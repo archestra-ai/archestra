@@ -670,6 +670,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateChatConversation]: {
     chat: ["create"],
   },
+  [RouteId.ForkChatConversation]: {
+    chat: ["create"],
+  },
   [RouteId.UpdateChatConversation]: {
     chat: ["update"],
   },

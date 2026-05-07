@@ -906,23 +906,52 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
-      const conversation =
-        (await ConversationModel.findAccessibleById({
-          id: id,
-          userId: user.id,
-          organizationId: organizationId,
-        })) ??
-        (await findScheduleRunConversationForAdmin({
-          conversationId: id,
-          userId: user.id,
-          organizationId,
-        }));
+      const conversation = await findReadableConversationById({
+        conversationId: id,
+        userId: user.id,
+        organizationId,
+      });
 
       if (!conversation) {
         throw new ApiError(404, "Conversation not found");
       }
 
       return reply.send(conversation);
+    },
+  );
+
+  fastify.post(
+    "/api/chat/conversations/:id/fork",
+    {
+      schema: {
+        operationId: RouteId.ForkChatConversation,
+        description:
+          "Create a new conversation from an accessible conversation",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        body: z.object({
+          agentId: z.string().uuid(),
+        }),
+        response: constructResponseSchema(SelectConversationSchema),
+      },
+    },
+    async ({ params: { id }, body: { agentId }, user, organizationId }) => {
+      const sourceConversation = await findReadableConversationById({
+        conversationId: id,
+        userId: user.id,
+        organizationId,
+      });
+
+      if (!sourceConversation) {
+        throw new ApiError(404, "Conversation not found");
+      }
+
+      return await forkConversation({
+        sourceConversation,
+        agentId,
+        userId: user.id,
+        organizationId,
+      });
     },
   );
 
@@ -1425,46 +1454,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Shared conversation not found");
       }
 
-      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+      return await forkConversation({
+        sourceConversation: sharedConversation,
+        agentId,
         userId: user.id,
         organizationId,
       });
-      const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
-
-      if (!agent) {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      const newConversation = await ConversationModel.create({
-        userId: user.id,
-        organizationId,
-        agentId: agent.id,
-        selectedModel: sharedConversation.selectedModel,
-        selectedProvider: sharedConversation.selectedProvider ?? undefined,
-      });
-
-      if (sharedConversation.messages.length > 0) {
-        const messagesToCopy = sharedConversation.messages.map(
-          (message: { role: string; content: unknown }) => ({
-            conversationId: newConversation.id,
-            role: message.role,
-            content: message,
-          }),
-        );
-        await MessageModel.bulkCreate(messagesToCopy);
-      }
-
-      const result = await ConversationModel.findById({
-        id: newConversation.id,
-        userId: user.id,
-        organizationId,
-      });
-
-      if (!result) {
-        throw new ApiError(500, "Failed to create forked conversation");
-      }
-
-      return result;
     },
   );
 
@@ -2344,6 +2339,25 @@ function attachRequestAbortListeners(params: {
   return cleanup;
 }
 
+async function findReadableConversationById(params: {
+  conversationId: string;
+  userId: string;
+  organizationId: string;
+}): Promise<z.infer<typeof SelectConversationSchema> | null> {
+  return (
+    (await ConversationModel.findAccessibleById({
+      id: params.conversationId,
+      userId: params.userId,
+      organizationId: params.organizationId,
+    })) ??
+    (await findScheduleRunConversationForAdmin({
+      conversationId: params.conversationId,
+      userId: params.userId,
+      organizationId: params.organizationId,
+    }))
+  );
+}
+
 async function findScheduleRunConversationForAdmin(params: {
   conversationId: string;
   userId: string;
@@ -2375,6 +2389,57 @@ async function findScheduleRunConversationForAdmin(params: {
     id: params.conversationId,
     organizationId: params.organizationId,
   });
+}
+
+async function forkConversation(params: {
+  sourceConversation: z.infer<typeof SelectConversationSchema>;
+  agentId: string;
+  userId: string;
+  organizationId: string;
+}): Promise<z.infer<typeof SelectConversationSchema>> {
+  const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+    userId: params.userId,
+    organizationId: params.organizationId,
+  });
+  const agent = await AgentModel.findById(
+    params.agentId,
+    params.userId,
+    isAgentAdmin,
+  );
+
+  if (!agent) {
+    throw new ApiError(404, "Agent not found");
+  }
+
+  const newConversation = await ConversationModel.create({
+    userId: params.userId,
+    organizationId: params.organizationId,
+    agentId: agent.id,
+    selectedModel: params.sourceConversation.selectedModel,
+    selectedProvider: params.sourceConversation.selectedProvider ?? undefined,
+  });
+
+  if (params.sourceConversation.messages.length > 0) {
+    await MessageModel.bulkCreate(
+      params.sourceConversation.messages.map((message: { role: string }) => ({
+        conversationId: newConversation.id,
+        role: message.role,
+        content: message,
+      })),
+    );
+  }
+
+  const result = await ConversationModel.findById({
+    id: newConversation.id,
+    userId: params.userId,
+    organizationId: params.organizationId,
+  });
+
+  if (!result) {
+    throw new ApiError(500, "Failed to create forked conversation");
+  }
+
+  return result;
 }
 
 /**

@@ -22,7 +22,7 @@ Every completed run preserves the full agent conversation. Open any run from the
 
 ![Task detail with run history](/docs/automated_screenshots/platform-agent-triggers-schedule_detail.webp)
 
-Each run opens as a chat. Users with `scheduledTask:admin` can view other users' run conversations, but only the conversation owner can continue them.
+Each run opens as a chat. Users with `scheduledTask:admin` can view other users' run conversations, but only the conversation owner can continue them. To follow up on another user's run, start a new chat from the run conversation; the new chat copies the existing messages and runs under your permissions.
 
 ![Completed run conversation](/docs/automated_screenshots/platform-agent-triggers-schedule_run.webp)
 

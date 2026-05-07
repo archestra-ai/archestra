@@ -11,6 +11,7 @@ import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useCreateIdentityProvider } from "@/lib/auth/identity-provider.query.ee";
+import { getIdentityProviderDialogNavItems } from "./identity-provider-dialog-nav-items.ee";
 import {
   type IdentityProviderDialogSection,
   IdentityProviderDialogShell,
@@ -109,28 +110,7 @@ export function CreateIdentityProviderDialog({
 
   const currentProviderType = form.watch("providerType");
   const navItems = useMemo(
-    () =>
-      currentProviderType === "saml"
-        ? [
-            { id: "general" as const, label: "SAML Settings" },
-            {
-              id: "service-provider-metadata" as const,
-              label: "SP Metadata",
-            },
-            { id: "attribute-mapping" as const, label: "Attribute Mapping" },
-            { id: "role-mapping" as const, label: "Role Mapping" },
-            { id: "team-sync" as const, label: "Team Sync" },
-          ]
-        : [
-            { id: "general" as const, label: "OIDC Settings" },
-            { id: "attribute-mapping" as const, label: "Attribute Mapping" },
-            {
-              id: "enterprise-managed-credentials" as const,
-              label: "Enterprise Credentials",
-            },
-            { id: "role-mapping" as const, label: "Role Mapping" },
-            { id: "team-sync" as const, label: "Team Sync" },
-          ],
+    () => getIdentityProviderDialogNavItems(currentProviderType),
     [currentProviderType],
   );
 

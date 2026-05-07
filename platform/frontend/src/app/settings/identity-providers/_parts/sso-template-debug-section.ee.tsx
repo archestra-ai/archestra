@@ -3,19 +3,18 @@
 import { SSO_TEMPLATE_HELPER_LIST_LABEL } from "@shared";
 import { Separator } from "@/components/ui/separator";
 import { IdTokenClaimsDebugger } from "./id-token-claims-debugger.ee";
+import type {
+  SsoRoleMappingRule,
+  SsoTemplateTestMode,
+} from "./sso-template-debug-types.ee";
 import { SsoTemplateTester } from "./sso-template-tester.ee";
-
-type RoleMappingRule = {
-  expression: string;
-  role: string;
-};
 
 interface SsoTemplateDebugSectionProps {
   identityProviderId?: string;
   template: string | undefined;
   templateLabel: string;
-  mode: "role" | "team-sync";
-  roleRules?: RoleMappingRule[];
+  mode: SsoTemplateTestMode;
+  roleRules?: SsoRoleMappingRule[];
   defaultRole?: string;
   strictMode?: boolean;
   examples: Array<{

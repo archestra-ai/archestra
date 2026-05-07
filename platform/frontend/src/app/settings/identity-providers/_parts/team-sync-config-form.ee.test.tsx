@@ -87,7 +87,7 @@ describe("TeamSyncConfigForm", () => {
     );
 
     expect(screen.getByText("Live Template Test")).toBeInTheDocument();
-    expect(screen.getByText("Groups extracted")).toBeInTheDocument();
+    expect(await screen.findByText("Groups extracted")).toBeInTheDocument();
     expect(
       screen.getByText(/group identifier.*extracted/i),
     ).toBeInTheDocument();
@@ -96,7 +96,7 @@ describe("TeamSyncConfigForm", () => {
   it("tests default team sync extraction when the template is empty", async () => {
     render(<TestWrapper providerId="Okta" identityProviderId="idp-1" />);
     expect(screen.getByText("Live Template Test")).toBeInTheDocument();
-    expect(screen.getByText("Groups extracted")).toBeInTheDocument();
+    expect(await screen.findByText("Groups extracted")).toBeInTheDocument();
     expect(screen.getByText(/using default extraction/i)).toBeInTheDocument();
     expect(screen.queryByText("Enter a template to test.")).toBeNull();
   });

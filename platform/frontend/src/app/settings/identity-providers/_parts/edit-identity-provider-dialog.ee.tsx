@@ -17,6 +17,7 @@ import {
   useIdentityProvider,
   useUpdateIdentityProvider,
 } from "@/lib/auth/identity-provider.query.ee";
+import { getIdentityProviderDialogNavItems } from "./identity-provider-dialog-nav-items.ee";
 import {
   type IdentityProviderDialogSection,
   IdentityProviderDialogShell,
@@ -162,28 +163,7 @@ export function EditIdentityProviderDialog({
     return null;
   }
 
-  const navItems =
-    providerType === "saml"
-      ? [
-          { id: "general" as const, label: "SAML Settings" },
-          {
-            id: "service-provider-metadata" as const,
-            label: "SP Metadata",
-          },
-          { id: "attribute-mapping" as const, label: "Attribute Mapping" },
-          { id: "role-mapping" as const, label: "Role Mapping" },
-          { id: "team-sync" as const, label: "Team Sync" },
-        ]
-      : [
-          { id: "general" as const, label: "OIDC Settings" },
-          { id: "attribute-mapping" as const, label: "Attribute Mapping" },
-          {
-            id: "enterprise-managed-credentials" as const,
-            label: "Enterprise Credentials",
-          },
-          { id: "role-mapping" as const, label: "Role Mapping" },
-          { id: "team-sync" as const, label: "Team Sync" },
-        ];
+  const navItems = getIdentityProviderDialogNavItems(providerType);
   const validActiveSection = navItems.some((item) => item.id === activeSection)
     ? activeSection
     : "general";

@@ -1,4 +1,6 @@
 import {
+  extractSsoGroupsFromRenderedTemplate,
+  isTruthyTemplateOutput,
   registerSsoTemplateHelpers,
   SYSTEM_PROMPT_HELPER_NAMES,
   type UserSystemPromptContext,
@@ -98,8 +100,7 @@ export function evaluateRoleMappingTemplate(
   try {
     const template = Handlebars.compile(templateString, { noEscape: true });
     const result = template(context).trim();
-    // Consider any non-empty string as truthy
-    return result.length > 0 && result !== "false" && result !== "0";
+    return isTruthyTemplateOutput(result);
   } catch {
     return false;
   }
@@ -123,26 +124,7 @@ export function extractGroupsWithTemplate(
 
   try {
     const result = template(context).trim();
-
-    if (!result) return [];
-
-    // Try to parse as JSON array first
-    try {
-      const parsed = JSON.parse(result);
-      if (Array.isArray(parsed)) {
-        return parsed
-          .filter((v) => typeof v === "string" && v.trim())
-          .map((v) => v.trim());
-      }
-    } catch {
-      // Not JSON, treat as comma-separated
-    }
-
-    // Split by comma and clean up
-    return result
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
+    return extractSsoGroupsFromRenderedTemplate(result);
   } catch {
     // Runtime error during template execution
     return [];

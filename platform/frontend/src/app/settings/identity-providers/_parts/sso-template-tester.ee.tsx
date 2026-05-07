@@ -1,32 +1,33 @@
 "use client";
 
-import { registerSsoTemplateHelpers } from "@shared";
-import Handlebars from "handlebars";
-import { useMemo } from "react";
+import {
+  extractSsoGroupsFromClaims,
+  extractSsoGroupsFromRenderedTemplate,
+  isTruthyTemplateOutput,
+  registerSsoTemplateHelpers,
+} from "@shared";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useIdentityProviderLatestIdTokenClaims } from "@/lib/auth/identity-provider.query.ee";
+import type {
+  SsoRoleMappingRule,
+  SsoTemplateTestMode,
+} from "./sso-template-debug-types.ee";
 
-type TemplateTestMode = "role" | "team-sync";
-
-type RoleMappingRule = {
-  expression: string;
-  role: string;
-};
+type HandlebarsRuntime = typeof import("handlebars");
 
 interface SsoTemplateTesterProps {
   identityProviderId?: string;
   template: string | undefined;
   templateLabel: string;
-  mode: TemplateTestMode;
-  roleRules?: RoleMappingRule[];
+  mode: SsoTemplateTestMode;
+  roleRules?: SsoRoleMappingRule[];
   defaultRole?: string;
   strictMode?: boolean;
 }
 
 let helpersRegistered = false;
-
-registerTemplateHelpers();
 
 export function SsoTemplateTester({
   identityProviderId,
@@ -40,6 +41,8 @@ export function SsoTemplateTester({
   const { data, isLoading } =
     useIdentityProviderLatestIdTokenClaims(identityProviderId);
   const claims = data?.claims;
+  const [result, setResult] = useState<TemplateTestResult | null>(null);
+  const [isEvaluating, setIsEvaluating] = useState(false);
   const disabledReason = useMemo(() => {
     if (!identityProviderId) {
       return "Save this provider and sign in with it before testing templates.";
@@ -50,16 +53,32 @@ export function SsoTemplateTester({
       return "Enter a template to test.";
     return null;
   }, [claims, identityProviderId, isLoading, mode, template]);
-  const result = useMemo(() => {
-    if (disabledReason || !claims) return null;
-    return evaluateTemplate({
+
+  useEffect(() => {
+    let cancelled = false;
+    if (disabledReason || !claims) {
+      setResult(null);
+      setIsEvaluating(false);
+      return;
+    }
+
+    setIsEvaluating(true);
+    evaluateTemplate({
       claims,
       defaultRole,
       mode,
       roleRules,
       strictMode,
       template,
+    }).then((nextResult) => {
+      if (cancelled) return;
+      setResult(nextResult);
+      setIsEvaluating(false);
     });
+
+    return () => {
+      cancelled = true;
+    };
   }, [
     claims,
     defaultRole,
@@ -96,6 +115,11 @@ export function SsoTemplateTester({
       {disabledReason && (
         <p className="text-xs text-muted-foreground">{disabledReason}</p>
       )}
+      {isEvaluating && !result && (
+        <p className="text-xs text-muted-foreground">
+          Loading template tester.
+        </p>
+      )}
 
       {result && (
         <div>
@@ -119,21 +143,22 @@ interface TemplateTestResult {
   output?: string;
 }
 
-function evaluateTemplate(params: {
+async function evaluateTemplate(params: {
   claims: Record<string, unknown>;
   defaultRole: string | undefined;
-  mode: TemplateTestMode;
-  roleRules: RoleMappingRule[] | undefined;
+  mode: SsoTemplateTestMode;
+  roleRules: SsoRoleMappingRule[] | undefined;
   strictMode: boolean;
   template: string | undefined;
-}): TemplateTestResult {
+}): Promise<TemplateTestResult> {
   try {
+    const handlebars = await loadHandlebars();
     if (params.mode === "role") {
-      const compiled = Handlebars.compile(params.template ?? "", {
+      const compiled = handlebars.compile(params.template ?? "", {
         noEscape: true,
       });
       const output = compiled(params.claims).trim();
-      const matched = output.length > 0 && output !== "false" && output !== "0";
+      const matched = isTruthyTemplateOutput(output);
       return {
         ok: matched,
         label: matched ? "Match" : "No match",
@@ -141,6 +166,7 @@ function evaluateTemplate(params: {
           outcome: evaluateRoleMappingOutcome({
             claims: params.claims,
             defaultRole: params.defaultRole,
+            handlebars,
             roleRules: params.roleRules,
             strictMode: params.strictMode,
           }),
@@ -151,13 +177,13 @@ function evaluateTemplate(params: {
 
     const hasTemplate = Boolean(params.template?.trim());
     const output = hasTemplate
-      ? Handlebars.compile(params.template ?? "", { noEscape: true })(
-          params.claims,
-        ).trim()
+      ? handlebars
+          .compile(params.template ?? "", { noEscape: true })(params.claims)
+          .trim()
       : "";
     const groups = hasTemplate
-      ? extractGroupsFromRenderedTemplate(output)
-      : extractGroupsFromClaims(params.claims);
+      ? extractSsoGroupsFromRenderedTemplate(output)
+      : extractSsoGroupsFromClaims(params.claims);
     return {
       ok: groups.length > 0,
       label: groups.length > 0 ? "Groups extracted" : "No groups",
@@ -193,14 +219,17 @@ type RoleMappingOutcome =
 function evaluateRoleMappingOutcome(params: {
   claims: Record<string, unknown>;
   defaultRole: string | undefined;
-  roleRules: RoleMappingRule[] | undefined;
+  handlebars: HandlebarsRuntime;
+  roleRules: SsoRoleMappingRule[] | undefined;
   strictMode: boolean;
 }): RoleMappingOutcome {
   for (const rule of params.roleRules ?? []) {
     if (!rule.expression.trim()) continue;
-    const compiled = Handlebars.compile(rule.expression, { noEscape: true });
+    const compiled = params.handlebars.compile(rule.expression, {
+      noEscape: true,
+    });
     const output = compiled(params.claims).trim();
-    if (output.length > 0 && output !== "false" && output !== "0") {
+    if (isTruthyTemplateOutput(output)) {
       return {
         kind: "assigned",
         role: rule.role,
@@ -240,73 +269,17 @@ function formatRoleName(role: string) {
     .join(" ");
 }
 
-function extractGroupsFromClaims(claims: Record<string, unknown>): string[] {
-  const groupClaimNames = [
-    "groups",
-    "group",
-    "memberOf",
-    "member_of",
-    "roles",
-    "role",
-    "teams",
-    "team",
-  ];
-
-  for (const claimName of groupClaimNames) {
-    const groups = normalizeGroups(claims[claimName]);
-    if (groups.length > 0) return groups;
-  }
-
-  return [];
-}
-
-function extractGroupsFromRenderedTemplate(output: string): string[] {
-  if (!output) return [];
-  try {
-    const parsed = JSON.parse(output);
-    if (Array.isArray(parsed)) {
-      return parsed
-        .filter((value) => typeof value === "string" && value.trim())
-        .map((value) => value.trim());
-    }
-  } catch {
-    // Not JSON; fall through to comma-separated parsing.
-  }
-  return output
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean);
-}
-
-function normalizeGroups(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value
-      .flatMap((item) => normalizeGroups(item))
-      .map((item) => item.trim())
-      .filter(Boolean);
-  }
-
-  if (typeof value === "string") {
-    if (!value.trim()) return [];
-    if (value.includes(",")) {
-      return value
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean);
-    }
-    return [value.trim()];
-  }
-
-  return [];
-}
-
-function registerTemplateHelpers() {
-  if (helpersRegistered) return;
+async function loadHandlebars(): Promise<HandlebarsRuntime> {
+  const module = await import("handlebars");
+  const handlebars = module.default ?? module;
+  if (helpersRegistered) return handlebars;
   helpersRegistered = true;
 
   registerSsoTemplateHelpers({
     registerHelper: (name, helper) => {
-      Handlebars.registerHelper(name, helper);
+      handlebars.registerHelper(name, helper);
     },
   });
+
+  return handlebars;
 }

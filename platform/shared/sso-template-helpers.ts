@@ -14,6 +14,17 @@ export const SSO_TEMPLATE_HELPER_LIST_LABEL = formatTemplateHelperNames(
   SSO_TEMPLATE_HELPER_NAMES,
 );
 
+export const SSO_GROUP_CLAIM_NAMES = [
+  "groups",
+  "group",
+  "memberOf",
+  "member_of",
+  "roles",
+  "role",
+  "teams",
+  "team",
+] as const;
+
 type TemplateHelperOptions = {
   fn: (context?: unknown) => unknown;
   inverse: (context?: unknown) => unknown;
@@ -35,6 +46,79 @@ export function registerSsoTemplateHelpers(registry: TemplateHelperRegistry) {
   registry.registerHelper("or", orHelper);
   registry.registerHelper("exists", existsHelper);
   registry.registerHelper("pluck", pluckHelper);
+}
+
+export function isTruthyTemplateOutput(output: string): boolean {
+  const normalizedOutput = output.trim();
+  return (
+    normalizedOutput.length > 0 &&
+    normalizedOutput !== "false" &&
+    normalizedOutput !== "0"
+  );
+}
+
+export function extractSsoGroupsFromClaims(
+  claims: Record<string, unknown>,
+): string[] {
+  for (const claimName of SSO_GROUP_CLAIM_NAMES) {
+    const groups = normalizeSsoClaimGroups(claims[claimName], false);
+    if (groups.length > 0) return groups;
+  }
+
+  return [];
+}
+
+export function extractSsoGroupsFromRenderedTemplate(output: string): string[] {
+  if (!output) return [];
+
+  try {
+    const parsed = JSON.parse(output);
+    if (Array.isArray(parsed)) {
+      return parsed
+        .filter((value) => typeof value === "string" && value.trim())
+        .map((value) => value.trim());
+    }
+  } catch {
+    // Not JSON; treat as comma-separated template output.
+  }
+
+  return output
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function normalizeSsoClaimGroups(
+  value: unknown,
+  valueCameFromArray: boolean,
+): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .flatMap((item) => normalizeSsoClaimGroups(item, true))
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    if (valueCameFromArray) {
+      return [value.trim()];
+    }
+    if (value.includes(",")) {
+      return value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+    if (value.includes(" ")) {
+      return value
+        .split(" ")
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+    return [value.trim()];
+  }
+
+  return [];
 }
 
 function jsonHelper(context: unknown) {

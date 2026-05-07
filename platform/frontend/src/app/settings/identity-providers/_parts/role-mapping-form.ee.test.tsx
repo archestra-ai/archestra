@@ -154,7 +154,7 @@ describe("RoleMappingForm", () => {
     expect(
       screen.getByText(/runs role mapping rule 1 \(member\)/i),
     ).toBeInTheDocument();
-    expect(screen.getByText("No match")).toBeInTheDocument();
+    expect(await screen.findByText("No match")).toBeInTheDocument();
 
     await user.click(
       screen.getAllByTestId(E2eTestId.IdpRoleMappingRuleTemplate)[1],
@@ -163,7 +163,7 @@ describe("RoleMappingForm", () => {
     expect(
       screen.getByText(/runs role mapping rule 2 \(admin\)/i),
     ).toBeInTheDocument();
-    expect(screen.getByText("Match")).toBeInTheDocument();
+    expect(await screen.findByText("Match")).toBeInTheDocument();
     expect(
       screen.getByText(/you would be assigned Admin/i),
     ).toBeInTheDocument();
@@ -183,7 +183,7 @@ describe("RoleMappingForm", () => {
       />,
     );
 
-    expect(screen.getByText("No match")).toBeInTheDocument();
+    expect(await screen.findByText("No match")).toBeInTheDocument();
     expect(
       screen.getByText(/you would be assigned Member/i),
     ).toBeInTheDocument();
@@ -204,7 +204,7 @@ describe("RoleMappingForm", () => {
       />,
     );
 
-    expect(screen.getByText("No match")).toBeInTheDocument();
+    expect(await screen.findByText("No match")).toBeInTheDocument();
     expect(
       screen.getByText(/sign-in would be denied by strict mode/i),
     ).toBeInTheDocument();

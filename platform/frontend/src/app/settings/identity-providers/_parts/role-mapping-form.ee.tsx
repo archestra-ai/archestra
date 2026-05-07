@@ -359,7 +359,7 @@ function RoleMappingRuleRow({
         isDragging && "relative z-10 opacity-70 shadow-md",
       )}
       data-testid={getIdpRoleMappingRuleRowTestId(index)}
-      onFocusCapture={onSelect}
+      onPointerDown={onSelect}
     >
       <Button
         type="button"

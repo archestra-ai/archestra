@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { OAUTH_TOKEN_TYPE } from "@shared";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
@@ -119,7 +120,7 @@ describe("resolveEnterpriseTransportCredential", () => {
       new Response(
         JSON.stringify({
           access_token: "id-jag-value",
-          issued_token_type: "urn:ietf:params:oauth:token-type:id-jag",
+          issued_token_type: OAUTH_TOKEN_TYPE.IdJag,
           expires_in: 300,
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
@@ -263,8 +264,7 @@ describe("resolveEnterpriseTransportCredential", () => {
           return new Response(
             JSON.stringify({
               access_token: "mcp-server-access-token",
-              issued_token_type:
-                "urn:ietf:params:oauth:token-type:access_token",
+              issued_token_type: OAUTH_TOKEN_TYPE.AccessToken,
               expires_in: 300,
             }),
             { status: 200, headers: { "Content-Type": "application/json" } },
@@ -288,6 +288,7 @@ describe("resolveEnterpriseTransportCredential", () => {
         requestedCredentialType: "id_jag",
         resourceType: "oauth_protected_resource",
         resourceIdentifier: "https://resource.example.com/mcp",
+        scopes: ["todos.read", "mcp.access"],
         tokenInjectionMode: "authorization_bearer",
       },
     });
@@ -307,12 +308,229 @@ describe("resolveEnterpriseTransportCredential", () => {
     expect(String(tokenRequest?.[1]?.body)).toContain(
       "assertion=caller-id-jag",
     );
+    expect(String(tokenRequest?.[1]?.body)).toContain(
+      "scope=todos.read+mcp.access",
+    );
     const tokenRequestHeaders = tokenRequest?.[1]?.headers as
       | Headers
       | undefined;
     expect(tokenRequestHeaders?.get("authorization")).toBe(
       `Basic ${Buffer.from("resource-client:resource-secret").toString("base64")}`,
     );
+
+    fetchMock.mockRestore();
+  });
+
+  test("uses protected resource client credential overrides for ID-JAG exchange", async ({
+    makeAgent,
+    makeIdentityProvider,
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const identityProvider = await makeIdentityProvider(organization.id, {
+      providerId: "id-jag-demo-idp",
+      issuer: "https://idp.example.com",
+      oidcConfig: {
+        clientId: "idp-client",
+        clientSecret: "idp-secret",
+        tokenEndpoint: "https://idp.example.com/token",
+        enterpriseManagedCredentials: {
+          clientId: "idp-exchange-client",
+          tokenEndpointAuthentication: "client_secret_basic",
+          clientSecret: "idp-exchange-secret",
+        },
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      identityProviderId: identityProvider.id,
+    });
+
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (
+          url ===
+          "https://resource.example.com/.well-known/oauth-protected-resource/mcp"
+        ) {
+          return Response.json({
+            resource: "https://resource.example.com/mcp",
+            authorization_servers: ["https://resource.example.com"],
+          });
+        }
+
+        if (
+          url ===
+          "https://resource.example.com/.well-known/oauth-authorization-server"
+        ) {
+          return Response.json({
+            token_endpoint: "https://resource.example.com/token",
+          });
+        }
+
+        if (url === "https://resource.example.com/token") {
+          const headers = init?.headers as Headers;
+          expect(headers.get("authorization")).toBe(
+            `Basic ${Buffer.from("resource-client:resource-secret").toString("base64")}`,
+          );
+          return Response.json({
+            access_token: "resource-access-token",
+            expires_in: 300,
+          });
+        }
+
+        throw new Error(`Unexpected fetch URL: ${url}`);
+      });
+
+    const result = await resolveEnterpriseTransportCredential({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: "external-id-jag",
+        teamId: null,
+        isOrganizationToken: false,
+        userId: "user-1",
+        isExternalIdp: true,
+        rawToken: "caller-id-jag",
+      },
+      enterpriseManagedConfig: {
+        requestedCredentialType: "id_jag",
+        resourceType: "oauth_protected_resource",
+        resourceIdentifier: "https://resource.example.com/mcp",
+        clientIdOverride: "resource-client",
+        clientSecretOverride: "resource-secret",
+        tokenInjectionMode: "authorization_bearer",
+      },
+    });
+
+    expect(result).toMatchObject({
+      headerName: "Authorization",
+      headerValue: "Bearer resource-access-token",
+    });
+
+    fetchMock.mockRestore();
+  });
+
+  test("mints an ID-JAG from the session IdP token before exchanging at an OAuth protected resource", async ({
+    makeAgent,
+    makeIdentityProvider,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser({ email: "id-jag-session@example.com" });
+    const identityProvider = await makeIdentityProvider(organization.id, {
+      providerId: "generic-id-jag",
+      issuer: "https://idp.example.com",
+      oidcConfig: {
+        clientId: "gateway-client",
+        tokenEndpoint: "https://idp.example.com/token",
+        enterpriseManagedCredentials: {
+          exchangeStrategy: "rfc8693",
+          clientId: "resource-client",
+          tokenEndpoint: "https://idp.example.com/token",
+          tokenEndpointAuthentication: "client_secret_basic",
+          clientSecret: "resource-secret",
+          subjectTokenType: OAUTH_TOKEN_TYPE.IdToken,
+        },
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      identityProviderId: identityProvider.id,
+    });
+
+    await db.insert(schema.accountsTable).values({
+      id: randomUUID(),
+      accountId: "acct-generic-id-jag",
+      providerId: identityProvider.providerId,
+      userId: user.id,
+      idToken: createJwt({ exp: futureExpSeconds(300) }),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (url === "https://idp.example.com/token") {
+          expect(String(init?.body)).toContain(
+            "requested_token_type=urn%3Aietf%3Aparams%3Aoauth%3Atoken-type%3Aid-jag",
+          );
+          return new Response(
+            JSON.stringify({
+              access_token: "session-id-jag",
+              issued_token_type: OAUTH_TOKEN_TYPE.IdJag,
+              expires_in: 300,
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        if (
+          url ===
+          "https://resource.example.com/.well-known/oauth-protected-resource/mcp"
+        ) {
+          return new Response(
+            JSON.stringify({
+              resource: "https://resource.example.com/mcp",
+              authorization_servers: ["https://resource.example.com"],
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        if (
+          url ===
+          "https://resource.example.com/.well-known/oauth-authorization-server"
+        ) {
+          return new Response(
+            JSON.stringify({
+              issuer: "https://resource.example.com",
+              token_endpoint: "https://resource.example.com/token",
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        if (url === "https://resource.example.com/token") {
+          expect(String(init?.body)).toContain("assertion=session-id-jag");
+          return new Response(
+            JSON.stringify({
+              access_token: "mcp-server-access-token",
+              issued_token_type: OAUTH_TOKEN_TYPE.AccessToken,
+              expires_in: 300,
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        throw new Error(`Unexpected fetch URL: ${url}`);
+      });
+
+    const result = await resolveEnterpriseTransportCredential({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: "session-token",
+        teamId: null,
+        isOrganizationToken: false,
+        userId: user.id,
+        isSessionAuth: true,
+      },
+      enterpriseManagedConfig: {
+        requestedCredentialType: "id_jag",
+        resourceType: "oauth_protected_resource",
+        resourceIdentifier: "https://resource.example.com/mcp",
+        tokenInjectionMode: "authorization_bearer",
+      },
+    });
+
+    expect(result).toEqual({
+      headerName: "Authorization",
+      headerValue: "Bearer mcp-server-access-token",
+      expiresInSeconds: 300,
+    });
 
     fetchMock.mockRestore();
   });
@@ -340,7 +558,7 @@ describe("resolveEnterpriseTransportCredential", () => {
           tokenEndpoint:
             "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
           tokenEndpointAuthentication: "client_secret_post",
-          subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
         },
       },
     });
@@ -365,7 +583,7 @@ describe("resolveEnterpriseTransportCredential", () => {
       new Response(
         JSON.stringify({
           access_token: "github-mock-access-token",
-          issued_token_type: "urn:ietf:params:oauth:token-type:access_token",
+          issued_token_type: OAUTH_TOKEN_TYPE.AccessToken,
           expires_in: 300,
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
@@ -422,7 +640,7 @@ describe("resolveEnterpriseTransportCredential", () => {
           clientSecret: "archestra-oidc-secret",
           tokenEndpoint: "https://idp.example.com/oauth2/v1/token",
           tokenEndpointAuthentication: "client_secret_post",
-          subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
         },
       },
     });
@@ -447,7 +665,7 @@ describe("resolveEnterpriseTransportCredential", () => {
       new Response(
         JSON.stringify({
           access_token: "generic-downstream-access-token",
-          issued_token_type: "urn:ietf:params:oauth:token-type:access_token",
+          issued_token_type: OAUTH_TOKEN_TYPE.AccessToken,
           expires_in: 300,
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
@@ -509,7 +727,7 @@ describe("resolveEnterpriseTransportCredential", () => {
           tokenEndpoint:
             "https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token",
           tokenEndpointAuthentication: "client_secret_post",
-          subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
         },
       },
     });
@@ -599,7 +817,7 @@ describe("resolveEnterpriseTransportCredential", () => {
           tokenEndpoint:
             "https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token",
           tokenEndpointAuthentication: "client_secret_post",
-          subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
         },
       },
     });
@@ -624,7 +842,7 @@ describe("resolveEnterpriseTransportCredential", () => {
       new Response(
         JSON.stringify({
           access_token: "downstream-access-token",
-          issued_token_type: "urn:ietf:params:oauth:token-type:access_token",
+          issued_token_type: OAUTH_TOKEN_TYPE.AccessToken,
           expires_in: 300,
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },

@@ -34,17 +34,4 @@ Archestra is built as a set of composable components. Most organizations already
 
 **[Security & Guardrails](/docs/platform-lethal-trifecta)** and **[Observability](/docs/platform-observability)** — Deterministic tool invocation policies and trusted data policies that cannot be bypassed by prompt injection. Prometheus metrics, OpenTelemetry tracing, and [per-team cost tracking](/docs/platform-costs-and-limits).
 
-## Pricing Model
-
-Archestra is Open Core software licensed under AGPL-3.0 meaning that the majority of it is open source and free to use, some features are licensed under a custom license and should be activated with an agreement with Archestra Inc.
-
-The rule of thumb is that if your company is small or mid-size, you can most likely use Open Source Archestra and never hit the limit. If you're looking to deploy an AI platform in the enterprise, we encourage you to talk to us at sales@archestra.ai.
-
-Such components are not enabled for the open source Archestra:
-
-- Role Based Access Control (granular control over what different categories of users are able to see in the platform)
-- SSO & OIDC
-- Whitelabeling
-- Advanced access control for RAG Knowledge Base
-
-If you're willing to pilot the enterprise feature set, please don't hesitate to reach out to us at sales@archestra.ai for the PoC license.
+See [Pricing Model](/docs/platform-pricing-model) for licensing details.

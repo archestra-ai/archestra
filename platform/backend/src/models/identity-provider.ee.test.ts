@@ -1,5 +1,9 @@
 import type { IdpRoleMappingConfig } from "@shared";
-import { IDENTITY_TRUSTED_PROVIDER_IDS, MEMBER_ROLE_NAME } from "@shared";
+import {
+  IDENTITY_TRUSTED_PROVIDER_IDS,
+  MEMBER_ROLE_NAME,
+  OAUTH_TOKEN_TYPE,
+} from "@shared";
 import { APIError } from "better-auth";
 import { vi } from "vitest";
 import { retrieveIdpGroups } from "@/auth/idp-team-sync-cache.ee";
@@ -202,7 +206,7 @@ describe("IdentityProviderModel", () => {
               tokenEndpoint:
                 "https://keycloak.example.com/realms/archestra/protocol/openid-connect/token",
               tokenEndpointAuthentication: "client_secret_post",
-              subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+              subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
             },
           },
         },
@@ -226,7 +230,7 @@ describe("IdentityProviderModel", () => {
       );
       expect(
         created.oidcConfig?.enterpriseManagedCredentials?.subjectTokenType,
-      ).toBe("urn:ietf:params:oauth:token-type:access_token");
+      ).toBe(OAUTH_TOKEN_TYPE.AccessToken);
     });
 
     test("clears persisted allowed email domains for non-Google API submissions", async ({
@@ -1227,7 +1231,7 @@ describe("IdentityProviderModel", () => {
               tokenEndpoint:
                 "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
               tokenEndpointAuthentication: "client_secret_post",
-              subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+              subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
             },
           } as never,
         },

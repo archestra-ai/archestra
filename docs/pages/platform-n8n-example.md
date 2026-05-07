@@ -1,7 +1,7 @@
 ---
 title: Secure Agent with N8N
 category: Examples
-order: 3
+order: 4
 ---
 
 <!--

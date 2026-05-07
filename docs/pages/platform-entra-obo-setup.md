@@ -4,7 +4,7 @@ category: Administration
 subcategory: Identity Providers
 description: "End-to-end setup for Microsoft Entra ID — SSO sign-in plus On-Behalf-Of token exchange for downstream MCP tool calls"
 order: 7
-lastUpdated: 2026-04-30
+lastUpdated: 2026-05-05
 ---
 
 <!--
@@ -83,12 +83,14 @@ Role mapping and team sync are provider-agnostic and fully documented on dedicat
 - [Role Mapping](/docs/platform-sso-role-mapping)
 - [Team Sync](/docs/platform-sso-team-sync)
 
-For Entra, the most common pattern is mapping the `groups` claim to Archestra teams. Make sure the **Groups claim** is enabled in the Entra app's **Token configuration** (set it to `Group ID` for object IDs, or `sAMAccountName` for on-prem-synced names). Then in Archestra:
+For Entra, the most common pattern is mapping the `groups` claim to Archestra teams. Make sure the **Groups claim** is enabled in the Entra app's **Token configuration** (set it to `Group ID` for object IDs, or `sAMAccountName` for on-prem-synced names). Entra does not require an additional OAuth scope for group claims; the Token configuration blade controls what appears in the ID token. Microsoft's guide covers the IdP-side configuration: [Configure group claims for applications by using Microsoft Entra ID](https://learn.microsoft.com/en-us/entra/identity/hybrid/connect/how-to-connect-fed-group-claims).
+
+Then in Archestra:
 
 - **Groups Handlebars Template** _(default extraction works for `groups`)_: leave empty, or use `{{#each groups}}{{this}},{{/each}}`
 - Link your Archestra teams to the Entra group object IDs (or names) under **Settings > Teams** > link icon
 
-🎉 **SSO is done.** Your users can now sign in with Microsoft and land in the right teams. If you don't need per-user downstream API calls, you can stop here.
+**SSO is done.** Your users can now sign in with Microsoft and land in the right teams. If you don't need per-user downstream API calls, you can stop here.
 
 # Configuring OBO for Enterprise MCP Auth
 

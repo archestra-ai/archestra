@@ -133,7 +133,7 @@ function ModelSelect({
           No pricing configured for models.
         </span>{" "}
         <Link
-          href="/llm/providers/models"
+          href="/llm/model-providers/models"
           className="hover:text-foreground hover:underline"
         >
           Add pricing
@@ -185,7 +185,7 @@ function ModelSelect({
                 <p className="text-sm">
                   No pricing configured for this model.{" "}
                   <Link
-                    href="/llm/providers/models"
+                    href="/llm/model-providers/models"
                     className="underline hover:text-foreground"
                   >
                     Add pricing

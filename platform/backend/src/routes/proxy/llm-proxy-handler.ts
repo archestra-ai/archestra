@@ -47,6 +47,7 @@ import {
   type Agent,
   ApiError,
   type DualLlmAnalysis,
+  type InteractionAuthMethod,
   type InteractionRequest,
   type InteractionResponse,
   type LLMProvider,
@@ -61,6 +62,7 @@ import {
   assertAuthenticatedForKeylessProvider,
   attemptJwksAuth,
   resolveAgent,
+  validateLlmOAuthAccessToken,
   validateVirtualApiKey,
   virtualKeyRateLimiter,
 } from "./llm-proxy-auth";
@@ -110,6 +112,12 @@ export interface LLMProxyContext<TRequest> {
   dualLlmAnalyses: DualLlmAnalysis[];
   unsafeContextBoundary?: UnsafeContextBoundary;
   externalAgentId?: string;
+  authMethod?: InteractionAuthMethod;
+  authenticatedApp?: {
+    id: string;
+    name: string;
+    clientId: string;
+  };
   userId?: string;
   resolvedUser?: { id: string; email: string; name: string } | null;
   sessionId?: string | null;
@@ -127,6 +135,13 @@ export type LLMProxyAuthOverride = {
   chatApiKeyId?: string;
   authenticated: boolean;
   source?: InteractionSource;
+  authMethod?: InteractionAuthMethod;
+  authenticatedApp?: {
+    id: string;
+    name: string;
+    clientId: string;
+  };
+  userId?: string;
 };
 
 function getProviderMessagesCount(messages: unknown): number | null {
@@ -274,6 +289,13 @@ export async function handleLLMProxy<
   let perKeyChatApiKeyId: string | undefined;
   let wasJwksAuthenticated = false;
   let wasVirtualKeyResolved = false;
+  let wasOAuthAuthenticated = false;
+  let authMethod = authOverride?.authMethod;
+  let authenticatedApp = authOverride?.authenticatedApp;
+  if (authOverride?.userId) {
+    userId = authOverride.userId;
+    resolvedUser = await UserModel.getById(userId);
+  }
   // 1. Try JWKS auth if the agent has an external identity provider configured
   if (authOverride) {
     apiKey = authOverride.apiKey;
@@ -288,6 +310,7 @@ export async function handleLLMProxy<
     );
     if (jwksResult) {
       wasJwksAuthenticated = true;
+      authMethod = "jwks";
       apiKey = jwksResult.apiKey;
       perKeyBaseUrl = jwksResult.baseUrl;
       perKeyChatApiKeyId = jwksResult.chatApiKeyId;
@@ -312,6 +335,30 @@ export async function handleLLMProxy<
     !wasJwksAuthenticated &&
     !authOverride &&
     rawApiKey &&
+    !hasArchestraTokenPrefix(rawApiKey)
+  ) {
+    const oauthResult = await validateLlmOAuthAccessToken({
+      tokenValue: rawApiKey,
+      expectedProvider: providerName,
+      agent: resolvedAgent,
+    });
+    if (oauthResult) {
+      apiKey = oauthResult.apiKey;
+      perKeyBaseUrl = oauthResult.baseUrl;
+      perKeyChatApiKeyId = oauthResult.chatApiKeyId;
+      wasOAuthAuthenticated = true;
+      authMethod = oauthResult.authMethod;
+      authenticatedApp = oauthResult.authenticatedApp;
+      if (oauthResult.userId) {
+        userId = oauthResult.userId;
+        resolvedUser = await UserModel.getById(userId);
+      }
+    }
+  }
+  if (
+    !wasJwksAuthenticated &&
+    !authOverride &&
+    rawApiKey &&
     hasArchestraTokenPrefix(rawApiKey)
   ) {
     await virtualKeyRateLimiter.check(request.ip);
@@ -324,6 +371,7 @@ export async function handleLLMProxy<
       perKeyBaseUrl = virtualResult.baseUrl;
       perKeyChatApiKeyId = virtualResult.chatApiKeyId;
       wasVirtualKeyResolved = true;
+      authMethod = "virtual_key";
     } catch (error) {
       if (error instanceof ApiError && error.statusCode === 401) {
         await virtualKeyRateLimiter.recordFailure(request.ip);
@@ -361,10 +409,14 @@ export async function handleLLMProxy<
   // 5. Enforce authentication for keyless providers on external requests
   assertAuthenticatedForKeylessProvider(
     apiKey,
-    wasVirtualKeyResolved,
+    wasVirtualKeyResolved || wasOAuthAuthenticated,
     wasJwksAuthenticated,
     request.ip,
   );
+
+  if (!authMethod) {
+    authMethod = isLoopbackAddress(request.ip) ? "internal" : "provider_key";
+  }
 
   // Check usage limits
   try {
@@ -693,6 +745,8 @@ export async function handleLLMProxy<
       dualLlmAnalyses,
       unsafeContextBoundary,
       externalAgentId,
+      authMethod,
+      authenticatedApp,
       userId,
       resolvedUser,
       sessionId,
@@ -732,6 +786,9 @@ export async function handleLLMProxy<
         sessionId,
         sessionSource,
         source,
+        authMethod,
+        authenticatedAppId: authenticatedApp?.id,
+        authenticatedAppName: authenticatedApp?.name,
         type: provider.interactionType,
         request: requestAdapter.getOriginalRequest() as InteractionRequest,
         processedRequest: null,
@@ -790,6 +847,8 @@ async function handleStreaming<
     dualLlmAnalyses,
     unsafeContextBoundary,
     externalAgentId,
+    authMethod,
+    authenticatedApp,
     userId,
     resolvedUser,
     sessionId,
@@ -826,6 +885,8 @@ async function handleStreaming<
       sessionId,
       executionId,
       externalAgentId,
+      authMethod,
+      authenticatedApp,
       source,
       serverAddress: provider.getBaseUrl(),
       promptMessages: provider
@@ -1113,6 +1174,8 @@ async function handleStreaming<
           buildInteractionRecord({
             agent,
             externalAgentId,
+            authMethod,
+            authenticatedApp,
             executionId,
             userId,
             sessionId,
@@ -1172,6 +1235,8 @@ async function handleNonStreaming<
     dualLlmAnalyses,
     unsafeContextBoundary,
     externalAgentId,
+    authMethod,
+    authenticatedApp,
     userId,
     resolvedUser,
     sessionId,
@@ -1199,6 +1264,8 @@ async function handleNonStreaming<
     sessionId,
     executionId,
     externalAgentId,
+    authMethod,
+    authenticatedApp,
     source,
     serverAddress: provider.getBaseUrl(),
     promptMessages: provider
@@ -1318,6 +1385,8 @@ async function handleNonStreaming<
         buildInteractionRecord({
           agent,
           externalAgentId,
+          authMethod,
+          authenticatedApp,
           executionId,
           userId,
           sessionId,
@@ -1381,6 +1450,8 @@ async function handleNonStreaming<
       buildInteractionRecord({
         agent,
         externalAgentId,
+        authMethod,
+        authenticatedApp,
         executionId,
         userId,
         sessionId,

@@ -6,7 +6,21 @@ vi.mock("@/observability", () => ({
   metrics: { llm: { getObservableFetch: vi.fn() } },
 }));
 
+vi.mock("@/clients/azure-openai-credentials", () => ({
+  getAzureOpenAiBearerTokenProvider: vi.fn(() => async () => "entra-token"),
+  isAzureOpenAiEntraIdEnabled: vi.fn(() => false),
+}));
+
+import {
+  getAzureOpenAiBearerTokenProvider,
+  isAzureOpenAiEntraIdEnabled,
+} from "@/clients/azure-openai-credentials";
 import { azureAdapterFactory } from "./azure";
+
+const mockIsAzureOpenAiEntraIdEnabled = vi.mocked(isAzureOpenAiEntraIdEnabled);
+const mockGetAzureOpenAiBearerTokenProvider = vi.mocked(
+  getAzureOpenAiBearerTokenProvider,
+);
 
 describe("azureAdapterFactory", () => {
   describe("extractApiKey", () => {
@@ -35,6 +49,51 @@ describe("azureAdapterFactory", () => {
   });
 
   describe("createClient", () => {
+    test("uses an Entra ID token provider when enabled and no apiKey is provided", () => {
+      mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(true);
+
+      const client = azureAdapterFactory.createClient(undefined, {
+        baseUrl:
+          "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
+        defaultHeaders: {},
+        source: "api",
+      }) as OpenAIProvider & {
+        _options?: {
+          apiKey?: unknown;
+          defaultHeaders?: Record<string, string>;
+        };
+      };
+
+      expect(typeof client._options?.apiKey).toBe("function");
+      expect(client._options?.defaultHeaders?.["api-key"]).toBeUndefined();
+      expect(mockGetAzureOpenAiBearerTokenProvider).toHaveBeenCalledWith(
+        "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
+      );
+
+      mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(false);
+    });
+
+    test("omits api-version for Azure OpenAI v1 base URLs", () => {
+      mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(true);
+
+      const client = azureAdapterFactory.createClient(undefined, {
+        baseUrl: "https://my-resource.services.ai.azure.com/openai/v1",
+        defaultHeaders: {},
+        source: "api",
+      }) as OpenAIProvider & {
+        _options?: {
+          defaultQuery?: Record<string, string>;
+        };
+      };
+
+      expect(client._options?.defaultQuery).toBeUndefined();
+      expect(mockGetAzureOpenAiBearerTokenProvider).toHaveBeenCalledWith(
+        "https://my-resource.services.ai.azure.com/openai/v1",
+      );
+
+      mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(false);
+    });
+
     test("throws ApiError(401) when apiKey is undefined", () => {
       expect(() =>
         azureAdapterFactory.createClient(undefined, {

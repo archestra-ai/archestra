@@ -86,6 +86,12 @@ export function deserializeExtraHeaders(
 export type LlmProviderApiKeyResponse =
   archestraApiTypes.GetLlmProviderApiKeysResponses["200"][number];
 
+export function isApiKeyOptionalForProvider(
+  provider: CreateLlmProviderApiKeyBody["provider"],
+): boolean {
+  return PROVIDERS_WITH_OPTIONAL_API_KEY.has(provider) || provider === "azure";
+}
+
 const PROVIDER_CONFIG: Record<
   CreateLlmProviderApiKeyBody["provider"],
   {
@@ -238,7 +244,7 @@ const PROVIDER_CONFIG: Record<
       "https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/OpenAI",
     consoleName: "Azure Portal",
     description:
-      "Set Base URL to: https://<resource>.openai.azure.com/openai/deployments/<deployment>",
+      "Use your Azure OpenAI resource URL, such as https://<resource>.openai.azure.com/openai. Archestra will discover deployments and route by model name.",
   },
 } as const;
 
@@ -523,7 +529,7 @@ export function LlmProviderApiKeyForm({
           <div className="space-y-2">
             <Label htmlFor="llm-provider-api-key-value">
               API Key{" "}
-              {PROVIDERS_WITH_OPTIONAL_API_KEY.has(provider) ? (
+              {isApiKeyOptionalForProvider(provider) ? (
                 <span className="font-normal text-muted-foreground">
                   (optional)
                 </span>

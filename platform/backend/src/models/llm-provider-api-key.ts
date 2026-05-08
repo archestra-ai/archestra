@@ -1,6 +1,5 @@
 import {
   isVaultReference,
-  PROVIDERS_WITH_OPTIONAL_API_KEY,
   parseVaultReference,
   type SupportedProvider,
 } from "@shared";
@@ -16,6 +15,7 @@ import type {
   UpdateLlmProviderApiKey,
 } from "@/types";
 import { decryptSecretValue, isEncryptedSecret } from "@/utils/crypto";
+import { getProvidersWithOptionalApiKey } from "@/utils/llm-provider-api-key-optional";
 import ConversationModel from "./conversation";
 
 class LlmProviderApiKeyModel {
@@ -267,9 +267,10 @@ class LlmProviderApiKeyModel {
     const secretOrSystemCondition = or(
       sql`${schema.llmProviderApiKeysTable.secretId} IS NOT NULL`,
       eq(schema.llmProviderApiKeysTable.isSystem, true),
-      inArray(schema.llmProviderApiKeysTable.provider, [
-        ...PROVIDERS_WITH_OPTIONAL_API_KEY,
-      ]),
+      inArray(
+        schema.llmProviderApiKeysTable.provider,
+        getProvidersWithOptionalApiKey(),
+      ),
     );
     if (secretOrSystemCondition) {
       conditions.push(secretOrSystemCondition);
@@ -415,9 +416,10 @@ class LlmProviderApiKeyModel {
     // Condition: key has a secret OR provider allows optional API keys
     const hasSecretOrOptional = or(
       sql`${schema.llmProviderApiKeysTable.secretId} IS NOT NULL`,
-      inArray(schema.llmProviderApiKeysTable.provider, [
-        ...PROVIDERS_WITH_OPTIONAL_API_KEY,
-      ]),
+      inArray(
+        schema.llmProviderApiKeysTable.provider,
+        getProvidersWithOptionalApiKey(),
+      ),
     );
 
     // 3. Try personal key (prefer isPrimary, then oldest)

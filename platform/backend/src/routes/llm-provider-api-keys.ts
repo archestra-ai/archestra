@@ -1,6 +1,5 @@
 import type { IncomingHttpHeaders } from "node:http";
 import {
-  PROVIDERS_WITH_OPTIONAL_API_KEY,
   RouteId,
   type SupportedProvider,
   SupportedProvidersSchema,
@@ -37,6 +36,7 @@ import {
   SelectLlmProviderApiKeySchema,
   type SelectSecret,
 } from "@/types";
+import { isLlmProviderApiKeyOptional } from "@/utils/llm-provider-api-key-optional";
 
 async function testApiKeyOrThrow(
   provider: SupportedProvider,
@@ -188,8 +188,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             (data) =>
               isByosEnabled()
                 ? data.vaultSecretPath && data.vaultSecretKey
-                : PROVIDERS_WITH_OPTIONAL_API_KEY.has(data.provider) ||
-                  data.apiKey,
+                : isLlmProviderApiKeyOptional(data.provider) || data.apiKey,
             {
               message:
                 "Either apiKey or both vaultSecretPath and vaultSecretKey must be provided",
@@ -268,7 +267,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      if (!secret && !PROVIDERS_WITH_OPTIONAL_API_KEY.has(body.provider)) {
+      if (!secret && !isLlmProviderApiKeyOptional(body.provider)) {
         throw new ApiError(
           400,
           "Secret creation failed, cannot create API key",
@@ -293,7 +292,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // can immediately show available models after creation.
       // For optional-key providers (Ollama, vLLM), sync even without an API key value.
       const canSync =
-        actualApiKeyValue || PROVIDERS_WITH_OPTIONAL_API_KEY.has(body.provider);
+        actualApiKeyValue || isLlmProviderApiKeyOptional(body.provider);
       if (canSync) {
         try {
           await modelSyncService.syncModelsForApiKey({
@@ -540,9 +539,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             testBaseUrl,
             testExtraHeaders,
           );
-        } else if (
-          !PROVIDERS_WITH_OPTIONAL_API_KEY.has(apiKeyFromDB.provider)
-        ) {
+        } else if (!isLlmProviderApiKeyOptional(apiKeyFromDB.provider)) {
           throw new ApiError(
             400,
             "Cannot update Base URL or extra headers without existing API key",

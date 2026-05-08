@@ -3,7 +3,6 @@
 import {
   E2eTestId,
   formatSecretStorageType,
-  PROVIDERS_WITH_OPTIONAL_API_KEY,
   type ResourceVisibilityScope,
 } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -28,6 +27,7 @@ import { ExternalDocsLink } from "@/components/external-docs-link";
 import { FormDialog } from "@/components/form-dialog";
 import {
   deserializeExtraHeaders,
+  isApiKeyOptionalForProvider,
   LLM_PROVIDER_API_KEY_PLACEHOLDER,
   LlmProviderApiKeyForm,
   type LlmProviderApiKeyFormValues,
@@ -354,7 +354,7 @@ export default function ApiKeysPage() {
           <div className="flex items-center gap-2">
             {row.original.isSystem ||
             row.original.secretId ||
-            PROVIDERS_WITH_OPTIONAL_API_KEY.has(row.original.provider) ? (
+            isApiKeyOptionalForProvider(row.original.provider) ? (
               <>
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
                 <span className="text-sm text-muted-foreground">

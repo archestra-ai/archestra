@@ -130,7 +130,7 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
   zhipuai: "https://api.z.ai/api/paas/v4",
   deepseek: "https://api.deepseek.com",
   minimax: "https://api.minimax.io/v1",
-  azure: "https://<resource>.openai.azure.com/openai/deployments/<deployment>",
+  azure: "https://<resource>.openai.azure.com/openai",
 };
 
 /**

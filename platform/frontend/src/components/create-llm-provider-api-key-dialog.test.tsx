@@ -9,6 +9,7 @@ const hasPermissions = vi.fn(() => ({ data: true }));
 vi.mock("@/components/llm-provider-api-key-form", () => ({
   LLM_PROVIDER_API_KEY_PLACEHOLDER: "••••••••••••••••",
   serializeExtraHeaders: () => null,
+  isApiKeyOptionalForProvider: (provider: string) => provider === "azure",
   PROVIDER_CONFIG: { anthropic: { name: "Anthropic" } },
   LlmProviderApiKeyForm: ({
     form,

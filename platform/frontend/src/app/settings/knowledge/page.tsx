@@ -1,6 +1,5 @@
 "use client";
 
-import { PROVIDERS_WITH_OPTIONAL_API_KEY } from "@shared";
 import {
   ArrowUpRight,
   Info,
@@ -18,6 +17,7 @@ import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
 import {
+  isApiKeyOptionalForProvider,
   LLM_PROVIDER_API_KEY_PLACEHOLDER,
   LlmProviderApiKeyForm,
   type LlmProviderApiKeyFormValues,
@@ -145,8 +145,7 @@ function AddApiKeyDialog({
     (formValues.scope !== "team" || formValues.teamId) &&
     (byosEnabled
       ? formValues.vaultSecretPath && formValues.vaultSecretKey
-      : PROVIDERS_WITH_OPTIONAL_API_KEY.has(formValues.provider) ||
-        formValues.apiKey);
+      : isApiKeyOptionalForProvider(formValues.provider) || formValues.apiKey);
 
   const handleCreate = form.handleSubmit(async (values) => {
     try {

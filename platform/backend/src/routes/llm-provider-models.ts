@@ -1,6 +1,5 @@
 import {
   EmbeddingDimensionsSchema,
-  PROVIDERS_WITH_OPTIONAL_API_KEY,
   RouteId,
   SupportedProvidersSchema,
 } from "@shared";
@@ -28,6 +27,7 @@ import {
   SelectModelSchema,
   UuidIdSchema,
 } from "@/types";
+import { isLlmProviderApiKeyOptional } from "@/utils/llm-provider-api-key-optional";
 
 const LlmModelSchema = z.object({
   id: z.string(),
@@ -292,10 +292,7 @@ export async function syncModelsForVisibleApiKeys(params: {
           )) as string | null;
         }
 
-        if (
-          !secretValue &&
-          !PROVIDERS_WITH_OPTIONAL_API_KEY.has(apiKey.provider)
-        ) {
+        if (!secretValue && !isLlmProviderApiKeyOptional(apiKey.provider)) {
           if (apiKey.secretId) {
             logger.warn(
               { apiKeyId: apiKey.id, provider: apiKey.provider },

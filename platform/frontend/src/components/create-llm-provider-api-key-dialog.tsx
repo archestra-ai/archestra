@@ -1,11 +1,11 @@
 "use client";
 
-import { PROVIDERS_WITH_OPTIONAL_API_KEY } from "@shared";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { FormDialog } from "@/components/form-dialog";
 import {
+  isApiKeyOptionalForProvider,
   LLM_PROVIDER_API_KEY_PLACEHOLDER,
   LlmProviderApiKeyForm,
   type LlmProviderApiKeyFormValues,
@@ -178,7 +178,6 @@ function getIsCreateFormValid(params: {
       (values.scope !== "team" || values.teamId) &&
       (byosEnabled
         ? values.vaultSecretPath && values.vaultSecretKey
-        : PROVIDERS_WITH_OPTIONAL_API_KEY.has(values.provider) ||
-          values.apiKey),
+        : isApiKeyOptionalForProvider(values.provider) || values.apiKey),
   );
 }

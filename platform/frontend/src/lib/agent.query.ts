@@ -1,5 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   DEFAULT_SORT_BY,
   DEFAULT_SORT_DIRECTION,
@@ -339,6 +340,10 @@ export function useExportAgent() {
       }
       return data;
     },
+    onSuccess: (data) => {
+      if (!data) return;
+      toast.success(`Agent "${data.agent.name}" exported successfully`);
+    },
   });
 }
 
@@ -356,6 +361,15 @@ export function useImportAgent() {
     onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["agents"] });
+
+      const warningCount = data.warnings.length;
+      if (warningCount > 0) {
+        toast.warning(
+          `Agent "${data.agent.name}" imported with ${warningCount} warning${warningCount !== 1 ? "s" : ""}`,
+        );
+      } else {
+        toast.success(`Agent "${data.agent.name}" imported successfully`);
+      }
     },
   });
 }

@@ -204,17 +204,13 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
 
   const handleClone = useCallback(
     async (agentId: string) => {
-      const toastId = toast.loading("Cloning agent...");
       try {
         const cloned = await cloneAgent.mutateAsync(agentId);
         if (cloned) {
-          toast.success("Agent cloned successfully", { id: toastId });
           // Open edit dialog for the cloned agent so user can rename immediately
           setEditingAgent(cloned as AgentData);
         }
-      } catch (_error) {
-        toast.error("Failed to clone agent", { id: toastId });
-      }
+      } catch (_error) {}
     },
     [cloneAgent],
   );
@@ -481,9 +477,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   a.download = `${agentData.name.replace(/\s+/g, "-").toLowerCase()}-agent.json`;
                   a.click();
                   URL.revokeObjectURL(url);
-                  toast.success(
-                    `Agent "${agentData.name}" exported successfully`,
-                  );
                 },
               });
             }}
@@ -611,15 +604,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             <ImportAgentDialog
               open={isImportDialogOpen}
               onOpenChange={setIsImportDialogOpen}
-              onSuccess={(agent, warningCount) => {
-                if (warningCount > 0) {
-                  toast.warning(
-                    `Agent "${agent.name}" imported with ${warningCount} warning${warningCount !== 1 ? "s" : ""}`,
-                  );
-                } else {
-                  toast.success(`Agent "${agent.name}" imported successfully`);
-                }
-              }}
+              onSuccess={() => {}}
             />
           </div>
         </div>

@@ -22,7 +22,9 @@ import { FormDialog } from "@/components/form-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { useImportAgent } from "@/lib/agent.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils";
 
 type ImportAgentDialogProps = {
@@ -51,6 +53,7 @@ export function ImportAgentDialog({
   onOpenChange,
   onSuccess,
 }: ImportAgentDialogProps) {
+  const appName = useAppName();
   const [state, setState] = useState<ImportState>({ status: "idle" });
   const [inputMode, setInputMode] = useState<"file" | "paste">("file");
   const [pasteContent, setPasteContent] = useState("");
@@ -239,7 +242,7 @@ export function ImportAgentDialog({
       open={open}
       onOpenChange={handleOpenChange}
       title="Import Agent"
-      description="Import an agent configuration from a JSON file previously exported from Archestra."
+      description={`Import an agent configuration from a JSON file previously exported from ${appName}.`}
       size="medium"
     >
       <DialogBody>
@@ -309,8 +312,8 @@ export function ImportAgentDialog({
               {/* JSON paste mode */}
               {inputMode === "paste" && (
                 <div className="space-y-2">
-                  <textarea
-                    className="h-48 w-full resize-none rounded-md border bg-background px-3 py-2 font-mono text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  <Textarea
+                    className="h-48 resize-none font-mono text-xs"
                     placeholder='Paste agent JSON here...\n{\n  "version": "1",\n  "agent": { ... }\n}'
                     value={pasteContent}
                     onChange={(e) => setPasteContent(e.target.value)}

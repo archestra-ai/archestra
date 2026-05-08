@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.2.36](https://github.com/archestra-ai/archestra/compare/platform-v1.2.35...platform-v1.2.36) (2026-05-08)
+
+
+### Features
+
+* add `GET /api/optimization-rules/:id` endpoint ([#4458](https://github.com/archestra-ai/archestra/issues/4458)) ([026e6e7](https://github.com/archestra-ai/archestra/commit/026e6e78e40e664240ed698b496d02c1c918ff94)), closes [#4252](https://github.com/archestra-ai/archestra/issues/4252)
+* add agent export and import functionality ([#4251](https://github.com/archestra-ai/archestra/issues/4251)) ([5ca1919](https://github.com/archestra-ai/archestra/commit/5ca191912c5ac785158799afc35199a3f2b54c70))
+* refresh account settings and credential flows ([#4443](https://github.com/archestra-ai/archestra/issues/4443)) ([56fe093](https://github.com/archestra-ai/archestra/commit/56fe093c16841e418f491c6651d2e00f158e20f5))
+
+
+### Bug Fixes
+
+* A2A JSON-RPC v2: 1.0 Protocol-compliant ([#4380](https://github.com/archestra-ai/archestra/issues/4380)) ([798b1c2](https://github.com/archestra-ai/archestra/commit/798b1c24e5697b4ac6ca9725be334b37a7378758))
+* custom logo should be in center ([#4410](https://github.com/archestra-ai/archestra/issues/4410)) ([90fc366](https://github.com/archestra-ai/archestra/commit/90fc366a790132a3c2664250fb3aab1171d29c61))
+* global MCP catalog access ([#4465](https://github.com/archestra-ai/archestra/issues/4465)) ([c9fd6d4](https://github.com/archestra-ai/archestra/commit/c9fd6d4296be736fa106555bfe9bca8854299561))
+* MCP gateway public origin handling ([#4466](https://github.com/archestra-ai/archestra/issues/4466)) ([b3545b7](https://github.com/archestra-ai/archestra/commit/b3545b79ed7453c5a0ea1f82dbd2b7a15f361938))
+* OpenAPI schema unions for codegen ([#4460](https://github.com/archestra-ai/archestra/issues/4460)) ([9ed86d8](https://github.com/archestra-ai/archestra/commit/9ed86d835d555fefe7ab5fe85e45ac4fdf052bca)), closes [#4453](https://github.com/archestra-ai/archestra/issues/4453)
+
 ## [1.2.35](https://github.com/archestra-ai/archestra/compare/platform-v1.2.34...platform-v1.2.35) (2026-05-07)
 
 

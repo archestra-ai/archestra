@@ -357,6 +357,8 @@ export default function LimitsPage() {
       {
         accessorKey: "status",
         header: "Status",
+        size: 100,
+        minSize: 80,
         cell: ({ row }) => {
           const status = getUsageStatus(row.original).status;
           return (
@@ -381,11 +383,15 @@ export default function LimitsPage() {
       {
         accessorKey: "entityId",
         header: "Applied to",
+        size: 150,
+        minSize: 120,
         cell: ({ row }) => getEntityLabel(row.original),
       },
       {
         accessorKey: "model",
         header: "Models",
+        size: 250,
+        minSize: 180,
         cell: ({ row }) => {
           const models = getLimitModels(row.original);
           const isAllModels =
@@ -419,6 +425,8 @@ export default function LimitsPage() {
       {
         accessorKey: "usage",
         header: "Usage",
+        size: 200,
+        minSize: 160,
         cell: ({ row }) => {
           const usage = getUsageStatus(row.original);
           return (
@@ -443,6 +451,8 @@ export default function LimitsPage() {
       {
         id: "actions",
         header: "Actions",
+        size: 100,
+        minSize: 80,
         cell: ({ row }) => (
           <TableRowActions
             actions={[

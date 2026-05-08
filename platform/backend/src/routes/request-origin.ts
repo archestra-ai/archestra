@@ -1,11 +1,11 @@
 import type { IncomingHttpHeaders } from "node:http";
+import config from "@/config";
 
 export function getPublicRequestOrigin(params: {
   protocol: string;
   headers: IncomingHttpHeaders;
-  trustProxy: unknown;
 }): string {
-  const trustForwardedHeaders = Boolean(params.trustProxy);
+  const trustForwardedHeaders = Boolean(config.api.trustProxy);
   const host =
     (trustForwardedHeaders
       ? getFirstHeaderValue(params.headers["x-forwarded-host"])

@@ -10603,24 +10603,28 @@ export type PostV1A2aByAgentIdResponses = {
 
 export type PostV1A2aByAgentIdResponse = PostV1A2aByAgentIdResponses[keyof PostV1A2aByAgentIdResponses];
 
-export type GetV2A2aByAgentIdWellKnownAgentJsonData = {
+export type GetV2A2aByAgentIdWellKnownAgentCardJsonData = {
     body?: never;
     path: {
         agentId: string;
     };
     query?: never;
-    url: '/v2/a2a/{agentId}/.well-known/agent.json';
+    url: '/v2/a2a/{agentId}/.well-known/agent-card.json';
 };
 
-export type GetV2A2aByAgentIdWellKnownAgentJsonResponses = {
+export type GetV2A2aByAgentIdWellKnownAgentCardJsonResponses = {
     /**
      * Default Response
      */
     200: {
         name: string;
         description: string;
-        url: string;
         version: string;
+        supportedInterfaces: Array<{
+            url: string;
+            protocolBinding: string;
+            protocolVersion: string;
+        }>;
         capabilities: {
             streaming: boolean;
             pushNotifications: boolean;
@@ -10639,7 +10643,7 @@ export type GetV2A2aByAgentIdWellKnownAgentJsonResponses = {
     };
 };
 
-export type GetV2A2aByAgentIdWellKnownAgentJsonResponse = GetV2A2aByAgentIdWellKnownAgentJsonResponses[keyof GetV2A2aByAgentIdWellKnownAgentJsonResponses];
+export type GetV2A2aByAgentIdWellKnownAgentCardJsonResponse = GetV2A2aByAgentIdWellKnownAgentCardJsonResponses[keyof GetV2A2aByAgentIdWellKnownAgentCardJsonResponses];
 
 export type PostV2A2aByAgentIdData = {
     body: {
@@ -18973,6 +18977,140 @@ export type UpdateChatConversationResponses = {
 };
 
 export type UpdateChatConversationResponse = UpdateChatConversationResponses[keyof UpdateChatConversationResponses];
+
+export type ForkChatConversationData = {
+    body: {
+        agentId: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/fork';
+};
+
+export type ForkChatConversationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ForkChatConversationError = ForkChatConversationErrors[keyof ForkChatConversationErrors];
+
+export type ForkChatConversationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        userId: string;
+        organizationId: string;
+        agentId: string | null;
+        chatApiKeyId: string | null;
+        title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+        hasCustomToolSelection: boolean;
+        todoList: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        artifact: string | null;
+        pinnedAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+            systemPrompt: string | null;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            llmApiKeyId: string | null;
+        } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
+        } | null;
+        messages: Array<unknown>;
+        chatErrors: Array<{
+            id: string;
+            conversationId: string;
+            error: {
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                message: string;
+                isRetryable: boolean;
+                sessionId?: string;
+                traceId?: string;
+                spanId?: string;
+                originalError?: {
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+                    status?: number;
+                    message?: string;
+                    type?: string;
+                    raw?: unknown;
+                };
+            };
+            createdAt: string;
+        }>;
+    };
+};
+
+export type ForkChatConversationResponse = ForkChatConversationResponses[keyof ForkChatConversationResponses];
 
 export type GetChatAgentMcpToolsData = {
     body?: never;
@@ -38697,6 +38835,103 @@ export type DeleteOptimizationRuleResponses = {
 
 export type DeleteOptimizationRuleResponse = DeleteOptimizationRuleResponses[keyof DeleteOptimizationRuleResponses];
 
+export type GetOptimizationRuleData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/optimization-rules/{id}';
+};
+
+export type GetOptimizationRuleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOptimizationRuleError = GetOptimizationRuleErrors[keyof GetOptimizationRuleErrors];
+
+export type GetOptimizationRuleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        conditions: Array<{
+            maxLength: number;
+        } | {
+            hasTools: boolean;
+        }>;
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+        targetModel: string;
+        enabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetOptimizationRuleResponse = GetOptimizationRuleResponses[keyof GetOptimizationRuleResponses];
+
 export type UpdateOptimizationRuleData = {
     body: {
         id?: string;
@@ -46837,6 +47072,7 @@ export type GetIdentityProvidersResponses = {
         organizationId: string | null;
         domain: string;
         domainVerified: boolean | null;
+        ssoLoginEnabled: boolean;
     }>;
 };
 
@@ -46965,6 +47201,7 @@ export type CreateIdentityProviderData = {
         providerId: string;
         domain: string;
         domainVerified?: boolean | null;
+        ssoLoginEnabled?: boolean;
     };
     path?: never;
     query?: never;
@@ -47164,6 +47401,7 @@ export type CreateIdentityProviderResponses = {
         organizationId: string | null;
         domain: string;
         domainVerified: boolean | null;
+        ssoLoginEnabled: boolean;
     };
 };
 
@@ -47251,6 +47489,95 @@ export type GetIdentityProviderIdpLogoutUrlResponses = {
 };
 
 export type GetIdentityProviderIdpLogoutUrlResponse = GetIdentityProviderIdpLogoutUrlResponses[keyof GetIdentityProviderIdpLogoutUrlResponses];
+
+export type GetIdentityProviderLatestIdTokenClaimsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/identity-providers/{id}/latest-id-token-claims';
+};
+
+export type GetIdentityProviderLatestIdTokenClaimsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetIdentityProviderLatestIdTokenClaimsError = GetIdentityProviderLatestIdTokenClaimsErrors[keyof GetIdentityProviderLatestIdTokenClaimsErrors];
+
+export type GetIdentityProviderLatestIdTokenClaimsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        providerId: string;
+        claims: {
+            [key: string]: unknown;
+        } | null;
+        updatedAt: string | null;
+    };
+};
+
+export type GetIdentityProviderLatestIdTokenClaimsResponse = GetIdentityProviderLatestIdTokenClaimsResponses[keyof GetIdentityProviderLatestIdTokenClaimsResponses];
 
 export type DeleteIdentityProviderData = {
     body?: never;
@@ -47539,6 +47866,7 @@ export type GetIdentityProviderResponses = {
         organizationId: string | null;
         domain: string;
         domainVerified: boolean | null;
+        ssoLoginEnabled: boolean;
     };
 };
 
@@ -47666,6 +47994,7 @@ export type UpdateIdentityProviderData = {
         providerId?: string;
         domain?: string;
         domainVerified?: boolean | null;
+        ssoLoginEnabled?: boolean;
     };
     path: {
         id: string;
@@ -47867,6 +48196,7 @@ export type UpdateIdentityProviderResponses = {
         organizationId: string | null;
         domain: string;
         domainVerified: boolean | null;
+        ssoLoginEnabled: boolean;
     };
 };
 

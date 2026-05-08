@@ -7,6 +7,7 @@ const {
   getConversationShare,
   shareConversation,
   unshareConversation,
+  forkChatConversation,
   forkSharedConversation,
 } = archestraApiSdk;
 
@@ -106,6 +107,34 @@ export function useForkSharedConversation() {
     }) => {
       const { data, error } = await forkSharedConversation({
         path: { shareId },
+        body: { agentId },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    },
+  });
+}
+
+export function useForkConversation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      conversationId,
+      agentId,
+    }: {
+      conversationId: string;
+      agentId: string;
+    }) => {
+      const { data, error } = await forkChatConversation({
+        path: { id: conversationId },
         body: { agentId },
       });
       if (error) {

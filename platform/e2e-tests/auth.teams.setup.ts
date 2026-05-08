@@ -7,7 +7,6 @@ import {
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
-  adminAuthFile,
   DEFAULT_TEAM_NAME,
   EDITOR_EMAIL,
   ENGINEERING_TEAM_NAME,
@@ -115,6 +114,26 @@ async function getTeams(request: APIRequestContext): Promise<Team[]> {
   return extractTeamsFromResponse(await response.json());
 }
 
+function extractTeamFromResponse(data: unknown): Team | null {
+  if (data && typeof data === "object" && "id" in data && "name" in data) {
+    return data as Team;
+  }
+
+  if (
+    data &&
+    typeof data === "object" &&
+    "data" in data &&
+    data.data &&
+    typeof data.data === "object" &&
+    "id" in data.data &&
+    "name" in data.data
+  ) {
+    return data.data as Team;
+  }
+
+  return null;
+}
+
 /**
  * Create a team if it doesn't already exist
  * Returns the team (existing or newly created)
@@ -146,7 +165,12 @@ async function createTeamIfNotExists(
     throw new Error(`Failed to create team ${name}: ${await response.text()}`);
   }
 
-  return response.json();
+  const team = extractTeamFromResponse(await response.json());
+  if (!team) {
+    throw new Error(`Failed to parse created team ${name}`);
+  }
+
+  return team;
 }
 
 interface TeamMember {
@@ -241,8 +265,50 @@ async function withRetries(
   throw new Error("Retry loop exited unexpectedly");
 }
 
+async function signOut(request: APIRequestContext): Promise<void> {
+  await request.post(`${UI_BASE_URL}/api/auth/sign-out`, {
+    headers: { Origin: UI_BASE_URL },
+  });
+}
+
+async function getSessionUserEmail(
+  request: APIRequestContext,
+): Promise<string | null> {
+  const response = await request.get(`${UI_BASE_URL}/api/auth/get-session`, {
+    headers: { Origin: UI_BASE_URL },
+  });
+  if (!response.ok()) {
+    return null;
+  }
+
+  const data = await response.json();
+  return data?.user?.email ?? null;
+}
+
+async function assertAdminPermissions(
+  request: APIRequestContext,
+): Promise<void> {
+  const response = await request.get(`${UI_BASE_URL}/api/user/permissions`, {
+    headers: { Origin: UI_BASE_URL },
+  });
+  expect(response.ok(), "Failed to fetch admin permissions").toBe(true);
+
+  const permissions = await response.json();
+  expect(
+    permissions?.identityProvider,
+    "Teams setup session is not using the admin role",
+  ).toContain("create");
+  expect(
+    permissions?.mcpRegistry,
+    "Teams setup session is not using the admin role",
+  ).toContain("create");
+}
+
 // Setup teams - runs after users are created
 setup("setup teams and assignments", async ({ page }) => {
+  await signOut(page.request);
+  await page.context().clearCookies();
+
   // Sign in as admin
   const signedIn = await signInUser(page.request, ADMIN_EMAIL, ADMIN_PASSWORD);
   expect(signedIn, "Admin sign-in failed for teams setup").toBe(true);
@@ -250,6 +316,11 @@ setup("setup teams and assignments", async ({ page }) => {
   // Navigate to establish cookie context
   await page.goto(`${UI_BASE_URL}/chat`);
   await page.waitForLoadState("domcontentloaded");
+  const sessionEmail = await getSessionUserEmail(page.request);
+  expect(sessionEmail, "Teams setup did not save an admin session").toBe(
+    ADMIN_EMAIL,
+  );
+  await assertAdminPermissions(page.request);
 
   // Get organization members to find editor and member user IDs
   const members = await listOrgMembers(page.request);
@@ -324,13 +395,27 @@ setup("setup teams and assignments", async ({ page }) => {
     defaultMembers,
   );
 
-  // Add Editor to both Engineering and Marketing teams
+  // Add Admin and Editor to both Engineering and Marketing teams
+  await addUserToTeamIfNotMember(
+    page.request,
+    engineeringTeam.id,
+    adminUserId,
+    "member",
+    engineeringMembers,
+  );
   await addUserToTeamIfNotMember(
     page.request,
     engineeringTeam.id,
     editorUserId,
     "member",
     engineeringMembers,
+  );
+  await addUserToTeamIfNotMember(
+    page.request,
+    marketingTeam.id,
+    adminUserId,
+    "member",
+    marketingMembers,
   );
   await addUserToTeamIfNotMember(
     page.request,
@@ -349,5 +434,5 @@ setup("setup teams and assignments", async ({ page }) => {
     marketingMembers,
   );
 
-  await page.request.storageState({ path: adminAuthFile });
+  await signOut(page.request);
 });

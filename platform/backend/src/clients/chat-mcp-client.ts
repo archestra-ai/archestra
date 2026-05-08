@@ -1528,7 +1528,7 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
   // Check if MCP tool returned an error
   // Return error text as tool result instead of throwing so the AI SDK includes
   // it in the conversation as a tool-result message. This allows the frontend to
-  // parse structured errors (e.g. auth-required with install URL) and render
+  // parse structured errors (e.g. auth-required with action URL) and render
   // actionable UI instead of showing a generic stream error.
   if (result.isError) {
     const extractedError = mcpContent

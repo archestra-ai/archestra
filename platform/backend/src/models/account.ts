@@ -1,4 +1,4 @@
-import { and, desc, eq, isNotNull } from "drizzle-orm";
+import { and, count, desc, eq, isNotNull } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
 import logger from "@/logging";
 
@@ -50,12 +50,14 @@ class AccountModel {
   static async getLatestSsoAccountByUserIdAndProviderId(
     userId: string,
     providerId: string,
+    tx?: Transaction,
   ) {
     logger.debug(
       { userId, providerId },
       "AccountModel.getLatestSsoAccountByUserIdAndProviderId: fetching account",
     );
-    const [account] = await db
+    const dbOrTx = tx ?? db;
+    const [account] = await dbOrTx
       .select()
       .from(schema.accountsTable)
       .where(
@@ -71,6 +73,46 @@ class AccountModel {
       "AccountModel.getLatestSsoAccountByUserIdAndProviderId: completed",
     );
     return account;
+  }
+
+  static async moveToUser(params: {
+    id: string;
+    userId: string;
+    tx?: Transaction;
+  }) {
+    logger.debug(
+      { accountId: params.id, userId: params.userId },
+      "AccountModel.moveToUser: moving account",
+    );
+    const dbOrTx = params.tx ?? db;
+    const [account] = await dbOrTx
+      .update(schema.accountsTable)
+      .set({
+        userId: params.userId,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.accountsTable.id, params.id))
+      .returning();
+    logger.debug(
+      { accountId: params.id, moved: !!account },
+      "AccountModel.moveToUser: completed",
+    );
+    return account ?? null;
+  }
+
+  static async countByUserId(userId: string, tx?: Transaction) {
+    logger.debug({ userId }, "AccountModel.countByUserId: counting accounts");
+    const dbOrTx = tx ?? db;
+    const [result] = await dbOrTx
+      .select({ count: count() })
+      .from(schema.accountsTable)
+      .where(eq(schema.accountsTable.userId, userId));
+    const accountCount = result?.count ?? 0;
+    logger.debug(
+      { userId, count: accountCount },
+      "AccountModel.countByUserId: completed",
+    );
+    return accountCount;
   }
 
   /**
@@ -185,7 +227,7 @@ class AccountModel {
       { providerId },
       "AccountModel.deleteByProviderId: deleting accounts",
     );
-    const dbOrTx = tx || db;
+    const dbOrTx = tx ?? db;
     const deleted = await dbOrTx
       .delete(schema.accountsTable)
       .where(eq(schema.accountsTable.providerId, providerId))

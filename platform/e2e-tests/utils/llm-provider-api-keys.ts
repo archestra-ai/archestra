@@ -9,12 +9,12 @@ import { expect, goToPage } from "../fixtures";
 import { clickButton, expandTablePagination } from "./dialogs";
 
 export async function goToLlmProviderApiKeysPage(page: Page): Promise<void> {
-  await goToPage(page, "/llm/providers/api-keys");
+  await goToPage(page, "/llm/model-providers/api-keys");
   await expandTablePagination(page, E2eTestId.ChatApiKeysTable);
 }
 
 export async function goToVirtualKeysPage(page: Page): Promise<void> {
-  await goToPage(page, "/llm/providers/virtual-keys");
+  await goToPage(page, "/llm/credentials/virtual-keys");
   await expect(page.getByTestId(E2eTestId.VirtualKeysPage)).toBeVisible({
     timeout: 15_000,
   });
@@ -69,9 +69,14 @@ export async function deleteLlmProviderApiKey(
   page: Page,
   keyName: string,
 ): Promise<void> {
-  await page
-    .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${keyName}`)
-    .click();
+  const deleteButton = page.getByTestId(
+    `${E2eTestId.DeleteChatApiKeyButton}-${keyName}`,
+  );
+  if (!(await deleteButton.isVisible().catch(() => false))) {
+    return;
+  }
+
+  await deleteButton.click();
   await clickButton({ page, options: { name: "Delete" } });
 }
 
@@ -95,8 +100,18 @@ export async function createVirtualKey(
       : null);
 
   if (parentKeyOptionName) {
+    await page.getByTestId(E2eTestId.VirtualKeyProviderSelect).click();
+    if (params.parentProvider) {
+      await page
+        .getByRole("option", { name: new RegExp(params.parentProvider, "i") })
+        .click();
+    } else {
+      await page.getByRole("option").first().click();
+    }
+
     await page.getByTestId(E2eTestId.VirtualKeyParentKeySelect).click();
     await page.getByRole("option", { name: parentKeyOptionName }).click();
+    await page.getByRole("button", { name: /^Add$/ }).click();
   }
   await page.getByLabel(/Name/i).fill(params.name);
   await clickButton({ page, options: { name: "Create" } });
@@ -129,8 +144,10 @@ export async function deleteVisibleProviderKeys(
     );
   }
 
-  const keys = (await listResponse.json()) as Array<{ id: string }>;
+  const keys = extractPaginatedArray<{ id: string }>(await listResponse.json());
   for (const key of keys) {
+    await deleteVirtualKeysForProviderKey(request, key.id);
+
     const deleteResponse = await request.delete(
       getE2eRequestUrl(`/api/llm-provider-api-keys/${key.id}`),
       {
@@ -146,6 +163,65 @@ export async function deleteVisibleProviderKeys(
       );
     }
   }
+}
+
+async function deleteVirtualKeysForProviderKey(
+  request: APIRequestContext,
+  providerApiKeyId: string,
+): Promise<void> {
+  const listResponse = await request.get(
+    getE2eRequestUrl(
+      `/api/llm-virtual-keys?providerApiKeyId=${encodeURIComponent(providerApiKeyId)}&limit=100`,
+    ),
+    {
+      headers: {
+        Origin: UI_BASE_URL,
+      },
+    },
+  );
+
+  if (!listResponse.ok()) {
+    throw new Error(
+      `Failed to list virtual API keys for provider key ${providerApiKeyId}: ${listResponse.status()} ${await listResponse.text()}`,
+    );
+  }
+
+  const virtualKeys = extractPaginatedArray<{ id: string }>(
+    await listResponse.json(),
+  );
+  for (const virtualKey of virtualKeys) {
+    const deleteResponse = await request.delete(
+      getE2eRequestUrl(`/api/llm-virtual-keys/${virtualKey.id}`),
+      {
+        headers: {
+          Origin: UI_BASE_URL,
+        },
+      },
+    );
+
+    if (!deleteResponse.ok() && deleteResponse.status() !== 404) {
+      throw new Error(
+        `Failed to delete virtual API key ${virtualKey.id}: ${deleteResponse.status()} ${await deleteResponse.text()}`,
+      );
+    }
+  }
+}
+
+function extractPaginatedArray<T>(data: unknown): T[] {
+  if (Array.isArray(data)) {
+    return data as T[];
+  }
+
+  if (
+    data &&
+    typeof data === "object" &&
+    "data" in data &&
+    Array.isArray(data.data)
+  ) {
+    return data.data as T[];
+  }
+
+  return [];
 }
 
 async function getParentKeyOptionNameForProvider(

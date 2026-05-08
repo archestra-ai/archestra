@@ -182,6 +182,7 @@ describe("normalizeIdentityProviderFormValues", () => {
           pkce: true,
           clientId: "archestra-oidc",
           clientSecret: "archestra-oidc-secret",
+          userInfoEndpoint: "https://graph.microsoft.com/oidc/userinfo",
           discoveryEndpoint:
             "https://login.microsoftonline.com/test-tenant/v2.0/.well-known/openid-configuration",
           mapping: { id: "sub", email: "email", name: "name" },
@@ -202,5 +203,33 @@ describe("normalizeIdentityProviderFormValues", () => {
         subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
       }),
     );
+    expect(normalized.oidcConfig?.userInfoEndpoint).toBeUndefined();
+    expect(normalized.oidcConfig?.mapping?.email).toBe("preferred_username");
+  });
+
+  it("preserves custom Entra OBO email mappings", () => {
+    const normalized = normalizeIdentityProviderFormValues(
+      makeOidcFormValues({
+        providerId: "EntraID",
+        issuer: "https://login.microsoftonline.com/test-tenant/v2.0",
+        oidcConfig: {
+          issuer: "https://login.microsoftonline.com/test-tenant/v2.0",
+          pkce: true,
+          clientId: "archestra-oidc",
+          clientSecret: "archestra-oidc-secret",
+          userInfoEndpoint: "https://graph.microsoft.com/oidc/userinfo",
+          discoveryEndpoint:
+            "https://login.microsoftonline.com/test-tenant/v2.0/.well-known/openid-configuration",
+          mapping: { id: "sub", email: "upn", name: "name" },
+          enterpriseManagedCredentials: {
+            exchangeStrategy: "entra_obo",
+            clientId: "archestra-oidc",
+          },
+        },
+      }),
+    );
+
+    expect(normalized.oidcConfig?.userInfoEndpoint).toBeUndefined();
+    expect(normalized.oidcConfig?.mapping?.email).toBe("upn");
   });
 });

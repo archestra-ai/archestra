@@ -1,5 +1,6 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { jwtDecode } from "jwt-decode";
 import { z } from "zod";
 import { auth } from "@/auth/better-auth";
 import config from "@/config";
@@ -10,6 +11,7 @@ import IdentityProviderModel from "@/models/identity-provider.ee";
 import {
   ApiError,
   constructResponseSchema,
+  IdentityProviderLatestIdTokenClaimsSchema,
   InsertIdentityProviderSchema,
   PublicIdentityProviderSchema,
   SelectIdentityProviderSchema,
@@ -82,6 +84,61 @@ const identityProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ user }, reply) => {
       const url = await getIdpLogoutUrl(user.id);
       return reply.send({ url });
+    },
+  );
+
+  fastify.get(
+    `${IDENTITY_PROVIDERS_API_PREFIX}/:id/latest-id-token-claims`,
+    {
+      schema: {
+        operationId: RouteId.GetIdentityProviderLatestIdTokenClaims,
+        description:
+          "Get decoded claims from the current user's latest ID token for an identity provider",
+        tags: ["Identity Providers"],
+        params: z.object({
+          id: z.string(),
+        }),
+        response: constructResponseSchema(
+          IdentityProviderLatestIdTokenClaimsSchema,
+        ),
+      },
+    },
+    async ({ params: { id }, organizationId, user }, reply) => {
+      const provider = await IdentityProviderModel.findById(id, organizationId);
+      if (!provider) {
+        throw new ApiError(404, "Identity provider not found");
+      }
+
+      const account =
+        await AccountModel.getLatestSsoAccountByUserIdAndProviderId(
+          user.id,
+          provider.providerId,
+        );
+      if (!account?.idToken) {
+        return reply.send({
+          providerId: provider.providerId,
+          claims: null,
+          updatedAt: account?.updatedAt ?? null,
+        });
+      }
+
+      try {
+        return reply.send({
+          providerId: provider.providerId,
+          claims: jwtDecode<Record<string, unknown>>(account.idToken),
+          updatedAt: account.updatedAt,
+        });
+      } catch (error) {
+        logger.warn(
+          { err: error, providerId: provider.providerId, userId: user.id },
+          "Failed to decode latest IdP id_token claims",
+        );
+        return reply.send({
+          providerId: provider.providerId,
+          claims: null,
+          updatedAt: account.updatedAt,
+        });
+      }
     },
   );
 

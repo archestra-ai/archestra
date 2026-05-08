@@ -121,6 +121,7 @@ function AddApiKeyDialog({
 }) {
   const createMutation = useCreateLlmProviderApiKey();
   const byosEnabled = useFeature("byosEnabled");
+  const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
   const bedrockIamAuthEnabled = useFeature("bedrockIamAuthEnabled");
   const geminiVertexAiEnabled = useFeature("geminiVertexAiEnabled");
 
@@ -147,7 +148,7 @@ function AddApiKeyDialog({
       ? formValues.vaultSecretPath && formValues.vaultSecretKey
       : isProviderApiKeyOptional({
           provider: formValues.provider,
-          azureEntraIdEnabled: true,
+          azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
         }) || formValues.apiKey);
 
   const handleCreate = form.handleSubmit(async (values) => {

@@ -286,6 +286,7 @@ export function LlmProviderApiKeyForm({
 }: LlmProviderApiKeyFormProps) {
   const authDocsUrl = getFrontendDocsUrl("platform-llm-proxy-authentication");
   const byosEnabled = useFeature("byosEnabled");
+  const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
   const { data: providerBaseUrls } = useProviderBaseUrls();
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: isLlmProviderApiKeyAdmin } = useHasPermissions({
@@ -525,7 +526,7 @@ export function LlmProviderApiKeyForm({
               API Key{" "}
               {isProviderApiKeyOptional({
                 provider,
-                azureEntraIdEnabled: true,
+                azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
               }) ? (
                 <span className="font-normal text-muted-foreground">
                   (optional)

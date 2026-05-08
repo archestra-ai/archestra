@@ -76587,6 +76587,9 @@
                             "2"
                           ]
                         },
+                        "azureOpenAiEntraIdEnabled": {
+                          "type": "boolean"
+                        },
                         "bedrockIamAuthEnabled": {
                           "type": "boolean"
                         },
@@ -76649,6 +76652,7 @@
                         "advancedToolFeaturesEnabled",
                         "byosEnabled",
                         "byosVaultKvVersion",
+                        "azureOpenAiEntraIdEnabled",
                         "bedrockIamAuthEnabled",
                         "geminiVertexAiEnabled",
                         "globalToolPolicy",

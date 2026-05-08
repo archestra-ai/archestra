@@ -111,6 +111,7 @@ export default function ApiKeysPage() {
   const updateMutation = useUpdateLlmProviderApiKey();
   const deleteMutation = useDeleteLlmProviderApiKey();
   const byosEnabled = useFeature("byosEnabled");
+  const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
 
   const getKeyUsage = useCallback(
     (keyId: string): string | null => {
@@ -356,7 +357,7 @@ export default function ApiKeysPage() {
             row.original.secretId ||
             isProviderApiKeyOptional({
               provider: row.original.provider,
-              azureEntraIdEnabled: true,
+              azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
             }) ? (
               <>
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
@@ -419,7 +420,13 @@ export default function ApiKeysPage() {
         },
       },
     ],
-    [docsUrl, openEditDialog, openDeleteDialog, getKeyUsage],
+    [
+      docsUrl,
+      openEditDialog,
+      openDeleteDialog,
+      getKeyUsage,
+      azureOpenAiEntraIdEnabled,
+    ],
   );
 
   return (

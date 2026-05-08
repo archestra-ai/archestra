@@ -1,3 +1,7 @@
+import {
+  parseFullToolName,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+} from "@shared";
 import { and, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { Agent } from "@/types";
@@ -79,7 +83,13 @@ export async function serializeAgentForExport(
 async function resolveToolReferences(
   agent: Agent,
 ): Promise<AgentExportPayload["tools"]> {
-  const nonDelegationTools = agent.tools.filter((t) => !t.delegateToAgentId);
+  const hasKnowledgeSources =
+    agent.knowledgeBaseIds.length > 0 || agent.connectorIds.length > 0;
+  const nonDelegationTools = agent.tools.filter(
+    (t) =>
+      !t.delegateToAgentId &&
+      (hasKnowledgeSources || !isQueryKnowledgeSourcesTool(t.name)),
+  );
   if (nonDelegationTools.length === 0) return [];
 
   // Batch-fetch catalog names for tools with a catalogId
@@ -137,6 +147,13 @@ async function resolveToolReferences(
       | "enterprise_managed"
       | undefined,
   }));
+}
+
+function isQueryKnowledgeSourcesTool(toolName: string): boolean {
+  return (
+    parseFullToolName(toolName).toolName ===
+    TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME
+  );
 }
 
 /**

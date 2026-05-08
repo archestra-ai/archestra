@@ -1,6 +1,10 @@
 "use client";
 
-import { providerDisplayNames, type SupportedProvider } from "@shared";
+import {
+  E2eTestId,
+  providerDisplayNames,
+  type SupportedProvider,
+} from "@shared";
 import { Plus, Trash2 } from "lucide-react";
 import Image from "next/image";
 import { useMemo, useState } from "react";
@@ -92,7 +96,10 @@ export function ProviderKeyMappingsField({
               setSelectedApiKeyId("");
             }}
           >
-            <SelectTrigger className="w-full">
+            <SelectTrigger
+              className="w-full"
+              data-testid={E2eTestId.VirtualKeyProviderSelect}
+            >
               <SelectValue placeholder="Select provider" />
             </SelectTrigger>
             <SelectContent>
@@ -124,7 +131,10 @@ export function ProviderKeyMappingsField({
             onValueChange={setSelectedApiKeyId}
             disabled={!selectedProvider}
           >
-            <SelectTrigger className="w-full">
+            <SelectTrigger
+              className="w-full"
+              data-testid={E2eTestId.VirtualKeyParentKeySelect}
+            >
               <SelectValue placeholder="Select key" />
             </SelectTrigger>
             <SelectContent>

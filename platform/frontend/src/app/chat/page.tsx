@@ -104,6 +104,7 @@ import {
 import { useChatAgentState } from "@/lib/chat/chat-agent-state.hook";
 import {
   useConversationShare,
+  useForkConversation,
   useForkSharedConversation,
 } from "@/lib/chat/chat-share.query";
 import {
@@ -203,6 +204,7 @@ export function ChatPageContent({
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
   const [isForkDialogOpen, setIsForkDialogOpen] = useState(false);
   const [forkAgentId, setForkAgentId] = useState<string | null>(null);
+  const forkConversationMutation = useForkConversation();
   const forkSharedConversationMutation = useForkSharedConversation();
   const { data: session } = useSession();
 
@@ -547,8 +549,6 @@ export function ChatPageContent({
     !!conversationId &&
     !!conversation &&
     conversation.userId !== session?.user.id;
-  const isReadOnlySharedConversation =
-    isReadOnlyConversation && !!conversation?.share;
   const persistedConversationMessages = useMemo(
     () => (conversation?.messages ?? []) as UIMessage[],
     [conversation?.messages],
@@ -1251,23 +1251,30 @@ export function ChatPageContent({
     setPendingBrowserUrl(undefined);
   }, []);
 
-  const handleForkSharedConversation = useCallback(async () => {
-    if (!conversation?.share?.id || !effectiveForkAgentId) {
+  const handleForkConversation = useCallback(async () => {
+    if (!conversationId || !effectiveForkAgentId) {
       return;
     }
 
-    const result = await forkSharedConversationMutation.mutateAsync({
-      shareId: conversation.share.id,
-      agentId: effectiveForkAgentId,
-    });
+    const result = conversation?.share?.id
+      ? await forkSharedConversationMutation.mutateAsync({
+          shareId: conversation.share.id,
+          agentId: effectiveForkAgentId,
+        })
+      : await forkConversationMutation.mutateAsync({
+          conversationId,
+          agentId: effectiveForkAgentId,
+        });
 
     if (result) {
       setIsForkDialogOpen(false);
       router.push(`/chat/${result.id}`);
     }
   }, [
+    conversationId,
     conversation?.share?.id,
     effectiveForkAgentId,
+    forkConversationMutation,
     forkSharedConversationMutation,
     router,
   ]);
@@ -1872,23 +1879,16 @@ export function ChatPageContent({
                       <div className="absolute inset-0 flex items-center justify-center pointer-events-auto">
                         <Button
                           onClick={() => {
-                            if (!isReadOnlySharedConversation) {
-                              router.push("/chat");
-                              return;
-                            }
-
                             if (shouldPromptForForkAgentSelection) {
                               setIsForkDialogOpen(true);
                               return;
                             }
 
-                            void handleForkSharedConversation();
+                            void handleForkConversation();
                           }}
                         >
                           <Plus className="h-4 w-4" />
-                          {isReadOnlySharedConversation
-                            ? "Start New Chat from here"
-                            : "Start New Chat"}
+                          Start New Chat from here
                         </Button>
                       </div>
                     </div>
@@ -2147,13 +2147,15 @@ export function ChatPageContent({
               Cancel
             </Button>
             <Button
-              onClick={handleForkSharedConversation}
+              onClick={handleForkConversation}
               disabled={
                 !effectiveForkAgentId ||
+                forkConversationMutation.isPending ||
                 forkSharedConversationMutation.isPending
               }
             >
-              {forkSharedConversationMutation.isPending
+              {forkConversationMutation.isPending ||
+              forkSharedConversationMutation.isPending
                 ? "Creating..."
                 : "Start Chat"}
             </Button>

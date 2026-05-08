@@ -668,6 +668,25 @@ describe("TeamModel", () => {
 
       expect(groupToTeams.size).toBe(0);
     });
+
+    test("should match IdP groups case-insensitively", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, user.id, { name: "Operations" });
+
+      await TeamModel.addExternalGroup(team.id, "ops-admins");
+
+      const groupToTeams = await TeamModel.findTeamsByExternalGroups(org.id, [
+        "Ops-Admins",
+      ]);
+
+      expect(groupToTeams.size).toBe(1);
+      expect(groupToTeams.get("ops-admins")?.[0]?.id).toBe(team.id);
+    });
   });
 
   describe("getTeammateUserIds", () => {
@@ -1195,6 +1214,30 @@ describe("TeamModel", () => {
 
       expect(added).toHaveLength(2);
       expect(added.sort()).toEqual([team1.id, team2.id].sort());
+    });
+
+    test("should report matched and unmapped SSO groups", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, user.id, { name: "Operations" });
+      const ssoUser = await makeUser({ email: "ops-user@test.com" });
+
+      await TeamModel.addExternalGroup(team.id, "ops-admins");
+
+      const result = await TeamModel.syncUserTeams(ssoUser.id, org.id, [
+        "Ops-Admins",
+        "Unmapped-Group",
+      ]);
+
+      expect(result.added).toEqual([team.id]);
+      expect(result.removed).toHaveLength(0);
+      expect(result.matchedExternalGroupCount).toBe(1);
+      expect(result.matchedTeamCount).toBe(1);
+      expect(result.unmappedGroupCount).toBe(1);
     });
   });
 

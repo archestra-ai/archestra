@@ -228,3 +228,5 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @Sudharsanselvaraj
 - @avaughey
 - @MoAdelMamoun
+- @Pratham-R
+- @berinelson122-design

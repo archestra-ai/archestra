@@ -25,7 +25,7 @@ The full example is available at [github.com/archestra-ai/examples/tree/main/mod
 3. Uses PKCE for the authorization-code exchange
 4. Sends the OAuth access token to `/v1/model-router/{proxyId}/chat/completions`
 
-User OAuth tokens do not use **LLM Proxies > Proxy Auth > OAuth Clients**. That page creates confidential clients for the client credentials flow. User OAuth apps are public authorization-code clients, and provider keys are resolved from the signed-in user's accessible Model Provider keys.
+User OAuth tokens do not use **LLM Proxies > Credentials > OAuth Clients**. That page creates confidential clients for the client credentials flow. User OAuth apps are public authorization-code clients, and provider keys are resolved from the signed-in user's accessible Model Provider keys.
 
 ## Run the Example
 

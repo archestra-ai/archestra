@@ -368,7 +368,9 @@ test.describe("Chat - Approval flow survives reload", () => {
 
     await waitForToolPartTerminalState(page);
 
-    // Reload and confirm the persistence sweep removed the stale row.
+    // Reload and confirm the persistence sweep removed the stale row AND the
+    // post-approval assistant response is still rendered (the original
+    // user-visible symptom from #4030: "the response disappears").
     await page.goto(conversationUrl);
     await page.waitForLoadState("networkidle");
 
@@ -379,6 +381,10 @@ test.describe("Chat - Approval flow survives reload", () => {
     await expect(page.getByRole("button", { name: /^Decline/i })).toHaveCount(
       0,
     );
+    // Stub follow-up text from helm/e2e-tests/mappings/*-chat-auth-ui-approval-e2e-followup.json
+    await expect(
+      page.getByText(/seems you need to set up credentials/i),
+    ).toBeVisible({ timeout: 10_000 });
   });
 
   test("Decline survives reload — banner does not reappear", async ({
@@ -408,5 +414,9 @@ test.describe("Chat - Approval flow survives reload", () => {
     await expect(page.getByRole("button", { name: /^Decline/i })).toHaveCount(
       0,
     );
+    // Stub follow-up text from helm/e2e-tests/mappings/*-chat-auth-ui-approval-e2e-followup.json
+    await expect(
+      page.getByText(/seems you need to set up credentials/i),
+    ).toBeVisible({ timeout: 10_000 });
   });
 });

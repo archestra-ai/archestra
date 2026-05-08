@@ -6,6 +6,29 @@
   },
   "components": {
     "schemas": {
+      "EmbeddingDimensionsInput": {
+        "type": "integer",
+        "minimum": -9007199254740991,
+        "maximum": 9007199254740991,
+        "enum": [
+          3072,
+          1536,
+          768
+        ]
+      },
+      "LocalConfigEnvironmentDefaultInput": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          }
+        ]
+      },
       "OpenAiChatCompletionRequestInput": {
         "type": "object",
         "properties": {
@@ -16823,6 +16846,29 @@
           "type",
           "title",
           "description"
+        ]
+      },
+      "EmbeddingDimensions": {
+        "type": "integer",
+        "minimum": -9007199254740991,
+        "maximum": 9007199254740991,
+        "enum": [
+          3072,
+          1536,
+          768
+        ]
+      },
+      "LocalConfigEnvironmentDefault": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          }
         ]
       },
       "OpenAiChatCompletionRequest": {
@@ -98413,15 +98459,9 @@
                                   "type": "string"
                                 },
                                 "default": {
-                                  "anyOf": [
+                                  "allOf": [
                                     {
-                                      "type": "string"
-                                    },
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "boolean"
+                                      "$ref": "#/components/schemas/LocalConfigEnvironmentDefault"
                                     }
                                   ]
                                 },
@@ -99256,15 +99296,9 @@
                               "type": "string"
                             },
                             "default": {
-                              "anyOf": [
+                              "allOf": [
                                 {
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "number"
-                                },
-                                {
-                                  "type": "boolean"
+                                  "$ref": "#/components/schemas/LocalConfigEnvironmentDefaultInput"
                                 }
                               ]
                             },
@@ -99794,15 +99828,9 @@
                                 "type": "string"
                               },
                               "default": {
-                                "anyOf": [
+                                "allOf": [
                                   {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "boolean"
+                                    "$ref": "#/components/schemas/LocalConfigEnvironmentDefault"
                                   }
                                 ]
                               },
@@ -100651,15 +100679,9 @@
                                 "type": "string"
                               },
                               "default": {
-                                "anyOf": [
+                                "allOf": [
                                   {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "boolean"
+                                    "$ref": "#/components/schemas/LocalConfigEnvironmentDefault"
                                   }
                                 ]
                               },
@@ -101485,15 +101507,9 @@
                               "type": "string"
                             },
                             "default": {
-                              "anyOf": [
+                              "allOf": [
                                 {
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "number"
-                                },
-                                {
-                                  "type": "boolean"
+                                  "$ref": "#/components/schemas/LocalConfigEnvironmentDefaultInput"
                                 }
                               ]
                             },
@@ -102031,15 +102047,9 @@
                                 "type": "string"
                               },
                               "default": {
-                                "anyOf": [
+                                "allOf": [
                                   {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "boolean"
+                                    "$ref": "#/components/schemas/LocalConfigEnvironmentDefault"
                                   }
                                 ]
                               },
@@ -119528,24 +119538,9 @@
                       },
                       "embeddingDimensions": {
                         "nullable": true,
-                        "anyOf": [
+                        "allOf": [
                           {
-                            "type": "number",
-                            "enum": [
-                              3072
-                            ]
-                          },
-                          {
-                            "type": "number",
-                            "enum": [
-                              1536
-                            ]
-                          },
-                          {
-                            "type": "number",
-                            "enum": [
-                              768
-                            ]
+                            "$ref": "#/components/schemas/EmbeddingDimensions"
                           }
                         ]
                       }
@@ -120173,24 +120168,9 @@
                       },
                       "embeddingDimensions": {
                         "nullable": true,
-                        "anyOf": [
+                        "allOf": [
                           {
-                            "type": "number",
-                            "enum": [
-                              3072
-                            ]
-                          },
-                          {
-                            "type": "number",
-                            "enum": [
-                              1536
-                            ]
-                          },
-                          {
-                            "type": "number",
-                            "enum": [
-                              768
-                            ]
+                            "$ref": "#/components/schemas/EmbeddingDimensions"
                           }
                         ]
                       },
@@ -120566,24 +120546,9 @@
                   },
                   "embeddingDimensions": {
                     "nullable": true,
-                    "anyOf": [
+                    "allOf": [
                       {
-                        "type": "number",
-                        "enum": [
-                          3072
-                        ]
-                      },
-                      {
-                        "type": "number",
-                        "enum": [
-                          1536
-                        ]
-                      },
-                      {
-                        "type": "number",
-                        "enum": [
-                          768
-                        ]
+                        "$ref": "#/components/schemas/EmbeddingDimensionsInput"
                       }
                     ]
                   },
@@ -120733,24 +120698,9 @@
                     },
                     "embeddingDimensions": {
                       "nullable": true,
-                      "anyOf": [
+                      "allOf": [
                         {
-                          "type": "number",
-                          "enum": [
-                            3072
-                          ]
-                        },
-                        {
-                          "type": "number",
-                          "enum": [
-                            1536
-                          ]
-                        },
-                        {
-                          "type": "number",
-                          "enum": [
-                            768
-                          ]
+                          "$ref": "#/components/schemas/EmbeddingDimensions"
                         }
                       ]
                     },
@@ -125680,15 +125630,9 @@
                                           "type": "string"
                                         },
                                         "default": {
-                                          "anyOf": [
+                                          "allOf": [
                                             {
-                                              "type": "string"
-                                            },
-                                            {
-                                              "type": "number"
-                                            },
-                                            {
-                                              "type": "boolean"
+                                              "$ref": "#/components/schemas/LocalConfigEnvironmentDefault"
                                             }
                                           ]
                                         },
@@ -126363,15 +126307,9 @@
                                       "type": "string"
                                     },
                                     "default": {
-                                      "anyOf": [
+                                      "allOf": [
                                         {
-                                          "type": "string"
-                                        },
-                                        {
-                                          "type": "number"
-                                        },
-                                        {
-                                          "type": "boolean"
+                                          "$ref": "#/components/schemas/LocalConfigEnvironmentDefaultInput"
                                         }
                                       ]
                                     },
@@ -126751,15 +126689,9 @@
                                         "type": "string"
                                       },
                                       "default": {
-                                        "anyOf": [
+                                        "allOf": [
                                           {
-                                            "type": "string"
-                                          },
-                                          {
-                                            "type": "number"
-                                          },
-                                          {
-                                            "type": "boolean"
+                                            "$ref": "#/components/schemas/LocalConfigEnvironmentDefault"
                                           }
                                         ]
                                       },
@@ -127466,15 +127398,9 @@
                                         "type": "string"
                                       },
                                       "default": {
-                                        "anyOf": [
+                                        "allOf": [
                                           {
-                                            "type": "string"
-                                          },
-                                          {
-                                            "type": "number"
-                                          },
-                                          {
-                                            "type": "boolean"
+                                            "$ref": "#/components/schemas/LocalConfigEnvironmentDefault"
                                           }
                                         ]
                                       },
@@ -128152,15 +128078,9 @@
                                       "type": "string"
                                     },
                                     "default": {
-                                      "anyOf": [
+                                      "allOf": [
                                         {
-                                          "type": "string"
-                                        },
-                                        {
-                                          "type": "number"
-                                        },
-                                        {
-                                          "type": "boolean"
+                                          "$ref": "#/components/schemas/LocalConfigEnvironmentDefaultInput"
                                         }
                                       ]
                                     },
@@ -128591,15 +128511,9 @@
                                         "type": "string"
                                       },
                                       "default": {
-                                        "anyOf": [
+                                        "allOf": [
                                           {
-                                            "type": "string"
-                                          },
-                                          {
-                                            "type": "number"
-                                          },
-                                          {
-                                            "type": "boolean"
+                                            "$ref": "#/components/schemas/LocalConfigEnvironmentDefault"
                                           }
                                         ]
                                       },
@@ -129595,15 +129509,9 @@
                                         "type": "string"
                                       },
                                       "default": {
-                                        "anyOf": [
+                                        "allOf": [
                                           {
-                                            "type": "string"
-                                          },
-                                          {
-                                            "type": "number"
-                                          },
-                                          {
-                                            "type": "boolean"
+                                            "$ref": "#/components/schemas/LocalConfigEnvironmentDefault"
                                           }
                                         ]
                                       },
@@ -130325,15 +130233,9 @@
                                         "type": "string"
                                       },
                                       "default": {
-                                        "anyOf": [
+                                        "allOf": [
                                           {
-                                            "type": "string"
-                                          },
-                                          {
-                                            "type": "number"
-                                          },
-                                          {
-                                            "type": "boolean"
+                                            "$ref": "#/components/schemas/LocalConfigEnvironmentDefault"
                                           }
                                         ]
                                       },
@@ -131059,15 +130961,9 @@
                                         "type": "string"
                                       },
                                       "default": {
-                                        "anyOf": [
+                                        "allOf": [
                                           {
-                                            "type": "string"
-                                          },
-                                          {
-                                            "type": "number"
-                                          },
-                                          {
-                                            "type": "boolean"
+                                            "$ref": "#/components/schemas/LocalConfigEnvironmentDefault"
                                           }
                                         ]
                                       },
@@ -147154,7 +147050,11 @@
                     },
                     "embeddingDimensions": {
                       "nullable": true,
-                      "type": "number"
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/EmbeddingDimensions"
+                        }
+                      ]
                     },
                     "embeddingChatApiKeyId": {
                       "nullable": true,
@@ -147948,7 +147848,11 @@
                     },
                     "embeddingDimensions": {
                       "nullable": true,
-                      "type": "number"
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/EmbeddingDimensions"
+                        }
+                      ]
                     },
                     "embeddingChatApiKeyId": {
                       "nullable": true,
@@ -149013,7 +148917,11 @@
                     },
                     "embeddingDimensions": {
                       "nullable": true,
-                      "type": "number"
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/EmbeddingDimensions"
+                        }
+                      ]
                     },
                     "embeddingChatApiKeyId": {
                       "nullable": true,
@@ -149680,7 +149588,11 @@
                     },
                     "embeddingDimensions": {
                       "nullable": true,
-                      "type": "number"
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/EmbeddingDimensions"
+                        }
+                      ]
                     },
                     "embeddingChatApiKeyId": {
                       "nullable": true,
@@ -150365,7 +150277,11 @@
                     },
                     "embeddingDimensions": {
                       "nullable": true,
-                      "type": "number"
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/EmbeddingDimensions"
+                        }
+                      ]
                     },
                     "embeddingChatApiKeyId": {
                       "nullable": true,
@@ -151094,7 +151010,11 @@
                     },
                     "embeddingDimensions": {
                       "nullable": true,
-                      "type": "number"
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/EmbeddingDimensions"
+                        }
+                      ]
                     },
                     "embeddingChatApiKeyId": {
                       "nullable": true,
@@ -151748,7 +151668,11 @@
                     },
                     "embeddingDimensions": {
                       "nullable": true,
-                      "type": "number"
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/EmbeddingDimensions"
+                        }
+                      ]
                     },
                     "embeddingChatApiKeyId": {
                       "nullable": true,
@@ -152415,7 +152339,11 @@
                     },
                     "embeddingDimensions": {
                       "nullable": true,
-                      "type": "number"
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/EmbeddingDimensions"
+                        }
+                      ]
                     },
                     "embeddingChatApiKeyId": {
                       "nullable": true,
@@ -153049,7 +152977,11 @@
                     },
                     "embeddingDimensions": {
                       "nullable": true,
-                      "type": "number"
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/EmbeddingDimensions"
+                        }
+                      ]
                     },
                     "embeddingChatApiKeyId": {
                       "nullable": true,
@@ -153996,7 +153928,11 @@
                     },
                     "embeddingDimensions": {
                       "nullable": true,
-                      "type": "number"
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/EmbeddingDimensions"
+                        }
+                      ]
                     },
                     "embeddingChatApiKeyId": {
                       "nullable": true,

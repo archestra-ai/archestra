@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 
@@ -20,7 +20,10 @@ class McpCatalogTeamModel {
         .select({ id: schema.internalMcpCatalogTable.id })
         .from(schema.internalMcpCatalogTable)
         .where(
-          eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+          or(
+            eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+            isNull(schema.internalMcpCatalogTable.organizationId),
+          ),
         );
       return allCatalogs.map((c) => c.id);
     }
@@ -28,7 +31,8 @@ class McpCatalogTeamModel {
     // Mirrors the agent (profile) access control approach: org-visible + personal + team-based
     const result = await db.execute<{ id: string }>(sql`
       SELECT id FROM internal_mcp_catalog
-        WHERE scope = 'org' AND organization_id = ${organizationId}
+        WHERE scope = 'org'
+          AND (organization_id = ${organizationId} OR organization_id IS NULL)
       UNION
       SELECT id FROM internal_mcp_catalog
         WHERE author_id = ${userId}
@@ -67,7 +71,9 @@ class McpCatalogTeamModel {
       .limit(1);
 
     if (!catalog) return false;
-    if (catalog.organizationId !== organizationId) return false;
+    if (catalog.organizationId && catalog.organizationId !== organizationId) {
+      return false;
+    }
     if (isAdmin) return true;
 
     if (catalog.scope === "org") return true;

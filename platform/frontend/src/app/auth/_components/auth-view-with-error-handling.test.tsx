@@ -81,6 +81,9 @@ describe("AuthViewWithErrorHandling", () => {
     render(<AuthViewWithErrorHandling path="sign-in" callbackURL="/" />);
 
     expect(screen.queryByText("Sign-In Failed")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Enter your email below to login to your account"),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sign In" })).toBeInTheDocument();
   });
 

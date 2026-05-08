@@ -274,4 +274,14 @@ describe("ConversationSearchPalette", () => {
 
     expect(mockRouterPush).toHaveBeenCalledWith("/chat");
   });
+
+  it("navigates to LLM credentials when selecting Credentials", () => {
+    render(<ConversationSearchPalette {...defaultProps} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Credentials" }));
+
+    expect(mockRouterPush).toHaveBeenCalledWith(
+      "/llm/credentials/virtual-keys",
+    );
+  });
 });

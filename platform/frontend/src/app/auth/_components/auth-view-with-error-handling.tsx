@@ -677,8 +677,10 @@ function SignInView({ callbackURL }: { callbackURL?: string }) {
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle>Sign In</CardTitle>
-        <CardDescription>Sign in to your account</CardDescription>
+        <CardTitle className="text-xl">Sign In</CardTitle>
+        <CardDescription>
+          Enter your email below to login to your account
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <Form {...signInForm}>

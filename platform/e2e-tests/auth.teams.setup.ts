@@ -395,13 +395,27 @@ setup("setup teams and assignments", async ({ page }) => {
     defaultMembers,
   );
 
-  // Add Editor to both Engineering and Marketing teams
+  // Add Admin and Editor to both Engineering and Marketing teams
+  await addUserToTeamIfNotMember(
+    page.request,
+    engineeringTeam.id,
+    adminUserId,
+    "member",
+    engineeringMembers,
+  );
   await addUserToTeamIfNotMember(
     page.request,
     engineeringTeam.id,
     editorUserId,
     "member",
     engineeringMembers,
+  );
+  await addUserToTeamIfNotMember(
+    page.request,
+    marketingTeam.id,
+    adminUserId,
+    "member",
+    marketingMembers,
   );
   await addUserToTeamIfNotMember(
     page.request,

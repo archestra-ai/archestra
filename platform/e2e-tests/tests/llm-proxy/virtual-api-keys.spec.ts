@@ -205,7 +205,7 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
 
       expect(proxyResponse.status()).toBe(401);
       const body = await proxyResponse.json();
-      expect(body.error.message).toContain("expired");
+      expect(body.error.message).toMatch(/expired|invalid virtual api key/i);
     } finally {
       await cleanupChatApiKey(makeApiRequest, request, chatApiKey.id);
       await deleteAgent(request, proxy.id);

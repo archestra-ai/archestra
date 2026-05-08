@@ -69,9 +69,14 @@ export async function deleteLlmProviderApiKey(
   page: Page,
   keyName: string,
 ): Promise<void> {
-  await page
-    .getByTestId(`${E2eTestId.DeleteChatApiKeyButton}-${keyName}`)
-    .click();
+  const deleteButton = page.getByTestId(
+    `${E2eTestId.DeleteChatApiKeyButton}-${keyName}`,
+  );
+  if (!(await deleteButton.isVisible().catch(() => false))) {
+    return;
+  }
+
+  await deleteButton.click();
   await clickButton({ page, options: { name: "Delete" } });
 }
 

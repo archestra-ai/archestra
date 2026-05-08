@@ -215,9 +215,6 @@ export function SamlConfigForm({
 
       {(!activeSection || activeSection === "service-provider-metadata") && (
         <div>
-          <h4 className="text-md font-medium mb-4">
-            Service Provider Metadata (Optional)
-          </h4>
           <div className="grid gap-4">
             <FormField
               control={form.control}
@@ -264,9 +261,6 @@ export function SamlConfigForm({
 
       {(!activeSection || activeSection === "attribute-mapping") && (
         <div>
-          <h4 className="text-md font-medium mb-4">
-            Attribute Mapping (Optional)
-          </h4>
           <div className="grid gap-4">
             <FormField
               control={form.control}

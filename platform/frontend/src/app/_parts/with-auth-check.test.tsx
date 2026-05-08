@@ -66,6 +66,7 @@ describe("WithAuthCheck", () => {
     } as ReturnType<typeof useHasPermissions>);
     // Reset window.location to default state
     setWindowLocation("/", "");
+    window.sessionStorage.clear();
   });
 
   describe("when user is not authenticated", () => {
@@ -223,6 +224,24 @@ describe("WithAuthCheck", () => {
       );
 
       expect(mockRouterPush).toHaveBeenCalledWith("/llm/logs");
+    });
+
+    it("should keep sign-in visible while default password change is pending", () => {
+      vi.mocked(usePathname).mockReturnValue("/auth/sign-in");
+      setWindowLocation("/auth/sign-in", "?redirectTo=%2Fchat");
+      window.sessionStorage.setItem(
+        "archestra.defaultPasswordChangePending",
+        "true",
+      );
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      expect(mockRouterPush).not.toHaveBeenCalled();
+      expect(screen.getByTestId("protected-content")).toBeInTheDocument();
     });
 
     it("should ignore malicious redirectTo param and redirect to home", () => {

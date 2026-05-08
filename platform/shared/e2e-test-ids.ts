@@ -7,6 +7,9 @@ export const E2eTestId = {
   OnboardingNextButton: "onboarding-next-button",
   OnboardingFinishButton: "onboarding-finish-button",
   OnboardingSkipButton: "onboarding-skip-button",
+  DefaultPasswordChangePrompt: "default-password-change-prompt",
+  DefaultPasswordChangeSkipButton: "default-password-change-skip-button",
+  SignInSubmitButton: "sign-in-submit-button",
   InviteMemberButton: "invite-member-button",
   InviteEmailInput: "invite-email-input",
   InviteRoleSelect: "invite-role-select",
@@ -97,6 +100,7 @@ export const E2eTestId = {
   AddVirtualKeyButton: "add-virtual-key-button",
   VirtualKeyCreateDialog: "virtual-key-create-dialog",
   VirtualKeyDeleteDialog: "virtual-key-delete-dialog",
+  VirtualKeyProviderSelect: "virtual-key-provider-select",
   VirtualKeyParentKeySelect: "virtual-key-parent-key-select",
   VirtualKeyValue: "virtual-key-value",
   // Chat Prompt Input

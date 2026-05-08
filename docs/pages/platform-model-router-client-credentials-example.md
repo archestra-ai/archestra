@@ -20,7 +20,7 @@ The full example is available at [github.com/archestra-ai/examples/tree/main/mod
 
 ## What the App Does
 
-1. Uses an OAuth client created in **LLM Proxies > Proxy Auth > OAuth Clients**
+1. Uses an OAuth client created in **LLM Proxies > Credentials > OAuth Clients**
 2. Exchanges `client_id` and `client_secret` for an access token
 3. Sends the access token to `/v1/model-router/{proxyId}/chat/completions`
 
@@ -28,7 +28,7 @@ OAuth client credentials do not use a browser consent screen and do not inherit 
 
 ## Run the Example
 
-Create an OAuth client in **LLM Proxies > Proxy Auth > OAuth Clients**. Select the LLM proxy it can access, map the provider keys it can use, and copy the generated secret.
+Create an OAuth client in **LLM Proxies > Credentials > OAuth Clients**. Select the LLM proxy it can access, map the provider keys it can use, and copy the generated secret.
 
 Then run:
 

@@ -5,6 +5,8 @@
 import { type APIRequestContext, test as base } from "@playwright/test";
 import type { SupportedProvider } from "@shared";
 import {
+  ADMIN_EMAIL,
+  ADMIN_PASSWORD,
   adminAuthFile,
   editorAuthFile,
   getE2eRequestUrl,
@@ -103,10 +105,23 @@ const makeApiRequest = async ({
   headers?: Record<string, string>;
   ignoreStatusCheck?: boolean;
 }) => {
-  const response = await request[method](getE2eRequestUrl(urlSuffix), {
-    headers,
-    data,
-  });
+  const makeRequest = () =>
+    request[method](getE2eRequestUrl(urlSuffix), {
+      headers,
+      data,
+    });
+
+  let response = await makeRequest();
+
+  if (!ignoreStatusCheck && response.status() === 403) {
+    await refreshAdminSession(request);
+    response = await makeRequest();
+  }
+
+  if (!ignoreStatusCheck && response.status() === 401) {
+    await refreshAdminSession(request);
+    response = await makeRequest();
+  }
 
   if (!ignoreStatusCheck && !response.ok()) {
     throw new Error(
@@ -118,6 +133,53 @@ const makeApiRequest = async ({
 
   return response;
 };
+
+async function refreshAdminSession(request: APIRequestContext): Promise<void> {
+  const response = await request.post(
+    getE2eRequestUrl("/api/auth/sign-in/email"),
+    {
+      data: {
+        email: ADMIN_EMAIL,
+        password: ADMIN_PASSWORD,
+      },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: "",
+        Origin: UI_BASE_URL,
+      },
+    },
+  );
+
+  if (!response.ok()) {
+    throw new Error(
+      `Failed to refresh admin session: ${response.status()} ${await response.text()}`,
+    );
+  }
+
+  const permissionsResponse = await request.get(
+    getE2eRequestUrl("/api/user/permissions"),
+    {
+      headers: { Origin: UI_BASE_URL },
+    },
+  );
+
+  if (!permissionsResponse.ok()) {
+    throw new Error(
+      `Failed to verify refreshed admin session: ${permissionsResponse.status()} ${await permissionsResponse.text()}`,
+    );
+  }
+
+  const permissions = await permissionsResponse.json();
+  if (
+    !permissions?.identityProvider?.includes("create") ||
+    !permissions?.mcpRegistry?.includes("create") ||
+    !permissions?.toolPolicy?.includes("create")
+  ) {
+    throw new Error(
+      `Refreshed session does not have admin permissions: ${JSON.stringify(permissions)}`,
+    );
+  }
+}
 
 function extractPaginatedArray<T>(data: unknown): T[] {
   if (Array.isArray(data)) {

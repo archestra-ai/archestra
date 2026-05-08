@@ -114,6 +114,7 @@ export const MARKETING_TEAM_NAME = "Marketing Team";
 
 export {
   E2eTestId,
+  getIdentityProviderDialogNavButtonTestId,
   getIdpRoleMappingRuleRowTestId,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";

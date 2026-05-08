@@ -1,5 +1,50 @@
 # Changelog
 
+## [1.2.35](https://github.com/archestra-ai/archestra/compare/platform-v1.2.34...platform-v1.2.35) (2026-05-07)
+
+
+### Features
+
+* add clone action for read-only run conversations ([#4434](https://github.com/archestra-ai/archestra/issues/4434)) ([5085dba](https://github.com/archestra-ai/archestra/commit/5085dba336c3f7ec3aae4b6c90bf8308155f1637))
+* support linked downstream IdPs for MCP auth ([#4414](https://github.com/archestra-ai/archestra/issues/4414)) ([9699eb8](https://github.com/archestra-ai/archestra/commit/9699eb8552e7390d129a73ad93186283b91a8b1f))
+
+
+### Bug Fixes
+
+* scheduled task admin run history access ([#4427](https://github.com/archestra-ai/archestra/issues/4427)) ([655760e](https://github.com/archestra-ai/archestra/commit/655760e4a57bff6719cda1b4f560f2c5165b6b0c))
+
+
+### Miscellaneous Chores
+
+* **deps:** bump hono from 4.12.14 to 4.12.18 in /platform/e2e-tests/test-mcp-servers/mcp-server-jwks-keycloak ([#4435](https://github.com/archestra-ai/archestra/issues/4435)) ([a225fe7](https://github.com/archestra-ai/archestra/commit/a225fe7a66c9267505695ccd53263f815384d929))
+* **deps:** bump ip-address and express-rate-limit in /platform/e2e-tests/test-mcp-servers/mcp-server-jwks-keycloak ([#4413](https://github.com/archestra-ai/archestra/issues/4413)) ([0dd94f4](https://github.com/archestra-ai/archestra/commit/0dd94f422f5b477b41fe13737cd05486f7854aed))
+* improve SSO sync diagnostics and IdP mapping UX ([#4428](https://github.com/archestra-ai/archestra/issues/4428)) ([25d4983](https://github.com/archestra-ai/archestra/commit/25d4983a13b97b1e85b6b78d8b172966e737e0d4))
+
+## [1.2.34](https://github.com/archestra-ai/archestra/compare/platform-v1.2.33...platform-v1.2.34) (2026-05-06)
+
+
+### Features
+
+* add file upload knowledge connector ([#3924](https://github.com/archestra-ai/archestra/issues/3924)) ([9069119](https://github.com/archestra-ai/archestra/commit/9069119ce16a2892c5e8ea1dc6bd1481b15e966d))
+
+
+### Bug Fixes
+
+* add fetching embedding models for openrouter provider ([#4368](https://github.com/archestra-ai/archestra/issues/4368)) ([d0ea63b](https://github.com/archestra-ai/archestra/commit/d0ea63bd1d8476140d55bac0d979efa20feb9b64))
+* org-scoped MCP visibility ([#4411](https://github.com/archestra-ai/archestra/issues/4411)) ([afa33cf](https://github.com/archestra-ai/archestra/commit/afa33cf00e7b24f2fe29f6baaa459b45e3d1ecbf))
+* stale MCP pod cleanup ([#4409](https://github.com/archestra-ai/archestra/issues/4409)) ([3e7c2c6](https://github.com/archestra-ai/archestra/commit/3e7c2c6f8bd6034a26b6155f1245c17030080c6b))
+* support protected resource enterprise credentials ([#4389](https://github.com/archestra-ai/archestra/issues/4389)) ([7d2f3b2](https://github.com/archestra-ai/archestra/commit/7d2f3b2ba3609ae7fcb26b66554bbae48cc11441))
+
+
+### Code Refactoring
+
+* **models:** centralize MODELS_DEV_PROVIDER_MAP into shared constants ([#4407](https://github.com/archestra-ai/archestra/issues/4407)) ([beeecf4](https://github.com/archestra-ai/archestra/commit/beeecf479a4687d90a588d611c02d08f2dae822f))
+
+
+### Miscellaneous Chores
+
+* allow search in add & reuse connector dialogs ([#4246](https://github.com/archestra-ai/archestra/issues/4246)) ([1189478](https://github.com/archestra-ai/archestra/commit/118947855275038c0d96882bfb75eb76ab37e437))
+
 ## [1.2.33](https://github.com/archestra-ai/archestra/compare/platform-v1.2.32...platform-v1.2.33) (2026-05-05)
 
 

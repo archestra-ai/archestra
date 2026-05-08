@@ -28,7 +28,7 @@ Archestra supports automatic team membership synchronization based on user group
 
 ## Configuring team sync
 
-When creating or editing an SSO provider, expand the **Team Sync Configuration (Optional)** section.
+When creating or editing an SSO provider, select the **Team Sync** section.
 
 1. **Enable Team Sync** — when enabled (default), users are automatically added or removed from Archestra teams based on their SSO group memberships.
 2. **Groups Handlebars Template** — a [Handlebars](https://handlebarsjs.com/) template that extracts group identifiers from the ID token claims. Should render to a comma-separated list or JSON array. Leave empty to use default extraction.
@@ -141,7 +141,7 @@ When users with the `dev-team` group log in via SSO, they will automatically be 
 If your IdP sends roles as objects (for example `roles: [{name: "admin"}, {name: "viewer"}]`):
 
 1. Edit your SSO provider configuration
-2. Expand **Team Sync Configuration**
+2. Select **Team Sync**
 3. Set **Groups Handlebars Template** to `{{#each roles}}{{this.name}},{{/each}}`
 4. Save the provider
 5. Link your teams to group identifiers like `admin` or `viewer`
@@ -152,12 +152,12 @@ If your IdP sends roles as objects (for example `roles: [{name: "admin"}, {name:
 
 1. Check that **Enable Team Sync** is enabled in your SSO provider settings
 2. Verify your Handlebars template extracts the expected groups from the ID token
-3. Use a JWT decoder (like [jwt.io](https://jwt.io)) to inspect your ID token claims
+3. Check **Latest ID token claims** in the Team Sync section to inspect the decoded claims from your latest sign-in
 4. Check that the group identifier in Archestra exactly matches the extracted group name
 5. Ensure your IdP is configured to include group claims in the ID token, and that Archestra requests the groups scope required by your IdP
 6. Check backend logs for sync errors
 
-You can test Handlebars templates at [tryhandlebarsjs.com](http://tryhandlebarsjs.com/) using your actual ID token claims as input.
+Use the built-in template tester in the Team Sync section to test the groups template against your latest decoded ID token claims.
 
 **Users not being removed from teams:**
 
@@ -167,7 +167,7 @@ You can test Handlebars templates at [tryhandlebarsjs.com](http://tryhandlebarsj
 
 **Checking ID token groups:**
 
-Use a JWT decoder (like [jwt.io](https://jwt.io)) to inspect the ID token and verify the groups claim contains the expected values. Role mapping and team sync both use ID token claims exclusively.
+When editing an existing OIDC provider, check **Latest ID token claims** in the Team Sync section and verify the group claim contains the expected values. Role mapping and team sync both use ID token claims.
 
 ## See also
 

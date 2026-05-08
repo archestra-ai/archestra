@@ -468,7 +468,7 @@ export async function getChatMcpClient(
       await pingClientWithTimeout(cachedClient);
       logger.info(
         { agentId, userId },
-        "✅ Returning cached MCP client for agent/user (ping succeeded, session will be reused)",
+        "Returning cached MCP client for agent/user (ping succeeded, session will be reused)",
       );
       clientCache.set(cacheKey, cachedClient);
       return cachedClient;
@@ -502,7 +502,7 @@ export async function getChatMcpClient(
       userId,
       totalCachedClients: clientCache.size,
     },
-    "🔄 No cached client found - creating new MCP client for agent/user via gateway",
+    "No cached client found - creating new MCP client for agent/user via gateway",
   );
 
   const externalIdpToken = await resolveSessionExternalIdpToken({
@@ -513,8 +513,10 @@ export async function getChatMcpClient(
   // Reuse pre-resolved token when available to avoid a redundant DB round-trip
   // (getChatMcpTools already calls selectMCPGatewayToken before this).
   let tokenValue: string;
+  let fallbackTokenValue: string | null = null;
   if (externalIdpToken) {
     tokenValue = externalIdpToken.rawToken;
+    fallbackTokenValue = preResolvedTokenValue ?? null;
     logger.info(
       {
         agentId,
@@ -545,14 +547,14 @@ export async function getChatMcpClient(
   // Use new URL format with profileId in path
   const mcpGatewayUrl = `${MCP_GATEWAY_BASE_URL}/${agentId}`;
 
-  try {
+  const connectWithToken = async (authToken: string) => {
     // Create StreamableHTTP transport with profile token authentication
     const transport = new StreamableHTTPClientTransport(
       new URL(mcpGatewayUrl),
       {
         requestInit: {
           headers: new Headers({
-            Authorization: `Bearer ${tokenValue}`,
+            Authorization: `Bearer ${authToken}`,
             Accept: "application/json, text/event-stream",
           }),
         },
@@ -574,6 +576,11 @@ export async function getChatMcpClient(
       "Connecting to MCP Gateway...",
     );
     await client.connect(transport);
+    return client;
+  };
+
+  try {
+    const client = await connectWithToken(tokenValue);
 
     logger.info(
       { agentId, userId },
@@ -590,11 +597,51 @@ export async function getChatMcpClient(
         userId,
         totalCachedClients: clientCache.size,
       },
-      "✅ MCP client cached - subsequent requests will reuse this session",
+      "MCP client cached - subsequent requests will reuse this session",
     );
 
     return client;
   } catch (error) {
+    if (fallbackTokenValue) {
+      logger.warn(
+        {
+          error,
+          agentId,
+          userId,
+          url: mcpGatewayUrl,
+        },
+        "Failed to connect to MCP Gateway with session-derived external IdP token; retrying with internal gateway token",
+      );
+
+      try {
+        const client = await connectWithToken(fallbackTokenValue);
+
+        logger.info(
+          { agentId, userId },
+          "Successfully connected to MCP Gateway with internal gateway token fallback",
+        );
+
+        clientCache.set(cacheKey, client);
+
+        logger.info(
+          {
+            agentId,
+            userId,
+            totalCachedClients: clientCache.size,
+          },
+          "MCP client cached - subsequent requests will reuse this session",
+        );
+
+        return client;
+      } catch (fallbackError) {
+        logger.error(
+          { error: fallbackError, agentId, userId, url: mcpGatewayUrl },
+          "Failed to connect to MCP Gateway for agent/user with fallback token",
+        );
+        return null;
+      }
+    }
+
     logger.error(
       { error, agentId, userId, url: mcpGatewayUrl },
       "Failed to connect to MCP Gateway for agent/user",
@@ -1481,7 +1528,7 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
   // Check if MCP tool returned an error
   // Return error text as tool result instead of throwing so the AI SDK includes
   // it in the conversation as a tool-result message. This allows the frontend to
-  // parse structured errors (e.g. auth-required with install URL) and render
+  // parse structured errors (e.g. auth-required with action URL) and render
   // actionable UI instead of showing a generic stream error.
   if (result.isError) {
     const extractedError = mcpContent

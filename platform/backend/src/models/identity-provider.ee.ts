@@ -83,7 +83,7 @@ class IdentityProviderModel {
 
     logger.debug(
       { providerId: context.provider.providerId, dataKeys: Object.keys(data) },
-      "Evaluating role mapping rules against ID token claims",
+      "[evaluateRoleMapping] Evaluating role mapping rules against ID token claims",
     );
 
     // Evaluate rules in order, first match wins
@@ -99,7 +99,7 @@ class IdentityProviderModel {
               expression: rule.expression,
               role: rule.role,
             },
-            "Role mapping rule matched",
+            "[evaluateRoleMapping] Role mapping rule matched",
           );
           return {
             role: rule.role,
@@ -113,7 +113,7 @@ class IdentityProviderModel {
             providerId: context.provider.providerId,
             expression: rule.expression,
           },
-          "Error evaluating role mapping expression",
+          "[evaluateRoleMapping] Error evaluating role mapping expression",
         );
         // Continue to next rule on error
       }
@@ -123,7 +123,7 @@ class IdentityProviderModel {
     if (config.strictMode) {
       logger.warn(
         { providerId: context.provider.providerId },
-        "Role mapping strict mode enabled and no rules matched - denying login",
+        "[evaluateRoleMapping] Strict mode enabled and no rules matched - denying login",
       );
       return {
         role: null,
@@ -137,7 +137,7 @@ class IdentityProviderModel {
     const resolvedRole = config.defaultRole || fallbackRole;
     logger.debug(
       { providerId: context.provider.providerId, role: resolvedRole },
-      "No role mapping rules matched, using default",
+      "[evaluateRoleMapping] No role mapping rules matched, using default",
     );
 
     return {
@@ -170,7 +170,7 @@ class IdentityProviderModel {
         hasToken: !!token,
         tokenKeys: token ? Object.keys(token) : [],
       },
-      "resolveSsoRole: Starting IdP role resolution",
+      "[resolveSsoRole] Starting IdP role resolution",
     );
 
     // Better-auth passes the raw OAuth token response, not decoded JWT claims.
@@ -184,20 +184,19 @@ class IdentityProviderModel {
           {
             providerId: provider?.providerId,
             idTokenClaimKeys: Object.keys(idTokenClaims),
-            idTokenClaims,
           },
-          "resolveSsoRole: Decoded idToken JWT claims",
+          "[resolveSsoRole] Decoded idToken JWT claims",
         );
       } catch (decodeError) {
         logger.warn(
           { err: decodeError, providerId: provider?.providerId },
-          "resolveSsoRole: Failed to decode idToken JWT for role mapping",
+          "[resolveSsoRole] Failed to decode idToken JWT for role mapping",
         );
       }
     } else {
       logger.debug(
         { providerId: provider?.providerId },
-        "resolveSsoRole: No idToken JWT present in token response",
+        "[resolveSsoRole] No idToken JWT present in token response",
       );
     }
 
@@ -205,7 +204,7 @@ class IdentityProviderModel {
       // Fetch the identity provider configuration to get role mapping rules
       logger.debug(
         { providerId: provider.providerId },
-        "resolveSsoRole: Fetching identity provider configuration",
+        "[resolveSsoRole] Fetching identity provider configuration",
       );
       const idpProvider = await IdentityProviderModel.findByProviderId(
         provider.providerId,
@@ -216,10 +215,11 @@ class IdentityProviderModel {
           providerId: provider.providerId,
           idpProviderFound: !!idpProvider,
           hasRoleMapping: !!idpProvider?.roleMapping,
-          roleMappingConfig: idpProvider?.roleMapping,
+          roleMappingRuleCount: idpProvider?.roleMapping?.rules?.length ?? 0,
+          teamSyncEnabled: idpProvider?.teamSyncConfig?.enabled !== false,
           organizationId: idpProvider?.organizationId,
         },
-        "resolveSsoRole: Identity provider configuration retrieved",
+        "[resolveSsoRole] Identity provider configuration retrieved",
       );
 
       if (idpProvider?.roleMapping) {
@@ -233,7 +233,7 @@ class IdentityProviderModel {
             userId: user?.id,
             organizationId: idpProvider.organizationId,
           },
-          "resolveSsoRole: Checking skipRoleSync configuration",
+          "[resolveSsoRole] Checking skipRoleSync configuration",
         );
 
         if (roleMapping.skipRoleSync && user?.id) {
@@ -248,7 +248,7 @@ class IdentityProviderModel {
               existingMemberFound: !!existingMember,
               existingRole: existingMember?.role,
             },
-            "resolveSsoRole: skipRoleSync - checked for existing membership",
+            "[resolveSsoRole] Checked existing membership for skipRoleSync",
           );
 
           if (existingMember) {
@@ -259,7 +259,7 @@ class IdentityProviderModel {
                 organizationId: idpProvider.organizationId,
                 currentRole: existingMember.role,
               },
-              "Skip role sync enabled - keeping existing role",
+              "[resolveSsoRole] Skip role sync enabled - keeping existing role",
             );
 
             // Cache IdP groups for team sync before returning (even when skipping role sync)
@@ -269,6 +269,15 @@ class IdentityProviderModel {
               const groups = extractGroupsFromClaims(
                 tokenClaims,
                 idpProvider.teamSyncConfig,
+              );
+              logger.info(
+                {
+                  providerId: provider.providerId,
+                  email: user.email,
+                  groupCount: groups.length,
+                  claimKeys: Object.keys(tokenClaims),
+                },
+                "[resolveSsoRole] SSO group claims extracted during role resolution",
               );
               if (groups.length > 0) {
                 await cacheIdpGroups(
@@ -283,7 +292,7 @@ class IdentityProviderModel {
                     email: user.email,
                     groupCount: groups.length,
                   },
-                  "Cached IdP groups for team sync (skipRoleSync path)",
+                  "[resolveSsoRole] Cached IdP groups for team sync in skipRoleSync path",
                 );
               }
             }
@@ -300,10 +309,9 @@ class IdentityProviderModel {
           {
             providerId: provider.providerId,
             tokenClaimsKeys: Object.keys(tokenClaims),
-            tokenClaims,
-            roleMapping,
+            roleMappingRuleCount: roleMapping.rules?.length ?? 0,
           },
-          "resolveSsoRole: Evaluating role mapping rules with token claims",
+          "[resolveSsoRole] Evaluating role mapping rules with token claims",
         );
 
         const result = IdentityProviderModel.evaluateRoleMapping(
@@ -323,7 +331,7 @@ class IdentityProviderModel {
             providerId: provider.providerId,
             result,
           },
-          "resolveSsoRole: Role mapping evaluation completed",
+          "[resolveSsoRole] Role mapping evaluation completed",
         );
 
         // Handle strict mode: Deny login if no rules matched
@@ -333,7 +341,7 @@ class IdentityProviderModel {
               providerId: provider.providerId,
               email: user?.email,
             },
-            "IdP login denied due to strict mode",
+            "[resolveSsoRole] IdP login denied due to strict mode",
           );
           throw new APIError("FORBIDDEN", {
             message: result.error,
@@ -346,7 +354,7 @@ class IdentityProviderModel {
             assignedRole: result.role,
             matched: result.matched,
           },
-          "IdP role mapping evaluated",
+          "[resolveSsoRole] IdP role mapping evaluated",
         );
 
         // Cache IdP groups for team sync (if user email is available)
@@ -354,6 +362,15 @@ class IdentityProviderModel {
           const groups = extractGroupsFromClaims(
             tokenClaims,
             idpProvider.teamSyncConfig,
+          );
+          logger.info(
+            {
+              providerId: provider.providerId,
+              email: user.email,
+              groupCount: groups.length,
+              claimKeys: Object.keys(tokenClaims),
+            },
+            "[resolveSsoRole] SSO group claims extracted during role resolution",
           );
           if (groups.length > 0) {
             await cacheIdpGroups(
@@ -376,6 +393,15 @@ class IdentityProviderModel {
           tokenClaimsForCache,
           idpProvider.teamSyncConfig,
         );
+        logger.info(
+          {
+            providerId: provider.providerId,
+            email: user.email,
+            groupCount: groups.length,
+            claimKeys: Object.keys(tokenClaimsForCache),
+          },
+          "[resolveSsoRole] SSO group claims extracted during role resolution",
+        );
         if (groups.length > 0) {
           await cacheIdpGroups(
             provider.providerId,
@@ -389,7 +415,7 @@ class IdentityProviderModel {
               email: user.email,
               groupCount: groups.length,
             },
-            "Cached IdP groups for team sync (no role mapping configured)",
+            "[resolveSsoRole] Cached IdP groups for team sync with no role mapping configured",
           );
         }
       }
@@ -401,13 +427,13 @@ class IdentityProviderModel {
             providerId: provider?.providerId,
             errorMessage: error.message,
           },
-          "resolveSsoRole: Re-throwing APIError (strict mode denial)",
+          "[resolveSsoRole] Re-throwing APIError for strict mode denial",
         );
         throw error;
       }
       logger.error(
         { err: error, providerId: provider?.providerId },
-        "resolveSsoRole: Error evaluating IdP role mapping",
+        "[resolveSsoRole] Error evaluating IdP role mapping",
       );
     }
 
@@ -417,7 +443,7 @@ class IdentityProviderModel {
         providerId: provider?.providerId,
         fallbackRole: MEMBER_ROLE_NAME,
       },
-      "resolveSsoRole: Using fallback role (no role mapping configured or error occurred)",
+      "[resolveSsoRole] Using fallback role because no mapping was configured or evaluation failed",
     );
     return MEMBER_ROLE_NAME;
   }
@@ -433,7 +459,8 @@ class IdentityProviderModel {
         id: schema.identityProvidersTable.id,
         providerId: schema.identityProvidersTable.providerId,
       })
-      .from(schema.identityProvidersTable);
+      .from(schema.identityProvidersTable)
+      .where(eq(schema.identityProvidersTable.ssoLoginEnabled, true));
 
     return idpProviders;
   }
@@ -580,6 +607,7 @@ class IdentityProviderModel {
           providerId: data.providerId,
           domain: data.domain,
         }) || SSO_REGISTRATION_PLACEHOLDER_DOMAIN,
+      ssoLoginEnabled: data.ssoLoginEnabled ?? true,
       organizationId,
       ...(data.oidcConfig && {
         oidcConfig:
@@ -606,10 +634,12 @@ class IdentityProviderModel {
     }
 
     const registrationData = await hydrateOidcConfigForRegistration(parsedData);
+    const { ssoLoginEnabled: _ssoLoginEnabled, ...betterAuthRegistrationData } =
+      registrationData;
 
     // Register with Better Auth
     await auth.api.registerSSOProvider({
-      body: registrationData,
+      body: betterAuthRegistrationData,
       headers: new Headers(headers),
     });
 
@@ -639,7 +669,9 @@ class IdentityProviderModel {
      */
     // Also store roleMapping and teamSyncConfig if provided (Better Auth doesn't handle these fields)
     // Note: These are stored as JSON text but typed as objects in Drizzle schema
-    const oidcConfigJson = serializeConfigValue(registrationData.oidcConfig);
+    const oidcConfigJson = serializeConfigValue(
+      betterAuthRegistrationData.oidcConfig,
+    );
     const samlConfigJson = serializeConfigValue(data.samlConfig);
     const roleMappingJson = serializeConfigValue(data.roleMapping);
     const teamSyncConfigJson = serializeConfigValue(data.teamSyncConfig);
@@ -652,6 +684,7 @@ class IdentityProviderModel {
       .set({
         domain: persistedDomain,
         domainVerified: true,
+        ssoLoginEnabled: data.ssoLoginEnabled ?? true,
         ...(oidcConfigJson !== undefined && {
           oidcConfig: oidcConfigJson as unknown as typeof data.oidcConfig,
         }),

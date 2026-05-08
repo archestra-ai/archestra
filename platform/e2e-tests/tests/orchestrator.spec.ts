@@ -1,6 +1,6 @@
-import { TEST_CATALOG_ITEM_NAME, WIREMOCK_INTERNAL_URL } from "../consts";
+import { WIREMOCK_INTERNAL_URL } from "../consts";
 import {
-  findCatalogItem,
+  ensureInternalDevTestServerCatalogItem,
   findInstalledServer,
   waitForServerInstallation,
 } from "../utils";
@@ -151,16 +151,8 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
           throw new Error("Default Team not found");
         }
 
-        // Find the internal-dev-test-server catalog item
-        const catalogItem = await findCatalogItem(
-          request,
-          TEST_CATALOG_ITEM_NAME,
-        );
-        if (!catalogItem) {
-          throw new Error(
-            `Catalog item '${TEST_CATALOG_ITEM_NAME}' not found. Ensure it exists in the internal MCP catalog.`,
-          );
-        }
+        const catalogItem =
+          await ensureInternalDevTestServerCatalogItem(request);
 
         // Check if already installed for this team
         let testServer = await findInstalledServer(

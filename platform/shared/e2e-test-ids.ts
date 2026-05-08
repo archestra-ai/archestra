@@ -9,6 +9,7 @@ export const E2eTestId = {
   OnboardingSkipButton: "onboarding-skip-button",
   DefaultPasswordChangePrompt: "default-password-change-prompt",
   DefaultPasswordChangeSkipButton: "default-password-change-skip-button",
+  SignInSubmitButton: "sign-in-submit-button",
   InviteMemberButton: "invite-member-button",
   InviteEmailInput: "invite-email-input",
   InviteRoleSelect: "invite-role-select",

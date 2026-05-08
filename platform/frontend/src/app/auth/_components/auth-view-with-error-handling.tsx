@@ -728,6 +728,7 @@ function SignInView({ callbackURL }: { callbackURL?: string }) {
               type="submit"
               className="w-full"
               disabled={signIn.isPending}
+              data-testid={E2eTestId.SignInSubmitButton}
             >
               {signIn.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

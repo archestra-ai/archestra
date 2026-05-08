@@ -9,12 +9,12 @@ import { expect, goToPage } from "../fixtures";
 import { clickButton, expandTablePagination } from "./dialogs";
 
 export async function goToLlmProviderApiKeysPage(page: Page): Promise<void> {
-  await goToPage(page, "/llm/providers/api-keys");
+  await goToPage(page, "/llm/model-providers/api-keys");
   await expandTablePagination(page, E2eTestId.ChatApiKeysTable);
 }
 
 export async function goToVirtualKeysPage(page: Page): Promise<void> {
-  await goToPage(page, "/llm/providers/virtual-keys");
+  await goToPage(page, "/llm/credentials/virtual-keys");
   await expect(page.getByTestId(E2eTestId.VirtualKeysPage)).toBeVisible({
     timeout: 15_000,
   });

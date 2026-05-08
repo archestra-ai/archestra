@@ -82,7 +82,7 @@ export async function loginViaUi(
 ): Promise<void> {
   await page.getByLabel(/email/i).fill(email);
   await page.getByLabel(/password/i).fill(password);
-  await page.getByRole("button", { name: /^(sign in|login)$/i }).click();
+  await page.getByTestId(E2eTestId.SignInSubmitButton).click();
   if (options.skipDefaultPasswordPrompt !== false) {
     await skipDefaultPasswordChangePromptIfVisible(page);
   }
@@ -124,7 +124,7 @@ export async function navigateAndVerifyAuth(params: {
   await expect(async () => {
     await params.goToPage(page, path);
     await page.waitForLoadState("domcontentloaded");
-    const loginButton = page.getByRole("button", { name: /login/i });
+    const loginButton = page.getByTestId(E2eTestId.SignInSubmitButton);
     if (await loginButton.isVisible({ timeout: 2_000 }).catch(() => false)) {
       await loginViaApi(page, email, password);
       await params.goToPage(page, path);

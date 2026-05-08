@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { E2eTestId } from "@shared";
 import { useSearchParams } from "next/navigation";
 import { StrictMode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -84,6 +85,7 @@ describe("AuthViewWithErrorHandling", () => {
     expect(
       screen.getByText("Enter your email below to login to your account"),
     ).toBeInTheDocument();
+    expect(screen.getByTestId(E2eTestId.SignInSubmitButton)).toBeVisible();
     expect(screen.getByRole("button", { name: "Sign In" })).toBeInTheDocument();
   });
 

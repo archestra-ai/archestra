@@ -27,6 +27,7 @@ import {
   extractCertFromMetadata,
   fetchKeycloakSamlMetadata,
   loginViaApi,
+  loginViaUi,
   loginViaKeycloak,
 } from "../utils";
 
@@ -78,9 +79,7 @@ async function ensureAdminAuthenticated(page: Page): Promise<void> {
       "API login appeared to fail (redirected to sign-in), trying UI fallback...",
     );
     // Try logging in via UI as fallback
-    await page.getByLabel("Email").fill(ADMIN_EMAIL);
-    await page.getByLabel("Password").fill(ADMIN_PASSWORD);
-    await page.getByRole("button", { name: "Login" }).click();
+    await loginViaUi(page, ADMIN_EMAIL, ADMIN_PASSWORD);
     await page.waitForLoadState("domcontentloaded");
 
     // Check for error toast or message on the sign-in page

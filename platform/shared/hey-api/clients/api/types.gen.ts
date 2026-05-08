@@ -4,6 +4,10 @@ export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});
 };
 
+export type EmbeddingDimensionsInput = 3072 | 1536 | 768;
+
+export type LocalConfigEnvironmentDefaultInput = string | number | boolean;
+
 export type OpenAiChatCompletionRequestInput = {
     model: string;
     /**
@@ -5258,6 +5262,10 @@ export type UserConfigFieldInput = {
     headerName?: string;
     valuePrefix?: string;
 };
+
+export type EmbeddingDimensions = 3072 | 1536 | 768;
+
+export type LocalConfigEnvironmentDefault = string | number | boolean;
 
 export type OpenAiChatCompletionRequest = {
     model: string;
@@ -27114,7 +27122,7 @@ export type GetInternalMcpCatalogResponses = {
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
-                default?: string | number | boolean;
+                default?: LocalConfigEnvironmentDefault;
                 mounted?: boolean;
             }>;
             envFrom?: Array<{
@@ -27241,7 +27249,7 @@ export type CreateInternalMcpCatalogItemData = {
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
-                default?: string | number | boolean;
+                default?: LocalConfigEnvironmentDefaultInput;
                 mounted?: boolean;
             }>;
             envFrom?: Array<{
@@ -27433,7 +27441,7 @@ export type CreateInternalMcpCatalogItemResponses = {
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
-                default?: string | number | boolean;
+                default?: LocalConfigEnvironmentDefault;
                 mounted?: boolean;
             }>;
             envFrom?: Array<{
@@ -27722,7 +27730,7 @@ export type GetInternalMcpCatalogItemResponses = {
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
-                default?: string | number | boolean;
+                default?: LocalConfigEnvironmentDefault;
                 mounted?: boolean;
             }>;
             envFrom?: Array<{
@@ -27847,7 +27855,7 @@ export type UpdateInternalMcpCatalogItemData = {
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
-                default?: string | number | boolean;
+                default?: LocalConfigEnvironmentDefaultInput;
                 mounted?: boolean;
             }>;
             envFrom?: Array<{
@@ -28041,7 +28049,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
-                default?: string | number | boolean;
+                default?: LocalConfigEnvironmentDefault;
                 mounted?: boolean;
             }>;
             envFrom?: Array<{
@@ -32412,7 +32420,7 @@ export type GetLlmModelsResponses = {
         };
         isBest?: boolean;
         isFastest?: boolean;
-        embeddingDimensions?: 3072 | 1536 | 768 | null;
+        embeddingDimensions?: EmbeddingDimensions | null;
     }>;
 };
 
@@ -32592,7 +32600,7 @@ export type GetModelsWithApiKeysResponses = {
         customPricePerMillionInput: string | null;
         customPricePerMillionOutput: string | null;
         ignored: boolean;
-        embeddingDimensions: 3072 | 1536 | 768 | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         discoveredViaLlmProxy: boolean;
         lastSyncedAt: string;
         createdAt: string;
@@ -32620,7 +32628,7 @@ export type UpdateModelData = {
         customPricePerMillionInput?: string | null;
         customPricePerMillionOutput?: string | null;
         ignored?: boolean;
-        embeddingDimensions?: 3072 | 1536 | 768 | null;
+        embeddingDimensions?: EmbeddingDimensionsInput | null;
         inputModalities?: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
         outputModalities?: Array<'text' | 'image' | 'audio'> | null;
     };
@@ -32715,7 +32723,7 @@ export type UpdateModelResponses = {
         customPricePerMillionInput: string | null;
         customPricePerMillionOutput: string | null;
         ignored: boolean;
-        embeddingDimensions: 3072 | 1536 | 768 | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         discoveredViaLlmProxy: boolean;
         lastSyncedAt: string;
         createdAt: string;
@@ -34061,7 +34069,7 @@ export type GetMcpServerInstallationRequestsResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
-                    default?: string | number | boolean;
+                    default?: LocalConfigEnvironmentDefault;
                     mounted?: boolean;
                 }>;
                 envFrom?: Array<{
@@ -34160,7 +34168,7 @@ export type CreateMcpServerInstallationRequestData = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
-                    default?: string | number | boolean;
+                    default?: LocalConfigEnvironmentDefaultInput;
                     mounted?: boolean;
                 }>;
                 envFrom?: Array<{
@@ -34319,7 +34327,7 @@ export type CreateMcpServerInstallationRequestResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
-                    default?: string | number | boolean;
+                    default?: LocalConfigEnvironmentDefault;
                     mounted?: boolean;
                 }>;
                 envFrom?: Array<{
@@ -34583,7 +34591,7 @@ export type GetMcpServerInstallationRequestResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
-                    default?: string | number | boolean;
+                    default?: LocalConfigEnvironmentDefault;
                     mounted?: boolean;
                 }>;
                 envFrom?: Array<{
@@ -34682,7 +34690,7 @@ export type UpdateMcpServerInstallationRequestData = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
-                    default?: string | number | boolean;
+                    default?: LocalConfigEnvironmentDefaultInput;
                     mounted?: boolean;
                 }>;
                 envFrom?: Array<{
@@ -34853,7 +34861,7 @@ export type UpdateMcpServerInstallationRequestResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
-                    default?: string | number | boolean;
+                    default?: LocalConfigEnvironmentDefault;
                     mounted?: boolean;
                 }>;
                 envFrom?: Array<{
@@ -35034,7 +35042,7 @@ export type ApproveMcpServerInstallationRequestResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
-                    default?: string | number | boolean;
+                    default?: LocalConfigEnvironmentDefault;
                     mounted?: boolean;
                 }>;
                 envFrom?: Array<{
@@ -35215,7 +35223,7 @@ export type DeclineMcpServerInstallationRequestResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
-                    default?: string | number | boolean;
+                    default?: LocalConfigEnvironmentDefault;
                     mounted?: boolean;
                 }>;
                 envFrom?: Array<{
@@ -35396,7 +35404,7 @@ export type AddMcpServerInstallationRequestNoteResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
-                    default?: string | number | boolean;
+                    default?: LocalConfigEnvironmentDefault;
                     mounted?: boolean;
                 }>;
                 envFrom?: Array<{
@@ -40015,7 +40023,7 @@ export type GetOrganizationResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
-        embeddingDimensions: number | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -40284,7 +40292,7 @@ export type UpdateAppearanceSettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
-        embeddingDimensions: number | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -40426,7 +40434,7 @@ export type UpdateSecuritySettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
-        embeddingDimensions: number | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -40569,7 +40577,7 @@ export type UpdateLlmSettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
-        embeddingDimensions: number | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -40713,7 +40721,7 @@ export type UpdateAgentSettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
-        embeddingDimensions: number | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -40864,7 +40872,7 @@ export type UpdateConnectionSettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
-        embeddingDimensions: number | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -41006,7 +41014,7 @@ export type UpdateAuthSettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
-        embeddingDimensions: number | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -41150,7 +41158,7 @@ export type UpdateKnowledgeSettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
-        embeddingDimensions: number | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -41289,7 +41297,7 @@ export type DropEmbeddingConfigResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
-        embeddingDimensions: number | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -41517,7 +41525,7 @@ export type CompleteOnboardingResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
-        embeddingDimensions: number | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;

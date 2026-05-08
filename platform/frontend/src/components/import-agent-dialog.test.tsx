@@ -47,6 +47,21 @@ vi.mock("@/lib/hooks/use-app-name", () => ({
   useAppName: () => "Archestra",
 }));
 
+vi.mock("@/components/editor", () => ({
+  Editor: (props: {
+    value?: string;
+    onChange?: (value: string | undefined) => void;
+    options?: { ariaLabel?: string; placeholder?: string };
+  }) => (
+    <textarea
+      aria-label={props.options?.ariaLabel}
+      placeholder={props.options?.placeholder}
+      value={props.value ?? ""}
+      onChange={(event) => props.onChange?.(event.target.value)}
+    />
+  ),
+}));
+
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
@@ -162,7 +177,7 @@ describe("ImportAgentDialog", () => {
     await user.click(screen.getByRole("button", { name: /paste json/i }));
 
     expect(
-      screen.getByPlaceholderText(/paste agent json here/i),
+      screen.getByLabelText(/paste agent json here/i),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /parse json/i }),
@@ -247,6 +262,56 @@ describe("ImportAgentDialog", () => {
       expect(
         screen.getByText(/only internal agents can be imported/i),
       ).toBeInTheDocument();
+    });
+  });
+
+  it("shows missing required fields error when agentType is absent", async () => {
+    const user = userEvent.setup();
+    render(<ImportAgentDialog open onOpenChange={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /paste json/i }));
+
+    const textarea = screen.getByLabelText(/paste agent json here/i);
+    await user.click(textarea);
+    await user.paste(
+      JSON.stringify({
+        version: "1",
+        agent: { name: "Partial Agent" },
+      }),
+    );
+
+    await user.click(screen.getByRole("button", { name: /parse json/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Invalid Configuration")).toBeInTheDocument();
+      expect(
+        screen.getByText(/missing required fields .*agent\.agentType/i),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("shows missing required fields error when preview arrays are absent", async () => {
+    const user = userEvent.setup();
+    render(<ImportAgentDialog open onOpenChange={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /paste json/i }));
+
+    const textarea = screen.getByLabelText(/paste agent json here/i);
+    await user.click(textarea);
+    await user.paste(
+      JSON.stringify({
+        version: "1",
+        agent: { name: "Partial Agent", agentType: "agent" },
+      }),
+    );
+
+    await user.click(screen.getByRole("button", { name: /parse json/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Invalid Configuration")).toBeInTheDocument();
+      expect(screen.getByText(/missing required fields/i)).toHaveTextContent(
+        "tools",
+      );
     });
   });
 
@@ -376,7 +441,7 @@ describe("ImportAgentDialog", () => {
     await user.click(screen.getByRole("button", { name: /paste json/i }));
 
     // Type valid JSON into the textarea
-    const textarea = screen.getByPlaceholderText(/paste agent json here/i);
+    const textarea = screen.getByLabelText(/paste agent json here/i);
     await user.click(textarea);
     await user.paste(
       JSON.stringify({
@@ -498,7 +563,7 @@ describe("ImportAgentDialog", () => {
 
     await user.click(screen.getByRole("button", { name: /paste json/i }));
 
-    const textarea = screen.getByPlaceholderText(/paste agent json here/i);
+    const textarea = screen.getByLabelText(/paste agent json here/i);
     await user.click(textarea);
     await user.paste("{ invalid }");
 

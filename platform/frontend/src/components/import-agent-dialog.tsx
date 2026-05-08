@@ -18,11 +18,11 @@ import {
   ConnectorTypeIcon,
   hasConnectorIcon,
 } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
+import { Editor } from "@/components/editor";
 import { FormDialog } from "@/components/form-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
 import { useImportAgent } from "@/lib/agent.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils";
@@ -85,12 +85,11 @@ export function ImportAgentDialog({
       try {
         const parsed = JSON.parse(content) as ParsedPayload;
 
-        // Basic shape validation
-        if (!parsed.version || !parsed.agent?.name) {
+        const missingFields = getMissingPreviewFields(parsed);
+        if (missingFields.length > 0) {
           setState({
             status: "error",
-            message:
-              "Invalid agent configuration file. Missing required fields (version, agent.name).",
+            message: `Invalid agent configuration file. Missing required fields (${missingFields.join(", ")}).`,
           });
           return;
         }
@@ -311,12 +310,40 @@ export function ImportAgentDialog({
 
               {/* JSON paste mode */}
               {inputMode === "paste" && (
-                <div className="space-y-2">
-                  <Textarea
-                    className="h-48 resize-none font-mono text-xs"
-                    placeholder='Paste agent JSON here...\n{\n  "version": "1",\n  "agent": { ... }\n}'
+                <div className="h-64 overflow-hidden rounded-md border">
+                  <Editor
+                    height="100%"
+                    language="json"
                     value={pasteContent}
-                    onChange={(e) => setPasteContent(e.target.value)}
+                    onChange={(value) => setPasteContent(value ?? "")}
+                    loading={
+                      <div className="flex h-full w-full items-center justify-center bg-muted/50">
+                        <p className="text-sm text-muted-foreground">
+                          Loading editor...
+                        </p>
+                      </div>
+                    }
+                    options={{
+                      minimap: { enabled: false },
+                      lineNumbers: "on",
+                      folding: true,
+                      scrollBeyondLastLine: false,
+                      wordWrap: "on",
+                      fontSize: 13,
+                      tabSize: 2,
+                      padding: { top: 12, bottom: 12 },
+                      automaticLayout: true,
+                      scrollbar: {
+                        vertical: "auto",
+                        horizontal: "auto",
+                        verticalScrollbarSize: 10,
+                      },
+                      ariaLabel: "Paste agent JSON here",
+                      placeholder:
+                        '{\n\u00A0\u00A0"version": "1",\n\u00A0\u00A0"agent": {\n\u00A0\u00A0\u00A0\u00A0"name": "Example Agent",\n\u00A0\u00A0\u00A0\u00A0"agentType": "agent"\n\u00A0\u00A0},\n\u00A0\u00A0"labels": [],\n\u00A0\u00A0"suggestedPrompts": [],\n\u00A0\u00A0"tools": [],\n\u00A0\u00A0"delegations": [],\n\u00A0\u00A0"knowledgeBases": [],\n\u00A0\u00A0"connectors": []\n}',
+                      // Disable EditContext API because Monaco runs inside a Radix Dialog portal.
+                      editContext: false,
+                    }}
                   />
                 </div>
               )}
@@ -641,3 +668,34 @@ export function ImportAgentDialog({
     </FormDialog>
   );
 }
+
+function getMissingPreviewFields(payload: ParsedPayload) {
+  const missingFields: string[] = [];
+
+  if (!payload.version) {
+    missingFields.push("version");
+  }
+  if (!payload.agent?.name) {
+    missingFields.push("agent.name");
+  }
+  if (!payload.agent?.agentType) {
+    missingFields.push("agent.agentType");
+  }
+
+  for (const field of PREVIEW_ARRAY_FIELDS) {
+    if (!Array.isArray(payload[field])) {
+      missingFields.push(field);
+    }
+  }
+
+  return missingFields;
+}
+
+const PREVIEW_ARRAY_FIELDS = [
+  "labels",
+  "suggestedPrompts",
+  "tools",
+  "delegations",
+  "knowledgeBases",
+  "connectors",
+] as const;

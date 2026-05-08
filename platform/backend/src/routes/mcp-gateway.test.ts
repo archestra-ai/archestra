@@ -11,7 +11,6 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import config from "@/config";
 import { TeamTokenModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import mcpGatewayRoutes from "./mcp-gateway";
@@ -200,8 +199,6 @@ describe("MCP Gateway (stateless mode)", () => {
   test("uses forwarded public origin in WWW-Authenticate when proxy trust is enabled", async ({
     makeAgent,
   }) => {
-    const originalTrustProxy = config.api.trustProxy;
-    config.api.trustProxy = true;
     const proxyApp = Fastify({
       trustProxy: true,
     }).withTypeProvider<ZodTypeProvider>();
@@ -239,7 +236,6 @@ describe("MCP Gateway (stateless mode)", () => {
         `resource_metadata="https://gateway.example.com/.well-known/oauth-protected-resource/v1/mcp/${agent.slug}"`,
       );
     } finally {
-      config.api.trustProxy = originalTrustProxy;
       await proxyApp.close();
     }
   });

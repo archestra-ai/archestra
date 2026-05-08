@@ -40,10 +40,7 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const baseUrl = getPublicRequestOrigin({
-        protocol: request.protocol,
-        headers: request.headers,
-      });
+      const baseUrl = getPublicRequestOrigin(request);
 
       // Extract the resource path (everything after /.well-known/oauth-protected-resource)
       const resourcePath = request.url.replace(
@@ -101,10 +98,7 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const baseUrl = getPublicRequestOrigin({
-        protocol: request.protocol,
-        headers: request.headers,
-      });
+      const baseUrl = getPublicRequestOrigin(request);
 
       // authorization_endpoint must be browser-facing (for session cookies).
       // Use the frontend URL so the browser sends its session cookie via

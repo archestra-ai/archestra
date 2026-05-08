@@ -431,10 +431,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         delete body.resource;
       }
 
-      const tokenEndpointOrigin = getPublicRequestOrigin({
-        protocol: request.protocol,
-        headers: request.headers,
-      });
+      const tokenEndpointOrigin = getPublicRequestOrigin(request);
       const url = new URL(request.url, tokenEndpointOrigin);
       const headers = new Headers();
       Object.entries(request.headers).forEach(([key, value]) => {

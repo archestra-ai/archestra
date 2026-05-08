@@ -406,6 +406,8 @@ describe("auth routes", () => {
 
     const originalTrustProxy = config.api.trustProxy;
     config.api.trustProxy = true;
+    await app.close();
+    app = await createAuthTestApp();
 
     try {
       const response = await app.inject({
@@ -536,6 +538,8 @@ describe("auth routes", () => {
 
     const originalTrustProxy = config.api.trustProxy;
     config.api.trustProxy = true;
+    await app.close();
+    app = await createAuthTestApp();
 
     try {
       const response = await app.inject({
@@ -715,3 +719,10 @@ describe("auth routes", () => {
     }
   });
 });
+
+async function createAuthTestApp(): Promise<FastifyInstanceWithZod> {
+  const app = createFastifyInstance();
+  const { default: authRoutes } = await import("./auth");
+  await app.register(authRoutes);
+  return app;
+}

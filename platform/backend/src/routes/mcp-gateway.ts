@@ -33,10 +33,7 @@ function setWWWAuthenticateHeader(
   request: FastifyRequest,
   reply: FastifyReply,
 ) {
-  const origin = getPublicRequestOrigin({
-    protocol: request.protocol,
-    headers: request.headers,
-  });
+  const origin = getPublicRequestOrigin(request);
   const resourceMetadataUrl = `${origin}/.well-known/oauth-protected-resource${request.url}`;
   reply.header(
     "WWW-Authenticate",

@@ -1,9 +1,11 @@
 import {
+  getProvidersWithOptionalApiKey,
   isVaultReference,
   parseVaultReference,
   type SupportedProvider,
 } from "@shared";
 import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import db, { schema } from "@/database";
 import { computeSecretStorageType } from "@/secrets-manager/utils";
 import type {
@@ -15,7 +17,6 @@ import type {
   UpdateLlmProviderApiKey,
 } from "@/types";
 import { decryptSecretValue, isEncryptedSecret } from "@/utils/crypto";
-import { getProvidersWithOptionalApiKey } from "@/utils/llm-provider-api-key-optional";
 import ConversationModel from "./conversation";
 
 class LlmProviderApiKeyModel {
@@ -269,7 +270,9 @@ class LlmProviderApiKeyModel {
       eq(schema.llmProviderApiKeysTable.isSystem, true),
       inArray(
         schema.llmProviderApiKeysTable.provider,
-        getProvidersWithOptionalApiKey(),
+        getProvidersWithOptionalApiKey({
+          azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+        }),
       ),
     );
     if (secretOrSystemCondition) {
@@ -418,7 +421,9 @@ class LlmProviderApiKeyModel {
       sql`${schema.llmProviderApiKeysTable.secretId} IS NOT NULL`,
       inArray(
         schema.llmProviderApiKeysTable.provider,
-        getProvidersWithOptionalApiKey(),
+        getProvidersWithOptionalApiKey({
+          azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+        }),
       ),
     );
 

@@ -4,7 +4,7 @@ import {
   type archestraApiTypes,
   DEFAULT_PROVIDER_BASE_URLS,
   E2eTestId,
-  PROVIDERS_WITH_OPTIONAL_API_KEY,
+  isProviderApiKeyOptional,
 } from "@shared";
 import { Building2, CheckCircle2, Trash2, User, Users } from "lucide-react";
 import Link from "next/link";
@@ -85,12 +85,6 @@ export function deserializeExtraHeaders(
 
 export type LlmProviderApiKeyResponse =
   archestraApiTypes.GetLlmProviderApiKeysResponses["200"][number];
-
-export function isApiKeyOptionalForProvider(
-  provider: CreateLlmProviderApiKeyBody["provider"],
-): boolean {
-  return PROVIDERS_WITH_OPTIONAL_API_KEY.has(provider) || provider === "azure";
-}
 
 const PROVIDER_CONFIG: Record<
   CreateLlmProviderApiKeyBody["provider"],
@@ -529,7 +523,10 @@ export function LlmProviderApiKeyForm({
           <div className="space-y-2">
             <Label htmlFor="llm-provider-api-key-value">
               API Key{" "}
-              {isApiKeyOptionalForProvider(provider) ? (
+              {isProviderApiKeyOptional({
+                provider,
+                azureEntraIdEnabled: true,
+              }) ? (
                 <span className="font-normal text-muted-foreground">
                   (optional)
                 </span>

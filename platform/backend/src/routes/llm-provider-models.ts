@@ -1,10 +1,12 @@
 import {
   EmbeddingDimensionsSchema,
+  isProviderApiKeyOptional,
   RouteId,
   SupportedProvidersSchema,
 } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { modelsDevClient } from "@/clients/models-dev-client";
@@ -27,7 +29,6 @@ import {
   SelectModelSchema,
   UuidIdSchema,
 } from "@/types";
-import { isLlmProviderApiKeyOptional } from "@/utils/llm-provider-api-key-optional";
 
 const LlmModelSchema = z.object({
   id: z.string(),
@@ -292,7 +293,13 @@ export async function syncModelsForVisibleApiKeys(params: {
           )) as string | null;
         }
 
-        if (!secretValue && !isLlmProviderApiKeyOptional(apiKey.provider)) {
+        if (
+          !secretValue &&
+          !isProviderApiKeyOptional({
+            provider: apiKey.provider,
+            azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+          })
+        ) {
           if (apiKey.secretId) {
             logger.warn(
               { apiKeyId: apiKey.id, provider: apiKey.provider },

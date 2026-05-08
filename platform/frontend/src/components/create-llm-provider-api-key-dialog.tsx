@@ -1,11 +1,11 @@
 "use client";
 
+import { isProviderApiKeyOptional } from "@shared";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { FormDialog } from "@/components/form-dialog";
 import {
-  isApiKeyOptionalForProvider,
   LLM_PROVIDER_API_KEY_PLACEHOLDER,
   LlmProviderApiKeyForm,
   type LlmProviderApiKeyFormValues,
@@ -178,6 +178,9 @@ function getIsCreateFormValid(params: {
       (values.scope !== "team" || values.teamId) &&
       (byosEnabled
         ? values.vaultSecretPath && values.vaultSecretKey
-        : isApiKeyOptionalForProvider(values.provider) || values.apiKey),
+        : isProviderApiKeyOptional({
+            provider: values.provider,
+            azureEntraIdEnabled: true,
+          }) || values.apiKey),
   );
 }

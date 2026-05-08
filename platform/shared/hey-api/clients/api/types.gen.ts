@@ -38799,6 +38799,103 @@ export type DeleteOptimizationRuleResponses = {
 
 export type DeleteOptimizationRuleResponse = DeleteOptimizationRuleResponses[keyof DeleteOptimizationRuleResponses];
 
+export type GetOptimizationRuleData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/optimization-rules/{id}';
+};
+
+export type GetOptimizationRuleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOptimizationRuleError = GetOptimizationRuleErrors[keyof GetOptimizationRuleErrors];
+
+export type GetOptimizationRuleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        conditions: Array<{
+            maxLength: number;
+        } | {
+            hasTools: boolean;
+        }>;
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+        targetModel: string;
+        enabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetOptimizationRuleResponse = GetOptimizationRuleResponses[keyof GetOptimizationRuleResponses];
+
 export type UpdateOptimizationRuleData = {
     body: {
         id?: string;

@@ -1,7 +1,7 @@
 import {
-  EmbeddingDimensionsSchema,
   ModelInputModalitySchema,
   ModelOutputModalitySchema,
+  SupportedEmbeddingDimensionsSchema,
   SupportedProvidersSchema,
 } from "@shared";
 import {
@@ -21,7 +21,7 @@ export { ModelInputModalitySchema, ModelOutputModalitySchema } from "@shared";
  */
 const fieldsToExtend = {
   provider: SupportedProvidersSchema,
-  embeddingDimensions: EmbeddingDimensionsSchema.nullable(),
+  embeddingDimensions: SupportedEmbeddingDimensionsSchema.nullable(),
   inputModalities: z.array(ModelInputModalitySchema).nullable(),
   outputModalities: z.array(ModelOutputModalitySchema).nullable(),
 };
@@ -46,7 +46,7 @@ export const CreateModelSchema = InsertModelSchema.omit({
   createdAt: true,
   updatedAt: true,
 }).extend({
-  embeddingDimensions: EmbeddingDimensionsSchema.nullable().optional(),
+  embeddingDimensions: SupportedEmbeddingDimensionsSchema.nullable().optional(),
 });
 
 /**
@@ -102,7 +102,8 @@ export const PatchModelBodySchema = createUpdateSchema(
     customPricePerMillionInput: z.string().nullable().optional(),
     customPricePerMillionOutput: z.string().nullable().optional(),
     ignored: z.boolean().optional(),
-    embeddingDimensions: EmbeddingDimensionsSchema.nullable().optional(),
+    embeddingDimensions:
+      SupportedEmbeddingDimensionsSchema.nullable().optional(),
     inputModalities: z
       .array(ModelInputModalitySchema)
       .min(1, "At least one input modality is required")

@@ -22,6 +22,11 @@ import fastifyFormbody from "@fastify/formbody";
 import fastifySwagger from "@fastify/swagger";
 import type { McpUiResourceCsp } from "@modelcontextprotocol/ext-apps";
 import * as Sentry from "@sentry/node";
+import {
+  EmbeddingDimensionsSchema,
+  LocalConfigEnvironmentDefaultSchema,
+  SUPPORTED_EMBEDDING_DIMENSIONS,
+} from "@shared";
 import Fastify from "fastify";
 import metricsPlugin from "fastify-metrics";
 import {
@@ -210,8 +215,15 @@ export function registerOpenApiSchemas() {
   z.globalRegistry.add(UserConfigFieldDefaultSchema, {
     id: "UserConfigFieldDefault",
   });
+  z.globalRegistry.add(LocalConfigEnvironmentDefaultSchema, {
+    id: "LocalConfigEnvironmentDefault",
+  });
   z.globalRegistry.add(UserConfigFieldSchema, {
     id: "UserConfigField",
+  });
+  z.globalRegistry.add(EmbeddingDimensionsSchema, {
+    id: "EmbeddingDimensions",
+    enum: [...SUPPORTED_EMBEDDING_DIMENSIONS],
   });
 }
 

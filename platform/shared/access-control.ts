@@ -804,6 +804,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOptimizationRules]: {
     optimizationRule: ["read"],
   },
+  [RouteId.GetOptimizationRule]: {
+    optimizationRule: ["read"],
+  },
   [RouteId.CreateOptimizationRule]: {
     optimizationRule: ["create"],
   },

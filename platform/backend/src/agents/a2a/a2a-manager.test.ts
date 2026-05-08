@@ -85,10 +85,13 @@ async function sendApprovalDecisions(
   });
 }
 
-function mockA2AExecuteMessageWithApprovalRequests(ids: string[]) {
+function mockA2AExecuteMessageWithApprovalRequests(
+  messageId: string,
+  ids: string[],
+) {
   executeA2AMessage.mockReturnValue({
     responseUiMessage: {
-      id: "msg-1",
+      id: messageId,
       role: "assistant",
       parts: ids.map((id) => ({
         type: `tool-tool-${id}`,
@@ -103,12 +106,13 @@ function mockA2AExecuteMessageWithApprovalRequests(ids: string[]) {
 }
 
 function mockA2AExecuteMessageWithTextAndApprovalRequests(
+  messageId: string,
   texts: string[],
   ids: string[],
 ) {
   executeA2AMessage.mockReturnValue({
     responseUiMessage: {
-      id: "msg-1",
+      id: messageId,
       role: "assistant",
       parts: [
         ...texts.map((text) => ({ type: "text", text })),
@@ -172,7 +176,7 @@ describe("A2AManager.sendMessage", () => {
     const prevMessageCount = await A2AMessageModel.getTotalCount();
     executeA2AMessage.mockReturnValue({
       responseUiMessage: {
-        id: "msg-1",
+        id: crypto.randomUUID(),
         role: "assistant",
         parts: [{ type: "text", text: "response" }],
       },
@@ -181,11 +185,135 @@ describe("A2AManager.sendMessage", () => {
 
     const response = await sendTextMessage(manager, agent.id, "Hello!");
 
-    expect(response.message?.role).toBe(A2AProtocolRole.Agent);
-    expect(response.message?.parts).toEqual([{ text: "response" }]);
+    if (!response.message) {
+      throw new Error("Message should be defined");
+    }
+    expect(response.message.role).toBe(A2AProtocolRole.Agent);
+    expect(response.message.parts).toEqual([{ text: "response" }]);
+
+    const dbMessage = await A2AMessageModel.findById(
+      response.message.messageId,
+    );
+    if (!dbMessage) {
+      throw new Error("Message should be stored in the database");
+    }
+    expect(dbMessage.contextId).toBe(response.message.contextId);
+    expect(dbMessage.parts).toEqual(response.message.parts);
+
     expect(await A2AContextModel.getTotalCount()).toBe(prevContextCount + 1);
     expect(await A2ATaskModel.getTotalCount()).toBe(prevTaskCount);
     expect(await A2AMessageModel.getTotalCount()).toBe(prevMessageCount + 2);
+  });
+
+  test("Text message: client messageId equals db messageId", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const manager = new A2AManager();
+
+    executeA2AMessage.mockReturnValue({
+      responseUiMessage: {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        parts: [{ type: "text", text: "response" }],
+      },
+      text: "response(text)",
+    });
+    const clientMessageId = crypto.randomUUID();
+    const response = await manager.sendMessage({
+      actor,
+      agentId: agent.id,
+      request: {
+        message: {
+          messageId: clientMessageId,
+          role: A2AProtocolRole.User,
+          parts: [{ text: "Hello!" }],
+        },
+      },
+    });
+    if (!response.message) {
+      throw new Error("Message should be defined");
+    }
+    const clientDbMessage = await A2AMessageModel.findById(clientMessageId);
+    if (!clientDbMessage) {
+      throw new Error("Message should be stored in the database");
+    }
+    expect(clientDbMessage.parts).toEqual([{ text: "Hello!" }]);
+    expect(clientDbMessage.contextId).toBe(response.message.contextId);
+  });
+
+  test("Continue conversation within context", async ({ makeAgent }) => {
+    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const manager = new A2AManager();
+    executeA2AMessage.mockReturnValue({
+      responseUiMessage: {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        parts: [{ type: "text", text: "response" }],
+      },
+      text: "response(text)",
+    });
+
+    const clientMessageId = crypto.randomUUID();
+    const response = await manager.sendMessage({
+      actor,
+      agentId: agent.id,
+      request: {
+        message: {
+          messageId: clientMessageId,
+          role: A2AProtocolRole.User,
+          parts: [{ text: "Hello!" }],
+        },
+      },
+    });
+
+    if (!response.message) {
+      throw new Error("Message should be defined");
+    }
+    const contextId = response.message.contextId;
+    if (!contextId) {
+      throw new Error("Context ID should be defined");
+    }
+    executeA2AMessage.mockReturnValue({
+      responseUiMessage: {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        parts: [{ type: "text", text: "response" }],
+      },
+      text: "response(text)",
+    });
+    const clientMessageId2 = crypto.randomUUID();
+    const response2 = await manager.sendMessage({
+      actor,
+      agentId: agent.id,
+      request: {
+        message: {
+          messageId: clientMessageId2,
+          contextId,
+          role: A2AProtocolRole.User,
+          parts: [{ text: "Hello2!" }],
+        },
+      },
+    });
+    if (!response2.message) {
+      throw new Error("Message should be defined");
+    }
+    expect(response2.message.contextId).toBe(contextId);
+
+    expect((await A2AMessageModel.findById(clientMessageId))?.contextId).toBe(
+      contextId,
+    );
+    expect(
+      (await A2AMessageModel.findById(response.message.messageId))?.contextId,
+    ).toBe(contextId);
+    expect((await A2AMessageModel.findById(clientMessageId2))?.contextId).toBe(
+      contextId,
+    );
+    expect(
+      (await A2AMessageModel.findById(response2.message.messageId))?.contextId,
+    ).toBe(contextId);
+    const contextMessages = await A2AMessageModel.findByContextId(contextId);
+    expect(contextMessages.length).toBe(4);
   });
 
   test("Text message stateless", async ({ makeAgent }) => {
@@ -196,7 +324,7 @@ describe("A2AManager.sendMessage", () => {
     const prevMessageCount = await A2AMessageModel.getTotalCount();
     executeA2AMessage.mockReturnValue({
       responseUiMessage: {
-        id: "msg-1",
+        id: crypto.randomUUID(),
         role: "assistant",
         parts: [{ type: "text", text: "response" }],
       },
@@ -219,7 +347,7 @@ describe("A2AManager.sendMessage", () => {
       const agent = await makeAgent({ name: "agent1", teams: [] });
       const manager = new A2AManager();
 
-      mockA2AExecuteMessageWithApprovalRequests(["1"]);
+      mockA2AExecuteMessageWithApprovalRequests(crypto.randomUUID(), ["1"]);
       const response = await sendTextMessage(manager, agent.id, "Hello!");
 
       if (!response.task) {
@@ -235,7 +363,7 @@ describe("A2AManager.sendMessage", () => {
 
       executeA2AMessage.mockReturnValue({
         responseUiMessage: {
-          id: "msg-1",
+          id: crypto.randomUUID(),
           role: "assistant",
           parts: [{ type: "text", text: "response" }],
         },
@@ -254,10 +382,13 @@ describe("A2AManager.sendMessage", () => {
         ],
       );
 
-      expect(response2.message).toBeDefined();
+      if (!response2.message) {
+        throw new Error("Message should be defined");
+      }
+
       expect(response2.task).toBeUndefined();
-      expect(response2.message?.role).toBe(A2AProtocolRole.Agent);
-      expect(response2.message?.parts).toEqual([{ text: "response" }]);
+      expect(response2.message.role).toBe(A2AProtocolRole.Agent);
+      expect(response2.message.parts).toEqual([{ text: "response" }]);
 
       const task = await manager.getTask({
         actor,
@@ -270,13 +401,26 @@ describe("A2AManager.sendMessage", () => {
       expect((await A2ATaskModel.findById(response.task.id))?.state).toBe(
         A2AProtocolTaskState.Completed,
       );
+
+      const dbMessage = await A2AMessageModel.findById(
+        response2.message.messageId,
+      );
+      if (!dbMessage) {
+        throw new Error("Message should be stored in the database");
+      }
+      expect(dbMessage.parts).toEqual(response2.message.parts);
     });
 
     test("Multi request in single turn", async ({ makeAgent }) => {
       const agent = await makeAgent({ name: "agent1", teams: [] });
       const manager = new A2AManager();
 
-      mockA2AExecuteMessageWithApprovalRequests(["1", "2", "3", "4"]);
+      mockA2AExecuteMessageWithApprovalRequests(crypto.randomUUID(), [
+        "1",
+        "2",
+        "3",
+        "4",
+      ]);
       const response = await sendTextMessage(manager, agent.id, "Hello!");
 
       if (!response.task) {
@@ -390,7 +534,7 @@ describe("A2AManager.sendMessage", () => {
 
       executeA2AMessage.mockReturnValue({
         responseUiMessage: {
-          id: "msg-1",
+          id: crypto.randomUUID(),
           role: "assistant",
           parts: [
             {
@@ -468,7 +612,7 @@ describe("A2AManager.sendMessage", () => {
 
       executeA2AMessage.mockReturnValue({
         responseUiMessage: {
-          id: "msg-1",
+          id: crypto.randomUUID(),
           role: "assistant",
           parts: [{ type: "text", text: "response" }],
         },
@@ -518,7 +662,8 @@ describe("A2AManager.sendMessage", () => {
       const agent = await makeAgent({ name: "agent1", teams: [] });
       const manager = new A2AManager();
 
-      mockA2AExecuteMessageWithApprovalRequests(["1"]);
+      const approvalMessageId = crypto.randomUUID();
+      mockA2AExecuteMessageWithApprovalRequests(approvalMessageId, ["1"]);
       const response = await sendTextMessage(manager, agent.id, "Hello!");
 
       if (!response.task) {
@@ -540,7 +685,7 @@ describe("A2AManager.sendMessage", () => {
           parts: [{ text: "Hello!" }],
         },
         {
-          messageId: expect.any(String),
+          messageId: approvalMessageId,
           contextId: response.task.contextId,
           taskId: response.task.id,
           role: A2AProtocolRole.Agent,
@@ -557,7 +702,7 @@ describe("A2AManager.sendMessage", () => {
 
       // The agent accepts the approval request,
       //   executes the message and returns a new approval request.
-      mockA2AExecuteMessageWithApprovalRequests(["11"]);
+      mockA2AExecuteMessageWithApprovalRequests(approvalMessageId, ["11"]);
       const response2 = await sendApprovalDecisions(
         manager,
         agent.id,
@@ -592,7 +737,7 @@ describe("A2AManager.sendMessage", () => {
           parts: [{ text: "Hello!" }],
         },
         {
-          messageId: expect.any(String),
+          messageId: approvalMessageId,
           contextId: response2.task.contextId,
           taskId: response2.task.id,
           role: A2AProtocolRole.Agent,
@@ -607,7 +752,7 @@ describe("A2AManager.sendMessage", () => {
         }),
       ).toEqual(response2.task);
 
-      mockA2AExecuteMessageWithApprovalRequests(["21"]);
+      mockA2AExecuteMessageWithApprovalRequests(approvalMessageId, ["21"]);
       const response3 = await sendApprovalDecisions(
         manager,
         agent.id,
@@ -643,7 +788,12 @@ describe("A2AManager.sendMessage", () => {
       const agent = await makeAgent({ name: "agent1", teams: [] });
       const manager = new A2AManager();
 
-      mockA2AExecuteMessageWithTextAndApprovalRequests(["Doing 1st"], ["1"]);
+      const approvalMessageId = crypto.randomUUID();
+      mockA2AExecuteMessageWithTextAndApprovalRequests(
+        approvalMessageId,
+        ["Doing 1st"],
+        ["1"],
+      );
       const response = await sendTextMessage(manager, agent.id, "Hello!");
 
       if (!response.task) {
@@ -665,7 +815,7 @@ describe("A2AManager.sendMessage", () => {
           parts: [{ text: "Hello!" }],
         },
         {
-          messageId: expect.any(String),
+          messageId: approvalMessageId,
           contextId: response.task.contextId,
           taskId: response.task.id,
           role: A2AProtocolRole.Agent,
@@ -683,6 +833,7 @@ describe("A2AManager.sendMessage", () => {
       // The agent accepts the approval request,
       //   executes the message and returns a new approval request.
       mockA2AExecuteMessageWithTextAndApprovalRequests(
+        approvalMessageId,
         ["Doing 1st", "Doing 2nd"],
         ["2"],
       );
@@ -733,6 +884,7 @@ describe("A2AManager.sendMessage", () => {
       ).toEqual(response2.task);
 
       mockA2AExecuteMessageWithTextAndApprovalRequests(
+        approvalMessageId,
         ["Doing 1st", "Doing 2nd", "Doing 3rd"],
         ["3"],
       );
@@ -787,6 +939,7 @@ describe("A2AManager.sendMessage", () => {
       ).toEqual(response3.task);
 
       mockA2AExecuteMessageWithTextAndApprovalRequests(
+        approvalMessageId,
         ["Doing 1st", "Doing 2nd", "Doing 3rd", "Final"],
         [],
       );

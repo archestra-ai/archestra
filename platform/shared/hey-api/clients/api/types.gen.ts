@@ -10603,24 +10603,28 @@ export type PostV1A2aByAgentIdResponses = {
 
 export type PostV1A2aByAgentIdResponse = PostV1A2aByAgentIdResponses[keyof PostV1A2aByAgentIdResponses];
 
-export type GetV2A2aByAgentIdWellKnownAgentJsonData = {
+export type GetV2A2aByAgentIdWellKnownAgentCardJsonData = {
     body?: never;
     path: {
         agentId: string;
     };
     query?: never;
-    url: '/v2/a2a/{agentId}/.well-known/agent.json';
+    url: '/v2/a2a/{agentId}/.well-known/agent-card.json';
 };
 
-export type GetV2A2aByAgentIdWellKnownAgentJsonResponses = {
+export type GetV2A2aByAgentIdWellKnownAgentCardJsonResponses = {
     /**
      * Default Response
      */
     200: {
         name: string;
         description: string;
-        url: string;
         version: string;
+        supportedInterfaces: Array<{
+            url: string;
+            protocolBinding: string;
+            protocolVersion: string;
+        }>;
         capabilities: {
             streaming: boolean;
             pushNotifications: boolean;
@@ -10639,7 +10643,7 @@ export type GetV2A2aByAgentIdWellKnownAgentJsonResponses = {
     };
 };
 
-export type GetV2A2aByAgentIdWellKnownAgentJsonResponse = GetV2A2aByAgentIdWellKnownAgentJsonResponses[keyof GetV2A2aByAgentIdWellKnownAgentJsonResponses];
+export type GetV2A2aByAgentIdWellKnownAgentCardJsonResponse = GetV2A2aByAgentIdWellKnownAgentCardJsonResponses[keyof GetV2A2aByAgentIdWellKnownAgentCardJsonResponses];
 
 export type PostV2A2aByAgentIdData = {
     body: {
@@ -39097,6 +39101,103 @@ export type DeleteOptimizationRuleResponses = {
 };
 
 export type DeleteOptimizationRuleResponse = DeleteOptimizationRuleResponses[keyof DeleteOptimizationRuleResponses];
+
+export type GetOptimizationRuleData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/optimization-rules/{id}';
+};
+
+export type GetOptimizationRuleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOptimizationRuleError = GetOptimizationRuleErrors[keyof GetOptimizationRuleErrors];
+
+export type GetOptimizationRuleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        conditions: Array<{
+            maxLength: number;
+        } | {
+            hasTools: boolean;
+        }>;
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+        targetModel: string;
+        enabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetOptimizationRuleResponse = GetOptimizationRuleResponses[keyof GetOptimizationRuleResponses];
 
 export type UpdateOptimizationRuleData = {
     body: {

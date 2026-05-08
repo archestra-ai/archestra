@@ -53,6 +53,13 @@ class OptimizationRuleModel {
           eq(schema.optimizationRulesTable.entityId, schema.teamsTable.id),
         ),
       )
+      .leftJoin(
+        schema.agentsTable,
+        and(
+          eq(schema.optimizationRulesTable.entityType, "agent"),
+          sql`${schema.optimizationRulesTable.entityId} = ${schema.agentsTable.id}::text`,
+        ),
+      )
       .where(
         or(
           // Organization-level rules
@@ -65,6 +72,11 @@ class OptimizationRuleModel {
             eq(schema.optimizationRulesTable.entityType, "team"),
             eq(schema.teamsTable.organizationId, organizationId),
           ),
+          // Agent-level rules for agents in this organization
+          and(
+            eq(schema.optimizationRulesTable.entityType, "agent"),
+            eq(schema.agentsTable.organizationId, organizationId),
+          ),
         ),
       )
       .orderBy(asc(schema.optimizationRulesTable.createdAt));
@@ -74,6 +86,104 @@ class OptimizationRuleModel {
       "OptimizationRuleModel.findByOrganizationId: completed",
     );
     return rules;
+  }
+
+  /**
+   * Find a rule by ID, scoped to an organization through its target entity.
+   */
+  static async findByIdForOrganization(
+    id: string,
+    organizationId: string,
+  ): Promise<OptimizationRule | null> {
+    logger.debug(
+      { id, organizationId },
+      "OptimizationRuleModel.findByIdForOrganization: fetching rule",
+    );
+
+    const [rule] = await db
+      .select(getTableColumns(schema.optimizationRulesTable))
+      .from(schema.optimizationRulesTable)
+      .leftJoin(
+        schema.teamsTable,
+        and(
+          eq(schema.optimizationRulesTable.entityType, "team"),
+          eq(schema.optimizationRulesTable.entityId, schema.teamsTable.id),
+        ),
+      )
+      .leftJoin(
+        schema.agentsTable,
+        and(
+          eq(schema.optimizationRulesTable.entityType, "agent"),
+          sql`${schema.optimizationRulesTable.entityId} = ${schema.agentsTable.id}::text`,
+        ),
+      )
+      .where(
+        and(
+          eq(schema.optimizationRulesTable.id, id),
+          or(
+            and(
+              eq(schema.optimizationRulesTable.entityType, "organization"),
+              eq(schema.optimizationRulesTable.entityId, organizationId),
+            ),
+            and(
+              eq(schema.optimizationRulesTable.entityType, "team"),
+              eq(schema.teamsTable.organizationId, organizationId),
+            ),
+            and(
+              eq(schema.optimizationRulesTable.entityType, "agent"),
+              eq(schema.agentsTable.organizationId, organizationId),
+            ),
+          ),
+        ),
+      )
+      .limit(1);
+
+    logger.debug(
+      { id, organizationId, found: !!rule },
+      "OptimizationRuleModel.findByIdForOrganization: completed",
+    );
+    return rule ?? null;
+  }
+
+  /**
+   * Check whether a rule target entity belongs to an organization.
+   */
+  static async entityBelongsToOrganization(
+    entityType: OptimizationRule["entityType"],
+    entityId: string,
+    organizationId: string,
+  ): Promise<boolean> {
+    if (entityType === "organization") {
+      return entityId === organizationId;
+    }
+
+    if (entityType === "team") {
+      const [team] = await db
+        .select({ id: schema.teamsTable.id })
+        .from(schema.teamsTable)
+        .where(
+          and(
+            eq(schema.teamsTable.id, entityId),
+            eq(schema.teamsTable.organizationId, organizationId),
+          ),
+        )
+        .limit(1);
+
+      return !!team;
+    }
+
+    const [agent] = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.id, entityId),
+          eq(schema.agentsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    return !!agent;
   }
 
   /**

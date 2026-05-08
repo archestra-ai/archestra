@@ -1,6 +1,17 @@
 import { desc, eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { A2AMessage, InsertA2AMessage } from "@/types";
+import type {
+  A2AMessage,
+  InsertA2AMessage,
+  InsertA2AMessageWithId,
+} from "@/types";
+
+export class A2AMessageIdExistsError extends Error {
+  constructor() {
+    super("A message with the given ID already exists");
+    this.name = "A2AMessageIdExistsError";
+  }
+}
 
 class A2AMessageModel {
   private static async touchContext(contextId: string): Promise<void> {
@@ -8,6 +19,30 @@ class A2AMessageModel {
       .update(schema.a2aContextsTable)
       .set({ updatedAt: new Date() })
       .where(eq(schema.a2aContextsTable.id, contextId));
+  }
+
+  static async createWithId(data: InsertA2AMessageWithId): Promise<A2AMessage> {
+    try {
+      const [message] = await db
+        .insert(schema.a2aMessagesTable)
+        .values(data)
+        .returning();
+
+      await A2AMessageModel.touchContext(data.contextId);
+
+      return message;
+    } catch (error) {
+      const err = error as {
+        cause?: { code?: string; constraint?: string };
+      };
+      if (
+        err.cause?.code === "23505" &&
+        err.cause?.constraint === "a2a_message_pkey"
+      ) {
+        throw new A2AMessageIdExistsError();
+      }
+      throw error;
+    }
   }
 
   static async create(data: InsertA2AMessage): Promise<A2AMessage> {

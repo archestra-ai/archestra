@@ -50,7 +50,9 @@ export const A2AProtocolMessageSchema = z.object({
   contextId: z.string().optional(),
   taskId: z.string().optional(),
   role: z.enum(A2AProtocolRole),
-  parts: z.array(A2AProtocolPartSchema),
+  // `parts` is required by A2A Protocol, but we allow undefined value
+  //    because of some client SDK implementations.
+  parts: z.array(A2AProtocolPartSchema).optional(),
   metadata: A2AArchestraMessageMetadataSchema.optional(),
   extensions: z.array(z.string()).optional(),
   referenceTaskIds: z.array(z.string()).optional(),

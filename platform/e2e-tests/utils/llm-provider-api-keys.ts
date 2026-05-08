@@ -141,6 +141,8 @@ export async function deleteVisibleProviderKeys(
 
   const keys = (await listResponse.json()) as Array<{ id: string }>;
   for (const key of keys) {
+    await deleteVirtualKeysForProviderKey(request, key.id);
+
     const deleteResponse = await request.delete(
       getE2eRequestUrl(`/api/llm-provider-api-keys/${key.id}`),
       {
@@ -153,6 +155,46 @@ export async function deleteVisibleProviderKeys(
     if (!deleteResponse.ok() && deleteResponse.status() !== 404) {
       throw new Error(
         `Failed to delete LLM provider API key ${key.id}: ${deleteResponse.status()} ${await deleteResponse.text()}`,
+      );
+    }
+  }
+}
+
+async function deleteVirtualKeysForProviderKey(
+  request: APIRequestContext,
+  providerApiKeyId: string,
+): Promise<void> {
+  const listResponse = await request.get(
+    getE2eRequestUrl(
+      `/api/llm-virtual-keys?providerApiKeyId=${encodeURIComponent(providerApiKeyId)}&limit=100`,
+    ),
+    {
+      headers: {
+        Origin: UI_BASE_URL,
+      },
+    },
+  );
+
+  if (!listResponse.ok()) {
+    throw new Error(
+      `Failed to list virtual API keys for provider key ${providerApiKeyId}: ${listResponse.status()} ${await listResponse.text()}`,
+    );
+  }
+
+  const virtualKeys = (await listResponse.json()) as Array<{ id: string }>;
+  for (const virtualKey of virtualKeys) {
+    const deleteResponse = await request.delete(
+      getE2eRequestUrl(`/api/llm-virtual-keys/${virtualKey.id}`),
+      {
+        headers: {
+          Origin: UI_BASE_URL,
+        },
+      },
+    );
+
+    if (!deleteResponse.ok() && deleteResponse.status() !== 404) {
+      throw new Error(
+        `Failed to delete virtual API key ${virtualKey.id}: ${deleteResponse.status()} ${await deleteResponse.text()}`,
       );
     }
   }

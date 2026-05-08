@@ -4,7 +4,7 @@ import {
   IdentityProviderFormSchema,
   type IdentityProviderFormValues,
 } from "@shared";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useForm } from "react-hook-form";
 import { describe, expect, it, vi } from "vitest";
@@ -42,18 +42,39 @@ vi.mock("@/lib/organization.query", () => ({
   }),
 }));
 
+vi.mock("@/lib/auth/identity-provider.query.ee", () => ({
+  useIdentityProviderLatestIdTokenClaims: () => ({
+    data: {
+      claims: {
+        email: "admin@example.com",
+        roles: ["app-admin"],
+      },
+      updatedAt: "2026-05-07T00:00:00.000Z",
+    },
+    isLoading: false,
+  }),
+}));
+
 function TestWrapper({
   defaultRules = [],
+  defaultRole = "member",
   onSubmit,
+  providerId = "test",
+  identityProviderId,
+  strictMode = false,
 }: {
   defaultRules?: Array<{ expression: string; role: string }>;
+  defaultRole?: "admin" | "member" | string;
   onSubmit?: (data: IdentityProviderFormValues) => void;
+  providerId?: string;
+  identityProviderId?: string;
+  strictMode?: boolean;
 }) {
   const form = useForm<IdentityProviderFormValues>({
     // biome-ignore lint/suspicious/noExplicitAny: test setup
     resolver: zodResolver(IdentityProviderFormSchema as any),
     defaultValues: {
-      providerId: "test",
+      providerId,
       issuer: "https://example.com",
       domain: "example.com",
       providerType: "oidc",
@@ -68,6 +89,8 @@ function TestWrapper({
       },
       roleMapping: {
         rules: defaultRules,
+        defaultRole,
+        strictMode,
       },
     },
   });
@@ -75,7 +98,7 @@ function TestWrapper({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit((data) => onSubmit?.(data))}>
-        <RoleMappingForm form={form} />
+        <RoleMappingForm form={form} identityProviderId={identityProviderId} />
         <Button type="submit">Save</Button>
       </form>
     </Form>
@@ -92,16 +115,142 @@ function getDeleteButtons() {
     .filter((btn) => btn.querySelector("svg.lucide-trash-2") !== null);
 }
 
-function openAccordion() {
-  const trigger = screen.getByText("Role Mapping (Optional)");
-  return userEvent.click(trigger);
-}
-
 describe("RoleMappingForm", () => {
+  it("shows latest ID token claims when editing an existing provider", async () => {
+    render(<TestWrapper identityProviderId="idp-1" />);
+    expect(screen.getByText(/admin@example.com/i)).toBeInTheDocument();
+    expect(screen.getByText(/app-admin/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/raw signed token is never shown/i),
+    ).toBeInTheDocument();
+  });
+
+  it("hides latest ID token claims when creating a provider", async () => {
+    render(<TestWrapper />);
+    expect(
+      screen.queryByText("Latest ID token claims"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows a live template test result for the selected role mapping rule", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <TestWrapper
+        identityProviderId="idp-1"
+        defaultRules={[
+          {
+            expression: '{{#includes roles "not-present"}}true{{/includes}}',
+            role: "member",
+          },
+          {
+            expression: '{{#includes roles "app-admin"}}true{{/includes}}',
+            role: "admin",
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByText("Live Template Test")).toBeInTheDocument();
+    expect(
+      screen.getByText(/runs role mapping rule 1 \(member\)/i),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("No match")).toBeInTheDocument();
+
+    await user.click(
+      screen.getAllByTestId(E2eTestId.IdpRoleMappingRuleTemplate)[1],
+    );
+
+    expect(
+      screen.getByText(/runs role mapping rule 2 \(admin\)/i),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("Match")).toBeInTheDocument();
+    expect(
+      screen.getByText(/you would be assigned Admin/i),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the default role assignment when no role mapping rules match and strict mode is off", async () => {
+    render(
+      <TestWrapper
+        identityProviderId="idp-1"
+        defaultRole="member"
+        defaultRules={[
+          {
+            expression: '{{#includes roles "not-present"}}true{{/includes}}',
+            role: "admin",
+          },
+        ]}
+      />,
+    );
+
+    expect(await screen.findByText("No match")).toBeInTheDocument();
+    expect(
+      screen.getByText(/you would be assigned Member/i),
+    ).toBeInTheDocument();
+  });
+
+  it("shows strict mode denial when no role mapping rules match", async () => {
+    render(
+      <TestWrapper
+        identityProviderId="idp-1"
+        strictMode
+        defaultRole="member"
+        defaultRules={[
+          {
+            expression: '{{#includes roles "not-present"}}true{{/includes}}',
+            role: "admin",
+          },
+        ]}
+      />,
+    );
+
+    expect(await screen.findByText("No match")).toBeInTheDocument();
+    expect(
+      screen.getByText(/sign-in would be denied by strict mode/i),
+    ).toBeInTheDocument();
+  });
+
+  it("reorders role mapping rules with the keyboard drag handle", async () => {
+    render(
+      <TestWrapper
+        defaultRules={[
+          { expression: "first", role: "admin" },
+          { expression: "second", role: "member" },
+        ]}
+      />,
+    );
+
+    const dragHandle = screen.getByRole("button", {
+      name: "Drag role mapping rule 2",
+    });
+    dragHandle.focus();
+    fireEvent.keyDown(dragHandle, { code: "ArrowUp", key: "ArrowUp" });
+
+    const templates = screen.getAllByTestId(
+      E2eTestId.IdpRoleMappingRuleTemplate,
+    );
+    expect(templates[0]).toHaveValue("second");
+    expect(templates[1]).toHaveValue("first");
+  });
+
+  it("shows the Okta groups claim hint", async () => {
+    render(<TestWrapper providerId="Okta" />);
+    expect(
+      screen.getByText(/Okta group-based role rules commonly read/i),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/groups/).length).toBeGreaterThan(0);
+  });
+
+  it("shows the Entra roles and groups claim hint", async () => {
+    render(<TestWrapper providerId="EntraID" />);
+    expect(
+      screen.getByText(/Microsoft Entra ID role rules commonly read/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/App role assignments/i)).toBeInTheDocument();
+  });
+
   it("adds a rule when clicking Add Rule", async () => {
     render(<TestWrapper />);
-    await openAccordion();
-
     expect(
       screen.getByText(
         "No mapping rules configured. All users will be assigned the default role.",
@@ -130,8 +279,6 @@ describe("RoleMappingForm", () => {
         ]}
       />,
     );
-    await openAccordion();
-
     const templateInputs = screen.getAllByTestId(
       E2eTestId.IdpRoleMappingRuleTemplate,
     );
@@ -144,8 +291,6 @@ describe("RoleMappingForm", () => {
         defaultRules={[{ expression: "rule-one", role: "admin" }]}
       />,
     );
-    await openAccordion();
-
     const row = screen.getByTestId("role-mapping-rule-0");
     const templateInput = screen.getByTestId(
       E2eTestId.IdpRoleMappingRuleTemplate,
@@ -168,8 +313,6 @@ describe("RoleMappingForm", () => {
         ]}
       />,
     );
-    await openAccordion();
-
     expect(
       screen.getAllByTestId(E2eTestId.IdpRoleMappingRuleTemplate),
     ).toHaveLength(3);
@@ -202,8 +345,6 @@ describe("RoleMappingForm", () => {
         ]}
       />,
     );
-    await openAccordion();
-
     await userEvent.click(getDeleteButtons()[1]);
 
     const remaining = screen.getAllByTestId(
@@ -220,8 +361,6 @@ describe("RoleMappingForm", () => {
         defaultRules={[{ expression: "only-rule", role: "admin" }]}
       />,
     );
-    await openAccordion();
-
     expect(
       screen.getAllByTestId(E2eTestId.IdpRoleMappingRuleTemplate),
     ).toHaveLength(1);
@@ -244,8 +383,6 @@ describe("RoleMappingForm", () => {
         defaultRules={[{ expression: "existing", role: "admin" }]}
       />,
     );
-    await openAccordion();
-
     await userEvent.click(getDeleteButtons()[0]);
     await userEvent.click(getAddRuleButton());
 
@@ -291,8 +428,6 @@ describe("RoleMappingForm", () => {
         onSubmit={onSubmit}
       />,
     );
-    await openAccordion();
-
     // Remove the second rule
     await userEvent.click(getDeleteButtons()[1]);
 
@@ -330,8 +465,6 @@ describe("RoleMappingForm", () => {
         onSubmit={onSubmit}
       />,
     );
-    await openAccordion();
-
     // Remove the only rule
     await userEvent.click(getDeleteButtons()[0]);
 

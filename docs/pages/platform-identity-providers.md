@@ -3,7 +3,7 @@ title: "Identity Providers"
 category: Administration
 description: "Index of identity-related configuration in Archestra — SSO sign-in, downstream token exchange, role mapping, team sync, and per-provider walkthroughs"
 order: 2
-lastUpdated: 2026-05-05
+lastUpdated: 2026-05-07
 ---
 
 <!--
@@ -54,7 +54,7 @@ All providers are configured from the **Settings > Identity Providers** card. Fo
 
 ### Microsoft Entra ID
 
-OIDC sign-in with downstream **Entra OBO** token exchange for MCP tool calls. See [Entra ID SSO + OBO](/docs/platform-entra-obo-setup) for the end-to-end walkthrough (app registration, client secret, group claims, OBO scopes).
+OIDC sign-in with downstream **Entra OBO** token exchange for MCP tool calls. See [Entra ID SSO + OBO](/docs/platform-entra-obo-setup) for the end-to-end walkthrough (app registration, client secret, group claims, OBO resource configuration).
 
 ### Okta
 
@@ -114,9 +114,11 @@ Optional:
 
 - **Discovery Endpoint:** the `.well-known/openid-configuration` URL (defaults to issuer + `/.well-known/openid-configuration`)
 - **Authorization / Token / User Info / JWKS endpoints:** override the discovery defaults
-- **Scopes:** additional OAuth scopes (default: `openid`, `email`, `profile`). Add the provider's groups scope, often `groups`, when role mapping or team sync reads group claims.
+- **Scopes:** additional OAuth scopes (default: `openid`, `email`, `profile`). Add `offline_access` when Archestra should refresh the user's linked IdP token. Add the provider's groups scope, often `groups`, when role mapping or team sync reads group claims. For linked downstream IdPs, keep these scopes focused on login/linking and the token-exchange assertion. For Entra OBO, include the Archestra app's own exposed delegated scope; configure each downstream resource on the MCP catalog item that needs the token.
 - **PKCE:** enable if your provider requires it
 - **Enable RP-Initiated Logout:** sends `post_logout_redirect_uri` during sign-out (on by default; disable for providers that reject it)
+
+Linked downstream IdPs can be hidden from the sign-in page. When a tool needs that IdP token, Archestra starts a short SSO link flow from the current session, stores the downstream account on that same user, and restores the original session after the IdP callback. This supports primary and downstream IdP accounts with different emails.
 
 ### Generic SAML
 

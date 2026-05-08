@@ -1,6 +1,6 @@
 import { ADMIN_EMAIL, ADMIN_PASSWORD, UI_BASE_URL } from "../consts";
 import { expect, test } from "../fixtures";
-import { loginViaApi } from "../utils";
+import { loginViaApi, loginViaUi } from "../utils";
 
 test.describe("Origin error handling", {
   tag: ["@quickstart", "@firefox", "@webkit"],
@@ -54,11 +54,8 @@ test.describe("Origin error handling", {
       await page.goto(`${UI_BASE_URL}/auth/sign-in`);
       await page.waitForLoadState("domcontentloaded");
 
-      // Wait for React to hydrate before triggering the fetch.
-      // The sign-in form must be rendered so React's window.fetch interceptor is active.
-      // The better-auth-ui library uses "Login" as the button text (SIGN_IN_ACTION localization).
-      await expect(page.getByRole("button", { name: /login/i })).toBeVisible({
-        timeout: 15_000,
+      await loginViaUi(page, "test@test.com", "test", {
+        skipDefaultPasswordPrompt: false,
       });
 
       // Trigger the 403 through window.fetch to activate the React error detection.

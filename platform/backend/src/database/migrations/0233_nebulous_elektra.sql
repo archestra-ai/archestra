@@ -1,0 +1,1 @@
+ALTER TABLE "identity_provider" ADD COLUMN "sso_login_enabled" boolean DEFAULT true NOT NULL;

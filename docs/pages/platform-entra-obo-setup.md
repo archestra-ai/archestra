@@ -4,7 +4,7 @@ category: Administration
 subcategory: Identity Providers
 description: "End-to-end setup for Microsoft Entra ID — SSO sign-in plus On-Behalf-Of token exchange for downstream MCP tool calls"
 order: 7
-lastUpdated: 2026-05-05
+lastUpdated: 2026-05-07
 ---
 
 <!--
@@ -70,6 +70,7 @@ Fill in:
 - **All pre-filled endpoint URLs:** replace the literal `{tenant-id}` placeholder with your Directory (tenant) ID from Step 1 in every field that contains it. For multi-tenant apps, use `common` or `organizations` instead
 - **Client ID:** the Application (client) ID from Step 1
 - **Client Secret:** the secret Value from Step 1
+- **Scopes:** keep the standard OIDC scopes `openid`, `profile`, and `email`. Add `offline_access` if you want Archestra to refresh the linked Entra token without prompting the user again.
 - **Allowed Email Domains** _(optional)_: comma-separated list of domains, e.g. `acme.com, acme-subsidiary.com`
 
 Click **Create Provider**. The **Sign in with Microsoft Entra ID** button now appears on the sign-in page. Test it in a private window with a tenant user.
@@ -145,15 +146,18 @@ OBO requires the app to expose at least one scope and to authorize itself as a c
 2. Client ID: paste the **same client ID** from Step 1 (the app authorizes itself for OBO)
 3. Check the `api://<client-id>/access_as_user` scope > **Add application**
 
-### Add downstream Graph permissions
+### Add downstream API permissions
 
 In **API permissions**, add the delegated scopes for whichever downstream API the user will call (in addition to `User.Read`). Common examples:
 
 - `Mail.Read` — read the user's mailbox
 - `Calendars.Read` — read the user's calendar
 - `Files.Read` — read the user's OneDrive
+- `api://<downstream-app-client-id>/user_impersonation` — call an Entra-protected API you own
 
 Click **Grant admin consent** afterwards.
+
+`user_impersonation` is just a common delegated scope name exposed by custom Entra-protected APIs. It means the API accepts a token for the signed-in user; it does not belong in the Archestra IdP login scopes unless you intentionally want that API requested during the login/linking step.
 
 ### Authentication settings
 
@@ -165,6 +169,7 @@ Click **Grant admin consent** afterwards.
 
 Reopen the Microsoft Entra ID provider in **Settings > Identity Providers** and expand **Enterprise-Managed Credentials**:
 
+- **Scopes:** include the OIDC identity scopes, usually `openid`, `profile`, and `email`; add `offline_access` if Archestra should refresh the linked Entra token without prompting the user again. Also include the delegated scope exposed by the Archestra app registration, for example `api://<archestra-app-client-id>/user_impersonation` or `api://<archestra-app-client-id>/access_as_user`.
 - **Exchange Client ID:** leave empty (reuses the Client ID from Section 2)
 - **Exchange Client Secret:** the same secret Value
 - **Exchange Token Endpoint:** `https://login.microsoftonline.com/<TENANT_ID>/oauth2/v2.0/token`
@@ -173,6 +178,8 @@ Reopen the Microsoft Entra ID provider in **Settings > Identity Providers** and 
 
 Save the provider.
 
+The OIDC scopes let Archestra link and refresh the user's Entra session. The Archestra app's exposed scope makes the linked access token's audience Archestra, which Entra requires for OBO. Downstream API scopes such as `Mail.Read` or `api://<downstream-app-client-id>/user_impersonation` are granted on the Entra app registration and selected per MCP server by the **Managed Resource Identifier** in Section 6.
+
 ## 6. Connect MCP Server
 
 Open the catalog entry for the MCP server that should call Entra-protected APIs and scroll to **Multitenant Authorization**. Select **Identity Provider Token Exchange**, pick the Entra provider you just configured, then fill in:
@@ -180,8 +187,12 @@ Open the catalog entry for the MCP server that should call Entra-protected APIs 
 - **Requested Credential:** _Bearer token_
 - **Injection Mode:** _Authorization: Bearer_
 - **Managed Resource Identifier:** the audience Entra should mint the token for, e.g.
-  - `https://graph.microsoft.com/.default` for Microsoft Graph
-  - `api://<downstream-app-client-id>/.default` for an Entra-protected API you own
+  - `https://graph.microsoft.com` for Microsoft Graph
+  - `api://<downstream-app-client-id>` for an Entra-protected API you own
+
+Archestra requests `<managed-resource-identifier>/.default` during the OBO exchange. Entra expands `.default` to the delegated API permissions that are configured and consented on the app registration for that resource. For example, if the downstream API exposes `api://<downstream-app-client-id>/user_impersonation`, add and consent that permission in Entra, then set the MCP server's managed resource identifier to `api://<downstream-app-client-id>`.
+
+If you have 10 MCP servers that call 10 different Entra-protected APIs, reuse the same Entra IdP configuration and give each MCP catalog item its own managed resource identifier. The IdP login scopes need the Archestra app's own exposed scope for the OBO assertion, but they do not need to list all 10 downstream API scopes.
 
 Save the catalog item. When you assign tools from this server to an Agent or Gateway, pick **Resolve at call time** as the credential resolution type.
 

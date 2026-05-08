@@ -15,6 +15,7 @@ interface AuthErrorToolProps {
   /** When provided, renders an inline button instead of an external link */
   onAction?: () => void;
   actionTooltipText?: string;
+  openInNewTab?: boolean;
 }
 
 export function AuthErrorTool({
@@ -24,6 +25,7 @@ export function AuthErrorTool({
   buttonUrl,
   onAction,
   actionTooltipText,
+  openInNewTab = true,
 }: AuthErrorToolProps) {
   return (
     <div className="mt-3 rounded-xl border border-border px-5 py-4">
@@ -46,7 +48,11 @@ export function AuthErrorTool({
           </Tooltip>
         ) : buttonText && buttonUrl ? (
           <Button variant="secondary" size="sm" asChild>
-            <a href={buttonUrl} target="_blank" rel="noopener noreferrer">
+            <a
+              href={buttonUrl}
+              target={openInNewTab ? "_blank" : undefined}
+              rel={openInNewTab ? "noopener noreferrer" : undefined}
+            >
               <ExternalLink className="size-3.5" />
               {buttonText}
             </a>

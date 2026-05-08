@@ -64,7 +64,7 @@ async function createChatApiKey(
 async function createVirtualKey(
   makeApiRequest: MakeApiRequest,
   request: APIRequestContext,
-  chatApiKeyId: string,
+  providerApiKey: { id: string; provider: string },
   opts?: { name?: string; expiresAt?: string | null },
 ) {
   const response = await makeApiRequest({
@@ -73,7 +73,12 @@ async function createVirtualKey(
     urlSuffix: "/api/llm-virtual-keys",
     data: {
       name: opts?.name ?? "test-vk",
-      chatApiKeyId,
+      providerApiKeys: [
+        {
+          provider: providerApiKey.provider,
+          providerApiKeyId: providerApiKey.id,
+        },
+      ],
       ...(opts?.expiresAt !== undefined && { expiresAt: opts.expiresAt }),
     },
   });
@@ -142,7 +147,7 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
 
     const chatApiKey = await createChatApiKey(makeApiRequest, request);
 
-    const vk = await createVirtualKey(makeApiRequest, request, chatApiKey.id, {
+    const vk = await createVirtualKey(makeApiRequest, request, chatApiKey, {
       name: "test-vk",
     });
     expect(hasArchestraTokenPrefix(vk.value)).toBe(true);
@@ -183,7 +188,7 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
     // NOTE: This test may fail locally if the server timezone differs from UTC
     // because the virtual_api_keys.expires_at column is `timestamp without time zone`
     // despite the schema declaring `withTimezone: true`. In CI (UTC), this works correctly.
-    const vk = await createVirtualKey(makeApiRequest, request, chatApiKey.id, {
+    const vk = await createVirtualKey(makeApiRequest, request, chatApiKey, {
       name: "expired-vk",
       expiresAt: new Date(Date.now() + 5000).toISOString(), // 5s from now
     });
@@ -200,7 +205,7 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
 
       expect(proxyResponse.status()).toBe(401);
       const body = await proxyResponse.json();
-      expect(body.error.message).toContain("expired");
+      expect(body.error.message).toMatch(/expired|invalid virtual api key/i);
     } finally {
       await cleanupChatApiKey(makeApiRequest, request, chatApiKey.id);
       await deleteAgent(request, proxy.id);
@@ -225,7 +230,7 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
       provider: "openai",
     });
 
-    const vk = await createVirtualKey(makeApiRequest, request, chatApiKey.id, {
+    const vk = await createVirtualKey(makeApiRequest, request, chatApiKey, {
       name: "wrong-provider-vk",
     });
 
@@ -248,7 +253,7 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
 
       expect(proxyResponse.status()).toBe(400);
       const body = await proxyResponse.json();
-      expect(body.error.message).toContain("openai");
+      expect(body.error.message).toContain("anthropic");
     } finally {
       await cleanupChatApiKey(makeApiRequest, request, chatApiKey.id);
       await deleteAgent(request, proxy.id);
@@ -333,7 +338,7 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
     const chatApiKey = await createChatApiKey(makeApiRequest, request);
 
     // Create a virtual key with no expiration
-    const vk = await createVirtualKey(makeApiRequest, request, chatApiKey.id, {
+    const vk = await createVirtualKey(makeApiRequest, request, chatApiKey, {
       name: "no-expiry-vk",
       expiresAt: null,
     });
@@ -367,7 +372,7 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
     const proxy = await proxyResp.json();
 
     const chatApiKey = await createChatApiKey(makeApiRequest, request);
-    const vk = await createVirtualKey(makeApiRequest, request, chatApiKey.id);
+    const vk = await createVirtualKey(makeApiRequest, request, chatApiKey);
 
     // Verify it works first
     const okResp = await callProxyWithVirtualKey(request, proxy.id, vk.value);
@@ -396,7 +401,7 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
     }
   });
 
-  test("deleted parent chat API key invalidates virtual key", async ({
+  test("mapped parent chat API key cannot be deleted", async ({
     request,
     makeApiRequest,
     createLlmProxy,
@@ -410,28 +415,37 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
     const proxy = await proxyResp.json();
 
     const chatApiKey = await createChatApiKey(makeApiRequest, request);
-    const vk = await createVirtualKey(makeApiRequest, request, chatApiKey.id);
+    const vk = await createVirtualKey(makeApiRequest, request, chatApiKey);
 
     // Verify it works first
     const okResp = await callProxyWithVirtualKey(request, proxy.id, vk.value);
     expect(okResp.ok()).toBeTruthy();
 
-    // Delete the PARENT chat API key (cascade should delete virtual keys)
-    await makeApiRequest({
+    const deleteParentResponse = await makeApiRequest({
       request,
       method: "delete",
       urlSuffix: `/api/llm-provider-api-keys/${chatApiKey.id}`,
+      ignoreStatusCheck: true,
     });
+    expect(deleteParentResponse.ok()).toBe(false);
+    const deleteParentBody = await deleteParentResponse.json();
+    expect(deleteParentBody.error.message).toContain("virtual API keys");
 
     try {
-      // Virtual key should now be invalid
-      const failResp = await callProxyWithVirtualKey(
+      const stillValidResponse = await callProxyWithVirtualKey(
         request,
         proxy.id,
         vk.value,
       );
-      expect(failResp.status()).toBe(401);
+      expect(stillValidResponse.ok()).toBeTruthy();
     } finally {
+      await makeApiRequest({
+        request,
+        method: "delete",
+        urlSuffix: `/api/llm-virtual-keys/${vk.id}`,
+        ignoreStatusCheck: true,
+      });
+      await cleanupChatApiKey(makeApiRequest, request, chatApiKey.id);
       await deleteAgent(request, proxy.id);
     }
   });
@@ -455,7 +469,7 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
     const chatApiKey = await createChatApiKey(makeApiRequest, request, {
       baseUrl: `${WIREMOCK_INTERNAL_URL}/custom-base-url-test/v1`,
     });
-    const vk = await createVirtualKey(makeApiRequest, request, chatApiKey.id);
+    const vk = await createVirtualKey(makeApiRequest, request, chatApiKey);
 
     try {
       const proxyResponse = await callProxyWithVirtualKey(

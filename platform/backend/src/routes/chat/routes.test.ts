@@ -1066,4 +1066,104 @@ describe("persistNewMessages — approval resolution sweep", () => {
     expect(tool?.output).toBe("tool-result");
     expect(text?.state).toBe("done");
   });
+
+  test("post-sweep: persisted thread has no orphan tool_use for tc-1 (DB precondition for a clean Anthropic follow-up)", async ({
+    makeAgent,
+    makeConversation,
+  }) => {
+    const agent = await makeAgent();
+    const conv = await makeConversation(agent.id);
+
+    // 1. Seed the buggy starting point: a stale approval-requested row.
+    await seedStaleApprovalRequested(conv.id);
+
+    // 2. Approve flow lands a final assistant with output-available + text@done.
+    const final = assistantMsg("ai-final", [
+      { type: "step-start" },
+      toolPart("output-available", "tc-1", "appr-1", {
+        approval: { approved: true },
+        output: "tool-result",
+      }),
+      { type: "step-start" },
+      { type: "text", state: "done", text: "all done" },
+    ]);
+    await persistNewMessagesForTest(conv.id, [userMsg(), final], "onFinish");
+
+    // 3. User sends a follow-up. The continuation request body is what would
+    //    feed Anthropic next — it must contain matching tool_use + tool_result
+    //    blocks for tc-1, with no orphan tool_use left from the stale row.
+    const followUp = { ...userMsg("user-2", "anything else?") };
+    await persistNewMessagesForTest(
+      conv.id,
+      [userMsg(), final, followUp].filter((m) => m.role === "user"),
+      "earlyUserMsg",
+    );
+
+    const persisted = await MessageModel.findByConversation(conv.id);
+
+    type PartLike = {
+      type?: string;
+      state?: string;
+      toolCallId?: string;
+      output?: unknown;
+    };
+    const allParts: PartLike[] = persisted.flatMap((m) => {
+      const c = m.content as { parts?: PartLike[] };
+      return c?.parts ?? [];
+    });
+
+    // Exactly one tool_use for tc-1 should remain (the swept-and-replaced row),
+    // and it must carry the tool_result via output-available.
+    const toolPartsForTc1 = allParts.filter(
+      (p) => p.type?.startsWith("tool-") && p.toolCallId === "tc-1",
+    );
+    expect(toolPartsForTc1).toHaveLength(1);
+    expect(toolPartsForTc1[0].state).toBe("output-available");
+    expect(toolPartsForTc1[0].output).toBe("tool-result");
+
+    // No persisted assistant row should still be in approval-requested for tc-1.
+    const stillRequested = allParts.some(
+      (p) => p.toolCallId === "tc-1" && p.state === "approval-requested",
+    );
+    expect(stillRequested).toBe(false);
+  });
+
+  test("post-sweep (decline): persisted thread has no orphan tool_use for tc-1 with declined output (DB precondition)", async ({
+    makeAgent,
+    makeConversation,
+  }) => {
+    const agent = await makeAgent();
+    const conv = await makeConversation(agent.id);
+
+    await seedStaleApprovalRequested(conv.id);
+
+    const declined = assistantMsg("ai-declined", [
+      { type: "step-start" },
+      toolPart("output-denied", "tc-1", "appr-1", {
+        approval: { approved: false },
+      }),
+      { type: "step-start" },
+      { type: "text", state: "done", text: "ok, skipping" },
+    ]);
+    await persistNewMessagesForTest(conv.id, [userMsg(), declined], "onFinish");
+
+    const followUp = { ...userMsg("user-2", "do something else") };
+    await persistNewMessagesForTest(
+      conv.id,
+      [userMsg(), declined, followUp].filter((m) => m.role === "user"),
+      "earlyUserMsg",
+    );
+
+    const persisted = await MessageModel.findByConversation(conv.id);
+    type PartLike = { type?: string; state?: string; toolCallId?: string };
+    const toolPartsForTc1: PartLike[] = persisted
+      .flatMap((m) => {
+        const c = m.content as { parts?: PartLike[] };
+        return c?.parts ?? [];
+      })
+      .filter((p) => p.type?.startsWith("tool-") && p.toolCallId === "tc-1");
+
+    expect(toolPartsForTc1).toHaveLength(1);
+    expect(toolPartsForTc1[0].state).toBe("output-denied");
+  });
 });

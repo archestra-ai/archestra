@@ -176,9 +176,7 @@ describe("ImportAgentDialog", () => {
 
     await user.click(screen.getByRole("button", { name: /paste json/i }));
 
-    expect(
-      screen.getByLabelText(/paste agent json here/i),
-    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/paste agent json here/i)).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /parse json/i }),
     ).toBeInTheDocument();

@@ -139,7 +139,7 @@ export async function deleteVisibleProviderKeys(
     );
   }
 
-  const keys = (await listResponse.json()) as Array<{ id: string }>;
+  const keys = extractPaginatedArray<{ id: string }>(await listResponse.json());
   for (const key of keys) {
     await deleteVirtualKeysForProviderKey(request, key.id);
 
@@ -181,7 +181,9 @@ async function deleteVirtualKeysForProviderKey(
     );
   }
 
-  const virtualKeys = (await listResponse.json()) as Array<{ id: string }>;
+  const virtualKeys = extractPaginatedArray<{ id: string }>(
+    await listResponse.json(),
+  );
   for (const virtualKey of virtualKeys) {
     const deleteResponse = await request.delete(
       getE2eRequestUrl(`/api/llm-virtual-keys/${virtualKey.id}`),
@@ -198,6 +200,23 @@ async function deleteVirtualKeysForProviderKey(
       );
     }
   }
+}
+
+function extractPaginatedArray<T>(data: unknown): T[] {
+  if (Array.isArray(data)) {
+    return data as T[];
+  }
+
+  if (
+    data &&
+    typeof data === "object" &&
+    "data" in data &&
+    Array.isArray(data.data)
+  ) {
+    return data.data as T[];
+  }
+
+  return [];
 }
 
 async function getParentKeyOptionNameForProvider(

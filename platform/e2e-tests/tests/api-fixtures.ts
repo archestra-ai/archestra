@@ -135,10 +135,6 @@ const makeApiRequest = async ({
 };
 
 async function refreshAdminSession(request: APIRequestContext): Promise<void> {
-  await request.post(getE2eRequestUrl("/api/auth/sign-out"), {
-    headers: { Origin: UI_BASE_URL },
-  });
-
   const response = await request.post(
     getE2eRequestUrl("/api/auth/sign-in/email"),
     {
@@ -159,26 +155,24 @@ async function refreshAdminSession(request: APIRequestContext): Promise<void> {
     );
   }
 
-  const permissionsResponse = await request.get(
-    getE2eRequestUrl("/api/user/permissions"),
+  const sessionResponse = await request.get(
+    getE2eRequestUrl("/api/auth/get-session"),
     {
       headers: { Origin: UI_BASE_URL },
     },
   );
 
-  if (!permissionsResponse.ok()) {
+  if (!sessionResponse.ok()) {
     throw new Error(
-      `Failed to verify refreshed admin session: ${permissionsResponse.status()} ${await permissionsResponse.text()}`,
+      `Failed to verify refreshed admin session: ${sessionResponse.status()} ${await sessionResponse.text()}`,
     );
   }
 
-  const permissions = await permissionsResponse.json();
-  if (
-    !permissions?.identityProvider?.includes("create") ||
-    !permissions?.mcpRegistry?.includes("create") ||
-    !permissions?.toolPolicy?.includes("create")
-  ) {
-    throw new Error("Refreshed session does not have admin permissions");
+  const session = await sessionResponse.json();
+  if (session?.user?.email !== ADMIN_EMAIL) {
+    throw new Error(
+      `Refreshed session is not admin: ${JSON.stringify(session?.user ?? null)}`,
+    );
   }
 }
 

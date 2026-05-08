@@ -212,5 +212,7 @@ function pluckHelper(array: unknown, property: unknown) {
 
 function formatTemplateHelperNames(helperNames: readonly string[]) {
   if (helperNames.length <= 1) return helperNames.join("");
-  return `${helperNames.slice(0, -1).join(", ")}, and ${helperNames.at(-1)}`;
+  return `${helperNames.slice(0, -1).join(", ")}, and ${
+    helperNames[helperNames.length - 1]
+  }`;
 }

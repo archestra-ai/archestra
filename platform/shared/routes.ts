@@ -392,6 +392,7 @@ export const RouteId = {
 
   // Optimization Rule Routes
   GetOptimizationRules: "getOptimizationRules",
+  GetOptimizationRule: "getOptimizationRule",
   CreateOptimizationRule: "createOptimizationRule",
   UpdateOptimizationRule: "updateOptimizationRule",
   DeleteOptimizationRule: "deleteOptimizationRule",

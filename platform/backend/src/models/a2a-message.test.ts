@@ -6,7 +6,7 @@ import {
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import A2AContextModel from "./a2a-context";
-import A2AMessageModel from "./a2a-message";
+import A2AMessageModel, { A2AMessageIdExistsError } from "./a2a-message";
 import A2ATaskModel from "./a2a-task";
 
 async function createContext() {
@@ -60,6 +60,31 @@ describe("A2AMessageModel", () => {
       expect(updatedContext.updatedAt.getTime()).toBeGreaterThan(
         originalUpdatedAt.getTime(),
       );
+    });
+  });
+
+  describe("createWithId", () => {
+    test("throws A2AMessageIdExistsError when a message with the same ID already exists", async () => {
+      const context = await createContext();
+      const messageId = crypto.randomUUID();
+
+      await A2AMessageModel.createWithId({
+        id: messageId,
+        contextId: context.id,
+        role: A2AProtocolRole.User,
+        parts: makeTextParts("Hello"),
+        content: makeContent(messageId, A2AProtocolRole.User, "Hello"),
+      });
+
+      await expect(
+        A2AMessageModel.createWithId({
+          id: messageId,
+          contextId: context.id,
+          role: A2AProtocolRole.User,
+          parts: makeTextParts("Hello again"),
+          content: makeContent(messageId, A2AProtocolRole.User, "Hello again"),
+        }),
+      ).rejects.toThrow(A2AMessageIdExistsError);
     });
   });
 

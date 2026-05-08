@@ -5,7 +5,7 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { parseTrustProxy } from "@/config";
+import config, { parseTrustProxy } from "@/config";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import oauthServerRoutes from "./oauth-server";
 
@@ -60,7 +60,7 @@ describe("OAuth Server - Well-Known Endpoints", () => {
       ]);
     });
 
-    test("prefers forwarded public origin over internal upstream host", async () => {
+    test("ignores forwarded public origin when proxy trust is disabled", async () => {
       const response = await app.inject({
         method: "GET",
         url: "/.well-known/oauth-protected-resource/v1/mcp/test-id",
@@ -74,10 +74,8 @@ describe("OAuth Server - Well-Known Endpoints", () => {
       expect(response.statusCode).toBe(200);
       const body = response.json();
 
-      expect(body.resource).toBe("https://gateway.example.com/v1/mcp/test-id");
-      expect(body.authorization_servers).toEqual([
-        "https://gateway.example.com",
-      ]);
+      expect(body.resource).toBe("http://localhost:9000/v1/mcp/test-id");
+      expect(body.authorization_servers).toEqual(["http://localhost:9000"]);
     });
   });
 
@@ -163,7 +161,7 @@ describe("OAuth Server - Well-Known Endpoints", () => {
       );
     });
 
-    test("prefers forwarded public origin for server-to-server endpoints", async () => {
+    test("ignores forwarded public origin for server-to-server endpoints when proxy trust is disabled", async () => {
       const response = await app.inject({
         method: "GET",
         url: "/.well-known/oauth-authorization-server",
@@ -178,20 +176,22 @@ describe("OAuth Server - Well-Known Endpoints", () => {
       const body = response.json();
 
       expect(body.token_endpoint).toBe(
-        "https://gateway.example.com/api/auth/oauth2/token",
+        "http://localhost:9000/api/auth/oauth2/token",
       );
       expect(body.registration_endpoint).toBe(
-        "https://gateway.example.com/api/auth/oauth2/register",
+        "http://localhost:9000/api/auth/oauth2/register",
       );
-      expect(body.jwks_uri).toBe("https://gateway.example.com/api/auth/jwks");
+      expect(body.jwks_uri).toBe("http://localhost:9000/api/auth/jwks");
     });
 
     describe("reverse proxy (trustProxy enabled)", () => {
       let proxyApp: FastifyInstance;
       const originalEnv = process.env;
+      const originalTrustProxy = config.api.trustProxy;
 
       beforeEach(async () => {
         process.env = { ...originalEnv, ARCHESTRA_TRUST_PROXY: "true" };
+        config.api.trustProxy = true;
         proxyApp = Fastify({
           trustProxy: parseTrustProxy(process.env.ARCHESTRA_TRUST_PROXY),
         }).withTypeProvider<ZodTypeProvider>();
@@ -202,6 +202,7 @@ describe("OAuth Server - Well-Known Endpoints", () => {
 
       afterEach(async () => {
         process.env = originalEnv;
+        config.api.trustProxy = originalTrustProxy;
         await proxyApp.close();
       });
 
@@ -238,6 +239,51 @@ describe("OAuth Server - Well-Known Endpoints", () => {
 
         expect(body.resource).toMatch(/^https:\/\//);
         expect(body.authorization_servers[0]).toMatch(/^https:\/\//);
+      });
+
+      test("prefers forwarded public origin over internal upstream host", async () => {
+        const response = await proxyApp.inject({
+          method: "GET",
+          url: "/.well-known/oauth-protected-resource/v1/mcp/test-id",
+          headers: {
+            host: "localhost:9000",
+            "x-forwarded-host": "gateway.example.com",
+            "x-forwarded-proto": "https",
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = response.json();
+
+        expect(body.resource).toBe(
+          "https://gateway.example.com/v1/mcp/test-id",
+        );
+        expect(body.authorization_servers).toEqual([
+          "https://gateway.example.com",
+        ]);
+      });
+
+      test("prefers forwarded public origin for server-to-server endpoints", async () => {
+        const response = await proxyApp.inject({
+          method: "GET",
+          url: "/.well-known/oauth-authorization-server",
+          headers: {
+            host: "localhost:9000",
+            "x-forwarded-host": "gateway.example.com",
+            "x-forwarded-proto": "https",
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = response.json();
+
+        expect(body.token_endpoint).toBe(
+          "https://gateway.example.com/api/auth/oauth2/token",
+        );
+        expect(body.registration_endpoint).toBe(
+          "https://gateway.example.com/api/auth/oauth2/register",
+        );
+        expect(body.jwks_uri).toBe("https://gateway.example.com/api/auth/jwks");
       });
 
       test("falls back to http:// when X-Forwarded-Proto is not set", async () => {

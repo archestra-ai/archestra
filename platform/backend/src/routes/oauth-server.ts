@@ -43,6 +43,7 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const baseUrl = getPublicRequestOrigin({
         protocol: request.protocol,
         headers: request.headers,
+        trustProxy: config.api.trustProxy,
       });
 
       // Extract the resource path (everything after /.well-known/oauth-protected-resource)
@@ -104,6 +105,7 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const baseUrl = getPublicRequestOrigin({
         protocol: request.protocol,
         headers: request.headers,
+        trustProxy: config.api.trustProxy,
       });
 
       // authorization_endpoint must be browser-facing (for session cookies).

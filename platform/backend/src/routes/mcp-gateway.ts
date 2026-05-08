@@ -36,6 +36,7 @@ function setWWWAuthenticateHeader(
   const origin = getPublicRequestOrigin({
     protocol: request.protocol,
     headers: request.headers,
+    trustProxy: config.api.trustProxy,
   });
   const resourceMetadataUrl = `${origin}/.well-known/oauth-protected-resource${request.url}`;
   reply.header(

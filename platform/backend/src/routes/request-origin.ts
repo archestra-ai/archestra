@@ -3,13 +3,19 @@ import type { IncomingHttpHeaders } from "node:http";
 export function getPublicRequestOrigin(params: {
   protocol: string;
   headers: IncomingHttpHeaders;
+  trustProxy: unknown;
 }): string {
+  const trustForwardedHeaders = Boolean(params.trustProxy);
   const host =
-    getFirstHeaderValue(params.headers["x-forwarded-host"]) ??
+    (trustForwardedHeaders
+      ? getFirstHeaderValue(params.headers["x-forwarded-host"])
+      : undefined) ??
     getFirstHeaderValue(params.headers.host) ??
     "localhost";
   const protocol = (
-    getFirstHeaderValue(params.headers["x-forwarded-proto"]) ??
+    (trustForwardedHeaders
+      ? getFirstHeaderValue(params.headers["x-forwarded-proto"])
+      : undefined) ??
     params.protocol ??
     "http"
   ).replace(/:$/, "");

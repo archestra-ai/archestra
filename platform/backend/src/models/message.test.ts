@@ -1130,11 +1130,11 @@ describe("MessageModel.findPriorApprovalRequestedByToolCallId", () => {
       toolCallId: "tc-1",
     });
 
-    expect(found).not.toBeNull();
-    expect(found?.id).toBe(seeded.id);
+    expect(found).toHaveLength(1);
+    expect(found[0].id).toBe(seeded.id);
   });
 
-  test("returns null when toolCallId is not present in any message", async ({
+  test("returns empty array when toolCallId is not present in any message", async ({
     makeUser,
     makeOrganization,
     makeAgent,
@@ -1159,7 +1159,7 @@ describe("MessageModel.findPriorApprovalRequestedByToolCallId", () => {
       toolCallId: "tc-nonexistent",
     });
 
-    expect(found).toBeNull();
+    expect(found).toEqual([]);
   });
 
   test("does not match an approval-responded row for the same toolCallId", async ({
@@ -1209,7 +1209,7 @@ describe("MessageModel.findPriorApprovalRequestedByToolCallId", () => {
       toolCallId: "tc-1",
     });
 
-    expect(found).toBeNull();
+    expect(found).toEqual([]);
   });
 
   test("does not return a match from a different conversation (cross-conversation isolation)", async ({
@@ -1270,6 +1270,62 @@ describe("MessageModel.findPriorApprovalRequestedByToolCallId", () => {
       toolCallId: "tc-1",
     });
 
-    expect(found).toBeNull();
+    expect(found).toEqual([]);
+  });
+
+  test("returns every stale row when multiple approval-requested rows exist for the same toolCallId", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      name: "Multi-stale Approval Agent",
+      teams: [],
+    });
+
+    const conv = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Multi-stale Approval Test",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    const seedRow = (contentId: string, createdAt: Date) =>
+      db
+        .insert(schema.messagesTable)
+        .values({
+          conversationId: conv.id,
+          role: "assistant",
+          content: {
+            id: contentId,
+            role: "assistant",
+            parts: [
+              {
+                type: "tool-system_monitor__get-system-info",
+                input: {},
+                state: "approval-requested",
+                approval: { id: "appr-1" },
+                toolCallId: "tc-1",
+              },
+            ],
+            // biome-ignore lint/suspicious/noExplicitAny: synthetic UIMessage shape — content column is jsonb $type<any>
+          } as any,
+          createdAt,
+        })
+        .returning();
+
+    const [first] = await seedRow("ai-stale-1", new Date(Date.now() - 1000));
+    const [second] = await seedRow("ai-stale-2", new Date());
+
+    const found = await MessageModel.findPriorApprovalRequestedByToolCallId({
+      conversationId: conv.id,
+      toolCallId: "tc-1",
+    });
+
+    expect(found).toHaveLength(2);
+    expect(found.map((m) => m.id).sort()).toEqual([first.id, second.id].sort());
   });
 });

@@ -1,3 +1,4 @@
+import { TOOL_STATE, type ToolState } from "@shared";
 import type { ChatMessage } from "@/types";
 
 /**
@@ -16,18 +17,28 @@ export function collectResolvedApprovalToolCallIds(
     for (const part of message.parts) {
       if (typeof part.toolCallId !== "string") continue;
       if (typeof part.state !== "string") continue;
-      if (!TERMINAL_APPROVAL_STATES.has(part.state)) continue;
-      // Only consider parts that went through the approval flow.
-      if (!part.approval || typeof part.approval !== "object") continue;
+      if (!TERMINAL_APPROVAL_STATES.has(part.state as ToolState)) continue;
+      // Only consider parts that went through the approval flow. Tighten the
+      // shape check beyond `typeof === "object"` so a future SDK change to
+      // emit e.g. `approval: []` or another non-record sentinel doesn't
+      // mis-fire the sweep.
+      if (!isApprovalRecord(part.approval)) continue;
       ids.add(part.toolCallId);
     }
   }
   return ids;
 }
 
-const TERMINAL_APPROVAL_STATES = new Set([
-  "approval-responded",
-  "output-available",
-  "output-error",
-  "output-denied",
+const TERMINAL_APPROVAL_STATES = new Set<ToolState>([
+  TOOL_STATE.APPROVAL_RESPONDED,
+  TOOL_STATE.OUTPUT_AVAILABLE,
+  TOOL_STATE.OUTPUT_ERROR,
+  TOOL_STATE.OUTPUT_DENIED,
 ]);
+
+function isApprovalRecord(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null) return false;
+  if (Array.isArray(value)) return false;
+  // The AI SDK approval object always carries at least one of these keys.
+  return "id" in value || "approved" in value;
+}

@@ -1,3 +1,4 @@
+import { TOOL_STATE } from "@shared";
 import logger from "@/logging";
 import { MessageModel } from "@/models";
 import type { ChatMessage } from "@/types";
@@ -41,7 +42,7 @@ export async function persistNewMessages(
             toolCallId,
           },
         );
-        if (stale) idsToDelete.push(stale.id);
+        for (const row of stale) idsToDelete.push(row.id);
       }
       if (idsToDelete.length > 0) {
         await MessageModel.bulkDelete(idsToDelete);
@@ -250,7 +251,10 @@ function computeMessageFingerprint(message: unknown): string | null {
       // another is still pending also fall through here — the resulting
       // re-insert is reconciled by the approval-resolution sweep that
       // deletes the prior approval-requested row.)
-      if (state === "approval-requested" || state.startsWith("input-")) {
+      if (
+        state === TOOL_STATE.APPROVAL_REQUESTED ||
+        state.startsWith("input-")
+      ) {
         return null;
       }
       partSignatures.push(`${type}:${toolCallId}:${state}`);

@@ -79,4 +79,26 @@ describe("collectResolvedApprovalToolCallIds", () => {
     ];
     expect(collectResolvedApprovalToolCallIds(messages)).toEqual(new Set());
   });
+
+  test.each([
+    ["null", null],
+    ["empty array", []],
+    ["array with junk", [1, 2, 3]],
+    ["Date object", new Date()],
+    ["object missing id and approved", { unrelated: 1 }],
+    ["primitive number", 1],
+    ["primitive string", "approved"],
+  ])("ignores parts whose approval is %s (not an approval record)", (_label, approvalValue) => {
+    const messages = [
+      message([
+        {
+          type: "tool-x",
+          state: "output-available",
+          approval: approvalValue,
+          toolCallId: "tc-1",
+        },
+      ]),
+    ];
+    expect(collectResolvedApprovalToolCallIds(messages)).toEqual(new Set());
+  });
 });

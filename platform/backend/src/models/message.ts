@@ -1,3 +1,4 @@
+import { TOOL_STATE } from "@shared";
 import { and, eq, gt, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertMessage, Message } from "@/types";
@@ -184,17 +185,19 @@ class MessageModel {
   }
 
   /**
-   * Find a prior assistant message in this conversation whose JSONB content
-   * contains a tool part with the given toolCallId in `approval-requested`
-   * state. Used by the persistence sweep to remove stale rows so `tool_use`
-   * ids stay unique across the conversation.
+   * Find every prior assistant message in this conversation whose JSONB
+   * content contains a tool part with the given toolCallId in
+   * `approval-requested` state. Used by the persistence sweep to remove stale
+   * rows so `tool_use` ids stay unique across the conversation. Returns all
+   * matches so legacy buggy state with two stale rows for the same toolCallId
+   * heals in a single sweep instead of one row per terminal event.
    */
   static async findPriorApprovalRequestedByToolCallId(params: {
     conversationId: string;
     toolCallId: string;
-  }): Promise<Message | null> {
+  }): Promise<Message[]> {
     const { conversationId, toolCallId } = params;
-    const [message] = await db
+    return await db
       .select()
       .from(schema.messagesTable)
       .where(
@@ -205,13 +208,16 @@ class MessageModel {
             FROM jsonb_array_elements(${schema.messagesTable.content}->'parts') AS part
             WHERE part->>'type' LIKE 'tool-%'
               AND part->>'toolCallId' = ${toolCallId}
-              AND part->>'state' = 'approval-requested'
+              AND part->>'state' = ${TOOL_STATE.APPROVAL_REQUESTED}
           )`,
         ),
       )
       .orderBy(schema.messagesTable.createdAt)
-      .limit(1);
-    return message ?? null;
+      // Defensive cap: realistic invariant is at most one stale row per
+      // (conversationId, toolCallId). 100 is large enough to absorb any
+      // legitimate legacy heal scenario, small enough to fail visibly if
+      // that invariant ever breaks rather than OOM the request handler.
+      .limit(100);
   }
 
   /**

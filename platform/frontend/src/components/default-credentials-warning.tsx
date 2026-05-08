@@ -108,7 +108,7 @@ export function DefaultCredentialsWarning({
               {" "}
               or{" "}
               <a
-                href="/settings/account"
+                href="/settings/account?highlight=change-password"
                 className="inline-flex items-center underline"
               >
                 Change

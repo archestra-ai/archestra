@@ -31,7 +31,7 @@ export const ssoConfig = {
           userId: data.user?.id,
           userEmail: data.user?.email,
         },
-        "SSO getRole callback: Invoking IdentityProviderModel.resolveSsoRole",
+        "[syncSsoRole] Invoking IdentityProviderModel.resolveSsoRole from SSO getRole callback",
       );
 
       // Cast to the expected union type (better-auth expects "member" | "admin")
@@ -45,7 +45,7 @@ export const ssoConfig = {
           userId: data.user?.id,
           resolvedRole,
         },
-        "SSO getRole callback: Role resolved successfully",
+        "[syncSsoRole] Role resolved successfully from SSO getRole callback",
       );
 
       return resolvedRole;
@@ -78,7 +78,7 @@ export async function syncSsoRole(
   userEmail: string,
   providerIdHint?: string,
 ): Promise<void> {
-  logger.info({ userId, userEmail }, "🔄 syncSsoRole called");
+  logger.info({ userId, userEmail }, "[syncSsoRole] Starting SSO role sync");
 
   const ssoAccount = await getRecentSsoAccount({
     userId,
@@ -89,7 +89,7 @@ export async function syncSsoRole(
   if (!ssoAccount) {
     logger.debug(
       { userId, userEmail },
-      "No SSO account found for user, skipping role sync",
+      "[syncSsoRole] No SSO account found for user, skipping role sync",
     );
     return;
   }
@@ -102,17 +102,17 @@ export async function syncSsoRole(
   if (!idpProvider?.organizationId) {
     logger.debug(
       { providerId, userEmail },
-      "SSO provider not found or has no organization, skipping role sync",
+      "[syncSsoRole] SSO provider not found or has no organization, skipping role sync",
     );
     return;
   }
 
   // Check if role mapping is configured
   const roleMapping = idpProvider.roleMapping;
-  if (!roleMapping?.rules?.length) {
+  if (!roleMapping) {
     logger.debug(
       { providerId, userEmail },
-      "No role mapping rules configured, skipping role sync",
+      "[syncSsoRole] No role mapping configured, skipping role sync",
     );
     return;
   }
@@ -121,7 +121,7 @@ export async function syncSsoRole(
   if (roleMapping.skipRoleSync) {
     logger.debug(
       { providerId, userEmail },
-      "skipRoleSync is enabled, skipping role sync for existing user",
+      "[syncSsoRole] skipRoleSync is enabled, skipping role sync for existing user",
     );
     return;
   }
@@ -130,7 +130,7 @@ export async function syncSsoRole(
   if (!ssoAccount.idToken) {
     logger.debug(
       { providerId, userEmail },
-      "No idToken in SSO account, skipping role sync",
+      "[syncSsoRole] No idToken in SSO account, skipping role sync",
     );
     return;
   }
@@ -144,12 +144,12 @@ export async function syncSsoRole(
         userEmail,
         tokenClaimsKeys: Object.keys(tokenClaims),
       },
-      "Decoded idToken claims for role sync",
+      "[syncSsoRole] Decoded idToken claims for role sync",
     );
   } catch (error) {
     logger.warn(
       { err: error, providerId, userEmail },
-      "Failed to decode idToken for role sync",
+      "[syncSsoRole] Failed to decode idToken for role sync",
     );
     return;
   }
@@ -166,21 +166,30 @@ export async function syncSsoRole(
     },
     "member",
   );
+  const extractedGroups = extractGroupsFromClaims(
+    tokenClaims,
+    idpProvider.teamSyncConfig,
+  );
 
-  logger.debug(
+  logger.info(
     {
       providerId,
       userEmail,
-      result,
+      organizationId: idpProvider.organizationId,
+      claimKeys: Object.keys(tokenClaims),
+      extractedGroupCount: extractedGroups.length,
+      roleMappingRuleCount: roleMapping.rules?.length ?? 0,
+      matched: result.matched,
+      resolvedRole: result.role,
     },
-    "Role mapping evaluation result for role sync",
+    "[syncSsoRole] Evaluated role mapping",
   );
 
   // Handle strict mode: Deny login if no rules matched and strict mode is enabled
   if (result.error) {
     logger.warn(
       { providerId, userEmail, error: result.error },
-      "SSO login denied for existing user due to strict mode - no role mapping rules matched",
+      "[syncSsoRole] SSO login denied for existing user due to strict mode - no role mapping rules matched",
     );
     throw new APIError("FORBIDDEN", {
       message: result.error,
@@ -190,7 +199,7 @@ export async function syncSsoRole(
   if (!result.role) {
     logger.debug(
       { providerId, userEmail },
-      "No role determined from mapping rules, skipping role sync",
+      "[syncSsoRole] No role determined from mapping rules, skipping role sync",
     );
     return;
   }
@@ -204,7 +213,7 @@ export async function syncSsoRole(
   if (!existingMember) {
     logger.debug(
       { providerId, userEmail, organizationId: idpProvider.organizationId },
-      "User has no membership in organization, skipping role sync (will be handled by organizationProvisioning)",
+      "[syncSsoRole] User has no membership in organization, skipping role sync",
     );
     return;
   }
@@ -226,7 +235,7 @@ export async function syncSsoRole(
         newRole: result.role,
         matched: result.matched,
       },
-      "✅ SSO role sync completed - role updated",
+      "[syncSsoRole] SSO role sync completed - role updated",
     );
   } else {
     logger.debug(
@@ -236,7 +245,7 @@ export async function syncSsoRole(
         providerId,
         currentRole: existingMember.role,
       },
-      "SSO role sync - no change needed",
+      "[syncSsoRole] SSO role sync completed - no change needed",
     );
   }
 }
@@ -254,11 +263,13 @@ export async function syncSsoTeams(
   userEmail: string,
   providerIdHint?: string,
 ): Promise<void> {
-  logger.info({ userId, userEmail }, "🔄 syncSsoTeams called");
+  logger.info({ userId, userEmail }, "[syncSsoTeams] Starting SSO team sync");
 
   // Only sync if enterprise license is activated
   if (!config.enterpriseFeatures.core) {
-    logger.info("🔄 Enterprise license not activated, skipping team sync");
+    logger.info(
+      "[syncSsoTeams] Enterprise license not activated, skipping team sync",
+    );
     return;
   }
 
@@ -274,13 +285,13 @@ export async function syncSsoTeams(
       providerId: ssoAccount?.providerId,
       providerIdHint,
     },
-    "🔄 Found accounts for user",
+    "[syncSsoTeams] Found SSO account for user",
   );
 
   if (!ssoAccount) {
     logger.warn(
       { userId, userEmail },
-      "🔄 No SSO account found for user, skipping team sync",
+      "[syncSsoTeams] No SSO account found for user, skipping team sync",
     );
     return;
   }
@@ -293,7 +304,7 @@ export async function syncSsoTeams(
   if (!idpProvider?.organizationId) {
     logger.debug(
       { providerId, userEmail },
-      "SSO provider not found or has no organization, skipping team sync",
+      "[syncSsoTeams] SSO provider not found or has no organization, skipping team sync",
     );
     return;
   }
@@ -302,24 +313,26 @@ export async function syncSsoTeams(
   if (idpProvider.teamSyncConfig?.enabled === false) {
     logger.debug(
       { providerId, userEmail },
-      "Team sync is disabled for this SSO provider",
+      "[syncSsoTeams] Team sync is disabled for this SSO provider",
     );
     return;
   }
 
   let groups: string[] = [];
+  let groupsSource: "callback-cache" | "account-id-token" = "account-id-token";
+  let claimKeys: string[] = [];
 
   const cachedGroups = await retrieveIdpGroups(providerId, userEmail);
   if (cachedGroups?.groups.length) {
+    groupsSource = "callback-cache";
     groups = cachedGroups.groups;
     logger.debug(
       {
         providerId,
         userEmail,
-        groups,
-        hasGroups: groups.length > 0,
+        groupCount: groups.length,
       },
-      "Using cached IdP groups for team sync",
+      "[syncSsoTeams] Using cached IdP groups for team sync",
     );
   } else {
     // Fall back to the persisted idToken if the short-lived callback cache
@@ -328,7 +341,7 @@ export async function syncSsoTeams(
     if (!ssoAccount.idToken) {
       logger.debug(
         { providerId, userEmail },
-        "No cached groups or idToken in SSO account, skipping team sync",
+        "[syncSsoTeams] No cached groups or idToken in SSO account, skipping team sync",
       );
       return;
     }
@@ -337,6 +350,7 @@ export async function syncSsoTeams(
       const idTokenClaims = jwtDecode<Record<string, unknown>>(
         ssoAccount.idToken,
       );
+      claimKeys = Object.keys(idTokenClaims);
       groups = extractGroupsFromClaims(
         idTokenClaims,
         idpProvider.teamSyncConfig,
@@ -345,24 +359,24 @@ export async function syncSsoTeams(
         {
           providerId,
           userEmail,
-          groups,
-          hasGroups: groups.length > 0,
+          claimKeys,
+          groupCount: groups.length,
         },
-        "Decoded idToken claims for team sync",
+        "[syncSsoTeams] Decoded idToken claims for team sync",
       );
     } catch (error) {
       logger.warn(
         { err: error, providerId, userEmail },
-        "Failed to decode idToken for team sync",
+        "[syncSsoTeams] Failed to decode idToken for team sync",
       );
       return;
     }
   }
 
   if (groups.length === 0) {
-    logger.debug(
-      { providerId, userEmail },
-      "No groups found in idToken, skipping team sync",
+    logger.info(
+      { providerId, userEmail, groupsSource, claimKeys },
+      "[syncSsoTeams] No IdP groups found for SSO team sync",
     );
     return;
   }
@@ -370,10 +384,29 @@ export async function syncSsoTeams(
   const organizationId = idpProvider.organizationId;
 
   try {
-    const { added, removed } = await TeamModel.syncUserTeams(
-      userId,
-      organizationId,
-      groups,
+    const {
+      added,
+      removed,
+      matchedExternalGroupCount,
+      matchedTeamCount,
+      unmappedGroupCount,
+    } = await TeamModel.syncUserTeams(userId, organizationId, groups);
+
+    logger.info(
+      {
+        userId,
+        email: userEmail,
+        providerId,
+        organizationId,
+        groupsSource,
+        groupCount: groups.length,
+        matchedExternalGroupCount,
+        matchedTeamCount,
+        unmappedGroupCount,
+        teamsAdded: added.length,
+        teamsRemoved: removed.length,
+      },
+      "[syncSsoTeams] Evaluated IdP groups for team sync",
     );
 
     if (added.length > 0 || removed.length > 0) {
@@ -387,18 +420,18 @@ export async function syncSsoTeams(
           teamsAdded: added.length,
           teamsRemoved: removed.length,
         },
-        "✅ SSO team sync completed",
+        "[syncSsoTeams] SSO team sync completed - memberships changed",
       );
     } else {
       logger.debug(
         { userId, email: userEmail, providerId },
-        "SSO team sync - no changes needed",
+        "[syncSsoTeams] SSO team sync completed - no changes needed",
       );
     }
   } catch (error) {
     logger.error(
       { err: error, userId, email: userEmail, providerId },
-      "❌ Failed to sync SSO teams",
+      "[syncSsoTeams] Failed to sync SSO teams",
     );
   }
 }

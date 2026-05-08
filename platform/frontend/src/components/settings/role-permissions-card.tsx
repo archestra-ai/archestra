@@ -1,5 +1,6 @@
 "use client";
 
+import { zodResolver } from "@hookform/resolvers/zod";
 import {
   type Action,
   type Permissions,
@@ -8,23 +9,48 @@ import {
   resourceDescriptions,
   resourceLabels,
 } from "@shared";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+  Pencil,
+  X,
+} from "lucide-react";
 import { useCallback, useState } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useUpdateAccountNameMutation } from "@/lib/auth/account.query";
 import { useAllPermissions } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import {
   useActiveMemberRole,
   useActiveOrganization,
 } from "@/lib/organization.query";
+
+const NameFormSchema = z.object({
+  name: z.string().trim().min(1, "Name is required"),
+});
+
+type NameFormValues = z.infer<typeof NameFormSchema>;
 
 const actionLabels: Record<Action, string> = {
   create: "Create",
@@ -63,13 +89,23 @@ export function RolePermissionsCard() {
   return (
     <Card>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-          <span className="text-muted-foreground">Username:</span>
-          <span>{session?.user?.name || "—"}</span>
-          <span className="text-muted-foreground">Email:</span>
-          <span>{session?.user?.email || "—"}</span>
-          <span className="text-muted-foreground">Role:</span>
-          <span className="capitalize">{role || "—"}</span>
+        <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+          <span className="flex h-8 items-center text-muted-foreground">
+            Name:
+          </span>
+          <EditableName value={session?.user?.name ?? ""} />
+          <span className="flex h-8 items-center text-muted-foreground">
+            Email:
+          </span>
+          <span className="flex h-8 items-center">
+            {session?.user?.email || "—"}
+          </span>
+          <span className="flex h-8 items-center text-muted-foreground">
+            Role:
+          </span>
+          <span className="flex h-8 items-center capitalize">
+            {role || "—"}
+          </span>
         </div>
         {permissions && (
           <>
@@ -82,6 +118,95 @@ export function RolePermissionsCard() {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function EditableName({ value }: { value: string }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const updateName = useUpdateAccountNameMutation();
+  const form = useForm<NameFormValues>({
+    resolver: zodResolver(NameFormSchema),
+    values: { name: value },
+  });
+
+  async function onSubmit(values: NameFormValues) {
+    const updated = await updateName.mutateAsync(values.name.trim());
+    if (updated) {
+      setIsEditing(false);
+    }
+  }
+
+  if (isEditing) {
+    return (
+      <Form {...form}>
+        <form
+          className="flex min-w-0 flex-wrap items-start gap-2"
+          onSubmit={form.handleSubmit(onSubmit)}
+        >
+          <FormField
+            control={form.control}
+            name="name"
+            render={({ field }) => (
+              <FormItem className="min-w-52 flex-1">
+                <FormControl>
+                  <Input
+                    {...field}
+                    autoFocus
+                    autoComplete="name"
+                    className="h-8"
+                    disabled={updateName.isPending}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <Button
+            type="submit"
+            size="icon"
+            className="h-8 w-8"
+            disabled={updateName.isPending}
+            aria-label="Save name"
+          >
+            {updateName.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Check className="h-4 w-4" />
+            )}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-8 w-8"
+            disabled={updateName.isPending}
+            onClick={() => {
+              form.reset({ name: value });
+              setIsEditing(false);
+            }}
+            aria-label="Cancel name edit"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </form>
+      </Form>
+    );
+  }
+
+  return (
+    <span className="flex h-8 min-w-0 items-center gap-2">
+      <span className="truncate">{value || "—"}</span>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-6 w-6"
+        onClick={() => setIsEditing(true)}
+        aria-label="Edit name"
+      >
+        <Pencil className="h-3.5 w-3.5" />
+      </Button>
+    </span>
   );
 }
 

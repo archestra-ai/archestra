@@ -59,4 +59,5 @@ export { default as ToolInvocationPolicyModel } from "./tool-invocation-policy";
 export { default as TrustedDataPolicyModel } from "./trusted-data-policy";
 export { default as UserModel } from "./user";
 export { default as UserTokenModel } from "./user-token";
+export { default as VerificationModel } from "./verification";
 export { default as VirtualApiKeyModel } from "./virtual-api-key";

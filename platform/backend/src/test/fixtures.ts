@@ -805,6 +805,7 @@ async function makeIdentityProvider(
     oidcConfig?: Record<string, unknown>;
     samlConfig?: Record<string, unknown>;
     roleMapping?: Record<string, unknown>;
+    ssoLoginEnabled?: boolean;
     userId?: string | null;
   } = {},
 ) {
@@ -821,6 +822,7 @@ async function makeIdentityProvider(
         overrides.issuer ?? `https://issuer-${id.substring(0, 8)}.example.com`,
       domain: overrides.domain ?? "example.com",
       organizationId,
+      ssoLoginEnabled: overrides.ssoLoginEnabled ?? true,
       oidcConfig: overrides.oidcConfig
         ? (JSON.stringify(overrides.oidcConfig) as unknown as undefined)
         : undefined,

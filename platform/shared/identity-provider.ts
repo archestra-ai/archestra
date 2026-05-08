@@ -256,6 +256,7 @@ export const IdentityProviderFormSchema = z
   .object({
     providerId: z.string().min(1, "Provider ID is required"),
     issuer: z.string().min(1, "Issuer is required"),
+    ssoLoginEnabled: z.boolean().optional(),
     domain: z.string().refine(
       (value) => {
         const domains = parseAllowedIdentityProviderDomains(value);

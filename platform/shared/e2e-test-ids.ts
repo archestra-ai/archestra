@@ -28,6 +28,7 @@ export const E2eTestId = {
   IdentityProviderCreateButton: "identity-provider-create-button",
   IdentityProviderUpdateButton: "identity-provider-update-button",
   IdentityProviderDeleteButton: "identity-provider-delete-button",
+  IdentityProviderDialogNavButton: "identity-provider-dialog-nav-button",
   IdpRoleMappingAccordionTrigger: "idp-role-mapping-accordion-trigger",
   IdpRoleMappingDefaultRole: "idp-role-mapping-default-role",
   IdpRoleMappingRuleRole: "idp-role-mapping-rule-role",
@@ -124,6 +125,12 @@ export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];
 
 export function getIdpRoleMappingRuleRowTestId(index: number): string {
   return `role-mapping-rule-${index}`;
+}
+
+export function getIdentityProviderDialogNavButtonTestId(
+  section: string,
+): string {
+  return `${E2eTestId.IdentityProviderDialogNavButton}-${section}`;
 }
 
 export function getChatApiKeySelectorProviderGroupTestId(

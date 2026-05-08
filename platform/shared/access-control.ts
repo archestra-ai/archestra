@@ -673,6 +673,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateChatConversation]: {
     chat: ["create"],
   },
+  [RouteId.ForkChatConversation]: {
+    chat: ["create"],
+  },
   [RouteId.UpdateChatConversation]: {
     chat: ["update"],
   },
@@ -867,6 +870,9 @@ export const requiredEndpointPermissionsMap: Partial<
     identityProvider: ["read"],
   },
   [RouteId.GetIdentityProvider]: {
+    identityProvider: ["read"],
+  },
+  [RouteId.GetIdentityProviderLatestIdTokenClaims]: {
     identityProvider: ["read"],
   },
   [RouteId.CreateIdentityProvider]: {

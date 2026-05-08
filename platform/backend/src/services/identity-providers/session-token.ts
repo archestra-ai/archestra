@@ -14,17 +14,21 @@ interface SessionExternalIdpToken {
 type SubjectTokenPreference = "access_token" | "id_token";
 
 export async function resolveSessionExternalIdpToken(params: {
-  agentId: string;
+  agentId?: string;
+  identityProviderId?: string;
   userId: string;
 }): Promise<SessionExternalIdpToken | null> {
-  const agent = await AgentModel.findById(params.agentId);
-  if (!agent?.identityProviderId) {
+  const identityProviderId =
+    params.identityProviderId ??
+    (params.agentId
+      ? (await AgentModel.findById(params.agentId))?.identityProviderId
+      : null);
+  if (!identityProviderId) {
     return null;
   }
 
-  const identityProvider = await findExternalIdentityProviderById(
-    agent.identityProviderId,
-  );
+  const identityProvider =
+    await findExternalIdentityProviderById(identityProviderId);
   if (!identityProvider?.oidcConfig) {
     return null;
   }

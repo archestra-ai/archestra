@@ -35,6 +35,7 @@ import InvitationModel from "@/models/invitation";
 import MemberModel from "@/models/member";
 import SessionModel from "@/models/session";
 import UserModel from "@/models/user";
+import { linkedIdentityProviderPlugin } from "./linked-idp";
 
 const { ssoConfig, syncSsoRole, syncSsoTeams } = config.enterpriseFeatures.core
   ? // biome-ignore lint/style/noRestrictedImports: EE-only SSO config
@@ -145,6 +146,14 @@ export const auth = betterAuth({
       },
     }),
     admin(),
+    /**
+     * Linked downstream identity provider auth must live inside Better Auth,
+     * rather than regular Fastify routes, because completing the flow has to
+     * restore the original browser session cookie. Better Auth owns the secure
+     * cookie name, signing format, and attributes, and they vary with baseURL
+     * and deployment settings.
+     */
+    linkedIdentityProviderPlugin(),
     apiKey({
       enableSessionForAPIKeys: true,
       apiKeyHeaders: [apiKeyAuthorizationHeaderName],

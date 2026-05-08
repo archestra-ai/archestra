@@ -253,7 +253,7 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
 
       expect(proxyResponse.status()).toBe(400);
       const body = await proxyResponse.json();
-      expect(body.error.message).toContain("openai");
+      expect(body.error.message).toContain("anthropic");
     } finally {
       await cleanupChatApiKey(makeApiRequest, request, chatApiKey.id);
       await deleteAgent(request, proxy.id);
@@ -401,7 +401,7 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
     }
   });
 
-  test("deleted parent chat API key invalidates virtual key", async ({
+  test("mapped parent chat API key cannot be deleted", async ({
     request,
     makeApiRequest,
     createLlmProxy,
@@ -421,22 +421,31 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
     const okResp = await callProxyWithVirtualKey(request, proxy.id, vk.value);
     expect(okResp.ok()).toBeTruthy();
 
-    // Delete the PARENT chat API key (cascade should delete virtual keys)
-    await makeApiRequest({
+    const deleteParentResponse = await makeApiRequest({
       request,
       method: "delete",
       urlSuffix: `/api/llm-provider-api-keys/${chatApiKey.id}`,
+      ignoreStatusCheck: true,
     });
+    expect(deleteParentResponse.ok()).toBe(false);
+    const deleteParentBody = await deleteParentResponse.json();
+    expect(deleteParentBody.error.message).toContain("virtual API keys");
 
     try {
-      // Virtual key should now be invalid
-      const failResp = await callProxyWithVirtualKey(
+      const stillValidResponse = await callProxyWithVirtualKey(
         request,
         proxy.id,
         vk.value,
       );
-      expect(failResp.status()).toBe(401);
+      expect(stillValidResponse.ok()).toBeTruthy();
     } finally {
+      await makeApiRequest({
+        request,
+        method: "delete",
+        urlSuffix: `/api/llm-virtual-keys/${vk.id}`,
+        ignoreStatusCheck: true,
+      });
+      await cleanupChatApiKey(makeApiRequest, request, chatApiKey.id);
       await deleteAgent(request, proxy.id);
     }
   });

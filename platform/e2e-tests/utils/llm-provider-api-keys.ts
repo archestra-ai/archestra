@@ -95,8 +95,18 @@ export async function createVirtualKey(
       : null);
 
   if (parentKeyOptionName) {
-    await page.getByTestId(E2eTestId.VirtualKeyParentKeySelect).click();
+    await page.getByRole("combobox", { name: "Provider" }).click();
+    if (params.parentProvider) {
+      await page
+        .getByRole("option", { name: new RegExp(params.parentProvider, "i") })
+        .click();
+    } else {
+      await page.getByRole("option").first().click();
+    }
+
+    await page.getByRole("combobox", { name: "Provider API Key" }).click();
     await page.getByRole("option", { name: parentKeyOptionName }).click();
+    await page.getByRole("button", { name: /^Add$/ }).click();
   }
   await page.getByLabel(/Name/i).fill(params.name);
   await clickButton({ page, options: { name: "Create" } });

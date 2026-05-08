@@ -42,6 +42,7 @@ test.describe("Provider Settings - Virtual API Keys", () => {
     await createVirtualKey(page, {
       name: virtualKeyName,
       parentKeyOptionName: new RegExp(parentKeyName),
+      parentProvider: "Zhipu",
     });
 
     await expect(

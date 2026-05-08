@@ -3,7 +3,7 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
-import { InternalMcpCatalogModel } from "@/models";
+import { InternalMcpCatalogModel, McpServerModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -360,6 +360,19 @@ describe("deploy_mcp_server", () => {
     );
 
     expect(result.isError).toBe(false);
+
+    const [createdServer] = await McpServerModel.findByCatalogId(catalog.id);
+    expect(createdServer).toMatchObject({
+      ownerId: notTeamMember.id,
+      scope: "team",
+      teamId: team.id,
+    });
+    const hydratedServer = await McpServerModel.findById(
+      createdServer.id,
+      notTeamMember.id,
+      true,
+    );
+    expect(hydratedServer?.users).toEqual([]);
   });
 
   test("team install: member of team and editor succeeds", async ({
@@ -519,6 +532,19 @@ describe("deploy_mcp_server", () => {
     );
 
     expect(result.isError).toBe(false);
+
+    const [createdServer] = await McpServerModel.findByCatalogId(catalog.id);
+    expect(createdServer).toMatchObject({
+      ownerId: user.id,
+      scope: "org",
+      teamId: null,
+    });
+    const hydratedServer = await McpServerModel.findById(
+      createdServer.id,
+      user.id,
+      true,
+    );
+    expect(hydratedServer?.users).toEqual([]);
   });
 
   test("org install: non-admin (no mcpServerInstallation:admin) is rejected", async ({

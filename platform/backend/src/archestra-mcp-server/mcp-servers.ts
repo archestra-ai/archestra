@@ -1108,8 +1108,8 @@ async function handleDeployMcpServer(
       catalogId: args.catalogId,
       serverType: catalogItem.serverType,
       ownerId: context.userId,
-      userId: context.userId,
       scope,
+      ...(scope === "personal" && { userId: context.userId }),
       ...(teamId && { teamId }),
     });
 

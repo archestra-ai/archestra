@@ -2054,6 +2054,358 @@ describe("mcp server inspect route", () => {
       expect(assignments.length).toBe(2);
     });
 
+    test("admin can install a personal connection for another organization member", async ({
+      makeInternalMcpCatalog,
+      makeMember,
+      makeUser,
+    }) => {
+      const { default: AgentModel } = await import("@/models/agent");
+      const { default: AgentToolModel } = await import("@/models/agent-tool");
+
+      const targetUser = await makeUser({
+        email: "target-install@example.com",
+      });
+      await makeMember(targetUser.id, organizationId);
+
+      const catalog = await makeInternalMcpCatalog({
+        name: "Targeted Personal Remote",
+        serverType: "remote",
+        serverUrl: "http://localhost:30082/mcp",
+      });
+
+      connectAndGetToolsMock.mockResolvedValueOnce([
+        {
+          name: "target-tool",
+          description: "target tool",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ]);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/mcp_server",
+        payload: {
+          name: "Targeted Personal Remote",
+          catalogId: catalog.id,
+          scope: "personal",
+          userId: targetUser.id,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        ownerId: targetUser.id,
+        users: [targetUser.id],
+        userDetails: [
+          expect.objectContaining({
+            userId: targetUser.id,
+            email: "target-install@example.com",
+          }),
+        ],
+      });
+
+      const targetPersonalGateway = await AgentModel.getPersonalMcpGateway(
+        targetUser.id,
+        organizationId,
+      );
+      if (!targetPersonalGateway) {
+        throw new Error("expected target user's personal gateway");
+      }
+      const targetAssignments = await AgentToolModel.findToolIdsByAgent(
+        targetPersonalGateway.id,
+      );
+      expect(targetAssignments.length).toBe(1);
+
+      const currentUserPersonalGateway = await AgentModel.getPersonalMcpGateway(
+        user.id,
+        organizationId,
+      );
+      const currentUserAssignments = currentUserPersonalGateway
+        ? await AgentToolModel.findToolIdsByAgent(currentUserPersonalGateway.id)
+        : [];
+      expect(currentUserAssignments.length).toBe(0);
+    });
+
+    test("same catalog can be installed as separate personal connections for different users", async ({
+      makeInternalMcpCatalog,
+      makeMember,
+      makeUser,
+    }) => {
+      const { default: AgentModel } = await import("@/models/agent");
+
+      const targetUser = await makeUser({
+        email: "target-second-personal-install@example.com",
+      });
+      await makeMember(targetUser.id, organizationId);
+
+      const catalog = await makeInternalMcpCatalog({
+        name: "Per User Personal Remote",
+        serverType: "remote",
+        serverUrl: "http://localhost:30082/mcp",
+      });
+
+      connectAndGetToolsMock.mockResolvedValue([
+        {
+          name: "shared-tool",
+          description: "shared tool",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ]);
+
+      const currentUserResponse = await app.inject({
+        method: "POST",
+        url: "/api/mcp_server",
+        payload: {
+          name: "Per User Personal Remote",
+          catalogId: catalog.id,
+          scope: "personal",
+        },
+      });
+      expect(currentUserResponse.statusCode).toBe(200);
+
+      const targetUserResponse = await app.inject({
+        method: "POST",
+        url: "/api/mcp_server",
+        payload: {
+          name: "Per User Personal Remote",
+          catalogId: catalog.id,
+          scope: "personal",
+          userId: targetUser.id,
+        },
+      });
+      expect(targetUserResponse.statusCode).toBe(200);
+
+      const currentUserServer = currentUserResponse.json();
+      const targetUserServer = targetUserResponse.json();
+      expect(currentUserServer).toMatchObject({
+        ownerId: user.id,
+        users: [user.id],
+      });
+      expect(targetUserServer).toMatchObject({
+        ownerId: targetUser.id,
+        users: [targetUser.id],
+      });
+
+      const serversForCatalog = await db
+        .select()
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.catalogId, catalog.id));
+      expect(serversForCatalog.map((server) => server.id).sort()).toEqual(
+        [currentUserServer.id, targetUserServer.id].sort(),
+      );
+
+      const currentPersonalGateway = await AgentModel.getPersonalMcpGateway(
+        user.id,
+        organizationId,
+      );
+      const targetPersonalGateway = await AgentModel.getPersonalMcpGateway(
+        targetUser.id,
+        organizationId,
+      );
+      if (!currentPersonalGateway || !targetPersonalGateway) {
+        throw new Error("expected personal gateways for both users");
+      }
+
+      const currentAssignments = await db
+        .select({ mcpServerId: schema.agentToolsTable.mcpServerId })
+        .from(schema.agentToolsTable)
+        .where(eq(schema.agentToolsTable.agentId, currentPersonalGateway.id));
+      const targetAssignments = await db
+        .select({ mcpServerId: schema.agentToolsTable.mcpServerId })
+        .from(schema.agentToolsTable)
+        .where(eq(schema.agentToolsTable.agentId, targetPersonalGateway.id));
+
+      expect(currentAssignments.map((row) => row.mcpServerId)).toEqual([
+        currentUserServer.id,
+      ]);
+      expect(targetAssignments.map((row) => row.mcpServerId)).toEqual([
+        targetUserServer.id,
+      ]);
+    });
+
+    test("targeted personal install uses the target user's identity-provider fallback token", async ({
+      makeAccount,
+      makeInternalMcpCatalog,
+      makeMember,
+      makeUser,
+    }) => {
+      const targetUser = await makeUser({
+        email: "target-install-token@example.com",
+      });
+      await makeMember(targetUser.id, organizationId);
+      await makeAccount(user.id, {
+        providerId: "keycloak",
+        accessToken: "installer-session-token",
+      });
+      await makeAccount(targetUser.id, {
+        providerId: "keycloak",
+        accessToken: "target-session-token",
+      });
+
+      const catalog = await makeInternalMcpCatalog({
+        name: "Targeted Protected Remote",
+        serverType: "remote",
+        serverUrl: "http://localhost:30082/mcp",
+      });
+
+      connectAndGetToolsMock
+        .mockRejectedValueOnce(
+          new Error(
+            "Failed to connect to MCP server Targeted Protected Remote: unauthorized",
+          ),
+        )
+        .mockResolvedValueOnce([
+          {
+            name: "target-protected-tool",
+            description: "target protected tool",
+            inputSchema: { type: "object", properties: {} },
+          },
+        ]);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/mcp_server",
+        payload: {
+          name: "Targeted Protected Remote",
+          catalogId: catalog.id,
+          scope: "personal",
+          userId: targetUser.id,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(connectAndGetToolsMock).toHaveBeenCalledTimes(2);
+      expect(connectAndGetToolsMock.mock.calls[1][0]).toMatchObject({
+        secrets: { access_token: "target-session-token" },
+      });
+      expect(connectAndGetToolsMock.mock.calls[1][0].secrets).not.toMatchObject(
+        {
+          access_token: "installer-session-token",
+        },
+      );
+    });
+
+    test("rejects explicit agentIds when installing a personal connection for another organization member", async ({
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeMember,
+      makeUser,
+    }) => {
+      const targetUser = await makeUser({
+        email: "target-agentids-denied@example.com",
+      });
+      await makeMember(targetUser.id, organizationId);
+      const explicitAgent = await makeAgent({
+        name: "Rejected Explicit Agent",
+        agentType: "mcp_gateway",
+        scope: "personal",
+        organizationId,
+        authorId: user.id,
+      });
+      const catalog = await makeInternalMcpCatalog({
+        name: "Rejected Targeted AgentIds Remote",
+        serverType: "remote",
+        serverUrl: "http://localhost:30082/mcp",
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/mcp_server",
+        payload: {
+          name: "Rejected Targeted AgentIds Remote",
+          catalogId: catalog.id,
+          scope: "personal",
+          userId: targetUser.id,
+          agentIds: [explicitAgent.id],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain(
+        "agentIds cannot be provided when installing a personal MCP server for another user",
+      );
+      expect(connectAndGetToolsMock).not.toHaveBeenCalled();
+
+      const serversForCatalog = await db
+        .select()
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.catalogId, catalog.id));
+      expect(serversForCatalog).toHaveLength(0);
+    });
+
+    test("non-admin cannot install a personal connection for another user", async ({
+      makeInternalMcpCatalog,
+      makeMember,
+      makeUser,
+    }) => {
+      hasPermissionMock.mockImplementation(
+        async (permission: Record<string, string[]>) => {
+          if (permission.mcpServerInstallation?.includes("admin")) {
+            return { success: false };
+          }
+          return { success: true };
+        },
+      );
+
+      const targetUser = await makeUser({
+        email: "target-denied@example.com",
+      });
+      await makeMember(targetUser.id, organizationId);
+      const catalog = await makeInternalMcpCatalog({
+        name: "Denied Targeted Personal Remote",
+        serverType: "remote",
+        serverUrl: "http://localhost:30082/mcp",
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/mcp_server",
+        payload: {
+          name: "Denied Targeted Personal Remote",
+          catalogId: catalog.id,
+          scope: "personal",
+          userId: targetUser.id,
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error.message).toContain(
+        "Only mcpServerInstallation admins can install personal MCP servers for another user",
+      );
+      expect(connectAndGetToolsMock).not.toHaveBeenCalled();
+    });
+
+    test("admin cannot install a personal connection for a user outside the organization", async ({
+      makeInternalMcpCatalog,
+      makeUser,
+    }) => {
+      const targetUser = await makeUser({
+        email: "target-outside-org@example.com",
+      });
+      const catalog = await makeInternalMcpCatalog({
+        name: "Outside Org Targeted Personal Remote",
+        serverType: "remote",
+        serverUrl: "http://localhost:30082/mcp",
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/mcp_server",
+        payload: {
+          name: "Outside Org Targeted Personal Remote",
+          catalogId: catalog.id,
+          scope: "personal",
+          userId: targetUser.id,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain(
+        "Target user must be a member of the active organization",
+      );
+      expect(connectAndGetToolsMock).not.toHaveBeenCalled();
+    });
+
     test("remote install with explicit agentIds still assigns tools to the personal gateway with no duplicate-key errors", async ({
       makeInternalMcpCatalog,
       makeAgent,
@@ -2152,6 +2504,156 @@ describe("mcp server inspect route", () => {
         otherPersonalGateway.id,
       );
       expect(otherAssignments.length).toBe(0);
+    });
+
+    test("targeted personal install returns the target user's existing installation", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeMember,
+      makeUser,
+    }) => {
+      const targetUser = await makeUser({
+        email: "target-existing@example.com",
+      });
+      await makeMember(targetUser.id, organizationId);
+      const catalog = await makeInternalMcpCatalog({
+        name: "Existing Targeted Personal Remote",
+        serverType: "remote",
+        serverUrl: "http://localhost:30082/mcp",
+      });
+      const existingServer = await makeMcpServer({
+        catalogId: catalog.id,
+        ownerId: targetUser.id,
+        scope: "personal",
+      });
+      await McpServerUserModel.assignUserToMcpServer(
+        existingServer.id,
+        targetUser.id,
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/mcp_server",
+        payload: {
+          name: "Existing Targeted Personal Remote",
+          catalogId: catalog.id,
+          scope: "personal",
+          userId: targetUser.id,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        id: existingServer.id,
+        ownerId: targetUser.id,
+        users: [targetUser.id],
+      });
+
+      const serversForCatalog = await db
+        .select()
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.catalogId, catalog.id));
+      expect(serversForCatalog).toHaveLength(1);
+      expect(connectAndGetToolsMock).not.toHaveBeenCalled();
+    });
+
+    test("rejects explicit agentIds when targeted personal install already exists", async ({
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeMember,
+      makeTool,
+      makeUser,
+    }) => {
+      const { default: AgentToolModel } = await import("@/models/agent-tool");
+
+      const targetUser = await makeUser({
+        email: "target-existing-agentids-denied@example.com",
+      });
+      await makeMember(targetUser.id, organizationId);
+      const explicitAgent = await makeAgent({
+        name: "Rejected Existing Explicit Agent",
+        agentType: "mcp_gateway",
+        scope: "personal",
+        organizationId,
+        authorId: user.id,
+      });
+      const catalog = await makeInternalMcpCatalog({
+        name: "Existing Rejected Targeted AgentIds Remote",
+        serverType: "remote",
+        serverUrl: "http://localhost:30082/mcp",
+      });
+      const existingServer = await makeMcpServer({
+        catalogId: catalog.id,
+        ownerId: targetUser.id,
+        scope: "personal",
+      });
+      await McpServerUserModel.assignUserToMcpServer(
+        existingServer.id,
+        targetUser.id,
+      );
+      await makeTool({
+        name: "existing-targeted-agentids-tool",
+        catalogId: catalog.id,
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/mcp_server",
+        payload: {
+          name: "Existing Rejected Targeted AgentIds Remote",
+          catalogId: catalog.id,
+          scope: "personal",
+          userId: targetUser.id,
+          agentIds: [explicitAgent.id],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain(
+        "agentIds cannot be provided when installing a personal MCP server for another user",
+      );
+
+      const explicitAssignments = await AgentToolModel.findToolIdsByAgent(
+        explicitAgent.id,
+      );
+      expect(explicitAssignments).toHaveLength(0);
+      const serversForCatalog = await db
+        .select()
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.catalogId, catalog.id));
+      expect(serversForCatalog).toHaveLength(1);
+    });
+
+    test("rejects userId on team-scoped installs", async ({
+      makeInternalMcpCatalog,
+      makeTeam,
+    }) => {
+      const team = await makeTeam(organizationId, user.id, {
+        name: "Reject UserId Team",
+      });
+      const catalog = await makeInternalMcpCatalog({
+        name: "Reject UserId Team Remote",
+        serverType: "remote",
+        serverUrl: "http://localhost:30082/mcp",
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/mcp_server",
+        payload: {
+          name: "Reject UserId Team Remote",
+          catalogId: catalog.id,
+          scope: "team",
+          teamId: team.id,
+          userId: user.id,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain(
+        "userId can only be provided for personal-scoped MCP server installations",
+      );
     });
 
     test("re-install pins mcp_server_id on newly inserted agent_tools rows", async ({

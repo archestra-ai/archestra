@@ -3,7 +3,7 @@ title: Private MCP Registry
 category: MCP
 order: 2
 description: Managing your organization's MCP servers in a private registry
-lastUpdated: 2026-04-27
+lastUpdated: 2026-05-08
 ---
 
 <!--
@@ -63,12 +63,15 @@ See [MCP Authentication](/docs/mcp-authentication) for the full gateway and upst
 
 ## Installation Scope
 
-Installations can be personal or team-scoped.
+Installations can be personal, team-scoped, or organization-scoped.
 
 - **Personal installations** are owned by one user and are useful when each person needs their own upstream account.
 - **Team installations** are shared with a team and are useful for shared service accounts or team-owned integrations.
+- **Organization installations** are shared across the organization and require MCP server installation admin permission.
 
-When assigning tools to an Agent or MCP Gateway, you can pin a specific installation or use **Resolve at call time**. Resolve-at-call-time resolves deterministically from the caller identity and the available personal or team-scoped credentials. If no credential can be resolved, Archestra returns an error with an install link.
+When using the API, `userId` can only be provided for personal installations. It defaults to the caller. Setting it to another organization member installs the personal connection on that member's behalf and requires `mcpServerInstallation:admin`.
+
+When assigning tools to an Agent or MCP Gateway, you can pin a specific installation or use **Resolve at call time**. Resolve-at-call-time resolves deterministically from the caller identity and the available personal, team-scoped, or organization-scoped credentials. If no credential can be resolved, Archestra returns an error with an install link.
 
 See [Credential Resolution](/docs/mcp-authentication#credential-resolution) for the resolution order and missing credential behavior.
 

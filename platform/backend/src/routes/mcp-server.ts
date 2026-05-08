@@ -15,6 +15,7 @@ import {
   AgentToolModel,
   InternalMcpCatalogModel,
   McpServerModel,
+  MemberModel,
   TeamModel,
   ToolModel,
 } from "@/models";
@@ -169,9 +170,37 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         serverType: "local",
       };
 
-      // Set owner_id and userId to current user
-      serverData.ownerId = user.id;
-      serverData.userId = user.id;
+      if (serverData.scope !== "personal" && serverData.userId) {
+        throw new ApiError(
+          400,
+          "userId can only be provided for personal-scoped MCP server installations",
+        );
+      }
+
+      const effectivePersonalUserId =
+        serverData.scope === "personal"
+          ? await resolvePersonalInstallUserId({
+              requestedUserId: serverData.userId,
+              currentUserId: user.id,
+              organizationId,
+              headers,
+            })
+          : undefined;
+
+      if (
+        serverData.scope === "personal" &&
+        effectivePersonalUserId !== undefined &&
+        effectivePersonalUserId !== user.id &&
+        agentIds?.length
+      ) {
+        throw new ApiError(
+          400,
+          "agentIds cannot be provided when installing a personal MCP server for another user",
+        );
+      }
+
+      serverData.ownerId = effectivePersonalUserId ?? user.id;
+      serverData.userId = effectivePersonalUserId;
 
       // Track if we created a new secret (for cleanup on failure)
       let createdSecretId: string | undefined;
@@ -219,7 +248,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Return existing server instead of erroring (idempotent behavior)
         if (serverData.scope === "personal") {
           const existingPersonal = existingServers.find(
-            (s) => s.scope === "personal" && s.ownerId === user.id,
+            (s) =>
+              s.scope === "personal" && s.ownerId === effectivePersonalUserId,
           );
           if (existingPersonal) {
             const catalogTools = await ToolModel.findByCatalogId(
@@ -229,7 +259,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             if (toolIds.length > 0) {
               const personalGateway = await AgentModel.ensurePersonalMcpGateway(
                 {
-                  userId: user.id,
+                  userId: effectivePersonalUserId ?? user.id,
                   organizationId,
                 },
               );
@@ -247,7 +277,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 },
               );
             }
-            return reply.send(existingPersonal);
+            const hydratedExisting = await McpServerModel.findById(
+              existingPersonal.id,
+              user.id,
+              true,
+            );
+            return reply.send(hydratedExisting ?? existingPersonal);
           }
         }
 
@@ -611,10 +646,13 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Create the MCP server with optional secret reference
-      const mcpServer = await McpServerModel.create({
+      let mcpServer = await McpServerModel.create({
         ...serverData,
         ...(secretId && { secretId }),
       });
+      mcpServer =
+        (await McpServerModel.findById(mcpServer.id, user.id, true)) ??
+        mcpServer;
 
       try {
         // For local servers, start the K8s deployment first
@@ -703,16 +741,19 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
 
                 // For personal installs, auto-assign every discovered tool to the
-                // installer's personal gateway alongside any explicit agentIds.
-                // Team-scoped installs only honor explicit agentIds.
+                // effective owner's personal gateway alongside any explicit agentIds.
+                // Shared-scope installs only honor explicit agentIds.
                 {
                   const toolIds = createdTools.map((t) => t.id);
                   if (toolIds.length > 0) {
                     const targetAgentIds: string[] = [];
-                    if (!mcpServer.teamId) {
+                    if (
+                      mcpServer.scope === "personal" &&
+                      effectivePersonalUserId
+                    ) {
                       const personalGateway =
                         await AgentModel.ensurePersonalMcpGateway({
-                          userId: user.id,
+                          userId: effectivePersonalUserId,
                           organizationId,
                         });
                       targetAgentIds.push(personalGateway.id);
@@ -809,12 +850,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // For non-local servers, fetch tools synchronously during installation.
         // If discovery fails with auth and this is a personal install, retry once
-        // with the current user's linked IdP access token.
+        // with the effective owner's linked IdP access token.
         const tools = await connectAndGetToolsForInstallation({
           catalogItem,
           mcpServerId: mcpServer.id,
           secretId: mcpServer.secretId ?? undefined,
-          userId: user.id,
+          userId: effectivePersonalUserId ?? user.id,
           allowCurrentUserTokenFallback: mcpServer.scope === "personal",
         });
 
@@ -833,16 +874,16 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
 
         // For personal installs, auto-assign every discovered tool to the
-        // installer's personal gateway alongside any explicit agentIds.
-        // Team-scoped installs only honor explicit agentIds.
+        // effective owner's personal gateway alongside any explicit agentIds.
+        // Shared-scope installs only honor explicit agentIds.
         {
           const toolIds = createdTools.map((t) => t.id);
           if (toolIds.length > 0) {
             const targetAgentIds: string[] = [];
-            if (!mcpServer.teamId) {
+            if (mcpServer.scope === "personal" && effectivePersonalUserId) {
               const personalGateway = await AgentModel.ensurePersonalMcpGateway(
                 {
-                  userId: user.id,
+                  userId: effectivePersonalUserId,
                   organizationId,
                 },
               );
@@ -1850,7 +1891,7 @@ async function connectAndGetToolsForInstallation(params: {
         mcpServerId: params.mcpServerId,
         userId: params.userId,
       },
-      "Retrying MCP install-time tool discovery with the current user's identity-provider access token",
+      "Retrying MCP install-time tool discovery with the effective user's identity-provider access token",
     );
 
     return await mcpClient.connectAndGetTools({
@@ -2190,6 +2231,43 @@ function filterInstallUserConfigValues(params: {
   }
 
   return Object.fromEntries(filteredEntries);
+}
+
+async function resolvePersonalInstallUserId(params: {
+  requestedUserId: string | undefined;
+  currentUserId: string;
+  organizationId: string;
+  headers: IncomingHttpHeaders;
+}): Promise<string> {
+  const targetUserId = params.requestedUserId ?? params.currentUserId;
+
+  if (targetUserId === params.currentUserId) {
+    return targetUserId;
+  }
+
+  const { success: isMcpServerInstallationAdmin } = await hasPermission(
+    { mcpServerInstallation: ["admin"] },
+    params.headers,
+  );
+  if (!isMcpServerInstallationAdmin) {
+    throw new ApiError(
+      403,
+      "Only mcpServerInstallation admins can install personal MCP servers for another user",
+    );
+  }
+
+  const targetMember = await MemberModel.getByUserId(
+    targetUserId,
+    params.organizationId,
+  );
+  if (!targetMember) {
+    throw new ApiError(
+      400,
+      "Target user must be a member of the active organization",
+    );
+  }
+
+  return targetUserId;
 }
 
 async function validateScopeAndAuthorization(params: {

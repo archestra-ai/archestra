@@ -163,6 +163,39 @@ describe("MCP Gateway (stateless mode)", () => {
     );
   });
 
+  test("uses forwarded public origin in WWW-Authenticate resource metadata", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.slug}`,
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        host: "localhost:9000",
+        "x-forwarded-host": "gateway.example.com",
+        "x-forwarded-proto": "https",
+      },
+      payload: {
+        jsonrpc: "2.0",
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "test-client", version: "1.0.0" },
+        },
+        id: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.headers["www-authenticate"]).toContain(
+      `resource_metadata="https://gateway.example.com/.well-known/oauth-protected-resource/v1/mcp/${agent.slug}"`,
+    );
+  });
+
   test("returns 401 with WWW-Authenticate header for invalid token", async ({
     makeAgent,
   }) => {

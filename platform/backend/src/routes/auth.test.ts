@@ -426,6 +426,68 @@ describe("auth routes", () => {
     });
   });
 
+  test("applies OAuth token lifetime when forwarded host is the resource origin", async ({
+    makeAgent,
+    makeOAuthAccessToken,
+    makeOAuthClient,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const user = await makeUser();
+    const organization = await makeOrganization();
+    await OrganizationModel.patch(organization.id, {
+      oauthAccessTokenLifetimeSeconds: 31_536_000,
+    });
+    const agent = await makeAgent({ organizationId: organization.id });
+    const client = await makeOAuthClient({ userId: user.id });
+    const rawAccessToken = "forwarded-host-oauth-access-token";
+    const tokenHash = createHash("sha256")
+      .update(rawAccessToken)
+      .digest("base64url");
+    await makeOAuthAccessToken(client.clientId, user.id, {
+      token: tokenHash,
+      expiresAt: new Date("2026-01-01T01:00:00.000Z"),
+    });
+    vi.mocked(betterAuth.handler).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          access_token: rawAccessToken,
+          token_type: "Bearer",
+          expires_in: 3_600,
+          scope: "mcp",
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+          },
+        },
+      ),
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/oauth2/token",
+      headers: {
+        host: "localhost:9000",
+        "x-forwarded-host": "gateway.example.com",
+        "x-forwarded-proto": "https",
+      },
+      payload: {
+        grant_type: "authorization_code",
+        client_id: client.clientId,
+        code: "auth-code",
+        resource: `https://gateway.example.com/v1/mcp/${agent.id}`,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      access_token: rawAccessToken,
+      expires_in: 31_536_000,
+    });
+  });
+
   test("applies OAuth token lifetime when resource uses the gateway slug", async ({
     makeAgent,
     makeOAuthAccessToken,

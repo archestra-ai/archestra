@@ -100,6 +100,7 @@ export const E2eTestId = {
   AddVirtualKeyButton: "add-virtual-key-button",
   VirtualKeyCreateDialog: "virtual-key-create-dialog",
   VirtualKeyDeleteDialog: "virtual-key-delete-dialog",
+  VirtualKeyProviderSelect: "virtual-key-provider-select",
   VirtualKeyParentKeySelect: "virtual-key-parent-key-select",
   VirtualKeyValue: "virtual-key-value",
   // Chat Prompt Input

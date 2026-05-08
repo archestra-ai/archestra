@@ -95,7 +95,7 @@ export async function createVirtualKey(
       : null);
 
   if (parentKeyOptionName) {
-    await page.getByRole("combobox", { name: "Provider" }).click();
+    await page.getByTestId(E2eTestId.VirtualKeyProviderSelect).click();
     if (params.parentProvider) {
       await page
         .getByRole("option", { name: new RegExp(params.parentProvider, "i") })
@@ -104,7 +104,7 @@ export async function createVirtualKey(
       await page.getByRole("option").first().click();
     }
 
-    await page.getByRole("combobox", { name: "Provider API Key" }).click();
+    await page.getByTestId(E2eTestId.VirtualKeyParentKeySelect).click();
     await page.getByRole("option", { name: parentKeyOptionName }).click();
     await page.getByRole("button", { name: /^Add$/ }).click();
   }

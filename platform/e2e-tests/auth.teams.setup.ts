@@ -7,7 +7,6 @@ import {
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
-  adminAuthFile,
   DEFAULT_TEAM_NAME,
   EDITOR_EMAIL,
   ENGINEERING_TEAM_NAME,
@@ -286,6 +285,25 @@ async function getSessionUserEmail(
   return data?.user?.email ?? null;
 }
 
+async function assertAdminPermissions(
+  request: APIRequestContext,
+): Promise<void> {
+  const response = await request.get(`${UI_BASE_URL}/api/user/permissions`, {
+    headers: { Origin: UI_BASE_URL },
+  });
+  expect(response.ok(), "Failed to fetch admin permissions").toBe(true);
+
+  const permissions = await response.json();
+  expect(
+    permissions?.identityProvider,
+    "Teams setup session is not using the admin role",
+  ).toContain("create");
+  expect(
+    permissions?.mcpRegistry,
+    "Teams setup session is not using the admin role",
+  ).toContain("create");
+}
+
 // Setup teams - runs after users are created
 setup("setup teams and assignments", async ({ page }) => {
   await signOut(page.request);
@@ -302,6 +320,7 @@ setup("setup teams and assignments", async ({ page }) => {
   expect(sessionEmail, "Teams setup did not save an admin session").toBe(
     ADMIN_EMAIL,
   );
+  await assertAdminPermissions(page.request);
 
   // Get organization members to find editor and member user IDs
   const members = await listOrgMembers(page.request);
@@ -401,5 +420,5 @@ setup("setup teams and assignments", async ({ page }) => {
     marketingMembers,
   );
 
-  await page.request.storageState({ path: adminAuthFile });
+  await signOut(page.request);
 });

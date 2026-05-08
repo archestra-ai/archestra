@@ -88,7 +88,7 @@ export async function loginViaUi(
   }
 }
 
-export async function skipDefaultPasswordChangePromptIfVisible(
+async function skipDefaultPasswordChangePromptIfVisible(
   page: Page,
 ): Promise<void> {
   const promptVisible = await page

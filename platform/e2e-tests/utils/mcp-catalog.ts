@@ -149,7 +149,7 @@ export async function addCustomSelfHostedCatalogItem({
   };
 }
 
-export async function findCatalogItem(
+async function findCatalogItem(
   request: APIRequestContext,
   name: string,
 ): Promise<{ id: string; name: string } | undefined> {

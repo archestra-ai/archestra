@@ -27,8 +27,8 @@ import {
   extractCertFromMetadata,
   fetchKeycloakSamlMetadata,
   loginViaApi,
-  loginViaUi,
   loginViaKeycloak,
+  loginViaUi,
 } from "../utils";
 
 // Run tests in this file serially to avoid conflicts when both tests

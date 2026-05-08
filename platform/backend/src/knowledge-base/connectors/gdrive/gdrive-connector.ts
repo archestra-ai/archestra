@@ -2,7 +2,6 @@ import type { ModelInputModality } from "@shared";
 import type { drive_v3 } from "googleapis";
 import { google } from "googleapis";
 import JSZip from "jszip";
-import mammoth from "mammoth";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -16,6 +15,7 @@ import {
   buildCheckpoint,
   extractErrorMessage,
 } from "../base-connector";
+import { extractTextFromDocx } from "../docx-text-extractor";
 import {
   type FolderTraversalAdapter,
   traverseFolders,
@@ -816,8 +816,7 @@ async function extractTextFromBinary(
 ): Promise<string> {
   switch (ext) {
     case ".docx": {
-      const result = await mammoth.extractRawText({ buffer });
-      return result.value;
+      return extractTextFromDocx(buffer);
     }
     case ".pdf": {
       return parsePdfBuffer(buffer);

@@ -9,7 +9,10 @@ import { usePublicIdentityProviders } from "@/lib/auth/identity-provider.query.e
 import { recordSsoSignInAttempt } from "@/lib/auth/sso-sign-in-attempt";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import config from "@/lib/config/config";
-import { getValidatedCallbackURLWithDefault } from "@/lib/utils/redirect-validation";
+import {
+  getValidatedCallbackURLWithDefault,
+  getValidatedRedirectPath,
+} from "@/lib/utils/redirect-validation";
 
 interface IdentityProviderSelectorProps {
   /**
@@ -43,7 +46,9 @@ export function IdentityProviderSelector({
   const handleSsoSignIn = useCallback(
     async (providerId: string) => {
       try {
-        recordSsoSignInAttempt();
+        recordSsoSignInAttempt(
+          getValidatedRedirectPath(searchParams.get("redirectTo")),
+        );
         await authClient.signIn.sso({
           providerId,
           callbackURL,
@@ -56,7 +61,7 @@ export function IdentityProviderSelector({
         toast.error("Failed to initiate SSO sign-in");
       }
     },
-    [callbackURL],
+    [callbackURL, searchParams],
   );
 
   // Don't show SSO options if the enterprise license is not activated

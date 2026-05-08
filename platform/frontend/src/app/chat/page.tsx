@@ -18,7 +18,7 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   useCallback,
   useEffect,
@@ -89,6 +89,10 @@ import {
   clearOAuthReauthChatResume,
   getOAuthReauthChatResume,
 } from "@/lib/auth/oauth-session";
+import {
+  clearSsoSignInRedirectPath,
+  getSsoSignInRedirectPath,
+} from "@/lib/auth/sso-sign-in-attempt";
 import { useRecentlyGeneratedTitles } from "@/lib/chat/chat.hook";
 import {
   fetchConversationEnabledTools,
@@ -102,6 +106,7 @@ import {
 import { useChatAgentState } from "@/lib/chat/chat-agent-state.hook";
 import {
   useConversationShare,
+  useForkConversation,
   useForkSharedConversation,
 } from "@/lib/chat/chat-share.query";
 import {
@@ -154,11 +159,28 @@ export function ChatPageContent({
 }) {
   const queryClient = useQueryClient();
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const [conversationId, setConversationId] = useState<string | undefined>(
     routeConversationId,
   );
+
+  useEffect(() => {
+    if (routeConversationId) {
+      clearSsoSignInRedirectPath();
+      return;
+    }
+
+    const redirectPath = getSsoSignInRedirectPath();
+    if (!redirectPath || redirectPath === "/chat") {
+      clearSsoSignInRedirectPath();
+      return;
+    }
+
+    clearSsoSignInRedirectPath();
+    router.replace(redirectPath);
+  }, [routeConversationId, router]);
 
   // Hide version display from layout - chat page has its own version display
   useEffect(() => {
@@ -187,6 +209,7 @@ export function ChatPageContent({
     useState(false);
   const [isForkDialogOpen, setIsForkDialogOpen] = useState(false);
   const [forkAgentId, setForkAgentId] = useState<string | null>(null);
+  const forkConversationMutation = useForkConversation();
   const forkSharedConversationMutation = useForkSharedConversation();
   const { data: session } = useSession();
 
@@ -542,9 +565,9 @@ export function ChatPageContent({
     conversation.userId === session?.user.id &&
     (conversation.messages?.length ?? 0) > 0;
   const isShared = !!conversation?.share;
-  const isReadOnlySharedConversation =
+  const isReadOnlyConversation =
     !!conversationId &&
-    !!conversation?.share &&
+    !!conversation &&
     conversation.userId !== session?.user.id;
   const persistedConversationMessages = useMemo(
     () => (conversation?.messages ?? []) as UIMessage[],
@@ -552,7 +575,7 @@ export function ChatPageContent({
   );
   const shouldEnableChatSession =
     !!conversationId &&
-    !isReadOnlySharedConversation &&
+    !isReadOnlyConversation &&
     (!routeConversationId || !!conversation);
   const chatSession = useChatSession({
     conversationId: shouldEnableChatSession ? conversationId : undefined,
@@ -897,16 +920,16 @@ export function ChatPageContent({
 
   // Get current agent info
   const currentProfileId = conversationAgentId;
-  const conversationToolsStateId = isReadOnlySharedConversation
+  const conversationToolsStateId = isReadOnlyConversation
     ? undefined
     : conversationId;
-  const browserToolsAgentId = isReadOnlySharedConversation
+  const browserToolsAgentId = isReadOnlyConversation
     ? undefined
     : conversationId
       ? (conversationAgentId ?? promptAgentId ?? undefined)
       : (initialAgentId ?? undefined);
 
-  const playwrightSetupAgentId = isReadOnlySharedConversation
+  const playwrightSetupAgentId = isReadOnlyConversation
     ? undefined
     : conversationId
       ? (conversationAgentId ?? undefined)
@@ -917,7 +940,7 @@ export function ChatPageContent({
   // Show while loading so it doesn't flash hidden for members whose agent already has playwright
   // tools. Once loading is done, hides only if the user lacks permission AND agent has no tools.
   const showBrowserButton =
-    !isReadOnlySharedConversation &&
+    !isReadOnlyConversation &&
     (canUpdateAgent ||
       hasPlaywrightMcpTools ||
       (!!conversationId && isLoadingConversation) ||
@@ -931,9 +954,7 @@ export function ChatPageContent({
     conversationToolsStateId,
     {
       enabled:
-        !isReadOnlySharedConversation &&
-        hasChatAccess &&
-        canUpdateAgent !== false,
+        !isReadOnlyConversation && hasChatAccess && canUpdateAgent !== false,
     },
   );
   // Treat both loading and required as "visible" for disabling submit, hiding arrow, etc.
@@ -1250,23 +1271,30 @@ export function ChatPageContent({
     setPendingBrowserUrl(undefined);
   }, []);
 
-  const handleForkSharedConversation = useCallback(async () => {
-    if (!conversation?.share?.id || !effectiveForkAgentId) {
+  const handleForkConversation = useCallback(async () => {
+    if (!conversationId || !effectiveForkAgentId) {
       return;
     }
 
-    const result = await forkSharedConversationMutation.mutateAsync({
-      shareId: conversation.share.id,
-      agentId: effectiveForkAgentId,
-    });
+    const result = conversation?.share?.id
+      ? await forkSharedConversationMutation.mutateAsync({
+          shareId: conversation.share.id,
+          agentId: effectiveForkAgentId,
+        })
+      : await forkConversationMutation.mutateAsync({
+          conversationId,
+          agentId: effectiveForkAgentId,
+        });
 
     if (result) {
       setIsForkDialogOpen(false);
       router.push(`/chat/${result.id}`);
     }
   }, [
+    conversationId,
     conversation?.share?.id,
     effectiveForkAgentId,
+    forkConversationMutation,
     forkSharedConversationMutation,
     router,
   ]);
@@ -1390,6 +1418,11 @@ export function ChatPageContent({
 
     // Mark as triggered to prevent duplicate sends
     autoSendTriggeredRef.current = true;
+    clearUserPromptQueryParam({
+      pathname,
+      router,
+      searchParams,
+    });
 
     // Store the message to send after conversation is created
     pendingPromptRef.current = initialUserPrompt;
@@ -1404,6 +1437,43 @@ export function ChatPageContent({
     createInitialConversation,
     selectConversation,
     createConversationMutation.isPending,
+    pathname,
+    router,
+    searchParams,
+  ]);
+
+  useEffect(() => {
+    if (
+      autoSendTriggeredRef.current ||
+      !initialUserPrompt ||
+      !conversationId ||
+      !sendMessage ||
+      status !== "ready"
+    ) {
+      return;
+    }
+
+    autoSendTriggeredRef.current = true;
+
+    clearUserPromptQueryParam({
+      pathname,
+      router,
+      searchParams,
+    });
+
+    sendMessage({
+      role: "user",
+      parts: [{ type: "text", text: initialUserPrompt }],
+      metadata: { createdAt: new Date().toISOString() },
+    });
+  }, [
+    conversationId,
+    initialUserPrompt,
+    pathname,
+    router,
+    searchParams,
+    sendMessage,
+    status,
   ]);
 
   useEffect(() => {
@@ -1763,7 +1833,7 @@ export function ChatPageContent({
                     "hidden md:block",
                 )}
               >
-                {isReadOnlySharedConversation ? (
+                {isReadOnlyConversation ? (
                   <MessageThread
                     messages={sharedConversationMessages}
                     containerClassName="h-full"
@@ -1823,7 +1893,7 @@ export function ChatPageContent({
                 )}
               </div>
 
-              {isReadOnlySharedConversation ? (
+              {isReadOnlyConversation ? (
                 <div className="sticky bottom-0 bg-background border-t p-4">
                   <div className="max-w-4xl mx-auto space-y-3">
                     <div className="relative">
@@ -1857,7 +1927,7 @@ export function ChatPageContent({
                               return;
                             }
 
-                            void handleForkSharedConversation();
+                            void handleForkConversation();
                           }}
                         >
                           <Plus className="h-4 w-4" />
@@ -2128,13 +2198,15 @@ export function ChatPageContent({
               Cancel
             </Button>
             <Button
-              onClick={handleForkSharedConversation}
+              onClick={handleForkConversation}
               disabled={
                 !effectiveForkAgentId ||
+                forkConversationMutation.isPending ||
                 forkSharedConversationMutation.isPending
               }
             >
-              {forkSharedConversationMutation.isPending
+              {forkConversationMutation.isPending ||
+              forkSharedConversationMutation.isPending
                 ? "Creating..."
                 : "Start Chat"}
             </Button>
@@ -2152,6 +2224,19 @@ export function ChatPageContent({
 
 export default function ChatPage() {
   return <ChatPageContent key="new-chat" />;
+}
+
+function clearUserPromptQueryParam(params: {
+  pathname: string;
+  router: ReturnType<typeof useRouter>;
+  searchParams: URLSearchParams;
+}) {
+  const nextSearchParams = new URLSearchParams(params.searchParams.toString());
+  nextSearchParams.delete("user_prompt");
+  const nextUrl = nextSearchParams.toString()
+    ? `${params.pathname}?${nextSearchParams.toString()}`
+    : params.pathname;
+  params.router.replace(nextUrl);
 }
 
 function mergePersistedMessageMetadata(params: {

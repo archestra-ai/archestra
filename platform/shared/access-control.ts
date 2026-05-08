@@ -670,6 +670,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateChatConversation]: {
     chat: ["create"],
   },
+  [RouteId.ForkChatConversation]: {
+    chat: ["create"],
+  },
   [RouteId.UpdateChatConversation]: {
     chat: ["update"],
   },
@@ -866,6 +869,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetIdentityProvider]: {
     identityProvider: ["read"],
   },
+  [RouteId.GetIdentityProviderLatestIdTokenClaims]: {
+    identityProvider: ["read"],
+  },
   [RouteId.CreateIdentityProvider]: {
     identityProvider: ["create"],
   },
@@ -1035,6 +1041,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetConnectorRuns]: { knowledgeSource: ["read"] },
   [RouteId.GetConnectorRun]: { knowledgeSource: ["read"] },
 
+  // Connector File Upload Routes
+  [RouteId.UploadConnectorFiles]: { knowledgeSource: ["update"] },
+  [RouteId.GetConnectorFiles]: { knowledgeSource: ["read"] },
+  [RouteId.GetConnectorFile]: { knowledgeSource: ["read"] },
+  [RouteId.DeleteConnectorFile]: { knowledgeSource: ["delete"] },
+
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},
 
@@ -1065,11 +1077,11 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/llm/proxies": { llmProxy: ["read"] },
   "/llm/model-providers/api-keys": { llmProviderApiKey: ["read"] },
   "/llm/model-providers/models": { llmModel: ["read"] },
-  "/llm/proxy-auth/virtual-keys": {
+  "/llm/credentials/virtual-keys": {
     llmVirtualKey: ["read"],
     llmProviderApiKey: ["read"],
   },
-  "/llm/proxy-auth/oauth-clients": { llmOauthClient: ["read"] },
+  "/llm/credentials/oauth-clients": { llmOauthClient: ["read"] },
   "/llm/limits": { llmLimit: ["read"] },
   "/llm/costs": { llmCost: ["read"] },
   "/llm/optimization-rules": { optimizationRule: ["read"] },

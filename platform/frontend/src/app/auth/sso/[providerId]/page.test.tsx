@@ -1,8 +1,13 @@
+import { LINKED_IDP_SSO_MODE } from "@shared";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useParams, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { hasSsoSignInAttempt } from "@/lib/auth/sso-sign-in-attempt";
+import { createLinkedIdentityProviderIntent } from "@/lib/auth/linked-idp";
+import {
+  getSsoSignInRedirectPath,
+  hasSsoSignInAttempt,
+} from "@/lib/auth/sso-sign-in-attempt";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import IdpInitiatedSsoPage from "./page";
 
@@ -23,6 +28,14 @@ vi.mock("@/lib/clients/auth/auth-client", () => ({
   },
 }));
 
+vi.mock("@/lib/auth/linked-idp", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/auth/linked-idp")>();
+  return {
+    ...actual,
+    createLinkedIdentityProviderIntent: vi.fn(),
+  };
+});
+
 describe("IdpInitiatedSsoPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -38,6 +51,10 @@ describe("IdpInitiatedSsoPage", () => {
     vi.mocked(authClient.signIn.sso).mockResolvedValue(
       undefined as Awaited<ReturnType<typeof authClient.signIn.sso>>,
     );
+    vi.mocked(createLinkedIdentityProviderIntent).mockResolvedValue({
+      intentId: "intent-123",
+      redirectTo: "/chat/conv-123",
+    });
   });
 
   it("starts SSO for the provider in the route", async () => {
@@ -51,6 +68,7 @@ describe("IdpInitiatedSsoPage", () => {
       });
     });
     expect(hasSsoSignInAttempt()).toBe(true);
+    expect(getSsoSignInRedirectPath()).toBe("/");
   });
 
   it("uses a safe redirectTo value as callback URL", async () => {
@@ -69,6 +87,33 @@ describe("IdpInitiatedSsoPage", () => {
         }),
       );
     });
+    expect(getSsoSignInRedirectPath()).toBe("/chat");
+  });
+
+  it("creates a link intent before starting linked identity provider SSO", async () => {
+    vi.mocked(useSearchParams).mockReturnValue({
+      get: vi.fn((key: string) => {
+        if (key === "redirectTo") return encodeURIComponent("/chat/conv-123");
+        if (key === "mode") return LINKED_IDP_SSO_MODE;
+        return null;
+      }),
+    } as unknown as ReturnType<typeof useSearchParams>);
+
+    render(<IdpInitiatedSsoPage />);
+
+    await waitFor(() => {
+      expect(createLinkedIdentityProviderIntent).toHaveBeenCalledWith({
+        providerId: "Okta",
+        redirectTo: "/chat/conv-123",
+      });
+      expect(authClient.signIn.sso).toHaveBeenCalledWith({
+        providerId: "Okta",
+        callbackURL:
+          "https://app.example.com/auth/sso/linked-callback?intentId=intent-123&redirectTo=%2Fchat%2Fconv-123",
+        errorCallbackURL: "https://app.example.com/auth/sign-in",
+      });
+    });
+    expect(hasSsoSignInAttempt()).toBe(false);
   });
 
   it("retries SSO when the initial request fails", async () => {

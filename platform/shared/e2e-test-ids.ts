@@ -7,6 +7,9 @@ export const E2eTestId = {
   OnboardingNextButton: "onboarding-next-button",
   OnboardingFinishButton: "onboarding-finish-button",
   OnboardingSkipButton: "onboarding-skip-button",
+  DefaultPasswordChangePrompt: "default-password-change-prompt",
+  DefaultPasswordChangeSkipButton: "default-password-change-skip-button",
+  SignInSubmitButton: "sign-in-submit-button",
   InviteMemberButton: "invite-member-button",
   InviteEmailInput: "invite-email-input",
   InviteRoleSelect: "invite-role-select",
@@ -28,6 +31,7 @@ export const E2eTestId = {
   IdentityProviderCreateButton: "identity-provider-create-button",
   IdentityProviderUpdateButton: "identity-provider-update-button",
   IdentityProviderDeleteButton: "identity-provider-delete-button",
+  IdentityProviderDialogNavButton: "identity-provider-dialog-nav-button",
   IdpRoleMappingAccordionTrigger: "idp-role-mapping-accordion-trigger",
   IdpRoleMappingDefaultRole: "idp-role-mapping-default-role",
   IdpRoleMappingRuleRole: "idp-role-mapping-rule-role",
@@ -96,6 +100,7 @@ export const E2eTestId = {
   AddVirtualKeyButton: "add-virtual-key-button",
   VirtualKeyCreateDialog: "virtual-key-create-dialog",
   VirtualKeyDeleteDialog: "virtual-key-delete-dialog",
+  VirtualKeyProviderSelect: "virtual-key-provider-select",
   VirtualKeyParentKeySelect: "virtual-key-parent-key-select",
   VirtualKeyValue: "virtual-key-value",
   // Chat Prompt Input
@@ -124,6 +129,12 @@ export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];
 
 export function getIdpRoleMappingRuleRowTestId(index: number): string {
   return `role-mapping-rule-${index}`;
+}
+
+export function getIdentityProviderDialogNavButtonTestId(
+  section: string,
+): string {
+  return `${E2eTestId.IdentityProviderDialogNavButton}-${section}`;
 }
 
 export function getChatApiKeySelectorProviderGroupTestId(

@@ -1,16 +1,20 @@
 "use client";
 
 import { AuthView } from "@daveyplate/better-auth-ui";
-import { GITHUB_REPO_NEW_ISSUE_URL } from "@shared";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { E2eTestId, GITHUB_REPO_NEW_ISSUE_URL } from "@shared";
 import {
   AlertCircle,
   ExternalLink,
   KeyRound,
+  Loader2,
   ShieldAlert,
   XCircle,
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +24,21 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  useChangeAccountPasswordMutation,
+  useSignInWithEmailMutation,
+} from "@/lib/auth/account.query";
+import { clearDefaultPasswordChangePending } from "@/lib/auth/default-password-change";
 import {
   clearSsoSignInAttempt,
   hasSsoSignInAttempt,
@@ -129,6 +148,26 @@ const GENERIC_SSO_SIGN_IN_FAILED = {
   message:
     "Single sign-on could not be completed. Please try again or contact your administrator.",
 };
+
+const SignInFormSchema = z.object({
+  email: z.string().email("Enter a valid email address"),
+  password: z.string().min(1, "Password is required"),
+});
+
+const DefaultPasswordChangeFormSchema = z
+  .object({
+    password: z.string().min(8, "Password must be at least 8 characters"),
+    confirmPassword: z.string().min(1, "Confirm your new password"),
+  })
+  .refine((value) => value.password === value.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
+
+type SignInFormValues = z.infer<typeof SignInFormSchema>;
+type DefaultPasswordChangeFormValues = z.infer<
+  typeof DefaultPasswordChangeFormSchema
+>;
 
 interface AuthViewWithErrorHandlingProps {
   path: string;
@@ -447,7 +486,22 @@ export function AuthViewWithErrorHandling({
         </Alert>
       )}
       <div className="space-y-4">
-        {(!isBasicAuthDisabled || alwaysShowAuthView) && (
+        {!isBasicAuthDisabled && isSignInPage ? (
+          <SignInView callbackURL={callbackURL} />
+        ) : (
+          alwaysShowAuthView && (
+            <AuthView
+              path={path}
+              callbackURL={callbackURL}
+              classNames={{
+                base: "bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm w-full max-w-full",
+                footer: "hidden",
+                form: { forgotPasswordLink: "hidden" },
+              }}
+            />
+          )
+        )}
+        {!isSignInPage && !alwaysShowAuthView && !isBasicAuthDisabled && (
           <AuthView
             path={path}
             callbackURL={callbackURL}
@@ -467,4 +521,227 @@ export function AuthViewWithErrorHandling({
       </div>
     </>
   );
+}
+
+function SignInView({ callbackURL }: { callbackURL?: string }) {
+  const [defaultPasswordRedirectUrl, setDefaultPasswordRedirectUrl] = useState<
+    string | null
+  >(null);
+  const [defaultAdminCurrentPassword, setDefaultAdminCurrentPassword] =
+    useState<string | null>(null);
+  const signIn = useSignInWithEmailMutation();
+  const changePassword = useChangeAccountPasswordMutation();
+  const signInForm = useForm<SignInFormValues>({
+    resolver: zodResolver(SignInFormSchema),
+    defaultValues: {
+      email: "",
+      password: "",
+    },
+  });
+  const defaultPasswordChangeForm = useForm<DefaultPasswordChangeFormValues>({
+    resolver: zodResolver(DefaultPasswordChangeFormSchema),
+    defaultValues: {
+      password: "",
+      confirmPassword: "",
+    },
+  });
+
+  async function onSignIn(values: SignInFormValues) {
+    const result = await signIn.mutateAsync({
+      email: values.email,
+      password: values.password,
+      callbackURL,
+    });
+
+    if (!result) return;
+
+    if (result.requiresDefaultPasswordChange) {
+      setDefaultPasswordRedirectUrl(result.redirectUrl);
+      setDefaultAdminCurrentPassword(values.password);
+      return;
+    }
+
+    clearDefaultPasswordChangePending();
+    redirectAfterSignIn(result.redirectUrl);
+  }
+
+  async function onChangeDefaultPassword(
+    values: DefaultPasswordChangeFormValues,
+  ) {
+    if (!defaultAdminCurrentPassword) return;
+
+    const changed = await changePassword.mutateAsync({
+      currentPassword: defaultAdminCurrentPassword,
+      newPassword: values.password,
+      revokeOtherSessions: true,
+    });
+
+    if (changed) {
+      clearDefaultPasswordChangePending();
+      redirectAfterSignIn(defaultPasswordRedirectUrl ?? callbackURL ?? "/");
+    }
+  }
+
+  if (defaultPasswordRedirectUrl) {
+    return (
+      <Card
+        className="w-full"
+        data-testid={E2eTestId.DefaultPasswordChangePrompt}
+      >
+        <CardHeader>
+          <CardTitle>Change Password</CardTitle>
+          <CardDescription>
+            The default administrator password is still active. Choose a new
+            password to secure this account.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Form {...defaultPasswordChangeForm}>
+            <form
+              className="space-y-4"
+              onSubmit={defaultPasswordChangeForm.handleSubmit(
+                onChangeDefaultPassword,
+              )}
+            >
+              <div className="grid gap-2">
+                <Label htmlFor="default-admin-new-password">New password</Label>
+                <Input
+                  id="default-admin-new-password"
+                  type="password"
+                  autoComplete="new-password"
+                  disabled={changePassword.isPending}
+                  aria-invalid={
+                    !!defaultPasswordChangeForm.formState.errors.password
+                  }
+                  {...defaultPasswordChangeForm.register("password")}
+                />
+                {defaultPasswordChangeForm.formState.errors.password && (
+                  <p className="text-destructive text-sm">
+                    {
+                      defaultPasswordChangeForm.formState.errors.password
+                        .message
+                    }
+                  </p>
+                )}
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="default-admin-confirm-password">
+                  Confirm password
+                </Label>
+                <Input
+                  id="default-admin-confirm-password"
+                  type="password"
+                  autoComplete="new-password"
+                  disabled={changePassword.isPending}
+                  aria-invalid={
+                    !!defaultPasswordChangeForm.formState.errors.confirmPassword
+                  }
+                  {...defaultPasswordChangeForm.register("confirmPassword")}
+                />
+                {defaultPasswordChangeForm.formState.errors.confirmPassword && (
+                  <p className="text-destructive text-sm">
+                    {
+                      defaultPasswordChangeForm.formState.errors.confirmPassword
+                        .message
+                    }
+                  </p>
+                )}
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={changePassword.isPending}
+                  data-testid={E2eTestId.DefaultPasswordChangeSkipButton}
+                  onClick={() => {
+                    clearDefaultPasswordChangePending();
+                    redirectAfterSignIn(defaultPasswordRedirectUrl);
+                  }}
+                >
+                  Skip
+                </Button>
+                <Button type="submit" disabled={changePassword.isPending}>
+                  {changePassword.isPending && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  Submit
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="w-full">
+      <CardHeader>
+        <CardTitle className="text-xl">Sign In</CardTitle>
+        <CardDescription>
+          Enter your email below to login to your account
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Form {...signInForm}>
+          <form
+            className="space-y-4"
+            onSubmit={signInForm.handleSubmit(onSignIn)}
+          >
+            <FormField
+              control={signInForm.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="email"
+                      autoComplete="email"
+                      disabled={signIn.isPending}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={signInForm.control}
+              name="password"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Password</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="password"
+                      autoComplete="current-password"
+                      disabled={signIn.isPending}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={signIn.isPending}
+              data-testid={E2eTestId.SignInSubmitButton}
+            >
+              {signIn.isPending && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Sign In
+            </Button>
+          </form>
+        </Form>
+      </CardContent>
+    </Card>
+  );
+}
+
+function redirectAfterSignIn(url: string) {
+  window.location.href = url;
 }

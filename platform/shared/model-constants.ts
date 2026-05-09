@@ -88,7 +88,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
  * Self-hosted providers are always optional. Azure is optional only when
  * Microsoft Entra ID authentication is enabled in the backend environment.
  */
-export const PROVIDERS_WITH_OPTIONAL_API_KEY = new Set<SupportedProvider>([
+const PROVIDERS_WITH_OPTIONAL_API_KEY = new Set<SupportedProvider>([
   "ollama",
   "vllm",
 ]);

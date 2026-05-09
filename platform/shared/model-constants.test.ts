@@ -15,6 +15,12 @@ describe("provider API key optional helpers", () => {
     expect(
       isProviderApiKeyOptional({
         provider: "azure",
+        azureEntraIdEnabled: false,
+      }),
+    ).toBe(false);
+    expect(
+      isProviderApiKeyOptional({
+        provider: "azure",
         azureEntraIdEnabled: true,
       }),
     ).toBe(true);

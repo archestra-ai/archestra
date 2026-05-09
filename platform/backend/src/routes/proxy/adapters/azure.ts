@@ -267,7 +267,10 @@ export const azureAdapterFactory: LLMProvider<
       throw new ApiError(401, "API key required for Azure AI Foundry");
     }
 
-    const normalizedApiKey = normalizeAzureApiKey(apiKey) ?? "";
+    const normalizedApiKey = normalizeAzureApiKey(apiKey);
+    if (!normalizedApiKey) {
+      throw new ApiError(401, "API key required for Azure AI Foundry");
+    }
 
     const defaultHeaders = {
       ...options.defaultHeaders,

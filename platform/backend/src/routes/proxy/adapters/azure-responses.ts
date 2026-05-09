@@ -101,7 +101,7 @@ export const azureResponsesAdapterFactory: LLMProvider<
     if (!resolvedBaseUrl) {
       throw new ApiError(
         500,
-        "Azure AI Foundry base URL must include /openai/deployments/<deployment>",
+        "Azure AI Foundry base URL must include /openai or /openai/v1",
       );
     }
 

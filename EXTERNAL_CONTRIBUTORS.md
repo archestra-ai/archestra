@@ -240,3 +240,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @adamsardo
 - @franklin52448-max
 - @swayansu951
+- @letsdeepchat

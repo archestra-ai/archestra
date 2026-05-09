@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "@/test";
 import {
+  buildAzureDeploymentBaseUrl,
   buildAzureDeploymentsUrl,
   buildAzureOpenAiV1ModelsUrl,
   buildAzureResponsesBaseUrl,
@@ -38,7 +39,7 @@ describe("buildAzureDeploymentsUrl", () => {
         apiVersion: "2024-02-01",
         baseUrl: "https://my-resource.openai.azure.com/gpt-4o",
       }),
-    ).toBe("https://my-resource.openai.azure.com?api-version=2024-02-01");
+    ).toBeNull();
   });
 
   it("handles a root path URL", () => {
@@ -47,7 +48,29 @@ describe("buildAzureDeploymentsUrl", () => {
         apiVersion: "2024-02-01",
         baseUrl: "https://my-resource.openai.azure.com",
       }),
-    ).toBe("https://my-resource.openai.azure.com/?api-version=2024-02-01");
+    ).toBeNull();
+  });
+
+  it("builds a deployments URL from a resource-level OpenAI base URL", () => {
+    expect(
+      buildAzureDeploymentsUrl({
+        apiVersion: "2024-02-01",
+        baseUrl: "https://my-resource.openai.azure.com/openai",
+      }),
+    ).toBe(
+      "https://my-resource.openai.azure.com/openai/deployments?api-version=2024-02-01",
+    );
+  });
+
+  it("preserves an explicit deployments collection base URL", () => {
+    expect(
+      buildAzureDeploymentsUrl({
+        apiVersion: "2024-02-01",
+        baseUrl: "https://my-resource.openai.azure.com/openai/deployments",
+      }),
+    ).toBe(
+      "https://my-resource.openai.azure.com/openai/deployments?api-version=2024-02-01",
+    );
   });
 
   it("handles paths with trailing slashes", () => {
@@ -106,9 +129,56 @@ describe("buildAzureResponsesBaseUrl", () => {
     expect(buildAzureResponsesBaseUrl("not-a-url")).toBeNull();
   });
 
-  it("returns null when the base URL is not deployment-scoped", () => {
+  it("accepts a resource-level OpenAI base URL", () => {
     expect(
       buildAzureResponsesBaseUrl("https://my-resource.openai.azure.com/openai"),
+    ).toBe("https://my-resource.openai.azure.com/openai");
+  });
+
+  it("accepts a deployments collection base URL", () => {
+    expect(
+      buildAzureResponsesBaseUrl(
+        "https://my-resource.openai.azure.com/openai/deployments",
+      ),
+    ).toBe("https://my-resource.openai.azure.com/openai");
+  });
+});
+
+describe("buildAzureDeploymentBaseUrl", () => {
+  it("appends the deployment to a resource-level OpenAI base URL", () => {
+    expect(
+      buildAzureDeploymentBaseUrl({
+        baseUrl: "https://my-resource.openai.azure.com/openai",
+        deploymentName: "gpt-4o",
+      }),
+    ).toBe("https://my-resource.openai.azure.com/openai/deployments/gpt-4o");
+  });
+
+  it("preserves deployment-scoped base URLs for compatibility", () => {
+    expect(
+      buildAzureDeploymentBaseUrl({
+        baseUrl:
+          "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
+        deploymentName: "gpt-4o-mini",
+      }),
+    ).toBe("https://my-resource.openai.azure.com/openai/deployments/gpt-4o");
+  });
+
+  it("preserves Azure OpenAI v1 base URLs", () => {
+    expect(
+      buildAzureDeploymentBaseUrl({
+        baseUrl: "https://my-resource.services.ai.azure.com/openai/v1",
+        deploymentName: "gpt-4o",
+      }),
+    ).toBe("https://my-resource.services.ai.azure.com/openai/v1");
+  });
+
+  it("returns null for invalid base URLs", () => {
+    expect(
+      buildAzureDeploymentBaseUrl({
+        baseUrl: "not-a-url",
+        deploymentName: "gpt-4o",
+      }),
     ).toBeNull();
   });
 });

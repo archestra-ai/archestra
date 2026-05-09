@@ -26,7 +26,7 @@ Archestra supports automatic role assignment based on user attributes from your 
 
 ## Configuring role mapping
 
-When creating or editing an SSO provider, expand the **Role Mapping (Optional)** section:
+When creating or editing an SSO provider, select the **Role Mapping** section:
 
 1. **Mapping Rules** — add one or more rules. Each rule has:
    - **Handlebars Template:** a template that renders to a non-empty string when the rule should match
@@ -113,7 +113,7 @@ This template:
 - Ensure your IdP is sending the expected claims in the ID token
 - The `includes` helper handles null/undefined arrays gracefully
 
-You can test Handlebars templates at [tryhandlebarsjs.com](http://tryhandlebarsjs.com/) using your actual ID token claims as input. To inspect the actual claims your IdP sends, paste the ID token into [jwt.io](https://jwt.io).
+When editing an existing OIDC provider, use the built-in template tester in the Role Mapping section to test rules against your latest decoded ID token claims.
 
 ## See also
 

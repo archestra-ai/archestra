@@ -13,6 +13,26 @@ describe("extractMcpToolError", () => {
         message: "Authentication required",
         catalogId: "cat_123",
         catalogName: "GitHub",
+        action: "install_mcp_credentials",
+        actionUrl: "http://localhost:3000/mcp/registry?install=cat_123",
+      }),
+    ).toEqual({
+      type: "auth_required",
+      message: "Authentication required",
+      catalogId: "cat_123",
+      catalogName: "GitHub",
+      action: "install_mcp_credentials",
+      actionUrl: "http://localhost:3000/mcp/registry?install=cat_123",
+    });
+  });
+
+  it("extracts a legacy auth-required MCP tool error with installUrl", () => {
+    expect(
+      extractMcpToolError({
+        type: "auth_required",
+        message: "Authentication required",
+        catalogId: "cat_123",
+        catalogName: "GitHub",
         installUrl: "http://localhost:3000/mcp/registry?install=cat_123",
       }),
     ).toEqual({

@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.2.37](https://github.com/archestra-ai/archestra/compare/platform-v1.2.36...platform-v1.2.37) (2026-05-09)
+
+
+### Features
+
+* support Azure Foundry multiple deployments ([#4467](https://github.com/archestra-ai/archestra/issues/4467)) ([c4f0613](https://github.com/archestra-ai/archestra/commit/c4f06135d5ffde8e6da30e29bc254b2a987924b9))
+
+
+### Miscellaneous Chores
+
+* **deps:** bump fast-uri from 3.1.0 to 3.1.2 in /platform/e2e-tests/test-mcp-servers/mcp-server-id-jag ([#4470](https://github.com/archestra-ai/archestra/issues/4470)) ([107a25a](https://github.com/archestra-ai/archestra/commit/107a25ab24304ec3f5768af846308821f375689c))
+* **deps:** bump fast-uri from 3.1.0 to 3.1.2 in /platform/e2e-tests/test-mcp-servers/mcp-server-jwks-keycloak ([#4469](https://github.com/archestra-ai/archestra/issues/4469)) ([281a984](https://github.com/archestra-ai/archestra/commit/281a9840c581f0c2effc820963f85e1e538c4fa9))
+* **deps:** bump fast-uri from 3.1.0 to 3.1.2 in /platform/mcp_server_docker_image ([#4471](https://github.com/archestra-ai/archestra/issues/4471)) ([eac64d5](https://github.com/archestra-ai/archestra/commit/eac64d58a2e7a1802fedde217d3020cc77d6da9b))
+* **deps:** bump hono from 4.12.12 to 4.12.18 in /platform/mcp_server_docker_image ([#4474](https://github.com/archestra-ai/archestra/issues/4474)) ([81b24d3](https://github.com/archestra-ai/archestra/commit/81b24d387ca5e887f92e531911a6554aaed7b92d))
+* **deps:** bump hono from 4.12.14 to 4.12.18 in /platform/e2e-tests/test-mcp-servers/mcp-server-id-jag ([#4475](https://github.com/archestra-ai/archestra/issues/4475)) ([836aacf](https://github.com/archestra-ai/archestra/commit/836aacff9b9ee09d2bbc97b6c64f3d728fa619f1))
+
 ## [1.2.36](https://github.com/archestra-ai/archestra/compare/platform-v1.2.35...platform-v1.2.36) (2026-05-08)
 
 

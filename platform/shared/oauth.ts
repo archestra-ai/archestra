@@ -1,5 +1,3 @@
-import type { SupportedProvider } from "./model-constants";
-
 /**
  * Scopes supported by the OAuth 2.1 authorization server.
  * Used by better-auth oauthProvider config, well-known endpoints, and consent UI.
@@ -71,11 +69,3 @@ export const MCP_CATALOG_INSTALL_QUERY_PARAM = "install";
  */
 export const MCP_CATALOG_REAUTH_QUERY_PARAM = "reauth";
 export const MCP_CATALOG_SERVER_QUERY_PARAM = "server";
-
-/**
- * Providers where an API key is optional (self-hosted providers that typically don't require auth).
- */
-export const PROVIDERS_WITH_OPTIONAL_API_KEY = new Set<SupportedProvider>([
-  "ollama",
-  "vllm",
-]);

@@ -84,6 +84,36 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
 };
 
 /**
+ * Providers where an API key can be omitted when creating a provider key.
+ * Self-hosted providers are always optional. Azure is optional only when
+ * Microsoft Entra ID authentication is enabled in the backend environment.
+ */
+const PROVIDERS_WITH_OPTIONAL_API_KEY = new Set<SupportedProvider>([
+  "ollama",
+  "vllm",
+]);
+
+export function isProviderApiKeyOptional(params: {
+  provider: SupportedProvider;
+  azureEntraIdEnabled?: boolean;
+}): boolean {
+  return (
+    PROVIDERS_WITH_OPTIONAL_API_KEY.has(params.provider) ||
+    (params.provider === "azure" && params.azureEntraIdEnabled === true)
+  );
+}
+
+export function getProvidersWithOptionalApiKey(params?: {
+  azureEntraIdEnabled?: boolean;
+}): SupportedProvider[] {
+  const providers = [...PROVIDERS_WITH_OPTIONAL_API_KEY];
+  if (params?.azureEntraIdEnabled === true) {
+    providers.push("azure");
+  }
+  return providers;
+}
+
+/**
  * Perplexity model definitions — single source of truth.
  * Perplexity has no /models endpoint, so models are maintained here.
  * @see https://ai-sdk.dev/providers/ai-sdk-providers/perplexity#model-capabilities
@@ -130,7 +160,7 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
   zhipuai: "https://api.z.ai/api/paas/v4",
   deepseek: "https://api.deepseek.com",
   minimax: "https://api.minimax.io/v1",
-  azure: "https://<resource>.openai.azure.com/openai/deployments/<deployment>",
+  azure: "https://<resource>.openai.azure.com/openai",
 };
 
 /**

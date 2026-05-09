@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   index,
   integer,
@@ -9,6 +10,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type { EmbeddingStatus, KbDocumentMetadata } from "@/types/kb-document";
+import { softDeleteColumns } from "./_soft-delete";
 import knowledgeBaseConnectorsTable from "./knowledge-base-connector";
 
 const kbDocumentsTable = pgTable(
@@ -38,13 +40,13 @@ const kbDocumentsTable = pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
+    ...softDeleteColumns,
   },
   (table) => [
     index("kb_documents_org_id_idx").on(table.organizationId),
-    uniqueIndex("kb_documents_source_idx").on(
-      table.connectorId,
-      table.sourceId,
-    ),
+    uniqueIndex("kb_documents_source_idx")
+      .on(table.connectorId, table.sourceId)
+      .where(sql`${table.deletedAt} IS NULL`),
   ],
 );
 

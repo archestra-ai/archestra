@@ -415,6 +415,7 @@ function makeUserWithOrganization(
     twoFactorEnabled: null,
     createdAt: new Date(),
     updatedAt: new Date(),
+    deletedAt: null,
     organizationId: "org-1",
     ...overrides,
   };

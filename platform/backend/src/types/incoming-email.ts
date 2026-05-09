@@ -75,7 +75,7 @@ export type UpdateIncomingEmailSubscription = z.infer<
  */
 export type SubscriptionInfo = Omit<
   SelectIncomingEmailSubscription,
-  "createdAt" | "updatedAt"
+  "createdAt" | "updatedAt" | "deletedAt"
 > & {
   /** Whether the subscription is currently active (not expired) */
   isActive: boolean;

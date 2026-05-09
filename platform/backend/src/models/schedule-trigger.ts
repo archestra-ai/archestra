@@ -290,6 +290,7 @@ function triggerColumns() {
     actorUserId: schema.scheduleTriggersTable.actorUserId,
     lastExecutedAt: schema.scheduleTriggersTable.lastExecutedAt,
     createdAt: schema.scheduleTriggersTable.createdAt,
+    deletedAt: schema.scheduleTriggersTable.deletedAt,
   };
 }
 

@@ -7,6 +7,7 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import type { ResourceVisibilityScope } from "@/types";
+import { softDeleteColumns } from "./_soft-delete";
 import secretsTable from "./secret";
 import usersTable from "./user";
 
@@ -32,6 +33,7 @@ const virtualApiKeysTable = pgTable(
     expiresAt: timestamp("expires_at", { mode: "date", withTimezone: true }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     lastUsedAt: timestamp("last_used_at", { mode: "date" }),
+    ...softDeleteColumns,
   },
   (table) => [
     index("idx_virtual_api_key_organization_id").on(table.organizationId),

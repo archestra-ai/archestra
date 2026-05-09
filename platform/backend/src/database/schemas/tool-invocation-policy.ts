@@ -1,5 +1,6 @@
 import { jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import type { AutonomyPolicyOperator, ToolInvocation } from "@/types";
+import { softDeleteColumns } from "./_soft-delete";
 import toolsTable from "./tool";
 
 /**
@@ -38,6 +39,7 @@ const toolInvocationPoliciesTable = pgTable("tool_invocation_policies", {
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
+  ...softDeleteColumns,
 });
 
 export default toolInvocationPoliciesTable;

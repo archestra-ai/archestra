@@ -1,5 +1,6 @@
 import { pgTable, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
 import type { EmailProviderType } from "@/types/incoming-email";
+import { softDeleteColumns } from "./_soft-delete";
 
 const incomingEmailSubscriptionsTable = pgTable("incoming_email_subscription", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -20,6 +21,7 @@ const incomingEmailSubscriptionsTable = pgTable("incoming_email_subscription", {
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
+  ...softDeleteColumns,
 });
 
 export default incomingEmailSubscriptionsTable;

@@ -107,6 +107,7 @@ describe("A2ATaskManager", () => {
       history: [],
       createdAt: new Date(),
       updatedAt: new Date(),
+      deletedAt: null,
     } satisfies A2ATaskWithData;
 
     expect(A2ATaskManager.toProtocolTask(task)).toEqual({
@@ -147,6 +148,7 @@ describe("A2ATaskManager", () => {
       history: [],
       createdAt: new Date(),
       updatedAt: new Date(),
+      deletedAt: null,
     } satisfies A2ATaskWithData;
     expect(getApprovalRequestsMap(task.approvalRequests)).toEqual({
       "approval-2": task.approvalRequests[0],

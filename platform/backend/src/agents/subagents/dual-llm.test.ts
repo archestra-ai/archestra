@@ -80,6 +80,7 @@ function makeBuiltInAgent(params: {
     builtIn: true,
     createdAt: new Date(),
     updatedAt: new Date(),
+    deletedAt: null,
     teams: [],
     tools: [],
     labels: [],

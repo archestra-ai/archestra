@@ -6,6 +6,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import { softDeleteColumns } from "./_soft-delete";
 import a2aTaskTable from "./a2a-task";
 
 const a2aTaskApprovalRequestTable = pgTable(
@@ -25,6 +26,7 @@ const a2aTaskApprovalRequestTable = pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
+    ...softDeleteColumns,
   },
   (table) => [
     index("a2a_task_approval_request_task_id_approval_id_idx").on(

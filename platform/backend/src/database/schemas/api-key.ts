@@ -6,6 +6,7 @@ import {
   text,
   timestamp,
 } from "drizzle-orm/pg-core";
+import { softDeleteColumns } from "./_soft-delete";
 import usersTable from "./user";
 
 const apikey = pgTable(
@@ -35,6 +36,7 @@ const apikey = pgTable(
     updatedAt: timestamp("updated_at").notNull(),
     permissions: text("permissions"),
     metadata: text("metadata"),
+    ...softDeleteColumns,
   },
   (table) => ({
     referenceIdIdx: index("idx_apikey_reference_id").on(table.referenceId),

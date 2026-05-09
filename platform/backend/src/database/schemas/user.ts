@@ -1,4 +1,5 @@
 import { boolean, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { softDeleteColumns } from "./_soft-delete";
 
 const usersTable = pgTable("user", {
   id: text("id").primaryKey(),
@@ -19,6 +20,7 @@ const usersTable = pgTable("user", {
   banReason: text("ban_reason"),
   banExpires: timestamp("ban_expires"),
   twoFactorEnabled: boolean("two_factor_enabled").default(false),
+  ...softDeleteColumns,
 });
 
 export default usersTable;

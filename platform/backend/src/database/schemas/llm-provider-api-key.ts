@@ -11,6 +11,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type { ResourceVisibilityScope } from "@/types";
+import { softDeleteColumns } from "./_soft-delete";
 import secretsTable from "./secret";
 import { team } from "./team";
 import usersTable from "./user";
@@ -49,6 +50,7 @@ const llmProviderApiKeysTable = pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
+    ...softDeleteColumns,
   },
   (table) => [
     // Index for efficient lookups by organization
@@ -61,17 +63,23 @@ const llmProviderApiKeysTable = pgTable(
     // Partial unique index: only one system key per provider (global)
     uniqueIndex("chat_api_keys_system_unique")
       .on(table.provider)
-      .where(sql`${table.isSystem} = true`),
+      .where(sql`${table.isSystem} = true AND ${table.deletedAt} IS NULL`),
     // Partial unique indexes: at most one primary key per provider+scope combination
     uniqueIndex("chat_api_keys_primary_personal_unique")
       .on(table.organizationId, table.provider, table.scope, table.userId)
-      .where(sql`${table.isPrimary} = true AND ${table.scope} = 'personal'`),
+      .where(
+        sql`${table.isPrimary} = true AND ${table.scope} = 'personal' AND ${table.deletedAt} IS NULL`,
+      ),
     uniqueIndex("chat_api_keys_primary_team_unique")
       .on(table.organizationId, table.provider, table.scope, table.teamId)
-      .where(sql`${table.isPrimary} = true AND ${table.scope} = 'team'`),
+      .where(
+        sql`${table.isPrimary} = true AND ${table.scope} = 'team' AND ${table.deletedAt} IS NULL`,
+      ),
     uniqueIndex("chat_api_keys_primary_org_unique")
       .on(table.organizationId, table.provider, table.scope)
-      .where(sql`${table.isPrimary} = true AND ${table.scope} = 'org'`),
+      .where(
+        sql`${table.isPrimary} = true AND ${table.scope} = 'org' AND ${table.deletedAt} IS NULL`,
+      ),
   ],
 );
 

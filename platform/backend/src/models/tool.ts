@@ -308,6 +308,7 @@ class ToolModel {
         description: schema.toolsTable.description,
         createdAt: schema.toolsTable.createdAt,
         updatedAt: schema.toolsTable.updatedAt,
+        deletedAt: schema.toolsTable.deletedAt,
         delegateToAgentId: schema.toolsTable.delegateToAgentId,
         meta: schema.toolsTable.meta,
         policiesAutoConfiguredAt: schema.toolsTable.policiesAutoConfiguredAt,

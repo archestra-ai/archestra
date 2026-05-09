@@ -16,6 +16,7 @@ import type {
   OAuthConfig,
   UserConfig,
 } from "@/types";
+import { softDeleteColumns } from "./_soft-delete";
 import secretTable from "./secret";
 import usersTable from "./user";
 
@@ -81,6 +82,7 @@ const internalMcpCatalogTable = pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
+    ...softDeleteColumns,
   },
   (table) => ({
     organizationIdIdx: index("internal_mcp_catalog_organization_id_idx").on(

@@ -1,4 +1,6 @@
-import { pgTable, text, timestamp, unique } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { softDeleteColumns } from "./_soft-delete";
 import organizationsTable from "./organization";
 
 export const organizationRole = pgTable(
@@ -16,12 +18,15 @@ export const organizationRole = pgTable(
     updatedAt: timestamp("updated_at").$onUpdate(
       () => /* @__PURE__ */ new Date(),
     ),
+    ...softDeleteColumns,
   },
   (table) => [
     /**
      * Unique constraint ensures:
      * - One role per (organizationId, role) combination
      */
-    unique().on(table.organizationId, table.role),
+    uniqueIndex("organization_role_org_role_uidx")
+      .on(table.organizationId, table.role)
+      .where(sql`${table.deletedAt} IS NULL`),
   ],
 );

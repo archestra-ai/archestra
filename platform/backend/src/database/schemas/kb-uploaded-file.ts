@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   customType,
   index,
@@ -8,6 +9,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { softDeleteColumns } from "./_soft-delete";
 import knowledgeBaseConnectorsTable from "./knowledge-base-connector";
 
 const bytea = customType<{ data: Buffer; driverParam: Buffer }>({
@@ -34,13 +36,13 @@ const kbUploadedFilesTable = pgTable(
     processingStatus: text("processing_status").notNull().default("completed"),
     processingError: text("processing_error"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    ...softDeleteColumns,
   },
   (table) => [
     index("kb_uploaded_files_connector_id_idx").on(table.connectorId),
-    uniqueIndex("kb_uploaded_files_content_hash_uidx").on(
-      table.connectorId,
-      table.contentHash,
-    ),
+    uniqueIndex("kb_uploaded_files_content_hash_uidx")
+      .on(table.connectorId, table.contentHash)
+      .where(sql`${table.deletedAt} IS NULL`),
   ],
 );
 

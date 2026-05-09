@@ -33,6 +33,7 @@ function fakeTool(overrides: { id: string; catalogId?: string | null }): Tool {
     policiesAutoConfiguredModel: null,
     createdAt: new Date(),
     updatedAt: new Date(),
+    deletedAt: null,
   } satisfies Tool;
 }
 

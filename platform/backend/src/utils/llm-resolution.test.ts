@@ -48,6 +48,7 @@ const MOCK_MODEL = {
   lastSyncedAt: new Date(),
   createdAt: new Date(),
   updatedAt: new Date(),
+  deletedAt: null,
 };
 
 describe("resolveSmartDefaultLlm", () => {

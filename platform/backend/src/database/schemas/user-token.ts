@@ -1,12 +1,14 @@
+import { sql } from "drizzle-orm";
 import {
   index,
   pgTable,
   text,
   timestamp,
-  unique,
+  uniqueIndex,
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import { softDeleteColumns } from "./_soft-delete";
 import organizationsTable from "./organization";
 import secretsTable from "./secret";
 import usersTable from "./user";
@@ -35,10 +37,13 @@ const userTokensTable = pgTable(
     tokenStart: varchar("token_start", { length: 16 }).notNull(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     lastUsedAt: timestamp("last_used_at", { mode: "date" }),
+    ...softDeleteColumns,
   },
   (table) => [
     // One token per user per organization
-    unique().on(table.organizationId, table.userId),
+    uniqueIndex("user_token_org_user_uidx")
+      .on(table.organizationId, table.userId)
+      .where(sql`${table.deletedAt} IS NULL`),
     index("idx_user_token_org_id").on(table.organizationId),
     index("idx_user_token_user_id").on(table.userId),
     index("idx_user_token_token_start").on(table.tokenStart),

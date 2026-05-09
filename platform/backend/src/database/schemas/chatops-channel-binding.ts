@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -9,6 +10,7 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import type { ChatOpsProviderType } from "@/types/chatops";
+import { softDeleteColumns } from "./_soft-delete";
 import agentsTable from "./agent";
 
 /**
@@ -51,14 +53,13 @@ const chatopsChannelBindingsTable = pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
+    ...softDeleteColumns,
   },
   (table) => [
     // Unique constraint: one binding per channel per provider
-    uniqueIndex("chatops_channel_binding_provider_channel_workspace_idx").on(
-      table.provider,
-      table.channelId,
-      table.workspaceId,
-    ),
+    uniqueIndex("chatops_channel_binding_provider_channel_workspace_idx")
+      .on(table.provider, table.channelId, table.workspaceId)
+      .where(sql`${table.deletedAt} IS NULL`),
     // Index for looking up bindings by organization
     index("chatops_channel_binding_organization_id_idx").on(
       table.organizationId,

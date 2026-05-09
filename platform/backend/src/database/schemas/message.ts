@@ -6,6 +6,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import { softDeleteColumns } from "./_soft-delete";
 import conversationsTable from "./conversation";
 
 const messagesTable = pgTable(
@@ -20,6 +21,7 @@ const messagesTable = pgTable(
     content: jsonb("content").$type<any>().notNull(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }),
+    ...softDeleteColumns,
   },
   (table) => ({
     conversationIdIdx: index("messages_conversation_id_idx").on(

@@ -6,6 +6,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import { softDeleteColumns } from "./_soft-delete";
 import a2aContextTable from "./a2a-context";
 import a2aTaskTable from "./a2a-task";
 
@@ -27,6 +28,7 @@ const a2aMessageTable = pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
+    ...softDeleteColumns,
   },
   (table) => [
     index("a2a_message_context_id_idx").on(table.contextId, table.createdAt),

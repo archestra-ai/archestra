@@ -1,4 +1,5 @@
 import { boolean, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { softDeleteColumns } from "./_soft-delete";
 import organizationsTable from "./organization";
 import usersTable from "./user";
 
@@ -19,6 +20,7 @@ export const team = pgTable("team", {
   convertToolResultsToToon: boolean("convert_tool_results_to_toon")
     .notNull()
     .default(false),
+  ...softDeleteColumns,
 });
 
 export const teamMember = pgTable(

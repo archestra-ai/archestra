@@ -1,5 +1,6 @@
 import { jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import type { AutonomyPolicyOperator, TrustedData } from "@/types";
+import { softDeleteColumns } from "./_soft-delete";
 import toolsTable from "./tool";
 
 /**
@@ -34,6 +35,7 @@ const trustedDataPoliciesTable = pgTable("trusted_data_policies", {
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
+  ...softDeleteColumns,
 });
 
 export default trustedDataPoliciesTable;

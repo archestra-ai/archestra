@@ -4,6 +4,7 @@ import type {
   McpServerInstallationRequestNote,
   McpServerInstallationRequestStatus,
 } from "@/types";
+import { softDeleteColumns } from "./_soft-delete";
 import usersTable from "./user";
 
 const mcpServerInstallationRequestTable = pgTable(
@@ -37,6 +38,7 @@ const mcpServerInstallationRequestTable = pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
+    ...softDeleteColumns,
   },
 );
 

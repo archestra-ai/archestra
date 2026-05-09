@@ -1,4 +1,5 @@
 import type { SupportedEmbeddingDimension, SupportedProvider } from "@shared";
+import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -8,11 +9,12 @@ import {
   pgTable,
   text,
   timestamp,
-  unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
 import type { ModelInputModality, ModelOutputModality } from "@/types";
+import { softDeleteColumns } from "./_soft-delete";
 
 /**
  * Models table - stores capability and pricing metadata fetched from models.dev API.
@@ -101,13 +103,13 @@ const modelsTable = pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
+    ...softDeleteColumns,
   },
   (table) => ({
     /** Unique constraint on provider + model_id to prevent duplicates */
-    providerModelUnique: unique("models_provider_model_unique").on(
-      table.provider,
-      table.modelId,
-    ),
+    providerModelUnique: uniqueIndex("models_provider_model_unique")
+      .on(table.provider, table.modelId)
+      .where(sql`${table.deletedAt} IS NULL`),
     /** Index for fast lookups by provider + model_id */
     providerModelIdx: index("models_provider_model_idx").on(
       table.provider,

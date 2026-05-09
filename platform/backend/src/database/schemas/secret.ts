@@ -7,6 +7,7 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import type { SecretValue } from "@/types";
+import { softDeleteColumns } from "./_soft-delete";
 
 const secretTable = pgTable("secret", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -29,6 +30,7 @@ const secretTable = pgTable("secret", {
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
+  ...softDeleteColumns,
 });
 
 export default secretTable;

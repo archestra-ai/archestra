@@ -6,6 +6,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import { softDeleteColumns } from "./_soft-delete";
 import agentsTable from "./agent";
 import usersTable from "./user";
 
@@ -32,6 +33,7 @@ const scheduleTriggersTable = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
       .notNull()
       .defaultNow(),
+    ...softDeleteColumns,
   },
   (table) => [
     index("schedule_triggers_agent_id_idx").on(table.agentId),

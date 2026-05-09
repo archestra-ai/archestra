@@ -228,6 +228,7 @@ class VirtualApiKeyModel {
           expiresAt: schema.virtualApiKeysTable.expiresAt,
           createdAt: schema.virtualApiKeysTable.createdAt,
           lastUsedAt: schema.virtualApiKeysTable.lastUsedAt,
+          deletedAt: schema.virtualApiKeysTable.deletedAt,
         })
         .from(schema.virtualApiKeysTable)
         .innerJoin(
@@ -431,6 +432,7 @@ class VirtualApiKeyModel {
           expiresAt: schema.virtualApiKeysTable.expiresAt,
           lastUsedAt: schema.virtualApiKeysTable.lastUsedAt,
           createdAt: schema.virtualApiKeysTable.createdAt,
+          deletedAt: schema.virtualApiKeysTable.deletedAt,
         })
         .from(schema.virtualApiKeysTable)
         .where(whereClause)

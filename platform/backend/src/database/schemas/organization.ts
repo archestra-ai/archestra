@@ -22,6 +22,7 @@ import type {
   OrganizationCompressionScope,
   OrganizationLimitCleanupInterval,
 } from "@/types";
+import { softDeleteColumns } from "./_soft-delete";
 
 const organizationsTable = pgTable("organization", {
   id: text("id").primaryKey(),
@@ -195,6 +196,7 @@ const organizationsTable = pgTable("organization", {
   connectionBaseUrls: jsonb("connection_base_urls").$type<
     ConnectionBaseUrl[]
   >(),
+  ...softDeleteColumns,
 });
 
 export default organizationsTable;

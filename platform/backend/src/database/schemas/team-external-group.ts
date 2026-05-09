@@ -1,4 +1,6 @@
-import { pgTable, text, timestamp, unique } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { softDeleteColumns } from "./_soft-delete";
 import { team } from "./team";
 
 /**
@@ -25,13 +27,13 @@ const teamExternalGroupsTable = pgTable(
      */
     groupIdentifier: text("group_identifier").notNull(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
+    ...softDeleteColumns,
   },
   (table) => [
     // Ensure unique combination of team and group
-    unique("team_external_group_team_group_unique").on(
-      table.teamId,
-      table.groupIdentifier,
-    ),
+    uniqueIndex("team_external_group_team_group_unique")
+      .on(table.teamId, table.groupIdentifier)
+      .where(sql`${table.deletedAt} IS NULL`),
   ],
 );
 

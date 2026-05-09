@@ -7,6 +7,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import { softDeleteColumns } from "./_soft-delete";
 import agentsTable from "./agent";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 
@@ -48,6 +49,7 @@ const conversationsTable = pgTable("conversations", {
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
+  ...softDeleteColumns,
 });
 
 export default conversationsTable;

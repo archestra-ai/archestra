@@ -139,6 +139,7 @@ class KnowledgeBaseConnectorModel {
         checkpoint: schema.knowledgeBaseConnectorsTable.checkpoint,
         createdAt: schema.knowledgeBaseConnectorsTable.createdAt,
         updatedAt: schema.knowledgeBaseConnectorsTable.updatedAt,
+        deletedAt: schema.knowledgeBaseConnectorsTable.deletedAt,
       })
       .from(schema.knowledgeBaseConnectorAssignmentsTable)
       .innerJoin(
@@ -190,6 +191,7 @@ class KnowledgeBaseConnectorModel {
         checkpoint: schema.knowledgeBaseConnectorsTable.checkpoint,
         createdAt: schema.knowledgeBaseConnectorsTable.createdAt,
         updatedAt: schema.knowledgeBaseConnectorsTable.updatedAt,
+        deletedAt: schema.knowledgeBaseConnectorsTable.deletedAt,
         knowledgeBaseId:
           schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
       })

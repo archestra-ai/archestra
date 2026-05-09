@@ -1,4 +1,5 @@
 import { pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { softDeleteColumns } from "./_soft-delete";
 import organizationsTable from "./organization";
 import usersTable from "./user";
 
@@ -15,6 +16,7 @@ const invitation = pgTable("invitation", {
     .notNull()
     .references(() => usersTable.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  ...softDeleteColumns,
 });
 
 export default invitation;

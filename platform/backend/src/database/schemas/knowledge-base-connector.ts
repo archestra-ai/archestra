@@ -14,6 +14,7 @@ import type {
   ConnectorType,
 } from "@/types";
 import type { KnowledgeSourceVisibility } from "@/types/knowledge-base";
+import { softDeleteColumns } from "./_soft-delete";
 import knowledgeBasesTable from "./knowledge-base";
 import secretTable from "./secret";
 
@@ -45,6 +46,7 @@ const knowledgeBaseConnectorsTable = pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
+    ...softDeleteColumns,
   },
   (table) => [
     index("knowledge_base_connectors_organization_id_idx").on(

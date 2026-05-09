@@ -47,6 +47,7 @@ class KbDocumentModel {
         chunkCount: schema.kbDocumentsTable.chunkCount,
         createdAt: schema.kbDocumentsTable.createdAt,
         updatedAt: schema.kbDocumentsTable.updatedAt,
+        deletedAt: schema.kbDocumentsTable.deletedAt,
       })
       .from(schema.kbDocumentsTable)
       .innerJoin(

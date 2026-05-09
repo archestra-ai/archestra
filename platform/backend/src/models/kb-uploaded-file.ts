@@ -16,6 +16,7 @@ const listColumns = {
   processingStatus: schema.kbUploadedFilesTable.processingStatus,
   processingError: schema.kbUploadedFilesTable.processingError,
   createdAt: schema.kbUploadedFilesTable.createdAt,
+  deletedAt: schema.kbUploadedFilesTable.deletedAt,
 } as const;
 
 class KbUploadedFileModel {

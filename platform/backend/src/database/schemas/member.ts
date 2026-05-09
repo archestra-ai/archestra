@@ -1,5 +1,6 @@
 import { MEMBER_ROLE_NAME } from "@shared";
 import { index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { softDeleteColumns } from "./_soft-delete";
 import agentsTable from "./agent";
 import organizationsTable from "./organization";
 import usersTable from "./user";
@@ -21,6 +22,7 @@ const member = pgTable(
     defaultAgentId: uuid("default_agent_id").references(() => agentsTable.id, {
       onDelete: "set null",
     }),
+    ...softDeleteColumns,
   },
   (table) => ({
     userOrganizationIdx: index("member_user_id_organization_id_idx").on(

@@ -1,13 +1,15 @@
+import { sql } from "drizzle-orm";
 import {
   index,
   jsonb,
   pgTable,
   text,
   timestamp,
-  unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import type { ToolParametersContent } from "@/types";
+import { softDeleteColumns } from "./_soft-delete";
 import agentsTable from "./agent";
 import mcpCatalogTable from "./internal-mcp-catalog";
 
@@ -56,18 +58,16 @@ const toolsTable = pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
+    ...softDeleteColumns,
   },
   (table) => [
     // Unique constraint ensures:
     // - For MCP tools: one tool per (catalogId, name) combination
     // - For proxy-sniffed tools: one tool per (agentId, name) combination
     // - For delegation tools: one tool per delegateToAgentId
-    unique().on(
-      table.catalogId,
-      table.name,
-      table.agentId,
-      table.delegateToAgentId,
-    ),
+    uniqueIndex("tools_identity_uidx")
+      .on(table.catalogId, table.name, table.agentId, table.delegateToAgentId)
+      .where(sql`${table.deletedAt} IS NULL`),
     // Index for delegation tool lookups
     index("tools_delegate_to_agent_id_idx").on(table.delegateToAgentId),
   ],

@@ -1,6 +1,6 @@
 "use client";
 
-import { PROVIDERS_WITH_OPTIONAL_API_KEY } from "@shared";
+import { isProviderApiKeyOptional } from "@shared";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
@@ -47,6 +47,7 @@ export function CreateLlmProviderApiKeyDialog({
   const createMutation = useCreateLlmProviderApiKey();
   const { data: existingKeys = [] } = useLlmProviderApiKeys({ enabled: open });
   const byosEnabled = useFeature("byosEnabled");
+  const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
   const bedrockIamAuthEnabled = useFeature("bedrockIamAuthEnabled");
   const geminiVertexAiEnabled = useFeature("geminiVertexAiEnabled");
   const { data: canCreateOrgScopedKey } = useHasPermissions({
@@ -72,6 +73,7 @@ export function CreateLlmProviderApiKeyDialog({
 
   const formValues = form.watch();
   const isValid = getIsCreateFormValid({
+    azureOpenAiEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
     byosEnabled: Boolean(byosEnabled),
     values: formValues,
   });
@@ -168,17 +170,20 @@ function getDefaultFormValues(params: {
 }
 
 function getIsCreateFormValid(params: {
+  azureOpenAiEntraIdEnabled: boolean;
   byosEnabled: boolean;
   values: LlmProviderApiKeyFormValues;
 }) {
-  const { byosEnabled, values } = params;
+  const { azureOpenAiEntraIdEnabled, byosEnabled, values } = params;
 
   return Boolean(
     values.apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER &&
       (values.scope !== "team" || values.teamId) &&
       (byosEnabled
         ? values.vaultSecretPath && values.vaultSecretKey
-        : PROVIDERS_WITH_OPTIONAL_API_KEY.has(values.provider) ||
-          values.apiKey),
+        : isProviderApiKeyOptional({
+            provider: values.provider,
+            azureEntraIdEnabled: azureOpenAiEntraIdEnabled,
+          }) || values.apiKey),
   );
 }

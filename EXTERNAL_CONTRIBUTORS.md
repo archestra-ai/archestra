@@ -236,3 +236,6 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @subhoS
 - @xAPT42
 - @KrishavRajSingh
+- @rudra0812
+- @adamsardo
+- @franklin52448-max

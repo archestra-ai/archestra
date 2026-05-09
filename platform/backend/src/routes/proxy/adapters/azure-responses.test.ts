@@ -26,6 +26,23 @@ describe("azureResponsesAdapterFactory", () => {
     expect(client._options?.apiKey).toBe("my-azure-key");
   });
 
+  test("uses Azure resource-level /openai base URLs for responses requests", () => {
+    const client = azureResponsesAdapterFactory.createClient("my-azure-key", {
+      baseUrl: "https://my-resource.openai.azure.com/openai",
+      defaultHeaders: {},
+      source: "api",
+    }) as OpenAIProvider & {
+      _options?: { baseURL?: string; defaultQuery?: Record<string, string> };
+    };
+
+    expect(client._options?.baseURL).toBe(
+      "https://my-resource.openai.azure.com/openai",
+    );
+    expect(client._options?.defaultQuery).toEqual({
+      "api-version": "2025-04-01-preview",
+    });
+  });
+
   test("uses Azure OpenAI v1 base URLs without api-version", () => {
     const client = azureResponsesAdapterFactory.createClient("my-azure-key", {
       baseUrl: "https://my-resource.services.ai.azure.com/openai/v1",

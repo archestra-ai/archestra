@@ -4,7 +4,7 @@ import {
   type archestraApiTypes,
   DEFAULT_PROVIDER_BASE_URLS,
   E2eTestId,
-  PROVIDERS_WITH_OPTIONAL_API_KEY,
+  isProviderApiKeyOptional,
 } from "@shared";
 import { Building2, CheckCircle2, Trash2, User, Users } from "lucide-react";
 import Link from "next/link";
@@ -238,7 +238,7 @@ const PROVIDER_CONFIG: Record<
       "https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/OpenAI",
     consoleName: "Azure Portal",
     description:
-      "Set Base URL to: https://<resource>.openai.azure.com/openai/deployments/<deployment>",
+      "Use your Azure OpenAI resource URL, such as https://<resource>.openai.azure.com/openai. Archestra will discover deployments and route by model name.",
   },
 } as const;
 
@@ -286,6 +286,7 @@ export function LlmProviderApiKeyForm({
 }: LlmProviderApiKeyFormProps) {
   const authDocsUrl = getFrontendDocsUrl("platform-llm-proxy-authentication");
   const byosEnabled = useFeature("byosEnabled");
+  const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
   const { data: providerBaseUrls } = useProviderBaseUrls();
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: isLlmProviderApiKeyAdmin } = useHasPermissions({
@@ -523,7 +524,10 @@ export function LlmProviderApiKeyForm({
           <div className="space-y-2">
             <Label htmlFor="llm-provider-api-key-value">
               API Key{" "}
-              {PROVIDERS_WITH_OPTIONAL_API_KEY.has(provider) ? (
+              {isProviderApiKeyOptional({
+                provider,
+                azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
+              }) ? (
                 <span className="font-normal text-muted-foreground">
                   (optional)
                 </span>

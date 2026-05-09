@@ -25,6 +25,7 @@ vi.mock("@/services/identity-providers/oidc", () => ({
 const {
   MCP_RESOURCE_REFERENCE_PREFIX,
   OAUTH_ID_JAG_TYP,
+  buildOAuthIssuer,
   exchangeIdentityAssertionForAccessToken,
 } = await import("./authorization");
 
@@ -79,7 +80,7 @@ describe("exchangeIdentityAssertionForAccessToken", () => {
 
     const result = await exchangeIdentityAssertionForAccessToken({
       assertion: makeAssertionJwt({
-        resource: `http://localhost:3000/v1/mcp/${agent.id}`,
+        resource: buildMcpResource(agent.id),
         clientId: client.clientId,
         scope: "email",
       }),
@@ -177,7 +178,7 @@ describe("exchangeIdentityAssertionForAccessToken", () => {
 
     const result = await exchangeIdentityAssertionForAccessToken({
       assertion: makeAssertionJwt({
-        resource: `http://localhost:3000/v1/mcp/${agent.id}`,
+        resource: buildMcpResource(agent.id),
         clientId: client.clientId,
         scope: "mcp email",
       }),
@@ -260,7 +261,7 @@ describe("exchangeIdentityAssertionForAccessToken", () => {
 
     const result = await exchangeIdentityAssertionForAccessToken({
       assertion: makeAssertionJwt({
-        resource: `http://localhost:3000/v1/mcp/${agent.id}`,
+        resource: buildMcpResource(agent.id),
         clientId: client.clientId,
         scope: "mcp email",
       }),
@@ -343,6 +344,7 @@ function makeAssertionJwt(params: {
   clientId: string;
   scope: string;
 }) {
+  const issuer = buildOAuthIssuer();
   const header = Buffer.from(
     JSON.stringify({ alg: "RS256", typ: OAUTH_ID_JAG_TYP }),
   ).toString("base64url");
@@ -350,7 +352,7 @@ function makeAssertionJwt(params: {
     JSON.stringify({
       iss: "https://idp.example.com",
       sub: "subject-1",
-      aud: "http://localhost:3000/",
+      aud: issuer,
       resource: params.resource,
       client_id: params.clientId,
       scope: params.scope,
@@ -362,4 +364,8 @@ function makeAssertionJwt(params: {
   ).toString("base64url");
 
   return `${header}.${payload}.signature`;
+}
+
+function buildMcpResource(agentId: string): string {
+  return new URL(`/v1/mcp/${agentId}`, buildOAuthIssuer()).toString();
 }

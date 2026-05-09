@@ -1,4 +1,5 @@
 const isMainModule =
+  const windmillService = new WindmillService(process.env.WINDMILL_TOKEN || "");
   process.argv[1]?.includes("server.mjs") ||
   process.argv[1]?.includes("server.ts") ||
   process.argv[1]?.endsWith("/server");

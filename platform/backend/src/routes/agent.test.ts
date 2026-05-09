@@ -1,5 +1,11 @@
-import { BUILT_IN_AGENT_IDS } from "@shared";
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  BUILT_IN_AGENT_IDS,
+  DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+} from "@shared";
 import { vi } from "vitest";
+import { ToolModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -138,6 +144,26 @@ describe("agent routes", () => {
       expect(agent.name).toBe(name);
       expect(agent).toHaveProperty("tools");
       expect(agent).toHaveProperty("teams");
+    });
+
+    test("should return 404 when agent belongs to a different organization", async ({
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const otherOrg = await makeOrganization();
+      const otherAgent = await makeAgent({
+        name: `Other Org Agent ${crypto.randomUUID().slice(0, 8)}`,
+        organizationId: otherOrg.id,
+        scope: "personal",
+        authorId: user.id,
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agents/${otherAgent.id}`,
+      });
+
+      expect(response.statusCode).toBe(404);
     });
 
     test("should return 404 for non-existent agent", async () => {
@@ -479,6 +505,39 @@ describe("agent routes", () => {
       expect(names).toContain(`Org Agent ${suffix}`);
       expect(names).not.toContain(`Other Personal ${suffix}`);
     });
+
+    test("hides the default knowledge query tool when an agent has no knowledge sources", async ({
+      makeAgent,
+    }) => {
+      const suffix = crypto.randomUUID().slice(0, 8);
+      const agent = await makeAgent({
+        name: `No Knowledge ${suffix}`,
+        agentType: "agent",
+        organizationId,
+        scope: "personal",
+        authorId: user.id,
+      });
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      await ToolModel.assignDefaultArchestraToolsToAgent(agent.id);
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agents?limit=10&offset=0&sortBy=name&sortDirection=asc&name=${suffix}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const result = response.json();
+      expect(result.data).toHaveLength(1);
+
+      const toolNames = result.data[0].tools.map((tool: { name: string }) => {
+        const segments = tool.name.split("__");
+        return segments[segments.length - 1];
+      });
+      expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME);
+      expect(toolNames).toHaveLength(
+        DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES.length - 1,
+      );
+    });
   });
 
   describe("GET /api/agents/all", () => {
@@ -810,5 +869,185 @@ describe("agent routes", () => {
       "x-correlation-id",
       "x-tenant-id",
     ]);
+  });
+
+  describe("GET /api/agents/:id/export", () => {
+    test("should export a valid portable JSON configuration", async ({
+      makeAgent,
+    }) => {
+      const created = await makeAgent({
+        name: `Export Test Agent ${crypto.randomUUID().slice(0, 8)}`,
+        organizationId,
+        scope: "personal",
+        authorId: user.id,
+        agentType: "agent",
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agents/${created.id}/export`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const data = response.json();
+      expect(data.version).toBe("1");
+      expect(data.agent.name).toBe(created.name);
+      expect(data.agent.agentType).toBe("agent");
+    });
+
+    test("does not export the default knowledge query tool without knowledge sources", async ({
+      makeAgent,
+    }) => {
+      const created = await makeAgent({
+        name: `Export No Knowledge ${crypto.randomUUID().slice(0, 8)}`,
+        organizationId,
+        scope: "personal",
+        authorId: user.id,
+        agentType: "agent",
+      });
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      await ToolModel.assignDefaultArchestraToolsToAgent(created.id);
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agents/${created.id}/export`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const toolNames = response
+        .json()
+        .tools.map((tool: { toolName: string }) => {
+          const segments = tool.toolName.split("__");
+          return segments[segments.length - 1];
+        });
+      expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME);
+      expect(toolNames).toHaveLength(
+        DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES.length - 1,
+      );
+    });
+
+    test("should return 400 for built-in agents", async ({ makeAgent }) => {
+      const created = await makeAgent({
+        name: "Policy Configuration Subagent",
+        organizationId,
+        scope: "org",
+        authorId: user.id,
+        agentType: "agent",
+        builtInAgentConfig: {
+          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+          autoConfigureOnToolDiscovery: true,
+        },
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agents/${created.id}/export`,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain(
+        "Built-in agents cannot be exported",
+      );
+    });
+
+    test("should return 400 if trying to export an MCP gateway", async ({
+      makeAgent,
+    }) => {
+      const created = await makeAgent({
+        name: `Proxy Export Test`,
+        organizationId,
+        scope: "personal",
+        authorId: user.id,
+        agentType: "mcp_gateway",
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agents/${created.id}/export`,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain(
+        "Only internal agents can be exported",
+      );
+    });
+  });
+
+  describe("POST /api/agents/import", () => {
+    const makeMinimalPayload = (name = "Imported Test Agent") => ({
+      version: "1" as const,
+      exportedAt: new Date().toISOString(),
+      sourceInstance: null,
+      agent: {
+        name,
+        agentType: "agent" as const,
+        description: null,
+        systemPrompt: "Hello",
+        icon: null,
+        scope: "personal",
+        considerContextUntrusted: false,
+        toolAssignmentMode: "manual",
+        toolExposureMode: "full",
+        llmModel: null,
+        incomingEmailEnabled: false,
+        incomingEmailSecurityMode: "private",
+        incomingEmailAllowedDomain: null,
+        passthroughHeaders: null,
+      },
+      labels: [],
+      suggestedPrompts: [],
+      tools: [],
+      delegations: [],
+      knowledgeBases: [],
+      connectors: [],
+    });
+
+    test("should import a valid agent and return 200", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/agents/import",
+        payload: makeMinimalPayload(),
+      });
+
+      expect(response.statusCode).toBe(200);
+      const data = response.json();
+      expect(data.agent.name).toBe("Imported Test Agent");
+      expect(data.agent.agentType).toBe("agent");
+      expect(data.agent.scope).toBe("personal");
+      expect(data.warnings).toEqual([]);
+    });
+
+    test("should return warnings for unresolvable tools", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/agents/import",
+        payload: makeMinimalPayload("Agent With Missing Tools"),
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    test("should return 400 for invalid payload (missing version)", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/agents/import",
+        payload: { agent: { name: "Bad" } },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    test("should return 400 for non-agent type", async () => {
+      const payload = makeMinimalPayload("Gateway Import");
+      (payload.agent as { agentType: string }).agentType = "mcp_gateway";
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/agents/import",
+        payload,
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
   });
 });

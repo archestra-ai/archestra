@@ -163,6 +163,171 @@ describe("MCP Gateway (stateless mode)", () => {
     );
   });
 
+  test("ignores forwarded public origin in WWW-Authenticate when proxy trust is disabled", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.slug}`,
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        host: "localhost:9000",
+        "x-forwarded-host": "gateway.example.com",
+        "x-forwarded-proto": "https",
+      },
+      payload: {
+        jsonrpc: "2.0",
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "test-client", version: "1.0.0" },
+        },
+        id: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.headers["www-authenticate"]).toContain(
+      `resource_metadata="http://localhost:9000/.well-known/oauth-protected-resource/v1/mcp/${agent.slug}"`,
+    );
+  });
+
+  test("uses forwarded public origin in WWW-Authenticate when proxy trust is enabled", async ({
+    makeAgent,
+  }) => {
+    const proxyApp = Fastify({
+      trustProxy: true,
+    }).withTypeProvider<ZodTypeProvider>();
+    proxyApp.setValidatorCompiler(validatorCompiler);
+    proxyApp.setSerializerCompiler(serializerCompiler);
+    await proxyApp.register(mcpGatewayRoutes);
+
+    try {
+      const agent = await makeAgent();
+
+      const response = await proxyApp.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.slug}`,
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          host: "localhost:9000",
+          "x-forwarded-host": "gateway.example.com",
+          "x-forwarded-proto": "https",
+        },
+        payload: {
+          jsonrpc: "2.0",
+          method: "initialize",
+          params: {
+            protocolVersion: "2024-11-05",
+            capabilities: {},
+            clientInfo: { name: "test-client", version: "1.0.0" },
+          },
+          id: 1,
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(response.headers["www-authenticate"]).toContain(
+        `resource_metadata="https://gateway.example.com/.well-known/oauth-protected-resource/v1/mcp/${agent.slug}"`,
+      );
+    } finally {
+      await proxyApp.close();
+    }
+  });
+
+  test("uses forwarded public origin when CIDR proxy trust matches the remote address", async ({
+    makeAgent,
+  }) => {
+    const proxyApp = Fastify({
+      trustProxy: "127.0.0.1/32",
+    }).withTypeProvider<ZodTypeProvider>();
+    proxyApp.setValidatorCompiler(validatorCompiler);
+    proxyApp.setSerializerCompiler(serializerCompiler);
+    await proxyApp.register(mcpGatewayRoutes);
+
+    try {
+      const agent = await makeAgent();
+
+      const response = await proxyApp.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.slug}`,
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          host: "localhost:9000",
+          "x-forwarded-host": "gateway.example.com",
+          "x-forwarded-proto": "https",
+        },
+        payload: {
+          jsonrpc: "2.0",
+          method: "initialize",
+          params: {
+            protocolVersion: "2024-11-05",
+            capabilities: {},
+            clientInfo: { name: "test-client", version: "1.0.0" },
+          },
+          id: 1,
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(response.headers["www-authenticate"]).toContain(
+        `resource_metadata="https://gateway.example.com/.well-known/oauth-protected-resource/v1/mcp/${agent.slug}"`,
+      );
+    } finally {
+      await proxyApp.close();
+    }
+  });
+
+  test("ignores forwarded public origin when CIDR proxy trust does not match the remote address", async ({
+    makeAgent,
+  }) => {
+    const proxyApp = Fastify({
+      trustProxy: "10.0.0.0/8",
+    }).withTypeProvider<ZodTypeProvider>();
+    proxyApp.setValidatorCompiler(validatorCompiler);
+    proxyApp.setSerializerCompiler(serializerCompiler);
+    await proxyApp.register(mcpGatewayRoutes);
+
+    try {
+      const agent = await makeAgent();
+
+      const response = await proxyApp.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.slug}`,
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          host: "localhost:9000",
+          "x-forwarded-host": "gateway.example.com",
+          "x-forwarded-proto": "https",
+        },
+        payload: {
+          jsonrpc: "2.0",
+          method: "initialize",
+          params: {
+            protocolVersion: "2024-11-05",
+            capabilities: {},
+            clientInfo: { name: "test-client", version: "1.0.0" },
+          },
+          id: 1,
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(response.headers["www-authenticate"]).toContain(
+        `resource_metadata="http://localhost:9000/.well-known/oauth-protected-resource/v1/mcp/${agent.slug}"`,
+      );
+    } finally {
+      await proxyApp.close();
+    }
+  });
+
   test("returns 401 with WWW-Authenticate header for invalid token", async ({
     makeAgent,
   }) => {

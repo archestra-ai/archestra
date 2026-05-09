@@ -3,8 +3,8 @@
 import { type archestraApiTypes, parseFullToolName } from "@shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, User } from "lucide-react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useMemo } from "react";
 import { ProfileFilterOption } from "@/components/log-filter-option";
 import { SearchInput } from "@/components/search-input";
 import { TableFilters } from "@/components/table-filters";
@@ -19,9 +19,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useProfiles } from "@/lib/agent.query";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import {
   formatAuthMethod,
@@ -83,57 +83,57 @@ function McpToolCallsTable({
     agents: archestraApiTypes.GetAllAgentsResponses["200"];
   };
 }) {
+  const {
+    searchParams,
+    pageIndex,
+    pageSize,
+    offset,
+    updateQueryParams,
+    setPagination,
+  } = useDataTableQueryParams();
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const pathname = usePathname();
 
-  // Get URL params for filters
+  // All filter state is URL-backed so it persists across navigation
   const startDateFromUrl = searchParams.get("startDate");
   const endDateFromUrl = searchParams.get("endDate");
-  const profileIdFromUrl =
-    searchParams.get("profileId") || searchParams.get("profileID");
+  const profileFilter =
+    searchParams.get("profileId") ||
+    searchParams.get("profileID") ||
+    "all";
   const searchFromUrl = searchParams.get("search");
 
-  const [profileFilter, setProfileFilter] = useState(profileIdFromUrl || "all");
-  const [pagination, setPagination] = useState({
-    pageIndex: 0,
-    pageSize: DEFAULT_TABLE_LIMIT,
-  });
-  const [sorting, setSorting] = useState<SortingState>([
-    { id: "createdAt", desc: true },
-  ]);
+  const sortByFromUrl = searchParams.get("sortBy") || "createdAt";
+  const sortDirectionFromUrl = searchParams.get("sortDirection") || "desc";
 
-  useEffect(() => {
-    setProfileFilter(profileIdFromUrl || "all");
-  }, [profileIdFromUrl]);
+  const sorting: SortingState = useMemo(
+    () => [{ id: sortByFromUrl, desc: sortDirectionFromUrl === "desc" }],
+    [sortByFromUrl, sortDirectionFromUrl],
+  );
 
-  // Helper to update URL params
-  const updateUrlParams = useCallback(
-    (updates: Record<string, string | null>) => {
-      const params = new URLSearchParams(searchParams.toString());
-      Object.entries(updates).forEach(([key, value]) => {
-        if (value === null || value === "") {
-          params.delete(key);
-        } else {
-          params.set(key, value);
-        }
-      });
-      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+  const handleSortingChange = useCallback(
+    (newSorting: SortingState) => {
+      const next = newSorting[0];
+      if (next) {
+        updateQueryParams({
+          sortBy: next.id,
+          sortDirection: next.desc ? "desc" : "asc",
+          page: "1",
+        });
+      }
     },
-    [searchParams, router, pathname],
+    [updateQueryParams],
   );
 
   // Profile filter change handler
   const handleProfileFilterChange = useCallback(
     (value: string) => {
-      setProfileFilter(value);
-      setPagination((prev) => ({ ...prev, pageIndex: 0 })); // Reset to first page
-      updateUrlParams({
+      updateQueryParams({
         profileId: value === "all" ? null : value,
         profileID: null,
+        page: "1",
       });
     },
-    [updateUrlParams],
+    [updateQueryParams],
   );
 
   // Date time range picker hook
@@ -142,35 +142,32 @@ function McpToolCallsTable({
     endDateFromUrl,
     onDateRangeChange: useCallback(
       ({ startDate, endDate }) => {
-        setPagination((prev) => ({ ...prev, pageIndex: 0 })); // Reset to first page
-        updateUrlParams({
+        updateQueryParams({
           startDate,
           endDate,
+          page: "1",
         });
       },
-      [updateUrlParams],
+      [updateQueryParams],
     ),
   });
 
-  // Convert TanStack sorting to API format
-  const sortBy = sorting[0]?.id;
-  const sortDirection = sorting[0]?.desc ? "desc" : "asc";
-  // Map UI column ids to API sort fields
+  // Convert sorting to API format
   const apiSortBy: NonNullable<
     archestraApiTypes.GetMcpToolCallsData["query"]
   >["sortBy"] =
-    sortBy === "method"
+    sortByFromUrl === "method"
       ? "method"
-      : sortBy === "createdAt"
+      : sortByFromUrl === "createdAt"
         ? "createdAt"
         : undefined;
 
   const { data: mcpToolCallsResponse, isFetching } = useMcpToolCalls({
     agentId: profileFilter !== "all" ? profileFilter : undefined,
-    limit: pagination.pageSize,
-    offset: pagination.pageIndex * pagination.pageSize,
+    limit: pageSize,
+    offset,
     sortBy: apiSortBy,
-    sortDirection,
+    sortDirection: sortDirectionFromUrl as "asc" | "desc",
     startDate: dateTimePicker.startDateParam,
     endDate: dateTimePicker.endDateParam,
     search: searchFromUrl || undefined,
@@ -386,10 +383,8 @@ function McpToolCallsTable({
     !!searchFromUrl;
 
   const clearFilters = useCallback(() => {
-    setProfileFilter("all");
-    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
     dateTimePicker.clearDateRange();
-    updateUrlParams({
+    updateQueryParams({
       profileId: null,
       profileID: null,
       startDate: null,
@@ -397,7 +392,7 @@ function McpToolCallsTable({
       search: null,
       page: "1",
     });
-  }, [dateTimePicker, updateUrlParams]);
+  }, [dateTimePicker, updateQueryParams]);
 
   // Shared date picker component
   const datePickerComponent = (
@@ -454,19 +449,17 @@ function McpToolCallsTable({
         pagination={
           paginationMeta
             ? {
-                pageIndex: pagination.pageIndex,
-                pageSize: pagination.pageSize,
+                pageIndex,
+                pageSize,
                 total: paginationMeta.total,
               }
             : undefined
         }
         manualPagination
-        onPaginationChange={(newPagination) => {
-          setPagination(newPagination);
-        }}
+        onPaginationChange={setPagination}
         manualSorting
         sorting={sorting}
-        onSortingChange={setSorting}
+        onSortingChange={handleSortingChange}
         isLoading={isFetching}
         hasActiveFilters={hasFilters}
         emptyMessage="No MCP tool calls found. Tool calls will appear here when agents use MCP tools."

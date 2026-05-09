@@ -35,6 +35,17 @@ export function isAnthropicWorkloadIdentityEnabled(): boolean {
   );
 }
 
+export async function getAnthropicWorkloadIdentityAuthHeaders(
+  baseUrl: string | undefined,
+): Promise<Record<string, string>> {
+  return {
+    Authorization: `Bearer ${await getAnthropicWorkloadIdentityToken(
+      baseUrl || "https://api.anthropic.com",
+    )}`,
+    "anthropic-beta": OAUTH_API_BETA_HEADER,
+  };
+}
+
 export function createAnthropicWorkloadIdentityFetch(
   baseUrl: string | undefined,
   upstreamFetch?: Fetch,
@@ -56,13 +67,18 @@ export function createAnthropicWorkloadIdentityFetch(
 }
 
 function getAnthropicWorkloadIdentityConfig(): AnthropicWorkloadIdentityConfig {
-  const identityToken = process.env.ANTHROPIC_IDENTITY_TOKEN?.trim();
-  const identityTokenFile = process.env.ANTHROPIC_IDENTITY_TOKEN_FILE?.trim();
+  const identityToken = process.env.ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN?.trim();
+  const identityTokenFile =
+    process.env.ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE?.trim();
   return {
-    federationRuleId: process.env.ANTHROPIC_FEDERATION_RULE_ID?.trim() ?? "",
-    organizationId: process.env.ANTHROPIC_ORGANIZATION_ID?.trim() ?? "",
-    serviceAccountId: process.env.ANTHROPIC_SERVICE_ACCOUNT_ID?.trim() ?? "",
-    workspaceId: process.env.ANTHROPIC_WORKSPACE_ID?.trim() || undefined,
+    federationRuleId:
+      process.env.ARCHESTRA_ANTHROPIC_FEDERATION_RULE_ID?.trim() ?? "",
+    organizationId:
+      process.env.ARCHESTRA_ANTHROPIC_ORGANIZATION_ID?.trim() ?? "",
+    serviceAccountId:
+      process.env.ARCHESTRA_ANTHROPIC_SERVICE_ACCOUNT_ID?.trim() ?? "",
+    workspaceId:
+      process.env.ARCHESTRA_ANTHROPIC_WORKSPACE_ID?.trim() || undefined,
     identityToken: identityToken || undefined,
     identityTokenFile: identityTokenFile || undefined,
   };
@@ -188,11 +204,19 @@ function assertWorkloadIdentityConfig(
   config: AnthropicWorkloadIdentityConfig,
 ): void {
   const missing: string[] = [];
-  if (!config.federationRuleId) missing.push("ANTHROPIC_FEDERATION_RULE_ID");
-  if (!config.organizationId) missing.push("ANTHROPIC_ORGANIZATION_ID");
-  if (!config.serviceAccountId) missing.push("ANTHROPIC_SERVICE_ACCOUNT_ID");
+  if (!config.federationRuleId) {
+    missing.push("ARCHESTRA_ANTHROPIC_FEDERATION_RULE_ID");
+  }
+  if (!config.organizationId) {
+    missing.push("ARCHESTRA_ANTHROPIC_ORGANIZATION_ID");
+  }
+  if (!config.serviceAccountId) {
+    missing.push("ARCHESTRA_ANTHROPIC_SERVICE_ACCOUNT_ID");
+  }
   if (!config.identityToken && !config.identityTokenFile) {
-    missing.push("ANTHROPIC_IDENTITY_TOKEN or ANTHROPIC_IDENTITY_TOKEN_FILE");
+    missing.push(
+      "ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN or ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE",
+    );
   }
 
   if (missing.length > 0) {

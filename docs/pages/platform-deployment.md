@@ -757,6 +757,29 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Uses Azure Identity `DefaultAzureCredential` with token scope `https://ai.azure.com/.default`
   - Claude deployments must already exist in the Azure resource. Microsoft lists additional Claude prerequisites: paid eligible subscription, supported region, Azure Marketplace access for partner models, permission to subscribe to model offerings, and Contributor or Owner role on the resource group. Azure also requires Anthropic deployment metadata: `industry`, `organizationName`, and `countryCode`.
 
+- **`ARCHESTRA_ANTHROPIC_FEDERATION_RULE_ID`** - Anthropic Workload Identity Federation rule ID.
+  - Required when using Anthropic Workload Identity Federation
+  - Example: `fdrl_...`
+
+- **`ARCHESTRA_ANTHROPIC_ORGANIZATION_ID`** - Anthropic organization UUID for token exchange.
+  - Required when using Anthropic Workload Identity Federation
+
+- **`ARCHESTRA_ANTHROPIC_SERVICE_ACCOUNT_ID`** - Anthropic service account targeted by the federation rule.
+  - Required when using Anthropic Workload Identity Federation
+  - Example: `svac_...`
+
+- **`ARCHESTRA_ANTHROPIC_WORKSPACE_ID`** - Workspace to scope the minted Anthropic token to.
+  - Optional unless the federation rule can target multiple workspaces
+  - Example: `wrkspc_...`
+
+- **`ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE`** - Path to the OIDC JWT projected into the Archestra backend container.
+  - Required unless `ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN` is set
+  - Recommended for Kubernetes projected service account tokens because the file can rotate automatically
+
+- **`ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN`** - Inline OIDC JWT for token exchange.
+  - Required only when `ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE` is not set
+  - Prefer the file form for production deployments
+
 - **`ARCHESTRA_GEMINI_BASE_URL`** - Override the Google Gemini API base URL.
   - Default: `https://generativelanguage.googleapis.com`
   - Use this to point to your own proxy or other custom endpoints

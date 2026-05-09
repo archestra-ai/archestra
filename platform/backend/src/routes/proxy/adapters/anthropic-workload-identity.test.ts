@@ -24,14 +24,14 @@ describe("anthropicAdapterFactory Workload Identity Federation", () => {
   });
 
   test("creates a keyless client that exchanges OIDC identity for Anthropic bearer auth", async () => {
-    vi.stubEnv("ANTHROPIC_FEDERATION_RULE_ID", "fdrl_test");
+    vi.stubEnv("ARCHESTRA_ANTHROPIC_FEDERATION_RULE_ID", "fdrl_test");
     vi.stubEnv(
-      "ANTHROPIC_ORGANIZATION_ID",
+      "ARCHESTRA_ANTHROPIC_ORGANIZATION_ID",
       "00000000-0000-0000-0000-000000000000",
     );
-    vi.stubEnv("ANTHROPIC_SERVICE_ACCOUNT_ID", "svac_test");
-    vi.stubEnv("ANTHROPIC_WORKSPACE_ID", "wrkspc_test");
-    vi.stubEnv("ANTHROPIC_IDENTITY_TOKEN", "jwt-from-idp");
+    vi.stubEnv("ARCHESTRA_ANTHROPIC_SERVICE_ACCOUNT_ID", "svac_test");
+    vi.stubEnv("ARCHESTRA_ANTHROPIC_WORKSPACE_ID", "wrkspc_test");
+    vi.stubEnv("ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN", "jwt-from-idp");
 
     const upstreamFetch = vi
       .spyOn(globalThis, "fetch")
@@ -100,13 +100,13 @@ describe("anthropicAdapterFactory Workload Identity Federation", () => {
   });
 
   test("does not use workload identity when a request supplies an API key", () => {
-    vi.stubEnv("ANTHROPIC_FEDERATION_RULE_ID", "fdrl_test");
+    vi.stubEnv("ARCHESTRA_ANTHROPIC_FEDERATION_RULE_ID", "fdrl_test");
     vi.stubEnv(
-      "ANTHROPIC_ORGANIZATION_ID",
+      "ARCHESTRA_ANTHROPIC_ORGANIZATION_ID",
       "00000000-0000-0000-0000-000000000000",
     );
-    vi.stubEnv("ANTHROPIC_SERVICE_ACCOUNT_ID", "svac_test");
-    vi.stubEnv("ANTHROPIC_IDENTITY_TOKEN", "jwt-from-idp");
+    vi.stubEnv("ARCHESTRA_ANTHROPIC_SERVICE_ACCOUNT_ID", "svac_test");
+    vi.stubEnv("ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN", "jwt-from-idp");
 
     const client = anthropicAdapterFactory.createClient("sk-ant-api-key", {
       baseUrl: "https://api.anthropic.com",

@@ -84,6 +84,25 @@ Azure requires Anthropic deployment metadata when creating Claude deployments: `
 
 See Microsoft's [Claude on Foundry guide](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-claude) for the Azure endpoint and authentication details.
 
+### Anthropic Workload Identity Federation
+
+Use Workload Identity Federation when Archestra should call Anthropic with short-lived OIDC-derived bearer tokens instead of a static Anthropic API key. Configure a federation issuer, rule, and service account in Claude Console, then inject the federation rule, organization, service account, optional workspace, and identity token source into the Archestra backend.
+
+Archestra reads the identity token from `ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE` or `ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN`, exchanges it for an Anthropic access token, caches the access token until shortly before expiry, and sends `Authorization: Bearer <token>` to Anthropic. Per-request Anthropic API keys still take precedence.
+
+Set `ARCHESTRA_ANTHROPIC_BASE_URL=https://api.anthropic.com` unless you are targeting a compatible Anthropic endpoint. Then set:
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `ARCHESTRA_ANTHROPIC_FEDERATION_RULE_ID` | Yes | Federation rule ID, for example `fdrl_...` |
+| `ARCHESTRA_ANTHROPIC_ORGANIZATION_ID` | Yes | Anthropic organization UUID |
+| `ARCHESTRA_ANTHROPIC_SERVICE_ACCOUNT_ID` | Yes | Anthropic service account ID, for example `svac_...` |
+| `ARCHESTRA_ANTHROPIC_WORKSPACE_ID` | No | Workspace ID, for example `wrkspc_...`; use when the rule can target multiple workspaces |
+| `ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE` | One token source required | Path to a projected OIDC JWT, recommended for Kubernetes and other rotating token sources |
+| `ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN` | One token source required | Inline OIDC JWT, useful for local smoke tests |
+
+See [deployment configuration](/docs/platform-deployment#llm-provider-configuration) for the environment-variable reference and Anthropic's [Workload Identity Federation guide](https://platform.claude.com/docs/en/manage-claude/workload-identity-federation) for issuer and rule setup.
+
 ## Google Gemini
 
 Archestra supports both the [Google AI Studio](https://ai.google.dev/) (Gemini Developer API) and [Vertex AI](https://cloud.google.com/vertex-ai) implementations of the Gemini API.

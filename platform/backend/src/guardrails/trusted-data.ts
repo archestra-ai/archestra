@@ -64,24 +64,23 @@ export async function evaluateIfContextIsTrusted(
   let unsafeContextBoundary: UnsafeContextBoundary | undefined;
 
   // If agent configured to consider context untrusted from the beginning,
-  // mark context as untrusted immediately and skip evaluation
+  // mark context as untrusted immediately but still evaluate tool result policies.
+  // Previously, this early return skipped policy evaluation entirely, which allowed
+  // blocked Tool Result Policies to be bypassed when the agent started in an
+  // untrusted context.
   if (considerContextUntrusted) {
     logger.debug(
       { agentId },
-      "[trustedData] evaluateIfContextIsTrusted: context marked untrusted by agent config",
+      "[trustedData] evaluateIfContextIsTrusted: context marked untrusted by agent config, continuing policy evaluation",
     );
-    return {
-      toolResultUpdates: {},
-      contextIsTrusted: false,
-      usedDualLlm: false,
-      dualLlmAnalyses: [],
-      unsafeContextBoundary: {
-        kind: "preexisting_untrusted",
-        reason:
-          initialUntrustedReason ??
-          UNSAFE_CONTEXT_BOUNDARY_REASON.agentConfiguredUntrusted,
-      },
+    hasUntrustedData = true;
+    unsafeContextBoundary = {
+      kind: "preexisting_untrusted",
+      reason:
+        initialUntrustedReason ??
+        UNSAFE_CONTEXT_BOUNDARY_REASON.agentConfiguredUntrusted,
     };
+    // Do NOT return early — continue to evaluate tool result policies below.
   }
 
   // First, collect all tool calls from all messages
@@ -112,11 +111,11 @@ export async function evaluateIfContextIsTrusted(
   if (allToolCalls.length === 0) {
     logger.debug(
       { agentId },
-      "[trustedData] evaluateIfContextIsTrusted: no tool calls found, context is trusted",
+      "[trustedData] evaluateIfContextIsTrusted: no tool calls found",
     );
     return {
       toolResultUpdates,
-      contextIsTrusted: true,
+      contextIsTrusted: !hasUntrustedData,
       usedDualLlm: false,
       dualLlmAnalyses: [],
       unsafeContextBoundary,

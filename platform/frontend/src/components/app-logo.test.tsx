@@ -54,3 +54,19 @@ describe("AppLogo", () => {
     expect(screen.queryByText("Archestra.AI")).not.toBeInTheDocument();
   });
 });
+
+  it("renders custom logo left-aligned when centered is false", () => {
+    mockUseTheme.mockReturnValue({ resolvedTheme: "light" });
+    mockUseOrgTheme.mockReturnValue({
+      isLoadingAppearance: false,
+      logo: "data:image/png;base64,square-logo",
+      logoDark: null,
+    });
+
+    const { container } = render(<AppLogo centered={false} />);
+
+    expect(screen.getByAltText("Organization logo")).toBeInTheDocument();
+    // Wrapper should not have justify-center when centered is false
+    const wrapper = container.firstChild as HTMLElement;
+    expect(wrapper.className).not.toContain("justify-center");
+  });

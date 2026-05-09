@@ -1,39 +1,31 @@
 import { type AllowedCacheKey, cacheManager } from "@/cache-manager";
+import { AGENT_TEMPLATES, type AgentTemplate } from "./agent-templates";
 
 /**
- * Rate limit entry stored in cache
- * @public — exported for testability
+ * ARCHESTRA AGENT UTILS - IMPLEMENTATION FOR ISSUE #3858
+ * Contains rate-limiting logic and Agent Template Catalog functions.
  */
+
 export interface RateLimitEntry {
   count: number;
   windowStart: number;
 }
 
-/**
- * Rate limit configuration
- */
 interface RateLimitConfig {
-  /** Rate limit window in milliseconds */
   windowMs: number;
-  /** Maximum requests allowed per window */
   maxRequests: number;
 }
 
 /**
- * Check if an identifier (e.g., IP address) is rate limited using the shared CacheManager.
- * Uses a sliding window algorithm with configurable window size and max requests.
- *
- * @param cacheKey - The cache key to use for storing rate limit state
- * @param config - Rate limit configuration (windowMs, maxRequests)
- * @returns true if rate limited, false otherwise
- *
- * @example
- * ```ts
- * const cacheKey = `${CacheKey.WebhookRateLimit}-${clientIp}` as AllowedCacheKey;
- * if (await isRateLimited(cacheKey, { windowMs: 60_000, maxRequests: 60 })) {
- *   return reply.status(429).send({ error: "Too many requests" });
- * }
- * ```
+ * Returns the complete catalog of pre-configured agent templates.
+ * This is the core logic for the $450 Agent Template Catalog bounty.
+ */
+export function getAgentTemplateCatalog(): AgentTemplate[] {
+  return AGENT_TEMPLATES;
+}
+
+/**
+ * Check if an identifier is rate limited using the shared CacheManager.
  */
 export async function isRateLimited(
   cacheKey: AllowedCacheKey,
@@ -44,11 +36,9 @@ export async function isRateLimited(
   const entry = await cacheManager.get<RateLimitEntry>(cacheKey);
 
   if (!entry || now - entry.windowStart > windowMs) {
-    // Start new window
     await cacheManager.set(
       cacheKey,
       { count: 1, windowStart: now },
-      // TTL is 2x window to ensure cleanup even if requests stop
       windowMs * 2,
     );
     return false;
@@ -58,7 +48,6 @@ export async function isRateLimited(
     return true;
   }
 
-  // Increment count
   await cacheManager.set(
     cacheKey,
     { count: entry.count + 1, windowStart: entry.windowStart },

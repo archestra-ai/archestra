@@ -68,6 +68,12 @@ export const OAuthConfigSchema = z
     }
   });
 
+export const LocalConfigEnvironmentDefaultSchema = z
+  .union([z.string(), z.number(), z.boolean()])
+  .meta({
+    id: "LocalConfigEnvironmentDefault",
+  });
+
 export const EnvironmentVariableSchema = z.object({
   key: z.string().min(1, "Key is required"),
   type: z.enum(["plain_text", "secret", "boolean", "number"]),
@@ -75,7 +81,7 @@ export const EnvironmentVariableSchema = z.object({
   promptOnInstallation: z.boolean(),
   required: z.boolean().optional(),
   description: z.string().optional(),
-  default: z.union([z.string(), z.number(), z.boolean()]).optional(),
+  default: LocalConfigEnvironmentDefaultSchema.optional(),
   mounted: z.boolean().optional(),
 });
 

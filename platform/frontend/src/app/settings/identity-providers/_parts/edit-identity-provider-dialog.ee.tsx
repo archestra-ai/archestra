@@ -10,20 +10,18 @@ import { Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  DialogBody,
-  DialogForm,
-  DialogStickyFooter,
-} from "@/components/ui/dialog";
-import { Form } from "@/components/ui/form";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   useDeleteIdentityProvider,
   useIdentityProvider,
   useUpdateIdentityProvider,
 } from "@/lib/auth/identity-provider.query.ee";
+import { getIdentityProviderDialogNavItems } from "./identity-provider-dialog-nav-items.ee";
+import {
+  type IdentityProviderDialogSection,
+  IdentityProviderDialogShell,
+} from "./identity-provider-dialog-shell.ee";
 import { normalizeIdentityProviderFormValues } from "./identity-provider-form.utils";
 import { OidcConfigForm } from "./oidc-config-form.ee";
 import { SamlConfigForm } from "./saml-config-form.ee";
@@ -43,6 +41,8 @@ export function EditIdentityProviderDialog({
   const updateIdentityProvider = useUpdateIdentityProvider();
   const deleteIdentityProvider = useDeleteIdentityProvider();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [activeSection, setActiveSection] =
+    useState<IdentityProviderDialogSection>("general");
 
   const form = useForm<IdentityProviderFormValues>({
     // biome-ignore lint/suspicious/noExplicitAny: Version mismatch between @hookform/resolvers and Zod
@@ -50,6 +50,7 @@ export function EditIdentityProviderDialog({
     defaultValues: {
       providerId: "",
       issuer: "",
+      ssoLoginEnabled: true,
       domain: "",
       providerType: "oidc",
       oidcConfig: {
@@ -82,6 +83,7 @@ export function EditIdentityProviderDialog({
       form.reset({
         providerId: provider.providerId,
         issuer: provider.issuer,
+        ssoLoginEnabled: provider.ssoLoginEnabled ?? true,
         domain: provider.domain,
         providerType: isSaml ? "saml" : "oidc",
         roleMapping: {
@@ -161,57 +163,79 @@ export function EditIdentityProviderDialog({
     return null;
   }
 
+  const navItems = getIdentityProviderDialogNavItems(providerType);
+  const validActiveSection = navItems.some((item) => item.id === activeSection)
+    ? activeSection
+    : "general";
+
   return (
     <>
-      <FormDialog
+      <IdentityProviderDialogShell
         open={open}
         onOpenChange={handleClose}
         title="Edit Identity Provider"
         description={`Update the configuration for "${provider.providerId}".`}
-        size="large"
-      >
-        <Form {...form}>
-          <DialogForm
-            className="flex min-h-0 flex-1 flex-col"
-            onSubmit={form.handleSubmit(onSubmit)}
+        providerLabel={provider.providerId}
+        form={form}
+        activeSection={validActiveSection}
+        navItems={navItems}
+        onActiveSectionChange={setActiveSection}
+        onSubmit={form.handleSubmit(onSubmit)}
+        sidebarFooter={
+          <PermissionButton
+            type="button"
+            variant="ghost"
+            permissions={{ identityProvider: ["delete"] }}
+            className="w-full justify-start gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+            onClick={() => setShowDeleteConfirm(true)}
+            data-testid={E2eTestId.IdentityProviderDeleteButton}
           >
-            <DialogBody className="pb-4">
-              {providerType === "saml" ? (
-                <SamlConfigForm form={form} />
-              ) : (
-                <OidcConfigForm form={form} />
-              )}
-            </DialogBody>
-
-            <DialogStickyFooter className="mt-0 sm:justify-between">
-              <PermissionButton
-                type="button"
-                variant="destructive"
-                permissions={{ identityProvider: ["delete"] }}
-                className="sm:mr-auto"
-                onClick={() => setShowDeleteConfirm(true)}
-                data-testid={E2eTestId.IdentityProviderDeleteButton}
+            <Trash2 className="h-4 w-4" />
+            Delete
+          </PermissionButton>
+        }
+        footer={
+          <>
+            <Button type="button" variant="outline" onClick={handleClose}>
+              Cancel
+            </Button>
+            <PermissionButton
+              type="submit"
+              permissions={{ identityProvider: ["update"] }}
+              disabled={updateIdentityProvider.isPending}
+              data-testid={E2eTestId.IdentityProviderUpdateButton}
+            >
+              {updateIdentityProvider.isPending
+                ? "Updating..."
+                : "Update Provider"}
+            </PermissionButton>
+          </>
+        }
+      >
+        {providerType === "saml" ? (
+          <SamlConfigForm
+            form={form}
+            identityProviderId={provider.id}
+            activeSection={
+              validActiveSection as Exclude<
+                IdentityProviderDialogSection,
+                "enterprise-managed-credentials"
               >
-                <Trash2 className="h-4 w-4" />
-                Delete
-              </PermissionButton>
-              <Button type="button" variant="outline" onClick={handleClose}>
-                Cancel
-              </Button>
-              <PermissionButton
-                type="submit"
-                permissions={{ identityProvider: ["update"] }}
-                disabled={updateIdentityProvider.isPending}
-                data-testid={E2eTestId.IdentityProviderUpdateButton}
+            }
+          />
+        ) : (
+          <OidcConfigForm
+            form={form}
+            identityProviderId={provider.id}
+            activeSection={
+              validActiveSection as Exclude<
+                IdentityProviderDialogSection,
+                "service-provider-metadata"
               >
-                {updateIdentityProvider.isPending
-                  ? "Updating..."
-                  : "Update Provider"}
-              </PermissionButton>
-            </DialogStickyFooter>
-          </DialogForm>
-        </Form>
-      </FormDialog>
+            }
+          />
+        )}
+      </IdentityProviderDialogShell>
 
       <DeleteConfirmDialog
         open={showDeleteConfirm}

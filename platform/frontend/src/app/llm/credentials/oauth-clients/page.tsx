@@ -35,7 +35,7 @@ import {
 } from "@/lib/llm-oauth-clients.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { formatRelativeTime } from "@/lib/utils/date-time";
-import { useSetProxyAuthAction } from "../layout";
+import { useSetCredentialsAction } from "../layout";
 
 type LlmOauthClient =
   archestraApiTypes.GetLlmOauthClientsResponses["200"][number];
@@ -67,16 +67,16 @@ export default function OAuthClientsPage() {
   const [rotatingOAuthClient, setRotatingOAuthClient] =
     useState<LlmOauthClient | null>(null);
 
-  const setProxyAuthAction = useSetProxyAuthAction();
+  const setCredentialsAction = useSetCredentialsAction();
   useEffect(() => {
-    setProxyAuthAction(
+    setCredentialsAction(
       <Button onClick={() => setIsCreateDialogOpen(true)}>
         <Plus className="h-4 w-4" />
         Create OAuth Client
       </Button>,
     );
-    return () => setProxyAuthAction(null);
-  }, [setProxyAuthAction]);
+    return () => setCredentialsAction(null);
+  }, [setCredentialsAction]);
 
   const columns: ColumnDef<LlmOauthClient>[] = useMemo(
     () => [

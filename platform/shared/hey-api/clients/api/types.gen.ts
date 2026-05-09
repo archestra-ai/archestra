@@ -4,6 +4,10 @@ export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});
 };
 
+export type EmbeddingDimensionsInput = 3072 | 1536 | 768;
+
+export type LocalConfigEnvironmentDefaultInput = string | number | boolean;
+
 export type OpenAiChatCompletionRequestInput = {
     model: string;
     /**
@@ -5258,6 +5262,10 @@ export type UserConfigFieldInput = {
     headerName?: string;
     valuePrefix?: string;
 };
+
+export type EmbeddingDimensions = 3072 | 1536 | 768;
+
+export type LocalConfigEnvironmentDefault = string | number | boolean;
 
 export type OpenAiChatCompletionRequest = {
     model: string;
@@ -10603,24 +10611,28 @@ export type PostV1A2aByAgentIdResponses = {
 
 export type PostV1A2aByAgentIdResponse = PostV1A2aByAgentIdResponses[keyof PostV1A2aByAgentIdResponses];
 
-export type GetV2A2aByAgentIdWellKnownAgentJsonData = {
+export type GetV2A2aByAgentIdWellKnownAgentCardJsonData = {
     body?: never;
     path: {
         agentId: string;
     };
     query?: never;
-    url: '/v2/a2a/{agentId}/.well-known/agent.json';
+    url: '/v2/a2a/{agentId}/.well-known/agent-card.json';
 };
 
-export type GetV2A2aByAgentIdWellKnownAgentJsonResponses = {
+export type GetV2A2aByAgentIdWellKnownAgentCardJsonResponses = {
     /**
      * Default Response
      */
     200: {
         name: string;
         description: string;
-        url: string;
         version: string;
+        supportedInterfaces: Array<{
+            url: string;
+            protocolBinding: string;
+            protocolVersion: string;
+        }>;
         capabilities: {
             streaming: boolean;
             pushNotifications: boolean;
@@ -10639,7 +10651,7 @@ export type GetV2A2aByAgentIdWellKnownAgentJsonResponses = {
     };
 };
 
-export type GetV2A2aByAgentIdWellKnownAgentJsonResponse = GetV2A2aByAgentIdWellKnownAgentJsonResponses[keyof GetV2A2aByAgentIdWellKnownAgentJsonResponses];
+export type GetV2A2aByAgentIdWellKnownAgentCardJsonResponse = GetV2A2aByAgentIdWellKnownAgentCardJsonResponses[keyof GetV2A2aByAgentIdWellKnownAgentCardJsonResponses];
 
 export type PostV2A2aByAgentIdData = {
     body: {
@@ -11611,6 +11623,260 @@ export type GetDefaultLlmProxyResponses = {
 
 export type GetDefaultLlmProxyResponse = GetDefaultLlmProxyResponses[keyof GetDefaultLlmProxyResponses];
 
+export type ImportAgentData = {
+    body: {
+        /**
+         * Schema version for forward compatibility
+         */
+        version: '1';
+        /**
+         * ISO 8601 timestamp
+         */
+        exportedAt: string;
+        /**
+         * Informational: hostname of the source instance
+         */
+        sourceInstance?: string | null;
+        agent: {
+            name: string;
+            /**
+             * Only internal agents are exportable
+             */
+            agentType: 'agent';
+            description: string | null;
+            systemPrompt: string | null;
+            icon: string | null;
+            /**
+             * Original scope; imports always default to personal
+             */
+            scope: 'personal' | 'team' | 'org';
+            considerContextUntrusted: boolean;
+            toolAssignmentMode: 'automatic' | 'manual';
+            toolExposureMode: 'full' | 'search_and_run_only';
+            /**
+             * Informational; not auto-configured on import
+             */
+            llmModel: string | null;
+            incomingEmailEnabled: boolean;
+            incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+            incomingEmailAllowedDomain: string | null;
+            passthroughHeaders?: Array<string> | null;
+        };
+        labels: Array<{
+            key: string;
+            value: string;
+        }>;
+        suggestedPrompts: Array<{
+            summaryTitle: string;
+            prompt: string;
+        }>;
+        tools: Array<{
+            /**
+             * Tool name as registered in the MCP catalog
+             */
+            toolName: string;
+            /**
+             * MCP catalog item name (null for proxy-sniffed tools)
+             */
+            catalogName: string | null;
+            /**
+             * How credentials are resolved for this tool assignment
+             */
+            credentialResolutionMode?: 'static' | 'dynamic' | 'enterprise_managed';
+        }>;
+        delegations: Array<{
+            /**
+             * Name of the target agent for delegation
+             */
+            targetAgentName: string;
+        }>;
+        knowledgeBases: Array<{
+            /**
+             * Knowledge base name
+             */
+            name: string;
+        }>;
+        connectors: Array<{
+            /**
+             * Connector name
+             */
+            name: string;
+            /**
+             * Connector type (e.g. confluence, github)
+             */
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce';
+        }>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agents/import';
+};
+
+export type ImportAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ImportAgentError = ImportAgentErrors[keyof ImportAgentErrors];
+
+export type ImportAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        agent: {
+            id: string;
+            organizationId: string;
+            authorId: string | null;
+            scope: 'personal' | 'team' | 'org';
+            name: string;
+            slug: string | null;
+            isDefault: boolean;
+            isPersonalGateway: boolean;
+            considerContextUntrusted: boolean;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            systemPrompt: string | null;
+            description: string | null;
+            icon: string | null;
+            incomingEmailEnabled: boolean;
+            incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+            incomingEmailAllowedDomain: string | null;
+            llmApiKeyId: string | null;
+            llmModel: string | null;
+            identityProviderId: string | null;
+            passthroughHeaders: Array<string> | null;
+            toolExposureMode: 'full' | 'search_and_run_only';
+            toolAssignmentMode: 'automatic' | 'manual';
+            builtInAgentConfig: {
+                name: 'policy-configuration-subagent';
+                autoConfigureOnToolDiscovery: boolean;
+            } | {
+                name: 'dual-llm-main-agent';
+                maxRounds: number;
+            } | {
+                name: 'dual-llm-quarantine-agent';
+            } | null;
+            builtIn: boolean | null;
+            createdAt: string;
+            updatedAt: string;
+            tools: Array<{
+                id: string;
+                agentId: string | null;
+                catalogId: string | null;
+                delegateToAgentId: string | null;
+                name: string;
+                /**
+                 *
+                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                 *
+                 * The parameters the functions accepts, described as a JSON Schema object. See the
+                 * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                 * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                 * documentation about the format.
+                 *
+                 * Omitting parameters defines a function with an empty parameter list.
+                 *
+                 */
+                parameters?: {
+                    [key: string]: unknown;
+                };
+                description: string | null;
+                meta: string | number | boolean | null | {
+                    [key: string]: unknown;
+                } | Array<unknown> | null;
+                policiesAutoConfiguredAt: string | null;
+                policiesAutoConfiguringStartedAt: string | null;
+                policiesAutoConfiguredReasoning: string | null;
+                policiesAutoConfiguredModel: string | null;
+                createdAt: string;
+                updatedAt: string;
+            }>;
+            teams: Array<{
+                id: string;
+                name: string;
+            }>;
+            labels: Array<{
+                key: string;
+                value: string;
+                keyId?: string;
+                valueId?: string;
+            }>;
+            authorName?: string | null;
+            knowledgeBaseIds: Array<string>;
+            connectorIds: Array<string>;
+            suggestedPrompts: Array<{
+                summaryTitle: string;
+                prompt: string;
+            }>;
+        };
+        warnings: Array<{
+            type: 'tool' | 'knowledgeBase' | 'connector' | 'delegation';
+            name: string;
+            message: string;
+        }>;
+    };
+};
+
+export type ImportAgentResponse = ImportAgentResponses[keyof ImportAgentResponses];
+
 export type DeleteAgentData = {
     body?: never;
     path: {
@@ -12237,6 +12503,171 @@ export type CloneAgentResponses = {
 };
 
 export type CloneAgentResponse = CloneAgentResponses[keyof CloneAgentResponses];
+
+export type ExportAgentData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/export';
+};
+
+export type ExportAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ExportAgentError = ExportAgentErrors[keyof ExportAgentErrors];
+
+export type ExportAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        /**
+         * Schema version for forward compatibility
+         */
+        version: '1';
+        /**
+         * ISO 8601 timestamp
+         */
+        exportedAt: string;
+        /**
+         * Informational: hostname of the source instance
+         */
+        sourceInstance?: string | null;
+        agent: {
+            name: string;
+            /**
+             * Only internal agents are exportable
+             */
+            agentType: 'agent';
+            description: string | null;
+            systemPrompt: string | null;
+            icon: string | null;
+            /**
+             * Original scope; imports always default to personal
+             */
+            scope: 'personal' | 'team' | 'org';
+            considerContextUntrusted: boolean;
+            toolAssignmentMode: 'automatic' | 'manual';
+            toolExposureMode: 'full' | 'search_and_run_only';
+            /**
+             * Informational; not auto-configured on import
+             */
+            llmModel: string | null;
+            incomingEmailEnabled: boolean;
+            incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+            incomingEmailAllowedDomain: string | null;
+            passthroughHeaders?: Array<unknown> | null;
+        };
+        labels: Array<{
+            key: string;
+            value: string;
+        }>;
+        suggestedPrompts: Array<{
+            summaryTitle: string;
+            prompt: string;
+        }>;
+        tools: Array<{
+            /**
+             * Tool name as registered in the MCP catalog
+             */
+            toolName: string;
+            /**
+             * MCP catalog item name (null for proxy-sniffed tools)
+             */
+            catalogName: string | null;
+            /**
+             * How credentials are resolved for this tool assignment
+             */
+            credentialResolutionMode?: 'static' | 'dynamic' | 'enterprise_managed';
+        }>;
+        delegations: Array<{
+            /**
+             * Name of the target agent for delegation
+             */
+            targetAgentName: string;
+        }>;
+        knowledgeBases: Array<{
+            /**
+             * Knowledge base name
+             */
+            name: string;
+        }>;
+        connectors: Array<{
+            /**
+             * Connector name
+             */
+            name: string;
+            /**
+             * Connector type (e.g. confluence, github)
+             */
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce';
+        }>;
+    };
+};
+
+export type ExportAgentResponse = ExportAgentResponses[keyof ExportAgentResponses];
 
 export type GetLabelKeysData = {
     body?: never;
@@ -18973,6 +19404,140 @@ export type UpdateChatConversationResponses = {
 };
 
 export type UpdateChatConversationResponse = UpdateChatConversationResponses[keyof UpdateChatConversationResponses];
+
+export type ForkChatConversationData = {
+    body: {
+        agentId: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/fork';
+};
+
+export type ForkChatConversationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ForkChatConversationError = ForkChatConversationErrors[keyof ForkChatConversationErrors];
+
+export type ForkChatConversationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        userId: string;
+        organizationId: string;
+        agentId: string | null;
+        chatApiKeyId: string | null;
+        title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+        hasCustomToolSelection: boolean;
+        todoList: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        artifact: string | null;
+        pinnedAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+            systemPrompt: string | null;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            llmApiKeyId: string | null;
+        } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
+        } | null;
+        messages: Array<unknown>;
+        chatErrors: Array<{
+            id: string;
+            conversationId: string;
+            error: {
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                message: string;
+                isRetryable: boolean;
+                sessionId?: string;
+                traceId?: string;
+                spanId?: string;
+                originalError?: {
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+                    status?: number;
+                    message?: string;
+                    type?: string;
+                    raw?: unknown;
+                };
+            };
+            createdAt: string;
+        }>;
+    };
+};
+
+export type ForkChatConversationResponse = ForkChatConversationResponses[keyof ForkChatConversationResponses];
 
 export type GetChatAgentMcpToolsData = {
     body?: never;
@@ -26557,7 +27122,7 @@ export type GetInternalMcpCatalogResponses = {
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
-                default?: string | number | boolean;
+                default?: LocalConfigEnvironmentDefault;
                 mounted?: boolean;
             }>;
             envFrom?: Array<{
@@ -26684,7 +27249,7 @@ export type CreateInternalMcpCatalogItemData = {
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
-                default?: string | number | boolean;
+                default?: LocalConfigEnvironmentDefaultInput;
                 mounted?: boolean;
             }>;
             envFrom?: Array<{
@@ -26876,7 +27441,7 @@ export type CreateInternalMcpCatalogItemResponses = {
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
-                default?: string | number | boolean;
+                default?: LocalConfigEnvironmentDefault;
                 mounted?: boolean;
             }>;
             envFrom?: Array<{
@@ -27165,7 +27730,7 @@ export type GetInternalMcpCatalogItemResponses = {
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
-                default?: string | number | boolean;
+                default?: LocalConfigEnvironmentDefault;
                 mounted?: boolean;
             }>;
             envFrom?: Array<{
@@ -27290,7 +27855,7 @@ export type UpdateInternalMcpCatalogItemData = {
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
-                default?: string | number | boolean;
+                default?: LocalConfigEnvironmentDefaultInput;
                 mounted?: boolean;
             }>;
             envFrom?: Array<{
@@ -27484,7 +28049,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
-                default?: string | number | boolean;
+                default?: LocalConfigEnvironmentDefault;
                 mounted?: boolean;
             }>;
             envFrom?: Array<{
@@ -31855,7 +32420,7 @@ export type GetLlmModelsResponses = {
         };
         isBest?: boolean;
         isFastest?: boolean;
-        embeddingDimensions?: 3072 | 1536 | 768 | null;
+        embeddingDimensions?: EmbeddingDimensions | null;
     }>;
 };
 
@@ -32035,7 +32600,7 @@ export type GetModelsWithApiKeysResponses = {
         customPricePerMillionInput: string | null;
         customPricePerMillionOutput: string | null;
         ignored: boolean;
-        embeddingDimensions: 3072 | 1536 | 768 | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         discoveredViaLlmProxy: boolean;
         lastSyncedAt: string;
         createdAt: string;
@@ -32063,7 +32628,7 @@ export type UpdateModelData = {
         customPricePerMillionInput?: string | null;
         customPricePerMillionOutput?: string | null;
         ignored?: boolean;
-        embeddingDimensions?: 3072 | 1536 | 768 | null;
+        embeddingDimensions?: EmbeddingDimensionsInput | null;
         inputModalities?: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
         outputModalities?: Array<'text' | 'image' | 'audio'> | null;
     };
@@ -32158,7 +32723,7 @@ export type UpdateModelResponses = {
         customPricePerMillionInput: string | null;
         customPricePerMillionOutput: string | null;
         ignored: boolean;
-        embeddingDimensions: 3072 | 1536 | 768 | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         discoveredViaLlmProxy: boolean;
         lastSyncedAt: string;
         createdAt: string;
@@ -33504,7 +34069,7 @@ export type GetMcpServerInstallationRequestsResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
-                    default?: string | number | boolean;
+                    default?: LocalConfigEnvironmentDefault;
                     mounted?: boolean;
                 }>;
                 envFrom?: Array<{
@@ -33603,7 +34168,7 @@ export type CreateMcpServerInstallationRequestData = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
-                    default?: string | number | boolean;
+                    default?: LocalConfigEnvironmentDefaultInput;
                     mounted?: boolean;
                 }>;
                 envFrom?: Array<{
@@ -33762,7 +34327,7 @@ export type CreateMcpServerInstallationRequestResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
-                    default?: string | number | boolean;
+                    default?: LocalConfigEnvironmentDefault;
                     mounted?: boolean;
                 }>;
                 envFrom?: Array<{
@@ -34026,7 +34591,7 @@ export type GetMcpServerInstallationRequestResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
-                    default?: string | number | boolean;
+                    default?: LocalConfigEnvironmentDefault;
                     mounted?: boolean;
                 }>;
                 envFrom?: Array<{
@@ -34125,7 +34690,7 @@ export type UpdateMcpServerInstallationRequestData = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
-                    default?: string | number | boolean;
+                    default?: LocalConfigEnvironmentDefaultInput;
                     mounted?: boolean;
                 }>;
                 envFrom?: Array<{
@@ -34296,7 +34861,7 @@ export type UpdateMcpServerInstallationRequestResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
-                    default?: string | number | boolean;
+                    default?: LocalConfigEnvironmentDefault;
                     mounted?: boolean;
                 }>;
                 envFrom?: Array<{
@@ -34477,7 +35042,7 @@ export type ApproveMcpServerInstallationRequestResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
-                    default?: string | number | boolean;
+                    default?: LocalConfigEnvironmentDefault;
                     mounted?: boolean;
                 }>;
                 envFrom?: Array<{
@@ -34658,7 +35223,7 @@ export type DeclineMcpServerInstallationRequestResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
-                    default?: string | number | boolean;
+                    default?: LocalConfigEnvironmentDefault;
                     mounted?: boolean;
                 }>;
                 envFrom?: Array<{
@@ -34839,7 +35404,7 @@ export type AddMcpServerInstallationRequestNoteResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
-                    default?: string | number | boolean;
+                    default?: LocalConfigEnvironmentDefault;
                     mounted?: boolean;
                 }>;
                 envFrom?: Array<{
@@ -38661,6 +39226,103 @@ export type DeleteOptimizationRuleResponses = {
 
 export type DeleteOptimizationRuleResponse = DeleteOptimizationRuleResponses[keyof DeleteOptimizationRuleResponses];
 
+export type GetOptimizationRuleData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/optimization-rules/{id}';
+};
+
+export type GetOptimizationRuleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOptimizationRuleError = GetOptimizationRuleErrors[keyof GetOptimizationRuleErrors];
+
+export type GetOptimizationRuleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        conditions: Array<{
+            maxLength: number;
+        } | {
+            hasTools: boolean;
+        }>;
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+        targetModel: string;
+        enabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetOptimizationRuleResponse = GetOptimizationRuleResponses[keyof GetOptimizationRuleResponses];
+
 export type UpdateOptimizationRuleData = {
     body: {
         id?: string;
@@ -39361,7 +40023,7 @@ export type GetOrganizationResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
-        embeddingDimensions: number | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -39630,7 +40292,7 @@ export type UpdateAppearanceSettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
-        embeddingDimensions: number | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -39772,7 +40434,7 @@ export type UpdateSecuritySettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
-        embeddingDimensions: number | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -39915,7 +40577,7 @@ export type UpdateLlmSettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
-        embeddingDimensions: number | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -40059,7 +40721,7 @@ export type UpdateAgentSettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
-        embeddingDimensions: number | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -40210,7 +40872,7 @@ export type UpdateConnectionSettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
-        embeddingDimensions: number | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -40352,7 +41014,7 @@ export type UpdateAuthSettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
-        embeddingDimensions: number | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -40496,7 +41158,7 @@ export type UpdateKnowledgeSettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
-        embeddingDimensions: number | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -40635,7 +41297,7 @@ export type DropEmbeddingConfigResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
-        embeddingDimensions: number | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -40863,7 +41525,7 @@ export type CompleteOnboardingResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
-        embeddingDimensions: number | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -46805,6 +47467,7 @@ export type GetIdentityProvidersResponses = {
         organizationId: string | null;
         domain: string;
         domainVerified: boolean | null;
+        ssoLoginEnabled: boolean;
     }>;
 };
 
@@ -46933,6 +47596,7 @@ export type CreateIdentityProviderData = {
         providerId: string;
         domain: string;
         domainVerified?: boolean | null;
+        ssoLoginEnabled?: boolean;
     };
     path?: never;
     query?: never;
@@ -47132,6 +47796,7 @@ export type CreateIdentityProviderResponses = {
         organizationId: string | null;
         domain: string;
         domainVerified: boolean | null;
+        ssoLoginEnabled: boolean;
     };
 };
 
@@ -47219,6 +47884,95 @@ export type GetIdentityProviderIdpLogoutUrlResponses = {
 };
 
 export type GetIdentityProviderIdpLogoutUrlResponse = GetIdentityProviderIdpLogoutUrlResponses[keyof GetIdentityProviderIdpLogoutUrlResponses];
+
+export type GetIdentityProviderLatestIdTokenClaimsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/identity-providers/{id}/latest-id-token-claims';
+};
+
+export type GetIdentityProviderLatestIdTokenClaimsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetIdentityProviderLatestIdTokenClaimsError = GetIdentityProviderLatestIdTokenClaimsErrors[keyof GetIdentityProviderLatestIdTokenClaimsErrors];
+
+export type GetIdentityProviderLatestIdTokenClaimsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        providerId: string;
+        claims: {
+            [key: string]: unknown;
+        } | null;
+        updatedAt: string | null;
+    };
+};
+
+export type GetIdentityProviderLatestIdTokenClaimsResponse = GetIdentityProviderLatestIdTokenClaimsResponses[keyof GetIdentityProviderLatestIdTokenClaimsResponses];
 
 export type DeleteIdentityProviderData = {
     body?: never;
@@ -47507,6 +48261,7 @@ export type GetIdentityProviderResponses = {
         organizationId: string | null;
         domain: string;
         domainVerified: boolean | null;
+        ssoLoginEnabled: boolean;
     };
 };
 
@@ -47634,6 +48389,7 @@ export type UpdateIdentityProviderData = {
         providerId?: string;
         domain?: string;
         domainVerified?: boolean | null;
+        ssoLoginEnabled?: boolean;
     };
     path: {
         id: string;
@@ -47835,6 +48591,7 @@ export type UpdateIdentityProviderResponses = {
         organizationId: string | null;
         domain: string;
         domainVerified: boolean | null;
+        ssoLoginEnabled: boolean;
     };
 };
 

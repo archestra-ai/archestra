@@ -72,7 +72,9 @@ const appendProxySuffix = (baseUrl: string): string => {
 export const getExternalProxyUrls = (): string[] => {
   const externalUrl = env("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL");
   if (!externalUrl) {
-    return [];
+    return typeof window !== "undefined"
+      ? [appendProxySuffix(window.location.origin)]
+      : [];
   }
   return externalUrl
     .split(",")

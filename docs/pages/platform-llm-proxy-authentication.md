@@ -47,7 +47,7 @@ Virtual API keys are platform-managed bearer tokens that map to one or more prov
 
 ### Creating Virtual Keys
 
-1. Go to **LLM Proxies > Proxy Auth > Virtual Keys**
+1. Go to **LLM Proxies > Credentials > Virtual Keys**
 2. Create a virtual key
 3. Map at least one provider API key
 4. Copy the generated token (shown only once)
@@ -92,7 +92,7 @@ Virtual keys are still the recommended path for generic LLM clients that cannot 
 
 ### Managing OAuth Clients
 
-1. Go to **LLM Proxies > Proxy Auth > OAuth Clients**
+1. Go to **LLM Proxies > Credentials > OAuth Clients**
 2. Create an OAuth client
 3. Select the LLM proxies it can access
 4. Map the provider API keys it can use

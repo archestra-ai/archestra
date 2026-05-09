@@ -9,7 +9,7 @@ import {
   createSelectSchema,
   createUpdateSchema,
 } from "drizzle-zod";
-import type { z } from "zod";
+import { z } from "zod";
 import { schema } from "@/database";
 
 const extendedFields = {
@@ -33,6 +33,12 @@ export const PublicIdentityProviderSchema = SelectIdentityProviderSchema.pick({
   providerId: true,
 });
 
+export const IdentityProviderLatestIdTokenClaimsSchema = z.object({
+  providerId: z.string(),
+  claims: z.record(z.string(), z.unknown()).nullable(),
+  updatedAt: z.date().nullable(),
+});
+
 export const InsertIdentityProviderSchema = createInsertSchema(
   schema.identityProvidersTable,
   extendedFields,
@@ -50,6 +56,9 @@ export const UpdateIdentityProviderSchema = createUpdateSchema(
 export type IdentityProvider = z.infer<typeof SelectIdentityProviderSchema>;
 export type PublicIdentityProvider = z.infer<
   typeof PublicIdentityProviderSchema
+>;
+export type IdentityProviderLatestIdTokenClaims = z.infer<
+  typeof IdentityProviderLatestIdTokenClaimsSchema
 >;
 export type InsertIdentityProvider = z.infer<
   typeof InsertIdentityProviderSchema

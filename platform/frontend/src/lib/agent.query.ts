@@ -1,5 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   DEFAULT_SORT_BY,
   DEFAULT_SORT_DIRECTION,
@@ -12,11 +13,13 @@ const {
   createAgent,
   cloneAgent,
   deleteAgent,
+  exportAgent,
   getAgents,
   getAllAgents,
   getDefaultMcpGateway,
   getDefaultLlmProxy,
   getAgent,
+  importAgent,
   updateAgent,
   getLabelKeys,
   getLabelValues,
@@ -323,6 +326,50 @@ export function useOrgScopedAgents() {
         query: { agentType: "agent", excludeBuiltIn: true, scope: "org" },
       });
       return response.data ?? [];
+    },
+  });
+}
+
+export function useExportAgent() {
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await exportAgent({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      toast.success(`Agent "${data.agent.name}" exported successfully`);
+    },
+  });
+}
+
+export function useImportAgent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: archestraApiTypes.ImportAgentData["body"]) => {
+      const { data, error } = await importAgent({ body: payload });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
+
+      const warningCount = data.warnings.length;
+      if (warningCount > 0) {
+        toast.warning(
+          `Agent "${data.agent.name}" imported with ${warningCount} warning${warningCount !== 1 ? "s" : ""}`,
+        );
+      } else {
+        toast.success(`Agent "${data.agent.name}" imported successfully`);
+      }
     },
   });
 }

@@ -78,10 +78,27 @@ export async function loginViaUi(
   page: Page,
   email: string,
   password: string,
+  options: { skipDefaultPasswordPrompt?: boolean } = {},
 ): Promise<void> {
   await page.getByLabel(/email/i).fill(email);
   await page.getByLabel(/password/i).fill(password);
-  await page.getByRole("button", { name: /^login$/i }).click();
+  await page.getByTestId(E2eTestId.SignInSubmitButton).click();
+  if (options.skipDefaultPasswordPrompt !== false) {
+    await skipDefaultPasswordChangePromptIfVisible(page);
+  }
+}
+
+async function skipDefaultPasswordChangePromptIfVisible(
+  page: Page,
+): Promise<void> {
+  const promptVisible = await page
+    .getByTestId(E2eTestId.DefaultPasswordChangePrompt)
+    .waitFor({ state: "visible", timeout: 10_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (promptVisible) {
+    await page.getByTestId(E2eTestId.DefaultPasswordChangeSkipButton).click();
+  }
 }
 
 export async function navigateAndVerifyAuth(params: {
@@ -107,7 +124,7 @@ export async function navigateAndVerifyAuth(params: {
   await expect(async () => {
     await params.goToPage(page, path);
     await page.waitForLoadState("domcontentloaded");
-    const loginButton = page.getByRole("button", { name: /login/i });
+    const loginButton = page.getByTestId(E2eTestId.SignInSubmitButton);
     if (await loginButton.isVisible({ timeout: 2_000 }).catch(() => false)) {
       await loginViaApi(page, email, password);
       await params.goToPage(page, path);

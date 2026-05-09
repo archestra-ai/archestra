@@ -70,18 +70,45 @@ async function handler(
   response.headers.forEach((value, key) => {
     // Don't forward certain headers that Next.js manages
     if (
-      !["content-encoding", "transfer-encoding"].includes(key.toLowerCase())
+      !["content-encoding", "set-cookie", "transfer-encoding"].includes(
+        key.toLowerCase(),
+      )
     ) {
       responseHeaders.set(key, value);
     }
   });
 
-  // Return the response with the same status and headers
-  return new NextResponse(response.body, {
+  const nextResponse = new NextResponse(response.body, {
     status: response.status,
     statusText: response.statusText,
     headers: responseHeaders,
   });
+
+  getSetCookieHeaders(response.headers).forEach((cookie) => {
+    nextResponse.headers.append("set-cookie", cookie);
+  });
+
+  // Return the response with the same status and headers
+  return nextResponse;
+}
+
+function getSetCookieHeaders(headers: Headers) {
+  const headersWithGetSetCookie = headers as Headers & {
+    getSetCookie?: () => string[];
+  };
+  if (typeof headersWithGetSetCookie.getSetCookie === "function") {
+    return headersWithGetSetCookie.getSetCookie();
+  }
+
+  const setCookie = headers.get("set-cookie");
+  return setCookie ? splitCombinedSetCookieHeader(setCookie) : [];
+}
+
+function splitCombinedSetCookieHeader(header: string) {
+  return header
+    .split(/,(?=\s*[^;,=\s]+(?:\.[^;,=\s]+)*=)/)
+    .map((cookie) => cookie.trim())
+    .filter(Boolean);
 }
 
 export const GET = handler;

@@ -121,6 +121,22 @@ class KnowledgeBaseModel {
 
     return result?.count ?? 0;
   }
+  static async findByName(
+    name: string,
+    organizationId: string,
+  ): Promise<KnowledgeBase | null> {
+    const [result] = await db
+      .select()
+      .from(schema.knowledgeBasesTable)
+      .where(
+        and(
+          eq(schema.knowledgeBasesTable.name, name),
+          eq(schema.knowledgeBasesTable.organizationId, organizationId),
+        ),
+      );
+
+    return result ?? null;
+  }
 }
 
 export default KnowledgeBaseModel;

@@ -4,7 +4,7 @@ category: Administration
 subcategory: Identity Providers
 description: "End-to-end setup for Okta — SSO sign-in plus Okta-managed token exchange for downstream MCP tool calls"
 order: 8
-lastUpdated: 2026-05-06
+lastUpdated: 2026-05-07
 ---
 
 <!--
@@ -154,6 +154,8 @@ Role mapping and team sync are provider-agnostic and fully documented on dedicat
 - [Team Sync](/docs/platform-sso-team-sync)
 
 For Okta, the most common pattern is mapping the `groups` claim to Archestra teams. Make sure the **Groups claim** is enabled in your Okta authorization server or app integration, and that the SSO provider scopes include `groups`. Okta's guide covers both pieces: [Customize tokens returned from Okta with a groups claim](https://developer.okta.com/docs/guides/customize-tokens-groups-claim/main/).
+
+When using the Archestra OIN app, Okta only includes groups whose names start with `Archestra_` in the `groups` claim. For example, map Okta groups like `Archestra_Admin` or `Archestra_Engineering` to the matching Archestra role rules or team links. Okta can include up to 100 groups in the claim.
 
 Then in Archestra, leave the default group extraction or use:
 

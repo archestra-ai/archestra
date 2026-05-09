@@ -19,6 +19,7 @@ import {
   extractProfileIdAndTokenFromRequest,
   validateMCPGatewayToken,
 } from "./mcp-gateway.utils";
+import { getPublicRequestOrigin } from "./request-origin";
 
 // =============================================================================
 // MCP Gateway request handling (stateless mode)
@@ -32,7 +33,8 @@ function setWWWAuthenticateHeader(
   request: FastifyRequest,
   reply: FastifyReply,
 ) {
-  const resourceMetadataUrl = `${request.protocol}://${request.headers.host}/.well-known/oauth-protected-resource${request.url}`;
+  const origin = getPublicRequestOrigin(request);
+  const resourceMetadataUrl = `${origin}/.well-known/oauth-protected-resource${request.url}`;
   reply.header(
     "WWW-Authenticate",
     `Bearer resource_metadata="${resourceMetadataUrl}"`,

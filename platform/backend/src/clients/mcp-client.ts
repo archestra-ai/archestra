@@ -14,6 +14,7 @@ import {
   type AssignedCredentialUnavailableMcpToolError,
   type AuthExpiredMcpToolError,
   type AuthRequiredMcpToolError,
+  LINKED_IDP_SSO_MODE,
   MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
   MCP_CATALOG_INSTALL_PATH,
   MCP_CATALOG_INSTALL_QUERY_PARAM,
@@ -44,6 +45,7 @@ import {
   type ResolvedEnterpriseTransportCredential,
   resolveEnterpriseTransportCredential,
 } from "@/services/identity-providers/enterprise-managed/broker";
+import { findExternalIdentityProviderById } from "@/services/identity-providers/oidc";
 import type {
   CommonMcpToolDefinition,
   CommonToolCall,
@@ -319,7 +321,10 @@ class McpClient {
     toolCall: CommonToolCall,
     agentId: string,
     tokenAuth?: TokenAuthContext,
-    options?: { conversationId?: string },
+    options?: {
+      conversationId?: string;
+      identityProviderRedirectPath?: string;
+    },
   ): Promise<CommonToolResult> {
     // Derive auth info for logging
     const authInfo =
@@ -379,13 +384,14 @@ class McpClient {
       tool.credentialResolutionMode === "enterprise_managed" &&
       !enterpriseTransportCredential
     ) {
-      const authError = this.buildExpiredAuthMessage(
-        catalogItem.name,
-        catalogItem.id,
-        targetMcpServerId,
-        tokenAuth,
-        "Archestra could not resolve a usable identity-provider token for your current session. Re-authenticate to continue using this tool.",
-      );
+      const authError =
+        await this.buildEnterpriseManagedIdentityProviderAuthMessage(
+          catalogItem.name,
+          catalogItem.id,
+          effectiveEnterpriseManagedConfig?.identityProviderId ?? null,
+          tokenAuth,
+          options,
+        );
       return this.createErrorResult(
         toolCall,
         agentId,
@@ -2210,7 +2216,8 @@ class McpClient {
       }),
       catalogId,
       catalogName: catalogDisplayName,
-      installUrl,
+      action: "install_mcp_credentials",
+      actionUrl: installUrl,
     };
   }
 
@@ -2259,6 +2266,82 @@ class McpClient {
       catalogId,
       catalogName: catalogDisplayName,
     };
+  }
+
+  private async buildEnterpriseManagedIdentityProviderAuthMessage(
+    catalogDisplayName: string,
+    catalogId: string,
+    identityProviderId: string | null,
+    tokenAuth?: TokenAuthContext,
+    options?: {
+      conversationId?: string;
+      identityProviderRedirectPath?: string;
+    },
+  ): Promise<AuthRequiredMcpToolError> {
+    const identityProvider = identityProviderId
+      ? await findExternalIdentityProviderById(identityProviderId)
+      : null;
+    if (!identityProvider) {
+      return this.buildAuthRequiredMessage(
+        catalogDisplayName,
+        catalogId,
+        tokenAuth,
+      );
+    }
+
+    const connectUrl = this.buildIdentityProviderConnectUrl(
+      identityProvider.providerId,
+      options,
+    );
+    return {
+      type: "auth_required",
+      message: formatActionableAuthError({
+        title: `Authentication required for "${catalogDisplayName}"`,
+        detail: `This tool needs a current ${identityProvider.providerId} session for your account before this deployment can request the downstream credential.`,
+        actionLabel: `connect ${identityProvider.providerId}`,
+        url: connectUrl,
+        postAction:
+          "Once you have completed authentication, retry this tool call.",
+      }),
+      catalogId,
+      catalogName: catalogDisplayName,
+      action: "connect_identity_provider",
+      actionUrl: connectUrl,
+      providerId: identityProvider.providerId,
+    };
+  }
+
+  private buildIdentityProviderConnectUrl(
+    providerId: string,
+    options?: {
+      conversationId?: string;
+      identityProviderRedirectPath?: string;
+    },
+  ): string {
+    const redirectTo = this.getIdentityProviderRedirectPath(options);
+    const searchParams = new URLSearchParams({
+      redirectTo,
+      mode: LINKED_IDP_SSO_MODE,
+    });
+    return `${config.frontendBaseUrl}/auth/sso/${encodeURIComponent(providerId)}?${searchParams.toString()}`;
+  }
+
+  private getIdentityProviderRedirectPath(options?: {
+    conversationId?: string;
+    identityProviderRedirectPath?: string;
+  }): string {
+    if (
+      options?.identityProviderRedirectPath?.startsWith("/") &&
+      !options.identityProviderRedirectPath.startsWith("//")
+    ) {
+      return options.identityProviderRedirectPath;
+    }
+
+    if (options?.conversationId) {
+      return `/chat/${options.conversationId}`;
+    }
+
+    return "/chat";
   }
 
   private formatAuthContext(tokenAuth?: TokenAuthContext): string {

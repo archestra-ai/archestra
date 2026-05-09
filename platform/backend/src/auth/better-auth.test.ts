@@ -1374,6 +1374,52 @@ describe("handleAfterHook", () => {
       expect(member?.role).toBe("admin");
     });
 
+    test("should apply default role when role mapping has no rules", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeAccount,
+      makeIdentityProvider,
+    }) => {
+      const user = await makeUser({ email: "default-only@example.com" });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "admin" });
+
+      await makeIdentityProvider(org.id, {
+        providerId: "keycloak-default-only",
+        roleMapping: {
+          defaultRole: "member",
+          rules: [],
+        } as unknown as Record<string, unknown>,
+      });
+
+      await makeAccount(user.id, {
+        providerId: "keycloak-default-only",
+        idToken: createMockIdToken({
+          sub: user.id,
+          email: user.email,
+          groups: ["admins"],
+        }),
+      });
+
+      const ctx = createMockContext({
+        path: "/sso/callback/keycloak-default-only",
+        method: "GET",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: "test-session-id", activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      await handleAfterHook(ctx);
+
+      const member = await MemberModel.getByUserId(user.id, org.id);
+      expect(member?.role).toBe("member");
+    });
+
     test("should not sync role for regular sign-in (non-SSO)", async ({
       makeUser,
       makeOrganization,

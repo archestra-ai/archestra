@@ -33,9 +33,10 @@ class SessionModel {
   /**
    * Get a session by ID
    */
-  static async getById(id: string) {
+  static async getById(id: string, tx?: Transaction) {
     logger.debug({ id }, "SessionModel.getById: fetching session");
-    const sessions = await db
+    const dbOrTx = tx ?? db;
+    const sessions = await dbOrTx
       .select()
       .from(schema.sessionsTable)
       .where(eq(schema.sessionsTable.id, id))
@@ -45,6 +46,18 @@ class SessionModel {
       "SessionModel.getById: completed",
     );
     return sessions;
+  }
+
+  static async getByToken(token: string, tx?: Transaction) {
+    logger.debug("SessionModel.getByToken: fetching session");
+    const dbOrTx = tx ?? db;
+    const [session] = await dbOrTx
+      .select()
+      .from(schema.sessionsTable)
+      .where(eq(schema.sessionsTable.token, token))
+      .limit(1);
+    logger.debug({ found: !!session }, "SessionModel.getByToken: completed");
+    return session ?? null;
   }
 
   /**

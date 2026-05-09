@@ -76,6 +76,16 @@ function createFastifyApp() {
   return app;
 }
 
+function createAzureTestClient() {
+  return {
+    apiKey: "test-azure-key",
+    baseUrl: undefined,
+    defaultHeaders: undefined,
+    fetch: undefined,
+    openai: createOpenAiTestClient(),
+  };
+}
+
 async function upsertModel(params: {
   provider: SupportedProvider;
   modelId: string;
@@ -354,7 +364,6 @@ describe("model router proxy routes", () => {
   beforeEach(() => {
     anthropicStubOptions = {};
     for (const factory of [
-      azureAdapterFactory,
       cerebrasAdapterFactory,
       deepseekAdapterFactory,
       groqAdapterFactory,
@@ -371,6 +380,9 @@ describe("model router proxy routes", () => {
         () => createOpenAiTestClient() as never,
       );
     }
+    vi.spyOn(azureAdapterFactory, "createClient").mockImplementation(
+      () => createAzureTestClient() as never,
+    );
     vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
       () => createAnthropicTestClient(anthropicStubOptions) as never,
     );

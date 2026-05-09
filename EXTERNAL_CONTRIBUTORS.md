@@ -238,3 +238,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @KrishavRajSingh
 - @rudra0812
 - @adamsardo
+- @franklin52448-max

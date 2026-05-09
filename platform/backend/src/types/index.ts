@@ -62,3 +62,8 @@ export * from "./user";
 export * from "./user-token";
 export * from "./virtual-api-key";
 export * from "./visibility";
+
+/**
+ * Custom MCP App Types for Issue #3855
+ */
+export type CustomAppType = "WINDMILL" | "N8N";

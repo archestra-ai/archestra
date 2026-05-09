@@ -16,6 +16,7 @@ if (isMainModule) {
   await import("./observability/tracing/sdk");
 }
 
+import { WindmillService } from "./mcp/windmill";
 import { readFileSync } from "node:fs";
 import fastifyCors from "@fastify/cors";
 import fastifyFormbody from "@fastify/formbody";

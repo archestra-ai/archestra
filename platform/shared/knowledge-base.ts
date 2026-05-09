@@ -6,19 +6,38 @@ export type EmbeddingModel = string;
 /** Maximum number of chunks to embed per embedding API call */
 export const EMBEDDING_BATCH_SIZE = 100;
 
+export const SUPPORTED_EMBEDDING_DIMENSIONS = [3072, 1536, 768] as const;
+export type SupportedEmbeddingDimension =
+  (typeof SUPPORTED_EMBEDDING_DIMENSIONS)[number];
+
 /**
  * Supported embedding column sizes. Each entry maps to a dedicated
  * `vector(N)` column and HNSW index in the `kb_chunks` table.
  */
-export const EmbeddingDimensionsSchema = z.union([
-  z.literal(3072),
-  z.literal(1536),
-  z.literal(768),
-]);
-export type SupportedEmbeddingDimension = z.infer<
-  typeof EmbeddingDimensionsSchema
->;
-export const SUPPORTED_EMBEDDING_DIMENSIONS = [3072, 1536, 768] as const;
+export const EmbeddingDimensionsSchema = z
+  .number()
+  .int()
+  .refine(
+    (value) =>
+      SUPPORTED_EMBEDDING_DIMENSIONS.includes(
+        value as SupportedEmbeddingDimension,
+      ),
+    {
+      message: `Embedding dimensions must be one of: ${SUPPORTED_EMBEDDING_DIMENSIONS.join(", ")}`,
+    },
+  )
+  .meta({
+    id: "EmbeddingDimensions",
+    enum: [...SUPPORTED_EMBEDDING_DIMENSIONS],
+  });
+
+/**
+ * Use this alias where the backing storage or application contract is already
+ * constrained to supported dimensions. The runtime schema object stays shared,
+ * so OpenAPI still emits one reusable component.
+ */
+export const SupportedEmbeddingDimensionsSchema =
+  EmbeddingDimensionsSchema as z.ZodType<SupportedEmbeddingDimension>;
 
 /**
  * Maps a dimension size to its database column name.

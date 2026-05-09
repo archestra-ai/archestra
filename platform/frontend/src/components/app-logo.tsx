@@ -26,14 +26,14 @@ export function AppLogo({ centered = true }: AppLogoProps) {
 
   if (effectiveLogo) {
     return (
-      <div className={`flex ${centered ? "justify-center" : "pl-8"}`}>
+      <div className="flex justify-center">
         <div className="flex flex-col items-center gap-1">
           <Image
             src={effectiveLogo}
             alt="Organization logo"
             width={200}
             height={60}
-            className="object-contain h-12 w-auto max-w-[calc(100vw-6rem)]"
+            className="object-contain max-w-full max-h-12 w-auto h-auto"
           />
           {!config.enterpriseFeatures.fullWhiteLabeling && (
             <p className="text-[10px] text-muted-foreground">

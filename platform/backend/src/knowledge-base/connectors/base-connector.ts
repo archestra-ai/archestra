@@ -10,13 +10,14 @@ import type {
 } from "@/types";
 
 /**
- * Build a connector checkpoint with `lastSyncedAt` derived from the last
- * fetched item's updated timestamp.  Falls back to the previous checkpoint
- * value when the batch contains no items.
- *
- * Centralises the timestamp logic so every connector computes its checkpoint
- * the same way (using item timestamps, never wall-clock time).
+ * ACL (Access Control List) interface to hold permission data
  */
+export interface ConnectorItemACL {
+  allowedUsers: string[]; // List of emails or IDs
+  allowedTeams: string[]; // List of team identifiers
+  visibilityMode: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
+}
+
 export function buildCheckpoint<
   T extends ConnectorType,
   E extends Record<string, unknown> = Record<never, never>,
@@ -56,6 +57,26 @@ export abstract class BaseConnector implements Connector {
   setLogger(log: pino.Logger): void {
     this.log = log;
   }
+
+  /**
+   * POWER LOGIC: Identity Mapper
+   * Maps upstream user identities (Jira/Confluence) to Archestra identities
+   */
+  protected async mapUserIdentity(upstreamId: string, provider: 'jira' | 'confluence'): Promise<string | null> {
+    this.log.debug({ upstreamId, provider }, "Mapping user identity for ACL synchronization");
+    // Implementation will be handled by inheriting connectors
+    return upstreamId; 
+  }
+
+  /**
+   * POWER LOGIC: Recursive Permission Fetcher
+   * To be implemented by Jira/Confluence connectors to extract ACL data
+   */
+  abstract fetchPermissions(params: {
+    itemId: string;
+    config: Record<string, unknown>;
+    credentials: ConnectorCredentials;
+  }): Promise<ConnectorItemACL>;
 
   protected async validateConfigWithSchema<T>(params: {
     config: Record<string, unknown>;
@@ -301,11 +322,6 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/**
- * Extract a meaningful error message from unknown errors.
- * Handles plain objects thrown by libraries like confluence.js,
- * which extract Axios response data instead of wrapping in Error instances.
- */
 export function extractErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;

@@ -3,6 +3,10 @@ import { ArchestraInternalErrorCode } from "@shared";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import {
+  createAnthropicWorkloadIdentityFetch,
+  isAnthropicWorkloadIdentityEnabled,
+} from "@/clients/anthropic-workload-identity";
+import {
   getAzureAiFoundryBearerTokenProvider,
   isAnthropicAzureFoundryEntraIdEnabled,
 } from "@/clients/azure-openai-credentials";
@@ -1168,6 +1172,23 @@ export const anthropicAdapterFactory: LLMProvider<
           ...options.defaultHeaders,
           // The fetch wrapper replaces this sentinel with a fresh Entra ID token on every request.
           Authorization: "Bearer <entra-id-managed>",
+        },
+      });
+    }
+
+    if (!apiKey && isAnthropicWorkloadIdentityEnabled()) {
+      return new AnthropicProvider({
+        apiKey: null,
+        authToken: null,
+        baseURL: options.baseUrl,
+        fetch: createAnthropicWorkloadIdentityFetch(
+          options.baseUrl,
+          customFetch,
+        ),
+        defaultHeaders: {
+          ...options.defaultHeaders,
+          // The fetch wrapper replaces this sentinel with a short-lived Anthropic WIF token.
+          Authorization: "Bearer <anthropic-wif-managed>",
         },
       });
     }

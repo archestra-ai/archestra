@@ -74,6 +74,26 @@ Model Router translation is text-first. Anthropic, Gemini, and Cohere routes cur
 - **Authentication**: Pass your Anthropic API key in the `x-api-key` header
 - **Messages path**: `POST /v1/anthropic/{profile-id}/v1/messages`
 
+### Anthropic Workload Identity Federation
+
+Archestra supports Anthropic Workload Identity Federation for keyless authentication. This allows deployments to authenticate with Anthropic using a workload identity token instead of a long-lived Anthropic API key.
+
+Configure the following deployment environment variables:
+
+```bash
+ARCHESTRA_CHAT_ANTHROPIC_FEDERATION_RULE_ID=fdrl_...
+ARCHESTRA_CHAT_ANTHROPIC_ORGANIZATION_ID=...
+ARCHESTRA_CHAT_ANTHROPIC_SERVICE_ACCOUNT_ID=svac_...
+ARCHESTRA_CHAT_ANTHROPIC_WORKSPACE_ID=...
+ARCHESTRA_CHAT_ANTHROPIC_IDENTITY_TOKEN_FILE=/var/run/secrets/anthropic/token
+# or
+ARCHESTRA_CHAT_ANTHROPIC_IDENTITY_TOKEN=...
+```
+
+`ARCHESTRA_CHAT_ANTHROPIC_IDENTITY_TOKEN_FILE` or `ARCHESTRA_CHAT_ANTHROPIC_IDENTITY_TOKEN` must be provided. When these variables are configured and no API key is supplied, Archestra lets the Anthropic SDK perform the federation token exchange and refresh flow.
+
+For Kubernetes deployments, these values can be supplied through `archestra.env`, `archestra.envFromSecrets`, or `archestra.envWithValueFrom`. See [Deployment - Environment Variables](/docs/platform-deployment#environment-variables).
+
 ### Anthropic on Microsoft Foundry
 
 Claude models deployed in Microsoft Foundry use the Anthropic Messages API at `https://<resource>.services.ai.azure.com/anthropic`. Set `ARCHESTRA_ANTHROPIC_BASE_URL` to that `/anthropic` base URL. For keyless Microsoft Entra ID authentication, also set `ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED=true`; Archestra sends a bearer token scoped to `https://ai.azure.com/.default`.

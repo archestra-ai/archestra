@@ -1172,6 +1172,20 @@ export const anthropicAdapterFactory: LLMProvider<
       });
     }
 
+    if (!apiKey && isAnthropicWifConfigured()) {
+      configureAnthropicWifEnv();
+
+      logger.info(
+        "[AnthropicAdapter] Using Anthropic Workload Identity Federation",
+      );
+
+      return new AnthropicProvider({
+        baseURL: options.baseUrl,
+        fetch: customFetch,
+        defaultHeaders: options.defaultHeaders,
+      });
+    }
+
     return new AnthropicProvider({
       apiKey: regularApiKey,
       authToken: token,
@@ -1241,6 +1255,37 @@ export const anthropicAdapterFactory: LLMProvider<
     return "Internal server error";
   },
 };
+
+function isAnthropicWifConfigured(): boolean {
+  const wif = config.chat.anthropic.wif;
+
+  return Boolean(
+    wif.federationRuleId &&
+      wif.organizationId &&
+      wif.serviceAccountId &&
+      (wif.identityTokenFile || wif.identityToken),
+  );
+}
+
+function configureAnthropicWifEnv(): void {
+  const wif = config.chat.anthropic.wif;
+
+  process.env.ANTHROPIC_FEDERATION_RULE_ID = wif.federationRuleId;
+  process.env.ANTHROPIC_ORGANIZATION_ID = wif.organizationId;
+  process.env.ANTHROPIC_SERVICE_ACCOUNT_ID = wif.serviceAccountId;
+
+  if (wif.workspaceId) {
+    process.env.ANTHROPIC_WORKSPACE_ID = wif.workspaceId;
+  }
+
+  if (wif.identityTokenFile) {
+    process.env.ANTHROPIC_IDENTITY_TOKEN_FILE = wif.identityTokenFile;
+  }
+
+  if (wif.identityToken) {
+    process.env.ANTHROPIC_IDENTITY_TOKEN = wif.identityToken;
+  }
+}
 
 function createAnthropicAzureFoundryFetch(
   baseFetch: typeof globalThis.fetch | undefined,

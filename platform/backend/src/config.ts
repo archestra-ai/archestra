@@ -687,6 +687,19 @@ const config = {
     },
     anthropic: {
       apiKey: process.env.ARCHESTRA_CHAT_ANTHROPIC_API_KEY || "",
+      wif: {
+        federationRuleId:
+          process.env.ARCHESTRA_CHAT_ANTHROPIC_FEDERATION_RULE_ID || "",
+        organizationId:
+          process.env.ARCHESTRA_CHAT_ANTHROPIC_ORGANIZATION_ID || "",
+        serviceAccountId:
+          process.env.ARCHESTRA_CHAT_ANTHROPIC_SERVICE_ACCOUNT_ID || "",
+        workspaceId: process.env.ARCHESTRA_CHAT_ANTHROPIC_WORKSPACE_ID || "",
+        identityTokenFile:
+          process.env.ARCHESTRA_CHAT_ANTHROPIC_IDENTITY_TOKEN_FILE || "",
+        identityToken:
+          process.env.ARCHESTRA_CHAT_ANTHROPIC_IDENTITY_TOKEN || "",
+      },
     },
     gemini: {
       apiKey: process.env.ARCHESTRA_CHAT_GEMINI_API_KEY || "",

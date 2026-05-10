@@ -64,9 +64,19 @@ class ConversationShareModel {
     shareId: string;
     organizationId: string;
   }): Promise<ConversationShareWithTargets | null> {
-    const [share] = await db
-      .select()
+    // Junction-style row over conversations: hide shares whose parent
+    // conversation is soft-deleted so callers see the same "gone" result
+    // they would have under the old hard-delete cascade.
+    const [row] = await db
+      .select({ share: schema.conversationSharesTable })
       .from(schema.conversationSharesTable)
+      .innerJoin(
+        schema.conversationsTable,
+        eq(
+          schema.conversationSharesTable.conversationId,
+          schema.conversationsTable.id,
+        ),
+      )
       .where(
         and(
           eq(schema.conversationSharesTable.id, params.shareId),
@@ -74,15 +84,16 @@ class ConversationShareModel {
             schema.conversationSharesTable.organizationId,
             params.organizationId,
           ),
+          notDeleted(schema.conversationsTable),
         ),
       )
       .limit(1);
 
-    if (!share) {
+    if (!row) {
       return null;
     }
 
-    return ConversationShareModel.attachTargets(share);
+    return ConversationShareModel.attachTargets(row.share);
   }
 
   static async upsert(params: {

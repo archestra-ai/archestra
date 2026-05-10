@@ -1803,7 +1803,9 @@ describe("ConversationModel", () => {
       expect(found).toBeDefined();
       expect(found?.id).toBe(conversation.id);
       expect(found?.title).toBe("Conversation to preserve");
-      expect(found?.agentId).toBeNull();
+      // Soft-delete leaves the FK column intact (no cascade SET NULL fires
+      // on UPDATE), but the agent join filters notDeleted so the response
+      // surfaces the same `agent: null` shape callers expect.
       expect(found?.agent).toBeNull();
     });
 
@@ -1858,7 +1860,6 @@ describe("ConversationModel", () => {
 
       expect(deletedAgentConv).toBeDefined();
       expect(deletedAgentConv?.agent).toBeNull();
-      expect(deletedAgentConv?.agentId).toBeNull();
 
       expect(existingAgentConv).toBeDefined();
       expect(existingAgentConv?.agent).toBeDefined();

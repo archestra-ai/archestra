@@ -644,9 +644,11 @@ describe("McpToolCallModel", () => {
         true,
       );
 
+      // Admin can still see the tool call. Soft-delete leaves agentId
+      // intact (no FK cascade fires on UPDATE); callers that need to flag
+      // "agent deleted" must join agents with notDeleted.
       expect(found).toBeDefined();
       expect(found?.id).toBe(toolCall.id);
-      expect(found?.agentId).toBeNull();
       expect(found?.mcpServerName).toBe("test-server");
     });
 
@@ -707,7 +709,6 @@ describe("McpToolCallModel", () => {
         true,
       );
       expect(adminView).not.toBeNull();
-      expect(adminView?.agentId).toBeNull();
     });
 
     test("findAllPaginated includes MCP tool calls with deleted agents for admin", async ({
@@ -765,7 +766,7 @@ describe("McpToolCallModel", () => {
       );
 
       expect(deletedAgentCall).toBeDefined();
-      expect(deletedAgentCall?.agentId).toBeNull();
+      expect(deletedAgentCall?.agentId).toBe(agentToDelete.id);
 
       expect(existingAgentCall).toBeDefined();
       expect(existingAgentCall?.agentId).toBe(agentToKeep.id);

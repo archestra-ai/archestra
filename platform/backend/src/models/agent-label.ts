@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
 import { notDeleted } from "@/database/schemas/_soft-delete";
 import { softDelete } from "@/database/soft-delete";
@@ -49,7 +49,10 @@ class AgentLabelModel {
     await txOrDb
       .insert(schema.labelKeysTable)
       .values({ key })
-      .onConflictDoNothing({ target: schema.labelKeysTable.key });
+      .onConflictDoNothing({
+        target: schema.labelKeysTable.key,
+        where: sql`${schema.labelKeysTable.deletedAt} IS NULL`,
+      });
 
     const [result] = await txOrDb
       .select({ id: schema.labelKeysTable.id })
@@ -71,7 +74,10 @@ class AgentLabelModel {
     await txOrDb
       .insert(schema.labelValuesTable)
       .values({ value })
-      .onConflictDoNothing({ target: schema.labelValuesTable.value });
+      .onConflictDoNothing({
+        target: schema.labelValuesTable.value,
+        where: sql`${schema.labelValuesTable.deletedAt} IS NULL`,
+      });
 
     const [result] = await txOrDb
       .select({ id: schema.labelValuesTable.id })

@@ -2985,7 +2985,10 @@ describe("InteractionModel", () => {
       // Delete the agent
       await AgentModel.delete(agent.id);
 
-      // Admin should still be able to see the interaction with null profileId
+      // Admin can still see the interaction. Soft-delete leaves the
+      // profileId column intact (no FK cascade fires on UPDATE) — consumers
+      // that need to surface "deleted profile" status should join agents
+      // with notDeleted.
       const found = await InteractionModel.findById(
         interaction.id,
         admin.id,
@@ -2994,7 +2997,6 @@ describe("InteractionModel", () => {
 
       expect(found).toBeDefined();
       expect(found?.id).toBe(interaction.id);
-      expect(found?.profileId).toBeNull();
     });
 
     test("non-admin cannot see interaction with deleted profile (null profileId)", async ({
@@ -3045,7 +3047,7 @@ describe("InteractionModel", () => {
       // Delete the agent
       await AgentModel.delete(agent.id);
 
-      // Non-admin should NOT see the interaction with null profileId
+      // Non-admin should NOT see the interaction once its agent is gone
       const afterDelete = await InteractionModel.findById(
         interaction.id,
         user.id,
@@ -3060,7 +3062,6 @@ describe("InteractionModel", () => {
         true,
       );
       expect(adminView).not.toBeNull();
-      expect(adminView?.profileId).toBeNull();
     });
 
     test("getSessions includes sessions with deleted profiles for admin", async ({
@@ -3094,7 +3095,9 @@ describe("InteractionModel", () => {
       // Delete the agent
       await AgentModel.delete(agent.id);
 
-      // Admin should see the session with null profileId
+      // Admin should still see the session belonging to the soft-deleted
+      // agent. profileId stays pointing at the tombstoned agent — callers
+      // that need to surface "deleted" status should join agents w/ notDeleted.
       const sessions = await InteractionModel.getSessions(
         { limit: 100, offset: 0 },
         admin.id,
@@ -3104,7 +3107,6 @@ describe("InteractionModel", () => {
 
       expect(sessions.data).toHaveLength(1);
       expect(sessions.data[0].sessionId).toBe("session-to-preserve");
-      expect(sessions.data[0].profileId).toBeNull();
     });
 
     test("findAllPaginated includes interactions with deleted profiles for admin", async ({
@@ -3162,8 +3164,10 @@ describe("InteractionModel", () => {
 
       expect(interactions.data).toHaveLength(2);
 
+      // The profileId column survives soft-delete (no FK cascade fires on
+      // UPDATE). Identify each row by which agent it points at.
       const deletedProfileInteraction = interactions.data.find(
-        (i) => i.profileId === null,
+        (i) => i.profileId === agentToDelete.id,
       );
       const existingProfileInteraction = interactions.data.find(
         (i) => i.profileId === agentToKeep.id,

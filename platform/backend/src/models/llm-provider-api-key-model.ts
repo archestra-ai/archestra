@@ -1,6 +1,7 @@
 import { MODEL_MARKER_PATTERNS, type SupportedProvider } from "@shared";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
 import type { LlmProviderApiKey, Model } from "@/types";
 
 /**
@@ -196,6 +197,12 @@ class LlmProviderApiKeyModelLinkModel {
         eq(
           schema.llmProviderApiKeyModelsTable.apiKeyId,
           schema.llmProviderApiKeysTable.id,
+        ),
+      )
+      .where(
+        and(
+          notDeleted(schema.modelsTable),
+          notDeleted(schema.llmProviderApiKeysTable),
         ),
       )
       .orderBy(

@@ -1,23 +1,46 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, getTableColumns, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
 import type { AgentKnowledgeBase } from "@/types";
 
 class AgentKnowledgeBaseModel {
+  // Junction rows survive parent soft-delete by FK design (§3.6); the joins
+  // here hide rows whose parent is soft-deleted so callers see the same
+  // result they would have under the old hard-delete cascade.
   static async findByAgent(agentId: string): Promise<AgentKnowledgeBase[]> {
     return await db
-      .select()
+      .select(getTableColumns(schema.agentKnowledgeBasesTable))
       .from(schema.agentKnowledgeBasesTable)
-      .where(eq(schema.agentKnowledgeBasesTable.agentId, agentId));
+      .innerJoin(
+        schema.knowledgeBasesTable,
+        eq(
+          schema.agentKnowledgeBasesTable.knowledgeBaseId,
+          schema.knowledgeBasesTable.id,
+        ),
+      )
+      .where(
+        and(
+          eq(schema.agentKnowledgeBasesTable.agentId, agentId),
+          notDeleted(schema.knowledgeBasesTable),
+        ),
+      );
   }
 
   static async findByKnowledgeBase(
     knowledgeBaseId: string,
   ): Promise<AgentKnowledgeBase[]> {
     return await db
-      .select()
+      .select(getTableColumns(schema.agentKnowledgeBasesTable))
       .from(schema.agentKnowledgeBasesTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentKnowledgeBasesTable.agentId, schema.agentsTable.id),
+      )
       .where(
-        eq(schema.agentKnowledgeBasesTable.knowledgeBaseId, knowledgeBaseId),
+        and(
+          eq(schema.agentKnowledgeBasesTable.knowledgeBaseId, knowledgeBaseId),
+          notDeleted(schema.agentsTable),
+        ),
       );
   }
 

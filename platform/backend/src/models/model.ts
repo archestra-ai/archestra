@@ -215,6 +215,7 @@ class ModelModel {
       .values(data)
       .onConflictDoUpdate({
         target: [schema.modelsTable.provider, schema.modelsTable.modelId],
+        targetWhere: sql`${schema.modelsTable.deletedAt} IS NULL`,
         set: {
           externalId: data.externalId,
           description: data.description,
@@ -277,6 +278,7 @@ class ModelModel {
           .values(batch)
           .onConflictDoUpdate({
             target: [schema.modelsTable.provider, schema.modelsTable.modelId],
+            targetWhere: sql`${schema.modelsTable.deletedAt} IS NULL`,
             set: {
               externalId: sql`excluded.external_id`,
               description: sql`excluded.description`,
@@ -344,6 +346,7 @@ class ModelModel {
           .values(batch)
           .onConflictDoUpdate({
             target: [schema.modelsTable.provider, schema.modelsTable.modelId],
+            targetWhere: sql`${schema.modelsTable.deletedAt} IS NULL`,
             set: {
               externalId: sql`excluded.external_id`,
               description: sql`excluded.description`,
@@ -499,6 +502,7 @@ class ModelModel {
       })
       .onConflictDoUpdate({
         target: [schema.modelsTable.provider, schema.modelsTable.modelId],
+        targetWhere: sql`${schema.modelsTable.deletedAt} IS NULL`,
         set: {
           discoveredViaLlmProxy: true,
         },

@@ -1,5 +1,6 @@
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
 import type { SuggestedPromptInput } from "@/types";
 
 class AgentSuggestedPromptModel {
@@ -33,13 +34,24 @@ class AgentSuggestedPromptModel {
    * Get all suggested prompts for an agent, ordered by sortOrder.
    */
   static async getForAgent(agentId: string): Promise<SuggestedPromptInput[]> {
+    // Junction-style child of agents — survives parent soft-delete by FK
+    // design but must be hidden when the agent is soft-deleted.
     const rows = await db
       .select({
         summaryTitle: schema.agentSuggestedPromptsTable.summaryTitle,
         prompt: schema.agentSuggestedPromptsTable.prompt,
       })
       .from(schema.agentSuggestedPromptsTable)
-      .where(eq(schema.agentSuggestedPromptsTable.agentId, agentId))
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentSuggestedPromptsTable.agentId, schema.agentsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentSuggestedPromptsTable.agentId, agentId),
+          notDeleted(schema.agentsTable),
+        ),
+      )
       .orderBy(asc(schema.agentSuggestedPromptsTable.sortOrder));
 
     return rows;

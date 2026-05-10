@@ -1,12 +1,15 @@
 import { and, asc, eq, inArray, or } from "drizzle-orm";
 import { uniqBy } from "lodash-es";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
 import type { AgentLabelGetResponse, AgentLabelWithDetails } from "@/types";
 import AgentLabelModel from "./agent-label";
 
 class McpCatalogLabelModel {
   /**
-   * Get all labels for a specific catalog item with key and value details
+   * Get all labels for a specific catalog item with key and value details.
+   * Junction-style child of internal_mcp_catalog: rows survive parent
+   * soft-delete by FK design, so the inner join hides them.
    */
   static async getLabelsForCatalogItem(
     catalogId: string,
@@ -19,6 +22,13 @@ class McpCatalogLabelModel {
         value: schema.labelValuesTable.value,
       })
       .from(schema.mcpCatalogLabelsTable)
+      .innerJoin(
+        schema.internalMcpCatalogTable,
+        eq(
+          schema.mcpCatalogLabelsTable.catalogId,
+          schema.internalMcpCatalogTable.id,
+        ),
+      )
       .leftJoin(
         schema.labelKeysTable,
         eq(schema.mcpCatalogLabelsTable.keyId, schema.labelKeysTable.id),
@@ -27,7 +37,12 @@ class McpCatalogLabelModel {
         schema.labelValuesTable,
         eq(schema.mcpCatalogLabelsTable.valueId, schema.labelValuesTable.id),
       )
-      .where(eq(schema.mcpCatalogLabelsTable.catalogId, catalogId))
+      .where(
+        and(
+          eq(schema.mcpCatalogLabelsTable.catalogId, catalogId),
+          notDeleted(schema.internalMcpCatalogTable),
+        ),
+      )
       .orderBy(asc(schema.labelKeysTable.key));
 
     return rows.map((row) => ({

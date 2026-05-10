@@ -628,6 +628,7 @@ class ChatOpsChannelBindingModel {
           schema.chatopsChannelBindingsTable.channelId,
           schema.chatopsChannelBindingsTable.workspaceId,
         ],
+        targetWhere: sql`${schema.chatopsChannelBindingsTable.deletedAt} IS NULL`,
         set: {
           channelName: sql`excluded.channel_name`,
           workspaceName: sql`excluded.workspace_name`,

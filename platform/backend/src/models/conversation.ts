@@ -141,7 +141,10 @@ class ConversationModel {
         .from(schema.conversationsTable)
         .leftJoin(
           schema.agentsTable,
-          eq(schema.conversationsTable.agentId, schema.agentsTable.id),
+          and(
+            eq(schema.conversationsTable.agentId, schema.agentsTable.id),
+            notDeleted(schema.agentsTable),
+          ),
         )
         .leftJoin(
           schema.messagesTable,
@@ -238,7 +241,10 @@ class ConversationModel {
         .from(schema.conversationsTable)
         .leftJoin(
           schema.agentsTable,
-          eq(schema.conversationsTable.agentId, schema.agentsTable.id),
+          and(
+            eq(schema.conversationsTable.agentId, schema.agentsTable.id),
+            notDeleted(schema.agentsTable),
+          ),
         )
         .leftJoin(
           schema.conversationSharesTable,
@@ -288,7 +294,10 @@ class ConversationModel {
       .from(schema.conversationsTable)
       .leftJoin(
         schema.agentsTable,
-        eq(schema.conversationsTable.agentId, schema.agentsTable.id),
+        and(
+          eq(schema.conversationsTable.agentId, schema.agentsTable.id),
+          notDeleted(schema.agentsTable),
+        ),
       )
       .leftJoin(
         schema.messagesTable,
@@ -388,7 +397,10 @@ class ConversationModel {
       .from(schema.conversationsTable)
       .leftJoin(
         schema.agentsTable,
-        eq(schema.conversationsTable.agentId, schema.agentsTable.id),
+        and(
+          eq(schema.conversationsTable.agentId, schema.agentsTable.id),
+          notDeleted(schema.agentsTable),
+        ),
       )
       .leftJoin(
         schema.messagesTable,

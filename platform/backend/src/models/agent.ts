@@ -1811,7 +1811,7 @@ class AgentModel {
           schema.agentsTable.organizationId,
           schema.agentsTable.authorId,
         ],
-        where: sql`${schema.agentsTable.agentType} = 'mcp_gateway' AND ${schema.agentsTable.isPersonalGateway} = true`,
+        where: sql`${schema.agentsTable.agentType} = 'mcp_gateway' AND ${schema.agentsTable.isPersonalGateway} = true AND ${schema.agentsTable.deletedAt} IS NULL`,
       })
       .returning({ id: schema.agentsTable.id });
 

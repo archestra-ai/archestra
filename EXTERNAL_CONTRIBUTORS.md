@@ -246,3 +246,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @sillasvidal
 - @harrycena
 - @harryautomazione
+- @w2jmoe

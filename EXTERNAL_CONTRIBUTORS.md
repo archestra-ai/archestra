@@ -252,3 +252,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @thefuturrjfhejh
 - @jeepvan
 - @debaa98
+- @jchatelet

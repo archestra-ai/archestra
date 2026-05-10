@@ -243,3 +243,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @letsdeepchat
 - @igladhan
 - @myceldevelopment-ctrl
+- @sillasvidal

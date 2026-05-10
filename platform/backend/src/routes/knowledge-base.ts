@@ -467,12 +467,13 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       if (
-        visibility === "team-scoped" &&
+        (visibility === "team-scoped" ||
+          visibility === "auto-sync-permissions") &&
         !config.enterpriseFeatures.knowledgeBase
       ) {
         throw new ApiError(
           403,
-          "Team-scoped connectors require an enterprise license. Please contact sales@archestra.ai to enable it.",
+          "Team-scoped and auto-sync-permissions connectors require an enterprise license. Please contact sales@archestra.ai to enable it.",
         );
       }
 
@@ -619,13 +620,15 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       if (
-        nextVisibility === "team-scoped" &&
-        connector.visibility !== "team-scoped" &&
-        !config.enterpriseFeatures.knowledgeBase
+        !config.enterpriseFeatures.knowledgeBase &&
+        ((nextVisibility === "team-scoped" &&
+          connector.visibility !== "team-scoped") ||
+          (nextVisibility === "auto-sync-permissions" &&
+            connector.visibility !== "auto-sync-permissions"))
       ) {
         throw new ApiError(
           403,
-          "Team-scoped connectors require an enterprise license. Please contact sales@archestra.ai to enable it.",
+          "Team-scoped and auto-sync-permissions connectors require an enterprise license. Please contact sales@archestra.ai to enable it.",
         );
       }
 

@@ -198,8 +198,18 @@ export class ConfluenceConnector extends BaseConnector {
             continue;
           }
 
+          const permissions = await this.fetchPagePermissions(
+            page.id,
+            parsed,
+            params.credentials,
+          );
           documents.push(
-            pageToDocument(page, parsed.confluenceUrl, parsed.isCloud),
+            pageToDocument(
+              page,
+              parsed.confluenceUrl,
+              parsed.isCloud,
+              permissions,
+            ),
           );
         }
 
@@ -260,6 +270,73 @@ export class ConfluenceConnector extends BaseConnector {
         throw error;
       }
     }
+  }
+
+  private async fetchPagePermissions(
+    pageId: string,
+    config: ConfluenceConfig,
+    credentials: ConnectorCredentials,
+  ): Promise<ConnectorDocument["permissions"]> {
+    const pathPrefix = config.isCloud ? "wiki/rest/api" : "rest/api";
+    const basePath = this.joinUrl(
+      config.confluenceUrl.replace(/\/+$/, ""),
+      `${pathPrefix}/content/${encodeURIComponent(pageId)}/restriction/byOperation/read`,
+    );
+    const url = `${basePath}?expand=restrictions.user,restrictions.group`;
+    const response = await this.fetchWithRetry(url, {
+      headers: this.confluenceRestHeaders(credentials),
+    });
+    if (!response.ok) {
+      return { users: [], groups: [], isPublic: false };
+    }
+    // biome-ignore lint/suspicious/noExplicitAny: REST payload shape
+    const body = (await response.json()) as any;
+    const readBlock = body.read ?? body;
+    const restrictions = readBlock.restrictions ?? readBlock;
+    const userResults = restrictions?.user?.results ?? [];
+    const groupResults = restrictions?.group?.results ?? [];
+    if (userResults.length === 0 && groupResults.length === 0) {
+      return { isPublic: true };
+    }
+    const users: string[] = [];
+    for (const u of userResults) {
+      const email =
+        u && typeof u === "object"
+          ? typeof u.email === "string"
+            ? u.email
+            : typeof u.emailAddress === "string"
+              ? u.emailAddress
+              : null
+          : null;
+      if (email) users.push(email);
+    }
+    const groups: string[] = [];
+    for (const g of groupResults) {
+      const name =
+        g && typeof g === "object" && typeof g.name === "string"
+          ? g.name
+          : null;
+      if (name) groups.push(name);
+    }
+    return { users, groups, isPublic: false };
+  }
+
+  private confluenceRestHeaders(
+    credentials: ConnectorCredentials,
+  ): HeadersInit {
+    if (credentials.email) {
+      return {
+        Accept: "application/json",
+        Authorization: this.buildBasicAuthHeader(
+          credentials.email,
+          credentials.apiToken,
+        ),
+      };
+    }
+    return {
+      Accept: "application/json",
+      Authorization: `Bearer ${credentials.apiToken}`,
+    };
   }
 }
 
@@ -407,6 +484,7 @@ function pageToDocument(
   page: any,
   baseUrl: string,
   isCloud: boolean,
+  permissions?: ConnectorDocument["permissions"],
 ): ConnectorDocument {
   const htmlContent: string = page.body?.storage?.value ?? "";
   const plainText = stripHtmlTags(htmlContent);
@@ -433,6 +511,7 @@ function pageToDocument(
         [],
     },
     updatedAt: page.version?.when ? new Date(page.version.when) : undefined,
+    permissions,
   };
 }
 

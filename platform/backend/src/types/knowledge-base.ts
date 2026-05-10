@@ -6,6 +6,7 @@ import { z } from "zod";
 export const KnowledgeSourceVisibilitySchema = z.enum([
   "org-wide",
   "team-scoped",
+  "auto-sync-permissions",
 ]);
 export type KnowledgeSourceVisibility = z.infer<
   typeof KnowledgeSourceVisibilitySchema

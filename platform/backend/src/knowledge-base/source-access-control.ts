@@ -7,6 +7,7 @@ import {
 } from "@/models";
 import type {
   AclEntry,
+  ConnectorDocument,
   KnowledgeBase,
   KnowledgeBaseConnector,
   KnowledgeSourceVisibility,
@@ -30,17 +31,24 @@ interface KnowledgeSourceAccessControlContext {
 function buildDocumentAccessControlList(params: {
   visibility: KnowledgeSourceVisibility;
   teamIds: string[];
-  permissions?: {
-    users?: string[];
-    groups?: string[];
-    isPublic?: boolean;
-  };
+  permissions?: ConnectorDocument["permissions"];
 }): AclEntry[] {
   switch (params.visibility) {
     case "org-wide":
       return ["org:*"];
     case "team-scoped":
       return params.teamIds.map((id): AclEntry => `team:${id}`);
+    case "auto-sync-permissions": {
+      if (params.permissions?.isPublic) return ["org:*"];
+      const entries: AclEntry[] = [];
+      for (const email of params.permissions?.users ?? []) {
+        entries.push(`user_email:${email}`);
+      }
+      for (const group of params.permissions?.groups ?? []) {
+        entries.push(`group:${group}`);
+      }
+      return entries;
+    }
   }
 }
 
@@ -134,10 +142,12 @@ class KnowledgeSourceAccessControlService {
 
   buildConnectorDocumentAccessControlList(params: {
     connector: KnowledgeBaseConnector;
+    permissions?: ConnectorDocument["permissions"];
   }): AclEntry[] {
     return buildDocumentAccessControlList({
       visibility: params.connector.visibility,
       teamIds: params.connector.teamIds,
+      permissions: params.permissions,
     });
   }
 
@@ -146,6 +156,10 @@ class KnowledgeSourceAccessControlService {
   ): Promise<void> {
     const connector = await KnowledgeBaseConnectorModel.findById(connectorId);
     if (!connector) {
+      return;
+    }
+
+    if (connector.visibility === "auto-sync-permissions") {
       return;
     }
 

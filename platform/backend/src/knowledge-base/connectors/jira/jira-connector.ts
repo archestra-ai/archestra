@@ -38,6 +38,7 @@ const SEARCH_FIELDS = [
   "resolutiondate",
   "created",
   "duedate",
+  "security",
 ];
 
 export class JiraConnector extends BaseConnector {
@@ -192,7 +193,11 @@ export class JiraConnector extends BaseConnector {
           });
 
         const issues = searchResult.issues ?? [];
-        const documents = issuesToDocuments(issues, config);
+        const documents = await this.issuesToDocuments(
+          issues,
+          config,
+          credentials,
+        );
 
         nextPageToken = searchResult.nextPageToken ?? undefined;
         hasMore = !!nextPageToken;
@@ -256,7 +261,11 @@ export class JiraConnector extends BaseConnector {
           });
 
         const issues = searchResult.issues ?? [];
-        const documents = issuesToDocuments(issues, config);
+        const documents = await this.issuesToDocuments(
+          issues,
+          config,
+          credentials,
+        );
 
         startAt += issues.length;
         hasMore =
@@ -295,6 +304,117 @@ export class JiraConnector extends BaseConnector {
         throw error;
       }
     }
+  }
+
+  private async issuesToDocuments(
+    // biome-ignore lint/suspicious/noExplicitAny: SDK issue types vary between v2/v3
+    issues: any[],
+    config: JiraConfig,
+    credentials: ConnectorCredentials,
+  ): Promise<ConnectorDocument[]> {
+    const documents: ConnectorDocument[] = [];
+    for (const issue of issues) {
+      if (shouldSkipIssue(issue, config.labelsToSkip)) continue;
+      const permissions = await this.fetchIssuePermissions(
+        issue,
+        config,
+        credentials,
+      );
+      documents.push(
+        issueToDocument({
+          issue,
+          baseUrl: config.jiraBaseUrl,
+          isCloud: config.isCloud,
+          commentEmailBlacklist: config.commentEmailBlacklist,
+          permissions,
+        }),
+      );
+    }
+    return documents;
+  }
+
+  private async fetchIssuePermissions(
+    // biome-ignore lint/suspicious/noExplicitAny: SDK issue types vary between v2/v3
+    issue: any,
+    config: JiraConfig,
+    credentials: ConnectorCredentials,
+  ): Promise<ConnectorDocument["permissions"]> {
+    const security = issue.fields?.security;
+    if (security == null) {
+      return { isPublic: true };
+    }
+    const securityId =
+      typeof security === "object" &&
+      security !== null &&
+      "id" in security &&
+      security.id != null
+        ? String(security.id)
+        : "";
+    if (!securityId) {
+      return { isPublic: true };
+    }
+    const apiVer = config.isCloud ? "3" : "2";
+    const url = this.joinUrl(
+      config.jiraBaseUrl.replace(/\/+$/, ""),
+      `rest/api/${apiVer}/securitylevel/${encodeURIComponent(securityId)}/member`,
+    );
+    const response = await this.fetchWithRetry(url, {
+      headers: this.jiraRestHeaders(credentials, config.isCloud),
+    });
+    if (!response.ok) {
+      return { users: [], groups: [], isPublic: false };
+    }
+    // biome-ignore lint/suspicious/noExplicitAny: REST payload shape
+    const data = (await response.json()) as any;
+    const users: string[] = [];
+    const groups: string[] = [];
+    if (Array.isArray(data.users)) {
+      for (const u of data.users) {
+        const email =
+          u && typeof u === "object" && typeof u.emailAddress === "string"
+            ? u.emailAddress
+            : null;
+        if (email) users.push(email);
+      }
+    }
+    if (Array.isArray(data.groups)) {
+      for (const g of data.groups) {
+        const name =
+          g && typeof g === "object" && typeof g.name === "string"
+            ? g.name
+            : null;
+        if (name) groups.push(name);
+      }
+    }
+    return { users, groups, isPublic: false };
+  }
+
+  private jiraRestHeaders(
+    credentials: ConnectorCredentials,
+    isCloud: boolean,
+  ): HeadersInit {
+    if (isCloud) {
+      return {
+        Accept: "application/json",
+        Authorization: this.buildBasicAuthHeader(
+          credentials.email ?? "",
+          credentials.apiToken,
+        ),
+      };
+    }
+    if (credentials.email) {
+      return {
+        Accept: "application/json",
+        Authorization: this.buildBasicAuthHeader(
+          credentials.email,
+          credentials.apiToken,
+        ),
+      };
+    }
+    return {
+      Accept: "application/json",
+      Authorization: `Bearer ${credentials.apiToken}`,
+    };
   }
 }
 
@@ -361,26 +481,6 @@ function buildJiraMiddlewares(log: pino.Logger) {
       );
     },
   };
-}
-
-function issuesToDocuments(
-  // biome-ignore lint/suspicious/noExplicitAny: SDK issue types vary between v2/v3
-  issues: any[],
-  config: JiraConfig,
-): ConnectorDocument[] {
-  const documents: ConnectorDocument[] = [];
-  for (const issue of issues) {
-    if (shouldSkipIssue(issue, config.labelsToSkip)) continue;
-    documents.push(
-      issueToDocument({
-        issue,
-        baseUrl: config.jiraBaseUrl,
-        isCloud: config.isCloud,
-        commentEmailBlacklist: config.commentEmailBlacklist,
-      }),
-    );
-  }
-  return documents;
 }
 
 function buildBatch(params: {
@@ -575,8 +675,9 @@ function issueToDocument(params: {
   baseUrl: string;
   isCloud: boolean;
   commentEmailBlacklist?: string[];
+  permissions?: ConnectorDocument["permissions"];
 }): ConnectorDocument {
-  const { issue, baseUrl, isCloud, commentEmailBlacklist } = params;
+  const { issue, baseUrl, isCloud, commentEmailBlacklist, permissions } = params;
   const fields = issue.fields ?? {};
 
   const descriptionText = isCloud
@@ -626,6 +727,7 @@ function issueToDocument(params: {
       dueDate: toDateOnly(fields.duedate),
     },
     updatedAt: fields.updated ? new Date(fields.updated) : undefined,
+    permissions,
   };
 }
 

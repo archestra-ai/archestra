@@ -43,6 +43,27 @@ describe("ConfluenceConnector", () => {
     vi.clearAllMocks();
     capturedConfluenceConfigs.length = 0;
     connector = new ConfluenceConnector();
+    vi.spyOn(
+      ConfluenceConnector.prototype as unknown as {
+        fetchWithRetry: (
+          url: string,
+          options: RequestInit,
+          maxRetries?: number,
+        ) => Promise<Response>;
+      },
+      "fetchWithRetry",
+    ).mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            restrictions: {
+              user: { results: [] },
+              group: { results: [] },
+            },
+          }),
+          { status: 200 },
+        ),
+    );
   });
 
   afterEach(() => {
@@ -614,6 +635,80 @@ describe("ConfluenceConnector", () => {
       expect(batches).toHaveLength(1);
       expect(batches[0].hasMore).toBe(false);
       expect(mockSendRequest).toHaveBeenCalledTimes(1);
+    });
+
+    describe("sync with auto-sync-permissions", () => {
+      test("page with empty restrictions sets permissions.isPublic true", async () => {
+        const pages = [makePage("123", "Public page")];
+
+        mockSearchContentByCQL.mockResolvedValueOnce({
+          results: pages,
+          size: pages.length,
+        });
+
+        const batches: ConnectorSyncBatch[] = [];
+        for await (const batch of connector.sync({
+          config: validConfig,
+          credentials,
+          checkpoint: null,
+        })) {
+          batches.push(batch);
+        }
+
+        expect(batches[0].documents[0].permissions).toEqual({
+          isPublic: true,
+        });
+      });
+
+      test("page with user and group restrictions maps permissions", async () => {
+        vi.spyOn(
+          ConfluenceConnector.prototype as unknown as {
+            fetchWithRetry: (
+              url: string,
+              options: RequestInit,
+              maxRetries?: number,
+            ) => Promise<Response>;
+          },
+          "fetchWithRetry",
+        ).mockImplementation(
+          async () =>
+            new Response(
+              JSON.stringify({
+                restrictions: {
+                  user: {
+                    results: [{ email: "reader@example.com" }],
+                  },
+                  group: {
+                    results: [{ name: "dev-team" }],
+                  },
+                },
+              }),
+              { status: 200 },
+            ),
+        );
+
+        const pages = [makePage("456", "Restricted page")];
+
+        mockSearchContentByCQL.mockResolvedValueOnce({
+          results: pages,
+          size: pages.length,
+        });
+
+        const batches: ConnectorSyncBatch[] = [];
+        for await (const batch of connector.sync({
+          config: validConfig,
+          credentials,
+          checkpoint: null,
+        })) {
+          batches.push(batch);
+        }
+
+        expect(batches[0].documents[0].permissions).toEqual({
+          users: ["reader@example.com"],
+          groups: ["dev-team"],
+          isPublic: false,
+        });
+      });
     });
   });
 

@@ -658,6 +658,100 @@ describe("JiraConnector", () => {
 
       await expect(generator.next()).rejects.toThrow();
     });
+
+    describe("sync with auto-sync-permissions", () => {
+      test("issue with fields.security null yields permissions.isPublic true", async () => {
+        const fetchWithRetrySpy = vi
+          .spyOn(
+            JiraConnector.prototype as unknown as {
+              fetchWithRetry: (
+                url: string,
+                options: RequestInit,
+                maxRetries?: number,
+              ) => Promise<Response>;
+            },
+            "fetchWithRetry",
+          )
+          .mockImplementation(() => {
+            throw new Error("fetchWithRetry should not be called");
+          });
+
+        const issue = makeIssue("PROJ-1", "Open issue");
+        (issue.fields as unknown as Record<string, unknown>).security = null;
+
+        mockEnhancedSearchPost.mockResolvedValueOnce({
+          issues: [issue],
+          nextPageToken: null,
+        });
+
+        const batches: ConnectorSyncBatch[] = [];
+        for await (const batch of connector.sync({
+          config: validConfig,
+          credentials,
+          checkpoint: null,
+        })) {
+          batches.push(batch);
+        }
+
+        expect(batches[0].documents[0].permissions).toEqual({
+          isPublic: true,
+        });
+        expect(fetchWithRetrySpy).not.toHaveBeenCalled();
+        fetchWithRetrySpy.mockRestore();
+      });
+
+      test("issue with security level fetches members into permissions.users", async () => {
+        vi.spyOn(
+          JiraConnector.prototype as unknown as {
+            fetchWithRetry: (
+              url: string,
+              options: RequestInit,
+              maxRetries?: number,
+            ) => Promise<Response>;
+          },
+          "fetchWithRetry",
+        ).mockImplementation(async (url: string) => {
+          if (url.includes("/rest/api/3/securitylevel/10000/member")) {
+            return new Response(
+              JSON.stringify({
+                users: [
+                  { emailAddress: "a@example.com" },
+                  { emailAddress: "b@example.com" },
+                ],
+                groups: [],
+              }),
+              { status: 200 },
+            );
+          }
+          return new Response("", { status: 404 });
+        });
+
+        const issue = makeIssue("PROJ-1", "Restricted");
+        (issue.fields as unknown as Record<string, unknown>).security = {
+          id: "10000",
+        };
+
+        mockEnhancedSearchPost.mockResolvedValueOnce({
+          issues: [issue],
+          nextPageToken: null,
+        });
+
+        const batches: ConnectorSyncBatch[] = [];
+        for await (const batch of connector.sync({
+          config: validConfig,
+          credentials,
+          checkpoint: null,
+        })) {
+          batches.push(batch);
+        }
+
+        expect(batches[0].documents[0].permissions).toEqual({
+          users: ["a@example.com", "b@example.com"],
+          groups: [],
+          isPublic: false,
+        });
+      });
+    });
   });
 
   describe("sync (server / isCloud=false)", () => {

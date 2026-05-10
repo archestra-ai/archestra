@@ -49,11 +49,22 @@ class ConnectorSyncService {
       throw new Error(`Connector not found: ${connectorId}`);
     }
 
-    // Load credentials from secrets manager
-    const [credentials, documentAcl] = await Promise.all([
+    const isAutoSync = connector.visibility === "auto-sync-permissions";
+    const [credentials, sharedAcl] = await Promise.all([
       this.loadCredentials(connector.secretId, log),
-      this.buildDocumentAccessControlList(connector),
+      Promise.resolve(
+        isAutoSync ? null : this.buildDocumentAccessControlList(connector),
+      ),
     ]);
+    const syncAcl:
+      | { mode: "per-document" }
+      | { mode: "shared"; acl: AclEntry[] } = isAutoSync
+      ? { mode: "per-document" }
+      : sharedAcl === null
+        ? (() => {
+            throw new Error("Expected shared ACL for connector sync");
+          })()
+        : { mode: "shared", acl: sharedAcl };
 
     // Get the connector implementation
     const connectorImpl = getConnector(connector.connectorType);
@@ -161,12 +172,21 @@ class ConnectorSyncService {
         for (const doc of batch.documents) {
           documentsProcessed++;
           try {
+            const acl =
+              syncAcl.mode === "per-document"
+                ? knowledgeSourceAccessControlService.buildConnectorDocumentAccessControlList(
+                    {
+                      connector,
+                      permissions: doc.permissions,
+                    },
+                  )
+                : syncAcl.acl;
             const result = await this.ingestDocument({
               doc,
               connectorId,
               connectorType: connector.connectorType,
               organizationId: connector.organizationId,
-              acl: documentAcl,
+              acl,
               log: runLog,
             });
             if (result.ingested) {

@@ -464,7 +464,7 @@ describe("knowledge base routes", () => {
 
         expect(response.statusCode).toBe(403);
         expect(response.json().error.message).toContain(
-          "Team-scoped connectors require an enterprise license",
+          "Team-scoped and auto-sync-permissions connectors require an enterprise license",
         );
       } finally {
         Object.defineProperty(config.enterpriseFeatures, "knowledgeBase", {
@@ -775,7 +775,7 @@ describe("knowledge base routes", () => {
 
         expect(response.statusCode).toBe(403);
         expect(response.json().error.message).toContain(
-          "Team-scoped connectors require an enterprise license",
+          "Team-scoped and auto-sync-permissions connectors require an enterprise license",
         );
       } finally {
         Object.defineProperty(config.enterpriseFeatures, "knowledgeBase", {

@@ -250,3 +250,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @ahras25
 - @asenseofpradhyu
 - @thefuturrjfhejh
+- @jeepvan

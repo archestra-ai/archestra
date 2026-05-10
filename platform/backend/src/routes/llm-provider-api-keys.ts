@@ -1,6 +1,6 @@
 import type { IncomingHttpHeaders } from "node:http";
 import {
-  PROVIDERS_WITH_OPTIONAL_API_KEY,
+  isProviderApiKeyOptional,
   RouteId,
   type SupportedProvider,
   SupportedProvidersSchema,
@@ -9,6 +9,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { capitalize } from "lodash-es";
 import { z } from "zod";
 import { hasPermission, userHasPermission } from "@/auth";
+import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import logger from "@/logging";
 import {
@@ -188,8 +189,10 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             (data) =>
               isByosEnabled()
                 ? data.vaultSecretPath && data.vaultSecretKey
-                : PROVIDERS_WITH_OPTIONAL_API_KEY.has(data.provider) ||
-                  data.apiKey,
+                : isProviderApiKeyOptional({
+                    provider: data.provider,
+                    azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+                  }) || data.apiKey,
             {
               message:
                 "Either apiKey or both vaultSecretPath and vaultSecretKey must be provided",
@@ -268,7 +271,13 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      if (!secret && !PROVIDERS_WITH_OPTIONAL_API_KEY.has(body.provider)) {
+      if (
+        !secret &&
+        !isProviderApiKeyOptional({
+          provider: body.provider,
+          azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+        })
+      ) {
         throw new ApiError(
           400,
           "Secret creation failed, cannot create API key",
@@ -293,7 +302,11 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // can immediately show available models after creation.
       // For optional-key providers (Ollama, vLLM), sync even without an API key value.
       const canSync =
-        actualApiKeyValue || PROVIDERS_WITH_OPTIONAL_API_KEY.has(body.provider);
+        actualApiKeyValue ||
+        isProviderApiKeyOptional({
+          provider: body.provider,
+          azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+        });
       if (canSync) {
         try {
           await modelSyncService.syncModelsForApiKey({
@@ -541,7 +554,10 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             testExtraHeaders,
           );
         } else if (
-          !PROVIDERS_WITH_OPTIONAL_API_KEY.has(apiKeyFromDB.provider)
+          !isProviderApiKeyOptional({
+            provider: apiKeyFromDB.provider,
+            azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+          })
         ) {
           throw new ApiError(
             400,

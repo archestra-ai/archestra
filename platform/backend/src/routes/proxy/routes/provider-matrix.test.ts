@@ -1907,6 +1907,7 @@ describe("LLM proxy provider matrix", () => {
   let app: FastifyInstance;
   const originalVllmEnabled = appConfig.llm.vllm.enabled;
   const originalVllmBaseUrl = appConfig.llm.vllm.baseUrl;
+  const originalAzureBaseUrl = appConfig.llm.azure.baseUrl;
 
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -1916,6 +1917,7 @@ describe("LLM proxy provider matrix", () => {
     vi.restoreAllMocks();
     appConfig.llm.vllm.enabled = originalVllmEnabled;
     appConfig.llm.vllm.baseUrl = originalVllmBaseUrl;
+    appConfig.llm.azure.baseUrl = originalAzureBaseUrl;
     if (app) {
       await app.close();
     }
@@ -1932,12 +1934,24 @@ describe("LLM proxy provider matrix", () => {
           appConfig.llm.vllm.enabled = true;
           appConfig.llm.vllm.baseUrl = "http://localhost:8000/v1";
         }
+        if (config.provider === "azure") {
+          appConfig.llm.azure.baseUrl = "";
+        }
         const harness = createHarness(config.family, {
           model: config.model,
           ...harnessOptions,
         });
         vi.spyOn(config.adapterFactory, "createClient").mockImplementation(
-          () => harness.client as never,
+          () =>
+            (config.provider === "azure" && config.family === "openai"
+              ? {
+                  apiKey: "test-key",
+                  baseUrl: undefined,
+                  defaultHeaders: undefined,
+                  fetch: undefined,
+                  openai: harness.client,
+                }
+              : harness.client) as never,
         );
         await app.register(config.routePlugin);
         return harness;

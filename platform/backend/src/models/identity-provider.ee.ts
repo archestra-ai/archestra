@@ -863,7 +863,7 @@ class IdentityProviderModel {
         and(
           eq(schema.identityProvidersTable.id, id),
           eq(schema.identityProvidersTable.organizationId, organizationId),
-        )!,
+        ),
       );
 
       if (count === 0) {

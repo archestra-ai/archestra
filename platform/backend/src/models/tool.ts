@@ -1568,7 +1568,7 @@ class ToolModel {
     const count = await softDelete(
       tx ?? db,
       schema.toolsTable,
-      and(eq(schema.toolsTable.id, id), isNull(schema.toolsTable.catalogId))!,
+      and(eq(schema.toolsTable.id, id), isNull(schema.toolsTable.catalogId)),
     );
     return count > 0;
   }

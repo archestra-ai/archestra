@@ -210,7 +210,7 @@ class MessageModel {
       and(
         eq(schema.messagesTable.conversationId, conversationId),
         gt(schema.messagesTable.createdAt, message.createdAt),
-      )!,
+      ),
     );
   }
 
@@ -281,7 +281,7 @@ class MessageModel {
           and(
             eq(schema.messagesTable.conversationId, message.conversationId),
             gt(schema.messagesTable.createdAt, message.createdAt),
-          )!,
+          ),
         );
       }
 

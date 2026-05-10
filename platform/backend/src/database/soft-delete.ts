@@ -15,8 +15,12 @@ type SoftDeletablePgTable = PgTable & SoftDeletableTable;
 export async function softDelete<T extends SoftDeletablePgTable>(
   executor: Executor,
   table: T,
-  where: SQL,
+  where: SQL | undefined,
 ): Promise<number> {
+  // Reject undefined so callers can use `and(...)` without a non-null
+  // assertion: a missing predicate would soft-delete every active row.
+  if (!where) throw new Error("softDelete requires a where clause");
+
   const rows = await executor
     .update(table)
     .set({ deletedAt: new Date() } as PgUpdateSetSource<T>)
@@ -32,8 +36,10 @@ export async function softDelete<T extends SoftDeletablePgTable>(
 export async function restore<T extends SoftDeletablePgTable>(
   executor: Executor,
   table: T,
-  where: SQL,
+  where: SQL | undefined,
 ): Promise<number> {
+  if (!where) throw new Error("restore requires a where clause");
+
   const rows = await executor
     .update(table)
     .set({ deletedAt: null } as PgUpdateSetSource<T>)
@@ -50,8 +56,10 @@ export async function restore<T extends SoftDeletablePgTable>(
 export async function hardDelete<T extends PgTable>(
   executor: Executor,
   table: T,
-  where: SQL,
+  where: SQL | undefined,
 ): Promise<number> {
+  if (!where) throw new Error("hardDelete requires a where clause");
+
   const rows = await executor.delete(table).where(where).returning();
   return rows.length;
 }

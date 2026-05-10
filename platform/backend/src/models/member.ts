@@ -430,7 +430,7 @@ class MemberModel {
         and(
           eq(schema.membersTable.userId, memberIdOrUserId),
           eq(schema.membersTable.organizationId, organizationId),
-        )!,
+        ),
       );
     }
 

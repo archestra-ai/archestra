@@ -480,7 +480,7 @@ class ConversationModel {
         eq(schema.conversationsTable.id, id),
         eq(schema.conversationsTable.userId, userId),
         eq(schema.conversationsTable.organizationId, organizationId),
-      )!,
+      ),
     );
   }
 
@@ -497,7 +497,7 @@ class ConversationModel {
         eq(schema.conversationsTable.id, id),
         eq(schema.conversationsTable.userId, userId),
         eq(schema.conversationsTable.organizationId, organizationId),
-      )!,
+      ),
     );
   }
 

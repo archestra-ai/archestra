@@ -734,7 +734,7 @@ class LlmProviderApiKeyModel {
       and(
         eq(schema.llmProviderApiKeysTable.provider, provider),
         eq(schema.llmProviderApiKeysTable.isSystem, true),
-      )!,
+      ),
     );
   }
 

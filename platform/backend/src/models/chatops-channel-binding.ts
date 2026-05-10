@@ -588,7 +588,7 @@ class ChatOpsChannelBindingModel {
       and(
         eq(schema.chatopsChannelBindingsTable.id, id),
         eq(schema.chatopsChannelBindingsTable.organizationId, organizationId),
-      )!,
+      ),
     );
     return count > 0;
   }
@@ -729,7 +729,7 @@ class ChatOpsChannelBindingModel {
         // Exclude DM bindings from cleanup — they won't appear in the
         // active channel discovery list but should be preserved.
         eq(schema.chatopsChannelBindingsTable.isDm, false),
-      )!,
+      ),
     );
 
     return deletedCount;
@@ -753,7 +753,7 @@ class ChatOpsChannelBindingModel {
         eq(schema.chatopsChannelBindingsTable.provider, params.provider),
         eq(schema.chatopsChannelBindingsTable.channelId, params.channelId),
         ne(schema.chatopsChannelBindingsTable.id, params.canonicalBindingId),
-      )!,
+      ),
     );
 
     return deletedCount;

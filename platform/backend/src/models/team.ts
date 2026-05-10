@@ -781,7 +781,7 @@ class TeamModel {
       and(
         eq(schema.teamExternalGroupsTable.teamId, teamId),
         eq(schema.teamExternalGroupsTable.groupIdentifier, groupIdentifier),
-      )!,
+      ),
     );
     const removed = removedCount > 0;
     logger.debug(
@@ -809,7 +809,7 @@ class TeamModel {
       and(
         eq(schema.teamExternalGroupsTable.id, groupId),
         eq(schema.teamExternalGroupsTable.teamId, teamId),
-      )!,
+      ),
     );
     const removed = removedCount > 0;
     logger.debug(

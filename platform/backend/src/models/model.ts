@@ -11,7 +11,7 @@ import {
 } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
 import { notDeleted } from "@/database/schemas/_soft-delete";
-import { hardDelete, softDelete } from "@/database/soft-delete";
+import { softDelete } from "@/database/soft-delete";
 import logger from "@/logging";
 import type {
   CreateModel,
@@ -398,7 +398,7 @@ class ModelModel {
       and(
         eq(schema.modelsTable.provider, provider),
         eq(schema.modelsTable.modelId, modelId),
-      )!,
+      ),
     );
 
     return true;
@@ -441,7 +441,7 @@ class ModelModel {
             })
             .from(schema.llmProviderApiKeyModelsTable),
         ),
-      )!,
+      ),
     );
   }
 

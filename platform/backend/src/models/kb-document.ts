@@ -232,7 +232,7 @@ class KbDocumentModel {
       and(
         eq(schema.kbDocumentsTable.connectorId, params.connectorId),
         eq(schema.kbDocumentsTable.sourceId, params.sourceId),
-      )!,
+      ),
     );
     return count > 0;
   }

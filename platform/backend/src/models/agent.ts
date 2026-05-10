@@ -1844,7 +1844,7 @@ class AgentModel {
         eq(schema.agentsTable.authorId, userId),
         eq(schema.agentsTable.agentType, "mcp_gateway"),
         eq(schema.agentsTable.isPersonalGateway, true),
-      )!,
+      ),
     );
   }
 

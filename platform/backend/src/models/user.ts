@@ -209,10 +209,10 @@ class UserModel {
   static async delete(userId: string, tx?: Transaction): Promise<boolean> {
     logger.debug("UserModel.delete: soft-deleting user");
     const dbOrTx = tx ?? db;
-    await SessionModel.deleteAllByUserId(userId, dbOrTx);
-    await AccountModel.deleteAllByUserId(userId, dbOrTx);
-    await ApiKeyModel.deleteAllByUserId(userId, dbOrTx);
-    await UserTokenModel.deleteAllByUserId(userId, dbOrTx);
+    await SessionModel.deleteAllByUserId(userId, tx);
+    await AccountModel.deleteAllByUserId(userId, tx);
+    await ApiKeyModel.deleteAllByUserId(userId, tx);
+    await UserTokenModel.deleteAllByUserId(userId, tx);
     await dbOrTx
       .delete(schema.twoFactorsTable)
       .where(eq(schema.twoFactorsTable.userId, userId));

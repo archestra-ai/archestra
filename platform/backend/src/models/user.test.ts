@@ -184,9 +184,7 @@ describe("UserModel.delete", () => {
       .where(eq(schema.twoFactorsTable.userId, user.id));
     expect(twoFactors).toHaveLength(0);
 
-    expect(
-      await UserTokenModel.findByUserAndOrg(user.id, org.id),
-    ).toBeNull();
+    expect(await UserTokenModel.findByUserAndOrg(user.id, org.id)).toBeNull();
   });
 
   test("should free up the email so a new user can register with it", async ({

@@ -4,11 +4,14 @@ import type { Permissions } from "@shared/permission.types";
 import { usePathname } from "next/navigation";
 import { ConversationSearchProvider } from "@/components/conversation-search-provider";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
+import { MaintenanceModePage } from "@/components/maintenance-mode-page";
 import { OnboardingDialogWrapper } from "@/components/onboarding-dialog-wrapper";
+import { SiteAnnouncementBanner } from "@/components/site-announcement-banner";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { Version } from "@/components/version";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { usePublicConfig } from "@/lib/config/config.query";
 import { AppSidebar } from "./sidebar";
 
 const SIDEBAR_COLLAPSED_PERMISSION: Permissions = {
@@ -21,10 +24,21 @@ interface AppShellProps {
 
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
+  const { data: publicConfig } = usePublicConfig();
   const isBrowserPreview = pathname.startsWith("/chat/browser-preview/");
   const isAuthPage = pathname.startsWith("/auth/");
+  const maintenanceModeMessage = publicConfig?.maintenanceModeMessage;
   const { data: shouldCollapse, isSuccess: permissionLoaded } =
     useHasPermissions(SIDEBAR_COLLAPSED_PERMISSION);
+
+  if (maintenanceModeMessage) {
+    return (
+      <>
+        <MaintenanceModePage message={maintenanceModeMessage} />
+        <Toaster />
+      </>
+    );
+  }
 
   // Browser preview mode: render children directly without sidebar/header/version
   if (isBrowserPreview) {
@@ -72,6 +86,7 @@ export function AppShell({ children }: AppShellProps) {
           <div id="mobile-header-actions" className="flex items-center gap-2" />
         </header>
         <div className="flex-1 min-w-0 flex flex-col">
+          <SiteAnnouncementBanner />
           <div className="flex-1 flex flex-col">{children}</div>
           <Version />
         </div>

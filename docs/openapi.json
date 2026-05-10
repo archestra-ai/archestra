@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.36"
+    "version": "1.2.37"
   },
   "components": {
     "schemas": {
@@ -76512,12 +76512,17 @@
                         "posthog"
                       ],
                       "additionalProperties": false
+                    },
+                    "maintenanceModeMessage": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
                     "disableBasicAuth",
                     "disableInvitations",
-                    "analytics"
+                    "analytics",
+                    "maintenanceModeMessage"
                   ],
                   "additionalProperties": false
                 }
@@ -76645,6 +76650,10 @@
                         "mcpSandboxDomain": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "maintenanceModeMessage": {
+                          "nullable": true,
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -76662,7 +76671,8 @@
                         "isQuickstart",
                         "ngrokDomain",
                         "virtualKeyDefaultExpirationSeconds",
-                        "mcpSandboxDomain"
+                        "mcpSandboxDomain",
+                        "maintenanceModeMessage"
                       ],
                       "additionalProperties": false
                     },
@@ -148886,6 +148896,15 @@
                     "showTwoFactor": {
                       "type": "boolean"
                     },
+                    "siteAnnouncementContent": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "siteAnnouncementExpiresAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
                       "minimum": 300,
@@ -148993,6 +149012,8 @@
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
+                    "siteAnnouncementContent",
+                    "siteAnnouncementExpiresAt",
                     "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
@@ -149684,6 +149705,15 @@
                     "showTwoFactor": {
                       "type": "boolean"
                     },
+                    "siteAnnouncementContent": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "siteAnnouncementExpiresAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
                       "minimum": 300,
@@ -149791,6 +149821,8 @@
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
+                    "siteAnnouncementContent",
+                    "siteAnnouncementExpiresAt",
                     "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
@@ -150753,6 +150785,15 @@
                     "showTwoFactor": {
                       "type": "boolean"
                     },
+                    "siteAnnouncementContent": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "siteAnnouncementExpiresAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
                       "minimum": 300,
@@ -150860,6 +150901,8 @@
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
+                    "siteAnnouncementContent",
+                    "siteAnnouncementExpiresAt",
                     "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
@@ -151424,6 +151467,15 @@
                     "showTwoFactor": {
                       "type": "boolean"
                     },
+                    "siteAnnouncementContent": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "siteAnnouncementExpiresAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
                       "minimum": 300,
@@ -151531,6 +151583,8 @@
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
+                    "siteAnnouncementContent",
+                    "siteAnnouncementExpiresAt",
                     "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
@@ -152113,6 +152167,15 @@
                     "showTwoFactor": {
                       "type": "boolean"
                     },
+                    "siteAnnouncementContent": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "siteAnnouncementExpiresAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
                       "minimum": 300,
@@ -152220,6 +152283,8 @@
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
+                    "siteAnnouncementContent",
+                    "siteAnnouncementExpiresAt",
                     "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
@@ -152846,6 +152911,15 @@
                     "showTwoFactor": {
                       "type": "boolean"
                     },
+                    "siteAnnouncementContent": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "siteAnnouncementExpiresAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
                       "minimum": 300,
@@ -152953,6 +153027,8 @@
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
+                    "siteAnnouncementContent",
+                    "siteAnnouncementExpiresAt",
                     "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
@@ -153504,6 +153580,15 @@
                     "showTwoFactor": {
                       "type": "boolean"
                     },
+                    "siteAnnouncementContent": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "siteAnnouncementExpiresAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
                       "minimum": 300,
@@ -153611,6 +153696,8 @@
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
+                    "siteAnnouncementContent",
+                    "siteAnnouncementExpiresAt",
                     "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
@@ -154175,6 +154262,15 @@
                     "showTwoFactor": {
                       "type": "boolean"
                     },
+                    "siteAnnouncementContent": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "siteAnnouncementExpiresAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
                       "minimum": 300,
@@ -154282,6 +154378,8 @@
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
+                    "siteAnnouncementContent",
+                    "siteAnnouncementExpiresAt",
                     "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
@@ -154813,6 +154911,15 @@
                     "showTwoFactor": {
                       "type": "boolean"
                     },
+                    "siteAnnouncementContent": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "siteAnnouncementExpiresAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
                       "minimum": 300,
@@ -154920,6 +155027,8 @@
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
+                    "siteAnnouncementContent",
+                    "siteAnnouncementExpiresAt",
                     "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
@@ -155764,6 +155873,15 @@
                     "showTwoFactor": {
                       "type": "boolean"
                     },
+                    "siteAnnouncementContent": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "siteAnnouncementExpiresAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
                       "minimum": 300,
@@ -155871,6 +155989,8 @@
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
+                    "siteAnnouncementContent",
+                    "siteAnnouncementExpiresAt",
                     "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
@@ -163304,6 +163424,305 @@
           "kind": "static",
           "permissions": [
             "secret:update"
+          ]
+        }
+      }
+    },
+    "/api/site-announcement": {
+      "get": {
+        "operationId": "getSiteAnnouncement",
+        "tags": [
+          "Site Announcement"
+        ],
+        "description": "Get the active site announcement\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`siteAnnouncement:read`: View site-wide announcements",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "announcement": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "content": {
+                          "type": "string"
+                        },
+                        "expiresAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "content",
+                        "expiresAt"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "announcement"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "siteAnnouncement:read"
+          ]
+        }
+      },
+      "post": {
+        "operationId": "createSiteAnnouncement",
+        "tags": [
+          "Site Announcement"
+        ],
+        "description": "Create a site announcement\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`siteAnnouncement:create`: Create site-wide announcements",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "content": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000
+                  },
+                  "expiresAt": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                  }
+                },
+                "required": [
+                  "content",
+                  "expiresAt"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "announcement": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "content": {
+                          "type": "string"
+                        },
+                        "expiresAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "content",
+                        "expiresAt"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "announcement"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "siteAnnouncement:create"
+          ]
+        }
+      },
+      "patch": {
+        "operationId": "updateSiteAnnouncement",
+        "tags": [
+          "Site Announcement"
+        ],
+        "description": "Update the site announcement\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`siteAnnouncement:update`: Modify site-wide announcements",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "content": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000
+                  },
+                  "expiresAt": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                  }
+                },
+                "required": [
+                  "content",
+                  "expiresAt"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "announcement": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "content": {
+                          "type": "string"
+                        },
+                        "expiresAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "content",
+                        "expiresAt"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "announcement"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "siteAnnouncement:update"
+          ]
+        }
+      },
+      "delete": {
+        "operationId": "deleteSiteAnnouncement",
+        "tags": [
+          "Site Announcement"
+        ],
+        "description": "Delete the site announcement\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`siteAnnouncement:delete`: Remove site-wide announcements",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "siteAnnouncement:delete"
+          ]
+        }
+      }
+    },
+    "/api/site-announcement/settings": {
+      "get": {
+        "operationId": "getSiteAnnouncementSettings",
+        "tags": [
+          "Site Announcement"
+        ],
+        "description": "Get site announcement settings\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`siteAnnouncement:read`: View site-wide announcements",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "announcement": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "content": {
+                          "type": "string"
+                        },
+                        "expiresAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "content",
+                        "expiresAt"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "announcement"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "siteAnnouncement:read"
           ]
         }
       }

@@ -32,6 +32,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 host: z.string(),
               }),
             }),
+            maintenanceModeMessage: z.string().nullable(),
           }),
         },
       },
@@ -41,6 +42,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
         disableBasicAuth: config.auth.disableBasicAuth,
         disableInvitations: config.auth.disableInvitations,
         analytics: config.analytics,
+        maintenanceModeMessage: config.maintenanceMode.message,
       });
     },
   );
@@ -80,6 +82,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               ngrokDomain: z.string(),
               virtualKeyDefaultExpirationSeconds: z.number(),
               mcpSandboxDomain: z.string().nullable(),
+              maintenanceModeMessage: z.string().nullable(),
             }),
             providerBaseUrls: z.record(
               SupportedProvidersSchema,
@@ -119,6 +122,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           virtualKeyDefaultExpirationSeconds:
             config.llmProxy.virtualKeyDefaultExpirationSeconds,
           mcpSandboxDomain: config.mcpSandbox.domain,
+          maintenanceModeMessage: config.maintenanceMode.message,
         },
         providerBaseUrls: {
           openai: config.llm.openai.baseUrl || null,

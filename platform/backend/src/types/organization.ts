@@ -241,6 +241,8 @@ const extendedFields = {
   chatPlaceholders: z.array(z.string()).nullable(),
   animateChatPlaceholders: z.boolean(),
   showTwoFactor: z.boolean(),
+  siteAnnouncementContent: z.string().nullable(),
+  siteAnnouncementExpiresAt: z.date().nullable(),
   oauthAccessTokenLifetimeSeconds: OAuthAccessTokenLifetimeSecondsSchema,
   connectionBaseUrls: z.array(ConnectionBaseUrlSchema).nullable(),
 };

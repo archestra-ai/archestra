@@ -48,6 +48,7 @@ describe("config routes", () => {
           host: expect.any(String),
         },
       },
+      maintenanceModeMessage: null,
     });
   });
 
@@ -78,6 +79,7 @@ describe("config routes", () => {
       isQuickstart: expect.any(Boolean),
       ngrokDomain: expect.any(String),
       virtualKeyDefaultExpirationSeconds: expect.any(Number),
+      maintenanceModeMessage: null,
     });
     expect(["permissive", "restrictive"]).toContain(
       payload.features.globalToolPolicy,

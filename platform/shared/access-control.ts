@@ -65,6 +65,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   identityProvider: ["read", "create", "update", "delete"],
   secret: ["read", "update"],
   organizationSettings: ["read", "update"],
+  siteAnnouncement: ["read", "create", "update", "delete"],
 
   // UI behavior resources
   simpleView: ["enable"],
@@ -118,6 +119,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   identityProvider: ["read"],
   secret: ["read"],
   organizationSettings: ["read", "update"],
+  siteAnnouncement: ["read", "create", "update", "delete"],
 
   // UI behavior resources
   simpleView: [],
@@ -171,6 +173,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   identityProvider: [],
   secret: [],
   organizationSettings: [],
+  siteAnnouncement: ["read"],
 
   // UI behavior resources
   simpleView: ["enable"],
@@ -333,6 +336,10 @@ export const permissionDescriptions: Record<string, string> = {
     "View organization settings (appearance, authentication, etc)",
   "organizationSettings:update":
     "Customize organization appearance, authentication, etc",
+  "siteAnnouncement:read": "View site-wide announcements",
+  "siteAnnouncement:create": "Create site-wide announcements",
+  "siteAnnouncement:update": "Modify site-wide announcements",
+  "siteAnnouncement:delete": "Remove site-wide announcements",
   "knowledgeSource:read": "View Knowledge Bases and Connectors",
   "knowledgeSource:create": "Create Knowledge Bases and Connectors",
   "knowledgeSource:update": "Modify Knowledge Bases and Connectors",
@@ -821,6 +828,21 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.UpdateAppearanceSettings]: {
     organizationSettings: ["update"],
+  },
+  [RouteId.GetSiteAnnouncement]: {
+    siteAnnouncement: ["read"],
+  },
+  [RouteId.GetSiteAnnouncementSettings]: {
+    siteAnnouncement: ["read"],
+  },
+  [RouteId.CreateSiteAnnouncement]: {
+    siteAnnouncement: ["create"],
+  },
+  [RouteId.UpdateSiteAnnouncement]: {
+    siteAnnouncement: ["update"],
+  },
+  [RouteId.DeleteSiteAnnouncement]: {
+    siteAnnouncement: ["delete"],
   },
   [RouteId.UpdateSecuritySettings]: {
     agentSettings: ["update"],

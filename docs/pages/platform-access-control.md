@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-05-04
+lastUpdated: 2026-05-10
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -65,6 +65,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Identity Providers | `read` |
 | Secrets | `read` |
 | Organization Settings | `read`, `update` |
+| Site Announcements | `read`, `create`, `update`, `delete` |
 | Chat Agent Picker | `enable` |
 | Chat Provider Settings | `enable` |
 | Chat Expand Tool Calls | `enable` |
@@ -91,6 +92,7 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Chats | `read`, `create`, `update`, `delete` |
 | API Keys | `read`, `create`, `delete` |
 | Teams | `read` |
+| Site Announcements | `read` |
 | Simple View | `enable` |
 | Chat Agent Picker | `enable` |
 | Chat Provider Settings | `enable` |
@@ -216,6 +218,10 @@ The following table lists all available permissions that can be assigned to cust
 | `secret:read` | View secrets manager configuration |
 | `secret:update` | Modify secrets manager settings and test connectivity |
 | `simpleView:enable` | Sidebar is collapsed by default on page load |
+| `siteAnnouncement:read` | View site-wide announcements |
+| `siteAnnouncement:create` | Create site-wide announcements |
+| `siteAnnouncement:update` | Modify site-wide announcements |
+| `siteAnnouncement:delete` | Remove site-wide announcements |
 | `team:read` | View teams and their members |
 | `team:create` | Create new teams |
 | `team:update` | Modify team settings |

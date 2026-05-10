@@ -21950,6 +21950,7 @@ export type GetPublicConfigResponses = {
                 host: string;
             };
         };
+        maintenanceModeMessage: string | null;
     };
 };
 
@@ -21993,6 +21994,7 @@ export type GetConfigResponses = {
             ngrokDomain: string;
             virtualKeyDefaultExpirationSeconds: number;
             mcpSandboxDomain: string | null;
+            maintenanceModeMessage: string | null;
         };
         providerBaseUrls: {
             [key: string]: string | null;
@@ -40053,6 +40055,8 @@ export type GetOrganizationResponses = {
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
         showTwoFactor: boolean;
+        siteAnnouncementContent: string | null;
+        siteAnnouncementExpiresAt: string | null;
         oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
@@ -40322,6 +40326,8 @@ export type UpdateAppearanceSettingsResponses = {
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
         showTwoFactor: boolean;
+        siteAnnouncementContent: string | null;
+        siteAnnouncementExpiresAt: string | null;
         oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
@@ -40464,6 +40470,8 @@ export type UpdateSecuritySettingsResponses = {
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
         showTwoFactor: boolean;
+        siteAnnouncementContent: string | null;
+        siteAnnouncementExpiresAt: string | null;
         oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
@@ -40607,6 +40615,8 @@ export type UpdateLlmSettingsResponses = {
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
         showTwoFactor: boolean;
+        siteAnnouncementContent: string | null;
+        siteAnnouncementExpiresAt: string | null;
         oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
@@ -40751,6 +40761,8 @@ export type UpdateAgentSettingsResponses = {
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
         showTwoFactor: boolean;
+        siteAnnouncementContent: string | null;
+        siteAnnouncementExpiresAt: string | null;
         oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
@@ -40902,6 +40914,8 @@ export type UpdateConnectionSettingsResponses = {
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
         showTwoFactor: boolean;
+        siteAnnouncementContent: string | null;
+        siteAnnouncementExpiresAt: string | null;
         oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
@@ -41044,6 +41058,8 @@ export type UpdateAuthSettingsResponses = {
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
         showTwoFactor: boolean;
+        siteAnnouncementContent: string | null;
+        siteAnnouncementExpiresAt: string | null;
         oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
@@ -41188,6 +41204,8 @@ export type UpdateKnowledgeSettingsResponses = {
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
         showTwoFactor: boolean;
+        siteAnnouncementContent: string | null;
+        siteAnnouncementExpiresAt: string | null;
         oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
@@ -41327,6 +41345,8 @@ export type DropEmbeddingConfigResponses = {
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
         showTwoFactor: boolean;
+        siteAnnouncementContent: string | null;
+        siteAnnouncementExpiresAt: string | null;
         oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
@@ -41555,6 +41575,8 @@ export type CompleteOnboardingResponses = {
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
         showTwoFactor: boolean;
+        siteAnnouncementContent: string | null;
+        siteAnnouncementExpiresAt: string | null;
         oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
@@ -43632,6 +43654,114 @@ export type CheckSecretsConnectivityResponses = {
 };
 
 export type CheckSecretsConnectivityResponse = CheckSecretsConnectivityResponses[keyof CheckSecretsConnectivityResponses];
+
+export type DeleteSiteAnnouncementData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/site-announcement';
+};
+
+export type DeleteSiteAnnouncementResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: true;
+    };
+};
+
+export type DeleteSiteAnnouncementResponse = DeleteSiteAnnouncementResponses[keyof DeleteSiteAnnouncementResponses];
+
+export type GetSiteAnnouncementData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/site-announcement';
+};
+
+export type GetSiteAnnouncementResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        announcement: {
+            content: string;
+            expiresAt: string | null;
+        } | null;
+    };
+};
+
+export type GetSiteAnnouncementResponse = GetSiteAnnouncementResponses[keyof GetSiteAnnouncementResponses];
+
+export type UpdateSiteAnnouncementData = {
+    body: {
+        content: string;
+        expiresAt: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/site-announcement';
+};
+
+export type UpdateSiteAnnouncementResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        announcement: {
+            content: string;
+            expiresAt: string | null;
+        } | null;
+    };
+};
+
+export type UpdateSiteAnnouncementResponse = UpdateSiteAnnouncementResponses[keyof UpdateSiteAnnouncementResponses];
+
+export type CreateSiteAnnouncementData = {
+    body: {
+        content: string;
+        expiresAt: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/site-announcement';
+};
+
+export type CreateSiteAnnouncementResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        announcement: {
+            content: string;
+            expiresAt: string | null;
+        } | null;
+    };
+};
+
+export type CreateSiteAnnouncementResponse = CreateSiteAnnouncementResponses[keyof CreateSiteAnnouncementResponses];
+
+export type GetSiteAnnouncementSettingsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/site-announcement/settings';
+};
+
+export type GetSiteAnnouncementSettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        announcement: {
+            content: string;
+            expiresAt: string | null;
+        } | null;
+    };
+};
+
+export type GetSiteAnnouncementSettingsResponse = GetSiteAnnouncementSettingsResponses[keyof GetSiteAnnouncementSettingsResponses];
 
 export type GetTeamStatisticsData = {
     body?: never;

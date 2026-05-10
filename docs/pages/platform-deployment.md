@@ -667,6 +667,11 @@ The following environment variables can be used to configure Archestra Platform.
   - `permissive`: Tools are allowed, unless a specific policy is set for them.
   - `restrictive`: Tools are forbidden, unless a specific policy is set for them.
 
+- **`ARCHESTRA_APPLICATION_MAINTENANCE_MODE_MESSAGE`** - Enables maintenance mode and shows this message instead of the application UI.
+  - Default: unset (maintenance mode disabled)
+  - Example: `ARCHESTRA_APPLICATION_MAINTENANCE_MODE_MESSAGE="Archestra is temporarily unavailable for scheduled maintenance."`
+  - Use this before database maintenance or upgrades when users should not access the site.
+
 - **`ARCHESTRA_ANALYTICS`** - Controls PostHog analytics for product improvements.
   - Default: `enabled`
   - Set to `disabled` to opt-out of analytics

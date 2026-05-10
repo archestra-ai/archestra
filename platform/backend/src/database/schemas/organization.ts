@@ -146,6 +146,12 @@ const organizationsTable = pgTable("organization", {
   /** Organization-level 2FA visibility toggle */
   showTwoFactor: boolean("show_two_factor").notNull().default(false),
 
+  /** Site-wide announcement markdown shown in the authenticated app shell */
+  siteAnnouncementContent: text("site_announcement_content"),
+
+  /** Expiration time after which the site-wide announcement is hidden */
+  siteAnnouncementExpiresAt: timestamp("site_announcement_expires_at"),
+
   /**
    * Organization OAuth access token lifetime for user authorization-code flows.
    * Returned to clients via `expires_in` and used to persist token expiration.

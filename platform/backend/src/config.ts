@@ -524,6 +524,11 @@ const config = {
   a2aV2Gateway: {
     endpoint: "/v2/a2a",
   },
+  maintenanceMode: {
+    message:
+      process.env.ARCHESTRA_APPLICATION_MAINTENANCE_MODE_MESSAGE?.trim() ||
+      null,
+  },
   agents: {
     advancedToolFeaturesEnabled:
       process.env.ARCHESTRA_AGENTS_ADVANCED_TOOL_FEATURES_ENABLED === "true",

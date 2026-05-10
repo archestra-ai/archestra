@@ -51,6 +51,7 @@ export { default as xaiProxyRoutes } from "./proxy/routes/xai";
 export { default as zhipuaiProxyRoutes } from "./proxy/routes/zhipuai";
 export { default as scheduleTriggerRoutes } from "./schedule-trigger";
 export { default as secretsRoutes } from "./secrets";
+export { default as siteAnnouncementRoutes } from "./site-announcement";
 export { default as statisticsRoutes } from "./statistics";
 export { default as teamRoutes } from "./team";
 export { default as tokenRoutes } from "./token";

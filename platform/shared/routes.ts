@@ -335,6 +335,13 @@ export const RouteId = {
   GetAppearanceSettings: "getAppearanceSettings",
   UpdateAppearanceSettings: "updateAppearanceSettings",
 
+  // Site Announcement Routes
+  GetSiteAnnouncement: "getSiteAnnouncement",
+  GetSiteAnnouncementSettings: "getSiteAnnouncementSettings",
+  CreateSiteAnnouncement: "createSiteAnnouncement",
+  UpdateSiteAnnouncement: "updateSiteAnnouncement",
+  DeleteSiteAnnouncement: "deleteSiteAnnouncement",
+
   // Security Settings Routes
   UpdateSecuritySettings: "updateSecuritySettings",
 

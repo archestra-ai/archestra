@@ -3,6 +3,7 @@
 import { DEFAULT_APP_DESCRIPTION, DEFAULT_APP_NAME } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
+import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsCardHeader,
   SettingsSaveBar,
@@ -39,6 +40,7 @@ import {
   validateOnboardingWizard,
 } from "./_components/onboarding-wizards-editor.utils";
 import { OrganizationTokenSection } from "./_components/organization-token-section";
+import { SiteAnnouncementSettings } from "./_components/site-announcement-settings";
 import { ThemeSelector } from "./_components/theme-selector";
 
 export default function OrganizationSettingsPage() {
@@ -407,6 +409,12 @@ export default function OrganizationSettingsPage() {
               />
             </CardContent>
           </Card>
+          <WithPermissions
+            permissions={{ siteAnnouncement: ["read"] }}
+            noPermissionHandle="hide"
+          >
+            <SiteAnnouncementSettings />
+          </WithPermissions>
         </SettingsSectionStack>
       </div>
 

@@ -1,5 +1,5 @@
 import { and, desc, eq } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import logger from "@/logging";
 import type { ApiKeyResponse, SelectApiKey } from "@/types";
 
@@ -39,6 +39,18 @@ class ApiKeyModel {
       .limit(1);
 
     return apiKey ? normalizeApiKey(apiKey) : null;
+  }
+
+  static async deleteAllByUserId(
+    userId: string,
+    tx?: Transaction,
+  ): Promise<number> {
+    const dbOrTx = tx ?? db;
+    const deleted = await dbOrTx
+      .delete(schema.apikeysTable)
+      .where(eq(schema.apikeysTable.referenceId, userId))
+      .returning({ id: schema.apikeysTable.id });
+    return deleted.length;
   }
 }
 

@@ -186,6 +186,41 @@ class UserTokenModel {
   }
 
   /**
+   * Soft-delete every token belonging to a user across all organizations and
+   * remove the associated secrets. Used when a user is soft-deleted so any
+   * outstanding personal token can no longer be used to authenticate.
+   */
+  static async deleteAllByUserId(
+    userId: string,
+    tx?: Transaction,
+  ): Promise<number> {
+    const dbOrTx = tx ?? db;
+    const tokens = await dbOrTx
+      .select()
+      .from(schema.userTokensTable)
+      .where(
+        and(
+          eq(schema.userTokensTable.userId, userId),
+          notDeleted(schema.userTokensTable),
+        ),
+      );
+
+    if (tokens.length === 0) return 0;
+
+    await softDelete(
+      dbOrTx,
+      schema.userTokensTable,
+      eq(schema.userTokensTable.userId, userId),
+    );
+
+    for (const token of tokens) {
+      await secretManager().deleteSecret(token.secretId);
+    }
+
+    return tokens.length;
+  }
+
+  /**
    * Rotate a token - generates new value while keeping other metadata
    * Returns the new token value (only returned once)
    */

@@ -1,8 +1,14 @@
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
 import { predefinedPermissionsMap } from "@shared/access-control";
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import { beforeEach, describe, expect, test } from "@/test";
+import AccountModel from "./account";
+import ApiKeyModel from "./api-key";
 import MemberModel from "./member";
+import SessionModel from "./session";
 import UserModel from "./user";
+import UserTokenModel from "./user-token";
 
 describe("User.getUserPermissions", () => {
   let testOrgId: string;
@@ -137,5 +143,64 @@ describe("UserModel.delete", () => {
     const deleted = await UserModel.delete(crypto.randomUUID());
 
     expect(deleted).toBe(false);
+  });
+
+  test("should invalidate all auth records so user cannot re-authenticate", async ({
+    makeUser,
+    makeOrganization,
+    makeSession,
+    makeAccount,
+  }) => {
+    const user = await makeUser({ email: "reauth-blocked@test.com" });
+    const org = await makeOrganization();
+    await makeSession(user.id);
+    await makeAccount(user.id);
+    await db.insert(schema.apikeysTable).values({
+      id: crypto.randomUUID(),
+      name: "test key",
+      key: crypto.randomUUID(),
+      referenceId: user.id,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await db.insert(schema.twoFactorsTable).values({
+      id: crypto.randomUUID(),
+      userId: user.id,
+      secret: "secret",
+      backupCodes: "codes",
+    });
+    await UserTokenModel.create(user.id, org.id);
+
+    const deleted = await UserModel.delete(user.id);
+    expect(deleted).toBe(true);
+
+    expect(await SessionModel.getByUserId(user.id)).toHaveLength(0);
+    expect(await AccountModel.getAllByUserId(user.id)).toHaveLength(0);
+    expect(await ApiKeyModel.listByUserId(user.id)).toHaveLength(0);
+
+    const twoFactors = await db
+      .select()
+      .from(schema.twoFactorsTable)
+      .where(eq(schema.twoFactorsTable.userId, user.id));
+    expect(twoFactors).toHaveLength(0);
+
+    expect(
+      await UserTokenModel.findByUserAndOrg(user.id, org.id),
+    ).toBeNull();
+  });
+
+  test("should free up the email so a new user can register with it", async ({
+    makeUser,
+  }) => {
+    const email = "reusable@test.com";
+    const original = await makeUser({ email });
+
+    await UserModel.delete(original.id);
+
+    const reregistered = await makeUser({ email });
+    expect(reregistered.id).not.toBe(original.id);
+
+    const found = await UserModel.findByEmail(email);
+    expect(found?.id).toBe(reregistered.id);
   });
 });

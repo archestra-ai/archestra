@@ -108,12 +108,13 @@ class SessionModel {
   /**
    * Delete all sessions for a user
    */
-  static async deleteAllByUserId(userId: string) {
+  static async deleteAllByUserId(userId: string, tx?: Transaction) {
     logger.debug(
       { userId },
       "SessionModel.deleteAllByUserId: deleting sessions",
     );
-    const result = await db
+    const dbOrTx = tx ?? db;
+    const result = await dbOrTx
       .delete(schema.sessionsTable)
       .where(eq(schema.sessionsTable.userId, userId));
     logger.debug({ userId }, "SessionModel.deleteAllByUserId: completed");

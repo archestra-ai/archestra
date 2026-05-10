@@ -675,10 +675,9 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
           expiresAt: invitation.expiresAt,
         };
 
-        // Delete placeholder user (cascades to member, invitation, user tokens)
-        await db
-          .delete(schema.usersTable)
-          .where(eq(schema.usersTable.id, existingUser.id));
+        // Hard-delete placeholder user (cascades to member, invitation, user tokens)
+        // so the email can be reused for the real sign-up that follows.
+        await UserModel.hardDelete(existingUser.id);
 
         // Re-create invitation as "pending" for better-auth's normal sign-up flow
         await db.insert(schema.invitationsTable).values({

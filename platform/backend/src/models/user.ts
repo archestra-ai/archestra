@@ -12,8 +12,12 @@ import { notDeleted } from "@/database/schemas/_soft-delete";
 import { hardDelete, softDelete } from "@/database/soft-delete";
 import logger from "@/logging";
 import type { UpdateUser } from "@/types";
+import AccountModel from "./account";
+import ApiKeyModel from "./api-key";
 import MemberModel from "./member";
 import OrganizationRoleModel from "./organization-role";
+import SessionModel from "./session";
+import UserTokenModel from "./user-token";
 
 class UserModel {
   static async createOrGetExistingDefaultAdminUser({
@@ -197,15 +201,30 @@ class UserModel {
   /**
    * Soft-delete a user and tombstone the email so the address is freed for
    * re-registration without weakening the global uniqueness invariant on
-   * `user.email`.
-   *
-   * Auth-side cascade (sessions, accounts, two_factor, oauth tokens, api
-   * keys, user tokens) is wired up by the better-auth integration; callers
-   * from that layer should pass the surrounding transaction.
+   * `user.email`. Auth-side records (sessions, accounts, two_factor, api
+   * keys, oauth tokens, oauth consents) are hard-deleted and personal user
+   * tokens are soft-deleted so the user cannot re-authenticate and
+   * downstream OAuth clients lose access.
    */
   static async delete(userId: string, tx?: Transaction): Promise<boolean> {
     logger.debug("UserModel.delete: soft-deleting user");
     const dbOrTx = tx ?? db;
+    await SessionModel.deleteAllByUserId(userId, dbOrTx);
+    await AccountModel.deleteAllByUserId(userId, dbOrTx);
+    await ApiKeyModel.deleteAllByUserId(userId, dbOrTx);
+    await UserTokenModel.deleteAllByUserId(userId, dbOrTx);
+    await dbOrTx
+      .delete(schema.twoFactorsTable)
+      .where(eq(schema.twoFactorsTable.userId, userId));
+    await dbOrTx
+      .delete(schema.oauthAccessTokensTable)
+      .where(eq(schema.oauthAccessTokensTable.userId, userId));
+    await dbOrTx
+      .delete(schema.oauthRefreshTokensTable)
+      .where(eq(schema.oauthRefreshTokensTable.userId, userId));
+    await dbOrTx
+      .delete(schema.oauthConsentsTable)
+      .where(eq(schema.oauthConsentsTable.userId, userId));
     await dbOrTx
       .update(schema.usersTable)
       .set({ email: makeEmailTombstone() })

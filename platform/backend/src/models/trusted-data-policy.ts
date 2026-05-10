@@ -1,9 +1,11 @@
 import { CONTEXT_EXTERNAL_AGENT_ID, CONTEXT_TEAM_IDS } from "@shared";
-import { desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { get } from "lodash-es";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
 import type { ResultPolicyCondition } from "@/database/schemas/trusted-data-policy";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import logger from "@/logging";
 import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
 import type {
@@ -35,7 +37,12 @@ class TrustedDataPolicyModel {
         policiesAutoConfiguredAt: null,
         policiesAutoConfiguredReasoning: null,
       })
-      .where(eq(schema.toolsTable.id, policy.toolId));
+      .where(
+        and(
+          eq(schema.toolsTable.id, policy.toolId),
+          notDeleted(schema.toolsTable),
+        ),
+      );
 
     return createdPolicy;
   }
@@ -44,6 +51,7 @@ class TrustedDataPolicyModel {
     return db
       .select()
       .from(schema.trustedDataPoliciesTable)
+      .where(notDeleted(schema.trustedDataPoliciesTable))
       .orderBy(desc(schema.trustedDataPoliciesTable.createdAt));
   }
 
@@ -53,7 +61,12 @@ class TrustedDataPolicyModel {
     const [policy] = await db
       .select()
       .from(schema.trustedDataPoliciesTable)
-      .where(eq(schema.trustedDataPoliciesTable.id, id));
+      .where(
+        and(
+          eq(schema.trustedDataPoliciesTable.id, id),
+          notDeleted(schema.trustedDataPoliciesTable),
+        ),
+      );
     return policy || null;
   }
 
@@ -64,7 +77,12 @@ class TrustedDataPolicyModel {
     const [updatedPolicy] = await db
       .update(schema.trustedDataPoliciesTable)
       .set(policy)
-      .where(eq(schema.trustedDataPoliciesTable.id, id))
+      .where(
+        and(
+          eq(schema.trustedDataPoliciesTable.id, id),
+          notDeleted(schema.trustedDataPoliciesTable),
+        ),
+      )
       .returning();
 
     if (updatedPolicy) {
@@ -75,25 +93,31 @@ class TrustedDataPolicyModel {
           policiesAutoConfiguredAt: null,
           policiesAutoConfiguredReasoning: null,
         })
-        .where(eq(schema.toolsTable.id, updatedPolicy.toolId));
+        .where(
+          and(
+            eq(schema.toolsTable.id, updatedPolicy.toolId),
+            notDeleted(schema.toolsTable),
+          ),
+        );
     }
 
     return updatedPolicy || null;
   }
 
-  static async delete(id: string): Promise<boolean> {
+  static async delete(id: string, tx?: Transaction): Promise<boolean> {
     // Get the policy first to access toolId
     const policy = await TrustedDataPolicyModel.findById(id);
     if (!policy) {
       return false;
     }
 
-    const result = await db
-      .delete(schema.trustedDataPoliciesTable)
-      .where(eq(schema.trustedDataPoliciesTable.id, id))
-      .returning({ id: schema.trustedDataPoliciesTable.id });
+    const count = await softDelete(
+      tx ?? db,
+      schema.trustedDataPoliciesTable,
+      eq(schema.trustedDataPoliciesTable.id, id),
+    );
 
-    const deleted = result.length > 0;
+    const deleted = count > 0;
 
     if (deleted) {
       // Clear auto-configured timestamp for this tool
@@ -103,23 +127,41 @@ class TrustedDataPolicyModel {
           policiesAutoConfiguredAt: null,
           policiesAutoConfiguredReasoning: null,
         })
-        .where(eq(schema.toolsTable.id, policy.toolId));
+        .where(
+          and(
+            eq(schema.toolsTable.id, policy.toolId),
+            notDeleted(schema.toolsTable),
+          ),
+        );
     }
 
     return deleted;
   }
 
   /**
-   * Delete all trusted data policies for a specific tool.
-   * Used primarily in tests.
+   * Hard-delete a trusted data policy. Reserved for purge flows.
    */
-  static async deleteByToolId(toolId: string): Promise<number> {
-    const result = await db
-      .delete(schema.trustedDataPoliciesTable)
-      .where(eq(schema.trustedDataPoliciesTable.toolId, toolId))
-      .returning({ id: schema.trustedDataPoliciesTable.id });
+  static async hardDelete(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await hardDelete(
+      tx ?? db,
+      schema.trustedDataPoliciesTable,
+      eq(schema.trustedDataPoliciesTable.id, id),
+    );
+    return count > 0;
+  }
 
-    return result.length;
+  /**
+   * Soft-delete all trusted data policies for a specific tool.
+   */
+  static async deleteByToolId(
+    toolId: string,
+    tx?: Transaction,
+  ): Promise<number> {
+    return softDelete(
+      tx ?? db,
+      schema.trustedDataPoliciesTable,
+      eq(schema.trustedDataPoliciesTable.toolId, toolId),
+    );
   }
 
   /**
@@ -142,7 +184,12 @@ class TrustedDataPolicyModel {
     const existingPolicies = await db
       .select()
       .from(schema.trustedDataPoliciesTable)
-      .where(inArray(schema.trustedDataPoliciesTable.toolId, toolIds));
+      .where(
+        and(
+          inArray(schema.trustedDataPoliciesTable.toolId, toolIds),
+          notDeleted(schema.trustedDataPoliciesTable),
+        ),
+      );
 
     // Filter to only default policies (empty conditions array)
     const defaultPolicies = existingPolicies.filter(
@@ -166,7 +213,12 @@ class TrustedDataPolicyModel {
       await db
         .update(schema.trustedDataPoliciesTable)
         .set({ action })
-        .where(inArray(schema.trustedDataPoliciesTable.id, policyIds));
+        .where(
+          and(
+            inArray(schema.trustedDataPoliciesTable.id, policyIds),
+            notDeleted(schema.trustedDataPoliciesTable),
+          ),
+        );
       updated = policiesToUpdate.length;
     }
 
@@ -458,7 +510,10 @@ class TrustedDataPolicyModel {
       .from(schema.toolsTable)
       .leftJoin(
         schema.trustedDataPoliciesTable,
-        eq(schema.toolsTable.id, schema.trustedDataPoliciesTable.toolId),
+        and(
+          eq(schema.toolsTable.id, schema.trustedDataPoliciesTable.toolId),
+          notDeleted(schema.trustedDataPoliciesTable),
+        ),
       )
       .where(inArray(schema.toolsTable.name, toolNames));
 

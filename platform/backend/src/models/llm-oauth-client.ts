@@ -3,6 +3,7 @@ import { LLM_PROXY_OAUTH_SCOPE } from "@shared";
 import { hashPassword, verifyPassword } from "better-auth/crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
 import {
   LLM_OAUTH_CLIENT_METADATA_TYPE,
   LlmOauthClientMetadataSchema,
@@ -248,7 +249,12 @@ async function hydrateOauthClients(
             provider: schema.llmProviderApiKeysTable.provider,
           })
           .from(schema.llmProviderApiKeysTable)
-          .where(inArray(schema.llmProviderApiKeysTable.id, providerApiKeyIds))
+          .where(
+            and(
+              inArray(schema.llmProviderApiKeysTable.id, providerApiKeyIds),
+              notDeleted(schema.llmProviderApiKeysTable),
+            ),
+          )
       : [];
   const apiKeyNames = new Map(apiKeyRows.map((row) => [row.id, row.name]));
 

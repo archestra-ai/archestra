@@ -1,7 +1,9 @@
 import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import mcpClient from "@/clients/mcp-client";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
@@ -100,6 +102,7 @@ class McpServerModel {
         and(
           eq(schema.teamMembersTable.userId, userId),
           eq(schema.mcpServersTable.scope, "team"),
+          notDeleted(schema.mcpServersTable),
         ),
       );
 
@@ -114,7 +117,12 @@ class McpServerModel {
     const rows = await db
       .select({ id: schema.mcpServersTable.id })
       .from(schema.mcpServersTable)
-      .where(eq(schema.mcpServersTable.scope, "org"));
+      .where(
+        and(
+          eq(schema.mcpServersTable.scope, "org"),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
     return rows.map((r) => r.id);
   }
 
@@ -132,6 +140,7 @@ class McpServerModel {
         and(
           eq(schema.mcpServersTable.id, mcpServerId),
           eq(schema.mcpServersTable.scope, "org"),
+          notDeleted(schema.mcpServersTable),
         ),
       )
       .limit(1);
@@ -158,6 +167,7 @@ class McpServerModel {
           eq(schema.mcpServersTable.id, mcpServerId),
           eq(schema.teamMembersTable.userId, userId),
           eq(schema.mcpServersTable.scope, "team"),
+          notDeleted(schema.mcpServersTable),
         ),
       )
       .limit(1);
@@ -240,8 +250,13 @@ class McpServerModel {
       }
 
       query = query.where(
-        inArray(schema.mcpServersTable.id, accessibleMcpServerIds),
+        and(
+          inArray(schema.mcpServersTable.id, accessibleMcpServerIds),
+          notDeleted(schema.mcpServersTable),
+        ),
       );
+    } else {
+      query = query.where(notDeleted(schema.mcpServersTable));
     }
 
     const results = await query;
@@ -332,7 +347,12 @@ class McpServerModel {
         schema.secretsTable,
         eq(schema.mcpServersTable.secretId, schema.secretsTable.id),
       )
-      .where(eq(schema.mcpServersTable.id, id));
+      .where(
+        and(
+          eq(schema.mcpServersTable.id, id),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
 
     if (!result) {
       return null;
@@ -378,14 +398,24 @@ class McpServerModel {
     return db
       .select()
       .from(schema.mcpServersTable)
-      .where(inArray(schema.mcpServersTable.id, ids));
+      .where(
+        and(
+          inArray(schema.mcpServersTable.id, ids),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
   }
 
   static async findByCatalogId(catalogId: string): Promise<McpServer[]> {
     return await db
       .select()
       .from(schema.mcpServersTable)
-      .where(eq(schema.mcpServersTable.catalogId, catalogId));
+      .where(
+        and(
+          eq(schema.mcpServersTable.catalogId, catalogId),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
   }
 
   static async findCustomServers(): Promise<McpServer[]> {
@@ -393,7 +423,12 @@ class McpServerModel {
     return await db
       .select()
       .from(schema.mcpServersTable)
-      .where(isNull(schema.mcpServersTable.catalogId));
+      .where(
+        and(
+          isNull(schema.mcpServersTable.catalogId),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
   }
 
   static async update(
@@ -409,7 +444,12 @@ class McpServerModel {
       [updatedServer] = await db
         .update(schema.mcpServersTable)
         .set(serverData)
-        .where(eq(schema.mcpServersTable.id, id))
+        .where(
+          and(
+            eq(schema.mcpServersTable.id, id),
+            notDeleted(schema.mcpServersTable),
+          ),
+        )
         .returning();
 
       if (!updatedServer) {
@@ -420,7 +460,12 @@ class McpServerModel {
       const [existingServer] = await db
         .select()
         .from(schema.mcpServersTable)
-        .where(eq(schema.mcpServersTable.id, id));
+        .where(
+          and(
+            eq(schema.mcpServersTable.id, id),
+            notDeleted(schema.mcpServersTable),
+          ),
+        );
 
       if (!existingServer) {
         return null;
@@ -442,7 +487,12 @@ class McpServerModel {
     const [updatedServer] = await db
       .update(schema.mcpServersTable)
       .set({ teamId })
-      .where(eq(schema.mcpServersTable.id, id))
+      .where(
+        and(
+          eq(schema.mcpServersTable.id, id),
+          notDeleted(schema.mcpServersTable),
+        ),
+      )
       .returning();
 
     return updatedServer || null;
@@ -509,13 +559,15 @@ class McpServerModel {
       }
     }
 
-    // Delete the MCP server from database
+    // Soft-delete the MCP server
     logger.info(`Deleting MCP server: ${mcpServer.name} with id: ${id}`);
-    const result = await db
-      .delete(schema.mcpServersTable)
-      .where(eq(schema.mcpServersTable.id, id));
+    const count = await softDelete(
+      db,
+      schema.mcpServersTable,
+      eq(schema.mcpServersTable.id, id),
+    );
 
-    const deleted = result.rowCount !== null && result.rowCount > 0;
+    const deleted = count > 0;
 
     // If the MCP server was deleted and it had an associated secret, delete the secret
     if (deleted && mcpServer.secretId) {
@@ -550,6 +602,18 @@ class McpServerModel {
     }
 
     return deleted;
+  }
+
+  /**
+   * Physically remove an MCP server row. Reserved for purge flows.
+   */
+  static async hardDelete(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await hardDelete(
+      tx ?? db,
+      schema.mcpServersTable,
+      eq(schema.mcpServersTable.id, id),
+    );
+    return count > 0;
   }
 
   /**
@@ -641,6 +705,7 @@ class McpServerModel {
           eq(schema.mcpServersTable.catalogId, catalogId),
           inArray(schema.mcpServersTable.teamId, teamIds),
           isNotNull(schema.mcpServersTable.secretId),
+          notDeleted(schema.mcpServersTable),
         ),
       )
       .limit(1);
@@ -678,6 +743,7 @@ class McpServerModel {
           eq(schema.mcpServersTable.catalogId, catalogId),
           eq(schema.mcpServersTable.ownerId, userId),
           eq(schema.mcpServersTable.scope, "personal"),
+          notDeleted(schema.mcpServersTable),
         ),
       )
       .limit(1);
@@ -705,6 +771,7 @@ class McpServerModel {
           inArray(schema.mcpServersTable.catalogId, catalogIds),
           eq(schema.mcpServersTable.ownerId, userId),
           eq(schema.mcpServersTable.scope, "personal"),
+          notDeleted(schema.mcpServersTable),
         ),
       );
 

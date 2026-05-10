@@ -1,5 +1,7 @@
-import { eq, inArray } from "drizzle-orm";
-import db, { schema } from "@/database";
+import { and, eq, inArray } from "drizzle-orm";
+import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import type { InsertSecret, SelectSecret, UpdateSecret } from "@/types";
 import {
   decryptSecretValue,
@@ -37,7 +39,9 @@ class SecretModel {
     const [secret] = await db
       .select()
       .from(schema.secretsTable)
-      .where(eq(schema.secretsTable.id, id));
+      .where(
+        and(eq(schema.secretsTable.id, id), notDeleted(schema.secretsTable)),
+      );
 
     return decryptSecretRow(secret ?? null);
   }
@@ -49,7 +53,12 @@ class SecretModel {
     const [secret] = await db
       .select()
       .from(schema.secretsTable)
-      .where(eq(schema.secretsTable.name, name));
+      .where(
+        and(
+          eq(schema.secretsTable.name, name),
+          notDeleted(schema.secretsTable),
+        ),
+      );
 
     return decryptSecretRow(secret ?? null);
   }
@@ -62,7 +71,12 @@ class SecretModel {
     const rows = await db
       .select()
       .from(schema.secretsTable)
-      .where(inArray(schema.secretsTable.id, ids));
+      .where(
+        and(
+          inArray(schema.secretsTable.id, ids),
+          notDeleted(schema.secretsTable),
+        ),
+      );
     return rows.map((row) => decryptSecretRow(row));
   }
 
@@ -80,21 +94,36 @@ class SecretModel {
     const [updatedSecret] = await db
       .update(schema.secretsTable)
       .set(values)
-      .where(eq(schema.secretsTable.id, id))
+      .where(
+        and(eq(schema.secretsTable.id, id), notDeleted(schema.secretsTable)),
+      )
       .returning();
 
     return decryptSecretRow(updatedSecret);
   }
 
   /**
-   * Delete a secret by ID
+   * Soft-delete a secret by ID
    */
-  static async delete(id: string): Promise<boolean> {
-    const result = await db
-      .delete(schema.secretsTable)
-      .where(eq(schema.secretsTable.id, id));
+  static async delete(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await softDelete(
+      tx ?? db,
+      schema.secretsTable,
+      eq(schema.secretsTable.id, id),
+    );
+    return count > 0;
+  }
 
-    return result.rowCount !== null && result.rowCount > 0;
+  /**
+   * Hard-delete a secret. Reserved for purge flows.
+   */
+  static async hardDelete(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await hardDelete(
+      tx ?? db,
+      schema.secretsTable,
+      eq(schema.secretsTable.id, id),
+    );
+    return count > 0;
   }
 }
 

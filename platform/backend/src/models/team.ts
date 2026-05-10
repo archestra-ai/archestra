@@ -1,6 +1,8 @@
 import { MEMBER_ROLE_NAME } from "@shared";
 import { and, count, eq, getTableColumns, ilike, inArray } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import logger from "@/logging";
 import type {
   InsertTeam,
@@ -62,7 +64,12 @@ class TeamModel {
     const teams = await db
       .select()
       .from(schema.teamsTable)
-      .where(eq(schema.teamsTable.organizationId, organizationId));
+      .where(
+        and(
+          eq(schema.teamsTable.organizationId, organizationId),
+          notDeleted(schema.teamsTable),
+        ),
+      );
 
     // Batch fetch all members for all teams in one query
     const teamIds = teams.map((t) => t.id);
@@ -97,6 +104,7 @@ class TeamModel {
 
     const filters = [
       eq(schema.teamsTable.organizationId, organizationId),
+      notDeleted(schema.teamsTable),
       ...(name ? [ilike(schema.teamsTable.name, `%${name}%`)] : []),
     ];
 
@@ -149,6 +157,7 @@ class TeamModel {
         and(
           eq(schema.teamsTable.name, name),
           eq(schema.teamsTable.organizationId, organizationId),
+          notDeleted(schema.teamsTable),
         ),
       )
       .limit(1);
@@ -171,12 +180,19 @@ class TeamModel {
   /**
    * Find a team by ID
    */
-  static async findById(id: string): Promise<Team | null> {
+  static async findById(
+    id: string,
+    opts: { includeDeleted?: boolean } = {},
+  ): Promise<Team | null> {
     logger.debug({ id }, "TeamModel.findById: fetching team");
+    const conditions = [eq(schema.teamsTable.id, id)];
+    if (!opts.includeDeleted) {
+      conditions.push(notDeleted(schema.teamsTable));
+    }
     const [team] = await db
       .select()
       .from(schema.teamsTable)
-      .where(eq(schema.teamsTable.id, id))
+      .where(and(...conditions))
       .limit(1);
 
     if (!team) {
@@ -207,7 +223,12 @@ class TeamModel {
     const teams = await db
       .select()
       .from(schema.teamsTable)
-      .where(inArray(schema.teamsTable.id, teamIds));
+      .where(
+        and(
+          inArray(schema.teamsTable.id, teamIds),
+          notDeleted(schema.teamsTable),
+        ),
+      );
 
     logger.debug({ count: teams.length }, "TeamModel.findByIds: completed");
     return teams.map((team) => ({
@@ -227,7 +248,7 @@ class TeamModel {
         ...input,
         updatedAt: new Date(),
       })
-      .where(eq(schema.teamsTable.id, id))
+      .where(and(eq(schema.teamsTable.id, id), notDeleted(schema.teamsTable)))
       .returning();
 
     if (!updatedTeam) {
@@ -242,17 +263,36 @@ class TeamModel {
   }
 
   /**
-   * Delete a team
+   * Soft-delete a team. Cascades to team_external_groups (also soft-delete)
+   * inside the same transaction. Team-member junction rows stay; they become
+   * invisible because parent-side queries filter the team.
    */
-  static async delete(id: string): Promise<boolean> {
-    logger.debug({ id }, "TeamModel.delete: deleting team");
-    const rows = await db
-      .delete(schema.teamsTable)
-      .where(eq(schema.teamsTable.id, id))
-      .returning({ id: schema.teamsTable.id });
-    const deleted = rows.length > 0;
+  static async delete(id: string, tx?: Transaction): Promise<boolean> {
+    logger.debug({ id }, "TeamModel.delete: soft-deleting team");
+    const run = async (txn: Transaction) => {
+      await softDelete(
+        txn,
+        schema.teamExternalGroupsTable,
+        eq(schema.teamExternalGroupsTable.teamId, id),
+      );
+      return softDelete(txn, schema.teamsTable, eq(schema.teamsTable.id, id));
+    };
+    const count = tx ? await run(tx) : await db.transaction(run);
+    const deleted = count > 0;
     logger.debug({ id, deleted }, "TeamModel.delete: completed");
     return deleted;
+  }
+
+  /**
+   * Hard-delete a team. Reserved for purge flows.
+   */
+  static async hardDelete(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await hardDelete(
+      tx ?? db,
+      schema.teamsTable,
+      eq(schema.teamsTable.id, id),
+    );
+    return count > 0;
   }
 
   /**
@@ -408,7 +448,12 @@ class TeamModel {
       db
         .select()
         .from(schema.teamsTable)
-        .where(inArray(schema.teamsTable.id, teamIds)),
+        .where(
+          and(
+            inArray(schema.teamsTable.id, teamIds),
+            notDeleted(schema.teamsTable),
+          ),
+        ),
       TeamModel.getTeamMembersBatch(teamIds),
     ]);
 
@@ -441,6 +486,7 @@ class TeamModel {
 
     const filters = [
       eq(schema.teamMembersTable.userId, userId),
+      notDeleted(schema.teamsTable),
       ...(name ? [ilike(schema.teamsTable.name, `%${name}%`)] : []),
     ];
 
@@ -644,7 +690,12 @@ class TeamModel {
         schema.teamsTable,
         eq(schema.agentTeamsTable.teamId, schema.teamsTable.id),
       )
-      .where(eq(schema.agentTeamsTable.agentId, agentId));
+      .where(
+        and(
+          eq(schema.agentTeamsTable.agentId, agentId),
+          notDeleted(schema.teamsTable),
+        ),
+      );
 
     logger.debug(
       { agentId, count: agentTeams.length },
@@ -671,7 +722,12 @@ class TeamModel {
     const groups = await db
       .select()
       .from(schema.teamExternalGroupsTable)
-      .where(eq(schema.teamExternalGroupsTable.teamId, teamId));
+      .where(
+        and(
+          eq(schema.teamExternalGroupsTable.teamId, teamId),
+          notDeleted(schema.teamExternalGroupsTable),
+        ),
+      );
     logger.debug(
       { teamId, count: groups.length },
       "TeamModel.getExternalGroups: completed",
@@ -719,17 +775,15 @@ class TeamModel {
       { teamId, groupIdentifier },
       "TeamModel.removeExternalGroup: removing external group",
     );
-    const rows = await db
-      .delete(schema.teamExternalGroupsTable)
-      .where(
-        and(
-          eq(schema.teamExternalGroupsTable.teamId, teamId),
-          eq(schema.teamExternalGroupsTable.groupIdentifier, groupIdentifier),
-        ),
-      )
-      .returning({ id: schema.teamExternalGroupsTable.id });
-
-    const removed = rows.length > 0;
+    const removedCount = await softDelete(
+      db,
+      schema.teamExternalGroupsTable,
+      and(
+        eq(schema.teamExternalGroupsTable.teamId, teamId),
+        eq(schema.teamExternalGroupsTable.groupIdentifier, groupIdentifier),
+      )!,
+    );
+    const removed = removedCount > 0;
     logger.debug(
       { teamId, groupIdentifier, removed },
       "TeamModel.removeExternalGroup: completed",
@@ -749,17 +803,15 @@ class TeamModel {
       { teamId, groupId },
       "TeamModel.removeExternalGroupById: removing external group",
     );
-    const rows = await db
-      .delete(schema.teamExternalGroupsTable)
-      .where(
-        and(
-          eq(schema.teamExternalGroupsTable.id, groupId),
-          eq(schema.teamExternalGroupsTable.teamId, teamId),
-        ),
-      )
-      .returning({ id: schema.teamExternalGroupsTable.id });
-
-    const removed = rows.length > 0;
+    const removedCount = await softDelete(
+      db,
+      schema.teamExternalGroupsTable,
+      and(
+        eq(schema.teamExternalGroupsTable.id, groupId),
+        eq(schema.teamExternalGroupsTable.teamId, teamId),
+      )!,
+    );
+    const removed = removedCount > 0;
     logger.debug(
       { teamId, groupId, removed },
       "TeamModel.removeExternalGroupById: completed",
@@ -795,6 +847,8 @@ class TeamModel {
             groupIdentifier.toLowerCase(),
           ),
           eq(schema.teamsTable.organizationId, organizationId),
+          notDeleted(schema.teamExternalGroupsTable),
+          notDeleted(schema.teamsTable),
         ),
       );
 
@@ -848,6 +902,8 @@ class TeamModel {
             normalizedGroups,
           ),
           eq(schema.teamsTable.organizationId, organizationId),
+          notDeleted(schema.teamExternalGroupsTable),
+          notDeleted(schema.teamsTable),
         ),
       );
 
@@ -906,6 +962,7 @@ class TeamModel {
           eq(schema.teamMembersTable.userId, userId),
           eq(schema.teamMembersTable.syncedFromSso, true),
           eq(schema.teamsTable.organizationId, organizationId),
+          notDeleted(schema.teamsTable),
         ),
       );
 

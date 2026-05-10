@@ -41,7 +41,12 @@ class LlmProviderApiKeyModel {
     const [apiKey] = await db
       .select()
       .from(schema.llmProviderApiKeysTable)
-      .where(eq(schema.llmProviderApiKeysTable.id, id));
+      .where(
+        and(
+          eq(schema.llmProviderApiKeysTable.id, id),
+          notDeleted(schema.llmProviderApiKeysTable),
+        ),
+      );
 
     return apiKey ?? null;
   }
@@ -54,7 +59,12 @@ class LlmProviderApiKeyModel {
     return db
       .select()
       .from(schema.llmProviderApiKeysTable)
-      .where(inArray(schema.llmProviderApiKeysTable.id, ids));
+      .where(
+        and(
+          inArray(schema.llmProviderApiKeysTable.id, ids),
+          notDeleted(schema.llmProviderApiKeysTable),
+        ),
+      );
   }
 
   /**
@@ -66,7 +76,12 @@ class LlmProviderApiKeyModel {
     const apiKeys = await db
       .select()
       .from(schema.llmProviderApiKeysTable)
-      .where(eq(schema.llmProviderApiKeysTable.organizationId, organizationId))
+      .where(
+        and(
+          eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
+          notDeleted(schema.llmProviderApiKeysTable),
+        ),
+      )
       .orderBy(schema.llmProviderApiKeysTable.createdAt);
 
     return apiKeys;
@@ -92,6 +107,7 @@ class LlmProviderApiKeyModel {
     // Build conditions based on visibility rules
     const conditions = [
       eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
+      notDeleted(schema.llmProviderApiKeysTable),
     ];
 
     if (isAgentAdmin) {
@@ -232,6 +248,7 @@ class LlmProviderApiKeyModel {
     // Build conditions
     const conditions = [
       eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
+      notDeleted(schema.llmProviderApiKeysTable),
     ];
 
     // User can only use: own personal + their teams + org-wide
@@ -440,6 +457,7 @@ class LlmProviderApiKeyModel {
           eq(schema.llmProviderApiKeysTable.scope, "personal"),
           eq(schema.llmProviderApiKeysTable.userId, userId),
           hasSecretOrOptional,
+          notDeleted(schema.llmProviderApiKeysTable),
         ),
       )
       .orderBy(
@@ -464,6 +482,7 @@ class LlmProviderApiKeyModel {
             eq(schema.llmProviderApiKeysTable.scope, "team"),
             inArray(schema.llmProviderApiKeysTable.teamId, userTeamIds),
             hasSecretOrOptional,
+            notDeleted(schema.llmProviderApiKeysTable),
           ),
         )
         .orderBy(
@@ -487,6 +506,7 @@ class LlmProviderApiKeyModel {
           eq(schema.llmProviderApiKeysTable.provider, provider),
           eq(schema.llmProviderApiKeysTable.scope, "org"),
           hasSecretOrOptional,
+          notDeleted(schema.llmProviderApiKeysTable),
         ),
       )
       .orderBy(
@@ -538,6 +558,7 @@ class LlmProviderApiKeyModel {
       eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
       eq(schema.llmProviderApiKeysTable.provider, provider),
       eq(schema.llmProviderApiKeysTable.scope, scope),
+      notDeleted(schema.llmProviderApiKeysTable),
     ];
 
     if (scope === "personal" && scopeId) {
@@ -569,22 +590,39 @@ class LlmProviderApiKeyModel {
     const [updated] = await db
       .update(schema.llmProviderApiKeysTable)
       .set(data)
-      .where(eq(schema.llmProviderApiKeysTable.id, id))
+      .where(
+        and(
+          eq(schema.llmProviderApiKeysTable.id, id),
+          notDeleted(schema.llmProviderApiKeysTable),
+        ),
+      )
       .returning();
 
     return updated ?? null;
   }
 
   /**
-   * Delete an LLM provider API key.
+   * Soft-delete an LLM provider API key.
    */
-  static async delete(id: string): Promise<boolean> {
-    const result = await db
-      .delete(schema.llmProviderApiKeysTable)
-      .where(eq(schema.llmProviderApiKeysTable.id, id))
-      .returning({ id: schema.llmProviderApiKeysTable.id });
+  static async delete(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await softDelete(
+      tx ?? db,
+      schema.llmProviderApiKeysTable,
+      eq(schema.llmProviderApiKeysTable.id, id),
+    );
+    return count > 0;
+  }
 
-    return result.length > 0;
+  /**
+   * Hard-delete an LLM provider API key. Reserved for purge flows.
+   */
+  static async hardDelete(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await hardDelete(
+      tx ?? db,
+      schema.llmProviderApiKeysTable,
+      eq(schema.llmProviderApiKeysTable.id, id),
+    );
+    return count > 0;
   }
 
   /**
@@ -594,7 +632,12 @@ class LlmProviderApiKeyModel {
     const [result] = await db
       .select({ id: schema.llmProviderApiKeysTable.id })
       .from(schema.llmProviderApiKeysTable)
-      .where(eq(schema.llmProviderApiKeysTable.organizationId, organizationId))
+      .where(
+        and(
+          eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
+          notDeleted(schema.llmProviderApiKeysTable),
+        ),
+      )
       .limit(1);
 
     return !!result;
@@ -615,6 +658,7 @@ class LlmProviderApiKeyModel {
           eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
           eq(schema.llmProviderApiKeysTable.provider, provider),
           sql`${schema.llmProviderApiKeysTable.secretId} IS NOT NULL`,
+          notDeleted(schema.llmProviderApiKeysTable),
         ),
       )
       .limit(1);
@@ -640,6 +684,7 @@ class LlmProviderApiKeyModel {
         and(
           eq(schema.llmProviderApiKeysTable.provider, provider),
           eq(schema.llmProviderApiKeysTable.isSystem, true),
+          notDeleted(schema.llmProviderApiKeysTable),
         ),
       )
       .limit(1);
@@ -677,15 +722,18 @@ class LlmProviderApiKeyModel {
    * Delete the system LLM provider API key for a provider.
    * Also deletes associated model links via cascade.
    */
-  static async deleteSystemKey(provider: SupportedProvider): Promise<void> {
-    await db
-      .delete(schema.llmProviderApiKeysTable)
-      .where(
-        and(
-          eq(schema.llmProviderApiKeysTable.provider, provider),
-          eq(schema.llmProviderApiKeysTable.isSystem, true),
-        ),
-      );
+  static async deleteSystemKey(
+    provider: SupportedProvider,
+    tx?: Transaction,
+  ): Promise<void> {
+    await softDelete(
+      tx ?? db,
+      schema.llmProviderApiKeysTable,
+      and(
+        eq(schema.llmProviderApiKeysTable.provider, provider),
+        eq(schema.llmProviderApiKeysTable.isSystem, true),
+      )!,
+    );
   }
 
   /**
@@ -695,7 +743,12 @@ class LlmProviderApiKeyModel {
     return db
       .select()
       .from(schema.llmProviderApiKeysTable)
-      .where(eq(schema.llmProviderApiKeysTable.isSystem, true));
+      .where(
+        and(
+          eq(schema.llmProviderApiKeysTable.isSystem, true),
+          notDeleted(schema.llmProviderApiKeysTable),
+        ),
+      );
   }
 
   /**
@@ -706,7 +759,8 @@ class LlmProviderApiKeyModel {
   static async getConfiguredProviders(): Promise<Set<string>> {
     const rows = await db
       .selectDistinct({ provider: schema.llmProviderApiKeysTable.provider })
-      .from(schema.llmProviderApiKeysTable);
+      .from(schema.llmProviderApiKeysTable)
+      .where(notDeleted(schema.llmProviderApiKeysTable));
     return new Set(rows.map((r) => r.provider));
   }
 }

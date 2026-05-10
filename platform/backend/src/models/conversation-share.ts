@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
 import type {
   Conversation,
   ConversationShare,
@@ -232,7 +233,12 @@ class ConversationShareModel {
         schema.messagesTable,
         eq(schema.conversationsTable.id, schema.messagesTable.conversationId),
       )
-      .where(eq(schema.conversationsTable.id, share.conversationId))
+      .where(
+        and(
+          eq(schema.conversationsTable.id, share.conversationId),
+          notDeleted(schema.conversationsTable),
+        ),
+      )
       .orderBy(schema.messagesTable.createdAt);
 
     if (rows.length === 0) return null;

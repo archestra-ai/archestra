@@ -8,7 +8,9 @@ import {
   or,
   sql,
 } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import type {
   Conversation,
   InsertConversation,
@@ -80,6 +82,7 @@ class ConversationModel {
     const conditions = [
       eq(schema.conversationsTable.userId, userId),
       eq(schema.conversationsTable.organizationId, organizationId),
+      notDeleted(schema.conversationsTable),
     ];
 
     // Add search filter if provided
@@ -118,6 +121,7 @@ class ConversationModel {
 
       // Use a lateral join to limit messages per conversation for preview
       // This prevents loading hundreds of messages for conversations with long histories
+      // soft-delete: `conditions` includes notDeleted(conversationsTable).
       const rows = await db
         .select({
           conversation: getTableColumns(schema.conversationsTable),
@@ -215,6 +219,7 @@ class ConversationModel {
       return Array.from(conversationMap.values());
     } else {
       // Non-search case: exclude messages for performance
+      // soft-delete: `conditions` includes notDeleted(conversationsTable).
       const rows = await db
         .select({
           conversation: getTableColumns(schema.conversationsTable),
@@ -301,6 +306,7 @@ class ConversationModel {
           eq(schema.conversationsTable.id, id),
           eq(schema.conversationsTable.userId, userId),
           eq(schema.conversationsTable.organizationId, organizationId),
+          notDeleted(schema.conversationsTable),
         ),
       )
       .orderBy(schema.messagesTable.createdAt);
@@ -399,6 +405,7 @@ class ConversationModel {
         and(
           eq(schema.conversationsTable.id, params.id),
           eq(schema.conversationsTable.organizationId, params.organizationId),
+          notDeleted(schema.conversationsTable),
         ),
       )
       .orderBy(schema.messagesTable.createdAt);
@@ -442,6 +449,7 @@ class ConversationModel {
           eq(schema.conversationsTable.id, id),
           eq(schema.conversationsTable.userId, userId),
           eq(schema.conversationsTable.organizationId, organizationId),
+          notDeleted(schema.conversationsTable),
         ),
       )
       .returning();
@@ -463,16 +471,34 @@ class ConversationModel {
     id: string,
     userId: string,
     organizationId: string,
+    tx?: Transaction,
   ): Promise<void> {
-    await db
-      .delete(schema.conversationsTable)
-      .where(
-        and(
-          eq(schema.conversationsTable.id, id),
-          eq(schema.conversationsTable.userId, userId),
-          eq(schema.conversationsTable.organizationId, organizationId),
-        ),
-      );
+    await softDelete(
+      tx ?? db,
+      schema.conversationsTable,
+      and(
+        eq(schema.conversationsTable.id, id),
+        eq(schema.conversationsTable.userId, userId),
+        eq(schema.conversationsTable.organizationId, organizationId),
+      )!,
+    );
+  }
+
+  static async hardDelete(
+    id: string,
+    userId: string,
+    organizationId: string,
+    tx?: Transaction,
+  ): Promise<void> {
+    await hardDelete(
+      tx ?? db,
+      schema.conversationsTable,
+      and(
+        eq(schema.conversationsTable.id, id),
+        eq(schema.conversationsTable.userId, userId),
+        eq(schema.conversationsTable.organizationId, organizationId),
+      )!,
+    );
   }
 
   /**
@@ -483,7 +509,12 @@ class ConversationModel {
     const result = await db
       .select({ agentId: schema.conversationsTable.agentId })
       .from(schema.conversationsTable)
-      .where(eq(schema.conversationsTable.id, conversationId))
+      .where(
+        and(
+          eq(schema.conversationsTable.id, conversationId),
+          notDeleted(schema.conversationsTable),
+        ),
+      )
       .limit(1);
 
     return result[0]?.agentId ?? null;
@@ -506,6 +537,7 @@ class ConversationModel {
           eq(schema.conversationsTable.id, conversationId),
           eq(schema.conversationsTable.userId, userId),
           eq(schema.conversationsTable.organizationId, organizationId),
+          notDeleted(schema.conversationsTable),
         ),
       )
       .limit(1);

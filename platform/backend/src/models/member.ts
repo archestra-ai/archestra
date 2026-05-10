@@ -1,6 +1,8 @@
 import type { AnyRoleName } from "@shared";
 import { and, count, eq, ilike, inArray, or } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import logger from "@/logging";
 
@@ -42,7 +44,12 @@ class MemberModel {
     const [member] = await db
       .select()
       .from(schema.membersTable)
-      .where(eq(schema.membersTable.id, memberId))
+      .where(
+        and(
+          eq(schema.membersTable.id, memberId),
+          notDeleted(schema.membersTable),
+        ),
+      )
       .limit(1);
     logger.debug(
       { memberId, found: !!member },
@@ -55,10 +62,6 @@ class MemberModel {
    * Get a member by user ID and organization ID.
    */
   static async getByUserId(userId: string, organizationId: string) {
-    // logger.debug(
-    //   { userId, organizationId },
-    //   "MemberModel.getByUserId: fetching member",
-    // );
     const [member] = await db
       .select()
       .from(schema.membersTable)
@@ -66,13 +69,10 @@ class MemberModel {
         and(
           eq(schema.membersTable.userId, userId),
           eq(schema.membersTable.organizationId, organizationId),
+          notDeleted(schema.membersTable),
         ),
       )
       .limit(1);
-    // logger.debug(
-    //   { userId, organizationId, found: !!member },
-    //   "MemberModel.getByUserId: completed",
-    // );
     return member;
   }
 
@@ -88,7 +88,12 @@ class MemberModel {
     const [member] = await db
       .select()
       .from(schema.membersTable)
-      .where(eq(schema.membersTable.userId, userId))
+      .where(
+        and(
+          eq(schema.membersTable.userId, userId),
+          notDeleted(schema.membersTable),
+        ),
+      )
       .limit(1);
     logger.debug(
       { userId, found: !!member, organizationId: member?.organizationId },
@@ -110,7 +115,12 @@ class MemberModel {
     const [result] = await dbOrTx
       .select({ count: count() })
       .from(schema.membersTable)
-      .where(eq(schema.membersTable.userId, userId));
+      .where(
+        and(
+          eq(schema.membersTable.userId, userId),
+          notDeleted(schema.membersTable),
+        ),
+      );
     const memberCount = result?.count ?? 0;
     logger.debug(
       { userId, count: memberCount },
@@ -139,21 +149,33 @@ class MemberModel {
     return hasMembership;
   }
 
+  /**
+   * Soft-delete every membership row for a user (across all organizations).
+   */
   static async deleteAllByUserId(userId: string, tx?: Transaction) {
     logger.debug(
       { userId },
-      "MemberModel.deleteAllByUserId: deleting memberships",
+      "MemberModel.deleteAllByUserId: soft-deleting memberships",
     );
     const dbOrTx = tx ?? db;
-    const deleted = await dbOrTx
-      .delete(schema.membersTable)
-      .where(eq(schema.membersTable.userId, userId))
-      .returning({ id: schema.membersTable.id });
-    logger.debug(
-      { userId, count: deleted.length },
-      "MemberModel.deleteAllByUserId: completed",
+    const count = await softDelete(
+      dbOrTx,
+      schema.membersTable,
+      eq(schema.membersTable.userId, userId),
     );
-    return deleted.length;
+    logger.debug({ userId, count }, "MemberModel.deleteAllByUserId: completed");
+    return count;
+  }
+
+  /**
+   * Hard-delete every membership row for a user. Reserved for purge flows.
+   */
+  static async hardDeleteAllByUserId(userId: string, tx?: Transaction) {
+    return hardDelete(
+      tx ?? db,
+      schema.membersTable,
+      eq(schema.membersTable.userId, userId),
+    );
   }
 
   /**
@@ -175,6 +197,7 @@ class MemberModel {
         and(
           eq(schema.membersTable.userId, userId),
           eq(schema.membersTable.organizationId, organizationId),
+          notDeleted(schema.membersTable),
         ),
       )
       .returning();
@@ -204,7 +227,13 @@ class MemberModel {
         schema.usersTable,
         eq(schema.membersTable.userId, schema.usersTable.id),
       )
-      .where(eq(schema.membersTable.organizationId, organizationId))
+      .where(
+        and(
+          eq(schema.membersTable.organizationId, organizationId),
+          notDeleted(schema.membersTable),
+          notDeleted(schema.usersTable),
+        ),
+      )
       .orderBy(schema.usersTable.name);
     logger.debug(
       { organizationId, count: results.length },
@@ -236,7 +265,13 @@ class MemberModel {
         schema.usersTable,
         eq(schema.membersTable.userId, schema.usersTable.id),
       )
-      .where(eq(schema.membersTable.organizationId, params.organizationId))
+      .where(
+        and(
+          eq(schema.membersTable.organizationId, params.organizationId),
+          notDeleted(schema.membersTable),
+          notDeleted(schema.usersTable),
+        ),
+      )
       .orderBy(schema.usersTable.name);
 
     return rows
@@ -261,6 +296,7 @@ class MemberModel {
         and(
           eq(schema.membersTable.organizationId, params.organizationId),
           inArray(schema.membersTable.userId, params.userIds),
+          notDeleted(schema.membersTable),
         ),
       );
 
@@ -281,6 +317,8 @@ class MemberModel {
 
     const filters = [
       eq(schema.membersTable.organizationId, organizationId),
+      notDeleted(schema.membersTable),
+      notDeleted(schema.usersTable),
       ...(role ? [eq(schema.membersTable.role, role)] : []),
       ...(searchPattern
         ? [
@@ -349,6 +387,8 @@ class MemberModel {
       .where(
         and(
           eq(schema.membersTable.organizationId, organizationId),
+          notDeleted(schema.membersTable),
+          notDeleted(schema.usersTable),
           or(
             eq(schema.usersTable.id, idOrEmail),
             eq(schema.usersTable.email, idOrEmail),
@@ -364,7 +404,7 @@ class MemberModel {
   }
 
   /**
-   * Delete a member by member ID or user ID + organization ID
+   * Soft-delete a member by member ID or user ID + organization ID.
    */
   static async deleteByMemberOrUserId(
     memberIdOrUserId: string,
@@ -373,33 +413,32 @@ class MemberModel {
   ) {
     logger.debug(
       { memberIdOrUserId, organizationId },
-      "MemberModel.deleteByMemberOrUserId: deleting member",
+      "MemberModel.deleteByMemberOrUserId: soft-deleting member",
     );
     const dbOrTx = tx ?? db;
-    // Try to delete by member ID first
-    let deleted = await dbOrTx
-      .delete(schema.membersTable)
-      .where(eq(schema.membersTable.id, memberIdOrUserId))
-      .returning();
 
-    // If not found, try by user ID + organization ID
-    if (!deleted[0] && organizationId) {
-      deleted = await dbOrTx
-        .delete(schema.membersTable)
-        .where(
-          and(
-            eq(schema.membersTable.userId, memberIdOrUserId),
-            eq(schema.membersTable.organizationId, organizationId),
-          ),
-        )
-        .returning();
+    let deletedCount = await softDelete(
+      dbOrTx,
+      schema.membersTable,
+      eq(schema.membersTable.id, memberIdOrUserId),
+    );
+
+    if (deletedCount === 0 && organizationId) {
+      deletedCount = await softDelete(
+        dbOrTx,
+        schema.membersTable,
+        and(
+          eq(schema.membersTable.userId, memberIdOrUserId),
+          eq(schema.membersTable.organizationId, organizationId),
+        )!,
+      );
     }
 
     logger.debug(
-      { memberIdOrUserId, organizationId, deleted: !!deleted[0] },
+      { memberIdOrUserId, organizationId, deleted: deletedCount > 0 },
       "MemberModel.deleteByMemberOrUserId: completed",
     );
-    return deleted[0];
+    return deletedCount > 0;
   }
   /**
    * Set the default agent for a member
@@ -416,6 +455,7 @@ class MemberModel {
         and(
           eq(schema.membersTable.userId, userId),
           eq(schema.membersTable.organizationId, organizationId),
+          notDeleted(schema.membersTable),
         ),
       );
   }
@@ -434,6 +474,7 @@ class MemberModel {
         and(
           eq(schema.membersTable.userId, userId),
           eq(schema.membersTable.organizationId, organizationId),
+          notDeleted(schema.membersTable),
         ),
       )
       .limit(1);
@@ -447,7 +488,12 @@ class MemberModel {
     const [result] = await db
       .select({ count: count() })
       .from(schema.membersTable)
-      .where(eq(schema.membersTable.defaultAgentId, agentId));
+      .where(
+        and(
+          eq(schema.membersTable.defaultAgentId, agentId),
+          notDeleted(schema.membersTable),
+        ),
+      );
     return (result?.count ?? 0) > 0;
   }
 }

@@ -17,6 +17,7 @@ import {
   sum,
 } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
 import {
   createPaginatedResult,
   type PaginatedResult,
@@ -158,6 +159,8 @@ async function getAgentNamesById(
 ): Promise<Map<string, string>> {
   if (agentIds.length === 0) return new Map();
 
+  // soft-delete: include deleted agents so historical interactions still
+  // resolve to a name in audit views.
   const agents = await db
     .select({ id: schema.agentsTable.id, name: schema.agentsTable.name })
     .from(schema.agentsTable)
@@ -683,7 +686,12 @@ class InteractionModel {
           const existingOrgLimits = await db
             .select({ entityId: schema.limitsTable.entityId })
             .from(schema.limitsTable)
-            .where(eq(schema.limitsTable.entityType, "organization"))
+            .where(
+              and(
+                eq(schema.limitsTable.entityType, "organization"),
+                notDeleted(schema.limitsTable),
+              ),
+            )
             .limit(1);
 
           if (existingOrgLimits.length > 0) {

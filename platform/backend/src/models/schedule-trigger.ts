@@ -9,7 +9,9 @@ import {
   ne,
   type SQL,
 } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import {
   normalizeCronExpression,
   normalizeTimezone,
@@ -46,6 +48,7 @@ class ScheduleTriggerModel {
       | "name"
     >,
   ): Promise<number> {
+    // soft-delete: `filters` from buildListFilters includes notDeleted.
     const filters = buildListFilters(params);
     if (!filters) return 0;
 
@@ -60,6 +63,7 @@ class ScheduleTriggerModel {
   static async listByOrganization(
     params: ScheduleTriggerListFilters,
   ): Promise<ScheduleTrigger[]> {
+    // soft-delete: `filters` from buildListFilters includes notDeleted.
     const filters = buildListFilters(params);
     if (!filters) return [];
 
@@ -109,7 +113,12 @@ class ScheduleTriggerModel {
         schema.agentsTable,
         eq(schema.scheduleTriggersTable.agentId, schema.agentsTable.id),
       )
-      .where(eq(schema.scheduleTriggersTable.id, id));
+      .where(
+        and(
+          eq(schema.scheduleTriggersTable.id, id),
+          notDeleted(schema.scheduleTriggersTable),
+        ),
+      );
 
     return trigger ?? null;
   }
@@ -143,7 +152,12 @@ class ScheduleTriggerModel {
           timezone: normalizeTimezone(data.timezone),
         }),
       })
-      .where(eq(schema.scheduleTriggersTable.id, id))
+      .where(
+        and(
+          eq(schema.scheduleTriggersTable.id, id),
+          notDeleted(schema.scheduleTriggersTable),
+        ),
+      )
       .returning({ id: schema.scheduleTriggersTable.id });
 
     if (!updated) {
@@ -153,12 +167,22 @@ class ScheduleTriggerModel {
     return await ScheduleTriggerModel.findById(updated.id);
   }
 
-  static async delete(id: string): Promise<boolean> {
-    const result = await db
-      .delete(schema.scheduleTriggersTable)
-      .where(eq(schema.scheduleTriggersTable.id, id));
+  static async delete(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await softDelete(
+      tx ?? db,
+      schema.scheduleTriggersTable,
+      eq(schema.scheduleTriggersTable.id, id),
+    );
+    return count > 0;
+  }
 
-    return (result.rowCount ?? 0) > 0;
+  static async hardDelete(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await hardDelete(
+      tx ?? db,
+      schema.scheduleTriggersTable,
+      eq(schema.scheduleTriggersTable.id, id),
+    );
+    return count > 0;
   }
 
   static async findDueTriggers(now: Date): Promise<ScheduleTrigger[]> {
@@ -177,7 +201,12 @@ class ScheduleTriggerModel {
         schema.agentsTable,
         eq(schema.scheduleTriggersTable.agentId, schema.agentsTable.id),
       )
-      .where(eq(schema.scheduleTriggersTable.enabled, true));
+      .where(
+        and(
+          eq(schema.scheduleTriggersTable.enabled, true),
+          notDeleted(schema.scheduleTriggersTable),
+        ),
+      );
 
     const dueTriggers: ScheduleTrigger[] = [];
     for (const trigger of enabledTriggers) {
@@ -204,7 +233,12 @@ class ScheduleTriggerModel {
     await db
       .update(schema.scheduleTriggersTable)
       .set({ lastExecutedAt: now })
-      .where(eq(schema.scheduleTriggersTable.id, id));
+      .where(
+        and(
+          eq(schema.scheduleTriggersTable.id, id),
+          notDeleted(schema.scheduleTriggersTable),
+        ),
+      );
   }
 }
 
@@ -235,6 +269,7 @@ function buildListFilters(
 
   const filters: SQL[] = [
     eq(schema.scheduleTriggersTable.organizationId, params.organizationId),
+    notDeleted(schema.scheduleTriggersTable),
   ];
 
   if (params.enabled !== undefined) {

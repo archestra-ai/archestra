@@ -1,6 +1,8 @@
 import type { SupportedProvider } from "@shared";
 import { and, asc, eq, getTableColumns, or, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import logger from "@/logging";
 import type {
   InsertOptimizationRule,
@@ -43,6 +45,7 @@ class OptimizationRuleModel {
       { organizationId },
       "OptimizationRuleModel.findByOrganizationId: fetching rules",
     );
+    // soft-delete: where clause below filters notDeleted(optimizationRulesTable).
     const rules = await db
       .select(getTableColumns(schema.optimizationRulesTable))
       .from(schema.optimizationRulesTable)
@@ -61,22 +64,25 @@ class OptimizationRuleModel {
         ),
       )
       .where(
-        or(
-          // Organization-level rules
-          and(
-            eq(schema.optimizationRulesTable.entityType, "organization"),
-            eq(schema.optimizationRulesTable.entityId, organizationId),
+        and(
+          or(
+            // Organization-level rules
+            and(
+              eq(schema.optimizationRulesTable.entityType, "organization"),
+              eq(schema.optimizationRulesTable.entityId, organizationId),
+            ),
+            // Team-level rules for teams in this organization
+            and(
+              eq(schema.optimizationRulesTable.entityType, "team"),
+              eq(schema.teamsTable.organizationId, organizationId),
+            ),
+            // Agent-level rules for agents in this organization
+            and(
+              eq(schema.optimizationRulesTable.entityType, "agent"),
+              eq(schema.agentsTable.organizationId, organizationId),
+            ),
           ),
-          // Team-level rules for teams in this organization
-          and(
-            eq(schema.optimizationRulesTable.entityType, "team"),
-            eq(schema.teamsTable.organizationId, organizationId),
-          ),
-          // Agent-level rules for agents in this organization
-          and(
-            eq(schema.optimizationRulesTable.entityType, "agent"),
-            eq(schema.agentsTable.organizationId, organizationId),
-          ),
+          notDeleted(schema.optimizationRulesTable),
         ),
       )
       .orderBy(asc(schema.optimizationRulesTable.createdAt));
@@ -120,6 +126,7 @@ class OptimizationRuleModel {
       .where(
         and(
           eq(schema.optimizationRulesTable.id, id),
+          notDeleted(schema.optimizationRulesTable),
           or(
             and(
               eq(schema.optimizationRulesTable.entityType, "organization"),
@@ -179,6 +186,7 @@ class OptimizationRuleModel {
         and(
           eq(schema.agentsTable.id, entityId),
           eq(schema.agentsTable.organizationId, organizationId),
+          notDeleted(schema.agentsTable),
         ),
       )
       .limit(1);
@@ -206,6 +214,7 @@ class OptimizationRuleModel {
           eq(schema.optimizationRulesTable.entityId, organizationId),
           eq(schema.optimizationRulesTable.provider, provider),
           eq(schema.optimizationRulesTable.enabled, true),
+          notDeleted(schema.optimizationRulesTable),
         ),
       )
       .orderBy(asc(schema.optimizationRulesTable.createdAt));
@@ -250,7 +259,12 @@ class OptimizationRuleModel {
     const [rule] = await db
       .update(schema.optimizationRulesTable)
       .set(data)
-      .where(eq(schema.optimizationRulesTable.id, id))
+      .where(
+        and(
+          eq(schema.optimizationRulesTable.id, id),
+          notDeleted(schema.optimizationRulesTable),
+        ),
+      )
       .returning();
 
     logger.debug(
@@ -261,17 +275,30 @@ class OptimizationRuleModel {
   }
 
   /**
-   * Delete an optimization rule
+   * Soft-delete an optimization rule
    */
-  static async delete(id: string): Promise<boolean> {
-    logger.debug({ id }, "OptimizationRuleModel.delete: deleting rule");
-    const result = await db
-      .delete(schema.optimizationRulesTable)
-      .where(eq(schema.optimizationRulesTable.id, id));
-
-    const deleted = result.rowCount !== null && result.rowCount > 0;
+  static async delete(id: string, tx?: Transaction): Promise<boolean> {
+    logger.debug({ id }, "OptimizationRuleModel.delete: soft-deleting rule");
+    const count = await softDelete(
+      tx ?? db,
+      schema.optimizationRulesTable,
+      eq(schema.optimizationRulesTable.id, id),
+    );
+    const deleted = count > 0;
     logger.debug({ id, deleted }, "OptimizationRuleModel.delete: completed");
     return deleted;
+  }
+
+  /**
+   * Hard-delete. Reserved for purge flows.
+   */
+  static async hardDelete(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await hardDelete(
+      tx ?? db,
+      schema.optimizationRulesTable,
+      eq(schema.optimizationRulesTable.id, id),
+    );
+    return count > 0;
   }
 
   /**

@@ -3,7 +3,9 @@ import type {
   A2AArchestraApprovalRequest,
   A2AArchestraTaskApprovalDecision,
 } from "@/agents/a2a/a2a-protocol";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import type {
   A2ATaskApprovalRequest,
   InsertA2ATaskApprovalRequest,
@@ -38,7 +40,12 @@ class A2ATaskApprovalRequestModel {
     const [req] = await db
       .select()
       .from(schema.a2aTaskApprovalRequestsTable)
-      .where(eq(schema.a2aTaskApprovalRequestsTable.id, id))
+      .where(
+        and(
+          eq(schema.a2aTaskApprovalRequestsTable.id, id),
+          notDeleted(schema.a2aTaskApprovalRequestsTable),
+        ),
+      )
       .limit(1);
 
     return req ?? null;
@@ -48,7 +55,12 @@ class A2ATaskApprovalRequestModel {
     const reqs = await db
       .select()
       .from(schema.a2aTaskApprovalRequestsTable)
-      .where(eq(schema.a2aTaskApprovalRequestsTable.taskId, taskId));
+      .where(
+        and(
+          eq(schema.a2aTaskApprovalRequestsTable.taskId, taskId),
+          notDeleted(schema.a2aTaskApprovalRequestsTable),
+        ),
+      );
 
     return reqs;
   }
@@ -66,6 +78,7 @@ class A2ATaskApprovalRequestModel {
         and(
           eq(schema.a2aTaskApprovalRequestsTable.taskId, taskId),
           eq(schema.a2aTaskApprovalRequestsTable.approvalId, approvalId),
+          notDeleted(schema.a2aTaskApprovalRequestsTable),
         ),
       );
   }
@@ -86,16 +99,28 @@ class A2ATaskApprovalRequestModel {
     );
   }
 
-  static async delete(id: string): Promise<void> {
-    await db
-      .delete(schema.a2aTaskApprovalRequestsTable)
-      .where(eq(schema.a2aTaskApprovalRequestsTable.id, id));
+  static async delete(id: string, tx?: Transaction): Promise<void> {
+    await softDelete(
+      tx ?? db,
+      schema.a2aTaskApprovalRequestsTable,
+      eq(schema.a2aTaskApprovalRequestsTable.id, id),
+    );
   }
 
-  static async deleteByTaskId(taskId: string): Promise<void> {
-    await db
-      .delete(schema.a2aTaskApprovalRequestsTable)
-      .where(eq(schema.a2aTaskApprovalRequestsTable.taskId, taskId));
+  static async hardDelete(id: string, tx?: Transaction): Promise<void> {
+    await hardDelete(
+      tx ?? db,
+      schema.a2aTaskApprovalRequestsTable,
+      eq(schema.a2aTaskApprovalRequestsTable.id, id),
+    );
+  }
+
+  static async deleteByTaskId(taskId: string, tx?: Transaction): Promise<void> {
+    await softDelete(
+      tx ?? db,
+      schema.a2aTaskApprovalRequestsTable,
+      eq(schema.a2aTaskApprovalRequestsTable.taskId, taskId),
+    );
   }
 }
 

@@ -1,7 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { ARCHESTRA_TOKEN_PREFIX } from "@shared";
 import { and, eq } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import type { SelectUserToken } from "@/types";
@@ -88,7 +90,12 @@ class UserTokenModel {
     const [token] = await db
       .select()
       .from(schema.userTokensTable)
-      .where(eq(schema.userTokensTable.id, id))
+      .where(
+        and(
+          eq(schema.userTokensTable.id, id),
+          notDeleted(schema.userTokensTable),
+        ),
+      )
       .limit(1);
 
     return token ?? null;
@@ -108,6 +115,7 @@ class UserTokenModel {
         and(
           eq(schema.userTokensTable.userId, userId),
           eq(schema.userTokensTable.organizationId, organizationId),
+          notDeleted(schema.userTokensTable),
         ),
       )
       .limit(1);
@@ -122,29 +130,46 @@ class UserTokenModel {
     await db
       .update(schema.userTokensTable)
       .set({ lastUsedAt: new Date() })
-      .where(eq(schema.userTokensTable.id, id));
+      .where(
+        and(
+          eq(schema.userTokensTable.id, id),
+          notDeleted(schema.userTokensTable),
+        ),
+      );
   }
 
   /**
    * Delete a token and its associated secret
    */
-  static async delete(id: string): Promise<boolean> {
+  static async delete(id: string, tx?: Transaction): Promise<boolean> {
     const token = await UserTokenModel.findById(id);
     if (!token) return false;
 
-    logger.debug({ tokenId: id }, "UserTokenModel.delete: deleting token");
+    logger.debug({ tokenId: id }, "UserTokenModel.delete: soft-deleting token");
 
-    // Delete the token (secret will be cascade deleted)
-    await db
-      .delete(schema.userTokensTable)
-      .where(eq(schema.userTokensTable.id, id));
+    await softDelete(
+      tx ?? db,
+      schema.userTokensTable,
+      eq(schema.userTokensTable.id, id),
+    );
 
-    // Also delete the secret explicitly
     await secretManager().deleteSecret(token.secretId);
 
     logger.info({ tokenId: id }, "UserTokenModel.delete: token deleted");
 
     return true;
+  }
+
+  /**
+   * Hard-delete a user token. Reserved for purge flows.
+   */
+  static async hardDelete(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await hardDelete(
+      tx ?? db,
+      schema.userTokensTable,
+      eq(schema.userTokensTable.id, id),
+    );
+    return count > 0;
   }
 
   /**
@@ -183,7 +208,12 @@ class UserTokenModel {
     await db
       .update(schema.userTokensTable)
       .set({ tokenStart: newTokenStart })
-      .where(eq(schema.userTokensTable.id, id));
+      .where(
+        and(
+          eq(schema.userTokensTable.id, id),
+          notDeleted(schema.userTokensTable),
+        ),
+      );
 
     logger.info({ tokenId: id }, "UserTokenModel.rotate: token rotated");
 
@@ -204,7 +234,12 @@ class UserTokenModel {
     const candidates = await db
       .select()
       .from(schema.userTokensTable)
-      .where(eq(schema.userTokensTable.tokenStart, tokenStart));
+      .where(
+        and(
+          eq(schema.userTokensTable.tokenStart, tokenStart),
+          notDeleted(schema.userTokensTable),
+        ),
+      );
     if (candidates.length === 0) return null;
 
     const secretsById = new Map(

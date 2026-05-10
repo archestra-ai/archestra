@@ -1,5 +1,7 @@
-import { desc, eq, gt } from "drizzle-orm";
-import db, { schema } from "@/database";
+import { and, desc, eq, gt } from "drizzle-orm";
+import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import type {
   InsertIncomingEmailSubscription,
   SelectIncomingEmailSubscription,
@@ -13,7 +15,12 @@ class IncomingEmailSubscriptionModel {
     const [subscription] = await db
       .select()
       .from(schema.incomingEmailSubscriptionsTable)
-      .where(gt(schema.incomingEmailSubscriptionsTable.expiresAt, new Date()))
+      .where(
+        and(
+          gt(schema.incomingEmailSubscriptionsTable.expiresAt, new Date()),
+          notDeleted(schema.incomingEmailSubscriptionsTable),
+        ),
+      )
       .orderBy(desc(schema.incomingEmailSubscriptionsTable.createdAt))
       .limit(1);
 
@@ -27,6 +34,7 @@ class IncomingEmailSubscriptionModel {
     const [subscription] = await db
       .select()
       .from(schema.incomingEmailSubscriptionsTable)
+      .where(notDeleted(schema.incomingEmailSubscriptionsTable))
       .orderBy(desc(schema.incomingEmailSubscriptionsTable.createdAt))
       .limit(1);
 
@@ -57,39 +65,54 @@ class IncomingEmailSubscriptionModel {
     const [updated] = await db
       .update(schema.incomingEmailSubscriptionsTable)
       .set({ expiresAt: params.expiresAt })
-      .where(eq(schema.incomingEmailSubscriptionsTable.id, params.id))
+      .where(
+        and(
+          eq(schema.incomingEmailSubscriptionsTable.id, params.id),
+          notDeleted(schema.incomingEmailSubscriptionsTable),
+        ),
+      )
       .returning();
 
     return updated;
   }
 
   /**
-   * Delete a subscription by ID
+   * Soft-delete a subscription by ID
    */
-  static async delete(id: string): Promise<boolean> {
-    const result = await db
-      .delete(schema.incomingEmailSubscriptionsTable)
-      .where(eq(schema.incomingEmailSubscriptionsTable.id, id));
-
-    return result.rowCount !== null && result.rowCount > 0;
+  static async delete(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await softDelete(
+      tx ?? db,
+      schema.incomingEmailSubscriptionsTable,
+      eq(schema.incomingEmailSubscriptionsTable.id, id),
+    );
+    return count > 0;
   }
 
   /**
-   * Delete subscription by Graph subscription ID
+   * Hard-delete a subscription. Reserved for purge flows.
+   */
+  static async hardDelete(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await hardDelete(
+      tx ?? db,
+      schema.incomingEmailSubscriptionsTable,
+      eq(schema.incomingEmailSubscriptionsTable.id, id),
+    );
+    return count > 0;
+  }
+
+  /**
+   * Soft-delete subscription by Graph subscription ID
    */
   static async deleteBySubscriptionId(
     subscriptionId: string,
+    tx?: Transaction,
   ): Promise<boolean> {
-    const result = await db
-      .delete(schema.incomingEmailSubscriptionsTable)
-      .where(
-        eq(
-          schema.incomingEmailSubscriptionsTable.subscriptionId,
-          subscriptionId,
-        ),
-      );
-
-    return result.rowCount !== null && result.rowCount > 0;
+    const count = await softDelete(
+      tx ?? db,
+      schema.incomingEmailSubscriptionsTable,
+      eq(schema.incomingEmailSubscriptionsTable.subscriptionId, subscriptionId),
+    );
+    return count > 0;
   }
 
   /**
@@ -102,9 +125,12 @@ class IncomingEmailSubscriptionModel {
       .select()
       .from(schema.incomingEmailSubscriptionsTable)
       .where(
-        eq(
-          schema.incomingEmailSubscriptionsTable.subscriptionId,
-          subscriptionId,
+        and(
+          eq(
+            schema.incomingEmailSubscriptionsTable.subscriptionId,
+            subscriptionId,
+          ),
+          notDeleted(schema.incomingEmailSubscriptionsTable),
         ),
       );
 

@@ -1,5 +1,7 @@
-import { eq } from "drizzle-orm";
-import db, { schema } from "@/database";
+import { and, eq } from "drizzle-orm";
+import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import logger from "@/logging";
 import type { TeamVaultFolder } from "@/types";
 
@@ -56,7 +58,12 @@ class TeamVaultFolderModel {
     const [folder] = await db
       .select()
       .from(schema.teamVaultFoldersTable)
-      .where(eq(schema.teamVaultFoldersTable.teamId, teamId))
+      .where(
+        and(
+          eq(schema.teamVaultFoldersTable.teamId, teamId),
+          notDeleted(schema.teamVaultFoldersTable),
+        ),
+      )
       .limit(1);
 
     if (!folder) {
@@ -75,26 +82,39 @@ class TeamVaultFolderModel {
   }
 
   /**
-   * Delete a team's Vault folder mapping
+   * Soft-delete a team's Vault folder mapping
    */
-  static async delete(teamId: string): Promise<boolean> {
+  static async delete(teamId: string, tx?: Transaction): Promise<boolean> {
     logger.debug(
       { teamId },
-      "TeamVaultFolderModel.delete: deleting team vault folder",
+      "TeamVaultFolderModel.delete: soft-deleting team vault folder",
     );
 
-    // First check if the folder exists
     const existing = await TeamVaultFolderModel.findByTeamId(teamId);
     if (!existing) {
       return false;
     }
 
-    await db
-      .delete(schema.teamVaultFoldersTable)
-      .where(eq(schema.teamVaultFoldersTable.teamId, teamId));
+    await softDelete(
+      tx ?? db,
+      schema.teamVaultFoldersTable,
+      eq(schema.teamVaultFoldersTable.teamId, teamId),
+    );
 
     logger.debug({ teamId }, "TeamVaultFolderModel.delete: completed");
     return true;
+  }
+
+  /**
+   * Hard-delete a team's Vault folder mapping. Reserved for purge flows.
+   */
+  static async hardDelete(teamId: string, tx?: Transaction): Promise<boolean> {
+    const count = await hardDelete(
+      tx ?? db,
+      schema.teamVaultFoldersTable,
+      eq(schema.teamVaultFoldersTable.teamId, teamId),
+    );
+    return count > 0;
   }
 }
 

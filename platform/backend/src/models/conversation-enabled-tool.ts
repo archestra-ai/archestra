@@ -1,5 +1,6 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
 import logger from "@/logging";
 
 class ConversationEnabledToolModel {
@@ -46,7 +47,12 @@ class ConversationEnabledToolModel {
           schema.conversationsTable.hasCustomToolSelection,
       })
       .from(schema.conversationsTable)
-      .where(eq(schema.conversationsTable.id, conversationId))
+      .where(
+        and(
+          eq(schema.conversationsTable.id, conversationId),
+          notDeleted(schema.conversationsTable),
+        ),
+      )
       .limit(1);
 
     const hasCustom = result[0]?.hasCustomToolSelection ?? false;
@@ -79,7 +85,12 @@ class ConversationEnabledToolModel {
       const existingTools = await db
         .select({ id: schema.toolsTable.id })
         .from(schema.toolsTable)
-        .where(inArray(schema.toolsTable.id, toolIds));
+        .where(
+          and(
+            inArray(schema.toolsTable.id, toolIds),
+            notDeleted(schema.toolsTable),
+          ),
+        );
 
       validToolIds = existingTools.map((t) => t.id);
 
@@ -97,7 +108,12 @@ class ConversationEnabledToolModel {
       await tx
         .update(schema.conversationsTable)
         .set({ hasCustomToolSelection: true })
-        .where(eq(schema.conversationsTable.id, conversationId));
+        .where(
+          and(
+            eq(schema.conversationsTable.id, conversationId),
+            notDeleted(schema.conversationsTable),
+          ),
+        );
 
       // Delete all existing enabled tool entries
       await tx
@@ -140,7 +156,12 @@ class ConversationEnabledToolModel {
       await tx
         .update(schema.conversationsTable)
         .set({ hasCustomToolSelection: false })
-        .where(eq(schema.conversationsTable.id, conversationId));
+        .where(
+          and(
+            eq(schema.conversationsTable.id, conversationId),
+            notDeleted(schema.conversationsTable),
+          ),
+        );
 
       // Delete all enabled tool entries
       await tx

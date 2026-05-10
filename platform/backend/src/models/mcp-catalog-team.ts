@@ -1,5 +1,6 @@
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
 import logger from "@/logging";
 
 class McpCatalogTeamModel {
@@ -20,23 +21,29 @@ class McpCatalogTeamModel {
         .select({ id: schema.internalMcpCatalogTable.id })
         .from(schema.internalMcpCatalogTable)
         .where(
-          or(
-            eq(schema.internalMcpCatalogTable.organizationId, organizationId),
-            isNull(schema.internalMcpCatalogTable.organizationId),
+          and(
+            or(
+              eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+              isNull(schema.internalMcpCatalogTable.organizationId),
+            ),
+            notDeleted(schema.internalMcpCatalogTable),
           ),
         );
       return allCatalogs.map((c) => c.id);
     }
 
+    // soft-delete: raw SQL filters via `c.deleted_at IS NULL` in each branch.
     // Mirrors the agent (profile) access control approach: org-visible + personal + team-based
     const result = await db.execute<{ id: string }>(sql`
       SELECT id FROM internal_mcp_catalog
         WHERE scope = 'org'
+          AND deleted_at IS NULL
           AND (organization_id = ${organizationId} OR organization_id IS NULL)
       UNION
       SELECT id FROM internal_mcp_catalog
         WHERE author_id = ${userId}
           AND scope = 'personal'
+          AND deleted_at IS NULL
           AND organization_id = ${organizationId}
       UNION
       SELECT ct.catalog_id AS id
@@ -45,6 +52,7 @@ class McpCatalogTeamModel {
         INNER JOIN team_member tm ON ct.team_id = tm.team_id
         WHERE tm.user_id = ${userId}
           AND c.scope = 'team'
+          AND c.deleted_at IS NULL
           AND c.organization_id = ${organizationId}
     `);
 
@@ -67,7 +75,12 @@ class McpCatalogTeamModel {
         organizationId: schema.internalMcpCatalogTable.organizationId,
       })
       .from(schema.internalMcpCatalogTable)
-      .where(eq(schema.internalMcpCatalogTable.id, catalogId))
+      .where(
+        and(
+          eq(schema.internalMcpCatalogTable.id, catalogId),
+          notDeleted(schema.internalMcpCatalogTable),
+        ),
+      )
       .limit(1);
 
     if (!catalog) return false;

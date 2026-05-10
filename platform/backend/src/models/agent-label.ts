@@ -1,5 +1,7 @@
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
+import { softDelete } from "@/database/soft-delete";
 import type { AgentLabelGetResponse, AgentLabelWithDetails } from "@/types";
 
 class AgentLabelModel {
@@ -170,22 +172,24 @@ class AgentLabelModel {
       let deletedKeys = 0;
       let deletedValues = 0;
 
-      // Delete orphaned keys
+      // Soft-delete orphaned keys
       if (orphanedKeys.length > 0) {
         const keyIds = orphanedKeys.map((k) => k.id);
-        const result = await tx
-          .delete(schema.labelKeysTable)
-          .where(inArray(schema.labelKeysTable.id, keyIds));
-        deletedKeys = result.rowCount || 0;
+        deletedKeys = await softDelete(
+          tx,
+          schema.labelKeysTable,
+          inArray(schema.labelKeysTable.id, keyIds),
+        );
       }
 
-      // Delete orphaned values
+      // Soft-delete orphaned values
       if (orphanedValues.length > 0) {
         const valueIds = orphanedValues.map((v) => v.id);
-        const result = await tx
-          .delete(schema.labelValuesTable)
-          .where(inArray(schema.labelValuesTable.id, valueIds));
-        deletedValues = result.rowCount || 0;
+        deletedValues = await softDelete(
+          tx,
+          schema.labelValuesTable,
+          inArray(schema.labelValuesTable.id, valueIds),
+        );
       }
 
       return { deletedKeys, deletedValues };
@@ -196,7 +200,10 @@ class AgentLabelModel {
    * Get all available label keys
    */
   static async getAllKeys(): Promise<string[]> {
-    const keys = await db.select().from(schema.labelKeysTable);
+    const keys = await db
+      .select()
+      .from(schema.labelKeysTable)
+      .where(notDeleted(schema.labelKeysTable));
     return keys.map((k) => k.key);
   }
 
@@ -204,7 +211,10 @@ class AgentLabelModel {
    * Get all available label values
    */
   static async getAllValues(): Promise<string[]> {
-    const values = await db.select().from(schema.labelValuesTable);
+    const values = await db
+      .select()
+      .from(schema.labelValuesTable)
+      .where(notDeleted(schema.labelValuesTable));
     return values.map((v) => v.value);
   }
 

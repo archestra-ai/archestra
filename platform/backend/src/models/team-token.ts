@@ -1,7 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { ARCHESTRA_TOKEN_PREFIX } from "@shared";
-import { desc, eq } from "drizzle-orm";
-import db, { schema } from "@/database";
+import { and, desc, eq } from "drizzle-orm";
+import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import { secretManager } from "@/secrets-manager";
 import type {
   InsertTeamToken,
@@ -93,7 +95,12 @@ class TeamTokenModel {
     const [token] = await db
       .select()
       .from(schema.teamTokensTable)
-      .where(eq(schema.teamTokensTable.id, id))
+      .where(
+        and(
+          eq(schema.teamTokensTable.id, id),
+          notDeleted(schema.teamTokensTable),
+        ),
+      )
       .limit(1);
 
     return token ?? null;
@@ -116,7 +123,12 @@ class TeamTokenModel {
         schema.teamsTable,
         eq(schema.teamTokensTable.teamId, schema.teamsTable.id),
       )
-      .where(eq(schema.teamTokensTable.id, id))
+      .where(
+        and(
+          eq(schema.teamTokensTable.id, id),
+          notDeleted(schema.teamTokensTable),
+        ),
+      )
       .limit(1);
 
     if (result.length === 0) return null;
@@ -135,7 +147,12 @@ class TeamTokenModel {
     return db
       .select()
       .from(schema.teamTokensTable)
-      .where(eq(schema.teamTokensTable.organizationId, organizationId))
+      .where(
+        and(
+          eq(schema.teamTokensTable.organizationId, organizationId),
+          notDeleted(schema.teamTokensTable),
+        ),
+      )
       .orderBy(schema.teamTokensTable.createdAt);
   }
 
@@ -156,6 +173,7 @@ class TeamTokenModel {
         schema.teamsTable,
         eq(schema.teamTokensTable.teamId, schema.teamsTable.id),
       )
+      .where(notDeleted(schema.teamTokensTable))
       .orderBy(
         desc(schema.teamTokensTable.isOrganizationToken),
         schema.teamTokensTable.createdAt,
@@ -174,7 +192,12 @@ class TeamTokenModel {
     const [token] = await db
       .select()
       .from(schema.teamTokensTable)
-      .where(eq(schema.teamTokensTable.isOrganizationToken, true))
+      .where(
+        and(
+          eq(schema.teamTokensTable.isOrganizationToken, true),
+          notDeleted(schema.teamTokensTable),
+        ),
+      )
       .limit(1);
 
     return token ?? null;
@@ -187,7 +210,12 @@ class TeamTokenModel {
     const [token] = await db
       .select()
       .from(schema.teamTokensTable)
-      .where(eq(schema.teamTokensTable.teamId, teamId))
+      .where(
+        and(
+          eq(schema.teamTokensTable.teamId, teamId),
+          notDeleted(schema.teamTokensTable),
+        ),
+      )
       .limit(1);
 
     return token ?? null;
@@ -203,7 +231,12 @@ class TeamTokenModel {
     const [updated] = await db
       .update(schema.teamTokensTable)
       .set(input)
-      .where(eq(schema.teamTokensTable.id, id))
+      .where(
+        and(
+          eq(schema.teamTokensTable.id, id),
+          notDeleted(schema.teamTokensTable),
+        ),
+      )
       .returning();
 
     return updated ?? null;
@@ -216,25 +249,43 @@ class TeamTokenModel {
     await db
       .update(schema.teamTokensTable)
       .set({ lastUsedAt: new Date() })
-      .where(eq(schema.teamTokensTable.id, id));
+      .where(
+        and(
+          eq(schema.teamTokensTable.id, id),
+          notDeleted(schema.teamTokensTable),
+        ),
+      );
   }
 
   /**
-   * Delete a token and its associated secret
+   * Soft-delete a token and its associated secret
    */
-  static async delete(id: string): Promise<boolean> {
+  static async delete(id: string, tx?: Transaction): Promise<boolean> {
     const token = await TeamTokenModel.findById(id);
     if (!token) return false;
 
-    // Delete the token (secret will be cascade deleted)
-    await db
-      .delete(schema.teamTokensTable)
-      .where(eq(schema.teamTokensTable.id, id));
+    await softDelete(
+      tx ?? db,
+      schema.teamTokensTable,
+      eq(schema.teamTokensTable.id, id),
+    );
 
-    // Also delete the secret explicitly
+    // Also soft-delete the associated secret
     await secretManager().deleteSecret(token.secretId);
 
     return true;
+  }
+
+  /**
+   * Hard-delete a token. Reserved for purge flows.
+   */
+  static async hardDelete(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await hardDelete(
+      tx ?? db,
+      schema.teamTokensTable,
+      eq(schema.teamTokensTable.id, id),
+    );
+    return count > 0;
   }
 
   /**
@@ -258,7 +309,12 @@ class TeamTokenModel {
     await db
       .update(schema.teamTokensTable)
       .set({ tokenStart: newTokenStart })
-      .where(eq(schema.teamTokensTable.id, id));
+      .where(
+        and(
+          eq(schema.teamTokensTable.id, id),
+          notDeleted(schema.teamTokensTable),
+        ),
+      );
 
     return { value: newTokenValue };
   }
@@ -275,7 +331,12 @@ class TeamTokenModel {
     const candidates = await db
       .select()
       .from(schema.teamTokensTable)
-      .where(eq(schema.teamTokensTable.tokenStart, tokenStart));
+      .where(
+        and(
+          eq(schema.teamTokensTable.tokenStart, tokenStart),
+          notDeleted(schema.teamTokensTable),
+        ),
+      );
     if (candidates.length === 0) return null;
 
     const secretsById = new Map(

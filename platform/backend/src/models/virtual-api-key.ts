@@ -5,7 +5,9 @@ import {
   type SupportedProvider,
 } from "@shared";
 import { and, count, eq, ilike, inArray, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import type { PaginatedResult } from "@/database/utils/pagination";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import logger from "@/logging";
@@ -169,7 +171,12 @@ class VirtualApiKeyModel {
           scope,
           authorId,
         })
-        .where(eq(schema.virtualApiKeysTable.id, id))
+        .where(
+          and(
+            eq(schema.virtualApiKeysTable.id, id),
+            notDeleted(schema.virtualApiKeysTable),
+          ),
+        )
         .returning();
 
       if (!updated) {
@@ -239,7 +246,13 @@ class VirtualApiKeyModel {
           ),
         )
         .where(
-          eq(schema.virtualApiKeyProviderApiKeysTable.providerApiKeyId, params),
+          and(
+            eq(
+              schema.virtualApiKeyProviderApiKeysTable.providerApiKeyId,
+              params,
+            ),
+            notDeleted(schema.virtualApiKeysTable),
+          ),
         )
         .orderBy(schema.virtualApiKeysTable.createdAt);
     }
@@ -259,7 +272,12 @@ class VirtualApiKeyModel {
     return db
       .select()
       .from(schema.virtualApiKeysTable)
-      .where(inArray(schema.virtualApiKeysTable.id, accessibleIds))
+      .where(
+        and(
+          inArray(schema.virtualApiKeysTable.id, accessibleIds),
+          notDeleted(schema.virtualApiKeysTable),
+        ),
+      )
       .orderBy(schema.virtualApiKeysTable.createdAt);
   }
 
@@ -270,7 +288,12 @@ class VirtualApiKeyModel {
     const [result] = await db
       .select()
       .from(schema.virtualApiKeysTable)
-      .where(eq(schema.virtualApiKeysTable.id, id))
+      .where(
+        and(
+          eq(schema.virtualApiKeysTable.id, id),
+          notDeleted(schema.virtualApiKeysTable),
+        ),
+      )
       .limit(1);
 
     return result ?? null;
@@ -290,7 +313,12 @@ class VirtualApiKeyModel {
         authorId: schema.virtualApiKeysTable.authorId,
       })
       .from(schema.virtualApiKeysTable)
-      .where(eq(schema.virtualApiKeysTable.id, id))
+      .where(
+        and(
+          eq(schema.virtualApiKeysTable.id, id),
+          notDeleted(schema.virtualApiKeysTable),
+        ),
+      )
       .limit(1);
 
     if (!virtualKey) {
@@ -306,15 +334,17 @@ class VirtualApiKeyModel {
   }
 
   /**
-   * Delete a virtual key and its associated secret.
+   * Soft-delete a virtual key and its associated secret.
    */
-  static async delete(id: string): Promise<boolean> {
+  static async delete(id: string, tx?: Transaction): Promise<boolean> {
     const virtualKey = await VirtualApiKeyModel.findById(id);
     if (!virtualKey) return false;
 
-    await db
-      .delete(schema.virtualApiKeysTable)
-      .where(eq(schema.virtualApiKeysTable.id, id));
+    await softDelete(
+      tx ?? db,
+      schema.virtualApiKeysTable,
+      eq(schema.virtualApiKeysTable.id, id),
+    );
 
     try {
       await secretManager().deleteSecret(virtualKey.secretId);
@@ -338,6 +368,18 @@ class VirtualApiKeyModel {
   }
 
   /**
+   * Hard-delete a virtual key. Reserved for purge flows.
+   */
+  static async hardDelete(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await hardDelete(
+      tx ?? db,
+      schema.virtualApiKeysTable,
+      eq(schema.virtualApiKeysTable.id, id),
+    );
+    return count > 0;
+  }
+
+  /**
    * Count virtual keys for a provider API key (for enforcing max limit).
    */
   static async countByProviderApiKeyId(
@@ -354,9 +396,12 @@ class VirtualApiKeyModel {
         ),
       )
       .where(
-        eq(
-          schema.virtualApiKeyProviderApiKeysTable.providerApiKeyId,
-          providerApiKeyId,
+        and(
+          eq(
+            schema.virtualApiKeyProviderApiKeysTable.providerApiKeyId,
+            providerApiKeyId,
+          ),
+          notDeleted(schema.virtualApiKeysTable),
         ),
       );
 
@@ -400,6 +445,7 @@ class VirtualApiKeyModel {
 
     const whereConditions = [
       eq(schema.virtualApiKeysTable.organizationId, organizationId),
+      notDeleted(schema.virtualApiKeysTable),
     ];
 
     if (!isAdmin) {
@@ -468,7 +514,12 @@ class VirtualApiKeyModel {
     await db
       .update(schema.virtualApiKeysTable)
       .set({ lastUsedAt: new Date() })
-      .where(eq(schema.virtualApiKeysTable.id, id));
+      .where(
+        and(
+          eq(schema.virtualApiKeysTable.id, id),
+          notDeleted(schema.virtualApiKeysTable),
+        ),
+      );
   }
 
   /**
@@ -482,7 +533,12 @@ class VirtualApiKeyModel {
     const candidates = await db
       .select()
       .from(schema.virtualApiKeysTable)
-      .where(eq(schema.virtualApiKeysTable.tokenStart, tokenStart));
+      .where(
+        and(
+          eq(schema.virtualApiKeysTable.tokenStart, tokenStart),
+          notDeleted(schema.virtualApiKeysTable),
+        ),
+      );
 
     for (const virtualKey of candidates) {
       const secret = await secretManager().getSecret(virtualKey.secretId);
@@ -632,7 +688,7 @@ class VirtualApiKeyModel {
       params;
 
     if (isAdmin) {
-      const conditions = [];
+      const conditions = [notDeleted(schema.virtualApiKeysTable)];
       if (organizationId) {
         conditions.push(
           eq(schema.virtualApiKeysTable.organizationId, organizationId),
@@ -660,13 +716,12 @@ class VirtualApiKeyModel {
                 ),
               ),
             )
-        : baseQuery.where(
-            conditions.length > 0 ? and(...conditions) : undefined,
-          ));
+        : baseQuery.where(and(...conditions)));
 
       return rows.map((row) => row.id);
     }
 
+    // soft-delete: raw SQL filters via `vak.deleted_at IS NULL` below.
     const teamAccessCondition =
       userTeamIds.length > 0
         ? sql`
@@ -674,6 +729,7 @@ class VirtualApiKeyModel {
             FROM virtual_api_key_team vat
             INNER JOIN virtual_api_keys vak ON vat.virtual_api_key_id = vak.id
             WHERE vak.scope = 'team'
+              AND vak.deleted_at IS NULL
               AND vat.team_id IN (${sql.join(
                 userTeamIds.map((id) => sql`${id}`),
                 sql`, `,
@@ -687,12 +743,14 @@ class VirtualApiKeyModel {
       SELECT vak.id
       FROM virtual_api_keys vak
       WHERE vak.scope = 'org'
+        AND vak.deleted_at IS NULL
         ${organizationId ? sql`AND vak.organization_id = ${organizationId}` : sql``}
         ${providerApiKeyId ? sql`AND EXISTS (SELECT 1 FROM virtual_api_key_provider_api_key vakpak WHERE vakpak.virtual_api_key_id = vak.id AND vakpak.provider_api_key_id = ${providerApiKeyId})` : sql``}
       UNION
       SELECT vak.id
       FROM virtual_api_keys vak
       WHERE vak.scope = 'personal'
+        AND vak.deleted_at IS NULL
         AND vak.author_id = ${userId}
         ${organizationId ? sql`AND vak.organization_id = ${organizationId}` : sql``}
         ${providerApiKeyId ? sql`AND EXISTS (SELECT 1 FROM virtual_api_key_provider_api_key vakpak WHERE vakpak.virtual_api_key_id = vak.id AND vakpak.provider_api_key_id = ${providerApiKeyId})` : sql``}
@@ -743,7 +801,12 @@ class VirtualApiKeyModel {
           schema.usersTable,
           eq(schema.virtualApiKeysTable.authorId, schema.usersTable.id),
         )
-        .where(inArray(schema.virtualApiKeysTable.id, virtualApiKeyIds)),
+        .where(
+          and(
+            inArray(schema.virtualApiKeysTable.id, virtualApiKeyIds),
+            notDeleted(schema.virtualApiKeysTable),
+          ),
+        ),
     ]);
 
     const teamsByVirtualApiKeyId = new Map<string, TeamInfo[]>();
@@ -806,7 +869,13 @@ async function getOrganizationIdForProviderKeys(
     .select({ organizationId: schema.llmProviderApiKeysTable.organizationId })
     .from(schema.llmProviderApiKeysTable)
     .where(
-      eq(schema.llmProviderApiKeysTable.id, firstProviderKey.providerApiKeyId),
+      and(
+        eq(
+          schema.llmProviderApiKeysTable.id,
+          firstProviderKey.providerApiKeyId,
+        ),
+        notDeleted(schema.llmProviderApiKeysTable),
+      ),
     )
     .limit(1);
 

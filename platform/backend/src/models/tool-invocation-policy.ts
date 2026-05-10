@@ -9,7 +9,9 @@ import {
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { get } from "lodash-es";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import logger from "@/logging";
 import type {
   AutonomyPolicyOperator,
@@ -36,7 +38,12 @@ class ToolInvocationPolicyModel {
       const [existingDefault] = await db
         .select()
         .from(schema.toolInvocationPoliciesTable)
-        .where(eq(schema.toolInvocationPoliciesTable.toolId, policy.toolId))
+        .where(
+          and(
+            eq(schema.toolInvocationPoliciesTable.toolId, policy.toolId),
+            notDeleted(schema.toolInvocationPoliciesTable),
+          ),
+        )
         .then((rows) => rows.filter((r) => r.conditions.length === 0));
 
       if (existingDefault) {
@@ -62,7 +69,12 @@ class ToolInvocationPolicyModel {
         policiesAutoConfiguredAt: null,
         policiesAutoConfiguredReasoning: null,
       })
-      .where(eq(schema.toolsTable.id, policy.toolId));
+      .where(
+        and(
+          eq(schema.toolsTable.id, policy.toolId),
+          notDeleted(schema.toolsTable),
+        ),
+      );
 
     return createdPolicy;
   }
@@ -71,6 +83,7 @@ class ToolInvocationPolicyModel {
     return db
       .select()
       .from(schema.toolInvocationPoliciesTable)
+      .where(notDeleted(schema.toolInvocationPoliciesTable))
       .orderBy(desc(schema.toolInvocationPoliciesTable.createdAt));
   }
 
@@ -80,7 +93,12 @@ class ToolInvocationPolicyModel {
     const [policy] = await db
       .select()
       .from(schema.toolInvocationPoliciesTable)
-      .where(eq(schema.toolInvocationPoliciesTable.id, id));
+      .where(
+        and(
+          eq(schema.toolInvocationPoliciesTable.id, id),
+          notDeleted(schema.toolInvocationPoliciesTable),
+        ),
+      );
     return policy || null;
   }
 
@@ -91,7 +109,12 @@ class ToolInvocationPolicyModel {
     const [updatedPolicy] = await db
       .update(schema.toolInvocationPoliciesTable)
       .set(policy)
-      .where(eq(schema.toolInvocationPoliciesTable.id, id))
+      .where(
+        and(
+          eq(schema.toolInvocationPoliciesTable.id, id),
+          notDeleted(schema.toolInvocationPoliciesTable),
+        ),
+      )
       .returning();
 
     if (updatedPolicy) {
@@ -102,25 +125,31 @@ class ToolInvocationPolicyModel {
           policiesAutoConfiguredAt: null,
           policiesAutoConfiguredReasoning: null,
         })
-        .where(eq(schema.toolsTable.id, updatedPolicy.toolId));
+        .where(
+          and(
+            eq(schema.toolsTable.id, updatedPolicy.toolId),
+            notDeleted(schema.toolsTable),
+          ),
+        );
     }
 
     return updatedPolicy || null;
   }
 
-  static async delete(id: string): Promise<boolean> {
+  static async delete(id: string, tx?: Transaction): Promise<boolean> {
     // Get the policy first to access toolId
     const policy = await ToolInvocationPolicyModel.findById(id);
     if (!policy) {
       return false;
     }
 
-    const result = await db
-      .delete(schema.toolInvocationPoliciesTable)
-      .where(eq(schema.toolInvocationPoliciesTable.id, id))
-      .returning({ id: schema.toolInvocationPoliciesTable.id });
+    const count = await softDelete(
+      tx ?? db,
+      schema.toolInvocationPoliciesTable,
+      eq(schema.toolInvocationPoliciesTable.id, id),
+    );
 
-    const deleted = result.length > 0;
+    const deleted = count > 0;
 
     if (deleted) {
       // Clear auto-configured timestamp for this tool
@@ -130,23 +159,41 @@ class ToolInvocationPolicyModel {
           policiesAutoConfiguredAt: null,
           policiesAutoConfiguredReasoning: null,
         })
-        .where(eq(schema.toolsTable.id, policy.toolId));
+        .where(
+          and(
+            eq(schema.toolsTable.id, policy.toolId),
+            notDeleted(schema.toolsTable),
+          ),
+        );
     }
 
     return deleted;
   }
 
   /**
-   * Delete all tool invocation policies for a specific tool.
-   * Used primarily in tests.
+   * Hard-delete a policy. Reserved for purge flows.
    */
-  static async deleteByToolId(toolId: string): Promise<number> {
-    const result = await db
-      .delete(schema.toolInvocationPoliciesTable)
-      .where(eq(schema.toolInvocationPoliciesTable.toolId, toolId))
-      .returning({ id: schema.toolInvocationPoliciesTable.id });
+  static async hardDelete(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await hardDelete(
+      tx ?? db,
+      schema.toolInvocationPoliciesTable,
+      eq(schema.toolInvocationPoliciesTable.id, id),
+    );
+    return count > 0;
+  }
 
-    return result.length;
+  /**
+   * Soft-delete all tool invocation policies for a specific tool.
+   */
+  static async deleteByToolId(
+    toolId: string,
+    tx?: Transaction,
+  ): Promise<number> {
+    return softDelete(
+      tx ?? db,
+      schema.toolInvocationPoliciesTable,
+      eq(schema.toolInvocationPoliciesTable.toolId, toolId),
+    );
   }
 
   /**
@@ -169,7 +216,12 @@ class ToolInvocationPolicyModel {
     const existingPolicies = await db
       .select()
       .from(schema.toolInvocationPoliciesTable)
-      .where(inArray(schema.toolInvocationPoliciesTable.toolId, toolIds));
+      .where(
+        and(
+          inArray(schema.toolInvocationPoliciesTable.toolId, toolIds),
+          notDeleted(schema.toolInvocationPoliciesTable),
+        ),
+      );
 
     // Filter to only default policies (empty conditions array)
     const defaultPolicies = existingPolicies.filter(
@@ -193,7 +245,12 @@ class ToolInvocationPolicyModel {
       await db
         .update(schema.toolInvocationPoliciesTable)
         .set({ action })
-        .where(inArray(schema.toolInvocationPoliciesTable.id, policyIds));
+        .where(
+          and(
+            inArray(schema.toolInvocationPoliciesTable.id, policyIds),
+            notDeleted(schema.toolInvocationPoliciesTable),
+          ),
+        );
       updated = policiesToUpdate.length;
     }
 
@@ -251,7 +308,12 @@ class ToolInvocationPolicyModel {
     const policies = await db
       .select()
       .from(schema.toolInvocationPoliciesTable)
-      .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
+      .where(
+        and(
+          eq(schema.toolInvocationPoliciesTable.toolId, tool.id),
+          notDeleted(schema.toolInvocationPoliciesTable),
+        ),
+      );
 
     logger.debug(
       {
@@ -460,7 +522,12 @@ class ToolInvocationPolicyModel {
     const allPolicies = await db
       .select()
       .from(schema.toolInvocationPoliciesTable)
-      .where(inArray(schema.toolInvocationPoliciesTable.toolId, toolIds));
+      .where(
+        and(
+          inArray(schema.toolInvocationPoliciesTable.toolId, toolIds),
+          notDeleted(schema.toolInvocationPoliciesTable),
+        ),
+      );
 
     logger.debug(
       { allPolicies },
@@ -648,6 +715,7 @@ class ToolInvocationPolicyModel {
             inArray(schema.toolInvocationPoliciesTable.action, blockingActions),
             sql`jsonb_typeof(${schema.toolInvocationPoliciesTable.conditions}) = 'array' AND jsonb_array_length(${schema.toolInvocationPoliciesTable.conditions}) > 0`,
           ),
+          notDeleted(schema.toolInvocationPoliciesTable),
         ),
       )
       .limit(1);

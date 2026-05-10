@@ -14,7 +14,9 @@ import {
   or,
   sql,
 } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import {
   createPaginatedResult,
   type PaginatedResult,
@@ -72,6 +74,7 @@ class ChatOpsChannelBindingModel {
     const conditions = [
       eq(schema.chatopsChannelBindingsTable.provider, params.provider),
       eq(schema.chatopsChannelBindingsTable.channelId, params.channelId),
+      notDeleted(schema.chatopsChannelBindingsTable),
     ];
 
     // Handle nullable workspaceId
@@ -99,7 +102,12 @@ class ChatOpsChannelBindingModel {
     const [binding] = await db
       .select()
       .from(schema.chatopsChannelBindingsTable)
-      .where(eq(schema.chatopsChannelBindingsTable.id, id));
+      .where(
+        and(
+          eq(schema.chatopsChannelBindingsTable.id, id),
+          notDeleted(schema.chatopsChannelBindingsTable),
+        ),
+      );
 
     return (binding as ChatOpsChannelBinding) || null;
   }
@@ -118,6 +126,7 @@ class ChatOpsChannelBindingModel {
         and(
           eq(schema.chatopsChannelBindingsTable.id, id),
           eq(schema.chatopsChannelBindingsTable.organizationId, organizationId),
+          notDeleted(schema.chatopsChannelBindingsTable),
         ),
       );
 
@@ -134,7 +143,10 @@ class ChatOpsChannelBindingModel {
       .select()
       .from(schema.chatopsChannelBindingsTable)
       .where(
-        eq(schema.chatopsChannelBindingsTable.organizationId, organizationId),
+        and(
+          eq(schema.chatopsChannelBindingsTable.organizationId, organizationId),
+          notDeleted(schema.chatopsChannelBindingsTable),
+        ),
       )
       .orderBy(desc(schema.chatopsChannelBindingsTable.createdAt));
 
@@ -172,6 +184,7 @@ class ChatOpsChannelBindingModel {
       eq(t.organizationId, organizationId),
       // DM visibility: exclude other users' DMs
       or(eq(t.isDm, false), eq(t.dmOwnerEmail, userEmail)),
+      notDeleted(t),
       ...(filters?.provider ? [eq(t.provider, filters.provider)] : []),
     ];
 
@@ -236,6 +249,7 @@ class ChatOpsChannelBindingModel {
             eq(t.organizationId, organizationId),
             isNotNull(t.workspaceId),
             isNotNull(t.workspaceName),
+            notDeleted(t),
             ...(filters?.provider ? [eq(t.provider, filters.provider)] : []),
           ),
         ),
@@ -272,7 +286,12 @@ class ChatOpsChannelBindingModel {
     const bindings = await db
       .select()
       .from(schema.chatopsChannelBindingsTable)
-      .where(eq(schema.chatopsChannelBindingsTable.agentId, agentId))
+      .where(
+        and(
+          eq(schema.chatopsChannelBindingsTable.agentId, agentId),
+          notDeleted(schema.chatopsChannelBindingsTable),
+        ),
+      )
       .orderBy(desc(schema.chatopsChannelBindingsTable.createdAt));
 
     return bindings as ChatOpsChannelBinding[];
@@ -290,7 +309,12 @@ class ChatOpsChannelBindingModel {
       .set({
         ...(input.agentId !== undefined && { agentId: input.agentId }),
       })
-      .where(eq(schema.chatopsChannelBindingsTable.id, id))
+      .where(
+        and(
+          eq(schema.chatopsChannelBindingsTable.id, id),
+          notDeleted(schema.chatopsChannelBindingsTable),
+        ),
+      )
       .returning();
 
     return (binding as ChatOpsChannelBinding) || null;
@@ -313,6 +337,7 @@ class ChatOpsChannelBindingModel {
           eq(schema.chatopsChannelBindingsTable.isDm, true),
           eq(schema.chatopsChannelBindingsTable.dmOwnerEmail, dmOwnerEmail),
           sql`${schema.chatopsChannelBindingsTable.channelId} LIKE 'dm:pending:%'`,
+          notDeleted(schema.chatopsChannelBindingsTable),
         ),
       )
       .limit(1);
@@ -337,6 +362,7 @@ class ChatOpsChannelBindingModel {
           eq(schema.chatopsChannelBindingsTable.provider, provider),
           eq(schema.chatopsChannelBindingsTable.isDm, true),
           eq(schema.chatopsChannelBindingsTable.dmOwnerEmail, dmOwnerEmail),
+          notDeleted(schema.chatopsChannelBindingsTable),
         ),
       )
       .orderBy(desc(schema.chatopsChannelBindingsTable.updatedAt))
@@ -360,7 +386,12 @@ class ChatOpsChannelBindingModel {
         channelId: realChannelId,
         workspaceId,
       })
-      .where(eq(schema.chatopsChannelBindingsTable.id, id))
+      .where(
+        and(
+          eq(schema.chatopsChannelBindingsTable.id, id),
+          notDeleted(schema.chatopsChannelBindingsTable),
+        ),
+      )
       .returning();
 
     return (binding as ChatOpsChannelBinding) || null;
@@ -384,6 +415,7 @@ class ChatOpsChannelBindingModel {
         and(
           inArray(schema.chatopsChannelBindingsTable.id, ids),
           eq(schema.chatopsChannelBindingsTable.organizationId, organizationId),
+          notDeleted(schema.chatopsChannelBindingsTable),
         ),
       )
       .returning();
@@ -412,7 +444,12 @@ class ChatOpsChannelBindingModel {
     const [binding] = await db
       .update(schema.chatopsChannelBindingsTable)
       .set(setFields)
-      .where(eq(schema.chatopsChannelBindingsTable.id, id))
+      .where(
+        and(
+          eq(schema.chatopsChannelBindingsTable.id, id),
+          notDeleted(schema.chatopsChannelBindingsTable),
+        ),
+      )
       .returning();
 
     return (binding as ChatOpsChannelBinding) || null;
@@ -450,7 +487,12 @@ class ChatOpsChannelBindingModel {
         const [updated] = await db
           .update(schema.chatopsChannelBindingsTable)
           .set(setFields)
-          .where(eq(schema.chatopsChannelBindingsTable.id, existing.id))
+          .where(
+            and(
+              eq(schema.chatopsChannelBindingsTable.id, existing.id),
+              notDeleted(schema.chatopsChannelBindingsTable),
+            ),
+          )
           .returning();
         return (updated as ChatOpsChannelBinding) ?? existing;
       }
@@ -461,6 +503,9 @@ class ChatOpsChannelBindingModel {
     // a new one. Slack/Teams can assign new channel IDs when a user
     // re-initiates a DM, leading to duplicate rows for the same person.
     if (input.isDm && input.dmOwnerEmail) {
+      // Hard-delete stale DM bindings: the channel ID changed; the row is
+      // no longer addressable, so a soft-deleted row would just be dead
+      // weight. Capture the rows for agentId inheritance below.
       const deleted = await db
         .delete(schema.chatopsChannelBindingsTable)
         .where(
@@ -506,33 +551,46 @@ class ChatOpsChannelBindingModel {
   }
 
   /**
-   * Delete a binding by ID
+   * Soft-delete a binding by ID
    */
-  static async delete(id: string): Promise<boolean> {
-    const result = await db
-      .delete(schema.chatopsChannelBindingsTable)
-      .where(eq(schema.chatopsChannelBindingsTable.id, id));
-
-    return (result.rowCount ?? 0) > 0;
+  static async delete(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await softDelete(
+      tx ?? db,
+      schema.chatopsChannelBindingsTable,
+      eq(schema.chatopsChannelBindingsTable.id, id),
+    );
+    return count > 0;
   }
 
   /**
-   * Delete a binding by ID and organization
+   * Hard-delete a binding. Reserved for purge flows.
+   */
+  static async hardDelete(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await hardDelete(
+      tx ?? db,
+      schema.chatopsChannelBindingsTable,
+      eq(schema.chatopsChannelBindingsTable.id, id),
+    );
+    return count > 0;
+  }
+
+  /**
+   * Soft-delete a binding by ID and organization
    */
   static async deleteByIdAndOrganization(
     id: string,
     organizationId: string,
+    tx?: Transaction,
   ): Promise<boolean> {
-    const result = await db
-      .delete(schema.chatopsChannelBindingsTable)
-      .where(
-        and(
-          eq(schema.chatopsChannelBindingsTable.id, id),
-          eq(schema.chatopsChannelBindingsTable.organizationId, organizationId),
-        ),
-      );
-
-    return (result.rowCount ?? 0) > 0;
+    const count = await softDelete(
+      tx ?? db,
+      schema.chatopsChannelBindingsTable,
+      and(
+        eq(schema.chatopsChannelBindingsTable.id, id),
+        eq(schema.chatopsChannelBindingsTable.organizationId, organizationId),
+      )!,
+    );
+    return count > 0;
   }
 
   /**
@@ -596,6 +654,7 @@ class ChatOpsChannelBindingModel {
           and(
             eq(schema.chatopsChannelBindingsTable.provider, params.provider),
             isNull(schema.chatopsChannelBindingsTable.workspaceName),
+            notDeleted(schema.chatopsChannelBindingsTable),
           ),
         );
       return;
@@ -611,6 +670,7 @@ class ChatOpsChannelBindingModel {
         and(
           eq(schema.chatopsChannelBindingsTable.provider, params.provider),
           sql`${schema.chatopsChannelBindingsTable.workspaceName} IS NOT NULL`,
+          notDeleted(schema.chatopsChannelBindingsTable),
         ),
       )
       .groupBy(schema.chatopsChannelBindingsTable.workspaceName)
@@ -625,6 +685,7 @@ class ChatOpsChannelBindingModel {
           and(
             eq(schema.chatopsChannelBindingsTable.provider, params.provider),
             isNull(schema.chatopsChannelBindingsTable.workspaceName),
+            notDeleted(schema.chatopsChannelBindingsTable),
           ),
         );
     }
@@ -648,31 +709,30 @@ class ChatOpsChannelBindingModel {
     )
       return 0;
 
-    const deleted = await db
-      .delete(schema.chatopsChannelBindingsTable)
-      .where(
-        and(
-          eq(
-            schema.chatopsChannelBindingsTable.organizationId,
-            params.organizationId,
-          ),
-          eq(schema.chatopsChannelBindingsTable.provider, params.provider),
-          inArray(
-            schema.chatopsChannelBindingsTable.workspaceId,
-            params.workspaceIds,
-          ),
-          notInArray(
-            schema.chatopsChannelBindingsTable.channelId,
-            params.activeChannelIds,
-          ),
-          // Exclude DM bindings from cleanup — they won't appear in the
-          // active channel discovery list but should be preserved.
-          eq(schema.chatopsChannelBindingsTable.isDm, false),
+    const deletedCount = await softDelete(
+      db,
+      schema.chatopsChannelBindingsTable,
+      and(
+        eq(
+          schema.chatopsChannelBindingsTable.organizationId,
+          params.organizationId,
         ),
-      )
-      .returning();
+        eq(schema.chatopsChannelBindingsTable.provider, params.provider),
+        inArray(
+          schema.chatopsChannelBindingsTable.workspaceId,
+          params.workspaceIds,
+        ),
+        notInArray(
+          schema.chatopsChannelBindingsTable.channelId,
+          params.activeChannelIds,
+        ),
+        // Exclude DM bindings from cleanup — they won't appear in the
+        // active channel discovery list but should be preserved.
+        eq(schema.chatopsChannelBindingsTable.isDm, false),
+      )!,
+    );
 
-    return deleted.length;
+    return deletedCount;
   }
 
   /**
@@ -686,18 +746,17 @@ class ChatOpsChannelBindingModel {
     channelId: string;
     canonicalBindingId: string;
   }): Promise<number> {
-    const deleted = await db
-      .delete(schema.chatopsChannelBindingsTable)
-      .where(
-        and(
-          eq(schema.chatopsChannelBindingsTable.provider, params.provider),
-          eq(schema.chatopsChannelBindingsTable.channelId, params.channelId),
-          ne(schema.chatopsChannelBindingsTable.id, params.canonicalBindingId),
-        ),
-      )
-      .returning();
+    const deletedCount = await softDelete(
+      db,
+      schema.chatopsChannelBindingsTable,
+      and(
+        eq(schema.chatopsChannelBindingsTable.provider, params.provider),
+        eq(schema.chatopsChannelBindingsTable.channelId, params.channelId),
+        ne(schema.chatopsChannelBindingsTable.id, params.canonicalBindingId),
+      )!,
+    );
 
-    return deleted.length;
+    return deletedCount;
   }
 
   /**
@@ -716,6 +775,7 @@ class ChatOpsChannelBindingModel {
         and(
           inArray(schema.chatopsChannelBindingsTable.id, ids),
           eq(schema.chatopsChannelBindingsTable.organizationId, organizationId),
+          notDeleted(schema.chatopsChannelBindingsTable),
         ),
       );
 
@@ -744,6 +804,7 @@ class ChatOpsChannelBindingModel {
             schema.chatopsChannelBindingsTable.channelId,
             params.channelIds,
           ),
+          notDeleted(schema.chatopsChannelBindingsTable),
         ),
       );
 
@@ -775,12 +836,11 @@ class ChatOpsChannelBindingModel {
 
     if (idsToDelete.length === 0) return 0;
 
-    const deleted = await db
-      .delete(schema.chatopsChannelBindingsTable)
-      .where(inArray(schema.chatopsChannelBindingsTable.id, idsToDelete))
-      .returning();
-
-    return deleted.length;
+    return softDelete(
+      db,
+      schema.chatopsChannelBindingsTable,
+      inArray(schema.chatopsChannelBindingsTable.id, idsToDelete),
+    );
   }
 }
 

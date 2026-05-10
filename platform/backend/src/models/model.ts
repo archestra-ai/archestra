@@ -1,6 +1,17 @@
 import type { SupportedProvider } from "@shared";
-import { and, eq, ilike, inArray, notInArray, or, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import {
+  and,
+  eq,
+  ilike,
+  inArray,
+  notInArray,
+  or,
+  type SQL,
+  sql,
+} from "drizzle-orm";
+import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import logger from "@/logging";
 import type {
   CreateModel,
@@ -56,7 +67,12 @@ class ModelModel {
     return await db
       .select()
       .from(schema.modelsTable)
-      .where(eq(schema.modelsTable.discoveredViaLlmProxy, true));
+      .where(
+        and(
+          eq(schema.modelsTable.discoveredViaLlmProxy, true),
+          notDeleted(schema.modelsTable),
+        ),
+      );
   }
 
   static async findAll(params?: {
@@ -64,7 +80,7 @@ class ModelModel {
     provider?: SupportedProvider;
     providers?: SupportedProvider[];
   }): Promise<Model[]> {
-    const conditions = [];
+    const conditions: SQL[] = [notDeleted(schema.modelsTable)];
 
     if (params?.search) {
       conditions.push(ilike(schema.modelsTable.modelId, `%${params.search}%`));
@@ -79,7 +95,7 @@ class ModelModel {
       conditions.push(inArray(schema.modelsTable.provider, params.providers));
     }
 
-    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    const whereClause = and(...conditions);
 
     return await db.select().from(schema.modelsTable).where(whereClause);
   }
@@ -91,7 +107,9 @@ class ModelModel {
     const [result] = await db
       .select()
       .from(schema.modelsTable)
-      .where(eq(schema.modelsTable.id, id));
+      .where(
+        and(eq(schema.modelsTable.id, id), notDeleted(schema.modelsTable)),
+      );
 
     return result || null;
   }
@@ -110,6 +128,7 @@ class ModelModel {
         and(
           eq(schema.modelsTable.provider, provider),
           eq(schema.modelsTable.modelId, modelId),
+          notDeleted(schema.modelsTable),
         ),
       );
 
@@ -137,7 +156,7 @@ class ModelModel {
     const results = await db
       .select()
       .from(schema.modelsTable)
-      .where(or(...conditions));
+      .where(and(or(...conditions), notDeleted(schema.modelsTable)));
 
     const map = new Map<string, Model>();
     for (const result of results) {
@@ -157,7 +176,10 @@ class ModelModel {
     modelId: string;
     provider?: SupportedProvider;
   }): Promise<Model[]> {
-    const conditions = [eq(schema.modelsTable.modelId, params.modelId)];
+    const conditions = [
+      eq(schema.modelsTable.modelId, params.modelId),
+      notDeleted(schema.modelsTable),
+    ];
 
     if (params.provider) {
       conditions.push(eq(schema.modelsTable.provider, params.provider));
@@ -370,49 +392,57 @@ class ModelModel {
       return false;
     }
 
-    await db
-      .delete(schema.modelsTable)
-      .where(
-        and(
-          eq(schema.modelsTable.provider, provider),
-          eq(schema.modelsTable.modelId, modelId),
-        ),
-      );
+    await softDelete(
+      db,
+      schema.modelsTable,
+      and(
+        eq(schema.modelsTable.provider, provider),
+        eq(schema.modelsTable.modelId, modelId),
+      )!,
+    );
 
     return true;
   }
 
   /**
-   * Delete all models
+   * Soft-delete all models
    */
-  static async deleteAll(): Promise<void> {
+  static async deleteAll(tx?: Transaction): Promise<void> {
+    await softDelete(
+      tx ?? db,
+      schema.modelsTable,
+      notDeleted(schema.modelsTable),
+    );
+  }
+
+  /**
+   * Hard-delete all models. Reserved for purge flows / dev resets.
+   */
+  static async hardDeleteAll(): Promise<void> {
     await db.delete(schema.modelsTable);
   }
 
   /**
-   * Delete orphaned models that have no API key links and were NOT
+   * Soft-delete orphaned models that have no API key links and were NOT
    * discovered via LLM Proxy. LLM Proxy models are preserved so users
    * can define custom token pricing for metrics.
    */
   static async deleteOrphanedModels(): Promise<number> {
-    const orphaned = await db
-      .delete(schema.modelsTable)
-      .where(
-        and(
-          eq(schema.modelsTable.discoveredViaLlmProxy, false),
-          notInArray(
-            schema.modelsTable.id,
-            db
-              .selectDistinct({
-                modelId: schema.llmProviderApiKeyModelsTable.modelId,
-              })
-              .from(schema.llmProviderApiKeyModelsTable),
-          ),
+    return softDelete(
+      db,
+      schema.modelsTable,
+      and(
+        eq(schema.modelsTable.discoveredViaLlmProxy, false),
+        notInArray(
+          schema.modelsTable.id,
+          db
+            .selectDistinct({
+              modelId: schema.llmProviderApiKeyModelsTable.modelId,
+            })
+            .from(schema.llmProviderApiKeyModelsTable),
         ),
-      )
-      .returning({ id: schema.modelsTable.id });
-
-    return orphaned.length;
+      )!,
+    );
   }
 
   /**
@@ -442,7 +472,7 @@ class ModelModel {
     const [result] = await db
       .update(schema.modelsTable)
       .set(set)
-      .where(eq(schema.modelsTable.id, id))
+      .where(and(eq(schema.modelsTable.id, id), notDeleted(schema.modelsTable)))
       .returning();
 
     return result || null;
@@ -550,7 +580,12 @@ class ModelModel {
     const [result] = await db
       .select()
       .from(schema.modelsTable)
-      .where(eq(schema.modelsTable.modelId, modelId))
+      .where(
+        and(
+          eq(schema.modelsTable.modelId, modelId),
+          notDeleted(schema.modelsTable),
+        ),
+      )
       .limit(1);
 
     return result || null;

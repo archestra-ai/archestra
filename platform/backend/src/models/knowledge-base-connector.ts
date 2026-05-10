@@ -1,5 +1,7 @@
 import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import type {
   InsertKnowledgeBaseConnector,
   KnowledgeBaseConnector,
@@ -31,6 +33,7 @@ class KnowledgeBaseConnectorModel {
             canReadAll: params.canReadAll,
             teamIds: params.viewerTeamIds,
           }),
+          notDeleted(schema.knowledgeBaseConnectorsTable),
         ),
       )
       .orderBy(desc(schema.knowledgeBaseConnectorsTable.createdAt))
@@ -51,7 +54,13 @@ class KnowledgeBaseConnectorModel {
       .select({ count: count() })
       .from(schema.knowledgeBaseConnectorsTable)
       .where(
-        eq(schema.knowledgeBaseConnectorsTable.organizationId, organizationId),
+        and(
+          eq(
+            schema.knowledgeBaseConnectorsTable.organizationId,
+            organizationId,
+          ),
+          notDeleted(schema.knowledgeBaseConnectorsTable),
+        ),
       );
 
     return result?.count ?? 0;
@@ -80,6 +89,7 @@ class KnowledgeBaseConnectorModel {
     const filters = [
       eq(schema.knowledgeBaseConnectorsTable.organizationId, organizationId),
       buildVisibilityFilter({ canReadAll, teamIds: viewerTeamIds }),
+      notDeleted(schema.knowledgeBaseConnectorsTable),
       ...(connectorType
         ? [eq(schema.knowledgeBaseConnectorsTable.connectorType, connectorType)]
         : []),
@@ -97,6 +107,7 @@ class KnowledgeBaseConnectorModel {
     ];
 
     const [data, totalResult] = await Promise.all([
+      // soft-delete: `filters` includes notDeleted(knowledgeBaseConnectorsTable).
       db
         .select()
         .from(schema.knowledgeBaseConnectorsTable)
@@ -159,6 +170,7 @@ class KnowledgeBaseConnectorModel {
             canReadAll: params?.canReadAll,
             teamIds: params?.viewerTeamIds,
           }),
+          notDeleted(schema.knowledgeBaseConnectorsTable),
         ),
       )
       .orderBy(desc(schema.knowledgeBaseConnectorsTable.createdAt));
@@ -213,6 +225,7 @@ class KnowledgeBaseConnectorModel {
             canReadAll: params?.canReadAll,
             teamIds: params?.viewerTeamIds,
           }),
+          notDeleted(schema.knowledgeBaseConnectorsTable),
         ),
       );
   }
@@ -221,7 +234,12 @@ class KnowledgeBaseConnectorModel {
     const [result] = await db
       .select()
       .from(schema.knowledgeBaseConnectorsTable)
-      .where(eq(schema.knowledgeBaseConnectorsTable.id, id));
+      .where(
+        and(
+          eq(schema.knowledgeBaseConnectorsTable.id, id),
+          notDeleted(schema.knowledgeBaseConnectorsTable),
+        ),
+      );
 
     return result ?? null;
   }
@@ -232,7 +250,12 @@ class KnowledgeBaseConnectorModel {
     return await db
       .select()
       .from(schema.knowledgeBaseConnectorsTable)
-      .where(inArray(schema.knowledgeBaseConnectorsTable.id, ids));
+      .where(
+        and(
+          inArray(schema.knowledgeBaseConnectorsTable.id, ids),
+          notDeleted(schema.knowledgeBaseConnectorsTable),
+        ),
+      );
   }
 
   static async create(
@@ -253,7 +276,12 @@ class KnowledgeBaseConnectorModel {
     const [result] = await db
       .update(schema.knowledgeBaseConnectorsTable)
       .set(data)
-      .where(eq(schema.knowledgeBaseConnectorsTable.id, id))
+      .where(
+        and(
+          eq(schema.knowledgeBaseConnectorsTable.id, id),
+          notDeleted(schema.knowledgeBaseConnectorsTable),
+        ),
+      )
       .returning();
 
     return result ?? null;
@@ -263,7 +291,12 @@ class KnowledgeBaseConnectorModel {
     return await db
       .select()
       .from(schema.knowledgeBaseConnectorsTable)
-      .where(eq(schema.knowledgeBaseConnectorsTable.enabled, true));
+      .where(
+        and(
+          eq(schema.knowledgeBaseConnectorsTable.enabled, true),
+          notDeleted(schema.knowledgeBaseConnectorsTable),
+        ),
+      );
   }
 
   static async findAllWithStatus(
@@ -272,16 +305,30 @@ class KnowledgeBaseConnectorModel {
     return await db
       .select()
       .from(schema.knowledgeBaseConnectorsTable)
-      .where(eq(schema.knowledgeBaseConnectorsTable.lastSyncStatus, status));
+      .where(
+        and(
+          eq(schema.knowledgeBaseConnectorsTable.lastSyncStatus, status),
+          notDeleted(schema.knowledgeBaseConnectorsTable),
+        ),
+      );
   }
 
-  static async delete(id: string): Promise<boolean> {
-    const rows = await db
-      .delete(schema.knowledgeBaseConnectorsTable)
-      .where(eq(schema.knowledgeBaseConnectorsTable.id, id))
-      .returning({ id: schema.knowledgeBaseConnectorsTable.id });
+  static async delete(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await softDelete(
+      tx ?? db,
+      schema.knowledgeBaseConnectorsTable,
+      eq(schema.knowledgeBaseConnectorsTable.id, id),
+    );
+    return count > 0;
+  }
 
-    return rows.length > 0;
+  static async hardDelete(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await hardDelete(
+      tx ?? db,
+      schema.knowledgeBaseConnectorsTable,
+      eq(schema.knowledgeBaseConnectorsTable.id, id),
+    );
+    return count > 0;
   }
 
   static async assignToKnowledgeBase(
@@ -343,7 +390,13 @@ class KnowledgeBaseConnectorModel {
       .update(schema.knowledgeBaseConnectorsTable)
       .set({ checkpoint: null })
       .where(
-        eq(schema.knowledgeBaseConnectorsTable.organizationId, organizationId),
+        and(
+          eq(
+            schema.knowledgeBaseConnectorsTable.organizationId,
+            organizationId,
+          ),
+          notDeleted(schema.knowledgeBaseConnectorsTable),
+        ),
       );
   }
 
@@ -378,6 +431,7 @@ class KnowledgeBaseConnectorModel {
             schema.knowledgeBaseConnectorsTable.organizationId,
             organizationId,
           ),
+          notDeleted(schema.knowledgeBaseConnectorsTable),
         ),
       );
 

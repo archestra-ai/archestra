@@ -1,5 +1,7 @@
 import { and, count, desc, eq, ilike, inArray, or } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import { secretManager } from "@/secrets-manager";
 import {
   ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
@@ -90,12 +92,18 @@ class InternalMcpCatalogModel {
       dbItems = await db
         .select()
         .from(schema.internalMcpCatalogTable)
-        .where(inArray(schema.internalMcpCatalogTable.id, accessibleIds))
+        .where(
+          and(
+            inArray(schema.internalMcpCatalogTable.id, accessibleIds),
+            notDeleted(schema.internalMcpCatalogTable),
+          ),
+        )
         .orderBy(desc(schema.internalMcpCatalogTable.createdAt));
     } else {
       dbItems = await db
         .select()
         .from(schema.internalMcpCatalogTable)
+        .where(notDeleted(schema.internalMcpCatalogTable))
         .orderBy(desc(schema.internalMcpCatalogTable.createdAt));
     }
 
@@ -153,13 +161,16 @@ class InternalMcpCatalogModel {
           and(
             inArray(schema.internalMcpCatalogTable.id, accessibleIds),
             searchCondition,
+            notDeleted(schema.internalMcpCatalogTable),
           ),
         );
     } else {
       dbItems = await db
         .select()
         .from(schema.internalMcpCatalogTable)
-        .where(searchCondition);
+        .where(
+          and(searchCondition, notDeleted(schema.internalMcpCatalogTable)),
+        );
     }
 
     const catalogItems =
@@ -207,7 +218,12 @@ class InternalMcpCatalogModel {
     const [dbItem] = await db
       .select()
       .from(schema.internalMcpCatalogTable)
-      .where(eq(schema.internalMcpCatalogTable.id, id));
+      .where(
+        and(
+          eq(schema.internalMcpCatalogTable.id, id),
+          notDeleted(schema.internalMcpCatalogTable),
+        ),
+      );
 
     if (!dbItem) {
       return null;
@@ -242,7 +258,12 @@ class InternalMcpCatalogModel {
     const [dbItem] = await db
       .select()
       .from(schema.internalMcpCatalogTable)
-      .where(eq(schema.internalMcpCatalogTable.id, id));
+      .where(
+        and(
+          eq(schema.internalMcpCatalogTable.id, id),
+          notDeleted(schema.internalMcpCatalogTable),
+        ),
+      );
 
     if (!dbItem) {
       return null;
@@ -279,7 +300,12 @@ class InternalMcpCatalogModel {
     const dbItems = await db
       .select()
       .from(schema.internalMcpCatalogTable)
-      .where(inArray(schema.internalMcpCatalogTable.id, ids));
+      .where(
+        and(
+          inArray(schema.internalMcpCatalogTable.id, ids),
+          notDeleted(schema.internalMcpCatalogTable),
+        ),
+      );
 
     const catalogItems =
       await InternalMcpCatalogModel.attachListMetadata(dbItems);
@@ -303,8 +329,12 @@ class InternalMcpCatalogModel {
             schema.internalMcpCatalogTable.organizationId,
             options.organizationId,
           ),
+          notDeleted(schema.internalMcpCatalogTable),
         )
-      : eq(schema.internalMcpCatalogTable.name, name);
+      : and(
+          eq(schema.internalMcpCatalogTable.name, name),
+          notDeleted(schema.internalMcpCatalogTable),
+        );
 
     const [dbItem] = await db
       .select()
@@ -335,13 +365,23 @@ class InternalMcpCatalogModel {
       [dbItem] = await db
         .update(schema.internalMcpCatalogTable)
         .set(dbValues)
-        .where(eq(schema.internalMcpCatalogTable.id, id))
+        .where(
+          and(
+            eq(schema.internalMcpCatalogTable.id, id),
+            notDeleted(schema.internalMcpCatalogTable),
+          ),
+        )
         .returning();
     } else {
       [dbItem] = await db
         .select()
         .from(schema.internalMcpCatalogTable)
-        .where(eq(schema.internalMcpCatalogTable.id, id));
+        .where(
+          and(
+            eq(schema.internalMcpCatalogTable.id, id),
+            notDeleted(schema.internalMcpCatalogTable),
+          ),
+        );
     }
 
     if (!dbItem) {
@@ -372,22 +412,35 @@ class InternalMcpCatalogModel {
     return result;
   }
 
-  static async delete(id: string): Promise<boolean> {
+  static async delete(id: string, tx?: Transaction): Promise<boolean> {
     // First, find all servers associated with this catalog item
     const servers = await McpServerModel.findByCatalogId(id);
 
-    // Delete each server (which will cascade to tools)
+    // Soft-delete each server (which will cascade to tools)
     for (const server of servers) {
       await McpServerModel.delete(server.id);
     }
 
-    // Then delete the catalog entry itself
-    const deletedRows = await db
-      .delete(schema.internalMcpCatalogTable)
-      .where(eq(schema.internalMcpCatalogTable.id, id))
-      .returning({ id: schema.internalMcpCatalogTable.id });
+    // Then soft-delete the catalog entry itself
+    const count = await softDelete(
+      tx ?? db,
+      schema.internalMcpCatalogTable,
+      eq(schema.internalMcpCatalogTable.id, id),
+    );
 
-    return deletedRows.length > 0;
+    return count > 0;
+  }
+
+  /**
+   * Hard-delete the catalog entry. Reserved for purge flows.
+   */
+  static async hardDelete(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await hardDelete(
+      tx ?? db,
+      schema.internalMcpCatalogTable,
+      eq(schema.internalMcpCatalogTable.id, id),
+    );
+    return count > 0;
   }
 
   // ===== Private methods =====
@@ -631,6 +684,8 @@ class InternalMcpCatalogModel {
 
     if (authorIds.size === 0) return;
 
+    // soft-delete: include deleted users so the author name can still be
+    // shown for catalog items whose author was later removed.
     const users = await db
       .select({ id: schema.usersTable.id, name: schema.usersTable.name })
       .from(schema.usersTable)

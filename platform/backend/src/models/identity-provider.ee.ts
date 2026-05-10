@@ -15,6 +15,8 @@ import {
 } from "@/auth/idp-team-sync-cache.ee";
 import config from "@/config";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
+import { softDelete } from "@/database/soft-delete";
 import logger from "@/logging";
 import { evaluateRoleMappingTemplate } from "@/templating";
 import type {
@@ -460,7 +462,12 @@ class IdentityProviderModel {
         providerId: schema.identityProvidersTable.providerId,
       })
       .from(schema.identityProvidersTable)
-      .where(eq(schema.identityProvidersTable.ssoLoginEnabled, true));
+      .where(
+        and(
+          eq(schema.identityProvidersTable.ssoLoginEnabled, true),
+          notDeleted(schema.identityProvidersTable),
+        ),
+      );
 
     return idpProviders;
   }
@@ -473,7 +480,8 @@ class IdentityProviderModel {
         .selectDistinct({
           providerId: schema.identityProvidersTable.providerId,
         })
-        .from(schema.identityProvidersTable);
+        .from(schema.identityProvidersTable)
+        .where(notDeleted(schema.identityProvidersTable));
     } catch (error) {
       if (
         error instanceof Error &&
@@ -505,7 +513,12 @@ class IdentityProviderModel {
     const idpProviders = await db
       .select()
       .from(schema.identityProvidersTable)
-      .where(eq(schema.identityProvidersTable.organizationId, organizationId));
+      .where(
+        and(
+          eq(schema.identityProvidersTable.organizationId, organizationId),
+          notDeleted(schema.identityProvidersTable),
+        ),
+      );
 
     return idpProviders.map((provider) => ({
       ...provider,
@@ -535,6 +548,7 @@ class IdentityProviderModel {
         and(
           eq(schema.identityProvidersTable.id, id),
           eq(schema.identityProvidersTable.organizationId, organizationId),
+          notDeleted(schema.identityProvidersTable),
         ),
       );
 
@@ -569,7 +583,12 @@ class IdentityProviderModel {
     const [idpProvider] = await db
       .select()
       .from(schema.identityProvidersTable)
-      .where(eq(schema.identityProvidersTable.providerId, providerId));
+      .where(
+        and(
+          eq(schema.identityProvidersTable.providerId, providerId),
+          notDeleted(schema.identityProvidersTable),
+        ),
+      );
 
     if (!idpProvider) {
       return null;
@@ -652,6 +671,7 @@ class IdentityProviderModel {
         and(
           eq(schema.identityProvidersTable.providerId, data.providerId),
           eq(schema.identityProvidersTable.organizationId, organizationId),
+          notDeleted(schema.identityProvidersTable),
         ),
       );
 
@@ -699,7 +719,12 @@ class IdentityProviderModel {
             teamSyncConfigJson as unknown as typeof data.teamSyncConfig,
         }),
       })
-      .where(eq(schema.identityProvidersTable.id, provider.id))
+      .where(
+        and(
+          eq(schema.identityProvidersTable.id, provider.id),
+          notDeleted(schema.identityProvidersTable),
+        ),
+      )
       .returning();
 
     if (!updatedProvider) {
@@ -779,6 +804,7 @@ class IdentityProviderModel {
         and(
           eq(schema.identityProvidersTable.id, id),
           eq(schema.identityProvidersTable.organizationId, organizationId),
+          notDeleted(schema.identityProvidersTable),
         ),
       )
       .returning();
@@ -830,18 +856,17 @@ class IdentityProviderModel {
         );
       }
 
-      // Delete from database
-      const deleted = await tx
-        .delete(schema.identityProvidersTable)
-        .where(
-          and(
-            eq(schema.identityProvidersTable.id, id),
-            eq(schema.identityProvidersTable.organizationId, organizationId),
-          ),
-        )
-        .returning({ id: schema.identityProvidersTable.id });
+      // Soft-delete from database
+      const count = await softDelete(
+        tx,
+        schema.identityProvidersTable,
+        and(
+          eq(schema.identityProvidersTable.id, id),
+          eq(schema.identityProvidersTable.organizationId, organizationId),
+        )!,
+      );
 
-      if (deleted.length === 0) {
+      if (count === 0) {
         // Rollback if provider wasn't deleted (though it existed in check above)
         throw new Error("Failed to delete identity provider");
       }
@@ -868,7 +893,12 @@ class IdentityProviderModel {
     await db
       .update(schema.identityProvidersTable)
       .set({ domainVerified })
-      .where(eq(schema.identityProvidersTable.id, id));
+      .where(
+        and(
+          eq(schema.identityProvidersTable.id, id),
+          notDeleted(schema.identityProvidersTable),
+        ),
+      );
     logger.debug(
       { id, domainVerified },
       "IdentityProviderModel.setDomainVerifiedForTesting: completed",

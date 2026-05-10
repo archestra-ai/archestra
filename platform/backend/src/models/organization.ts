@@ -1,7 +1,9 @@
 import { DEFAULT_THEME_ID, type OrganizationCustomFont } from "@shared";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { CacheKey, cacheManager } from "@/cache-manager";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import logger from "@/logging";
 import type { AppearanceSettings, Organization } from "@/types";
 
@@ -14,6 +16,7 @@ class OrganizationModel {
     const [organization] = await db
       .select()
       .from(schema.organizationsTable)
+      .where(notDeleted(schema.organizationsTable))
       .limit(1);
     logger.debug(
       { found: !!organization },
@@ -27,7 +30,6 @@ class OrganizationModel {
    */
   static async getOrCreateDefaultOrganization(): Promise<Organization> {
     logger.debug("OrganizationModel.getOrCreateDefaultOrganization: starting");
-    // Try to get existing default organization
     const existingOrg = await OrganizationModel.getFirst();
 
     if (existingOrg) {
@@ -38,7 +40,6 @@ class OrganizationModel {
       return existingOrg;
     }
 
-    // Create default organization if none exists
     logger.debug(
       "OrganizationModel.getOrCreateDefaultOrganization: creating default organization",
     );
@@ -71,7 +72,6 @@ class OrganizationModel {
       "OrganizationModel.patch: updating organization",
     );
 
-    // Guard against empty updates - Drizzle throws "No values to set" on empty objects
     if (Object.keys(data).length === 0) {
       return OrganizationModel.getById(id);
     }
@@ -79,7 +79,12 @@ class OrganizationModel {
     const [updatedOrganization] = await db
       .update(schema.organizationsTable)
       .set(data)
-      .where(eq(schema.organizationsTable.id, id))
+      .where(
+        and(
+          eq(schema.organizationsTable.id, id),
+          notDeleted(schema.organizationsTable),
+        ),
+      )
       .returning();
 
     logger.debug(
@@ -93,12 +98,19 @@ class OrganizationModel {
   /**
    * Get an organization by ID
    */
-  static async getById(id: string): Promise<Organization | null> {
+  static async getById(
+    id: string,
+    opts: { includeDeleted?: boolean } = {},
+  ): Promise<Organization | null> {
     logger.debug({ id }, "OrganizationModel.getById: fetching organization");
+    const conditions = [eq(schema.organizationsTable.id, id)];
+    if (!opts.includeDeleted) {
+      conditions.push(notDeleted(schema.organizationsTable));
+    }
     const [organization] = await db
       .select()
       .from(schema.organizationsTable)
-      .where(eq(schema.organizationsTable.id, id))
+      .where(and(...conditions))
       .limit(1);
 
     logger.debug(
@@ -123,15 +135,20 @@ class OrganizationModel {
         slimChatErrorUi: schema.organizationsTable.slimChatErrorUi,
       })
       .from(schema.organizationsTable)
-      .where(eq(schema.organizationsTable.id, id))
+      .where(
+        and(
+          eq(schema.organizationsTable.id, id),
+          notDeleted(schema.organizationsTable),
+        ),
+      )
       .limit(1);
 
     const slimChatErrorUi = organization?.slimChatErrorUi ?? false;
     try {
       await cacheManager.set(cacheKey, slimChatErrorUi);
     } catch {
-      // Cache writes are best-effort here; tests and early startup may not
-      // have the distributed cache initialized yet.
+      // Cache writes are best-effort; tests and early startup may not have
+      // the distributed cache initialized yet.
     }
     return slimChatErrorUi;
   }
@@ -161,9 +178,9 @@ class OrganizationModel {
           schema.organizationsTable.animateChatPlaceholders,
       })
       .from(schema.organizationsTable)
+      .where(notDeleted(schema.organizationsTable))
       .limit(1);
 
-    // Return defaults if no organization exists
     if (!organization) {
       return {
         theme: DEFAULT_THEME_ID,
@@ -185,9 +202,58 @@ class OrganizationModel {
 
     return organization;
   }
+
+  /**
+   * Soft-delete an organization. Tombstones the slug so it can be reused
+   * after deletion without weakening the global uniqueness invariant.
+   */
+  static async delete(id: string, tx?: Transaction): Promise<boolean> {
+    const dbOrTx = tx ?? db;
+    const [current] = await dbOrTx
+      .select({ slug: schema.organizationsTable.slug })
+      .from(schema.organizationsTable)
+      .where(
+        and(
+          eq(schema.organizationsTable.id, id),
+          notDeleted(schema.organizationsTable),
+        ),
+      );
+    if (!current) return false;
+
+    await dbOrTx
+      .update(schema.organizationsTable)
+      .set({ slug: makeSlugTombstone(current.slug) })
+      .where(eq(schema.organizationsTable.id, id));
+
+    const count = await softDelete(
+      dbOrTx,
+      schema.organizationsTable,
+      eq(schema.organizationsTable.id, id),
+    );
+    await cacheManager.delete(getOrganizationSettingsCacheKey(id));
+    return count > 0;
+  }
+
+  /**
+   * Physically remove an organization. Reserved for purge flows and test
+   * cleanup — application code should call `delete` instead.
+   */
+  static async hardDelete(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await hardDelete(
+      tx ?? db,
+      schema.organizationsTable,
+      eq(schema.organizationsTable.id, id),
+    );
+    await cacheManager.delete(getOrganizationSettingsCacheKey(id));
+    return count > 0;
+  }
 }
 export default OrganizationModel;
 
 function getOrganizationSettingsCacheKey(organizationId: string) {
   return `${CacheKey.OrganizationSettings}-${organizationId}` as const;
+}
+
+function makeSlugTombstone(originalSlug: string): string {
+  return `deleted-${crypto.randomUUID().slice(0, 8)}-${originalSlug}`;
 }

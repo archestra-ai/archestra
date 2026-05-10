@@ -3,7 +3,9 @@ import type { archestraCatalogTypes } from "@shared";
 import { archestraCatalogSdk } from "@shared";
 import { and, desc, eq } from "drizzle-orm";
 import config from "@/config";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import logger from "@/logging";
 import type {
   InsertMcpServerInstallationRequest,
@@ -52,6 +54,7 @@ class McpServerInstallationRequestModel {
     return await db
       .select()
       .from(schema.mcpServerInstallationRequestsTable)
+      .where(notDeleted(schema.mcpServerInstallationRequestsTable))
       .orderBy(desc(schema.mcpServerInstallationRequestsTable.createdAt));
   }
 
@@ -61,7 +64,12 @@ class McpServerInstallationRequestModel {
     const [request] = await db
       .select()
       .from(schema.mcpServerInstallationRequestsTable)
-      .where(eq(schema.mcpServerInstallationRequestsTable.id, id));
+      .where(
+        and(
+          eq(schema.mcpServerInstallationRequestsTable.id, id),
+          notDeleted(schema.mcpServerInstallationRequestsTable),
+        ),
+      );
 
     return request || null;
   }
@@ -72,7 +80,12 @@ class McpServerInstallationRequestModel {
     return await db
       .select()
       .from(schema.mcpServerInstallationRequestsTable)
-      .where(eq(schema.mcpServerInstallationRequestsTable.status, status))
+      .where(
+        and(
+          eq(schema.mcpServerInstallationRequestsTable.status, status),
+          notDeleted(schema.mcpServerInstallationRequestsTable),
+        ),
+      )
       .orderBy(desc(schema.mcpServerInstallationRequestsTable.createdAt));
   }
 
@@ -82,7 +95,12 @@ class McpServerInstallationRequestModel {
     return await db
       .select()
       .from(schema.mcpServerInstallationRequestsTable)
-      .where(eq(schema.mcpServerInstallationRequestsTable.requestedBy, userId))
+      .where(
+        and(
+          eq(schema.mcpServerInstallationRequestsTable.requestedBy, userId),
+          notDeleted(schema.mcpServerInstallationRequestsTable),
+        ),
+      )
       .orderBy(desc(schema.mcpServerInstallationRequestsTable.createdAt));
   }
 
@@ -93,9 +111,12 @@ class McpServerInstallationRequestModel {
       .select()
       .from(schema.mcpServerInstallationRequestsTable)
       .where(
-        eq(
-          schema.mcpServerInstallationRequestsTable.externalCatalogId,
-          externalCatalogId,
+        and(
+          eq(
+            schema.mcpServerInstallationRequestsTable.externalCatalogId,
+            externalCatalogId,
+          ),
+          notDeleted(schema.mcpServerInstallationRequestsTable),
         ),
       )
       .orderBy(desc(schema.mcpServerInstallationRequestsTable.createdAt));
@@ -114,6 +135,7 @@ class McpServerInstallationRequestModel {
             externalCatalogId,
           ),
           eq(schema.mcpServerInstallationRequestsTable.status, "pending"),
+          notDeleted(schema.mcpServerInstallationRequestsTable),
         ),
       )
       .orderBy(desc(schema.mcpServerInstallationRequestsTable.createdAt))
@@ -129,7 +151,12 @@ class McpServerInstallationRequestModel {
     const [updatedRequest] = await db
       .update(schema.mcpServerInstallationRequestsTable)
       .set(request)
-      .where(eq(schema.mcpServerInstallationRequestsTable.id, id))
+      .where(
+        and(
+          eq(schema.mcpServerInstallationRequestsTable.id, id),
+          notDeleted(schema.mcpServerInstallationRequestsTable),
+        ),
+      )
       .returning();
 
     return updatedRequest || null;
@@ -219,7 +246,12 @@ class McpServerInstallationRequestModel {
         reviewedAt: new Date(),
         adminResponse,
       })
-      .where(eq(schema.mcpServerInstallationRequestsTable.id, id))
+      .where(
+        and(
+          eq(schema.mcpServerInstallationRequestsTable.id, id),
+          notDeleted(schema.mcpServerInstallationRequestsTable),
+        ),
+      )
       .returning();
 
     return updatedRequest || null;
@@ -238,7 +270,12 @@ class McpServerInstallationRequestModel {
         reviewedAt: new Date(),
         adminResponse,
       })
-      .where(eq(schema.mcpServerInstallationRequestsTable.id, id))
+      .where(
+        and(
+          eq(schema.mcpServerInstallationRequestsTable.id, id),
+          notDeleted(schema.mcpServerInstallationRequestsTable),
+        ),
+      )
       .returning();
 
     return updatedRequest || null;
@@ -274,12 +311,22 @@ class McpServerInstallationRequestModel {
     });
   }
 
-  static async delete(id: string): Promise<boolean> {
-    const result = await db
-      .delete(schema.mcpServerInstallationRequestsTable)
-      .where(eq(schema.mcpServerInstallationRequestsTable.id, id));
+  static async delete(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await softDelete(
+      tx ?? db,
+      schema.mcpServerInstallationRequestsTable,
+      eq(schema.mcpServerInstallationRequestsTable.id, id),
+    );
+    return count > 0;
+  }
 
-    return result.rowCount !== null && result.rowCount > 0;
+  static async hardDelete(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await hardDelete(
+      tx ?? db,
+      schema.mcpServerInstallationRequestsTable,
+      eq(schema.mcpServerInstallationRequestsTable.id, id),
+    );
+    return count > 0;
   }
 }
 

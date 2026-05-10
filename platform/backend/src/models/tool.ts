@@ -32,7 +32,9 @@ import { alias } from "drizzle-orm/pg-core";
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import {
   createPaginatedResult,
   type PaginatedResult,
@@ -105,7 +107,7 @@ class ToolModel {
         ...data,
         updatedAt: new Date(),
       })
-      .where(eq(schema.toolsTable.id, id))
+      .where(and(eq(schema.toolsTable.id, id), notDeleted(schema.toolsTable)))
       .returning();
     return updatedTool || null;
   }
@@ -115,7 +117,7 @@ class ToolModel {
     await db
       .update(schema.toolsTable)
       .set({ policiesAutoConfiguringStartedAt: new Date() })
-      .where(eq(schema.toolsTable.id, id));
+      .where(and(eq(schema.toolsTable.id, id), notDeleted(schema.toolsTable)));
   }
 
   /** Clear the auto-configuring loading state, optionally resetting all policy metadata */
@@ -134,7 +136,7 @@ class ToolModel {
     await db
       .update(schema.toolsTable)
       .set(setData)
-      .where(eq(schema.toolsTable.id, id));
+      .where(and(eq(schema.toolsTable.id, id), notDeleted(schema.toolsTable)));
   }
 
   // TODO: used only in tests and should be removed.
@@ -151,6 +153,7 @@ class ToolModel {
             isNull(schema.toolsTable.catalogId),
             isNull(schema.toolsTable.delegateToAgentId),
             eq(schema.toolsTable.name, tool.name),
+            notDeleted(schema.toolsTable),
           ),
         );
 
@@ -170,6 +173,7 @@ class ToolModel {
             isNull(schema.toolsTable.agentId),
             eq(schema.toolsTable.catalogId, tool.catalogId),
             eq(schema.toolsTable.name, tool.name),
+            notDeleted(schema.toolsTable),
           ),
         );
 
@@ -189,6 +193,7 @@ class ToolModel {
             isNull(schema.toolsTable.catalogId),
             isNull(schema.toolsTable.delegateToAgentId),
             eq(schema.toolsTable.name, tool.name),
+            notDeleted(schema.toolsTable),
           ),
         );
 
@@ -203,7 +208,12 @@ class ToolModel {
                 ? tool.parameters
                 : proxyTool.parameters,
           })
-          .where(eq(schema.toolsTable.id, proxyTool.id))
+          .where(
+            and(
+              eq(schema.toolsTable.id, proxyTool.id),
+              notDeleted(schema.toolsTable),
+            ),
+          )
           .returning();
         return upgradedTool;
       }
@@ -226,11 +236,13 @@ class ToolModel {
                 isNull(schema.toolsTable.agentId),
                 eq(schema.toolsTable.catalogId, tool.catalogId),
                 eq(schema.toolsTable.name, tool.name),
+                notDeleted(schema.toolsTable),
               )
             : and(
                 isNull(schema.toolsTable.agentId),
                 isNull(schema.toolsTable.catalogId),
                 eq(schema.toolsTable.name, tool.name),
+                notDeleted(schema.toolsTable),
               ),
         );
       return existingTool;
@@ -273,7 +285,7 @@ class ToolModel {
     const [tool] = await db
       .select()
       .from(schema.toolsTable)
-      .where(eq(schema.toolsTable.id, id));
+      .where(and(eq(schema.toolsTable.id, id), notDeleted(schema.toolsTable)));
 
     if (!tool) {
       return null;
@@ -336,6 +348,7 @@ class ToolModel {
         schema.internalMcpCatalogTable,
         eq(schema.toolsTable.catalogId, schema.internalMcpCatalogTable.id),
       )
+      .where(notDeleted(schema.toolsTable))
       .orderBy(desc(schema.toolsTable.createdAt))
       .$dynamic();
 
@@ -348,7 +361,12 @@ class ToolModel {
     // TODO: this require a re-work.
     // findAll currently used only by the auto-policy configuration and it bypass access control checks.
     if (userId && !isAgentAdmin) {
-      query = query.where(isNotNull(schema.toolsTable.catalogId));
+      query = query.where(
+        and(
+          isNotNull(schema.toolsTable.catalogId),
+          notDeleted(schema.toolsTable),
+        ),
+      );
     }
 
     const results = await query;
@@ -363,7 +381,9 @@ class ToolModel {
     const [tool] = await db
       .select()
       .from(schema.toolsTable)
-      .where(eq(schema.toolsTable.name, name));
+      .where(
+        and(eq(schema.toolsTable.name, name), notDeleted(schema.toolsTable)),
+      );
 
     if (!tool) {
       return null;
@@ -388,7 +408,9 @@ class ToolModel {
     const [result] = await db
       .select({ total: count() })
       .from(schema.toolsTable)
-      .where(eq(schema.toolsTable.name, name));
+      .where(
+        and(eq(schema.toolsTable.name, name), notDeleted(schema.toolsTable)),
+      );
 
     return Number(result?.total ?? 0);
   }
@@ -413,6 +435,7 @@ class ToolModel {
         and(
           eq(schema.agentToolsTable.agentId, agentId),
           eq(schema.toolsTable.name, name),
+          notDeleted(schema.toolsTable),
         ),
       )
       .limit(1);
@@ -446,6 +469,7 @@ class ToolModel {
           eq(schema.agentToolsTable.agentId, agentId),
           // Always hide query_knowledge_sources from UI — it's auto-injected behind the scenes
           ne(schema.toolsTable.name, brandedKnowledgeToolName),
+          notDeleted(schema.toolsTable),
         ),
       )
       .orderBy(desc(schema.toolsTable.createdAt));
@@ -492,6 +516,7 @@ class ToolModel {
                   isNotNull(schema.toolsTable.catalogId),
                   isNotNull(schema.toolsTable.delegateToAgentId),
                 ),
+                notDeleted(schema.toolsTable),
               ),
             )
             .orderBy(desc(schema.toolsTable.createdAt))
@@ -545,6 +570,7 @@ class ToolModel {
           isNull(schema.toolsTable.agentId),
           isNull(schema.toolsTable.delegateToAgentId),
           inArray(schema.toolsTable.name, toolNames),
+          notDeleted(schema.toolsTable),
         ),
       );
 
@@ -557,6 +583,7 @@ class ToolModel {
           isNull(schema.toolsTable.agentId),
           eq(schema.toolsTable.catalogId, catalogId),
           inArray(schema.toolsTable.name, toolNames),
+          notDeleted(schema.toolsTable),
         ),
       );
 
@@ -579,7 +606,12 @@ class ToolModel {
             db
               .update(schema.toolsTable)
               .set({ meta: tool.meta ?? null, updatedAt: new Date() })
-              .where(eq(schema.toolsTable.id, existingTool.id))
+              .where(
+                and(
+                  eq(schema.toolsTable.id, existingTool.id),
+                  notDeleted(schema.toolsTable),
+                ),
+              )
               .returning()
               .then(([updated]) => updated ?? existingTool),
           );
@@ -634,6 +666,7 @@ class ToolModel {
                 isNull(schema.toolsTable.agentId),
                 eq(schema.toolsTable.catalogId, catalogId),
                 inArray(schema.toolsTable.name, missingNames),
+                notDeleted(schema.toolsTable),
               ),
             );
           resultTools.push(...insertedTools, ...conflictTools);
@@ -697,6 +730,7 @@ class ToolModel {
         and(
           isNull(schema.toolsTable.catalogId),
           isNull(schema.toolsTable.agentId),
+          notDeleted(schema.toolsTable),
         ),
       );
 
@@ -718,14 +752,24 @@ class ToolModel {
       await db
         .update(schema.toolsTable)
         .set({ catalogId })
-        .where(inArray(schema.toolsTable.id, discoveredToolIdsToMigrate));
+        .where(
+          and(
+            inArray(schema.toolsTable.id, discoveredToolIdsToMigrate),
+            notDeleted(schema.toolsTable),
+          ),
+        );
     }
 
     // Get all existing Archestra tools in a single query (now including migrated ones)
     const existingTools = await db
       .select()
       .from(schema.toolsTable)
-      .where(eq(schema.toolsTable.catalogId, catalogId));
+      .where(
+        and(
+          eq(schema.toolsTable.catalogId, catalogId),
+          notDeleted(schema.toolsTable),
+        ),
+      );
 
     const existingToolsByShortName = new Map(
       existingTools
@@ -778,7 +822,12 @@ class ToolModel {
               description: newDescription,
               parameters: archestraTool.inputSchema,
             })
-            .where(eq(schema.toolsTable.id, existingTool.id));
+            .where(
+              and(
+                eq(schema.toolsTable.id, existingTool.id),
+                notDeleted(schema.toolsTable),
+              ),
+            );
         }
       }
     }
@@ -793,13 +842,20 @@ class ToolModel {
     const allCatalogTools = await db
       .select({ id: schema.toolsTable.id, name: schema.toolsTable.name })
       .from(schema.toolsTable)
-      .where(eq(schema.toolsTable.catalogId, catalogId));
+      .where(
+        and(
+          eq(schema.toolsTable.catalogId, catalogId),
+          notDeleted(schema.toolsTable),
+        ),
+      );
 
     const staleTools = allCatalogTools.filter(
       (t) => !archestraToolNames.has(t.name),
     );
     if (staleTools.length > 0) {
-      await db.delete(schema.toolsTable).where(
+      await softDelete(
+        db,
+        schema.toolsTable,
         inArray(
           schema.toolsTable.id,
           staleTools.map((t) => t.id),
@@ -834,7 +890,12 @@ class ToolModel {
     const archestraTools = await db
       .select()
       .from(schema.toolsTable)
-      .where(eq(schema.toolsTable.catalogId, catalogId));
+      .where(
+        and(
+          eq(schema.toolsTable.catalogId, catalogId),
+          notDeleted(schema.toolsTable),
+        ),
+      );
 
     const toolIds = archestraTools.map((t) => t.id);
 
@@ -868,7 +929,12 @@ class ToolModel {
     const defaultTools = await db
       .select({ id: schema.toolsTable.id })
       .from(schema.toolsTable)
-      .where(inArray(schema.toolsTable.name, defaultToolNames));
+      .where(
+        and(
+          inArray(schema.toolsTable.name, defaultToolNames),
+          notDeleted(schema.toolsTable),
+        ),
+      );
 
     if (defaultTools.length === 0) {
       // Tools not yet seeded, skip assignment
@@ -890,7 +956,12 @@ class ToolModel {
     const rows = await db
       .select({ name: schema.toolsTable.name })
       .from(schema.toolsTable)
-      .where(inArray(schema.toolsTable.name, names));
+      .where(
+        and(
+          inArray(schema.toolsTable.name, names),
+          notDeleted(schema.toolsTable),
+        ),
+      );
     return rows.map((r) => r.name);
   }
 
@@ -908,6 +979,7 @@ class ToolModel {
         and(
           eq(schema.agentToolsTable.agentId, agentId),
           isNotNull(schema.toolsTable.catalogId), // Only MCP tools
+          notDeleted(schema.toolsTable),
         ),
       );
 
@@ -949,6 +1021,7 @@ class ToolModel {
           eq(schema.agentToolsTable.agentId, agentId),
           inArray(schema.toolsTable.name, toolNames),
           isNotNull(schema.toolsTable.catalogId), // Only MCP tools (have catalogId)
+          notDeleted(schema.toolsTable),
         ),
       );
 
@@ -993,6 +1066,7 @@ class ToolModel {
           eq(schema.agentToolsTable.agentId, agentId),
           sql`RIGHT(${schema.toolsTable.name}, ${suffix.length}) = ${suffix}`,
           isNotNull(schema.toolsTable.catalogId),
+          notDeleted(schema.toolsTable),
         ),
       )
       .limit(1);
@@ -1041,6 +1115,7 @@ class ToolModel {
           ...hiddenToolNames.map((toolName) =>
             ne(schema.toolsTable.name, toolName),
           ),
+          notDeleted(schema.toolsTable),
         ),
       )
       .orderBy(desc(schema.toolsTable.createdAt));
@@ -1116,7 +1191,12 @@ class ToolModel {
         catalogId: schema.toolsTable.catalogId,
       })
       .from(schema.toolsTable)
-      .where(inArray(schema.toolsTable.catalogId, catalogIds));
+      .where(
+        and(
+          inArray(schema.toolsTable.catalogId, catalogIds),
+          notDeleted(schema.toolsTable),
+        ),
+      );
 
     // Filter out any nulls (catalogId is nullable in schema)
     return tools.filter(
@@ -1138,20 +1218,31 @@ class ToolModel {
         id: schema.toolsTable.id,
       })
       .from(schema.toolsTable)
-      .where(inArray(schema.toolsTable.catalogId, catalogIds));
+      .where(
+        and(
+          inArray(schema.toolsTable.catalogId, catalogIds),
+          notDeleted(schema.toolsTable),
+        ),
+      );
 
     return tools.map((t) => t.id);
   }
 
   /**
-   * Delete all tools for a specific catalog item
-   * Used when the last MCP server installation for a catalog is removed
-   * Returns the number of tools deleted
+   * Soft-delete all tools for a specific catalog item.
+   * Used when the last MCP server installation for a catalog is removed.
+   * Returns the number of tools soft-deleted.
    */
-  static async deleteByCatalogId(catalogId: string): Promise<number> {
-    const result = await db
-      .delete(schema.toolsTable)
-      .where(eq(schema.toolsTable.catalogId, catalogId));
+  static async deleteByCatalogId(
+    catalogId: string,
+    tx?: Transaction,
+  ): Promise<number> {
+    const count = await softDelete(
+      tx ?? db,
+      schema.toolsTable,
+      eq(schema.toolsTable.catalogId, catalogId),
+    );
+    const result = { rowCount: count };
 
     return result.rowCount || 0;
   }
@@ -1203,6 +1294,7 @@ class ToolModel {
             isNull(schema.toolsTable.agentId),
             isNull(schema.toolsTable.delegateToAgentId),
             inArray(schema.toolsTable.name, toolNames),
+            notDeleted(schema.toolsTable),
           ),
         );
     }
@@ -1216,6 +1308,7 @@ class ToolModel {
         and(
           isNull(schema.toolsTable.agentId),
           eq(schema.toolsTable.catalogId, catalogId),
+          notDeleted(schema.toolsTable),
         ),
       );
 
@@ -1325,7 +1418,12 @@ class ToolModel {
                 meta: tool.meta,
                 updatedAt: new Date(),
               })
-              .where(eq(schema.toolsTable.id, existingTool.id))
+              .where(
+                and(
+                  eq(schema.toolsTable.id, existingTool.id),
+                  notDeleted(schema.toolsTable),
+                ),
+              )
               .returning()
               .then(([updatedTool]) => updatedTool ?? null),
           );
@@ -1448,8 +1546,10 @@ class ToolModel {
         }
       }
 
-      // Now safe to delete orphaned tools - agent_tools have been transferred
-      await db.delete(schema.toolsTable).where(
+      // Now safe to soft-delete orphaned tools - agent_tools have been transferred
+      await softDelete(
+        db,
+        schema.toolsTable,
         inArray(
           schema.toolsTable.id,
           orphanedTools.map((t) => t.id),
@@ -1461,24 +1561,37 @@ class ToolModel {
   }
 
   /**
-   * Delete a tool by ID.
+   * Soft-delete a tool by ID.
    * Only allows deletion of proxy-discovered tools (no catalogId).
    */
-  static async delete(id: string): Promise<boolean> {
-    const result = await db
-      .delete(schema.toolsTable)
-      .where(
-        and(eq(schema.toolsTable.id, id), isNull(schema.toolsTable.catalogId)),
-      );
+  static async delete(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await softDelete(
+      tx ?? db,
+      schema.toolsTable,
+      and(eq(schema.toolsTable.id, id), isNull(schema.toolsTable.catalogId))!,
+    );
+    return count > 0;
+  }
 
-    return (result.rowCount || 0) > 0;
+  /**
+   * Hard-delete a tool. Reserved for purge flows.
+   */
+  static async hardDelete(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await hardDelete(
+      tx ?? db,
+      schema.toolsTable,
+      eq(schema.toolsTable.id, id),
+    );
+    return count > 0;
   }
 
   static async getByIds(ids: string[]): Promise<Tool[]> {
     return db
       .select()
       .from(schema.toolsTable)
-      .where(inArray(schema.toolsTable.id, ids));
+      .where(
+        and(inArray(schema.toolsTable.id, ids), notDeleted(schema.toolsTable)),
+      );
   }
 
   /**
@@ -1493,7 +1606,9 @@ class ToolModel {
     const tools = await db
       .select({ name: schema.toolsTable.name })
       .from(schema.toolsTable)
-      .where(inArray(schema.toolsTable.id, ids));
+      .where(
+        and(inArray(schema.toolsTable.id, ids), notDeleted(schema.toolsTable)),
+      );
 
     return tools.map((t) => t.name);
   }
@@ -1523,7 +1638,12 @@ class ToolModel {
     const existingTools = await db
       .select()
       .from(schema.toolsTable)
-      .where(inArray(schema.toolsTable.name, toolNames));
+      .where(
+        and(
+          inArray(schema.toolsTable.name, toolNames),
+          notDeleted(schema.toolsTable),
+        ),
+      );
 
     const existingToolsByName = new Map(existingTools.map((t) => [t.name, t]));
 
@@ -1579,6 +1699,7 @@ class ToolModel {
                 isNull(schema.toolsTable.catalogId),
                 isNull(schema.toolsTable.delegateToAgentId),
                 inArray(schema.toolsTable.name, missingNames),
+                notDeleted(schema.toolsTable),
               ),
             );
           resultTools.push(...insertedTools, ...conflictTools);
@@ -1608,7 +1729,12 @@ class ToolModel {
     const [existingTool] = await db
       .select()
       .from(schema.toolsTable)
-      .where(eq(schema.toolsTable.delegateToAgentId, targetAgentId))
+      .where(
+        and(
+          eq(schema.toolsTable.delegateToAgentId, targetAgentId),
+          notDeleted(schema.toolsTable),
+        ),
+      )
       .limit(1);
 
     if (existingTool) {
@@ -1659,7 +1785,12 @@ class ToolModel {
     const [tool] = await db
       .select()
       .from(schema.toolsTable)
-      .where(eq(schema.toolsTable.delegateToAgentId, targetAgentId))
+      .where(
+        and(
+          eq(schema.toolsTable.delegateToAgentId, targetAgentId),
+          notDeleted(schema.toolsTable),
+        ),
+      )
       .limit(1);
 
     return tool || null;
@@ -1699,6 +1830,7 @@ class ToolModel {
             sql`${schema.toolsTable.meta}->'_meta'->'ui'->>'resourceUri' = ${resourceUri}`,
             sql`${schema.toolsTable.meta}->'_meta'->>'ui/resourceUri' = ${resourceUri}`,
           ),
+          notDeleted(schema.toolsTable),
         ),
       );
 
@@ -1745,6 +1877,7 @@ class ToolModel {
         and(
           eq(schema.agentToolsTable.agentId, agentId),
           isNotNull(schema.toolsTable.delegateToAgentId),
+          notDeleted(schema.toolsTable),
         ),
       );
 
@@ -1769,7 +1902,12 @@ class ToolModel {
         name: newToolName,
         description: `Delegate task to agent: ${newName}`,
       })
-      .where(eq(schema.toolsTable.delegateToAgentId, targetAgentId));
+      .where(
+        and(
+          eq(schema.toolsTable.delegateToAgentId, targetAgentId),
+          notDeleted(schema.toolsTable),
+        ),
+      );
   }
 
   /**
@@ -1784,7 +1922,12 @@ class ToolModel {
         schema.toolsTable,
         eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
       )
-      .where(eq(schema.toolsTable.delegateToAgentId, targetAgentId));
+      .where(
+        and(
+          eq(schema.toolsTable.delegateToAgentId, targetAgentId),
+          notDeleted(schema.toolsTable),
+        ),
+      );
 
     return results.map((r) => r.agentId);
   }
@@ -1863,6 +2006,9 @@ class ToolModel {
       ),
     );
 
+    // Filter out soft-deleted tools
+    toolWhereConditions.push(notDeleted(schema.toolsTable));
+
     // Apply access control filtering for users that are not agent admins
     // Get accessible agent IDs for filtering assignments
     let accessibleAgentIds: string[] | undefined;
@@ -1925,6 +2071,7 @@ class ToolModel {
     // Query for tools that have at least one assignment
     // Secondary sort on id ensures deterministic ordering when primary sort values are equal
     // (e.g. bulk-inserted MCP tools share the same createdAt timestamp)
+    // soft-delete: `toolWhereClause` includes notDeleted(toolsTable).
     const toolsWithCount = await db
       .select({
         id: schema.toolsTable.id,
@@ -1948,6 +2095,7 @@ class ToolModel {
       .offset(pagination.offset ?? 0);
 
     // Get total count
+    // soft-delete: `toolWhereClause` includes notDeleted(toolsTable).
     const [{ total }] = await db
       .select({ total: count() })
       .from(schema.toolsTable)
@@ -2135,6 +2283,7 @@ class ToolModel {
 
     db.select({ id: schema.organizationsTable.id })
       .from(schema.organizationsTable)
+      .where(notDeleted(schema.organizationsTable))
       .limit(1)
       .then(async (rows) => {
         if (rows.length === 0) return;

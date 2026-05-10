@@ -1,6 +1,8 @@
 import { MEMBER_ROLE_NAME } from "@shared";
-import { eq } from "drizzle-orm";
-import db, { schema } from "@/database";
+import { and, eq } from "drizzle-orm";
+import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import logger from "@/logging";
 import type {
   BetterAuthSession,
@@ -24,7 +26,12 @@ class InvitationModel {
     const [invitation] = await db
       .select()
       .from(schema.invitationsTable)
-      .where(eq(schema.invitationsTable.id, invitationId))
+      .where(
+        and(
+          eq(schema.invitationsTable.id, invitationId),
+          notDeleted(schema.invitationsTable),
+        ),
+      )
       .limit(1);
     logger.debug(
       { invitationId, found: !!invitation },
@@ -45,7 +52,12 @@ class InvitationModel {
     const invitations = await db
       .select()
       .from(schema.invitationsTable)
-      .where(eq(schema.invitationsTable.email, email.toLowerCase()));
+      .where(
+        and(
+          eq(schema.invitationsTable.email, email.toLowerCase()),
+          notDeleted(schema.invitationsTable),
+        ),
+      );
     logger.debug(
       { email, count: invitations.length },
       "InvitationModel.findByEmail: completed",
@@ -176,24 +188,45 @@ class InvitationModel {
     const result = await db
       .update(schema.invitationsTable)
       .set(data)
-      .where(eq(schema.invitationsTable.id, invitationId));
+      .where(
+        and(
+          eq(schema.invitationsTable.id, invitationId),
+          notDeleted(schema.invitationsTable),
+        ),
+      );
     logger.debug({ invitationId }, "InvitationModel.patch: completed");
     return result;
   }
 
   /**
-   * Delete an invitation by its ID
+   * Soft-delete an invitation by its ID.
    */
-  static async delete(invitationId: string) {
+  static async delete(invitationId: string, tx?: Transaction) {
     logger.debug(
       { invitationId },
-      "InvitationModel.delete: deleting invitation",
+      "InvitationModel.delete: soft-deleting invitation",
     );
-    const result = await db
-      .delete(schema.invitationsTable)
-      .where(eq(schema.invitationsTable.id, invitationId));
-    logger.debug({ invitationId }, "InvitationModel.delete: completed");
-    return result;
+    const count = await softDelete(
+      tx ?? db,
+      schema.invitationsTable,
+      eq(schema.invitationsTable.id, invitationId),
+    );
+    logger.debug(
+      { invitationId, deleted: count > 0 },
+      "InvitationModel.delete: completed",
+    );
+    return count;
+  }
+
+  /**
+   * Hard-delete an invitation. Reserved for purge flows.
+   */
+  static async hardDelete(invitationId: string, tx?: Transaction) {
+    return hardDelete(
+      tx ?? db,
+      schema.invitationsTable,
+      eq(schema.invitationsTable.id, invitationId),
+    );
   }
 }
 

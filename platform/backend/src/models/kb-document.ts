@@ -1,5 +1,7 @@
 import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import type {
   AclEntry,
   InsertKbDocument,
@@ -12,7 +14,12 @@ class KbDocumentModel {
     const [result] = await db
       .select()
       .from(schema.kbDocumentsTable)
-      .where(eq(schema.kbDocumentsTable.id, id));
+      .where(
+        and(
+          eq(schema.kbDocumentsTable.id, id),
+          notDeleted(schema.kbDocumentsTable),
+        ),
+      );
 
     return result ?? null;
   }
@@ -23,7 +30,12 @@ class KbDocumentModel {
     return await db
       .select()
       .from(schema.kbDocumentsTable)
-      .where(inArray(schema.kbDocumentsTable.id, ids));
+      .where(
+        and(
+          inArray(schema.kbDocumentsTable.id, ids),
+          notDeleted(schema.kbDocumentsTable),
+        ),
+      );
   }
 
   static async findByKnowledgeBase(params: {
@@ -58,9 +70,12 @@ class KbDocumentModel {
         ),
       )
       .where(
-        eq(
-          schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
-          params.knowledgeBaseId,
+        and(
+          eq(
+            schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
+            params.knowledgeBaseId,
+          ),
+          notDeleted(schema.kbDocumentsTable),
         ),
       )
       .orderBy(desc(schema.kbDocumentsTable.createdAt))
@@ -87,6 +102,7 @@ class KbDocumentModel {
         and(
           eq(schema.kbDocumentsTable.connectorId, params.connectorId),
           eq(schema.kbDocumentsTable.sourceId, params.sourceId),
+          notDeleted(schema.kbDocumentsTable),
         ),
       );
 
@@ -106,6 +122,7 @@ class KbDocumentModel {
         and(
           eq(schema.kbDocumentsTable.connectorId, params.connectorId),
           inArray(schema.kbDocumentsTable.sourceId, params.sourceIds),
+          notDeleted(schema.kbDocumentsTable),
         ),
       );
   }
@@ -126,25 +143,45 @@ class KbDocumentModel {
     const [result] = await db
       .update(schema.kbDocumentsTable)
       .set(data)
-      .where(eq(schema.kbDocumentsTable.id, id))
+      .where(
+        and(
+          eq(schema.kbDocumentsTable.id, id),
+          notDeleted(schema.kbDocumentsTable),
+        ),
+      )
       .returning();
 
     return result ?? null;
   }
 
-  static async delete(id: string): Promise<boolean> {
-    const result = await db
-      .delete(schema.kbDocumentsTable)
-      .where(eq(schema.kbDocumentsTable.id, id));
+  static async delete(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await softDelete(
+      tx ?? db,
+      schema.kbDocumentsTable,
+      eq(schema.kbDocumentsTable.id, id),
+    );
+    return count > 0;
+  }
 
-    return result.rowCount !== null && result.rowCount > 0;
+  static async hardDelete(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await hardDelete(
+      tx ?? db,
+      schema.kbDocumentsTable,
+      eq(schema.kbDocumentsTable.id, id),
+    );
+    return count > 0;
   }
 
   static async countByConnector(connectorId: string): Promise<number> {
     const [result] = await db
       .select({ count: count() })
       .from(schema.kbDocumentsTable)
-      .where(eq(schema.kbDocumentsTable.connectorId, connectorId));
+      .where(
+        and(
+          eq(schema.kbDocumentsTable.connectorId, connectorId),
+          notDeleted(schema.kbDocumentsTable),
+        ),
+      );
 
     return result?.count ?? 0;
   }
@@ -161,45 +198,54 @@ class KbDocumentModel {
         ),
       )
       .where(
-        eq(
-          schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
-          knowledgeBaseId,
+        and(
+          eq(
+            schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
+            knowledgeBaseId,
+          ),
+          notDeleted(schema.kbDocumentsTable),
         ),
       );
 
     return result?.count ?? 0;
   }
 
-  static async deleteByConnector(connectorId: string): Promise<number> {
-    const result = await db
-      .delete(schema.kbDocumentsTable)
-      .where(eq(schema.kbDocumentsTable.connectorId, connectorId));
-
-    return result.rowCount ?? 0;
+  static async deleteByConnector(
+    connectorId: string,
+    tx?: Transaction,
+  ): Promise<number> {
+    return softDelete(
+      tx ?? db,
+      schema.kbDocumentsTable,
+      eq(schema.kbDocumentsTable.connectorId, connectorId),
+    );
   }
 
   static async deleteByConnectorAndSourceId(params: {
     connectorId: string;
     sourceId: string;
+    tx?: Transaction;
   }): Promise<boolean> {
-    const result = await db
-      .delete(schema.kbDocumentsTable)
-      .where(
-        and(
-          eq(schema.kbDocumentsTable.connectorId, params.connectorId),
-          eq(schema.kbDocumentsTable.sourceId, params.sourceId),
-        ),
-      )
-      .returning({ id: schema.kbDocumentsTable.id });
-    return result.length > 0;
+    const count = await softDelete(
+      params.tx ?? db,
+      schema.kbDocumentsTable,
+      and(
+        eq(schema.kbDocumentsTable.connectorId, params.connectorId),
+        eq(schema.kbDocumentsTable.sourceId, params.sourceId),
+      )!,
+    );
+    return count > 0;
   }
 
-  static async deleteByOrganization(organizationId: string): Promise<number> {
-    const result = await db
-      .delete(schema.kbDocumentsTable)
-      .where(eq(schema.kbDocumentsTable.organizationId, organizationId));
-
-    return result.rowCount ?? 0;
+  static async deleteByOrganization(
+    organizationId: string,
+    tx?: Transaction,
+  ): Promise<number> {
+    return softDelete(
+      tx ?? db,
+      schema.kbDocumentsTable,
+      eq(schema.kbDocumentsTable.organizationId, organizationId),
+    );
   }
 
   static async updateAclByConnector(
@@ -243,9 +289,12 @@ class KbDocumentModel {
         ),
       )
       .where(
-        inArray(
-          schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
-          knowledgeBaseIds,
+        and(
+          inArray(
+            schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
+            knowledgeBaseIds,
+          ),
+          notDeleted(schema.kbDocumentsTable),
         ),
       )
       .groupBy(schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId);

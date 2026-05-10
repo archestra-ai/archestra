@@ -1,5 +1,7 @@
 import { and, eq, gt, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import type { InsertMessage, Message } from "@/types";
 
 class MessageModel {
@@ -48,29 +50,54 @@ class MessageModel {
     const messages = await db
       .select()
       .from(schema.messagesTable)
-      .where(eq(schema.messagesTable.conversationId, conversationId))
+      .where(
+        and(
+          eq(schema.messagesTable.conversationId, conversationId),
+          notDeleted(schema.messagesTable),
+        ),
+      )
       .orderBy(schema.messagesTable.createdAt);
 
     return messages;
   }
 
-  static async delete(id: string): Promise<void> {
-    await db
-      .delete(schema.messagesTable)
-      .where(eq(schema.messagesTable.id, id));
+  static async delete(id: string, tx?: Transaction): Promise<void> {
+    await softDelete(
+      tx ?? db,
+      schema.messagesTable,
+      eq(schema.messagesTable.id, id),
+    );
   }
 
-  static async deleteByConversation(conversationId: string): Promise<void> {
-    await db
-      .delete(schema.messagesTable)
-      .where(eq(schema.messagesTable.conversationId, conversationId));
+  static async hardDelete(id: string, tx?: Transaction): Promise<void> {
+    await hardDelete(
+      tx ?? db,
+      schema.messagesTable,
+      eq(schema.messagesTable.id, id),
+    );
+  }
+
+  static async deleteByConversation(
+    conversationId: string,
+    tx?: Transaction,
+  ): Promise<void> {
+    await softDelete(
+      tx ?? db,
+      schema.messagesTable,
+      eq(schema.messagesTable.conversationId, conversationId),
+    );
   }
 
   static async findById(messageId: string): Promise<Message | null> {
     const [message] = await db
       .select()
       .from(schema.messagesTable)
-      .where(eq(schema.messagesTable.id, messageId));
+      .where(
+        and(
+          eq(schema.messagesTable.id, messageId),
+          notDeleted(schema.messagesTable),
+        ),
+      );
 
     return message || null;
   }
@@ -83,7 +110,12 @@ class MessageModel {
     const [message] = await db
       .select()
       .from(schema.messagesTable)
-      .where(sql`${schema.messagesTable.content}->>'id' = ${contentId}`);
+      .where(
+        and(
+          sql`${schema.messagesTable.content}->>'id' = ${contentId}`,
+          notDeleted(schema.messagesTable),
+        ),
+      );
 
     return message || null;
   }
@@ -143,7 +175,12 @@ class MessageModel {
         content,
         updatedAt: new Date(),
       })
-      .where(eq(schema.messagesTable.id, messageId))
+      .where(
+        and(
+          eq(schema.messagesTable.id, messageId),
+          notDeleted(schema.messagesTable),
+        ),
+      )
       .returning();
 
     return updatedMessage;
@@ -152,6 +189,7 @@ class MessageModel {
   static async deleteAfterMessage(
     conversationId: string,
     messageId: string,
+    tx?: Transaction,
   ): Promise<void> {
     // Get the message to find its createdAt timestamp
     const message = await MessageModel.findById(messageId);
@@ -165,15 +203,15 @@ class MessageModel {
       throw new Error("Message does not belong to the specified conversation");
     }
 
-    // Delete all messages in this conversation created after this message
-    await db
-      .delete(schema.messagesTable)
-      .where(
-        and(
-          eq(schema.messagesTable.conversationId, conversationId),
-          gt(schema.messagesTable.createdAt, message.createdAt),
-        ),
-      );
+    // Soft-delete all messages in this conversation created after this message
+    await softDelete(
+      tx ?? db,
+      schema.messagesTable,
+      and(
+        eq(schema.messagesTable.conversationId, conversationId),
+        gt(schema.messagesTable.createdAt, message.createdAt),
+      )!,
+    );
   }
 
   /**
@@ -191,7 +229,12 @@ class MessageModel {
       const [message] = await tx
         .select()
         .from(schema.messagesTable)
-        .where(eq(schema.messagesTable.id, messageId));
+        .where(
+          and(
+            eq(schema.messagesTable.id, messageId),
+            notDeleted(schema.messagesTable),
+          ),
+        );
 
       if (!message) {
         throw new Error("Message not found");
@@ -222,19 +265,24 @@ class MessageModel {
           content,
           updatedAt: new Date(),
         })
-        .where(eq(schema.messagesTable.id, messageId))
+        .where(
+          and(
+            eq(schema.messagesTable.id, messageId),
+            notDeleted(schema.messagesTable),
+          ),
+        )
         .returning();
 
-      // Delete subsequent messages if requested
+      // Soft-delete subsequent messages if requested
       if (deleteSubsequent) {
-        await tx
-          .delete(schema.messagesTable)
-          .where(
-            and(
-              eq(schema.messagesTable.conversationId, message.conversationId),
-              gt(schema.messagesTable.createdAt, message.createdAt),
-            ),
-          );
+        await softDelete(
+          tx,
+          schema.messagesTable,
+          and(
+            eq(schema.messagesTable.conversationId, message.conversationId),
+            gt(schema.messagesTable.createdAt, message.createdAt),
+          )!,
+        );
       }
 
       return updatedMessage;

@@ -1,5 +1,7 @@
-import { desc, eq, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import { and, desc, eq, sql } from "drizzle-orm";
+import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import type {
   A2AMessage,
   InsertA2AMessage,
@@ -18,7 +20,12 @@ class A2AMessageModel {
     await db
       .update(schema.a2aContextsTable)
       .set({ updatedAt: new Date() })
-      .where(eq(schema.a2aContextsTable.id, contextId));
+      .where(
+        and(
+          eq(schema.a2aContextsTable.id, contextId),
+          notDeleted(schema.a2aContextsTable),
+        ),
+      );
   }
 
   static async createWithId(data: InsertA2AMessageWithId): Promise<A2AMessage> {
@@ -74,7 +81,12 @@ class A2AMessageModel {
     await db
       .update(schema.a2aMessagesTable)
       .set({ content, updatedAt: new Date() })
-      .where(eq(schema.a2aMessagesTable.id, id));
+      .where(
+        and(
+          eq(schema.a2aMessagesTable.id, id),
+          notDeleted(schema.a2aMessagesTable),
+        ),
+      );
   }
 
   static async updateContentAndParts(
@@ -85,14 +97,24 @@ class A2AMessageModel {
     await db
       .update(schema.a2aMessagesTable)
       .set({ content, parts, updatedAt: new Date() })
-      .where(eq(schema.a2aMessagesTable.id, id));
+      .where(
+        and(
+          eq(schema.a2aMessagesTable.id, id),
+          notDeleted(schema.a2aMessagesTable),
+        ),
+      );
   }
 
   static async findById(id: string): Promise<A2AMessage | null> {
     const [message] = await db
       .select()
       .from(schema.a2aMessagesTable)
-      .where(eq(schema.a2aMessagesTable.id, id))
+      .where(
+        and(
+          eq(schema.a2aMessagesTable.id, id),
+          notDeleted(schema.a2aMessagesTable),
+        ),
+      )
       .limit(1);
 
     return message ?? null;
@@ -104,7 +126,12 @@ class A2AMessageModel {
     const [message] = await db
       .select()
       .from(schema.a2aMessagesTable)
-      .where(eq(schema.a2aMessagesTable.contextId, contextId))
+      .where(
+        and(
+          eq(schema.a2aMessagesTable.contextId, contextId),
+          notDeleted(schema.a2aMessagesTable),
+        ),
+      )
       .orderBy(desc(schema.a2aMessagesTable.createdAt))
       .limit(1);
 
@@ -115,7 +142,12 @@ class A2AMessageModel {
     const [message] = await db
       .select()
       .from(schema.a2aMessagesTable)
-      .where(eq(schema.a2aMessagesTable.taskId, taskId))
+      .where(
+        and(
+          eq(schema.a2aMessagesTable.taskId, taskId),
+          notDeleted(schema.a2aMessagesTable),
+        ),
+      )
       .orderBy(desc(schema.a2aMessagesTable.createdAt))
       .limit(1);
 
@@ -126,7 +158,12 @@ class A2AMessageModel {
     const messages = await db
       .select()
       .from(schema.a2aMessagesTable)
-      .where(eq(schema.a2aMessagesTable.contextId, contextId))
+      .where(
+        and(
+          eq(schema.a2aMessagesTable.contextId, contextId),
+          notDeleted(schema.a2aMessagesTable),
+        ),
+      )
       .orderBy(schema.a2aMessagesTable.createdAt);
 
     return messages;
@@ -136,22 +173,38 @@ class A2AMessageModel {
     const messages = await db
       .select()
       .from(schema.a2aMessagesTable)
-      .where(eq(schema.a2aMessagesTable.taskId, taskId))
+      .where(
+        and(
+          eq(schema.a2aMessagesTable.taskId, taskId),
+          notDeleted(schema.a2aMessagesTable),
+        ),
+      )
       .orderBy(schema.a2aMessagesTable.createdAt);
 
     return messages;
   }
 
-  static async delete(id: string): Promise<void> {
-    await db
-      .delete(schema.a2aMessagesTable)
-      .where(eq(schema.a2aMessagesTable.id, id));
+  static async delete(id: string, tx?: Transaction): Promise<void> {
+    await softDelete(
+      tx ?? db,
+      schema.a2aMessagesTable,
+      eq(schema.a2aMessagesTable.id, id),
+    );
+  }
+
+  static async hardDelete(id: string, tx?: Transaction): Promise<void> {
+    await hardDelete(
+      tx ?? db,
+      schema.a2aMessagesTable,
+      eq(schema.a2aMessagesTable.id, id),
+    );
   }
 
   static async getTotalCount(): Promise<number> {
     const [{ count }] = await db
       .select({ count: sql<number>`count(${schema.a2aMessagesTable.id})` })
-      .from(schema.a2aMessagesTable);
+      .from(schema.a2aMessagesTable)
+      .where(notDeleted(schema.a2aMessagesTable));
 
     return Number(count);
   }

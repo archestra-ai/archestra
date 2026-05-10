@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { and, count, desc, eq, ilike, inArray } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 
 type KbUploadedFile = typeof schema.kbUploadedFilesTable.$inferSelect;
 type KbUploadedFileInsert = typeof schema.kbUploadedFilesTable.$inferInsert;
@@ -26,7 +28,12 @@ class KbUploadedFileModel {
     return db
       .select(listColumns)
       .from(schema.kbUploadedFilesTable)
-      .where(eq(schema.kbUploadedFilesTable.connectorId, connectorId));
+      .where(
+        and(
+          eq(schema.kbUploadedFilesTable.connectorId, connectorId),
+          notDeleted(schema.kbUploadedFilesTable),
+        ),
+      );
   }
 
   static async findByConnectorPaginated(params: {
@@ -37,6 +44,7 @@ class KbUploadedFileModel {
   }): Promise<Omit<KbUploadedFile, "fileData">[]> {
     const conditions = [
       eq(schema.kbUploadedFilesTable.connectorId, params.connectorId),
+      notDeleted(schema.kbUploadedFilesTable),
     ];
 
     if (params.search) {
@@ -60,6 +68,7 @@ class KbUploadedFileModel {
   }): Promise<number> {
     const conditions = [
       eq(schema.kbUploadedFilesTable.connectorId, params.connectorId),
+      notDeleted(schema.kbUploadedFilesTable),
     ];
 
     if (params.search) {
@@ -86,6 +95,7 @@ class KbUploadedFileModel {
         and(
           eq(schema.kbUploadedFilesTable.connectorId, connectorId),
           eq(schema.kbUploadedFilesTable.contentHash, contentHash),
+          notDeleted(schema.kbUploadedFilesTable),
         ),
       );
     return result ?? null;
@@ -97,7 +107,12 @@ class KbUploadedFileModel {
     const [result] = await db
       .select(listColumns)
       .from(schema.kbUploadedFilesTable)
-      .where(eq(schema.kbUploadedFilesTable.id, id));
+      .where(
+        and(
+          eq(schema.kbUploadedFilesTable.id, id),
+          notDeleted(schema.kbUploadedFilesTable),
+        ),
+      );
     return result ?? null;
   }
 
@@ -105,7 +120,12 @@ class KbUploadedFileModel {
     const [result] = await db
       .select()
       .from(schema.kbUploadedFilesTable)
-      .where(eq(schema.kbUploadedFilesTable.id, id));
+      .where(
+        and(
+          eq(schema.kbUploadedFilesTable.id, id),
+          notDeleted(schema.kbUploadedFilesTable),
+        ),
+      );
     return result ?? null;
   }
 
@@ -114,7 +134,12 @@ class KbUploadedFileModel {
     return db
       .select()
       .from(schema.kbUploadedFilesTable)
-      .where(inArray(schema.kbUploadedFilesTable.id, ids));
+      .where(
+        and(
+          inArray(schema.kbUploadedFilesTable.id, ids),
+          notDeleted(schema.kbUploadedFilesTable),
+        ),
+      );
   }
 
   static async create(
@@ -138,15 +163,30 @@ class KbUploadedFileModel {
         processingStatus: status,
         processingError: error ?? null,
       })
-      .where(eq(schema.kbUploadedFilesTable.id, id));
+      .where(
+        and(
+          eq(schema.kbUploadedFilesTable.id, id),
+          notDeleted(schema.kbUploadedFilesTable),
+        ),
+      );
   }
 
-  static async delete(id: string): Promise<boolean> {
-    const result = await db
-      .delete(schema.kbUploadedFilesTable)
-      .where(eq(schema.kbUploadedFilesTable.id, id))
-      .returning({ id: schema.kbUploadedFilesTable.id });
-    return result.length > 0;
+  static async delete(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await softDelete(
+      tx ?? db,
+      schema.kbUploadedFilesTable,
+      eq(schema.kbUploadedFilesTable.id, id),
+    );
+    return count > 0;
+  }
+
+  static async hardDelete(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await hardDelete(
+      tx ?? db,
+      schema.kbUploadedFilesTable,
+      eq(schema.kbUploadedFilesTable.id, id),
+    );
+    return count > 0;
   }
 
   static computeContentHash(text: string): string {

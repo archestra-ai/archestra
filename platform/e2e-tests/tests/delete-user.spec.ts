@@ -17,7 +17,6 @@ test.describe("User soft-delete blocks re-authentication", {
     const TEST_EMAIL = `${makeRandomString(10, "deleted")}@example.com`;
     const TEST_PASSWORD = "TestPassword123!";
 
-    // PART 1 — admin generates an invitation link
     const inviteButton = page.getByRole("button", { name: /invite user/i });
     await navigateAndVerifyAuth({
       page,
@@ -42,8 +41,6 @@ test.describe("User soft-delete blocks re-authentication", {
     const invitationLink = await invitationLinkInput.inputValue();
     expect(invitationLink).toContain("/auth/sign-up-with-invitation");
 
-    // PART 2 — new user signs up via the invitation link in an incognito
-    // context so the admin's session in `page` stays untouched
     const newUserContext = await browser.newContext({ storageState: undefined });
     const newUserPage = await newUserContext.newPage();
     try {
@@ -67,8 +64,6 @@ test.describe("User soft-delete blocks re-authentication", {
       await newUserContext.close();
     }
 
-    // PART 3 — admin removes the member, which (when no other memberships
-    // remain) routes through UserModel.delete and tombstones the user
     const membersResponse = await page.request.get(
       `${UI_BASE_URL}/api/organization/members`,
       { headers: { Origin: UI_BASE_URL } },
@@ -104,9 +99,6 @@ test.describe("User soft-delete blocks re-authentication", {
     );
     expect(removeResponse.ok()).toBe(true);
 
-    // PART 4 — the soft-delete invariant: the credentials that worked a
-    // moment ago must now fail. Use a fresh request context so no cached
-    // session is reused.
     const freshContext = await browser.newContext({ storageState: undefined });
     try {
       const signInResponse = await freshContext.request.post(
@@ -117,8 +109,6 @@ test.describe("User soft-delete blocks re-authentication", {
             Origin: UI_BASE_URL,
           },
           data: { email: TEST_EMAIL, password: TEST_PASSWORD },
-          // Better-auth returns 401/403 on bad credentials and Playwright
-          // would otherwise treat any non-2xx as a thrown error.
           failOnStatusCode: false,
         },
       );

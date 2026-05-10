@@ -226,6 +226,38 @@ describe("ConversationModel", () => {
     expect(found).toBeNull();
   });
 
+  test("soft-deleted conversation is filtered from findAll", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Filter Agent", teams: [] });
+
+    const kept = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Kept",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+    const removed = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Removed",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    await ConversationModel.delete(removed.id, user.id, org.id);
+
+    const list = await ConversationModel.findAll(user.id, org.id);
+    const ids = list.map((c) => c.id);
+    expect(ids).toContain(kept.id);
+    expect(ids).not.toContain(removed.id);
+  });
+
   test("returns conversations ordered by updatedAt descending", async ({
     makeUser,
     makeOrganization,

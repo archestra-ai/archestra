@@ -355,3 +355,79 @@ test.describe("Chat message persistence on provider error", () => {
     }
   });
 });
+
+test.describe("Conversation soft-delete", () => {
+  test("deleted conversation is excluded from the list endpoint", async ({
+    request,
+    makeApiRequest,
+    createAgent,
+    deleteAgent,
+  }) => {
+    const agentResponse = await createAgent(
+      request,
+      "Soft Delete Test Agent",
+      "personal",
+    );
+    const agent = await agentResponse.json();
+
+    try {
+      const keepResponse = await makeApiRequest({
+        request,
+        method: "post",
+        urlSuffix: "/api/chat/conversations",
+        data: {
+          agentId: agent.id,
+          title: `Keep ${randomUUID()}`,
+          selectedModel: "claude-3-5-sonnet-20241022",
+          selectedProvider: "anthropic",
+        },
+      });
+      const kept = await keepResponse.json();
+
+      const removeResponse = await makeApiRequest({
+        request,
+        method: "post",
+        urlSuffix: "/api/chat/conversations",
+        data: {
+          agentId: agent.id,
+          title: `Remove ${randomUUID()}`,
+          selectedModel: "claude-3-5-sonnet-20241022",
+          selectedProvider: "anthropic",
+        },
+      });
+      const removed = await removeResponse.json();
+
+      await makeApiRequest({
+        request,
+        method: "delete",
+        urlSuffix: `/api/chat/conversations/${removed.id}`,
+      });
+
+      // Soft-delete invariant: GET on the row 404s, and the list does not
+      // include it. Both must hold — list filtering is the user-facing
+      // surface that any leak would show up on first.
+      const fetchDeleted = await makeApiRequest({
+        request,
+        method: "get",
+        urlSuffix: `/api/chat/conversations/${removed.id}`,
+        ignoreStatusCheck: true,
+      });
+      expect(fetchDeleted.status()).toBe(404);
+
+      const listResponse = await makeApiRequest({
+        request,
+        method: "get",
+        urlSuffix: "/api/chat/conversations",
+      });
+      const list = await listResponse.json();
+      const items: Array<{ id: string }> = Array.isArray(list)
+        ? list
+        : (list?.data ?? []);
+      const ids = items.map((c) => c.id);
+      expect(ids).toContain(kept.id);
+      expect(ids).not.toContain(removed.id);
+    } finally {
+      await deleteAgent(request, agent.id);
+    }
+  });
+});

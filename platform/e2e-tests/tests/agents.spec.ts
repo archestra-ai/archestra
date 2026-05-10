@@ -41,6 +41,12 @@ test("can create and delete an agent", {
 
   // Wait for deletion to complete
   await expect(agentLocator).not.toBeVisible({ timeout: 10000 });
+
+  // Soft-delete invariant: a fresh page load must still hide the agent —
+  // optimistic UI removal alone is not enough.
+  await page.reload();
+  await page.waitForLoadState("domcontentloaded");
+  await expect(agentLocator).not.toBeVisible({ timeout: 10000 });
 });
 
 test("can clone an agent and rename it", {

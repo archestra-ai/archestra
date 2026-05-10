@@ -241,7 +241,9 @@ async function seedPlaywrightCatalog(): Promise<void> {
     }
 
     for (const catalogId of catalogIdsToDelete) {
-      const deleted = await InternalMcpCatalogModel.delete(catalogId);
+      // hardDelete: legacy rows are obsolete and should not linger as
+      // soft-deleted; this is operator cleanup, not user-driven deletion.
+      const deleted = await InternalMcpCatalogModel.hardDelete(catalogId);
       if (deleted) {
         logger.info(
           { catalogId, legacyCatalogName: LEGACY_PLAYWRIGHT_MCP_SERVER_NAME },

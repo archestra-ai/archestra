@@ -687,4 +687,87 @@ describe("OrganizationModel", () => {
       expect(fetched?.defaultAgentId).toBe(agent.id);
     });
   });
+
+  describe("soft-delete", () => {
+    test("should set deletedAt and tombstone the slug", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization({ slug: "acme" });
+
+      const ok = await OrganizationModel.delete(org.id);
+      expect(ok).toBe(true);
+
+      const [row] = await db
+        .select()
+        .from(schema.organizationsTable)
+        .where(eq(schema.organizationsTable.id, org.id));
+
+      expect(row.deletedAt).toBeInstanceOf(Date);
+      expect(row.slug).not.toBe("acme");
+      expect(row.slug).toMatch(/-acme$/);
+    });
+
+    test("getById hides soft-deleted orgs by default", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      await OrganizationModel.delete(org.id);
+
+      expect(await OrganizationModel.getById(org.id)).toBeNull();
+    });
+
+    test("getById with includeDeleted returns the soft-deleted row", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      await OrganizationModel.delete(org.id);
+
+      const found = await OrganizationModel.getById(org.id, {
+        includeDeleted: true,
+      });
+      expect(found?.id).toBe(org.id);
+      expect(found?.deletedAt).toBeInstanceOf(Date);
+    });
+
+    test("frees the original slug for re-registration (Bucket A tombstone)", async ({
+      makeOrganization,
+    }) => {
+      const original = await makeOrganization({ slug: "reusable" });
+
+      await OrganizationModel.delete(original.id);
+
+      // Same slug must succeed because the unique index on slug is preserved
+      // at the DB level and the tombstone moved the original off the slot.
+      const reused = await makeOrganization({ slug: "reusable" });
+      expect(reused.id).not.toBe(original.id);
+      expect(reused.slug).toBe("reusable");
+    });
+
+    test("hardDelete physically removes the row", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      const ok = await OrganizationModel.hardDelete(org.id);
+      expect(ok).toBe(true);
+
+      const rows = await db
+        .select()
+        .from(schema.organizationsTable)
+        .where(eq(schema.organizationsTable.id, org.id));
+      expect(rows).toHaveLength(0);
+    });
+
+    test("delete returns false when org is already deleted or missing", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      await OrganizationModel.delete(org.id);
+
+      expect(await OrganizationModel.delete(org.id)).toBe(false);
+      expect(await OrganizationModel.delete("missing")).toBe(false);
+    });
+  });
 });

@@ -5,6 +5,7 @@ import {
   TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
 } from "@shared";
+import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import AgentModel from "./agent";
@@ -2602,6 +2603,68 @@ describe("AgentModel", () => {
       });
 
       expect(agent.slug).toBe("test-gateway");
+    });
+
+    test("frees slug for reuse after soft-delete (Bucket B)", async () => {
+      const original = await AgentModel.create({
+        name: "Reusable Gateway",
+        agentType: "mcp_gateway",
+        teams: [],
+        scope: "org",
+      });
+      expect(original.slug).toBe("reusable-gateway");
+
+      await AgentModel.delete(original.id);
+
+      // The partial unique index excludes soft-deleted rows, so the next
+      // mcp_gateway with the same name reclaims the original slug verbatim
+      // (no auto-generated suffix).
+      const reused = await AgentModel.create({
+        name: "Reusable Gateway",
+        agentType: "mcp_gateway",
+        teams: [],
+        scope: "org",
+      });
+      expect(reused.slug).toBe("reusable-gateway");
+      expect(reused.id).not.toBe(original.id);
+    });
+  });
+
+  describe("soft-delete", () => {
+    test("delete sets deletedAt and removes the agent from findAll", async () => {
+      await AgentModel.create({ name: "Keeper", teams: [], scope: "org" });
+      const target = await AgentModel.create({
+        name: "To Delete",
+        teams: [],
+        scope: "org",
+      });
+
+      await AgentModel.delete(target.id);
+
+      const all = await AgentModel.findAll();
+      expect(all.map((a) => a.id)).not.toContain(target.id);
+
+      const [row] = await db
+        .select()
+        .from(schema.agentsTable)
+        .where(eq(schema.agentsTable.id, target.id));
+      expect(row.deletedAt).toBeInstanceOf(Date);
+    });
+
+    test("hardDelete physically removes the row", async () => {
+      const agent = await AgentModel.create({
+        name: "Purge Me",
+        teams: [],
+        scope: "org",
+      });
+
+      await AgentModel.hardDelete(agent.id);
+
+      const rows = await db
+        .select()
+        .from(schema.agentsTable)
+        .where(eq(schema.agentsTable.id, agent.id));
+      expect(rows).toHaveLength(0);
     });
   });
 

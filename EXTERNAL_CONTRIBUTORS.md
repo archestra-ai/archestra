@@ -245,3 +245,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @myceldevelopment-ctrl
 - @sillasvidal
 - @harrycena
+- @harryautomazione

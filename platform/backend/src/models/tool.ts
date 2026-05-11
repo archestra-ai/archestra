@@ -565,19 +565,30 @@ class ToolModel {
     const toolsToInsert: InsertTool[] = [];
     const resultTools: Tool[] = [];
 
-    // Collect meta-update promises so they run in parallel instead of N+1 sequential UPDATEs.
-    const metaUpdatePromises: Promise<Tool>[] = [];
+    // Refresh existing tool definitions while preserving IDs, assignments, and policies.
+    const existingToolUpdatePromises: Promise<Tool>[] = [];
 
     for (const tool of tools) {
       const existingTool = existingToolsByName.get(tool.name);
       if (existingTool) {
+        const descriptionChanged =
+          existingTool.description !== tool.description;
+        const parametersChanged =
+          JSON.stringify(existingTool.parameters) !==
+          JSON.stringify(tool.parameters);
         const metaChanged =
-          JSON.stringify(existingTool.meta) !== JSON.stringify(tool.meta);
-        if (metaChanged) {
-          metaUpdatePromises.push(
+          JSON.stringify(existingTool.meta ?? null) !==
+          JSON.stringify(tool.meta ?? null);
+        if (descriptionChanged || parametersChanged || metaChanged) {
+          existingToolUpdatePromises.push(
             db
               .update(schema.toolsTable)
-              .set({ meta: tool.meta ?? null, updatedAt: new Date() })
+              .set({
+                description: tool.description,
+                parameters: tool.parameters,
+                meta: tool.meta ?? null,
+                updatedAt: new Date(),
+              })
               .where(eq(schema.toolsTable.id, existingTool.id))
               .returning()
               .then(([updated]) => updated ?? existingTool),
@@ -597,8 +608,8 @@ class ToolModel {
       }
     }
 
-    if (metaUpdatePromises.length > 0) {
-      resultTools.push(...(await Promise.all(metaUpdatePromises)));
+    if (existingToolUpdatePromises.length > 0) {
+      resultTools.push(...(await Promise.all(existingToolUpdatePromises)));
     }
 
     // Bulk insert new tools if any

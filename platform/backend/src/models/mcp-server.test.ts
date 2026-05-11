@@ -173,7 +173,7 @@ describe("McpServerModel", () => {
       expect(trustedDataPolicyAfterDelete?.toolId).toBe(tool.id);
     });
 
-    test("recreated credentials reuse the existing tool row and can repin preserved assignments", async ({
+    test("recreated credentials reuse the existing tool row, refresh schema, and repin assignments", async ({
       makeAgent,
       makeAgentTool,
       makeInternalMcpCatalog,
@@ -193,6 +193,13 @@ describe("McpServerModel", () => {
       });
       const tool = await makeTool({
         name: "delete_recreate__search",
+        description: "Old search description",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string" },
+          },
+        },
         catalogId: catalog.id,
       });
       const agent = await makeAgent();
@@ -215,12 +222,26 @@ describe("McpServerModel", () => {
       const [reusedTool] = await ToolModel.bulkCreateToolsIfNotExists([
         {
           name: tool.name,
-          description: tool.description,
-          parameters: tool.parameters ?? {},
+          description: "Updated search description",
+          parameters: {
+            type: "object",
+            properties: {
+              query: { type: "string" },
+              limit: { type: "number" },
+            },
+          },
           catalogId: catalog.id,
         },
       ]);
       expect(reusedTool.id).toBe(tool.id);
+      expect(reusedTool.description).toBe("Updated search description");
+      expect(reusedTool.parameters).toEqual({
+        type: "object",
+        properties: {
+          query: { type: "string" },
+          limit: { type: "number" },
+        },
+      });
 
       await AgentToolModel.bulkCreateForAgentsAndTools([agent.id], [tool.id], {
         mcpServerId: secondServer.id,

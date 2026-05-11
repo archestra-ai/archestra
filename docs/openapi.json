@@ -111743,15 +111743,9 @@
                                   "type": "string"
                                 },
                                 "default": {
-                                  "anyOf": [
+                                  "allOf": [
                                     {
-                                      "type": "string"
-                                    },
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "boolean"
+                                      "$ref": "#/components/schemas/LocalConfigEnvironmentDefault"
                                     }
                                   ]
                                 },
@@ -112041,6 +112035,9 @@
                             "type": "string"
                           },
                           "clientIdOverride": {
+                            "type": "string"
+                          },
+                          "clientSecretOverride": {
                             "type": "string"
                           },
                           "tokenInjectionMode": {
@@ -112641,15 +112638,9 @@
                                 "type": "string"
                               },
                               "default": {
-                                "anyOf": [
+                                "allOf": [
                                   {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "boolean"
+                                    "$ref": "#/components/schemas/LocalConfigEnvironmentDefault"
                                   }
                                 ]
                               },
@@ -112939,6 +112930,9 @@
                           "type": "string"
                         },
                         "clientIdOverride": {
+                          "type": "string"
+                        },
+                        "clientSecretOverride": {
                           "type": "string"
                         },
                         "tokenInjectionMode": {
@@ -113547,15 +113541,9 @@
                                 "type": "string"
                               },
                               "default": {
-                                "anyOf": [
+                                "allOf": [
                                   {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "boolean"
+                                    "$ref": "#/components/schemas/LocalConfigEnvironmentDefault"
                                   }
                                 ]
                               },
@@ -113845,6 +113833,9 @@
                           "type": "string"
                         },
                         "clientIdOverride": {
+                          "type": "string"
+                        },
+                        "clientSecretOverride": {
                           "type": "string"
                         },
                         "tokenInjectionMode": {

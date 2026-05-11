@@ -29767,7 +29767,7 @@ export type GetCatalogChildrenResponses = {
                 promptOnPreset?: boolean;
                 required?: boolean;
                 description?: string;
-                default?: string | number | boolean;
+                default?: LocalConfigEnvironmentDefault;
                 mounted?: boolean;
             }>;
             envFrom?: Array<{
@@ -29831,6 +29831,7 @@ export type GetCatalogChildrenResponses = {
             scopes?: Array<string>;
             audience?: string;
             clientIdOverride?: string;
+            clientSecretOverride?: string;
             tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
             headerName?: string;
             envVarName?: string;
@@ -29980,7 +29981,7 @@ export type CreateCatalogChildResponses = {
                 promptOnPreset?: boolean;
                 required?: boolean;
                 description?: string;
-                default?: string | number | boolean;
+                default?: LocalConfigEnvironmentDefault;
                 mounted?: boolean;
             }>;
             envFrom?: Array<{
@@ -30044,6 +30045,7 @@ export type CreateCatalogChildResponses = {
             scopes?: Array<string>;
             audience?: string;
             clientIdOverride?: string;
+            clientSecretOverride?: string;
             tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
             headerName?: string;
             envVarName?: string;
@@ -30280,7 +30282,7 @@ export type UpdateCatalogChildResponses = {
                 promptOnPreset?: boolean;
                 required?: boolean;
                 description?: string;
-                default?: string | number | boolean;
+                default?: LocalConfigEnvironmentDefault;
                 mounted?: boolean;
             }>;
             envFrom?: Array<{
@@ -30344,6 +30346,7 @@ export type UpdateCatalogChildResponses = {
             scopes?: Array<string>;
             audience?: string;
             clientIdOverride?: string;
+            clientSecretOverride?: string;
             tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
             headerName?: string;
             envVarName?: string;

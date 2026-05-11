@@ -28,7 +28,9 @@ export function useUpdateAccountNameMutation() {
     onSuccess: async (updated) => {
       if (!updated) return;
       toast.success("Name updated");
-      await queryClient.invalidateQueries({ queryKey: authQueryKeys.session() });
+      await queryClient.invalidateQueries({
+        queryKey: authQueryKeys.session(),
+      });
     },
   });
 }

@@ -13,6 +13,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useAgentDelegations } from "@/lib/agent-tools.query";
+import { useSession } from "@/lib/auth/auth.query";
 import {
   fetchAgentMcpTools,
   useConversationEnabledTools,
@@ -26,7 +27,6 @@ import {
   getPendingActions,
   PENDING_TOOL_STATE_CHANGE_EVENT,
 } from "@/lib/chat/pending-tool-state";
-import { useSession } from "@/lib/auth/auth.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { cn } from "@/lib/utils";
 

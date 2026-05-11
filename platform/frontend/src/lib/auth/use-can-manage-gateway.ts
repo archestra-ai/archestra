@@ -1,7 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useQuery } from "@tanstack/react-query";
-import { useHasPermissions } from "@/lib/auth/auth.query";
-import { authClient } from "@/lib/clients/auth/auth-client";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 
 type Gateway = archestraApiTypes.GetAgentResponses["200"] | null | undefined;
 
@@ -23,8 +22,7 @@ export function useCanManageGateway(gateway: Gateway): {
     useHasPermissions({ mcpGateway: ["team-admin"] });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
 
-  const { data: session, isPending: isSessionLoading } =
-    authClient.useSession();
+  const { data: session, isPending: isSessionLoading } = useSession();
   const currentUserId = session?.user?.id;
 
   const { data: userTeams, isLoading: isTeamsLoading } = useQuery({

@@ -50,8 +50,7 @@ import {
   type VisibilityOption,
   VisibilitySelector,
 } from "@/components/visibility-selector";
-import { useHasPermissions } from "@/lib/auth/auth.query";
-import { authClient } from "@/lib/clients/auth/auth-client";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
@@ -94,7 +93,7 @@ export default function VirtualKeysPage() {
   const paginationMeta = response?.pagination;
 
   const { data: apiKeys = [] } = useLlmProviderApiKeys();
-  const { data: session } = authClient.useSession();
+  const { data: session } = useSession();
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: isVirtualKeyAdmin } = useHasPermissions({
     llmVirtualKey: ["admin"],

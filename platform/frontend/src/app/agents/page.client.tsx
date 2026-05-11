@@ -44,8 +44,7 @@ import {
   useProfiles,
   useProfilesPaginated,
 } from "@/lib/agent.query";
-import { useHasPermissions } from "@/lib/auth/auth.query";
-import { authClient } from "@/lib/clients/auth/auth-client";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { AgentActions } from "./agent-actions";
@@ -173,7 +172,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const { data: isAgentTeamAdmin } = useHasPermissions({
     agent: ["team-admin"],
   });
-  const { data: session } = authClient.useSession();
+  const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const userTeamIdSet = new Set((userTeams ?? []).map((t) => t.id));
 

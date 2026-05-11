@@ -14,7 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { invalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import { conversationStorageKeys } from "@/lib/chat/chat-utils";
-import { authClient } from "@/lib/clients/auth/auth-client";
+import { useSession } from "@/lib/auth/auth.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { handleApiError } from "@/lib/utils";
 
@@ -726,7 +726,7 @@ export function useHasPlaywrightMcpTools(
   const playwrightServersQuery = useMcpServers({
     catalogId: PLAYWRIGHT_MCP_CATALOG_ID,
   });
-  const { data: session } = authClient.useSession();
+  const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   // Find the server owned by the current user (admins see all servers)
   const playwrightServer = playwrightServersQuery.data?.find(

@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Invitation } from "better-auth/plugins/organization";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { useSession } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { handleApiError } from "./utils";
 
@@ -61,7 +62,7 @@ export const organizationKeys = {
  * Fetch invitation details by ID
  */
 export function useInvitation(invitationId: string) {
-  const session = authClient.useSession();
+  const session = useSession();
   return useQuery({
     queryKey: organizationKeys.invitation(invitationId),
     queryFn: async () => {
@@ -254,7 +255,7 @@ export function useCreateInvitation(organizationId: string | undefined) {
  * Get organization
  */
 export function useOrganization(enabled = true) {
-  const session = authClient.useSession();
+  const session = useSession();
 
   return useQuery({
     queryKey: organizationKeys.details(),

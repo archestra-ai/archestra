@@ -25,7 +25,7 @@ import {
 } from "@/components/oauth-confirmation-dialog";
 import { SearchInput } from "@/components/search-input";
 import { Button } from "@/components/ui/button";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useInitiateOAuth } from "@/lib/auth/oauth.query";
 import {
   clearInstallationCompleteCatalogId,
@@ -44,7 +44,6 @@ import {
   setOAuthTeamId,
   setOAuthUserConfigValues,
 } from "@/lib/auth/oauth-session";
-import { authClient } from "@/lib/clients/auth/auth-client";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useMcpRegistryServer } from "@/lib/mcp/external-mcp-catalog.query";
 import {
@@ -118,8 +117,8 @@ export function InternalMCPCatalog({
   const reauthMutation = useReauthenticateMcpServer();
   const initiateOAuthMutation = useInitiateOAuth();
   const deploymentStatuses = useMcpDeploymentStatuses();
-  const session = authClient.useSession();
-  const currentUserId = session.data?.user?.id;
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
 
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<
     | "create"

@@ -71,8 +71,7 @@ import {
   useSyncAgentDelegations,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
-import { useHasPermissions } from "@/lib/auth/auth.query";
-import { authClient } from "@/lib/clients/auth/auth-client";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useConnectors } from "@/lib/knowledge/connector.query";
 import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
@@ -111,7 +110,7 @@ export function InitialAgentSelector({
   onAgentChange,
 }: InitialAgentSelectorProps) {
   const { data: allAgents = [] } = useInternalAgents();
-  const { data: session } = authClient.useSession();
+  const { data: session } = useSession();
   const userId = session?.user?.id;
   const { data: isAgentAdmin } = useHasPermissions({ agent: ["admin"] });
   const createProfile = useCreateProfile();

@@ -42,8 +42,7 @@ import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
 import { useCreateProfile } from "@/lib/agent.query";
 import { useBulkAssignTools } from "@/lib/agent-tools.query";
-import { useHasPermissions } from "@/lib/auth/auth.query";
-import { authClient } from "@/lib/clients/auth/auth-client";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useCatalogTools } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers, useMcpServerTools } from "@/lib/mcp/mcp-server.query";
@@ -140,8 +139,8 @@ export function McpServerCard({
   const [isChatCreating, setIsChatCreating] = useState(false);
 
   const isByosEnabled = useFeature("byosEnabled");
-  const session = authClient.useSession();
-  const currentUserId = session.data?.user?.id;
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
   const { data: userIsMcpServerAdmin } = useHasPermissions({
     mcpServerInstallation: ["admin"],
   });

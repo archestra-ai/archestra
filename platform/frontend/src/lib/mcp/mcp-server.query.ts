@@ -9,7 +9,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { invalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
-import { authClient } from "@/lib/clients/auth/auth-client";
+import { useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { handleApiError } from "@/lib/utils";
 import websocketService from "@/lib/websocket/websocket";
@@ -81,7 +81,7 @@ export function useMcpServersGroupedByCatalog(params?: McpServersQuery) {
     assignmentScope: params?.assignmentScope,
     assignmentTeamIds: params?.assignmentTeamIds,
   });
-  const { data: session } = authClient.useSession();
+  const { data: session } = useSession();
   const currentUserId = session?.user?.id;
 
   return useMemo(() => {

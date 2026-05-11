@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.2.38](https://github.com/archestra-ai/archestra/compare/platform-v1.2.37...platform-v1.2.38) (2026-05-11)
+
+
+### Features
+
+* add granular llm cost limits ([#4258](https://github.com/archestra-ai/archestra/issues/4258)) ([4b6f50c](https://github.com/archestra-ai/archestra/commit/4b6f50c27a516f7d2eeaba96f958e8dcd14f5fc5))
+
+
+### Bug Fixes
+
+* add require-approval to built-in config policy subagent ([#4521](https://github.com/archestra-ai/archestra/issues/4521)) ([9942310](https://github.com/archestra-ai/archestra/commit/994231064c5487bac0b7fe1f9e6bd071c3f62fdc))
+* allow scroll on alternative-onboarding-dialog ([#4534](https://github.com/archestra-ai/archestra/issues/4534)) ([0fc0674](https://github.com/archestra-ai/archestra/commit/0fc0674fabb2604c4e76e63d536e5b2938f596cf))
+* change frontend visibility settings for roles ([#4456](https://github.com/archestra-ai/archestra/issues/4456)) ([4c94643](https://github.com/archestra-ai/archestra/commit/4c94643aca404c88d8fa163e4c14238f6e694daf))
+* make pool max configurable via ARCHESTRA_DATABASE_POOL_MAX, defa… ([#4537](https://github.com/archestra-ai/archestra/issues/4537)) ([85fb79f](https://github.com/archestra-ai/archestra/commit/85fb79f766d23a79a06fee15344cb1e64a23967e))
+* **model-router:** hide models not linked to mapped API keys ([#4533](https://github.com/archestra-ai/archestra/issues/4533)) ([6565c43](https://github.com/archestra-ai/archestra/commit/6565c4374def50e2a2b75409e162856a5af36c63))
+
 ## [1.2.37](https://github.com/archestra-ai/archestra/compare/platform-v1.2.36...platform-v1.2.37) (2026-05-09)
 
 

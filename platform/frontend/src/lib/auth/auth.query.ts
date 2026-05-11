@@ -13,7 +13,12 @@ export const authQueryKeys = {
 };
 
 /**
- * Fetch current session
+ * Fetch the current session through the shared TanStack Query cache.
+ *
+ * Always use this hook instead of calling `authClient.getSession()` directly in
+ * components/hooks. This keeps every session consumer on one query key with the
+ * same stale-time and invalidation path, and prevents repeated session requests
+ * when many auth-aware components mount together.
  */
 export function useSession() {
   return useQuery({

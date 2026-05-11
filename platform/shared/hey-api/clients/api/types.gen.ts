@@ -1372,7 +1372,17 @@ export type AnthropicMessagesRequestInput = {
     metadata?: {
         user_id: string | null;
     };
+    output_config?: {
+        effort?: 'low' | 'medium' | 'high' | 'max';
+        format?: {
+            type: 'json_schema';
+            schema: {
+                [key: string]: unknown;
+            };
+        } | null;
+    };
     service_tier?: unknown;
+    speed?: 'fast' | 'standard';
     stop_sequences?: Array<string>;
     stream?: boolean;
     system?: string | {
@@ -1387,6 +1397,14 @@ export type AnthropicMessagesRequestInput = {
         citations?: Array<unknown> | null;
     }>;
     temperature?: number;
+    thinking?: {
+        type: 'enabled';
+        budget_tokens: number;
+    } | {
+        type: 'disabled';
+    } | {
+        type: 'adaptive';
+    };
     tool_choice?: {
         type: 'auto';
         disable_parallel_tool_use?: boolean;
@@ -6631,7 +6649,17 @@ export type AnthropicMessagesRequest = {
     metadata?: {
         user_id: string | null;
     };
+    output_config?: {
+        effort?: 'low' | 'medium' | 'high' | 'max';
+        format?: {
+            type: 'json_schema';
+            schema: {
+                [key: string]: unknown;
+            };
+        } | null;
+    };
     service_tier?: unknown;
+    speed?: 'fast' | 'standard';
     stop_sequences?: Array<string>;
     stream?: boolean;
     system?: string | {
@@ -6646,6 +6674,14 @@ export type AnthropicMessagesRequest = {
         citations?: Array<unknown> | null;
     }>;
     temperature?: number;
+    thinking?: {
+        type: 'enabled';
+        budget_tokens: number;
+    } | {
+        type: 'disabled';
+    } | {
+        type: 'adaptive';
+    };
     tool_choice?: {
         type: 'auto';
         disable_parallel_tool_use?: boolean;
@@ -13426,7 +13462,7 @@ export type AutoConfigureAgentToolPoliciesResponses = {
             toolId: string;
             success: boolean;
             config?: {
-                toolInvocationAction: 'allow_when_context_is_sensitive' | 'block_when_context_is_sensitive' | 'block_always';
+                toolInvocationAction: 'allow_when_context_is_sensitive' | 'block_when_context_is_sensitive' | 'require_approval' | 'block_always';
                 trustedDataAction: 'mark_as_safe' | 'mark_as_sensitive' | 'sanitize_with_dual_llm' | 'block_always';
                 reasoning: string;
             };

@@ -25,7 +25,7 @@ import {
   Star,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import React from "react";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
 import { AppLogo } from "@/components/app-logo";
@@ -226,6 +226,7 @@ const NavPrimary = ({
   chatSection?: React.ReactNode;
 }) => {
   const { isMobile, setOpenMobile } = useSidebar();
+  const router = useRouter();
 
   const renderItem = (item: NavItem) => (
     <SidebarMenuItem key={item.title}>
@@ -240,6 +241,7 @@ const NavPrimary = ({
         <Link
           href={item.url}
           data-testid={item.testId}
+          {...getManualPrefetchProps(router, item.url)}
           onClick={() => {
             if (isMobile) setOpenMobile(false);
           }}
@@ -265,6 +267,7 @@ const NavPrimary = ({
                   <Link
                     href={sub.url}
                     data-testid={sub.testId}
+                    {...getManualPrefetchProps(router, sub.url)}
                     onClick={() => {
                       if (isMobile) setOpenMobile(false);
                     }}
@@ -319,6 +322,7 @@ const NavSecondary = ({
   starCount: string;
   className?: string;
 }) => {
+  const router = useRouter();
   const permittedItems = items.filter(
     (item) => permissionMap[item.url] ?? true,
   );
@@ -337,7 +341,10 @@ const NavSecondary = ({
                   pathname.startsWith(item.url)
                 }
               >
-                <Link href={item.url}>
+                <Link
+                  href={item.url}
+                  {...getManualPrefetchProps(router, item.url)}
+                >
                   <item.icon className={item.iconClassName} />
                   <span>{item.title}</span>
                 </Link>
@@ -409,6 +416,7 @@ const NavSecondary = ({
 };
 
 export function AppSidebar() {
+  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const isAuthenticated = useIsAuthenticated();
@@ -459,7 +467,11 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader className="pt-4 group-data-[collapsible=icon]:pt-2 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:gap-1">
         <div className="flex items-center justify-between group-data-[collapsible=icon]:hidden">
-          <Link href="/chat" className="flex-1 min-w-0">
+          <Link
+            href="/chat"
+            className="flex-1 min-w-0"
+            {...getManualPrefetchProps(router, "/chat")}
+          >
             <AppLogo centered={false} />
           </Link>
           <SidebarTrigger className="size-7 cursor-pointer" />
@@ -467,6 +479,7 @@ export function AppSidebar() {
         <Link
           href="/chat"
           className="hidden group-data-[collapsible=icon]:flex"
+          {...getManualPrefetchProps(router, "/chat")}
         >
           <img src={appIconLogo} alt="Logo" className="size-7" />
         </Link>
@@ -537,4 +550,15 @@ export function AppSidebar() {
       </SidebarFooter>
     </Sidebar>
   );
+}
+
+function getManualPrefetchProps(
+  router: ReturnType<typeof useRouter>,
+  href: string,
+) {
+  return {
+    prefetch: false,
+    onFocus: () => router.prefetch(href),
+    onMouseEnter: () => router.prefetch(href),
+  } as const;
 }

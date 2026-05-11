@@ -572,6 +572,11 @@ function SidebarPrefetchLink({
   );
 }
 
+/**
+ * Converts a Next.js Link href into the string URL required by router.prefetch.
+ * Sidebar links currently pass strings, but this keeps manual prefetch safe if
+ * a future item uses a UrlObject with query or hash fields.
+ */
 function getPrefetchHref(href: React.ComponentProps<typeof Link>["href"]) {
   if (typeof href === "string") return href;
   if (!href.pathname) return null;

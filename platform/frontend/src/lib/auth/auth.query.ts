@@ -29,6 +29,7 @@ export function useSession() {
     },
     staleTime: 5 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
+    // Keep focus refetching on so backgrounded tabs discover revoked or changed sessions promptly.
     refetchOnWindowFocus: true,
   });
 }

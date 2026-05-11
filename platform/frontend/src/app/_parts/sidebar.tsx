@@ -539,6 +539,12 @@ export function AppSidebar() {
   );
 }
 
+/**
+ * Sidebar links opt out of Next.js viewport prefetch to avoid fetching every
+ * visible sidebar route's RSC payload when the app shell mounts. Hover/focus
+ * prefetch keeps intentional navigation fast without competing with initial
+ * page API requests.
+ */
 function SidebarPrefetchLink({
   href,
   onFocus,

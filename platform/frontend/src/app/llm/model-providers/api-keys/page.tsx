@@ -3,7 +3,7 @@
 import {
   E2eTestId,
   formatSecretStorageType,
-  PROVIDERS_WITH_OPTIONAL_API_KEY,
+  isProviderApiKeyOptional,
   type ResourceVisibilityScope,
 } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -111,6 +111,7 @@ export default function ApiKeysPage() {
   const updateMutation = useUpdateLlmProviderApiKey();
   const deleteMutation = useDeleteLlmProviderApiKey();
   const byosEnabled = useFeature("byosEnabled");
+  const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
 
   const getKeyUsage = useCallback(
     (keyId: string): string | null => {
@@ -354,7 +355,10 @@ export default function ApiKeysPage() {
           <div className="flex items-center gap-2">
             {row.original.isSystem ||
             row.original.secretId ||
-            PROVIDERS_WITH_OPTIONAL_API_KEY.has(row.original.provider) ? (
+            isProviderApiKeyOptional({
+              provider: row.original.provider,
+              azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
+            }) ? (
               <>
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
                 <span className="text-sm text-muted-foreground">
@@ -416,7 +420,13 @@ export default function ApiKeysPage() {
         },
       },
     ],
-    [docsUrl, openEditDialog, openDeleteDialog, getKeyUsage],
+    [
+      docsUrl,
+      openEditDialog,
+      openDeleteDialog,
+      getKeyUsage,
+      azureOpenAiEntraIdEnabled,
+    ],
   );
 
   return (

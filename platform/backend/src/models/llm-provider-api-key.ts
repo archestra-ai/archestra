@@ -1,10 +1,11 @@
 import {
+  getProvidersWithOptionalApiKey,
   isVaultReference,
-  PROVIDERS_WITH_OPTIONAL_API_KEY,
   parseVaultReference,
   type SupportedProvider,
 } from "@shared";
 import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import db, { schema } from "@/database";
 import { computeSecretStorageType } from "@/secrets-manager/utils";
 import type {
@@ -267,9 +268,12 @@ class LlmProviderApiKeyModel {
     const secretOrSystemCondition = or(
       sql`${schema.llmProviderApiKeysTable.secretId} IS NOT NULL`,
       eq(schema.llmProviderApiKeysTable.isSystem, true),
-      inArray(schema.llmProviderApiKeysTable.provider, [
-        ...PROVIDERS_WITH_OPTIONAL_API_KEY,
-      ]),
+      inArray(
+        schema.llmProviderApiKeysTable.provider,
+        getProvidersWithOptionalApiKey({
+          azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+        }),
+      ),
     );
     if (secretOrSystemCondition) {
       conditions.push(secretOrSystemCondition);
@@ -415,9 +419,12 @@ class LlmProviderApiKeyModel {
     // Condition: key has a secret OR provider allows optional API keys
     const hasSecretOrOptional = or(
       sql`${schema.llmProviderApiKeysTable.secretId} IS NOT NULL`,
-      inArray(schema.llmProviderApiKeysTable.provider, [
-        ...PROVIDERS_WITH_OPTIONAL_API_KEY,
-      ]),
+      inArray(
+        schema.llmProviderApiKeysTable.provider,
+        getProvidersWithOptionalApiKey({
+          azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+        }),
+      ),
     );
 
     // 3. Try personal key (prefer isPrimary, then oldest)

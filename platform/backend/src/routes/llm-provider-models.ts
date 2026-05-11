@@ -1,11 +1,12 @@
 import {
   EmbeddingDimensionsSchema,
-  PROVIDERS_WITH_OPTIONAL_API_KEY,
+  isProviderApiKeyOptional,
   RouteId,
   SupportedProvidersSchema,
 } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { modelsDevClient } from "@/clients/models-dev-client";
@@ -294,7 +295,10 @@ export async function syncModelsForVisibleApiKeys(params: {
 
         if (
           !secretValue &&
-          !PROVIDERS_WITH_OPTIONAL_API_KEY.has(apiKey.provider)
+          !isProviderApiKeyOptional({
+            provider: apiKey.provider,
+            azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+          })
         ) {
           if (apiKey.secretId) {
             logger.warn(

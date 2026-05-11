@@ -22,6 +22,7 @@ import {
   isAzureOpenAiEntraIdEnabled,
 } from "@/clients/azure-openai-credentials";
 import {
+  buildAzureDeploymentBaseUrl,
   normalizeAzureApiKey,
   shouldUseAzureOpenAiApiVersion,
 } from "@/clients/azure-url";
@@ -51,6 +52,14 @@ type AzureResponse = Azure.Types.ChatCompletionsResponse;
 type AzureMessages = Azure.Types.ChatCompletionsRequest["messages"];
 type AzureHeaders = Azure.Types.ChatCompletionsHeaders;
 type AzureStreamChunk = Azure.Types.ChatCompletionChunk;
+
+type AzureClient = {
+  apiKey: string | undefined;
+  baseUrl: string | undefined;
+  defaultHeaders: Record<string, string> | undefined;
+  fetch: typeof globalThis.fetch | undefined;
+  openai: OpenAIProvider;
+};
 
 // =============================================================================
 // ADAPTER CLASSES (delegate to OpenAI adapters, override provider)
@@ -227,7 +236,7 @@ export const azureAdapterFactory: LLMProvider<
   createClient(
     apiKey: string | undefined,
     options: CreateClientOptions,
-  ): OpenAIProvider {
+  ): AzureClient {
     const customFetch = options.agent
       ? metrics.llm.getObservableFetch(
           "azure",
@@ -238,13 +247,20 @@ export const azureAdapterFactory: LLMProvider<
       : undefined;
 
     if (!apiKey && isAzureOpenAiEntraIdEnabled()) {
-      return new OpenAIProvider({
+      const client = new OpenAIProvider({
         apiKey: getAzureOpenAiBearerTokenProvider(options.baseUrl),
         baseURL: options.baseUrl,
         defaultQuery: getAzureDefaultQuery(options.baseUrl),
         fetch: customFetch,
         defaultHeaders: options.defaultHeaders,
       });
+      return {
+        apiKey,
+        baseUrl: options.baseUrl,
+        defaultHeaders: options.defaultHeaders,
+        fetch: customFetch,
+        openai: client,
+      };
     }
 
     if (!apiKey) {
@@ -252,24 +268,37 @@ export const azureAdapterFactory: LLMProvider<
     }
 
     const normalizedApiKey = normalizeAzureApiKey(apiKey);
+    if (!normalizedApiKey) {
+      throw new ApiError(401, "API key required for Azure AI Foundry");
+    }
 
-    return new OpenAIProvider({
+    const defaultHeaders = {
+      ...options.defaultHeaders,
+      "api-key": normalizedApiKey,
+    };
+
+    const client = new OpenAIProvider({
       apiKey: normalizedApiKey,
       baseURL: options.baseUrl,
       defaultQuery: getAzureDefaultQuery(options.baseUrl),
       fetch: customFetch,
-      defaultHeaders: {
-        ...options.defaultHeaders,
-        "api-key": normalizedApiKey,
-      },
+      defaultHeaders,
     });
+
+    return {
+      apiKey: normalizedApiKey,
+      baseUrl: options.baseUrl,
+      defaultHeaders,
+      fetch: customFetch,
+      openai: client,
+    };
   },
 
   async execute(
     client: unknown,
     request: AzureRequest,
   ): Promise<AzureResponse> {
-    const azureClient = client as OpenAIProvider;
+    const azureClient = getAzureClientForRequest(client, request.model);
     const azureRequest = {
       ...request,
       stream: false,
@@ -284,7 +313,7 @@ export const azureAdapterFactory: LLMProvider<
     client: unknown,
     request: AzureRequest,
   ): Promise<AsyncIterable<AzureStreamChunk>> {
-    const azureClient = client as OpenAIProvider;
+    const azureClient = getAzureClientForRequest(client, request.model);
     const azureRequest = {
       ...request,
       stream: true,
@@ -329,4 +358,29 @@ function getAzureDefaultQuery(
   return shouldUseAzureOpenAiApiVersion(baseUrl)
     ? { "api-version": config.llm.azure.apiVersion }
     : undefined;
+}
+
+function getAzureClientForRequest(
+  client: unknown,
+  model: string,
+): OpenAIProvider {
+  const azureClient = client as AzureClient;
+  const deploymentBaseUrl = buildAzureDeploymentBaseUrl({
+    baseUrl: azureClient.baseUrl,
+    deploymentName: model,
+  });
+
+  if (!deploymentBaseUrl || deploymentBaseUrl === azureClient.baseUrl) {
+    return azureClient.openai;
+  }
+
+  return new OpenAIProvider({
+    apiKey:
+      azureClient.apiKey ??
+      getAzureOpenAiBearerTokenProvider(deploymentBaseUrl),
+    baseURL: deploymentBaseUrl,
+    defaultQuery: getAzureDefaultQuery(deploymentBaseUrl),
+    fetch: azureClient.fetch,
+    defaultHeaders: azureClient.defaultHeaders,
+  });
 }

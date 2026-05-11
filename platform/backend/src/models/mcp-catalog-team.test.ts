@@ -25,6 +25,28 @@ test("getUserAccessibleCatalogIds returns org-scoped items for any user", async 
   expect(ids).toContain(orgCatalog.id);
 });
 
+test("getUserAccessibleCatalogIds returns global org-scoped items for any user", async ({
+  makeUser,
+  makeOrganization,
+}) => {
+  const user = await makeUser();
+  const org = await makeOrganization();
+
+  const globalCatalog = await InternalMcpCatalogModel.create({
+    name: "global-catalog",
+    serverType: "builtin",
+    scope: "org",
+  });
+
+  const ids = await McpCatalogTeamModel.getUserAccessibleCatalogIds(
+    user.id,
+    false,
+    org.id,
+  );
+
+  expect(ids).toContain(globalCatalog.id);
+});
+
 test("getUserAccessibleCatalogIds scopes org items to the active organization", async ({
   makeUser,
   makeOrganization,
@@ -140,6 +162,28 @@ test("getUserAccessibleCatalogIds returns all items for admin", async ({
   expect(adminIds).toContain(personalCatalog.id);
 });
 
+test("getUserAccessibleCatalogIds returns global items for admin", async ({
+  makeUser,
+  makeOrganization,
+}) => {
+  const admin = await makeUser();
+  const org = await makeOrganization();
+
+  const globalCatalog = await InternalMcpCatalogModel.create({
+    name: "global-admin-catalog",
+    serverType: "builtin",
+    scope: "org",
+  });
+
+  const adminIds = await McpCatalogTeamModel.getUserAccessibleCatalogIds(
+    admin.id,
+    true,
+    org.id,
+  );
+
+  expect(adminIds).toContain(globalCatalog.id);
+});
+
 test("userHasCatalogAccess checks access correctly for all scope types", async ({
   makeUser,
   makeOrganization,
@@ -249,6 +293,28 @@ test("userHasCatalogAccess denies org-scoped catalog items from other organizati
   ).resolves.toBe(false);
 });
 
+test("userHasCatalogAccess allows global org-scoped catalog items", async ({
+  makeUser,
+  makeOrganization,
+}) => {
+  const user = await makeUser();
+  const org = await makeOrganization();
+  const globalCatalog = await InternalMcpCatalogModel.create({
+    name: "global-access-catalog",
+    serverType: "builtin",
+    scope: "org",
+  });
+
+  await expect(
+    McpCatalogTeamModel.userHasCatalogAccess(
+      user.id,
+      globalCatalog.id,
+      false,
+      org.id,
+    ),
+  ).resolves.toBe(true);
+});
+
 test("syncCatalogTeams replaces team assignments", async ({
   makeOrganization,
   makeUser,
@@ -336,4 +402,26 @@ test("findAll with scope filtering returns correct items", async ({
   expect(otherNames).toContain(orgCatalog.name);
   expect(otherNames).not.toContain(personalCatalog.name);
   expect(otherNames).not.toContain(teamCatalog.name);
+});
+
+test("findAll with scope filtering includes global org-scoped items", async ({
+  makeUser,
+  makeOrganization,
+}) => {
+  const user = await makeUser();
+  const org = await makeOrganization();
+  const globalCatalog = await InternalMcpCatalogModel.create({
+    name: "scope-test-global",
+    serverType: "builtin",
+    scope: "org",
+  });
+
+  const items = await InternalMcpCatalogModel.findAll({
+    expandSecrets: false,
+    userId: user.id,
+    isAdmin: false,
+    organizationId: org.id,
+  });
+
+  expect(items.map((i) => i.id)).toContain(globalCatalog.id);
 });

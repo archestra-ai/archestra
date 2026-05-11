@@ -4,6 +4,10 @@ export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});
 };
 
+export type EmbeddingDimensionsInput = 3072 | 1536 | 768;
+
+export type LocalConfigEnvironmentDefaultInput = string | number | boolean;
+
 export type OpenAiChatCompletionRequestInput = {
     model: string;
     /**
@@ -1368,7 +1372,17 @@ export type AnthropicMessagesRequestInput = {
     metadata?: {
         user_id: string | null;
     };
+    output_config?: {
+        effort?: 'low' | 'medium' | 'high' | 'max';
+        format?: {
+            type: 'json_schema';
+            schema: {
+                [key: string]: unknown;
+            };
+        } | null;
+    };
     service_tier?: unknown;
+    speed?: 'fast' | 'standard';
     stop_sequences?: Array<string>;
     stream?: boolean;
     system?: string | {
@@ -1383,6 +1397,14 @@ export type AnthropicMessagesRequestInput = {
         citations?: Array<unknown> | null;
     }>;
     temperature?: number;
+    thinking?: {
+        type: 'enabled';
+        budget_tokens: number;
+    } | {
+        type: 'disabled';
+    } | {
+        type: 'adaptive';
+    };
     tool_choice?: {
         type: 'auto';
         disable_parallel_tool_use?: boolean;
@@ -5259,6 +5281,10 @@ export type UserConfigFieldInput = {
     valuePrefix?: string;
 };
 
+export type EmbeddingDimensions = 3072 | 1536 | 768;
+
+export type LocalConfigEnvironmentDefault = string | number | boolean;
+
 export type OpenAiChatCompletionRequest = {
     model: string;
     /**
@@ -6623,7 +6649,17 @@ export type AnthropicMessagesRequest = {
     metadata?: {
         user_id: string | null;
     };
+    output_config?: {
+        effort?: 'low' | 'medium' | 'high' | 'max';
+        format?: {
+            type: 'json_schema';
+            schema: {
+                [key: string]: unknown;
+            };
+        } | null;
+    };
     service_tier?: unknown;
+    speed?: 'fast' | 'standard';
     stop_sequences?: Array<string>;
     stream?: boolean;
     system?: string | {
@@ -6638,6 +6674,14 @@ export type AnthropicMessagesRequest = {
         citations?: Array<unknown> | null;
     }>;
     temperature?: number;
+    thinking?: {
+        type: 'enabled';
+        budget_tokens: number;
+    } | {
+        type: 'disabled';
+    } | {
+        type: 'adaptive';
+    };
     tool_choice?: {
         type: 'auto';
         disable_parallel_tool_use?: boolean;
@@ -11615,6 +11659,260 @@ export type GetDefaultLlmProxyResponses = {
 
 export type GetDefaultLlmProxyResponse = GetDefaultLlmProxyResponses[keyof GetDefaultLlmProxyResponses];
 
+export type ImportAgentData = {
+    body: {
+        /**
+         * Schema version for forward compatibility
+         */
+        version: '1';
+        /**
+         * ISO 8601 timestamp
+         */
+        exportedAt: string;
+        /**
+         * Informational: hostname of the source instance
+         */
+        sourceInstance?: string | null;
+        agent: {
+            name: string;
+            /**
+             * Only internal agents are exportable
+             */
+            agentType: 'agent';
+            description: string | null;
+            systemPrompt: string | null;
+            icon: string | null;
+            /**
+             * Original scope; imports always default to personal
+             */
+            scope: 'personal' | 'team' | 'org';
+            considerContextUntrusted: boolean;
+            toolAssignmentMode: 'automatic' | 'manual';
+            toolExposureMode: 'full' | 'search_and_run_only';
+            /**
+             * Informational; not auto-configured on import
+             */
+            llmModel: string | null;
+            incomingEmailEnabled: boolean;
+            incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+            incomingEmailAllowedDomain: string | null;
+            passthroughHeaders?: Array<string> | null;
+        };
+        labels: Array<{
+            key: string;
+            value: string;
+        }>;
+        suggestedPrompts: Array<{
+            summaryTitle: string;
+            prompt: string;
+        }>;
+        tools: Array<{
+            /**
+             * Tool name as registered in the MCP catalog
+             */
+            toolName: string;
+            /**
+             * MCP catalog item name (null for proxy-sniffed tools)
+             */
+            catalogName: string | null;
+            /**
+             * How credentials are resolved for this tool assignment
+             */
+            credentialResolutionMode?: 'static' | 'dynamic' | 'enterprise_managed';
+        }>;
+        delegations: Array<{
+            /**
+             * Name of the target agent for delegation
+             */
+            targetAgentName: string;
+        }>;
+        knowledgeBases: Array<{
+            /**
+             * Knowledge base name
+             */
+            name: string;
+        }>;
+        connectors: Array<{
+            /**
+             * Connector name
+             */
+            name: string;
+            /**
+             * Connector type (e.g. confluence, github)
+             */
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce';
+        }>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agents/import';
+};
+
+export type ImportAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ImportAgentError = ImportAgentErrors[keyof ImportAgentErrors];
+
+export type ImportAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        agent: {
+            id: string;
+            organizationId: string;
+            authorId: string | null;
+            scope: 'personal' | 'team' | 'org';
+            name: string;
+            slug: string | null;
+            isDefault: boolean;
+            isPersonalGateway: boolean;
+            considerContextUntrusted: boolean;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            systemPrompt: string | null;
+            description: string | null;
+            icon: string | null;
+            incomingEmailEnabled: boolean;
+            incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+            incomingEmailAllowedDomain: string | null;
+            llmApiKeyId: string | null;
+            llmModel: string | null;
+            identityProviderId: string | null;
+            passthroughHeaders: Array<string> | null;
+            toolExposureMode: 'full' | 'search_and_run_only';
+            toolAssignmentMode: 'automatic' | 'manual';
+            builtInAgentConfig: {
+                name: 'policy-configuration-subagent';
+                autoConfigureOnToolDiscovery: boolean;
+            } | {
+                name: 'dual-llm-main-agent';
+                maxRounds: number;
+            } | {
+                name: 'dual-llm-quarantine-agent';
+            } | null;
+            builtIn: boolean | null;
+            createdAt: string;
+            updatedAt: string;
+            tools: Array<{
+                id: string;
+                agentId: string | null;
+                catalogId: string | null;
+                delegateToAgentId: string | null;
+                name: string;
+                /**
+                 *
+                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                 *
+                 * The parameters the functions accepts, described as a JSON Schema object. See the
+                 * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                 * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                 * documentation about the format.
+                 *
+                 * Omitting parameters defines a function with an empty parameter list.
+                 *
+                 */
+                parameters?: {
+                    [key: string]: unknown;
+                };
+                description: string | null;
+                meta: string | number | boolean | null | {
+                    [key: string]: unknown;
+                } | Array<unknown> | null;
+                policiesAutoConfiguredAt: string | null;
+                policiesAutoConfiguringStartedAt: string | null;
+                policiesAutoConfiguredReasoning: string | null;
+                policiesAutoConfiguredModel: string | null;
+                createdAt: string;
+                updatedAt: string;
+            }>;
+            teams: Array<{
+                id: string;
+                name: string;
+            }>;
+            labels: Array<{
+                key: string;
+                value: string;
+                keyId?: string;
+                valueId?: string;
+            }>;
+            authorName?: string | null;
+            knowledgeBaseIds: Array<string>;
+            connectorIds: Array<string>;
+            suggestedPrompts: Array<{
+                summaryTitle: string;
+                prompt: string;
+            }>;
+        };
+        warnings: Array<{
+            type: 'tool' | 'knowledgeBase' | 'connector' | 'delegation';
+            name: string;
+            message: string;
+        }>;
+    };
+};
+
+export type ImportAgentResponse = ImportAgentResponses[keyof ImportAgentResponses];
+
 export type DeleteAgentData = {
     body?: never;
     path: {
@@ -12241,6 +12539,171 @@ export type CloneAgentResponses = {
 };
 
 export type CloneAgentResponse = CloneAgentResponses[keyof CloneAgentResponses];
+
+export type ExportAgentData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/export';
+};
+
+export type ExportAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ExportAgentError = ExportAgentErrors[keyof ExportAgentErrors];
+
+export type ExportAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        /**
+         * Schema version for forward compatibility
+         */
+        version: '1';
+        /**
+         * ISO 8601 timestamp
+         */
+        exportedAt: string;
+        /**
+         * Informational: hostname of the source instance
+         */
+        sourceInstance?: string | null;
+        agent: {
+            name: string;
+            /**
+             * Only internal agents are exportable
+             */
+            agentType: 'agent';
+            description: string | null;
+            systemPrompt: string | null;
+            icon: string | null;
+            /**
+             * Original scope; imports always default to personal
+             */
+            scope: 'personal' | 'team' | 'org';
+            considerContextUntrusted: boolean;
+            toolAssignmentMode: 'automatic' | 'manual';
+            toolExposureMode: 'full' | 'search_and_run_only';
+            /**
+             * Informational; not auto-configured on import
+             */
+            llmModel: string | null;
+            incomingEmailEnabled: boolean;
+            incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+            incomingEmailAllowedDomain: string | null;
+            passthroughHeaders?: Array<unknown> | null;
+        };
+        labels: Array<{
+            key: string;
+            value: string;
+        }>;
+        suggestedPrompts: Array<{
+            summaryTitle: string;
+            prompt: string;
+        }>;
+        tools: Array<{
+            /**
+             * Tool name as registered in the MCP catalog
+             */
+            toolName: string;
+            /**
+             * MCP catalog item name (null for proxy-sniffed tools)
+             */
+            catalogName: string | null;
+            /**
+             * How credentials are resolved for this tool assignment
+             */
+            credentialResolutionMode?: 'static' | 'dynamic' | 'enterprise_managed';
+        }>;
+        delegations: Array<{
+            /**
+             * Name of the target agent for delegation
+             */
+            targetAgentName: string;
+        }>;
+        knowledgeBases: Array<{
+            /**
+             * Knowledge base name
+             */
+            name: string;
+        }>;
+        connectors: Array<{
+            /**
+             * Connector name
+             */
+            name: string;
+            /**
+             * Connector type (e.g. confluence, github)
+             */
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce';
+        }>;
+    };
+};
+
+export type ExportAgentResponse = ExportAgentResponses[keyof ExportAgentResponses];
 
 export type GetLabelKeysData = {
     body?: never;
@@ -12999,7 +13462,7 @@ export type AutoConfigureAgentToolPoliciesResponses = {
             toolId: string;
             success: boolean;
             config?: {
-                toolInvocationAction: 'allow_when_context_is_sensitive' | 'block_when_context_is_sensitive' | 'block_always';
+                toolInvocationAction: 'allow_when_context_is_sensitive' | 'block_when_context_is_sensitive' | 'require_approval' | 'block_always';
                 trustedDataAction: 'mark_as_safe' | 'mark_as_sensitive' | 'sanitize_with_dual_llm' | 'block_always';
                 reasoning: string;
             };
@@ -21550,6 +22013,7 @@ export type GetConfigResponses = {
             advancedToolFeaturesEnabled: boolean;
             byosEnabled: boolean;
             byosVaultKvVersion: '1' | '2';
+            azureOpenAiEntraIdEnabled: boolean;
             bedrockIamAuthEnabled: boolean;
             geminiVertexAiEnabled: boolean;
             globalToolPolicy: 'permissive' | 'restrictive';
@@ -26735,7 +27199,7 @@ export type GetInternalMcpCatalogResponses = {
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
-                default?: string | number | boolean;
+                default?: LocalConfigEnvironmentDefault;
                 mounted?: boolean;
             }>;
             envFrom?: Array<{
@@ -26862,7 +27326,7 @@ export type CreateInternalMcpCatalogItemData = {
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
-                default?: string | number | boolean;
+                default?: LocalConfigEnvironmentDefaultInput;
                 mounted?: boolean;
             }>;
             envFrom?: Array<{
@@ -27054,7 +27518,7 @@ export type CreateInternalMcpCatalogItemResponses = {
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
-                default?: string | number | boolean;
+                default?: LocalConfigEnvironmentDefault;
                 mounted?: boolean;
             }>;
             envFrom?: Array<{
@@ -27343,7 +27807,7 @@ export type GetInternalMcpCatalogItemResponses = {
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
-                default?: string | number | boolean;
+                default?: LocalConfigEnvironmentDefault;
                 mounted?: boolean;
             }>;
             envFrom?: Array<{
@@ -27468,7 +27932,7 @@ export type UpdateInternalMcpCatalogItemData = {
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
-                default?: string | number | boolean;
+                default?: LocalConfigEnvironmentDefaultInput;
                 mounted?: boolean;
             }>;
             envFrom?: Array<{
@@ -27662,7 +28126,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
                 promptOnInstallation: boolean;
                 required?: boolean;
                 description?: string;
-                default?: string | number | boolean;
+                default?: LocalConfigEnvironmentDefault;
                 mounted?: boolean;
             }>;
             envFrom?: Array<{
@@ -32033,7 +32497,7 @@ export type GetLlmModelsResponses = {
         };
         isBest?: boolean;
         isFastest?: boolean;
-        embeddingDimensions?: 3072 | 1536 | 768 | null;
+        embeddingDimensions?: EmbeddingDimensions | null;
     }>;
 };
 
@@ -32213,7 +32677,7 @@ export type GetModelsWithApiKeysResponses = {
         customPricePerMillionInput: string | null;
         customPricePerMillionOutput: string | null;
         ignored: boolean;
-        embeddingDimensions: 3072 | 1536 | 768 | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         discoveredViaLlmProxy: boolean;
         lastSyncedAt: string;
         createdAt: string;
@@ -32241,7 +32705,7 @@ export type UpdateModelData = {
         customPricePerMillionInput?: string | null;
         customPricePerMillionOutput?: string | null;
         ignored?: boolean;
-        embeddingDimensions?: 3072 | 1536 | 768 | null;
+        embeddingDimensions?: EmbeddingDimensionsInput | null;
         inputModalities?: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
         outputModalities?: Array<'text' | 'image' | 'audio'> | null;
     };
@@ -32336,7 +32800,7 @@ export type UpdateModelResponses = {
         customPricePerMillionInput: string | null;
         customPricePerMillionOutput: string | null;
         ignored: boolean;
-        embeddingDimensions: 3072 | 1536 | 768 | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         discoveredViaLlmProxy: boolean;
         lastSyncedAt: string;
         createdAt: string;
@@ -33682,7 +34146,7 @@ export type GetMcpServerInstallationRequestsResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
-                    default?: string | number | boolean;
+                    default?: LocalConfigEnvironmentDefault;
                     mounted?: boolean;
                 }>;
                 envFrom?: Array<{
@@ -33781,7 +34245,7 @@ export type CreateMcpServerInstallationRequestData = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
-                    default?: string | number | boolean;
+                    default?: LocalConfigEnvironmentDefaultInput;
                     mounted?: boolean;
                 }>;
                 envFrom?: Array<{
@@ -33940,7 +34404,7 @@ export type CreateMcpServerInstallationRequestResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
-                    default?: string | number | boolean;
+                    default?: LocalConfigEnvironmentDefault;
                     mounted?: boolean;
                 }>;
                 envFrom?: Array<{
@@ -34204,7 +34668,7 @@ export type GetMcpServerInstallationRequestResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
-                    default?: string | number | boolean;
+                    default?: LocalConfigEnvironmentDefault;
                     mounted?: boolean;
                 }>;
                 envFrom?: Array<{
@@ -34303,7 +34767,7 @@ export type UpdateMcpServerInstallationRequestData = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
-                    default?: string | number | boolean;
+                    default?: LocalConfigEnvironmentDefaultInput;
                     mounted?: boolean;
                 }>;
                 envFrom?: Array<{
@@ -34474,7 +34938,7 @@ export type UpdateMcpServerInstallationRequestResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
-                    default?: string | number | boolean;
+                    default?: LocalConfigEnvironmentDefault;
                     mounted?: boolean;
                 }>;
                 envFrom?: Array<{
@@ -34655,7 +35119,7 @@ export type ApproveMcpServerInstallationRequestResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
-                    default?: string | number | boolean;
+                    default?: LocalConfigEnvironmentDefault;
                     mounted?: boolean;
                 }>;
                 envFrom?: Array<{
@@ -34836,7 +35300,7 @@ export type DeclineMcpServerInstallationRequestResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
-                    default?: string | number | boolean;
+                    default?: LocalConfigEnvironmentDefault;
                     mounted?: boolean;
                 }>;
                 envFrom?: Array<{
@@ -35017,7 +35481,7 @@ export type AddMcpServerInstallationRequestNoteResponses = {
                     promptOnInstallation: boolean;
                     required?: boolean;
                     description?: string;
-                    default?: string | number | boolean;
+                    default?: LocalConfigEnvironmentDefault;
                     mounted?: boolean;
                 }>;
                 envFrom?: Array<{
@@ -39636,7 +40100,7 @@ export type GetOrganizationResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
-        embeddingDimensions: number | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -39905,7 +40369,7 @@ export type UpdateAppearanceSettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
-        embeddingDimensions: number | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -40047,7 +40511,7 @@ export type UpdateSecuritySettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
-        embeddingDimensions: number | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -40190,7 +40654,7 @@ export type UpdateLlmSettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
-        embeddingDimensions: number | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -40334,7 +40798,7 @@ export type UpdateAgentSettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
-        embeddingDimensions: number | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -40485,7 +40949,7 @@ export type UpdateConnectionSettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
-        embeddingDimensions: number | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -40627,7 +41091,7 @@ export type UpdateAuthSettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
-        embeddingDimensions: number | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -40771,7 +41235,7 @@ export type UpdateKnowledgeSettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
-        embeddingDimensions: number | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -40910,7 +41374,7 @@ export type DropEmbeddingConfigResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
-        embeddingDimensions: number | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
@@ -41138,7 +41602,7 @@ export type CompleteOnboardingResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
-        embeddingDimensions: number | null;
+        embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;

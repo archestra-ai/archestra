@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.37"
+    "version": "1.2.38"
   },
   "components": {
     "schemas": {

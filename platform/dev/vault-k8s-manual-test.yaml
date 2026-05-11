@@ -87,6 +87,12 @@ archestra:
     ARCHESTRA_ANALYTICS: "disabled"
 
   orchestrator:
+    # The MCP base image tag is derived from `archestra.imageTag` by default
+    # (via the runtime's `ARCHESTRA_VERSION` env). Since we pin `imageTag=dev`
+    # to use the locally-built platform image, the auto-derived MCP tag
+    # `:dev` doesn't exist in the public registry. Pin to a real chart
+    # version explicitly here (match the chart version used in step 4).
+    baseImage: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:1.2.37
     kubernetes:
       serviceAccount:
         # Must match Vault's k8s auth role binding

@@ -64,7 +64,7 @@ Agents can be assigned one or more Knowledge Bases or knowledge connectors. This
 
 When at least one knowledge source is assigned, Archestra automatically adds the built-in [`query_knowledge_sources`](/docs/platform-archestra-mcp-server#query_knowledge_sources) tool to that agent. The model can call it during a run to search across the assigned sources and pull relevant context into its answer.
 
-The output of `query_knowledge_sources` is treated as untrusted by default and can make later tool calls more restrictive. You can configure its tool call policies and tool result policies from **Tool Guardrails** at `/mcp/tool-guardrails`.
+The output of `query_knowledge_sources` is treated as untrusted by default and can make later tool calls more restrictive. See [Archestra MCP Server](/docs/platform-archestra-mcp-server#auth) for more details.
 
 See [Knowledge Bases](/docs/platform-knowledge-bases) for how retrieval works and how sources are assigned. See [Archestra MCP Server](/docs/platform-archestra-mcp-server) for the built-in tool behavior and RBAC requirements.
 

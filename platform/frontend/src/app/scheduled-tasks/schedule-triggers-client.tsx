@@ -38,7 +38,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MultiSelect } from "@/components/ui/multi-select";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
@@ -55,6 +54,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UserSearchableMultiSelect } from "@/components/user-searchable-multi-select";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useOrganizationMembers } from "@/lib/organization.query";
@@ -105,13 +105,14 @@ export function ScheduleTriggersIndexPage() {
   const { data: members } = useOrganizationMembers(
     isScheduledTaskAdmin && showOtherUsers,
   );
-  const memberItems = useMemo(
+  const userOptions = useMemo(
     () =>
       (members ?? [])
         .filter((m) => m.id !== currentUserId)
         .map((m) => ({
-          value: m.id,
-          label: m.name || m.email,
+          userId: m.id,
+          name: m.name,
+          email: m.email,
         })),
     [members, currentUserId],
   );
@@ -446,13 +447,13 @@ export function ScheduleTriggersIndexPage() {
           </Select>
         )}
         {isScheduledTaskAdmin && showOtherUsers && (
-          <MultiSelect
+          <UserSearchableMultiSelect
             value={selectedAuthorIds}
             onValueChange={(ids) => {
               setSelectedAuthorIds(ids);
               setPageIndex(0);
             }}
-            items={memberItems}
+            users={userOptions}
             placeholder="All users"
             className="w-[220px]"
             showSelectedBadges={false}

@@ -748,6 +748,30 @@ class InteractionModel {
         ),
       );
 
+      if (interaction.userId) {
+        updatePromises.push(
+          LimitModel.updateTokenLimitUsage(
+            "user",
+            interaction.userId,
+            model,
+            inputTokens,
+            outputTokens,
+          ),
+        );
+      }
+
+      if (interaction.virtualKeyId) {
+        updatePromises.push(
+          LimitModel.updateTokenLimitUsage(
+            "virtual_key",
+            interaction.virtualKeyId,
+            model,
+            inputTokens,
+            outputTokens,
+          ),
+        );
+      }
+
       // Execute all updates in parallel
       await Promise.all(updatePromises);
     } catch (error) {

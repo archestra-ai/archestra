@@ -6,6 +6,7 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   DEFAULT_APP_NAME,
   MEMBER_ROLE_NAME,
+  type SupportedProvider,
 } from "@shared";
 import { beforeEach as baseBeforeEach, test as baseTest } from "vitest";
 import db, { schema } from "@/database";
@@ -22,6 +23,7 @@ import {
   ToolInvocationPolicyModel,
   ToolModel,
   TrustedDataPolicyModel,
+  VirtualApiKeyModel,
 } from "@/models";
 import type {
   Agent,
@@ -45,6 +47,7 @@ import type {
   InsertSession,
   InsertTeam,
   InsertUser,
+  InsertVirtualApiKey,
   KnowledgeBase,
   KnowledgeBaseConnector,
   OrganizationRole,
@@ -67,6 +70,7 @@ type MakeUserOverrides = Partial<
 interface TestFixtures {
   makeUser: typeof makeUser;
   makeAdmin: typeof makeAdmin;
+  makeVirtualApiKey: typeof makeVirtualApiKey;
   makeOrganization: typeof makeOrganization;
   makeTeam: typeof makeTeam;
   makeTeamMember: typeof makeTeamMember;
@@ -132,6 +136,32 @@ async function makeUser(overrides: MakeUserOverrides = {}) {
  */
 async function makeAdmin(overrides: MakeUserOverrides = {}) {
   return await _makeUser("Admin User", overrides);
+}
+
+/**
+ * Creates a test virtual key in the database
+ */
+async function makeVirtualApiKey(
+  organizationId: string,
+  overrides: Partial<
+    Pick<InsertVirtualApiKey, "name" | "scope" | "authorId">
+  > & {
+    providerApiKeys?: {
+      provider: SupportedProvider;
+      providerApiKeyId: string;
+    }[];
+  } = {},
+) {
+  const result = await VirtualApiKeyModel.create({
+    organizationId,
+    name:
+      overrides.name ??
+      `Test Virtual Key ${crypto.randomUUID().substring(0, 8)}`,
+    scope: overrides.scope ?? "org",
+    authorId: overrides.authorId ?? null,
+    providerApiKeys: overrides.providerApiKeys ?? [],
+  });
+  return result.virtualKey;
 }
 
 /**
@@ -1133,6 +1163,9 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeLlmProviderApiKey: async ({}, use) => {
     await use(makeLlmProviderApiKey);
+  },
+  makeVirtualApiKey: async ({}, use) => {
+    await use(makeVirtualApiKey);
   },
   makeIdentityProvider: async ({}, use) => {
     await use(makeIdentityProvider);

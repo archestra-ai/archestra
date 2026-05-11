@@ -32,7 +32,9 @@ const LimitOutputItemSchema = z.object({
     .array(z.string())
     .nullable()
     .optional()
-    .describe("Models targeted by a token_cost limit, if any."),
+    .describe(
+      "Models targeted by a token_cost limit. Null or empty array means all models.",
+    ),
   mcpServerName: z
     .string()
     .nullable()
@@ -51,7 +53,7 @@ const CreateLimitToolArgsSchema = z
       "The type of entity to apply the limit to.",
     ),
     entity_id: UuidIdSchema.describe(
-      "The ID of the entity (organization, team, or agent).",
+      "The ID of the entity (organization, team, agent, user, or virtual_key).",
     ),
     limit_type: LimitTypeSchema.describe("The type of limit to apply."),
     limit_value: z
@@ -59,8 +61,9 @@ const CreateLimitToolArgsSchema = z
       .describe("The limit value (tokens or count depending on limit type)."),
     model: z
       .array(z.string())
+      .nullable()
       .optional()
-      .describe("Array of model names. Required for token_cost limits."),
+      .describe("Array of model names. Omit for all models."),
     mcp_server_name: z
       .string()
       .optional()
@@ -74,18 +77,6 @@ const CreateLimitToolArgsSchema = z
   })
   .strict()
   .superRefine((args, ctx) => {
-    if (
-      args.limit_type === "token_cost" &&
-      (!args.model || !Array.isArray(args.model) || args.model.length === 0)
-    ) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["model"],
-        message:
-          "model array with at least one model is required for token_cost limits.",
-      });
-    }
-
     if (args.limit_type === "mcp_server_calls" && !args.mcp_server_name) {
       ctx.addIssue({
         code: "custom",
@@ -112,7 +103,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_CREATE_LIMIT_SHORT_NAME,
     title: "Create Limit",
     description:
-      "Create a new cost or usage limit for an organization, team, agent, LLM proxy, or MCP gateway. Supports token_cost, mcp_server_calls, and tool_calls limit types.",
+      "Create a new cost or usage limit for an organization, team, agent, user, virtual key, or MCP gateway. Supports token_cost, mcp_server_calls, and tool_calls limit types.",
     schema: CreateLimitToolArgsSchema,
     outputSchema: z.object({
       limit: LimitOutputItemSchema,
@@ -131,7 +122,10 @@ const registry = defineArchestraTools([
           entityId: args.entity_id,
           limitType: args.limit_type,
           limitValue: args.limit_value,
-          model: args.model,
+          model:
+            args.model && Array.isArray(args.model) && args.model.length > 0
+              ? args.model
+              : null,
           mcpServerName: args.mcp_server_name,
           toolName: args.tool_name,
         });
@@ -144,7 +138,7 @@ const registry = defineArchestraTools([
             limit.entityId
           }\nLimit Type: ${limit.limitType}\nLimit Value: ${
             limit.limitValue
-          }${limit.model ? `\nModel: ${limit.model}` : ""}${
+          }${limit.model ? `\nModel: ${limit.model}` : "\nModel: All models"}${
             limit.mcpServerName ? `\nMCP Server: ${limit.mcpServerName}` : ""
           }${limit.toolName ? `\nTool: ${limit.toolName}` : ""}`,
         );
@@ -206,6 +200,8 @@ const registry = defineArchestraTools([
             result += `\n  Limit Type: ${limit.limitType}`;
             result += `\n  Limit Value: ${limit.limitValue}`;
             if (limit.model) result += `\n  Model: ${limit.model}`;
+            else if (limit.limitType === "token_cost")
+              result += `\n  Model: All models`;
             if (limit.mcpServerName)
               result += `\n  MCP Server: ${limit.mcpServerName}`;
             if (limit.toolName) result += `\n  Tool: ${limit.toolName}`;

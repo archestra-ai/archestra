@@ -29,6 +29,26 @@ const ToolChoiceSchema = z.union([
   ToolChoiceNoneSchema,
 ]);
 
+// Mirrors @anthropic-ai/sdk BetaJSONOutputFormat / BetaOutputConfig.
+// Sent by the Vercel AI SDK to enable native structured output on opus-4-6.
+const OutputConfigSchema = z.object({
+  effort: z.enum(["low", "medium", "high", "max"]).nullable().optional(),
+  format: z
+    .object({
+      type: z.literal("json_schema"),
+      schema: z.record(z.string(), z.unknown()),
+    })
+    .nullable()
+    .optional(),
+});
+
+// Mirrors @anthropic-ai/sdk BetaThinkingConfigParam.
+const ThinkingConfigSchema = z.union([
+  z.object({ type: z.literal("enabled"), budget_tokens: z.number() }),
+  z.object({ type: z.literal("disabled") }),
+  z.object({ type: z.literal("adaptive") }),
+]);
+
 export const MessagesRequestSchema = z.object({
   model: z.string(),
   messages: z.array(MessageParamSchema),
@@ -41,7 +61,9 @@ export const MessagesRequestSchema = z.object({
       user_id: z.string().nullable(),
     })
     .optional(),
+  output_config: OutputConfigSchema.optional(),
   service_tier: z.any().optional(),
+  speed: z.enum(["fast", "standard"]).optional(),
   stop_sequences: z.array(z.string()).optional(),
   stream: z.boolean().optional(),
   system: z
@@ -64,6 +86,7 @@ export const MessagesRequestSchema = z.object({
     ])
     .optional(),
   temperature: z.number().optional(),
+  thinking: ThinkingConfigSchema.optional(),
   tool_choice: ToolChoiceSchema.optional(),
   tools: z.array(ToolSchema).optional(),
   top_k: z.number().optional(),

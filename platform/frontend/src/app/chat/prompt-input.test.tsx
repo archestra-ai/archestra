@@ -1,10 +1,19 @@
 import { E2eTestId } from "@shared";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockUseOrganization, mockUseChatPlaceholder } = vi.hoisted(() => ({
+const {
+  mockUseOrganization,
+  mockUseChatPlaceholder,
+  mockTextInputSetInput,
+  mockTextInputClear,
+  mockControllerState,
+} = vi.hoisted(() => ({
   mockUseOrganization: vi.fn(),
   mockUseChatPlaceholder: vi.fn(),
+  mockTextInputSetInput: vi.fn(),
+  mockTextInputClear: vi.fn(),
+  mockControllerState: { value: "" },
 }));
 
 // Mock ResizeObserver which is used by Radix UI components
@@ -68,6 +77,29 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
       {children}
     </button>
   ),
+  PromptInputCommand: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="prompt-command">{children}</div>
+  ),
+  PromptInputCommandEmpty: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  PromptInputCommandGroup: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  PromptInputCommandItem: ({
+    children,
+    onSelect,
+  }: {
+    children: React.ReactNode;
+    onSelect?: () => void;
+  }) => (
+    <button type="button" onClick={onSelect}>
+      {children}
+    </button>
+  ),
+  PromptInputCommandList: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
   PromptInputFooter: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
@@ -83,14 +115,33 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
       Submit {status ?? "unset"}
     </button>
   ),
-  PromptInputTextarea: ({ placeholder }: { placeholder?: string }) => (
-    <textarea placeholder={placeholder} />
+  PromptInputTextarea: ({
+    placeholder,
+    onKeyDown,
+    disabled,
+    "data-testid": testId,
+  }: {
+    placeholder?: string;
+    onKeyDown?: React.KeyboardEventHandler<HTMLTextAreaElement>;
+    disabled?: boolean;
+    "data-testid"?: string;
+  }) => (
+    <textarea
+      data-testid={testId}
+      disabled={disabled}
+      onKeyDown={onKeyDown}
+      placeholder={placeholder}
+    />
   ),
   PromptInputTools: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="prompt-tools">{children}</div>
   ),
   usePromptInputController: () => ({
-    textInput: { setInput: vi.fn() },
+    textInput: {
+      value: mockControllerState.value,
+      setInput: mockTextInputSetInput,
+      clear: mockTextInputClear,
+    },
     attachments: { files: [] },
   }),
   usePromptInputAttachments: () => ({
@@ -201,6 +252,7 @@ describe("ArchestraPromptInput", () => {
       placeholder: "Animated placeholder",
       isAnimating: true,
     });
+    mockControllerState.value = "";
   });
 
   describe("File Upload Button", () => {
@@ -432,6 +484,48 @@ describe("ArchestraPromptInput", () => {
       expect(
         screen.queryByPlaceholderText("Animated placeholder"),
       ).not.toBeInTheDocument();
+    });
+
+    it("should reset slash command selection when the menu reopens", () => {
+      const onCompactConversation = vi.fn();
+      mockControllerState.value = "/";
+
+      const { rerender } = render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          conversationId="conversation-1"
+          onCompactConversation={onCompactConversation}
+        />,
+      );
+
+      fireEvent.keyDown(screen.getByTestId(E2eTestId.ChatPromptTextarea), {
+        key: "ArrowDown",
+      });
+
+      mockControllerState.value = "";
+      rerender(
+        <ArchestraPromptInput
+          {...defaultProps}
+          conversationId="conversation-1"
+          onCompactConversation={onCompactConversation}
+        />,
+      );
+
+      mockControllerState.value = "/";
+      rerender(
+        <ArchestraPromptInput
+          {...defaultProps}
+          conversationId="conversation-1"
+          onCompactConversation={onCompactConversation}
+        />,
+      );
+
+      fireEvent.keyDown(screen.getByTestId(E2eTestId.ChatPromptTextarea), {
+        key: "Enter",
+      });
+
+      expect(onCompactConversation).toHaveBeenCalledTimes(1);
+      expect(mockTextInputClear).toHaveBeenCalled();
     });
   });
 });

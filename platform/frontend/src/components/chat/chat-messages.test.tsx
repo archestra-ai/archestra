@@ -404,6 +404,37 @@ describe("ChatMessages", () => {
     );
   });
 
+  it("renders context compaction feedback after existing messages", () => {
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "keep this visible first" }],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        contextCompactionFeedback={{
+          status: "skipped",
+          message: "There is not enough older context to compact yet.",
+        }}
+      />,
+    );
+
+    const message = screen.getByText("keep this visible first");
+    const feedback = screen.getByText(
+      "There is not enough older context to compact yet.",
+    );
+
+    expect(message.compareDocumentPosition(feedback)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
   it("renders the unsafe-context divider when a tool result marks the context unsafe", () => {
     const messages = [
       {

@@ -66,6 +66,7 @@ import {
   DeleteObjectResponseSchema,
   ErrorResponsesSchema,
   InsertConversationSchema,
+  SelectConversationCompactionSchema,
   SelectConversationSchema,
   SelectConversationShareWithTargetsSchema,
   type UpdateConversation,
@@ -79,6 +80,11 @@ import {
   resolveSmartDefaultLlmForChat,
 } from "@/utils/llm-resolution";
 import { estimateMessagesSize } from "@/utils/message-size";
+import {
+  type ContextCompactionResult,
+  compactMessagesForChat,
+  invalidateConversationCompactions,
+} from "./context-compaction";
 import {
   parseMaxInputTokens,
   shouldProbeTextStreamForContextTrimRetry,
@@ -324,7 +330,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const normalizedMessagesForLLM = normalizeChatMessages(
             messages as ChatMessage[],
           );
-          const providerPreparedMessages = prepareMessagesForProvider({
+          let providerPreparedMessages = prepareMessagesForProvider({
             messages: normalizedMessagesForLLM,
             provider,
           });
@@ -332,7 +338,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Stream with AI SDK
           // Build streamText config conditionally
           // Cast to UIMessage[] - ChatMessage is structurally compatible at runtime
-          const modelMessages = await convertToModelMessages(
+          let modelMessages = await convertToModelMessages(
             providerPreparedMessages as unknown as Omit<UIMessage, "id">[],
           );
 
@@ -587,6 +593,50 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   throw new Error(
                     "No output generated. Check the stream for errors.",
                   );
+                }
+
+                const compactionResult = await compactMessagesForChat({
+                  conversationId,
+                  organizationId,
+                  userId: user.id,
+                  provider,
+                  selectedModel: conversation.selectedModel,
+                  agentLlmApiKeyId: agent.llmApiKeyId,
+                  messages: normalizedMessagesForLLM,
+                  systemPrompt,
+                  trigger: "auto",
+                  onCompactionStart: () => {
+                    writer.write({
+                      type: "data-context-compaction-start",
+                      data: { trigger: "auto" },
+                    });
+                  },
+                });
+
+                if (
+                  compactionResult.status === "created" ||
+                  compactionResult.status === "existing"
+                ) {
+                  providerPreparedMessages = prepareMessagesForProvider({
+                    messages: compactionResult.messages,
+                    provider,
+                  });
+                  modelMessages = await convertToModelMessages(
+                    providerPreparedMessages as unknown as Omit<
+                      UIMessage,
+                      "id"
+                    >[],
+                  );
+                }
+
+                if (
+                  compactionResult.status === "created" ||
+                  compactionResult.status === "failed"
+                ) {
+                  writer.write({
+                    type: "data-context-compaction-finish",
+                    data: buildContextCompactionStreamData(compactionResult),
+                  });
                 }
 
                 // Stream tokens to the client in real-time while also
@@ -1243,6 +1293,75 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.post(
+    "/api/chat/conversations/:id/compact",
+    {
+      schema: {
+        operationId: RouteId.CompactChatConversation,
+        description: "Compact older chat history for model context",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(
+          z.object({
+            status: z.enum(["created", "existing", "skipped", "failed"]),
+            reason: z.string().optional(),
+            compaction: SelectConversationCompactionSchema.nullable(),
+            conversation: SelectConversationSchema,
+          }),
+        ),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      const conversation = await ConversationModel.findById({
+        id,
+        userId: user.id,
+        organizationId,
+      });
+
+      if (!conversation) {
+        throw new ApiError(404, "Conversation not found");
+      }
+
+      if (!conversation.agentId || !conversation.agent) {
+        throw new ApiError(
+          400,
+          "The agent associated with this conversation has been deleted",
+        );
+      }
+
+      const provider = isSupportedProvider(conversation.selectedProvider)
+        ? conversation.selectedProvider
+        : detectProviderFromModel(conversation.selectedModel);
+      const result = await compactMessagesForChat({
+        conversationId: id,
+        organizationId,
+        userId: user.id,
+        provider,
+        selectedModel: conversation.selectedModel,
+        agentLlmApiKeyId: conversation.agent.llmApiKeyId,
+        messages: normalizeChatMessages(conversation.messages as ChatMessage[]),
+        systemPrompt: conversation.agent.systemPrompt ?? undefined,
+        trigger: "manual",
+      });
+      const updatedConversation = await ConversationModel.findById({
+        id,
+        userId: user.id,
+        organizationId,
+      });
+
+      if (!updatedConversation) {
+        throw new ApiError(500, "Failed to retrieve compacted conversation");
+      }
+
+      return reply.send({
+        status: result.status,
+        reason: result.reason,
+        compaction: result.compaction,
+        conversation: updatedConversation,
+      });
+    },
+  );
+
   fastify.get(
     "/api/chat/conversations/:id/share",
     {
@@ -1661,6 +1780,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         text,
         deleteSubsequentMessages ?? false,
       );
+      await invalidateConversationCompactions(message.conversationId);
 
       // Return updated conversation with all messages
       const updatedConversation = await ConversationModel.findById({
@@ -2064,6 +2184,16 @@ function persistConversationChatError(params: {
       "Failed to persist chat error event on conversation",
     );
   });
+}
+
+function buildContextCompactionStreamData(result: ContextCompactionResult) {
+  return {
+    status: result.status,
+    compactionId: result.compaction?.id,
+    trigger: result.compaction?.trigger,
+    originalTokenEstimate: result.compaction?.originalTokenEstimate,
+    compactedTokenEstimate: result.compaction?.compactedTokenEstimate,
+  };
 }
 
 function getSerializableChatError(error: ChatErrorResponse): ChatErrorResponse {

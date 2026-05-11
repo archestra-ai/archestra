@@ -94,6 +94,7 @@ import {
 import { useRecentlyGeneratedTitles } from "@/lib/chat/chat.hook";
 import {
   fetchConversationEnabledTools,
+  useCompactConversation,
   useConversation,
   useCreateConversation,
   useHasPlaywrightMcpTools,
@@ -204,6 +205,10 @@ export function ChatPageContent({
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
   const [isForkDialogOpen, setIsForkDialogOpen] = useState(false);
   const [forkAgentId, setForkAgentId] = useState<string | null>(null);
+  const [manualCompactionFeedback, setManualCompactionFeedback] = useState<{
+    status: "pending" | "success" | "skipped" | "failed";
+    message: string;
+  } | null>(null);
   const forkConversationMutation = useForkConversation();
   const forkSharedConversationMutation = useForkSharedConversation();
   const { data: session } = useSession();
@@ -805,6 +810,7 @@ export function ChatPageContent({
 
   // Stop chat stream mutation (signals backend to abort subagents)
   const stopChatStreamMutation = useStopChatStream();
+  const compactConversationMutation = useCompactConversation();
 
   // Persist artifact panel state
   const toggleArtifactPanel = useCallback(() => {
@@ -875,6 +881,7 @@ export function ChatPageContent({
   const setPendingCustomServerToolCall =
     chatSession?.setPendingCustomServerToolCall;
   const tokenUsage = chatSession?.tokenUsage;
+  const contextCompaction = chatSession?.contextCompaction;
 
   const {
     conversationAgentId,
@@ -944,6 +951,66 @@ export function ChatPageContent({
 
   // Use actual token usage when available from the stream (no fallback to estimation)
   const tokensUsed = tokenUsage?.totalTokens;
+  const isContextCompacting =
+    !!contextCompaction?.isCompacting || compactConversationMutation.isPending;
+
+  const handleCompactConversation = useCallback(async () => {
+    if (!conversationId || isReadOnlyConversation) {
+      return;
+    }
+
+    setManualCompactionFeedback({
+      status: "pending",
+      message: "Compacting conversation context...",
+    });
+
+    const result = await compactConversationMutation.mutateAsync({
+      id: conversationId,
+    });
+    if (!result) {
+      setManualCompactionFeedback({
+        status: "failed",
+        message: "Context compaction failed.",
+      });
+      return;
+    }
+
+    if (result.status === "created" || result.status === "existing") {
+      setManualCompactionFeedback({
+        status: "success",
+        message: "Conversation context compacted.",
+      });
+      return;
+    }
+
+    if (result.status === "skipped") {
+      setManualCompactionFeedback({
+        status: "skipped",
+        message: "There is not enough older context to compact yet.",
+      });
+      return;
+    }
+
+    setManualCompactionFeedback({
+      status: "failed",
+      message: "Context compaction failed.",
+    });
+  }, [compactConversationMutation, conversationId, isReadOnlyConversation]);
+
+  useEffect(() => {
+    if (
+      !manualCompactionFeedback ||
+      manualCompactionFeedback.status === "pending"
+    ) {
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      setManualCompactionFeedback(null);
+    }, 8000);
+
+    return () => clearTimeout(timeout);
+  }, [manualCompactionFeedback]);
 
   useEffect(() => {
     if (
@@ -1807,6 +1874,8 @@ export function ChatPageContent({
                     agentId={currentProfileId || initialAgentId || undefined}
                     messages={messages}
                     status={status}
+                    isContextCompacting={isContextCompacting}
+                    contextCompactionFeedback={manualCompactionFeedback}
                     optimisticToolCalls={optimisticToolCalls}
                     isLoadingConversation={isLoadingConversation}
                     onMessagesUpdate={setMessages}
@@ -1947,6 +2016,8 @@ export function ChatPageContent({
                           conversation?.agent?.llmApiKeyId ?? null
                         }
                         submitDisabled={isPlaywrightSetupVisible}
+                        isContextCompacting={isContextCompacting}
+                        onCompactConversation={handleCompactConversation}
                         isPlaywrightSetupVisible={isPlaywrightSetupVisible}
                         selectorAgentId={activeAgentId}
                         selectorAgentName={swappedAgentName ?? undefined}

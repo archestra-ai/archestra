@@ -24,6 +24,7 @@ const {
   getChatAgentMcpTools,
   createChatConversation,
   updateChatConversation,
+  compactChatConversation,
   deleteChatConversation,
   generateChatConversationTitle,
   getConversationEnabledTools,
@@ -242,6 +243,35 @@ export function usePinConversation() {
     mutationFn: async ({ id, pinned }: { id: string; pinned: boolean }) => {
       const pinnedAt = pinned ? new Date().toISOString() : null;
       return updateMutation.mutateAsync({ id, pinnedAt });
+    },
+  });
+}
+
+export function useCompactConversation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      const { data, error } = await compactChatConversation({
+        path: { id },
+      });
+
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+
+      return data;
+    },
+    onSuccess: (data, variables) => {
+      if (!data) return;
+      queryClient.setQueryData(
+        ["conversation", variables.id],
+        data.conversation,
+      );
+      queryClient.invalidateQueries({
+        queryKey: ["conversation", variables.id],
+      });
     },
   });
 }

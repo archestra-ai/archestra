@@ -33,6 +33,7 @@ import {
   ConversationContent,
   ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
+import { Loader } from "@/components/ai-elements/loader";
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import {
   Reasoning,
@@ -144,6 +145,11 @@ interface ChatMessagesProps {
   agentName?: string;
   selectedModel?: string;
   modelSource?: ModelSource | null;
+  isContextCompacting?: boolean;
+  contextCompactionFeedback?: {
+    status: "pending" | "success" | "skipped" | "failed";
+    message: string;
+  } | null;
   unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
 }
 
@@ -191,6 +197,8 @@ export function ChatMessages({
   agentName,
   selectedModel,
   modelSource,
+  isContextCompacting = false,
+  contextCompactionFeedback = null,
   unsafeContextBoundary,
 }: ChatMessagesProps) {
   const isStreamingStalled = useStreamingStallDetection(messages, status);
@@ -255,6 +263,7 @@ export function ChatMessages({
   const { getSession } = useGlobalChat();
   const session = conversationId ? getSession(conversationId) : null;
   const earlyToolUiStarts = session?.earlyToolUiStarts || {};
+  const contextCompaction = session?.contextCompaction;
 
   // Debounce resize mode change when exiting edit mode to let DOM settle
   const isEditing = editingPartKey !== null;
@@ -445,6 +454,10 @@ export function ChatMessages({
       resize={instantResize || initialLoad ? "instant" : "smooth"}
     >
       <ScrollToBottomOnSubmit status={status} />
+      <ScrollToBottomOnContextCompaction
+        isCompacting={contextCompaction?.isCompacting || isContextCompacting}
+        feedback={contextCompactionFeedback}
+      />
       <ConversationContent>
         <div className="max-w-4xl mx-auto relative pb-8">
           <SensitiveContextStickyIndicator
@@ -1229,6 +1242,12 @@ export function ChatMessages({
               toolIconMap={toolIconMap}
             />
           ))}
+          <ContextCompactionStatus
+            isCompacting={
+              contextCompaction?.isCompacting || isContextCompacting
+            }
+            feedback={contextCompactionFeedback}
+          />
           {(status === "submitted" ||
             (status === "streaming" && isStreamingStalled)) && (
             <div className="absolute bottom-[-10] left-0">
@@ -1344,6 +1363,29 @@ function ScrollToBottomOnSubmit({ status }: { status: ChatStatus }) {
 
     prevStatusRef.current = status;
   }, [status, scrollToBottom]);
+
+  return null;
+}
+
+function ScrollToBottomOnContextCompaction({
+  isCompacting,
+  feedback,
+}: {
+  isCompacting: boolean;
+  feedback: ChatMessagesProps["contextCompactionFeedback"];
+}) {
+  const { scrollToBottom } = useStickToBottomContext();
+  const statusKey = isCompacting
+    ? "pending"
+    : feedback
+      ? `${feedback.status}:${feedback.message}`
+      : null;
+
+  useEffect(() => {
+    if (statusKey) {
+      scrollToBottom();
+    }
+  }, [scrollToBottom, statusKey]);
 
   return null;
 }
@@ -2421,6 +2463,45 @@ function getInlineErrorMessage(error: Error): string {
   }
 
   return error.message;
+}
+
+function ContextCompactionStatus({
+  isCompacting,
+  feedback,
+}: {
+  isCompacting: boolean;
+  feedback: ChatMessagesProps["contextCompactionFeedback"];
+}) {
+  if (isCompacting || feedback?.status === "pending") {
+    return (
+      <div className="mb-4 flex justify-center">
+        <div className="inline-flex items-center gap-2 rounded-full border bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
+          <Loader size={16} />
+          <span>Compacting conversation context...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!feedback) {
+    return null;
+  }
+
+  const icon =
+    feedback.status === "success" ? (
+      <CheckCircleIcon className="size-4 text-emerald-500" />
+    ) : (
+      <ClockIcon className="size-4 text-muted-foreground" />
+    );
+
+  return (
+    <div className="mb-4 flex justify-center">
+      <div className="inline-flex items-center gap-2 rounded-full border bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
+        {icon}
+        <span>{feedback.message}</span>
+      </div>
+    </div>
+  );
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: Tool parts have dynamic structure

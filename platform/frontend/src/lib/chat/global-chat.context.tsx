@@ -54,6 +54,16 @@ const RETRYABLE_CLIENT_ERRORS = [
   "network",
 ];
 
+export type ContextCompactionState = {
+  isCompacting: boolean;
+  trigger: "auto" | "manual" | null;
+  lastCompaction: {
+    compactionId?: string;
+    originalTokenEstimate?: number;
+    compactedTokenEstimate?: number;
+  } | null;
+};
+
 function isRetryableError(error: Error): boolean {
   const msg = error.message;
   // Structured backend chat errors already reached the server and should render
@@ -96,6 +106,7 @@ interface ChatSession {
   ) => void;
   /** Token usage for the current/last response */
   tokenUsage: TokenUsage | null;
+  contextCompaction: ContextCompactionState;
   /** Early UI data from data-tool-ui-start events (toolCallId → resource data incl. pre-fetched HTML) */
   earlyToolUiStarts: Record<
     string,
@@ -322,6 +333,12 @@ function ChatSessionHook({
     }>
   >([]);
   const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null);
+  const [contextCompaction, setContextCompaction] =
+    useState<ContextCompactionState>({
+      isCompacting: false,
+      trigger: null,
+      lastCompaction: null,
+    });
   const generateTitleMutation = useGenerateConversationTitle();
   // Track if title generation has been attempted for this conversation
   const titleGenerationAttemptedRef = useRef(false);
@@ -507,6 +524,31 @@ function ChatSessionHook({
         setTokenUsage(usage);
       }
 
+      if (dataPart.type === "data-context-compaction-start") {
+        const data = dataPart.data as { trigger?: "auto" | "manual" };
+        setContextCompaction((current) => ({
+          ...current,
+          isCompacting: true,
+          trigger: data.trigger ?? "auto",
+        }));
+      }
+
+      if (dataPart.type === "data-context-compaction-finish") {
+        const data = dataPart.data as {
+          compactionId?: string;
+          originalTokenEstimate?: number;
+          compactedTokenEstimate?: number;
+        };
+        setContextCompaction({
+          isCompacting: false,
+          trigger: null,
+          lastCompaction: data,
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["conversation", conversationId],
+        });
+      }
+
       // Handle data-tool-ui-start: backend emits this when a tool call starts streaming,
       // so the frontend can render the MCP App container immediately (before tool finishes)
       const customData = dataPart as unknown as {
@@ -624,6 +666,7 @@ function ChatSessionHook({
     optimisticToolCalls,
     setPendingCustomServerToolCall,
     tokenUsage,
+    contextCompaction,
     earlyToolUiStarts,
   };
 
@@ -647,6 +690,7 @@ function ChatSessionHook({
     pendingCustomServerToolCall,
     optimisticToolCalls,
     tokenUsage,
+    contextCompaction,
     earlyToolUiStarts,
     sessionsRef,
     notifySessionUpdate,

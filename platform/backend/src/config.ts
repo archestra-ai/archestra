@@ -371,9 +371,7 @@ export const parseContentMaxLength = (
 };
 
 /** @public — exported for testability */
-export const parseDatabasePoolMax = (
-  envValue?: string | undefined,
-): number => {
+export const parseDatabasePoolMax = (envValue?: string | undefined): number => {
   const value = envValue?.trim();
   if (!value) {
     return DEFAULT_DATABASE_POOL_MAX;

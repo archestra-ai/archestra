@@ -226,7 +226,6 @@ const NavPrimary = ({
   chatSection?: React.ReactNode;
 }) => {
   const { isMobile, setOpenMobile } = useSidebar();
-  const router = useRouter();
 
   const renderItem = (item: NavItem) => (
     <SidebarMenuItem key={item.title}>
@@ -238,17 +237,16 @@ const NavPrimary = ({
           pathname.startsWith(item.url)
         }
       >
-        <Link
+        <SidebarPrefetchLink
           href={item.url}
           data-testid={item.testId}
-          {...getManualPrefetchProps(router, item.url)}
           onClick={() => {
             if (isMobile) setOpenMobile(false);
           }}
         >
           <item.icon className={item.iconClassName} />
           <span>{item.title}</span>
-        </Link>
+        </SidebarPrefetchLink>
       </SidebarMenuButton>
       {item.title === "New Chat" && chatSection}
       {item.subItems && item.subItems.length > 0 && (
@@ -264,16 +262,15 @@ const NavPrimary = ({
                     pathname.startsWith(sub.url)
                   }
                 >
-                  <Link
+                  <SidebarPrefetchLink
                     href={sub.url}
                     data-testid={sub.testId}
-                    {...getManualPrefetchProps(router, sub.url)}
                     onClick={() => {
                       if (isMobile) setOpenMobile(false);
                     }}
                   >
                     <span>{sub.title}</span>
-                  </Link>
+                  </SidebarPrefetchLink>
                 </SidebarMenuSubButton>
               </SidebarMenuSubItem>
             ))}
@@ -322,7 +319,6 @@ const NavSecondary = ({
   starCount: string;
   className?: string;
 }) => {
-  const router = useRouter();
   const permittedItems = items.filter(
     (item) => permissionMap[item.url] ?? true,
   );
@@ -341,13 +337,10 @@ const NavSecondary = ({
                   pathname.startsWith(item.url)
                 }
               >
-                <Link
-                  href={item.url}
-                  {...getManualPrefetchProps(router, item.url)}
-                >
+                <SidebarPrefetchLink href={item.url}>
                   <item.icon className={item.iconClassName} />
                   <span>{item.title}</span>
-                </Link>
+                </SidebarPrefetchLink>
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}
@@ -416,7 +409,6 @@ const NavSecondary = ({
 };
 
 export function AppSidebar() {
-  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const isAuthenticated = useIsAuthenticated();
@@ -467,22 +459,17 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader className="pt-4 group-data-[collapsible=icon]:pt-2 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:gap-1">
         <div className="flex items-center justify-between group-data-[collapsible=icon]:hidden">
-          <Link
-            href="/chat"
-            className="flex-1 min-w-0"
-            {...getManualPrefetchProps(router, "/chat")}
-          >
+          <SidebarPrefetchLink href="/chat" className="flex-1 min-w-0">
             <AppLogo centered={false} />
-          </Link>
+          </SidebarPrefetchLink>
           <SidebarTrigger className="size-7 cursor-pointer" />
         </div>
-        <Link
+        <SidebarPrefetchLink
           href="/chat"
           className="hidden group-data-[collapsible=icon]:flex"
-          {...getManualPrefetchProps(router, "/chat")}
         >
           <img src={appIconLogo} alt="Logo" className="size-7" />
-        </Link>
+        </SidebarPrefetchLink>
         <SidebarTrigger className="hidden group-data-[collapsible=icon]:flex size-8 cursor-pointer" />
       </SidebarHeader>
       <SidebarContent>
@@ -552,13 +539,27 @@ export function AppSidebar() {
   );
 }
 
-function getManualPrefetchProps(
-  router: ReturnType<typeof useRouter>,
-  href: string,
-) {
-  return {
-    prefetch: false,
-    onFocus: () => router.prefetch(href),
-    onMouseEnter: () => router.prefetch(href),
-  } as const;
+function SidebarPrefetchLink({
+  href,
+  onFocus,
+  onMouseEnter,
+  ...props
+}: React.ComponentProps<typeof Link>) {
+  const router = useRouter();
+
+  return (
+    <Link
+      href={href}
+      prefetch={false}
+      onFocus={(event) => {
+        router.prefetch(String(href));
+        onFocus?.(event);
+      }}
+      onMouseEnter={(event) => {
+        router.prefetch(String(href));
+        onMouseEnter?.(event);
+      }}
+      {...props}
+    />
+  );
 }

@@ -1,4 +1,5 @@
 import {
+  EmbeddingDimensionsSchema,
   OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS,
   OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS,
   OrganizationCustomFontSchema,
@@ -224,7 +225,7 @@ const extendedFields = {
   compressionScope: OrganizationCompressionScopeSchema,
   globalToolPolicy: GlobalToolPolicySchema,
   embeddingModel: z.string().nullable(),
-  embeddingDimensions: z.number().nullable(),
+  embeddingDimensions: EmbeddingDimensionsSchema.nullable(),
   defaultLlmModel: z.string().nullable(),
   defaultLlmProvider: SupportedProvidersSchema.nullable(),
   defaultAgentId: z.string().uuid().nullable(),

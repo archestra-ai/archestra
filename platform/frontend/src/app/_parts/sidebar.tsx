@@ -159,10 +159,10 @@ const contentNavGroups: NavGroup[] = [
               pathname.startsWith("/llm/model-providers"),
           },
           {
-            title: "Proxy Auth",
-            url: "/llm/proxy-auth/virtual-keys",
+            title: "Credentials",
+            url: "/llm/credentials/virtual-keys",
             customIsActive: (pathname: string) =>
-              pathname.startsWith("/llm/proxy-auth"),
+              pathname.startsWith("/llm/credentials"),
           },
           {
             title: "Costs & Limits",
@@ -459,7 +459,7 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader className="pt-4 group-data-[collapsible=icon]:pt-2 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:gap-1">
         <div className="flex items-center justify-between group-data-[collapsible=icon]:hidden">
-          <Link href="/chat">
+          <Link href="/chat" className="flex-1 min-w-0">
             <AppLogo centered={false} />
           </Link>
           <SidebarTrigger className="size-7 cursor-pointer" />

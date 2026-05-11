@@ -21,6 +21,7 @@ const identityProvidersTable = pgTable("identity_provider", {
   organizationId: text("organization_id"),
   domain: text("domain").notNull(),
   domainVerified: boolean("domain_verified"),
+  ssoLoginEnabled: boolean("sso_login_enabled").notNull().default(true),
 });
 
 export default identityProvidersTable;

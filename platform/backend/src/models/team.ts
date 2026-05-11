@@ -931,7 +931,13 @@ class TeamModel {
     userId: string,
     organizationId: string,
     ssoGroups: string[],
-  ): Promise<{ added: string[]; removed: string[] }> {
+  ): Promise<{
+    added: string[];
+    removed: string[];
+    matchedExternalGroupCount: number;
+    matchedTeamCount: number;
+    unmappedGroupCount: number;
+  }> {
     logger.debug(
       { userId, organizationId, groupCount: ssoGroups.length },
       "TeamModel.syncUserTeams: starting sync",
@@ -952,6 +958,12 @@ class TeamModel {
         shouldBeInTeamIds.add(team.id);
       }
     }
+    const distinctGroups = new Set(
+      ssoGroups.map((group) => group.toLowerCase()),
+    );
+    const matchedExternalGroupCount = groupToTeams.size;
+    const matchedTeamCount = shouldBeInTeamIds.size;
+    const unmappedGroupCount = distinctGroups.size - matchedExternalGroupCount;
 
     // Get user's current SSO-synced team memberships in this organization
     const currentSyncedMemberships = await TeamModel.getSsoSyncedMemberships(
@@ -978,10 +990,24 @@ class TeamModel {
     }
 
     logger.debug(
-      { userId, organizationId, added: added.length, removed: removed.length },
+      {
+        userId,
+        organizationId,
+        added: added.length,
+        removed: removed.length,
+        matchedExternalGroupCount,
+        matchedTeamCount,
+        unmappedGroupCount,
+      },
       "TeamModel.syncUserTeams: completed",
     );
-    return { added, removed };
+    return {
+      added,
+      removed,
+      matchedExternalGroupCount,
+      matchedTeamCount,
+      unmappedGroupCount,
+    };
   }
 
   /**

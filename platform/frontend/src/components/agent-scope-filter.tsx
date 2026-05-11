@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { UserSearchableMultiSelect } from "@/components/user-searchable-multi-select";
 import { useLabelKeys, useLabelValues } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useOrganizationMembers } from "@/lib/organization.query";
@@ -156,13 +157,14 @@ export function AgentScopeFilter({
     [teams],
   );
 
-  const memberItems = useMemo(
+  const userOptions = useMemo(
     () =>
       (members ?? [])
         .filter((m) => m.id !== currentUserId)
         .map((m) => ({
-          value: m.id,
-          label: m.name || m.email,
+          userId: m.id,
+          name: m.name,
+          email: m.email,
         })),
     [members, currentUserId],
   );
@@ -218,10 +220,10 @@ export function AgentScopeFilter({
         />
       )}
       {showMembersMultiSelect && (
-        <MultiSelect
+        <UserSearchableMultiSelect
           value={selectedAuthorIds}
           onValueChange={handleAuthorIdsChange}
-          items={memberItems}
+          users={userOptions}
           placeholder="All users"
           className="w-[220px]"
           showSelectedBadges={false}

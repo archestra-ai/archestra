@@ -120,6 +120,7 @@ export interface LLMProxyContext<TRequest> {
   };
   userId?: string;
   resolvedUser?: { id: string; email: string; name: string } | null;
+  virtualKeyId?: string;
   sessionId?: string | null;
   sessionSource?: SessionSource;
   source: InteractionSource;
@@ -193,6 +194,7 @@ export async function handleLLMProxy<
   let userId = (await utils.headers.userId.getUser(headersForExtraction))
     ?.userId;
   let resolvedUser = userId ? await UserModel.getById(userId) : null;
+  let virtualKeyId: string | undefined;
 
   const { sessionId, sessionSource } =
     utils.headers.sessionId.extractSessionInfo(
@@ -371,6 +373,7 @@ export async function handleLLMProxy<
       perKeyBaseUrl = virtualResult.baseUrl;
       perKeyChatApiKeyId = virtualResult.chatApiKeyId;
       wasVirtualKeyResolved = true;
+      virtualKeyId = virtualResult.virtualKeyId;
       authMethod = "virtual_key";
     } catch (error) {
       if (error instanceof ApiError && error.statusCode === 401) {
@@ -425,7 +428,11 @@ export async function handleLLMProxy<
       `[${providerName}Proxy] Checking usage limits`,
     );
     const limitViolation =
-      await LimitValidationService.checkLimitsBeforeRequest(resolvedAgentId);
+      await LimitValidationService.checkLimitsBeforeRequest({
+        agentId: resolvedAgentId,
+        userId,
+        virtualKeyId,
+      });
 
     if (limitViolation) {
       const [_refusalMessage, contentMessage] = limitViolation;
@@ -749,6 +756,7 @@ export async function handleLLMProxy<
       authenticatedApp,
       userId,
       resolvedUser,
+      virtualKeyId,
       sessionId,
       sessionSource,
       source,
@@ -783,6 +791,7 @@ export async function handleLLMProxy<
         externalAgentId,
         executionId,
         userId,
+        virtualKeyId,
         sessionId,
         sessionSource,
         source,
@@ -850,6 +859,7 @@ async function handleStreaming<
     authMethod,
     authenticatedApp,
     userId,
+    virtualKeyId,
     resolvedUser,
     sessionId,
     sessionSource,
@@ -1178,6 +1188,7 @@ async function handleStreaming<
             authenticatedApp,
             executionId,
             userId,
+            virtualKeyId,
             sessionId,
             sessionSource,
             source,
@@ -1238,6 +1249,7 @@ async function handleNonStreaming<
     authMethod,
     authenticatedApp,
     userId,
+    virtualKeyId,
     resolvedUser,
     sessionId,
     sessionSource,
@@ -1389,6 +1401,7 @@ async function handleNonStreaming<
           authenticatedApp,
           executionId,
           userId,
+          virtualKeyId,
           sessionId,
           sessionSource,
           source,
@@ -1454,6 +1467,7 @@ async function handleNonStreaming<
         authenticatedApp,
         executionId,
         userId,
+        virtualKeyId,
         sessionId,
         sessionSource,
         source,

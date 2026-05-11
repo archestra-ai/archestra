@@ -620,7 +620,7 @@ This tool takes no arguments.
 
 | Tool | Description | Required RBAC Permission |
 |------|-------------|--------------------------|
-| `create_limit` | Create a new cost or usage limit for an organization, team, agent, LLM proxy, or MCP gateway. | `llmLimit:create` |
+| `create_limit` | Create a new cost or usage limit for an organization, team, agent, user, virtual key, or MCP gateway. | `llmLimit:create` |
 | `get_limits` | Retrieve all limits, optionally filtered by entity type and/or entity ID. | `llmLimit:read` |
 | `update_limit` | Update mutable fields on an existing limit. | `llmLimit:update` |
 | `delete_limit` | Delete an existing limit by ID. | `llmLimit:delete` |
@@ -635,11 +635,11 @@ Required RBAC permission: `llmLimit:create`
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `entity_type` | `"organization" \| "team" \| "agent"` | Yes | The type of entity to apply the limit to. |
-| `entity_id` | `string` | Yes | The ID of the entity (organization, team, or agent). |
+| `entity_type` | `"organization" \| "team" \| "agent" \| "user" \| "virtual_key"` | Yes | The type of entity to apply the limit to. |
+| `entity_id` | `string` | Yes | The ID of the entity (organization, team, agent, user, or virtual_key). |
 | `limit_type` | `"token_cost" \| "mcp_server_calls" \| "tool_calls"` | Yes | The type of limit to apply. |
 | `limit_value` | `number` | Yes | The limit value (tokens or count depending on limit type). |
-| `model` | `string[]` | No | Array of model names. Required for token_cost limits. |
+| `model` | `string[] \| null` | No | Array of model names. Omit for all models. |
 | `mcp_server_name` | `string` | No | MCP server name. Required for mcp_server_calls and tool_calls limits. |
 | `tool_name` | `string` | No | Tool name. Required for tool_calls limits. |
 
@@ -649,11 +649,11 @@ Required RBAC permission: `llmLimit:create`
 |-------|------|----------|-------------|
 | `limit` | `object` | Yes |  |
 | `limit.id` | `string` | Yes | The limit ID. |
-| `limit.entityType` | `"organization" \| "team" \| "agent"` | Yes | The limited entity type. |
+| `limit.entityType` | `"organization" \| "team" \| "agent" \| "user" \| "virtual_key"` | Yes | The limited entity type. |
 | `limit.entityId` | `string` | Yes | The limited entity ID. |
 | `limit.limitType` | `"token_cost" \| "mcp_server_calls" \| "tool_calls"` | Yes | The kind of limit. |
 | `limit.limitValue` | `number` | Yes | The configured limit value. |
-| `limit.model` | `string[] \| null` | No | Models targeted by a token_cost limit, if any. |
+| `limit.model` | `string[] \| null` | No | Models targeted by a token_cost limit. Null or empty array means all models. |
 | `limit.mcpServerName` | `string \| null` | No | MCP server name for MCP-specific limits, if any. |
 | `limit.toolName` | `string \| null` | No | Tool name for tool-specific limits, if any. |
 
@@ -665,7 +665,7 @@ Required RBAC permission: `llmLimit:read`
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `entity_type` | `"organization" \| "team" \| "agent"` | No | Optional filter by entity type. |
+| `entity_type` | `"organization" \| "team" \| "agent" \| "user" \| "virtual_key"` | No | Optional filter by entity type. |
 | `entity_id` | `string` | No | Optional filter by entity ID. |
 
 ##### Output
@@ -674,11 +674,11 @@ Required RBAC permission: `llmLimit:read`
 |-------|------|----------|-------------|
 | `limits` | `object[]` | Yes |  |
 | `limits[].id` | `string` | Yes | The limit ID. |
-| `limits[].entityType` | `"organization" \| "team" \| "agent"` | Yes | The limited entity type. |
+| `limits[].entityType` | `"organization" \| "team" \| "agent" \| "user" \| "virtual_key"` | Yes | The limited entity type. |
 | `limits[].entityId` | `string` | Yes | The limited entity ID. |
 | `limits[].limitType` | `"token_cost" \| "mcp_server_calls" \| "tool_calls"` | Yes | The kind of limit. |
 | `limits[].limitValue` | `number` | Yes | The configured limit value. |
-| `limits[].model` | `string[] \| null` | No | Models targeted by a token_cost limit, if any. |
+| `limits[].model` | `string[] \| null` | No | Models targeted by a token_cost limit. Null or empty array means all models. |
 | `limits[].mcpServerName` | `string \| null` | No | MCP server name for MCP-specific limits, if any. |
 | `limits[].toolName` | `string \| null` | No | Tool name for tool-specific limits, if any. |
 
@@ -699,11 +699,11 @@ Required RBAC permission: `llmLimit:update`
 |-------|------|----------|-------------|
 | `limit` | `object` | Yes |  |
 | `limit.id` | `string` | Yes | The limit ID. |
-| `limit.entityType` | `"organization" \| "team" \| "agent"` | Yes | The limited entity type. |
+| `limit.entityType` | `"organization" \| "team" \| "agent" \| "user" \| "virtual_key"` | Yes | The limited entity type. |
 | `limit.entityId` | `string` | Yes | The limited entity ID. |
 | `limit.limitType` | `"token_cost" \| "mcp_server_calls" \| "tool_calls"` | Yes | The kind of limit. |
 | `limit.limitValue` | `number` | Yes | The configured limit value. |
-| `limit.model` | `string[] \| null` | No | Models targeted by a token_cost limit, if any. |
+| `limit.model` | `string[] \| null` | No | Models targeted by a token_cost limit. Null or empty array means all models. |
 | `limit.mcpServerName` | `string \| null` | No | MCP server name for MCP-specific limits, if any. |
 | `limit.toolName` | `string \| null` | No | Tool name for tool-specific limits, if any. |
 

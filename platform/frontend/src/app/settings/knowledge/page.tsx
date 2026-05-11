@@ -1,6 +1,6 @@
 "use client";
 
-import { PROVIDERS_WITH_OPTIONAL_API_KEY } from "@shared";
+import { isProviderApiKeyOptional } from "@shared";
 import {
   ArrowUpRight,
   Info,
@@ -121,6 +121,7 @@ function AddApiKeyDialog({
 }) {
   const createMutation = useCreateLlmProviderApiKey();
   const byosEnabled = useFeature("byosEnabled");
+  const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
   const bedrockIamAuthEnabled = useFeature("bedrockIamAuthEnabled");
   const geminiVertexAiEnabled = useFeature("geminiVertexAiEnabled");
 
@@ -145,8 +146,10 @@ function AddApiKeyDialog({
     (formValues.scope !== "team" || formValues.teamId) &&
     (byosEnabled
       ? formValues.vaultSecretPath && formValues.vaultSecretKey
-      : PROVIDERS_WITH_OPTIONAL_API_KEY.has(formValues.provider) ||
-        formValues.apiKey);
+      : isProviderApiKeyOptional({
+          provider: formValues.provider,
+          azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
+        }) || formValues.apiKey);
 
   const handleCreate = form.handleSubmit(async (values) => {
     try {

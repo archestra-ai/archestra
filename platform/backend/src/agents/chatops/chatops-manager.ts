@@ -1359,7 +1359,9 @@ export class ChatOpsManager {
     }
 
     const resultMessage = extractMessageFromSendMessageResult(result);
-    const text = resultMessage.parts.map((part) => part.text).join("\n");
+    const text = (resultMessage.parts || [])
+      .map((part) => part.text)
+      .join("\n");
     const agentResponse = stripThinkingBlocks(text);
 
     if (sendReply && agentResponse) {
@@ -1439,7 +1441,7 @@ export class ChatOpsManager {
     }
 
     const agentResponse = stripThinkingBlocks(
-      resultMessage?.parts.map((p) => p.text).join("\n") || "",
+      (resultMessage?.parts || []).map((p) => p.text).join("\n"),
     );
 
     if (sendReply) {

@@ -139,6 +139,23 @@ class MemberModel {
     return hasMembership;
   }
 
+  static async deleteAllByUserId(userId: string, tx?: Transaction) {
+    logger.debug(
+      { userId },
+      "MemberModel.deleteAllByUserId: deleting memberships",
+    );
+    const dbOrTx = tx ?? db;
+    const deleted = await dbOrTx
+      .delete(schema.membersTable)
+      .where(eq(schema.membersTable.userId, userId))
+      .returning({ id: schema.membersTable.id });
+    logger.debug(
+      { userId, count: deleted.length },
+      "MemberModel.deleteAllByUserId: completed",
+    );
+    return deleted.length;
+  }
+
   /**
    * Update a member's role
    */

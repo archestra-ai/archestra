@@ -1,0 +1,96 @@
+# ============================================================
+# Manual READONLY_VAULT (BYOS) end-to-end test setup
+#
+# Spins up a local Archestra in Kubernetes wired to a Vault running
+# in the same cluster, using K8s auth. No Tilt involved.
+#
+# Run all commands from `platform/`:
+#
+#   # 1. Build the image into Docker Desktop's daemon
+#   docker build -t archestra/platform:dev -f Dockerfile .
+#
+#   # 2. Namespace (idempotent)
+#   kubectl create namespace archestra-dev \
+#     --dry-run=client -o yaml | kubectl apply -f -
+#
+#   # 3. Run Vault. It's using our e2e vault chart with pre-configured K8s auth.
+#   helm upgrade --install vault-k8s ./helm/e2e-tests \
+#     --namespace archestra-dev \
+#     --values dev/vault-k8s-manual-test.yaml \
+#     --wait --timeout 5m
+#
+#   # 4. Run Archestra — pin to the image built in step 1
+#   #    (otherwise the OCI chart would pull its default published image).
+#   helm upgrade archestra-platform \
+#     oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
+#     --install \
+#     --namespace archestra-dev \
+#     --values dev/vault-k8s-manual-test.yaml \
+#     --set archestra.image=archestra/platform \
+#     --set archestra.imageTag=dev \
+#     --set archestra.imagePullPolicy=Never \
+#     --set archestra.env.HOSTNAME="0.0.0.0" \
+#     --wait --timeout 10m
+#
+#   # 5. Verify and port-forward
+#   kubectl -n archestra-dev get pods,deploy,svc
+#
+#   # One-liner: forwards frontend (3000), backend (9000), and Vault (8200).
+#   # Ctrl-C cleans up all three.
+#   (trap 'kill 0' SIGINT; \
+#     kubectl -n archestra-dev port-forward svc/archestra-platform 9000:9000 3000:3000 & \
+#     kubectl -n archestra-dev port-forward svc/vault 8200:8200 & \
+#     wait)
+#
+# Tear down:
+#   helm uninstall archestra-platform -n archestra-dev
+#   helm uninstall vault-k8s         -n archestra-dev
+#   kubectl delete namespace archestra-dev
+# ============================================================
+
+# ============================================================
+# Consumed by ./helm/e2e-tests (vault-k8s release)
+# ============================================================
+vault:
+  service:
+    type: ClusterIP
+  k8sAuth:
+    enabled: true
+
+wiremock:
+  enabled: false
+keycloak:
+  enabled: false
+mcpExampleOAuth:
+  enabled: false
+mcpServerJwks:
+  enabled: false
+mcpServerIdJag:
+  enabled: false
+
+# ============================================================
+# Consumed by ./helm/archestra (archestra release)
+# ============================================================
+archestra:
+  # image / imageTag / imagePullPolicy are pinned to the locally-built
+  # image via `--set` flags on the helm command above (step 4), so they
+  # are intentionally not set here.
+  env:
+    ARCHESTRA_SECRETS_MANAGER: READONLY_VAULT
+    ARCHESTRA_HASHICORP_VAULT_ADDR: http://vault.archestra-dev.svc:8200
+    ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD: K8S
+    # these comes from the e2e-tests vault chart, vault is pre-configured with this role and to create the secret
+    ARCHESTRA_HASHICORP_VAULT_K8S_ROLE: archestra
+    ARCHESTRA_HASHICORP_VAULT_KV_VERSION: "1"
+    ARCHESTRA_HASHICORP_VAULT_SECRET_PATH: kv/archestra
+    ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
+    ARCHESTRA_ANALYTICS: "disabled"
+
+  orchestrator:
+    kubernetes:
+      serviceAccount:
+        # Must match Vault's k8s auth role binding
+        # (helm/e2e-tests/values.yaml:203-204):
+        #   bound_service_account_names=archestra-platform
+        #   bound_service_account_namespaces=archestra-dev
+        name: archestra-platform

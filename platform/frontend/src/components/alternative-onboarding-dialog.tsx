@@ -65,9 +65,9 @@ export function AlternativeOnboardingDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleDialogOpenChange}>
-      <DialogContent className="max-w-4xl p-0 overflow-hidden border-0">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-4xl overflow-hidden border-0 p-0">
         {/* Gradient Background Header */}
-        <div className="relative bg-gradient-to-br from-primary/10 via-primary/5 to-background px-8 pt-8 pb-6">
+        <div className="relative shrink-0 bg-gradient-to-br from-primary/10 via-primary/5 to-background px-8 pt-8 pb-6">
           <div className="absolute inset-0 bg-grid-white/[0.02] pointer-events-none" />
           <div className="relative">
             <DialogHeader>
@@ -86,7 +86,7 @@ export function AlternativeOnboardingDialog({
           </div>
         </div>
 
-        <div className="px-8 py-6">
+        <div className="min-h-0 flex-1 overflow-y-auto px-8 py-6">
           <div className="space-y-6">
             {/* Options Grid */}
             <div className="grid gap-4 md:grid-cols-2">
@@ -296,7 +296,7 @@ export function AlternativeOnboardingDialog({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end px-8 py-4 border-t bg-muted/30">
+        <div className="flex shrink-0 items-center justify-end border-t bg-muted/30 px-8 py-4">
           <Button
             onClick={handleGetStarted}
             size="lg"

@@ -100,3 +100,21 @@ archestra:
         #   bound_service_account_names=archestra-platform
         #   bound_service_account_namespaces=archestra-dev
         name: archestra-platform
+
+  # Pull ARCHESTRA_DATABASE_URL from Vault at pod startup via the
+  # vault-env-injector init container (writes /vault/secrets/env on tmpfs;
+  # main container sources it before exec'ing the backend).
+  initContainers:
+    vaultSecrets:
+      enabled: true
+      secrets:
+        - envVar: ARCHESTRA_DATABASE_URL
+          path: kv/archestra/config/db_url
+          key: url
+
+# Tell the chart NOT to construct ARCHESTRA_DATABASE_URL itself — the
+# init container above will provide it. `from_vault` is the sentinel
+# value the chart looks for (helm/archestra/templates/_helpers.tpl:72).
+# Keeping postgresql.enabled=true so the bundled DB is still deployed.
+postgresql:
+  external_database_url: from_vault

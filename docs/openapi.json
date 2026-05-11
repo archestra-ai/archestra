@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.36"
+    "version": "1.2.37"
   },
   "components": {
     "schemas": {
@@ -3594,7 +3594,49 @@
               "user_id"
             ]
           },
+          "output_config": {
+            "type": "object",
+            "properties": {
+              "effort": {
+                "nullable": true,
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high",
+                  "max"
+                ]
+              },
+              "format": {
+                "nullable": true,
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "json_schema"
+                    ]
+                  },
+                  "schema": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "type",
+                  "schema"
+                ]
+              }
+            }
+          },
           "service_tier": {},
+          "speed": {
+            "type": "string",
+            "enum": [
+              "fast",
+              "standard"
+            ]
+          },
           "stop_sequences": {
             "type": "array",
             "items": {
@@ -3668,6 +3710,56 @@
           },
           "temperature": {
             "type": "number"
+          },
+          "thinking": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "enabled"
+                    ]
+                  },
+                  "budget_tokens": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "type",
+                  "budget_tokens"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "disabled"
+                    ]
+                  }
+                },
+                "required": [
+                  "type"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "adaptive"
+                    ]
+                  }
+                },
+                "required": [
+                  "type"
+                ]
+              }
+            ]
           },
           "tool_choice": {
             "anyOf": [
@@ -20599,7 +20691,51 @@
             ],
             "additionalProperties": false
           },
+          "output_config": {
+            "type": "object",
+            "properties": {
+              "effort": {
+                "nullable": true,
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high",
+                  "max"
+                ]
+              },
+              "format": {
+                "nullable": true,
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "json_schema"
+                    ]
+                  },
+                  "schema": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "type",
+                  "schema"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          },
           "service_tier": {},
+          "speed": {
+            "type": "string",
+            "enum": [
+              "fast",
+              "standard"
+            ]
+          },
           "stop_sequences": {
             "type": "array",
             "items": {
@@ -20675,6 +20811,59 @@
           },
           "temperature": {
             "type": "number"
+          },
+          "thinking": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "enabled"
+                    ]
+                  },
+                  "budget_tokens": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "type",
+                  "budget_tokens"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "disabled"
+                    ]
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "adaptive"
+                    ]
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": false
+              }
+            ]
           },
           "tool_choice": {
             "anyOf": [
@@ -45601,6 +45790,7 @@
                                 "enum": [
                                   "allow_when_context_is_sensitive",
                                   "block_when_context_is_sensitive",
+                                  "require_approval",
                                   "block_always"
                                 ]
                               },

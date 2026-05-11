@@ -270,3 +270,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @JB-Bryant
 - @MANISH-LAB
 - @Draconna
+- @NoeFabris

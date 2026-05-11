@@ -39,9 +39,13 @@ type DialogKey =
   | "no-auth"
   | "manage";
 
-export function useMcpInstallOrchestrator() {
-  const { data: catalogItems } = useInternalMcpCatalog({});
-  const { data: installedServers } = useMcpServers({});
+export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
+  const { data: catalogItems } = useInternalMcpCatalog({
+    enabled: options?.enabled,
+  });
+  const { data: installedServers } = useMcpServers({
+    enabled: options?.enabled,
+  });
   const installMutation = useInstallMcpServer();
   const reauthMutation = useReauthenticateMcpServer();
   const initiateOAuthMutation = useInitiateOAuth();

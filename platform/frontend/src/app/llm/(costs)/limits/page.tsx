@@ -44,6 +44,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { UserSearchableSelect } from "@/components/user-searchable-select";
 import { VirtualKeySearchableSelect } from "@/components/virtual-key-searchable-select";
 import { useProfiles } from "@/lib/agent.query";
@@ -99,7 +104,8 @@ const CLEANUP_INTERVAL_LABELS: Record<LimitCleanupInterval, string> = {
   "1m": "Every month",
 };
 
-const LIMITS_ENTITY_SELECTOR_PAGE_SIZE = 500;
+const LIMITS_ENTITY_SELECTOR_PAGE_SIZE = 100;
+const MAX_VISIBLE_MODEL_BADGES = 3;
 
 const ENTITY_TYPE_ITEMS: Array<{
   value: LimitFormEntityType;
@@ -292,6 +298,34 @@ export default function LimitsPage() {
     [teams, members, virtualKeys, agents, llmProxies],
   );
 
+  const getEntityIcon = useCallback(
+    (limit: LimitData) => {
+      const iconClassName = "h-4 w-4 shrink-0 text-muted-foreground";
+      if (limit.entityType === "organization") {
+        return <Building2 className={iconClassName} />;
+      }
+      if (limit.entityType === "team") {
+        return <Users className={iconClassName} />;
+      }
+      if (limit.entityType === "user") {
+        return <User className={iconClassName} />;
+      }
+      if (limit.entityType === "virtual_key") {
+        return <Key className={iconClassName} />;
+      }
+      if (
+        limit.entityType === "agent" &&
+        llmProxies.some((candidate) => candidate.id === limit.entityId)
+      ) {
+        return <Network className={iconClassName} />;
+      }
+      return (
+        <AgentIcon icon={null} fallbackType="agent" className={iconClassName} />
+      );
+    },
+    [llmProxies],
+  );
+
   const getUsageStatus = useCallback(
     (
       limit: LimitData,
@@ -389,7 +423,12 @@ export default function LimitsPage() {
         header: "Applied to",
         size: 150,
         minSize: 120,
-        cell: ({ row }) => getEntityLabel(row.original),
+        cell: ({ row }) => (
+          <div className="flex min-w-0 items-center gap-2">
+            {getEntityIcon(row.original)}
+            <span className="truncate">{getEntityLabel(row.original)}</span>
+          </div>
+        ),
       },
       {
         accessorKey: "model",
@@ -400,6 +439,8 @@ export default function LimitsPage() {
           const models = getLimitModels(row.original);
           const isAllModels =
             models.length === 0 && row.original.limitType === "token_cost";
+          const visibleModels = models.slice(0, MAX_VISIBLE_MODEL_BADGES);
+          const remainingModels = models.slice(MAX_VISIBLE_MODEL_BADGES);
           return (
             <div className="flex flex-wrap gap-1">
               {isAllModels && (
@@ -412,7 +453,7 @@ export default function LimitsPage() {
                 </Badge>
               )}
               {!isAllModels &&
-                models.map((model) => (
+                visibleModels.map((model) => (
                   <Badge
                     key={model}
                     variant="outline"
@@ -422,6 +463,26 @@ export default function LimitsPage() {
                     {model}
                   </Badge>
                 ))}
+              {remainingModels.length > 0 && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge
+                      variant="outline"
+                      className="cursor-default text-xs"
+                      data-testid="limits-table-models-more-badge"
+                    >
+                      +{remainingModels.length} more
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-80">
+                    <div className="space-y-1">
+                      {remainingModels.map((model) => (
+                        <div key={model}>{model}</div>
+                      ))}
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              )}
             </div>
           );
         },
@@ -476,7 +537,7 @@ export default function LimitsPage() {
         ),
       },
     ],
-    [getEntityLabel, getUsageStatus, handleEditOpen],
+    [getEntityIcon, getEntityLabel, getUsageStatus, handleEditOpen],
   );
 
   const hasActiveFilters =

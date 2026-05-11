@@ -4,6 +4,7 @@ import LimitsPage, { getLimitModels } from "./page";
 
 const mockSetCostsAction = vi.fn();
 const mockUseLimits = vi.fn();
+const mockUseAllVirtualApiKeys = vi.fn();
 
 vi.mock("next/link", () => ({
   default: ({
@@ -44,9 +45,8 @@ vi.mock("@/lib/organization.query", () => ({
 }));
 
 vi.mock("@/lib/virtual-api-keys.query", () => ({
-  useAllVirtualApiKeys: () => ({
-    data: { data: [], pagination: { total: 0 } },
-  }),
+  useAllVirtualApiKeys: (...args: unknown[]) =>
+    mockUseAllVirtualApiKeys(...args),
 }));
 
 vi.mock("@/lib/llm-models.query", () => ({
@@ -248,6 +248,18 @@ vi.mock("@/components/ui/badge", () => ({
   }) => <span {...props}>{children}</span>,
 }));
 
+vi.mock("@/components/ui/tooltip", () => ({
+  Tooltip: ({ children }: { children: React.ReactNode }) => (
+    <span>{children}</span>
+  ),
+  TooltipTrigger: ({ children }: { children: React.ReactNode }) => (
+    <span>{children}</span>
+  ),
+  TooltipContent: ({ children }: { children: React.ReactNode }) => (
+    <span>{children}</span>
+  ),
+}));
+
 vi.mock("@/components/ui/checkbox", () => ({
   Checkbox: ({
     checked,
@@ -286,6 +298,9 @@ describe("LimitsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseLimits.mockReturnValue({ data: [], isPending: false });
+    mockUseAllVirtualApiKeys.mockReturnValue({
+      data: { data: [], pagination: { total: 0 } },
+    });
   });
 
   it("shows the active cleanup interval and links to LLM settings", () => {
@@ -301,6 +316,12 @@ describe("LimitsPage", () => {
     expect(
       screen.getByRole("link", { name: /change it in llm settings/i }),
     ).toHaveAttribute("href", "/settings/llm");
+  });
+
+  it("requests virtual keys with the API-supported page size", () => {
+    render(<LimitsPage />);
+
+    expect(mockUseAllVirtualApiKeys).toHaveBeenCalledWith({ limit: 100 });
   });
 
   it("shows 'All models' badge for limits with null model", () => {
@@ -346,6 +367,43 @@ describe("LimitsPage", () => {
     } as unknown as Parameters<typeof getLimitModels>[0]);
 
     expect(models).toEqual(["gpt-4o", "claude-3.5-sonnet"]);
+  });
+
+  it("shows only the first three models and a tooltip for remaining models", () => {
+    mockUseLimits.mockReturnValue({
+      data: [
+        {
+          id: "limit-1",
+          entityType: "organization",
+          entityId: "org-1",
+          limitType: "token_cost",
+          limitValue: 1000,
+          model: [
+            "gpt-4o",
+            "claude-3.5-sonnet",
+            "gemini-1.5-pro",
+            "gpt-4.1",
+            "claude-3.7-sonnet",
+          ],
+          mcpServerName: null,
+          toolName: null,
+          lastCleanup: null,
+          createdAt: "2026-01-01",
+          updatedAt: "2026-01-01",
+          modelUsage: [],
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<LimitsPage />);
+
+    expect(screen.getAllByTestId("limits-table-models-badge")).toHaveLength(3);
+    expect(
+      screen.getByTestId("limits-table-models-more-badge"),
+    ).toHaveTextContent("+2 more");
+    expect(screen.getByText("gpt-4.1")).toBeInTheDocument();
+    expect(screen.getByText("claude-3.7-sonnet")).toBeInTheDocument();
   });
 
   it("shows 'All models' in multi-select when editing limit with null model", () => {

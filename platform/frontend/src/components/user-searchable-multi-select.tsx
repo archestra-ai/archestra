@@ -1,7 +1,7 @@
 "use client";
 
+import { SearchableMultiSelect } from "@/components/searchable-multi-select";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select";
 
 export interface UserSelectOption {
   userId: string;

@@ -2089,8 +2089,8 @@ describe("cleanupLimitsIfNeeded", () => {
     });
 
     const modelUsage = await LimitModel.getRawModelUsage(limit.id);
-    expect(modelUsage[0].currentUsageTokensIn).toBe(0);
-    expect(modelUsage[0].currentUsageTokensOut).toBe(0);
+    expect(modelUsage[0].currentUsageTokensIn).toBe(500);
+    expect(modelUsage[0].currentUsageTokensOut).toBe(500);
   });
 
   test("handles unknown organization gracefully", async () => {

@@ -51,7 +51,12 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      const limits = await LimitModel.findAll(entityType, entityId, limitType);
+      const limits = await LimitModel.findAll(
+        entityType,
+        entityId,
+        limitType,
+        organizationId,
+      );
 
       // Add per-model usage breakdown for token_cost limits
       const limitsWithUsage = await Promise.all(

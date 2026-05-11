@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { UserSearchableMultiSelect } from "@/components/ui/user-searchable-multi-select";
+import { UserSearchableMultiSelect } from "@/components/user-searchable-multi-select";
 import {
   type VisibilityOption,
   VisibilitySelector,

@@ -267,7 +267,7 @@ vi.mock("@/components/ui/checkbox", () => ({
   ),
 }));
 
-vi.mock("@/components/ui/searchable-multi-select", () => ({
+vi.mock("@/components/searchable-multi-select", () => ({
   SearchableMultiSelect: ({
     value,
     placeholder,

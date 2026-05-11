@@ -96,15 +96,28 @@ describe("limits routes", () => {
 
     test("cleanup resets usage before limits are returned", async ({
       makeAgent,
+      makeOrganization,
     }) => {
       const agent = await makeAgent({
         name: "Test Agent",
         organizationId,
       });
+      const otherOrganization = await makeOrganization();
+      const otherAgent = await makeAgent({
+        name: "Other Org Agent",
+        organizationId: otherOrganization.id,
+      });
 
       const limit = await LimitModel.create({
         entityType: "agent",
         entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o"],
+      });
+      const otherLimit = await LimitModel.create({
+        entityType: "agent",
+        entityId: otherAgent.id,
         limitType: "token_cost",
         limitValue: 1000000,
         model: ["gpt-4o"],
@@ -117,6 +130,13 @@ describe("limits routes", () => {
         500,
         500,
       );
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        otherAgent.id,
+        "gpt-4o",
+        700,
+        700,
+      );
 
       const response = await app.inject({
         method: "GET",
@@ -128,6 +148,11 @@ describe("limits routes", () => {
       const body = response.json();
       const returnedLimit = body.find((l: { id: string }) => l.id === limit.id);
       expect(returnedLimit).toBeDefined();
+      expect(
+        body.some(
+          (candidate: { id: string }) => candidate.id === otherLimit.id,
+        ),
+      ).toBe(false);
       expect(returnedLimit.modelUsage).toBeDefined();
 
       const gpt4oUsage = returnedLimit.modelUsage.find(
@@ -136,6 +161,10 @@ describe("limits routes", () => {
       expect(gpt4oUsage).toBeDefined();
       expect(gpt4oUsage.tokensIn).toBe(0);
       expect(gpt4oUsage.tokensOut).toBe(0);
+
+      const otherModelUsage = await LimitModel.getRawModelUsage(otherLimit.id);
+      expect(otherModelUsage[0].currentUsageTokensIn).toBe(700);
+      expect(otherModelUsage[0].currentUsageTokensOut).toBe(700);
     });
 
     test("does not cleanup limits with recent lastCleanup", async ({

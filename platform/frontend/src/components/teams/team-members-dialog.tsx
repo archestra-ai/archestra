@@ -10,7 +10,7 @@ import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { DialogStickyFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { UserSearchableSelect } from "@/components/ui/user-searchable-select";
+import { UserSearchableSelect } from "@/components/user-searchable-select";
 import { useMembersPaginated } from "@/lib/member.query";
 import { useActiveOrganization } from "@/lib/organization.query";
 

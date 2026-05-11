@@ -44,8 +44,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { UserSearchableSelect } from "@/components/ui/user-searchable-select";
-import { VirtualKeySearchableSelect } from "@/components/ui/virtual-key-searchable-select";
+import { UserSearchableSelect } from "@/components/user-searchable-select";
+import { VirtualKeySearchableSelect } from "@/components/virtual-key-searchable-select";
 import { useProfiles } from "@/lib/agent.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
@@ -98,6 +98,8 @@ const CLEANUP_INTERVAL_LABELS: Record<LimitCleanupInterval, string> = {
   "1w": "Every week",
   "1m": "Every month",
 };
+
+const LIMITS_ENTITY_SELECTOR_PAGE_SIZE = 500;
 
 const ENTITY_TYPE_ITEMS: Array<{
   value: LimitFormEntityType;
@@ -161,7 +163,9 @@ export default function LimitsPage() {
   const { data: teams = [] } = useTeams();
   const { data: organization } = useOrganization();
   const { data: members = [] } = useOrganizationMembers();
-  const { data: virtualKeysData } = useAllVirtualApiKeys();
+  const { data: virtualKeysData } = useAllVirtualApiKeys({
+    limit: LIMITS_ENTITY_SELECTOR_PAGE_SIZE,
+  });
   const virtualKeys = virtualKeysData?.data ?? [];
   const { data: agents = [] } = useProfiles({
     filters: { agentTypes: ["agent"] },

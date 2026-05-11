@@ -5,8 +5,8 @@ import { providerDisplayNames, type SupportedProvider } from "@shared";
 import { Layers } from "lucide-react";
 import Image from "next/image";
 import type { ReactNode } from "react";
+import { SearchableMultiSelect } from "@/components/searchable-multi-select";
 import { Badge } from "@/components/ui/badge";
-import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
 

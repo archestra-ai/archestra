@@ -99,8 +99,15 @@ class LimitModel {
     entityType?: LimitEntityType,
     entityId?: string,
     limitType?: LimitType,
+    organizationId?: string,
   ): Promise<Limit[]> {
     const whereConditions: SQL[] = [];
+
+    if (organizationId) {
+      whereConditions.push(
+        buildOrganizationLimitScopeCondition(organizationId),
+      );
+    }
 
     if (entityType) {
       whereConditions.push(eq(schema.limitsTable.entityType, entityType));
@@ -467,13 +474,27 @@ class LimitModel {
       });
     }
 
-    const entityConditions: SQL[] = [];
+    const selectionConditions: SQL[] = [];
 
     if (filterConditions.length > 0) {
-      entityConditions.push(and(...filterConditions) as SQL);
+      selectionConditions.push(and(...filterConditions) as SQL);
     }
     if (entityIdConditions.length > 0) {
-      entityConditions.push(or(...entityIdConditions) as SQL);
+      selectionConditions.push(or(...entityIdConditions) as SQL);
+    }
+
+    const scopeConditions: SQL[] = [];
+    if (options.allForOrganizationId !== undefined) {
+      scopeConditions.push(
+        buildOrganizationLimitScopeCondition(options.allForOrganizationId),
+      );
+    }
+    if (selectionConditions.length > 0) {
+      scopeConditions.push(or(...selectionConditions) as SQL);
+    }
+
+    if (scopeConditions.length === 0) {
+      return [];
     }
 
     const cutoffIntervalSqlExpr = sql`now() - interval ${sql.raw(`'${limitsResetInterval}'`)}`;
@@ -483,7 +504,7 @@ class LimitModel {
       .from(schema.limitsTable)
       .where(
         and(
-          or(...entityConditions),
+          ...scopeConditions,
           or(
             isNull(schema.limitsTable.lastCleanup),
             lt(schema.limitsTable.lastCleanup, cutoffIntervalSqlExpr),
@@ -521,6 +542,10 @@ class LimitModel {
       const tokenCostLimitIds = limits
         .filter((l) => l.limitType === "token_cost")
         .map((l) => l.id);
+
+      if (tokenCostLimitIds.length === 0) {
+        return;
+      }
 
       // Reset model usage records for token_cost limits
       await tx
@@ -900,6 +925,47 @@ ${contentMessage}`;
       return null; // Allow request on error
     }
   }
+}
+
+function buildOrganizationLimitScopeCondition(organizationId: string): SQL {
+  return or(
+    and(
+      eq(schema.limitsTable.entityType, "organization"),
+      eq(schema.limitsTable.entityId, organizationId),
+    ),
+    and(
+      eq(schema.limitsTable.entityType, "team"),
+      sql`EXISTS (
+        SELECT 1 FROM ${schema.teamsTable}
+        WHERE ${schema.teamsTable.id} = ${schema.limitsTable.entityId}
+          AND ${schema.teamsTable.organizationId} = ${organizationId}
+      )`,
+    ),
+    and(
+      eq(schema.limitsTable.entityType, "agent"),
+      sql`EXISTS (
+        SELECT 1 FROM ${schema.agentsTable}
+        WHERE ${schema.agentsTable.id}::text = ${schema.limitsTable.entityId}
+          AND ${schema.agentsTable.organizationId} = ${organizationId}
+      )`,
+    ),
+    and(
+      eq(schema.limitsTable.entityType, "user"),
+      sql`EXISTS (
+        SELECT 1 FROM ${schema.membersTable}
+        WHERE ${schema.membersTable.userId} = ${schema.limitsTable.entityId}
+          AND ${schema.membersTable.organizationId} = ${organizationId}
+      )`,
+    ),
+    and(
+      eq(schema.limitsTable.entityType, "virtual_key"),
+      sql`EXISTS (
+        SELECT 1 FROM ${schema.virtualApiKeysTable}
+        WHERE ${schema.virtualApiKeysTable.id}::text = ${schema.limitsTable.entityId}
+          AND ${schema.virtualApiKeysTable.organizationId} = ${organizationId}
+      )`,
+    ),
+  ) as SQL;
 }
 
 export default LimitModel;

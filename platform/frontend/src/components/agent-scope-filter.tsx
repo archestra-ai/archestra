@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { UserSearchableMultiSelect } from "@/components/ui/user-searchable-multi-select";
+import { UserSearchableMultiSelect } from "@/components/user-searchable-multi-select";
 import { useLabelKeys, useLabelValues } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useOrganizationMembers } from "@/lib/organization.query";

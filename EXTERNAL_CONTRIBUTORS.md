@@ -253,3 +253,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @jeepvan
 - @debaa98
 - @jchatelet
+- @whisp0

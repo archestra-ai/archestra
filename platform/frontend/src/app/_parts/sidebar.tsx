@@ -558,14 +558,35 @@ function SidebarPrefetchLink({
       href={href}
       prefetch={false}
       onFocus={(event) => {
-        router.prefetch(String(href));
+        const prefetchHref = getPrefetchHref(href);
+        if (prefetchHref) router.prefetch(prefetchHref);
         onFocus?.(event);
       }}
       onMouseEnter={(event) => {
-        router.prefetch(String(href));
+        const prefetchHref = getPrefetchHref(href);
+        if (prefetchHref) router.prefetch(prefetchHref);
         onMouseEnter?.(event);
       }}
       {...props}
     />
   );
+}
+
+function getPrefetchHref(href: React.ComponentProps<typeof Link>["href"]) {
+  if (typeof href === "string") return href;
+  if (!href.pathname) return null;
+
+  const searchParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(href.query ?? {})) {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item != null) searchParams.append(key, String(item));
+      }
+      continue;
+    }
+    if (value != null) searchParams.set(key, String(value));
+  }
+
+  const query = searchParams.toString();
+  return `${href.pathname}${query ? `?${query}` : ""}${href.hash ?? ""}`;
 }

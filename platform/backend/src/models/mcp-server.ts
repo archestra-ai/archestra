@@ -12,11 +12,9 @@ import type {
   ResourceVisibilityScope,
   UpdateMcpServer,
 } from "@/types";
-import AgentToolModel from "./agent-tool";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpHttpSessionModel from "./mcp-http-session";
 import McpServerUserModel from "./mcp-server-user";
-import ToolModel from "./tool";
 
 // Alias for users table to avoid conflict with the owner LEFT JOIN
 const assignedUsersTable = alias(schema.usersTable, "assigned_users");
@@ -468,31 +466,6 @@ class McpServerModel {
       // Continue with deletion even if session cleanup fails
     }
 
-    // Clean up agent_tools that reference this server
-    // Must be done before deletion to ensure agents do not retain unusable tool assignments
-    // FK constraint would only null out the reference, not remove the assignment
-    try {
-      let deletedAgentTools = 0;
-      if (mcpServer.serverType === "local") {
-        deletedAgentTools =
-          await AgentToolModel.deleteByExecutionSourceMcpServerId(id);
-      } else {
-        deletedAgentTools =
-          await AgentToolModel.deleteByCredentialSourceMcpServerId(id);
-      }
-      if (deletedAgentTools > 0) {
-        logger.info(
-          `Deleted ${deletedAgentTools} agent tool assignments for MCP server: ${mcpServer.name}`,
-        );
-      }
-    } catch (error) {
-      logger.error(
-        { err: error },
-        `Failed to clean up agent tools for MCP server ${mcpServer.name}:`,
-      );
-      // Continue with deletion even if agent tool cleanup fails
-    }
-
     // For local servers, stop and remove the K8s deployment
     if (mcpServer.serverType === "local") {
       try {
@@ -511,42 +484,16 @@ class McpServerModel {
 
     // Delete the MCP server from database
     logger.info(`Deleting MCP server: ${mcpServer.name} with id: ${id}`);
-    const result = await db
+    const deletedRows = await db
       .delete(schema.mcpServersTable)
-      .where(eq(schema.mcpServersTable.id, id));
+      .where(eq(schema.mcpServersTable.id, id))
+      .returning({ id: schema.mcpServersTable.id });
 
-    const deleted = result.rowCount !== null && result.rowCount > 0;
+    const deleted = deletedRows.length > 0;
 
     // If the MCP server was deleted and it had an associated secret, delete the secret
     if (deleted && mcpServer.secretId) {
       await secretManager().deleteSecret(mcpServer.secretId);
-    }
-
-    // If the MCP server was deleted and had a catalogId, check if this was the last installation
-    // If so, clean up all tools for this catalog
-    if (deleted && mcpServer.catalogId) {
-      try {
-        // Check if any other servers exist for this catalog
-        const remainingServers = await McpServerModel.findByCatalogId(
-          mcpServer.catalogId,
-        );
-
-        if (remainingServers.length === 0) {
-          // No more servers for this catalog, delete all tools
-          const deletedToolsCount = await ToolModel.deleteByCatalogId(
-            mcpServer.catalogId,
-          );
-          logger.info(
-            `Deleted ${deletedToolsCount} tools for catalog ${mcpServer.catalogId} (last installation removed)`,
-          );
-        }
-      } catch (error) {
-        logger.error(
-          { err: error },
-          `Failed to clean up tools for catalog ${mcpServer.catalogId}:`,
-        );
-        // Don't fail the deletion if tool cleanup fails
-      }
     }
 
     return deleted;

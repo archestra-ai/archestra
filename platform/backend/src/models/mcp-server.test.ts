@@ -1,7 +1,10 @@
+import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
+import AgentToolModel from "./agent-tool";
 import McpServerModel from "./mcp-server";
 import McpServerUserModel from "./mcp-server-user";
+import ToolModel from "./tool";
 
 describe("McpServerModel", () => {
   describe("serverType field", () => {
@@ -99,6 +102,147 @@ describe("McpServerModel", () => {
         crypto.randomUUID(),
       ]);
       expect(results).toEqual([]);
+    });
+  });
+
+  describe("delete", () => {
+    test("preserves catalog tools, assignments, and guardrail policies after the last installation is removed", async ({
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeTool,
+      makeToolPolicy,
+      makeTrustedDataPolicy,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        name: "Delete Preserve",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+      });
+      const mcpServer = await McpServerModel.create({
+        name: catalog.name,
+        serverType: "remote",
+        catalogId: catalog.id,
+        scope: "personal",
+      });
+      const tool = await makeTool({
+        name: "delete_preserve__read",
+        catalogId: catalog.id,
+      });
+      const agent = await makeAgent();
+      const agentTool = await makeAgentTool(agent.id, tool.id, {
+        mcpServerId: mcpServer.id,
+        credentialResolutionMode: "static",
+      });
+      const invocationPolicy = await makeToolPolicy(tool.id, {
+        reason: "Keep this invocation policy",
+      });
+      const trustedDataPolicy = await makeTrustedDataPolicy(tool.id, {
+        description: "Keep this result policy",
+      });
+
+      await expect(McpServerModel.delete(mcpServer.id)).resolves.toBe(true);
+
+      const [toolAfterDelete] = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(eq(schema.toolsTable.id, tool.id));
+      expect(toolAfterDelete?.catalogId).toBe(catalog.id);
+
+      const [agentToolAfterDelete] = await db
+        .select()
+        .from(schema.agentToolsTable)
+        .where(eq(schema.agentToolsTable.id, agentTool.id));
+      expect(agentToolAfterDelete).toMatchObject({
+        agentId: agent.id,
+        toolId: tool.id,
+        mcpServerId: null,
+        credentialResolutionMode: "static",
+      });
+
+      const [invocationPolicyAfterDelete] = await db
+        .select()
+        .from(schema.toolInvocationPoliciesTable)
+        .where(eq(schema.toolInvocationPoliciesTable.id, invocationPolicy.id));
+      expect(invocationPolicyAfterDelete?.toolId).toBe(tool.id);
+
+      const [trustedDataPolicyAfterDelete] = await db
+        .select()
+        .from(schema.trustedDataPoliciesTable)
+        .where(eq(schema.trustedDataPoliciesTable.id, trustedDataPolicy.id));
+      expect(trustedDataPolicyAfterDelete?.toolId).toBe(tool.id);
+    });
+
+    test("recreated credentials reuse the existing tool row and can repin preserved assignments", async ({
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeTool,
+      makeToolPolicy,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        name: "Delete Recreate",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+      });
+      const firstServer = await McpServerModel.create({
+        name: catalog.name,
+        serverType: "remote",
+        catalogId: catalog.id,
+        scope: "personal",
+      });
+      const tool = await makeTool({
+        name: "delete_recreate__search",
+        catalogId: catalog.id,
+      });
+      const agent = await makeAgent();
+      await makeAgentTool(agent.id, tool.id, {
+        mcpServerId: firstServer.id,
+        credentialResolutionMode: "static",
+      });
+      const invocationPolicy = await makeToolPolicy(tool.id, {
+        reason: "Policy survives credential recreation",
+      });
+
+      await expect(McpServerModel.delete(firstServer.id)).resolves.toBe(true);
+
+      const secondServer = await McpServerModel.create({
+        name: catalog.name,
+        serverType: "remote",
+        catalogId: catalog.id,
+        scope: "personal",
+      });
+      const [reusedTool] = await ToolModel.bulkCreateToolsIfNotExists([
+        {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters ?? {},
+          catalogId: catalog.id,
+        },
+      ]);
+      expect(reusedTool.id).toBe(tool.id);
+
+      await AgentToolModel.bulkCreateForAgentsAndTools([agent.id], [tool.id], {
+        mcpServerId: secondServer.id,
+        credentialResolutionMode: "static",
+      });
+
+      const [agentToolAfterRecreate] = await db
+        .select()
+        .from(schema.agentToolsTable)
+        .where(
+          and(
+            eq(schema.agentToolsTable.agentId, agent.id),
+            eq(schema.agentToolsTable.toolId, tool.id),
+          ),
+        );
+      expect(agentToolAfterRecreate?.mcpServerId).toBe(secondServer.id);
+
+      const [policyAfterRecreate] = await db
+        .select()
+        .from(schema.toolInvocationPoliciesTable)
+        .where(eq(schema.toolInvocationPoliciesTable.id, invocationPolicy.id));
+      expect(policyAfterRecreate?.toolId).toBe(tool.id);
     });
   });
 

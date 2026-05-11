@@ -854,25 +854,10 @@ async function phase0Preflight(): Promise<PreflightResult> {
   console.log(`
   Next, Phase 1 prepares the migration without touching live state:
 
-    1. Snapshot the secret table as a manual-recovery anchor:
-         CREATE TABLE ${BACKUP_TABLE} AS SELECT * FROM secret
-       Encrypted blobs copy verbatim — readable only with your existing
-       ARCHESTRA_AUTH_SECRET.
+    1. Back up the secrets table.
+    2. Write each secret into Vault and verify it reads back identically.
 
-    2. Pre-stage each of the ${migratableRows.length} row${migratableRows.length === 1 ? "" : "s"} above in Vault:
-       write the resolved values to ${vaultConfig.secretPath}/<sanitized_name>-<id>,
-       then read back and confirm the bytes match.
-
-    3. Re-read every pre-staged row using the same path scheme the backend
-       will use after the env-var flip, and confirm the value parses back
-       to exactly what was resolved.
-
-  The secret table is NOT modified. The backend keeps reading through READONLY_VAULT;
-  live traffic is unaffected. Your customer-Vault folders are untouched —
-  only the Archestra-managed paths under ${vaultConfig.secretPath}/* are written to.
-
-  To stop after this phase: DROP TABLE ${BACKUP_TABLE}. The Archestra-managed
-  Vault entries are inert under READONLY_VAULT and can be left or cleaned up.
+  The existing secrets table is not modified.
 `);
   const cont = await confirm("Proceed with Phase 1?");
   if (!cont) {
@@ -1127,9 +1112,6 @@ async function phase1Prestage(
       in READONLY_VAULT mode and harmless if left in place.
 `);
 
-  const renameCount = prestaged.filter(
-    (r) => r.sanitizedName !== r.name,
-  ).length;
   console.log(`
   Next, Phase 2 — switch from READONLY_VAULT to Archestra-managed Vault.
 
@@ -1140,31 +1122,25 @@ async function phase1Prestage(
 
   Once you take the platform out of service, the script will:
 
-    1. Run a single SQL transaction:
-         UPDATE secret SET name = <sanitized> WHERE id = ...   (per row, ${renameCount} total)
-         UPDATE secret SET secret = '{}'::jsonb,
-                           is_vault = true,
-                           is_byos_vault = false              (bulk, ${prestaged.length} rows)
-       The transaction sanity-checks the result before COMMIT; if any row
-       didn't flip cleanly it ROLLBACKs and the migration aborts.
+    1. Run a single SQL transaction to upgrade the secrets format in the database.
 
     2. Pause and ask you to:
          • set ARCHESTRA_SECRETS_MANAGER=Vault
-         • keep the other ARCHESTRA_HASHICORP_VAULT_* vars as-is
          • restart the backend
 
-    3. Re-read sample paths from Vault to confirm post-flip data integrity.
-
-  Then Phase 4 runs a fail-loud post-migration consistency audit (C1–C16
-  required, C17–C18 recommended) and writes a forensic audit-trail file
-  to disk.
-
-  Vault contents are NOT changed in this phase — Phase 1 wrote them already.
-  The ${BACKUP_TABLE} table is left alone as the manual-recovery anchor.
-
   No automated rollback. If something goes wrong post-flip, restore by hand
-  from ${BACKUP_TABLE}: a single UPDATE … FROM ${BACKUP_TABLE} statement
-  can restore the secret column, name, and flag values for every row.
+  from ${BACKUP_TABLE}:
+
+       BEGIN;
+       UPDATE secret AS s
+          SET secret = b.secret,
+              is_vault = b.is_vault,
+              is_byos_vault = b.is_byos_vault,
+              name = b.name,
+              updated_at = b.updated_at
+         FROM ${BACKUP_TABLE} AS b
+        WHERE s.id = b.id;
+       COMMIT;
 `);
   const cont = await confirm("Proceed with Phase 2?");
   if (!cont) {
@@ -1186,17 +1162,7 @@ async function phase2AtomicFlip(
   printHeader("Phase 2 — Atomic DB flip + env-var change");
 
   console.log(`
-  Take the backend out of service before continuing:
-
-    kubectl scale deploy archestra-backend --replicas=0
-
-  (or remove backend from your ingress / load balancer). Make sure no
-  scheduled jobs or async workers will write to the secret table during
-  this window.
-
-  If you stop here, Phase 1's Vault writes remain in place (inert under
-  READONLY_VAULT), the ${BACKUP_TABLE} table stays as-is, and DB rows
-  are unchanged. You can resume by re-running the script later.
+  Take the backend out of service before continuing.
 `);
   const ready = await confirm("Have you taken the platform out of service?");
   if (!ready) {
@@ -1297,15 +1263,8 @@ async function phase2AtomicFlip(
 
   1. In your backend deployment, change ARCHESTRA_SECRETS_MANAGER from
      READONLY_VAULT to Vault. Leave the other ARCHESTRA_HASHICORP_VAULT_*
-     vars as they are (or swap to a runtime-scoped token if your security
-     policy requires that).
-  2. Start the backend back up:
-
-       kubectl scale deploy archestra-backend --replicas=1
-
-     (or whatever your environment's equivalent is — re-add to the ingress
-     / load balancer, restart the systemd unit, re-enable the Tilt resource,
-     etc.)
+     vars as they are.
+  2. Start the backend back up.
   3. Verify health: GET /api/secrets/type — expect type "Vault".
 `);
   await pressEnter("Press Enter once the backend is up under the new config: ");
@@ -2217,15 +2176,9 @@ function phase3SoakGuidance(): void {
       A manual restore from ${BACKUP_TABLE} during the soak would lose
       those new secrets.
 
-  To minimize risk, consider freezing UI-driven secret writes during
-  the soak (POST /api/secrets/..., MCP-server installs, LLM-key creation).
-
   When ready to commit (no manual recovery possible after this):
 
     DROP TABLE ${BACKUP_TABLE};
-
-  Optional: clean up the target Vault probe key residue (none should
-  exist — the probe was deleted in Phase 0).
 `);
 }
 

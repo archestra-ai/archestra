@@ -66,7 +66,7 @@ export function useInvitation(invitationId: string) {
   return useQuery({
     queryKey: organizationKeys.invitation(invitationId),
     queryFn: async () => {
-      if (!session) {
+      if (!session.data?.user) {
         return undefined;
       }
       const response = await authClient.organization.getInvitation({
@@ -74,6 +74,7 @@ export function useInvitation(invitationId: string) {
       });
       return response.data;
     },
+    enabled: !!session.data?.user,
   });
 }
 

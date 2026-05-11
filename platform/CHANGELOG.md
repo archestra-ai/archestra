@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.39](https://github.com/archestra-ai/archestra/compare/platform-v1.2.38...platform-v1.2.39) (2026-05-11)
+
+
+### Miscellaneous Chores
+
+* reduce frontend request churn ([#4538](https://github.com/archestra-ai/archestra/issues/4538)) ([173056a](https://github.com/archestra-ai/archestra/commit/173056a6fba80a2346af258977de4d4716204978))
+
 ## [1.2.38](https://github.com/archestra-ai/archestra/compare/platform-v1.2.37...platform-v1.2.38) (2026-05-11)
 
 

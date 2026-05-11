@@ -125456,6 +125456,18 @@
                   "vaultSecretKey": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "awsAccessKeyId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "awsSecretAccessKey": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "awsSessionToken": {
+                    "type": "string",
+                    "minLength": 1
                   }
                 },
                 "required": [
@@ -126693,6 +126705,18 @@
                     "minLength": 1
                   },
                   "vaultSecretKey": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "awsAccessKeyId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "awsSecretAccessKey": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "awsSessionToken": {
                     "type": "string",
                     "minLength": 1
                   }

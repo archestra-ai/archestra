@@ -29,46 +29,51 @@ const ToolChoiceSchema = z.union([
   ToolChoiceNoneSchema,
 ]);
 
-export const MessagesRequestSchema = z.object({
-  model: z.string(),
-  messages: z.array(MessageParamSchema),
-  max_tokens: z.number(),
-  container: z.string().nullable().optional(),
-  context_management: z.object().nullable().optional(),
-  mcp_servers: z.array(z.any()).optional(),
-  metadata: z
-    .object({
-      user_id: z.string().nullable(),
-    })
-    .optional(),
-  service_tier: z.any().optional(),
-  stop_sequences: z.array(z.string()).optional(),
-  stream: z.boolean().optional(),
-  system: z
-    .union([
-      z.string(),
-      z.object({
-        type: z.enum(["text"]),
-        text: z.string(),
-        cache_control: z.any().nullable().optional(),
-        citations: z.array(z.any()).nullable().optional(),
-      }),
-      z.array(
+// Forwarded verbatim to Anthropic. Use `.loose()` so newer fields the SDK
+// adds (output_config, thinking, etc.) pass through instead of being silently
+// stripped by Zod's default `strip` behavior.
+export const MessagesRequestSchema = z
+  .object({
+    model: z.string(),
+    messages: z.array(MessageParamSchema),
+    max_tokens: z.number(),
+    container: z.string().nullable().optional(),
+    context_management: z.object().nullable().optional(),
+    mcp_servers: z.array(z.any()).optional(),
+    metadata: z
+      .object({
+        user_id: z.string().nullable(),
+      })
+      .optional(),
+    service_tier: z.any().optional(),
+    stop_sequences: z.array(z.string()).optional(),
+    stream: z.boolean().optional(),
+    system: z
+      .union([
+        z.string(),
         z.object({
           type: z.enum(["text"]),
           text: z.string(),
           cache_control: z.any().nullable().optional(),
           citations: z.array(z.any()).nullable().optional(),
         }),
-      ),
-    ])
-    .optional(),
-  temperature: z.number().optional(),
-  tool_choice: ToolChoiceSchema.optional(),
-  tools: z.array(ToolSchema).optional(),
-  top_k: z.number().optional(),
-  top_p: z.number().optional(),
-});
+        z.array(
+          z.object({
+            type: z.enum(["text"]),
+            text: z.string(),
+            cache_control: z.any().nullable().optional(),
+            citations: z.array(z.any()).nullable().optional(),
+          }),
+        ),
+      ])
+      .optional(),
+    temperature: z.number().optional(),
+    tool_choice: ToolChoiceSchema.optional(),
+    tools: z.array(ToolSchema).optional(),
+    top_k: z.number().optional(),
+    top_p: z.number().optional(),
+  })
+  .loose();
 
 export const UsageSchema = z.object({
   input_tokens: z.number(),

@@ -277,3 +277,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @ixhxpns
 - @jojo2a
 - @XinYe-here
+- @Projetos-AI-Design-JB

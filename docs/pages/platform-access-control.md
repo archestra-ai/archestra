@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-05-04
+lastUpdated: 2026-05-12
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -126,6 +126,7 @@ The following table lists all available permissions that can be assigned to cust
 | `apiKey:read` | View API keys |
 | `apiKey:create` | Create API keys |
 | `apiKey:delete` | Delete API keys |
+| `auditLog:read` | View the organization-wide audit log of administrative actions |
 | `chat:read` | View and access chat conversations |
 | `chat:create` | Start new chat conversations |
 | `chat:update` | Edit chat messages and conversation settings |

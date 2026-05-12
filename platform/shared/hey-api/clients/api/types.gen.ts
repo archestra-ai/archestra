@@ -27607,7 +27607,6 @@ export type CreateInternalMcpCatalogItemResponses = {
             name: string;
         }>;
         authorName?: string | null;
-        toolCount: number;
     };
 };
 
@@ -27897,7 +27896,6 @@ export type GetInternalMcpCatalogItemResponses = {
             name: string;
         }>;
         authorName?: string | null;
-        toolCount: number;
     };
 };
 
@@ -28217,7 +28215,6 @@ export type UpdateInternalMcpCatalogItemResponses = {
             name: string;
         }>;
         authorName?: string | null;
-        toolCount: number;
     };
 };
 

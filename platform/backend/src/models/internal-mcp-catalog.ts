@@ -5,6 +5,7 @@ import {
   ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
   type InsertInternalMcpCatalog,
   type InternalMcpCatalog,
+  type ListInternalMcpCatalog,
   type UpdateInternalMcpCatalog,
 } from "@/types";
 import McpCatalogLabelModel from "./mcp-catalog-label";
@@ -54,7 +55,6 @@ class InternalMcpCatalogModel {
       ...createdItem,
       labels: itemLabels,
       teams: itemTeams,
-      toolCount: 0,
     };
     await InternalMcpCatalogModel.populateAuthorNames([result]);
     return result;
@@ -65,7 +65,7 @@ class InternalMcpCatalogModel {
     userId?: string;
     isAdmin?: boolean;
     organizationId?: string;
-  }): Promise<InternalMcpCatalog[]> {
+  }): Promise<ListInternalMcpCatalog[]> {
     const {
       expandSecrets = true,
       userId,
@@ -119,7 +119,7 @@ class InternalMcpCatalogModel {
       isAdmin?: boolean;
       organizationId?: string;
     },
-  ): Promise<InternalMcpCatalog[]> {
+  ): Promise<ListInternalMcpCatalog[]> {
     const {
       expandSecrets = true,
       userId,
@@ -174,6 +174,11 @@ class InternalMcpCatalogModel {
     return catalogItems;
   }
 
+  /**
+   * Return the singular catalog shape. Do not add toolCount here: it is list
+   * metadata used by registry/card UIs and would require an otherwise-unused
+   * COUNT(*) on runtime paths that fetch one catalog item by id.
+   */
   static async findById(
     id: string,
     options?: {
@@ -219,10 +224,6 @@ class InternalMcpCatalogModel {
       ...dbItem,
       labels,
       teams,
-      // toolCount is UI metadata only — populated by attachListMetadata on the
-      // list endpoint. Skip the per-item COUNT(*) on the singular path because
-      // runtime callers (MCP client, gateway, server runtime) don't use it.
-      toolCount: 0,
     };
 
     if (expandSecrets) {
@@ -256,7 +257,6 @@ class InternalMcpCatalogModel {
       ...dbItem,
       labels,
       teams,
-      toolCount: 0,
     };
 
     await InternalMcpCatalogModel.expandSecretsAndAlwaysResolveValues([
@@ -272,7 +272,7 @@ class InternalMcpCatalogModel {
    */
   static async getByIds(
     ids: string[],
-  ): Promise<Map<string, InternalMcpCatalog>> {
+  ): Promise<Map<string, ListInternalMcpCatalog>> {
     if (ids.length === 0) {
       return new Map();
     }
@@ -285,7 +285,7 @@ class InternalMcpCatalogModel {
     const catalogItems =
       await InternalMcpCatalogModel.attachListMetadata(dbItems);
 
-    const result = new Map<string, InternalMcpCatalog>();
+    const result = new Map<string, ListInternalMcpCatalog>();
     for (const item of catalogItems) {
       result.set(item.id, item);
     }
@@ -320,7 +320,7 @@ class InternalMcpCatalogModel {
       dbItem.id,
     );
     const teams = await McpCatalogTeamModel.getTeamDetailsForCatalog(dbItem.id);
-    return { ...dbItem, labels, teams, toolCount: 0 };
+    return { ...dbItem, labels, teams };
   }
 
   static async update(
@@ -365,7 +365,6 @@ class InternalMcpCatalogModel {
       ...dbItem,
       labels: itemLabels,
       teams: itemTeams,
-      toolCount: 0,
     };
     await InternalMcpCatalogModel.populateAuthorNames([result]);
     return result;
@@ -563,7 +562,7 @@ class InternalMcpCatalogModel {
    */
   private static async attachListMetadata(
     dbItems: Array<typeof schema.internalMcpCatalogTable.$inferSelect>,
-  ): Promise<InternalMcpCatalog[]> {
+  ): Promise<ListInternalMcpCatalog[]> {
     if (dbItems.length === 0) {
       return [];
     }
@@ -609,7 +608,7 @@ class InternalMcpCatalogModel {
     );
   }
 
-/**
+  /**
    * Populate authorName for catalog items that have an authorId.
    */
   private static async populateAuthorNames(

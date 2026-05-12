@@ -113,8 +113,12 @@ export const SelectInternalMcpCatalogSchema = createSelectSchema(
   // Teams are loaded from the junction table, not from the DB row
   teams: z.array(z.object({ id: z.string(), name: z.string() })).default([]),
   authorName: z.string().nullable().optional(),
-  toolCount: z.number().int().default(0),
 });
+
+export const ListInternalMcpCatalogSchema =
+  SelectInternalMcpCatalogSchema.extend({
+    toolCount: z.number().int().default(0),
+  });
 
 const InsertInternalMcpCatalogSchemaBase = createInsertSchema(
   schema.internalMcpCatalogTable,
@@ -199,6 +203,9 @@ export type OAuthConfig = z.infer<typeof OAuthConfigSchema>;
 export type LocalConfig = z.infer<typeof LocalConfigSelectSchema>;
 
 export type InternalMcpCatalog = z.infer<typeof SelectInternalMcpCatalogSchema>;
+export type ListInternalMcpCatalog = z.infer<
+  typeof ListInternalMcpCatalogSchema
+>;
 export type InsertInternalMcpCatalog = z.infer<
   typeof InsertInternalMcpCatalogSchema
 >;

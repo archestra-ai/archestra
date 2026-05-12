@@ -390,9 +390,31 @@ class LimitModel {
 
   static async resolveLimitsCleanupIntervalSqlLiteral(
     organizationId?: string,
+    limitId?: string,
   ): Promise<LimitsCleanupIntervalSqlLiteral> {
     // Use default cleanup interval if not set
     let cleanupInterval: LimitsCleanupIntervalSqlLiteral = "1 hour";
+
+    // Check per-limit cleanup interval first
+    if (limitId) {
+      const [limit] = await db
+        .select()
+        .from(schema.limitsTable)
+        .where(eq(schema.limitsTable.id, limitId));
+
+      if (limit?.cleanupInterval) {
+        const perLimitInterval =
+          LimitModel.limitsCleanupIntervalSqlLiterals[
+            limit.cleanupInterval as Exclude<OrganizationLimitCleanupInterval, null>
+          ];
+        if (perLimitInterval) {
+          logger.info(
+            `[LimitsCleanup] Using per-limit cleanup interval: ${perLimitInterval} for limit: ${limitId}`,
+          );
+          return perLimitInterval;
+        }
+      }
+    }
 
     if (!organizationId) {
       logger.warn(
@@ -497,7 +519,18 @@ class LimitModel {
       return [];
     }
 
-    const cutoffIntervalSqlExpr = sql`now() - interval ${sql.raw(`'${limitsResetInterval}'`)}`;
+    // For limits with their own cleanup_interval, use that; otherwise use the org-wide interval
+    const orgCutoff = sql`now() - interval ${sql.raw(`'${limitsResetInterval}'`)}`;
+    const perLimitCutoff = sql`now() - CASE ${schema.limitsTable.cleanupInterval}
+      WHEN '1h' THEN interval '1 hour'
+      WHEN '12h' THEN interval '12 hours'
+      WHEN '24h' THEN interval '24 hours'
+      WHEN '1w' THEN interval '1 week'
+      WHEN '1m' THEN interval '1 month'
+      ELSE interval ${sql.raw(`'${limitsResetInterval}'`)}
+    END`;
+
+    const cutoffExpr = sql`CASE WHEN ${schema.limitsTable.cleanupInterval} IS NOT NULL THEN ${perLimitCutoff} ELSE ${orgCutoff} END`;
 
     const limitsToReset = await db
       .select({ id: schema.limitsTable.id })
@@ -507,7 +540,7 @@ class LimitModel {
           ...scopeConditions,
           or(
             isNull(schema.limitsTable.lastCleanup),
-            lt(schema.limitsTable.lastCleanup, cutoffIntervalSqlExpr),
+            lt(schema.limitsTable.lastCleanup, cutoffExpr),
           ),
         ),
       );

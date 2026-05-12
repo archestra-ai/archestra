@@ -27,6 +27,7 @@ const limitsTable = pgTable(
     // 3. Validation: Check if incoming interaction's model is within limit scope
     model: jsonb("model").$type<string[] | null>(),
     lastCleanup: timestamp("last_cleanup", { mode: "date" }),
+    cleanupInterval: varchar("cleanup_interval", { length: 10 }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

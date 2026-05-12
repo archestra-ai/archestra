@@ -298,3 +298,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @Adysekus
 - @phquand2000
 - @elfketchup
+- @basdilhan

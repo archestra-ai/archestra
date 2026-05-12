@@ -278,3 +278,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @jojo2a
 - @XinYe-here
 - @Projetos-AI-Design-JB
+- @nguyenquockhang1610

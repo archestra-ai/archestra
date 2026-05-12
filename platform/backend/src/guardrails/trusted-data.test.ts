@@ -410,6 +410,105 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       });
     });
 
+    test("evaluates blocked tool result policies even when context starts untrusted", async () => {
+      // Create a block policy
+      await TrustedDataPolicyModel.create({
+        toolId,
+        conditions: [{ key: "dangerous", operator: "equal", value: "true" }],
+        action: "block_always",
+        description: "Block dangerous data",
+      });
+
+      const commonMessages: CommonMessage[] = [
+        { role: "user", content: "Summarize this thread" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_blocked",
+              name: "get_emails",
+              content: { dangerous: "true", other: "sensitive" },
+              isError: false,
+            },
+          ],
+        },
+      ];
+
+      const result = await evaluateIfContextIsTrusted(
+        commonMessages,
+        agentId,
+        organizationId,
+        undefined,
+        true, // considerContextUntrusted
+        "restrictive",
+        { teamIds: [] },
+      );
+
+      // Context should be untrusted (preexisting) and the blocked tool result
+      // should be replaced — this is the bug fix: previously the early return
+      // when considerContextUntrusted=true skipped policy evaluation entirely.
+      expect(result.contextIsTrusted).toBe(false);
+      expect(result.toolResultUpdates).toEqual({
+        call_blocked:
+          "[Content blocked by policy: Data blocked by policy: Block dangerous data]",
+      });
+      // The preexisting boundary should be preserved (not overwritten by the
+      // blocked tool result boundary)
+      expect(result.unsafeContextBoundary).toEqual({
+        kind: "preexisting_untrusted",
+        reason: "agentConfiguredUntrusted",
+      });
+    });
+
+    test("preserves preexisting unsafe boundary reason when evaluating policies in untrusted context", async () => {
+      // Create a block policy
+      await TrustedDataPolicyModel.create({
+        toolId,
+        conditions: [{ key: "dangerous", operator: "equal", value: "true" }],
+        action: "block_always",
+        description: "Block dangerous data",
+      });
+
+      const commonMessages: CommonMessage[] = [
+        { role: "user", content: "Summarize this thread" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_blocked",
+              name: "get_emails",
+              content: { dangerous: "true", other: "sensitive" },
+              isError: false,
+            },
+          ],
+        },
+      ];
+
+      const result = await evaluateIfContextIsTrusted(
+        commonMessages,
+        agentId,
+        organizationId,
+        undefined,
+        true, // considerContextUntrusted
+        "restrictive",
+        { teamIds: [] },
+        undefined,
+        undefined,
+        "inherited_from_parent",
+      );
+
+      // The custom initialUntrustedReason should be preserved
+      expect(result.contextIsTrusted).toBe(false);
+      expect(result.toolResultUpdates).toEqual({
+        call_blocked:
+          "[Content blocked by policy: Data blocked by policy: Block dangerous data]",
+      });
+      expect(result.unsafeContextBoundary).toEqual({
+        kind: "preexisting_untrusted",
+        reason: "inherited_from_parent",
+      });
+    });
+
     test("handles multiple tool calls with mixed trust", async () => {
       // Create policies
       await TrustedDataPolicyModel.create({

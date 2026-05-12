@@ -294,3 +294,7 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @BrodoB
 - @thejoshuasilverstone-cloud
 - @sus689
+- @didier-brown
+- @diegousdz
+- @Adysekus
+- @phquand2000

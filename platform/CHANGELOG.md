@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.42](https://github.com/archestra-ai/archestra/compare/platform-v1.2.41...platform-v1.2.42) (2026-05-12)
+
+
+### Bug Fixes
+
+* **dev:** stop vault-k8s release from claiming e2e-tests NodePorts ([#4571](https://github.com/archestra-ai/archestra/issues/4571)) ([953a696](https://github.com/archestra-ai/archestra/commit/953a6964a068ba08ac711f62fdbd9863c9df43fe))
+
+
+### Miscellaneous Chores
+
+* vault readonly migration ([#4528](https://github.com/archestra-ai/archestra/issues/4528)) ([8df421b](https://github.com/archestra-ai/archestra/commit/8df421b2b67dbd6e5087d63fe6c4a11a57a9c3c6))
+
 ## [1.2.41](https://github.com/archestra-ai/archestra/compare/platform-v1.2.40...platform-v1.2.41) (2026-05-12)
 
 

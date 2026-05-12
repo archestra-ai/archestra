@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.44](https://github.com/archestra-ai/archestra/compare/platform-v1.2.43...platform-v1.2.44) (2026-05-12)
+
+
+### Bug Fixes
+
+* relax probe timeouts and make them configurable ([#4595](https://github.com/archestra-ai/archestra/issues/4595)) ([58568bc](https://github.com/archestra-ai/archestra/commit/58568bcbb9656881d9a2fea9f9bbad23432040f7))
+
 ## [1.2.43](https://github.com/archestra-ai/archestra/compare/platform-v1.2.42...platform-v1.2.43) (2026-05-12)
 
 

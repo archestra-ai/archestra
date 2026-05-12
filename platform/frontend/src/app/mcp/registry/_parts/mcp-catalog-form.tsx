@@ -999,12 +999,12 @@ export function McpCatalogForm({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>
-                          Arguments (one per line)
+                          Arguments (one per line or JSON array)
                           <ReinstallHint show={isArgumentsDirty} />
                         </FormLabel>
                         <FormControl>
                           <Textarea
-                            placeholder={`/path/to/server.js\n--verbose`}
+                            placeholder={`/path/to/server.js\n--verbose\n\nor as JSON: ["/path/to/server.js", "--verbose"]`}
                             className="font-mono min-h-20"
                             {...field}
                           />

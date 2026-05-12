@@ -219,6 +219,135 @@ describe("transformFormToApiData", () => {
       default_scopes: ["read", "write"],
     });
   });
+  it("parses localConfig arguments as a JSON array if formatted correctly", () => {
+    const values: McpCatalogFormValues = {
+      name: "JSON Args MCP",
+      description: "",
+      icon: null,
+      serverType: "local",
+      serverUrl: "",
+      authMethod: "none",
+      includeBearerPrefix: true,
+      authHeaderName: "",
+      additionalHeaders: [],
+      oauthConfig: undefined,
+      enterpriseManagedConfig: null,
+      localConfig: {
+        command: "node",
+        arguments: '["server.js", "--verbose", "--port", "3000"]',
+        environment: [],
+        envFrom: [],
+        dockerImage: "",
+        transportType: "stdio",
+        httpPort: "",
+        httpPath: "",
+        serviceAccount: "",
+        imagePullSecrets: [],
+      },
+      deploymentSpecYaml: "",
+      originalDeploymentSpecYaml: "",
+      oauthClientSecretVaultPath: "",
+      oauthClientSecretVaultKey: "",
+      localConfigVaultPath: "",
+      localConfigVaultKey: "",
+      labels: [],
+      scope: "personal",
+      teams: [],
+    };
+
+    expect(transformFormToApiData(values).localConfig?.arguments).toEqual([
+      "server.js",
+      "--verbose",
+      "--port",
+      "3000",
+    ]);
+  });
+
+  it("falls back to newline splitting if arguments are not a valid JSON array", () => {
+    const values: McpCatalogFormValues = {
+      name: "Newline Args MCP",
+      description: "",
+      icon: null,
+      serverType: "local",
+      serverUrl: "",
+      authMethod: "none",
+      includeBearerPrefix: true,
+      authHeaderName: "",
+      additionalHeaders: [],
+      oauthConfig: undefined,
+      enterpriseManagedConfig: null,
+      localConfig: {
+        command: "node",
+        arguments: "server.js\n--verbose\n--port\n3000",
+        environment: [],
+        envFrom: [],
+        dockerImage: "",
+        transportType: "stdio",
+        httpPort: "",
+        httpPath: "",
+        serviceAccount: "",
+        imagePullSecrets: [],
+      },
+      deploymentSpecYaml: "",
+      originalDeploymentSpecYaml: "",
+      oauthClientSecretVaultPath: "",
+      oauthClientSecretVaultKey: "",
+      localConfigVaultPath: "",
+      localConfigVaultKey: "",
+      labels: [],
+      scope: "personal",
+      teams: [],
+    };
+
+    expect(transformFormToApiData(values).localConfig?.arguments).toEqual([
+      "server.js",
+      "--verbose",
+      "--port",
+      "3000",
+    ]);
+  });
+
+  it("handles malformed JSON array by falling back to newline splitting", () => {
+    const values: McpCatalogFormValues = {
+      name: "Malformed JSON Args MCP",
+      description: "",
+      icon: null,
+      serverType: "local",
+      serverUrl: "",
+      authMethod: "none",
+      includeBearerPrefix: true,
+      authHeaderName: "",
+      additionalHeaders: [],
+      oauthConfig: undefined,
+      enterpriseManagedConfig: null,
+      localConfig: {
+        command: "node",
+        arguments: '["server.js", "--verbose"', // Missing closing bracket
+        environment: [],
+        envFrom: [],
+        dockerImage: "",
+        transportType: "stdio",
+        httpPort: "",
+        httpPath: "",
+        serviceAccount: "",
+        imagePullSecrets: [],
+      },
+      deploymentSpecYaml: "",
+      originalDeploymentSpecYaml: "",
+      oauthClientSecretVaultPath: "",
+      oauthClientSecretVaultKey: "",
+      localConfigVaultPath: "",
+      localConfigVaultKey: "",
+      labels: [],
+      scope: "personal",
+      teams: [],
+    };
+
+    // It should treat the whole thing as a single argument if no newlines, or split by newlines if any.
+    expect(transformFormToApiData(values).localConfig?.arguments).toEqual([
+      '["server.js", "--verbose"',
+    ]);
+  });
 
   it("treats comma-only scopes input as blank (persists empty scopes with read/write fallback)", () => {
     const values: McpCatalogFormValues = {

@@ -95,7 +95,7 @@ RUN apk add --no-cache \
    # CVE-2026-32767: expat XML parser vulnerability
    # CVE-2026-40200 (musl 1.2.5-r23) is covered by the pinned base image digest
    # Go runtime is copied from the golang:1.25.10-alpine image below to pick up the
-   # November 2026 Go stdlib HIGH CVEs (CVE-2026-42499/39836/39820/33814/33811) that
+   # Go stdlib HIGH CVEs fixed in 1.25.10 (CVE-2026-42499/39836/39820/33814/33811) that
    # Alpine's apk index has not yet shipped as go-1.25.10-r0.
    apk upgrade --no-cache nodejs bind openssl zlib expat
 

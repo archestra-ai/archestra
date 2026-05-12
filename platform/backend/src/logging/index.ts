@@ -51,6 +51,9 @@ function createLogger(): pino.Logger {
       // Drop `pid` and `hostname` — they're noise in a containerized
       // environment where pod metadata already identifies the host.
       base: undefined,
+      // Use ISO 8601 timestamps instead of epoch ms — human-readable in
+      // stdout/Grafana while still parser-friendly. Pino built-in.
+      timestamp: pino.stdTimeFunctions.isoTime,
     },
     pino.multistream([
       {
@@ -153,8 +156,17 @@ function createOtelLogStream(): Writable {
           ...attributes
         } = record;
 
+        // `time` is an ISO 8601 string (pino.stdTimeFunctions.isoTime).
+        // Fall back to `Date.now()` only if parsing fails — important under
+        // async destinations where this callback can run after the log call.
+        const parsedMs =
+          typeof time === "number"
+            ? time
+            : typeof time === "string"
+              ? Date.parse(time)
+              : NaN;
         const timestamp = millisToHrTime(
-          typeof time === "number" ? time : Date.now(),
+          Number.isFinite(parsedMs) ? parsedMs : Date.now(),
         );
 
         otelLogger.emit({

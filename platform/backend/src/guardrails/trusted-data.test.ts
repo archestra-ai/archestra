@@ -410,6 +410,51 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       });
     });
 
+    test("applies blocked tool result policies when context starts untrusted", async () => {
+      await TrustedDataPolicyModel.create({
+        toolId,
+        conditions: [{ key: "status", operator: "equal", value: "blocked" }],
+        action: "block_always",
+        description: "Block sensitive tool output",
+      });
+
+      const result = await evaluateIfContextIsTrusted(
+        [
+          { role: "user", content: "Read the issue" },
+          {
+            role: "tool",
+            toolCalls: [
+              {
+                id: "call_blocked_from_start",
+                name: "get_emails",
+                content: { status: "blocked", body: "raw sensitive result" },
+                isError: false,
+              },
+            ],
+          },
+        ],
+        agentId,
+        organizationId,
+        undefined,
+        true,
+        "restrictive",
+        { teamIds: [] },
+        undefined,
+        undefined,
+        "agent_configured_untrusted",
+      );
+
+      expect(result.contextIsTrusted).toBe(false);
+      expect(result.toolResultUpdates).toEqual({
+        call_blocked_from_start:
+          "[Content blocked by policy: Data blocked by policy: Block sensitive tool output]",
+      });
+      expect(result.unsafeContextBoundary).toEqual({
+        kind: "preexisting_untrusted",
+        reason: "agent_configured_untrusted",
+      });
+    });
+
     test("handles multiple tool calls with mixed trust", async () => {
       // Create policies
       await TrustedDataPolicyModel.create({

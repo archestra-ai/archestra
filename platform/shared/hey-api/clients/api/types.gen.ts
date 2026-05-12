@@ -27287,6 +27287,7 @@ export type GetInternalMcpCatalogResponses = {
             name: string;
         }>;
         authorName?: string | null;
+        toolCount: number;
     }>;
 };
 
@@ -27606,6 +27607,7 @@ export type CreateInternalMcpCatalogItemResponses = {
             name: string;
         }>;
         authorName?: string | null;
+        toolCount: number;
     };
 };
 
@@ -27895,6 +27897,7 @@ export type GetInternalMcpCatalogItemResponses = {
             name: string;
         }>;
         authorName?: string | null;
+        toolCount: number;
     };
 };
 
@@ -28214,6 +28217,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
             name: string;
         }>;
         authorName?: string | null;
+        toolCount: number;
     };
 };
 
@@ -33417,6 +33421,9 @@ export type CreateLlmProviderApiKeyData = {
         isPrimary?: boolean;
         vaultSecretPath?: string;
         vaultSecretKey?: string;
+        awsAccessKeyId?: string;
+        awsSecretAccessKey?: string;
+        awsSessionToken?: string;
     };
     path?: never;
     query?: never;
@@ -33827,6 +33834,9 @@ export type UpdateLlmProviderApiKeyData = {
         isPrimary?: boolean;
         vaultSecretPath?: string;
         vaultSecretKey?: string;
+        awsAccessKeyId?: string;
+        awsSecretAccessKey?: string;
+        awsSessionToken?: string;
     };
     path: {
         id: string;

@@ -26,6 +26,7 @@ import {
   normalizeAzureApiKey,
 } from "@/clients/azure-url";
 import {
+  decodeBedrockSigV4Marker,
   getBedrockCredentialProvider,
   getBedrockRegion,
   isBedrockIamAuthEnabled,
@@ -572,6 +573,19 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
           region,
           baseURL,
           credentialProvider: getBedrockCredentialProvider(),
+          headers,
+          fetch,
+        })(modelName);
+      }
+
+      const sigV4 = decodeBedrockSigV4Marker(apiKey);
+      if (sigV4) {
+        return createAmazonBedrock({
+          region,
+          baseURL,
+          accessKeyId: sigV4.accessKeyId,
+          secretAccessKey: sigV4.secretAccessKey,
+          sessionToken: sigV4.sessionToken,
           headers,
           fetch,
         })(modelName);

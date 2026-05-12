@@ -113,6 +113,7 @@ export const SelectInternalMcpCatalogSchema = createSelectSchema(
   // Teams are loaded from the junction table, not from the DB row
   teams: z.array(z.object({ id: z.string(), name: z.string() })).default([]),
   authorName: z.string().nullable().optional(),
+  toolCount: z.number().int().default(0),
 });
 
 const InsertInternalMcpCatalogSchemaBase = createInsertSchema(

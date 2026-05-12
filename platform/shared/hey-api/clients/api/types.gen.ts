@@ -18945,6 +18945,18 @@ export type GetChatConversationsResponses = {
             };
             createdAt: string;
         }>;
+        compactions: Array<{
+            id: string;
+            conversationId: string;
+            summary: string;
+            compactedThroughMessageId: string | null;
+            trigger: 'auto' | 'manual';
+            provider: string;
+            model: string;
+            originalTokenEstimate: number;
+            compactedTokenEstimate: number;
+            createdAt: string;
+        }>;
     }>;
 };
 
@@ -19079,6 +19091,18 @@ export type CreateChatConversationResponses = {
                     raw?: unknown;
                 };
             };
+            createdAt: string;
+        }>;
+        compactions: Array<{
+            id: string;
+            conversationId: string;
+            summary: string;
+            compactedThroughMessageId: string | null;
+            trigger: 'auto' | 'manual';
+            provider: string;
+            model: string;
+            originalTokenEstimate: number;
+            compactedTokenEstimate: number;
             createdAt: string;
         }>;
     };
@@ -19298,6 +19322,18 @@ export type GetChatConversationResponses = {
             };
             createdAt: string;
         }>;
+        compactions: Array<{
+            id: string;
+            conversationId: string;
+            summary: string;
+            compactedThroughMessageId: string | null;
+            trigger: 'auto' | 'manual';
+            provider: string;
+            model: string;
+            originalTokenEstimate: number;
+            compactedTokenEstimate: number;
+            createdAt: string;
+        }>;
     };
 };
 
@@ -19438,6 +19474,18 @@ export type UpdateChatConversationResponses = {
             };
             createdAt: string;
         }>;
+        compactions: Array<{
+            id: string;
+            conversationId: string;
+            summary: string;
+            compactedThroughMessageId: string | null;
+            trigger: 'auto' | 'manual';
+            provider: string;
+            model: string;
+            originalTokenEstimate: number;
+            compactedTokenEstimate: number;
+            createdAt: string;
+        }>;
     };
 };
 
@@ -19570,6 +19618,18 @@ export type ForkChatConversationResponses = {
                     raw?: unknown;
                 };
             };
+            createdAt: string;
+        }>;
+        compactions: Array<{
+            id: string;
+            conversationId: string;
+            summary: string;
+            compactedThroughMessageId: string | null;
+            trigger: 'auto' | 'manual';
+            provider: string;
+            model: string;
+            originalTokenEstimate: number;
+            compactedTokenEstimate: number;
             createdAt: string;
         }>;
     };
@@ -19806,6 +19866,18 @@ export type CompactChatConversationResponses = {
                         raw?: unknown;
                     };
                 };
+                createdAt: string;
+            }>;
+            compactions: Array<{
+                id: string;
+                conversationId: string;
+                summary: string;
+                compactedThroughMessageId: string | null;
+                trigger: 'auto' | 'manual';
+                provider: string;
+                model: string;
+                originalTokenEstimate: number;
+                compactedTokenEstimate: number;
                 createdAt: string;
             }>;
         };
@@ -20214,6 +20286,18 @@ export type GetSharedConversationResponses = {
             };
             createdAt: string;
         }>;
+        compactions: Array<{
+            id: string;
+            conversationId: string;
+            summary: string;
+            compactedThroughMessageId: string | null;
+            trigger: 'auto' | 'manual';
+            provider: string;
+            model: string;
+            originalTokenEstimate: number;
+            compactedTokenEstimate: number;
+            createdAt: string;
+        }>;
         sharedByUserId: string;
     };
 };
@@ -20347,6 +20431,18 @@ export type ForkSharedConversationResponses = {
                     raw?: unknown;
                 };
             };
+            createdAt: string;
+        }>;
+        compactions: Array<{
+            id: string;
+            conversationId: string;
+            summary: string;
+            compactedThroughMessageId: string | null;
+            trigger: 'auto' | 'manual';
+            provider: string;
+            model: string;
+            originalTokenEstimate: number;
+            compactedTokenEstimate: number;
             createdAt: string;
         }>;
     };
@@ -20486,6 +20582,18 @@ export type GenerateChatConversationTitleResponses = {
             };
             createdAt: string;
         }>;
+        compactions: Array<{
+            id: string;
+            conversationId: string;
+            summary: string;
+            compactedThroughMessageId: string | null;
+            trigger: 'auto' | 'manual';
+            provider: string;
+            model: string;
+            originalTokenEstimate: number;
+            compactedTokenEstimate: number;
+            createdAt: string;
+        }>;
     };
 };
 
@@ -20620,6 +20728,18 @@ export type UpdateChatMessageResponses = {
                     raw?: unknown;
                 };
             };
+            createdAt: string;
+        }>;
+        compactions: Array<{
+            id: string;
+            conversationId: string;
+            summary: string;
+            compactedThroughMessageId: string | null;
+            trigger: 'auto' | 'manual';
+            provider: string;
+            model: string;
+            originalTokenEstimate: number;
+            compactedTokenEstimate: number;
             createdAt: string;
         }>;
     };
@@ -23573,7 +23693,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -23640,7 +23760,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -23823,7 +23943,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -23910,7 +24030,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -23977,7 +24097,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -24044,7 +24164,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -24485,7 +24605,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -24552,7 +24672,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -24619,7 +24739,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -24686,7 +24806,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -24753,7 +24873,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -24820,7 +24940,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -24887,7 +25007,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -24952,7 +25072,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -25017,7 +25137,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -25084,7 +25204,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -25151,7 +25271,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -25218,7 +25338,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -25285,7 +25405,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -25419,7 +25539,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -25622,7 +25742,7 @@ export type GetInteractionSessionsData = {
         /**
          * Filter by interaction source
          */
-        source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         /**
          * Filter by session ID
          */
@@ -25718,7 +25838,7 @@ export type GetInteractionSessionsResponses = {
         data: Array<{
             sessionId: string | null;
             sessionSource: string | null;
-            source: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             interactionId: string | null;
             requestCount: number;
             totalInputTokens: number;
@@ -26015,7 +26135,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -26082,7 +26202,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -26265,7 +26385,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -26352,7 +26472,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -26419,7 +26539,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -26486,7 +26606,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -26927,7 +27047,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -26994,7 +27114,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -27061,7 +27181,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -27128,7 +27248,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -27195,7 +27315,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -27262,7 +27382,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -27329,7 +27449,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -27394,7 +27514,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -27459,7 +27579,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -27526,7 +27646,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -27593,7 +27713,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -27660,7 +27780,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -27727,7 +27847,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -27861,7 +27981,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -45717,6 +45837,18 @@ export type CreateScheduleTriggerRunConversationResponses = {
                     raw?: unknown;
                 };
             };
+            createdAt: string;
+        }>;
+        compactions: Array<{
+            id: string;
+            conversationId: string;
+            summary: string;
+            compactedThroughMessageId: string | null;
+            trigger: 'auto' | 'manual';
+            provider: string;
+            model: string;
+            originalTokenEstimate: number;
+            compactedTokenEstimate: number;
             createdAt: string;
         }>;
     };

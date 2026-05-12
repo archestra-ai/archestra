@@ -25,6 +25,16 @@ class ConversationCompactionModel {
     return record ?? null;
   }
 
+  static async findByConversation(conversationId: string) {
+    return await db
+      .select()
+      .from(schema.conversationCompactionsTable)
+      .where(
+        eq(schema.conversationCompactionsTable.conversationId, conversationId),
+      )
+      .orderBy(schema.conversationCompactionsTable.createdAt);
+  }
+
   static async deleteByConversation(conversationId: string): Promise<void> {
     await db
       .delete(schema.conversationCompactionsTable)

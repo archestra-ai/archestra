@@ -1888,6 +1888,7 @@ export function ChatPageContent({
                     selectedModel={conversation?.selectedModel ?? initialModel}
                     modelSource={conversationModelSource ?? initialModelSource}
                     chatErrors={conversation?.chatErrors ?? []}
+                    compactions={conversation?.compactions ?? []}
                     onUserMessageEdit={(
                       editedMessage,
                       updatedMessages,

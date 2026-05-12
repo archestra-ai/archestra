@@ -136,6 +136,7 @@ interface ChatMessagesProps {
   ) => void;
   error?: Error | null;
   chatErrors?: archestraApiTypes.GetChatConversationResponses["200"]["chatErrors"];
+  compactions?: archestraApiTypes.GetChatConversationResponses["200"]["compactions"];
   /** Callback for tool approval responses (approve/deny) */
   onToolApprovalResponse?: (params: {
     id: string;
@@ -158,7 +159,11 @@ type PersistedChatError =
 
 type TimelineItem =
   | { kind: "message"; message: UIMessage; messageIndex: number }
-  | { kind: "chat-error"; chatError: PersistedChatError };
+  | { kind: "chat-error"; chatError: PersistedChatError }
+  | {
+      kind: "compaction";
+      compaction: archestraApiTypes.GetChatConversationResponses["200"]["compactions"][number];
+    };
 
 // Type guards for tool parts
 // biome-ignore lint/suspicious/noExplicitAny: AI SDK message parts have dynamic structure
@@ -193,6 +198,7 @@ export function ChatMessages({
   onUserMessageEdit,
   error = null,
   chatErrors = [],
+  compactions = [],
   onToolApprovalResponse,
   agentName,
   selectedModel,
@@ -440,7 +446,11 @@ export function ChatMessages({
     const nextMessage = messages[idx + 1];
     return nextMessage.role !== "assistant";
   });
-  const timelineItems = buildMessageTimeline({ messages, chatErrors });
+  const timelineItems = buildMessageTimeline({
+    messages,
+    chatErrors,
+    compactions,
+  });
   const liveErrorMessage = error ? getInlineErrorMessage(error) : null;
   const hasRenderedLiveError =
     !!error &&
@@ -478,6 +488,15 @@ export function ChatMessages({
                   agentName={agentName}
                   selectedModel={selectedModel}
                   modelSource={modelSource}
+                />
+              );
+            }
+
+            if (item.kind === "compaction") {
+              return (
+                <ContextCompactionTimelineEvent
+                  key={`compaction-${item.compaction.id}`}
+                  compaction={item.compaction}
                 />
               );
             }
@@ -2398,10 +2417,28 @@ function hasMessageAuthToolError(message: UIMessage): boolean {
 function buildMessageTimeline(params: {
   messages: UIMessage[];
   chatErrors: PersistedChatError[];
+  compactions: ChatMessagesProps["compactions"];
 }): TimelineItem[] {
   const sortedChatErrors = [...params.chatErrors].sort(
     (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt),
   );
+  const compactionsByBoundary = new Map<
+    string,
+    NonNullable<ChatMessagesProps["compactions"]>
+  >();
+  const unanchoredCompactions: NonNullable<ChatMessagesProps["compactions"]> =
+    [];
+  for (const compaction of params.compactions ?? []) {
+    if (compaction.compactedThroughMessageId) {
+      const existing =
+        compactionsByBoundary.get(compaction.compactedThroughMessageId) ?? [];
+      existing.push(compaction);
+      compactionsByBoundary.set(compaction.compactedThroughMessageId, existing);
+    } else {
+      unanchoredCompactions.push(compaction);
+    }
+  }
+
   const timelineItems: TimelineItem[] = [];
   let errorIndex = 0;
 
@@ -2420,6 +2457,9 @@ function buildMessageTimeline(params: {
     }
 
     timelineItems.push({ kind: "message", message, messageIndex });
+    for (const compaction of compactionsByBoundary.get(message.id) ?? []) {
+      timelineItems.push({ kind: "compaction", compaction });
+    }
   });
 
   for (; errorIndex < sortedChatErrors.length; errorIndex++) {
@@ -2427,6 +2467,10 @@ function buildMessageTimeline(params: {
       kind: "chat-error",
       chatError: sortedChatErrors[errorIndex],
     });
+  }
+
+  for (const compaction of unanchoredCompactions) {
+    timelineItems.push({ kind: "compaction", compaction });
   }
 
   return timelineItems;
@@ -2499,6 +2543,30 @@ function ContextCompactionStatus({
       <div className="inline-flex items-center gap-2 rounded-full border bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
         {icon}
         <span>{feedback.message}</span>
+      </div>
+    </div>
+  );
+}
+
+function ContextCompactionTimelineEvent({
+  compaction,
+}: {
+  compaction: NonNullable<ChatMessagesProps["compactions"]>[number];
+}) {
+  const createdAt = new Date(compaction.createdAt);
+  const timestamp = Number.isNaN(createdAt.getTime())
+    ? null
+    : createdAt.toLocaleString(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      });
+
+  return (
+    <div className="my-4 flex justify-center">
+      <div className="inline-flex max-w-full items-center gap-2 rounded-full border bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
+        <CheckCircleIcon className="size-4 text-emerald-500" />
+        <span>Conversation context compacted</span>
+        {timestamp && <span className="text-muted-foreground/70">{timestamp}</span>}
       </div>
     </div>
   );

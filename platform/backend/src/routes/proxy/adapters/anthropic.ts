@@ -6,6 +6,10 @@ import {
   getAzureAiFoundryBearerTokenProvider,
   isAnthropicAzureFoundryEntraIdEnabled,
 } from "@/clients/azure-openai-credentials";
+import {
+  getAnthropicWifAccessToken,
+  isAnthropicWifEnabled,
+} from "@/clients/anthropic-wif-credentials";
 import config from "@/config";
 import logger from "@/logging";
 import { ModelModel } from "@/models";
@@ -1158,6 +1162,22 @@ export const anthropicAdapterFactory: LLMProvider<
     const token = isAuthToken && apiKey ? apiKey.slice(7) : undefined;
     const regularApiKey = isAuthToken ? undefined : apiKey;
 
+    // Workload Identity Federation (keyless auth via OIDC tokens)
+    if (!apiKey && isAnthropicWifEnabled()) {
+      return new AnthropicProvider({
+        apiKey: null,
+        authToken: null,
+        baseURL: options.baseUrl,
+        fetch: createAnthropicWifFetch(customFetch),
+        defaultHeaders: {
+          ...options.defaultHeaders,
+          // The fetch wrapper replaces this sentinel with a fresh WIF token on every request.
+          Authorization: "Bearer <wif-managed>",
+        },
+      });
+    }
+
+    // Azure AI Foundry Entra ID
     if (!apiKey && isAnthropicAzureFoundryEntraIdEnabled()) {
       return new AnthropicProvider({
         apiKey: null,
@@ -1249,6 +1269,22 @@ function createAnthropicAzureFoundryFetch(
     const tokenProvider = getAzureAiFoundryBearerTokenProvider();
     const headers = new Headers(init?.headers);
     headers.set("Authorization", `Bearer ${await tokenProvider()}`);
+
+    const fetchFn = baseFetch ?? globalThis.fetch;
+    return fetchFn(input, {
+      ...init,
+      headers,
+    });
+  };
+}
+
+function createAnthropicWifFetch(
+  baseFetch: typeof globalThis.fetch | undefined,
+): typeof globalThis.fetch {
+  return async (input, init) => {
+    const accessToken = await getAnthropicWifAccessToken();
+    const headers = new Headers(init?.headers);
+    headers.set("Authorization", `Bearer ${accessToken}`);
 
     const fetchFn = baseFetch ?? globalThis.fetch;
     return fetchFn(input, {

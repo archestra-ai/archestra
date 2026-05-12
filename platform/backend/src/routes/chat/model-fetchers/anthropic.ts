@@ -2,6 +2,10 @@ import {
   getAzureAiFoundryBearerTokenProvider,
   isAnthropicAzureFoundryEntraIdEnabled,
 } from "@/clients/azure-openai-credentials";
+import {
+  getAnthropicWifAccessToken,
+  isAnthropicWifEnabled,
+} from "@/clients/anthropic-wif-credentials";
 import config from "@/config";
 import logger from "@/logging";
 import type { Anthropic } from "@/types";
@@ -47,14 +51,23 @@ export async function fetchAnthropicModels(
 async function getAnthropicAuthHeaders(
   apiKey: string | undefined,
 ): Promise<Record<string, string>> {
+  // 1. Explicit API key takes precedence
   if (apiKey) {
     return { "x-api-key": apiKey };
   }
 
-  if (!isAnthropicAzureFoundryEntraIdEnabled()) {
-    return { "x-api-key": "" };
+  // 2. Workload Identity Federation (keyless auth)
+  if (isAnthropicWifEnabled()) {
+    const accessToken = await getAnthropicWifAccessToken();
+    return { Authorization: `Bearer ${accessToken}` };
   }
 
-  const tokenProvider = getAzureAiFoundryBearerTokenProvider();
-  return { Authorization: `Bearer ${await tokenProvider()}` };
+  // 3. Azure AI Foundry Entra ID
+  if (isAnthropicAzureFoundryEntraIdEnabled()) {
+    const tokenProvider = getAzureAiFoundryBearerTokenProvider();
+    return { Authorization: `Bearer ${await tokenProvider()}` };
+  }
+
+  // 4. Fallback: no auth
+  return { "x-api-key": "" };
 }

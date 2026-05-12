@@ -576,9 +576,13 @@ describe("McpClient", () => {
       };
 
       const firstResult = await mcpClient.executeToolCall(toolCall, agentId);
-      const secondResult = await mcpClient.executeToolCall(toolCall, agentId);
-
       expect(firstResult.isError).toBe(false);
+      expect(mockConnect).toHaveBeenCalledTimes(1);
+      expect(mockPing).not.toHaveBeenCalled();
+
+      mockPing.mockClear();
+
+      const secondResult = await mcpClient.executeToolCall(toolCall, agentId);
       expect(secondResult.isError).toBe(false);
       expect(mockConnect).toHaveBeenCalledTimes(1);
       expect(mockPing).not.toHaveBeenCalled();

@@ -215,12 +215,14 @@ class InternalMcpCatalogModel {
 
     const labels = await McpCatalogLabelModel.getLabelsForCatalogItem(id);
     const teams = await McpCatalogTeamModel.getTeamDetailsForCatalog(id);
-    const toolCount = await InternalMcpCatalogModel.getToolCount(id);
     const catalogItem: InternalMcpCatalog = {
       ...dbItem,
       labels,
       teams,
-      toolCount,
+      // toolCount is UI metadata only — populated by attachListMetadata on the
+      // list endpoint. Skip the per-item COUNT(*) on the singular path because
+      // runtime callers (MCP client, gateway, server runtime) don't use it.
+      toolCount: 0,
     };
 
     if (expandSecrets) {
@@ -250,12 +252,11 @@ class InternalMcpCatalogModel {
 
     const labels = await McpCatalogLabelModel.getLabelsForCatalogItem(id);
     const teams = await McpCatalogTeamModel.getTeamDetailsForCatalog(id);
-    const toolCount = await InternalMcpCatalogModel.getToolCount(id);
     const catalogItem: InternalMcpCatalog = {
       ...dbItem,
       labels,
       teams,
-      toolCount,
+      toolCount: 0,
     };
 
     await InternalMcpCatalogModel.expandSecretsAndAlwaysResolveValues([
@@ -319,8 +320,7 @@ class InternalMcpCatalogModel {
       dbItem.id,
     );
     const teams = await McpCatalogTeamModel.getTeamDetailsForCatalog(dbItem.id);
-    const toolCount = await InternalMcpCatalogModel.getToolCount(dbItem.id);
-    return { ...dbItem, labels, teams, toolCount };
+    return { ...dbItem, labels, teams, toolCount: 0 };
   }
 
   static async update(
@@ -361,12 +361,11 @@ class InternalMcpCatalogModel {
 
     const itemLabels = await McpCatalogLabelModel.getLabelsForCatalogItem(id);
     const itemTeams = await McpCatalogTeamModel.getTeamDetailsForCatalog(id);
-    const toolCount = await InternalMcpCatalogModel.getToolCount(id);
     const result: InternalMcpCatalog = {
       ...dbItem,
       labels: itemLabels,
       teams: itemTeams,
-      toolCount,
+      toolCount: 0,
     };
     await InternalMcpCatalogModel.populateAuthorNames([result]);
     return result;
@@ -610,15 +609,7 @@ class InternalMcpCatalogModel {
     );
   }
 
-  private static async getToolCount(catalogId: string): Promise<number> {
-    return (
-      (await InternalMcpCatalogModel.getToolCounts([catalogId])).get(
-        catalogId,
-      ) ?? 0
-    );
-  }
-
-  /**
+/**
    * Populate authorName for catalog items that have an authorId.
    */
   private static async populateAuthorNames(

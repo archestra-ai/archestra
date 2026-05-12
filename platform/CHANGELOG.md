@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.41](https://github.com/archestra-ai/archestra/compare/platform-v1.2.40...platform-v1.2.41) (2026-05-12)
+
+
+### Features
+
+* new bedrock auth ([#4562](https://github.com/archestra-ai/archestra/issues/4562)) ([51a017b](https://github.com/archestra-ai/archestra/commit/51a017b8a9895673af9275226b530a129fa0fdf6))
+
 ## [1.2.40](https://github.com/archestra-ai/archestra/compare/platform-v1.2.39...platform-v1.2.40) (2026-05-12)
 
 

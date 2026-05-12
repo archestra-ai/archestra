@@ -1049,6 +1049,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetConnectorFile]: { knowledgeSource: ["read"] },
   [RouteId.DeleteConnectorFile]: { knowledgeSource: ["delete"] },
 
+  // Audit Log Routes
+  [RouteId.GetAuditLogs]: {
+    auditLog: ["read"],
+  },
+
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},
 

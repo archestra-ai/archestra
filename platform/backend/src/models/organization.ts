@@ -159,6 +159,10 @@ class OrganizationModel {
         slimChatErrorUi: schema.organizationsTable.slimChatErrorUi,
         animateChatPlaceholders:
           schema.organizationsTable.animateChatPlaceholders,
+        siteAnnouncementContent:
+          schema.organizationsTable.siteAnnouncementContent,
+        siteAnnouncementExpiresAt:
+          schema.organizationsTable.siteAnnouncementExpiresAt,
       })
       .from(schema.organizationsTable)
       .limit(1);
@@ -180,6 +184,8 @@ class OrganizationModel {
         chatErrorSupportMessage: null,
         slimChatErrorUi: false,
         animateChatPlaceholders: true,
+        siteAnnouncementContent: null,
+        siteAnnouncementExpiresAt: null,
       };
     }
 

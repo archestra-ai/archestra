@@ -177,6 +177,16 @@ const organizationsTable = pgTable("organization", {
   connectionDefaultClientId: text("connection_default_client_id"),
 
   /**
+   * Site-wide announcement banner content (markdown).
+   * When set and not expired, displays a thin banner at the top of the site.
+   * Only one announcement can be active at a time.
+   */
+  siteAnnouncementContent: text("site_announcement_content"),
+
+  /** Expiration timestamp for the site announcement. Null means no expiration. */
+  siteAnnouncementExpiresAt: timestamp("site_announcement_expires_at"),
+
+  /**
    * Client IDs shown on the /connection client grid. Null = show all.
    * ("generic" is always shown regardless of this list.)
    */

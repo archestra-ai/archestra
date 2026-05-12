@@ -45,6 +45,7 @@ export const resources = [
   "organizationSettings",
   "llmSettings",
   "agentSettings",
+  "siteAnnouncement",
   "agentTrigger",
   "scheduledTask",
   /**
@@ -103,6 +104,7 @@ export const resourceLabels: Record<Resource, string> = {
   organizationSettings: "Organization Settings",
   llmSettings: "LLM Settings",
   agentSettings: "Agent Settings",
+  siteAnnouncement: "Site Announcement",
   agentTrigger: "Agent Triggers",
   scheduledTask: "Scheduled Tasks",
   simpleView: "Simple View",
@@ -142,6 +144,8 @@ export const resourceDescriptions: Record<Resource, string> = {
   apiKey: "User API keys for programmatic access",
   organizationSettings:
     "Organization settings (appearance, authentication, etc)",
+  siteAnnouncement:
+    "Site-wide announcement banner with markdown content and expiration",
   knowledgeSource:
     "Knowledge sources including knowledge bases and connectors for RAG-based document retrieval",
   knowledgeSettings:
@@ -203,6 +207,7 @@ export const resourceCategories: Record<string, Resource[]> = {
     "secret",
     "apiKey",
     "organizationSettings",
+    "siteAnnouncement",
   ],
 };
 

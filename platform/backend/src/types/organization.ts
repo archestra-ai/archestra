@@ -200,6 +200,8 @@ export const AppearanceSettingsSchema = z.object({
   chatErrorSupportMessage: z.string().nullable(),
   slimChatErrorUi: z.boolean(),
   animateChatPlaceholders: z.boolean(),
+  siteAnnouncementContent: z.string().nullable(),
+  siteAnnouncementExpiresAt: z.date().nullable(),
 });
 
 export const OrganizationLimitCleanupIntervalSchema = z
@@ -243,6 +245,8 @@ const extendedFields = {
   showTwoFactor: z.boolean(),
   oauthAccessTokenLifetimeSeconds: OAuthAccessTokenLifetimeSecondsSchema,
   connectionBaseUrls: z.array(ConnectionBaseUrlSchema).nullable(),
+  siteAnnouncementContent: z.string().nullable(),
+  siteAnnouncementExpiresAt: z.date().nullable(),
 };
 
 export const SelectOrganizationSchema = createSelectSchema(
@@ -269,6 +273,8 @@ export const UpdateAppearanceSettingsSchema = z.object({
   slimChatErrorUi: z.boolean().optional(),
   chatPlaceholders: z.array(z.string().max(80)).max(20).nullable().optional(),
   animateChatPlaceholders: z.boolean().optional(),
+  siteAnnouncementContent: z.string().max(5000).nullable().optional(),
+  siteAnnouncementExpiresAt: z.string().datetime().nullable().optional(),
 });
 
 export const UpdateSecuritySettingsSchema = z.object({
@@ -341,6 +347,8 @@ export const UpdateConnectionSettingsSchema = z.object({
         });
       }
     }),
+  siteAnnouncementContent: z.string().max(5000).nullable().optional(),
+  siteAnnouncementExpiresAt: z.string().datetime().nullable().optional(),
 });
 
 export const CompleteOnboardingSchema = z.object({

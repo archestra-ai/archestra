@@ -340,6 +340,8 @@ export function useUpdateAppearanceSettings(
         chatErrorSupportMessage: updatedOrganization.chatErrorSupportMessage,
         slimChatErrorUi: updatedOrganization.slimChatErrorUi,
         animateChatPlaceholders: updatedOrganization.animateChatPlaceholders,
+        siteAnnouncementContent: updatedOrganization.siteAnnouncementContent,
+        siteAnnouncementExpiresAt: updatedOrganization.siteAnnouncementExpiresAt,
       });
       toast.success(onSuccessMessage);
     },

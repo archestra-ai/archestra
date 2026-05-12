@@ -3,6 +3,7 @@ import { and, count, eq, ilike, inArray, or } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import logger from "@/logging";
+import LimitModel from "./limit";
 
 class MemberModel {
   /**
@@ -31,6 +32,7 @@ class MemberModel {
       { userId, organizationId, memberId: result[0]?.id },
       "MemberModel.create: completed",
     );
+    await MemberModel.createDefaultUserLimit(userId, organizationId);
     return result;
   }
 
@@ -449,6 +451,32 @@ class MemberModel {
       .from(schema.membersTable)
       .where(eq(schema.membersTable.defaultAgentId, agentId));
     return (result?.count ?? 0) > 0;
+  }
+
+  private static async createDefaultUserLimit(
+    userId: string,
+    organizationId: string,
+  ): Promise<void> {
+    const [organization] = await db
+      .select({
+        defaultUserLimitValue: schema.organizationsTable.defaultUserLimitValue,
+        defaultUserLimitCleanupInterval:
+          schema.organizationsTable.defaultUserLimitCleanupInterval,
+      })
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, organizationId))
+      .limit(1);
+
+    if (!organization?.defaultUserLimitValue) {
+      return;
+    }
+
+    await LimitModel.upsertDefaultUserLimitsForOrganization({
+      organizationId,
+      userIds: [userId],
+      limitValue: organization.defaultUserLimitValue,
+      cleanupInterval: organization.defaultUserLimitCleanupInterval ?? "1h",
+    });
   }
 }
 

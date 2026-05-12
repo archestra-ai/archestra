@@ -62,13 +62,16 @@ describe("limit tool execution", () => {
         entity_id: testAgent.id,
         limit_type: "token_cost",
         limit_value: 1000,
+        cleanup_interval: "12h",
       },
       mockContext,
     );
     expect(result.isError).toBe(false);
+    expect((result.structuredContent as any).limit.cleanupInterval).toBe("12h");
     expect((result.content[0] as any).text).toContain(
       "Successfully created limit",
     );
+    expect((result.content[0] as any).text).toContain("Cleanup Interval: 12h");
     expect((result.content[0] as any).text).toContain("Model: All models");
   });
 
@@ -222,6 +225,7 @@ describe("limit tool execution", () => {
         limit_type: "token_cost",
         limit_value: 1000,
         model: ["gpt-4o"],
+        cleanup_interval: "12h",
       },
       mockContext,
     );
@@ -230,6 +234,7 @@ describe("limit tool execution", () => {
     expect(createText).toContain("Successfully created limit");
     expect(createText).toContain("Limit Type: token_cost");
     expect(createText).toContain("Limit Value: 1000");
+    expect(createText).toContain("Cleanup Interval: 12h");
 
     // Extract the limit ID
     const idMatch = createText.match(/Limit ID: (.+)/);
@@ -247,19 +252,26 @@ describe("limit tool execution", () => {
     expect(getText).toContain("Found 1 limit(s)");
     expect(getText).toContain(limitId);
     expect(getText).toContain("token_cost");
+    expect(getText).toContain("Cleanup Interval: 12h");
 
-    // Update the limit value
+    // Update the limit value and cleanup interval
     const updateResult = await executeArchestraTool(
       `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_limit`,
-      { id: limitId, limit_value: 2000 },
+      { id: limitId, limit_value: 2000, cleanup_interval: "1w" },
       mockContext,
     );
     expect(updateResult.isError).toBe(false);
+    expect((updateResult.structuredContent as any).limit.cleanupInterval).toBe(
+      "1w",
+    );
     expect((updateResult.content[0] as any).text).toContain(
       "Successfully updated limit",
     );
     expect((updateResult.content[0] as any).text).toContain(
       "Limit Value: 2000",
+    );
+    expect((updateResult.content[0] as any).text).toContain(
+      "Cleanup Interval: 1w",
     );
 
     // Delete the limit

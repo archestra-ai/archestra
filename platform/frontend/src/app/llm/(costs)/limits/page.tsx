@@ -84,6 +84,7 @@ type LimitFormState = {
   entityType: LimitFormEntityType;
   entityId: string;
   limitValue: string;
+  cleanupInterval: LimitCleanupInterval;
   models: string[];
   isAllModels: boolean;
 };
@@ -92,6 +93,7 @@ const DEFAULT_FORM_STATE: LimitFormState = {
   entityType: "organization",
   entityId: "",
   limitValue: "",
+  cleanupInterval: "1h",
   models: [],
   isAllModels: true,
 };
@@ -213,9 +215,13 @@ export default function LimitsPage() {
 
   const handleCreateOpen = useCallback(() => {
     setEditingLimit(null);
-    setFormState(DEFAULT_FORM_STATE);
+    setFormState({
+      ...DEFAULT_FORM_STATE,
+      cleanupInterval:
+        (organization?.limitCleanupInterval as LimitCleanupInterval) || "1h",
+    });
     setIsDialogOpen(true);
-  }, []);
+  }, [organization?.limitCleanupInterval]);
 
   useEffect(() => {
     setActionButton(
@@ -252,12 +258,16 @@ export default function LimitsPage() {
         entityType,
         entityId: limit.entityType === "organization" ? "" : limit.entityId,
         limitValue: String(limit.limitValue),
+        cleanupInterval:
+          (limit.cleanupInterval as LimitCleanupInterval) ||
+          (organization?.limitCleanupInterval as LimitCleanupInterval) ||
+          "1h",
         models: isAllModels ? [] : models,
         isAllModels,
       });
       setIsDialogOpen(true);
     },
-    [llmProxies],
+    [llmProxies, organization?.limitCleanupInterval],
   );
 
   const getEntityLabel = useCallback(
@@ -561,6 +571,7 @@ export default function LimitsPage() {
       limitType: "token_cost" as const,
       limitValue: Number(formState.limitValue),
       model: formState.isAllModels ? null : formState.models,
+      cleanupInterval: formState.cleanupInterval,
     };
 
     if (editingLimit) {
@@ -597,9 +608,7 @@ export default function LimitsPage() {
       <Alert variant="info">
         <CircleHelp />
         <AlertDescription className="sm:flex sm:flex-wrap sm:items-center sm:gap-1">
-          <span>
-            Expired or exceeded limits reset on the current cleanup schedule:
-          </span>
+          <span>New limits use the current default cleanup schedule:</span>
           <span className="font-medium text-foreground">
             {cleanupIntervalLabel}
           </span>
@@ -854,6 +863,32 @@ export default function LimitsPage() {
                 placeholder="1,000"
                 inputMode="numeric"
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Cleanup interval</Label>
+              <Select
+                value={formState.cleanupInterval}
+                onValueChange={(value: LimitCleanupInterval) =>
+                  setFormState((current) => ({
+                    ...current,
+                    cleanupInterval: value,
+                  }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(CLEANUP_INTERVAL_LABELS).map(
+                    ([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ),
+                  )}
+                </SelectContent>
+              </Select>
             </div>
           </DialogBody>
           <DialogStickyFooter className="mt-0">

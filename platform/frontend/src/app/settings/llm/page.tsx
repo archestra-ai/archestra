@@ -12,6 +12,8 @@ import {
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
 import { CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { MultiSelect } from "@/components/ui/multi-select";
 import {
   Select,
@@ -65,6 +67,9 @@ export default function LlmSettingsPage() {
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
   const [cleanupInterval, setCleanupInterval] =
     useState<LimitCleanupInterval>("1h");
+  const [defaultUserLimitValue, setDefaultUserLimitValue] = useState("");
+  const [defaultUserLimitCleanupInterval, setDefaultUserLimitCleanupInterval] =
+    useState<LimitCleanupInterval>("1h");
   const toonDocsUrl = getFrontendDocsUrl(
     "platform-costs-and-limits",
     "toon-compression",
@@ -89,6 +94,15 @@ export default function LlmSettingsPage() {
     setCleanupInterval(
       (organization.limitCleanupInterval as LimitCleanupInterval) || "1h",
     );
+    setDefaultUserLimitValue(
+      organization.defaultUserLimitValue
+        ? String(organization.defaultUserLimitValue)
+        : "",
+    );
+    setDefaultUserLimitCleanupInterval(
+      (organization.defaultUserLimitCleanupInterval as LimitCleanupInterval) ||
+        "1h",
+    );
     const enabledTeams = teams
       .filter((team) => team.convertToolResultsToToon)
       .map((team) => team.id);
@@ -109,6 +123,12 @@ export default function LlmSettingsPage() {
 
   const serverCleanupInterval =
     (organization?.limitCleanupInterval as LimitCleanupInterval) || "1h";
+  const serverDefaultUserLimitValue = organization?.defaultUserLimitValue
+    ? String(organization.defaultUserLimitValue)
+    : "";
+  const serverDefaultUserLimitCleanupInterval =
+    (organization?.defaultUserLimitCleanupInterval as LimitCleanupInterval) ||
+    "1h";
 
   const serverTeamIds = loadedTeams
     .filter((team) => team.convertToolResultsToToon)
@@ -122,10 +142,14 @@ export default function LlmSettingsPage() {
         JSON.stringify(serverTeamIds));
 
   const hasCleanupChanges = cleanupInterval !== serverCleanupInterval;
+  const hasDefaultUserLimitChanges =
+    defaultUserLimitValue !== serverDefaultUserLimitValue ||
+    defaultUserLimitCleanupInterval !== serverDefaultUserLimitCleanupInterval;
 
   const isInitialLoading = isOrganizationPending || areTeamsPending;
   const hasChanges =
-    !isInitialLoading && (hasCompressionChanges || hasCleanupChanges);
+    !isInitialLoading &&
+    (hasCompressionChanges || hasCleanupChanges || hasDefaultUserLimitChanges);
 
   const handleSave = async () => {
     const mutations: Promise<unknown>[] = [];
@@ -183,6 +207,17 @@ export default function LlmSettingsPage() {
       );
     }
 
+    if (hasDefaultUserLimitChanges) {
+      mutations.push(
+        updateLlmSettingsMutation.mutateAsync({
+          defaultUserLimitValue: defaultUserLimitValue
+            ? Number(defaultUserLimitValue)
+            : null,
+          defaultUserLimitCleanupInterval: defaultUserLimitCleanupInterval,
+        }),
+      );
+    }
+
     const results = await Promise.allSettled(mutations);
     const failures = results.filter((r) => r.status === "rejected");
     if (failures.length > 0 && failures.length < results.length) {
@@ -195,6 +230,8 @@ export default function LlmSettingsPage() {
   const handleCancel = () => {
     setCompressionMode(serverCompressionMode);
     setCleanupInterval(serverCleanupInterval);
+    setDefaultUserLimitValue(serverDefaultUserLimitValue);
+    setDefaultUserLimitCleanupInterval(serverDefaultUserLimitCleanupInterval);
     setSelectedTeamIds(
       loadedTeams
         .filter((team) => team.convertToolResultsToToon)
@@ -281,7 +318,7 @@ export default function LlmSettingsPage() {
       </SettingsBlock>
       <SettingsBlock
         title="Limit auto-cleanup interval"
-        description="How often expired or exceeded usage limits are automatically reset."
+        description="Default reset interval pre-selected when creating new limits."
         control={
           <WithPermissions
             permissions={{ llmSettings: ["update"] }}
@@ -308,6 +345,64 @@ export default function LlmSettingsPage() {
                   )}
                 </SelectContent>
               </Select>
+            )}
+          </WithPermissions>
+        }
+      />
+      <SettingsBlock
+        title="Default user limit"
+        description="Applies to every existing and new user unless their limit is edited separately."
+        control={
+          <WithPermissions
+            permissions={{ llmSettings: ["update"] }}
+            noPermissionHandle="tooltip"
+          >
+            {({ hasPermission }) => (
+              <div className="flex flex-col gap-2 sm:w-[360px] sm:flex-row">
+                <div className="space-y-1 sm:w-36">
+                  <Label htmlFor="default-user-limit-value">Amount ($)</Label>
+                  <Input
+                    id="default-user-limit-value"
+                    aria-label="Default user limit"
+                    value={defaultUserLimitValue}
+                    onChange={(event) =>
+                      setDefaultUserLimitValue(
+                        event.target.value.replace(/[^0-9]/g, ""),
+                      )
+                    }
+                    placeholder="No limit"
+                    inputMode="numeric"
+                    disabled={
+                      updateLlmSettingsMutation.isPending || !hasPermission
+                    }
+                  />
+                </div>
+                <div className="space-y-1 sm:flex-1">
+                  <Label>Reset interval</Label>
+                  <Select
+                    value={defaultUserLimitCleanupInterval}
+                    onValueChange={(value: LimitCleanupInterval) =>
+                      setDefaultUserLimitCleanupInterval(value)
+                    }
+                    disabled={
+                      updateLlmSettingsMutation.isPending || !hasPermission
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(CLEANUP_INTERVAL_LABELS).map(
+                        ([value, label]) => (
+                          <SelectItem key={value} value={value}>
+                            {label}
+                          </SelectItem>
+                        ),
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             )}
           </WithPermissions>
         }

@@ -32,6 +32,7 @@ export * from "./knowledge-base";
 export * from "./knowledge-base-connector";
 export * from "./knowledge-connector";
 export * from "./label";
+export * from "./limit-cleanup-interval";
 export * from "./limit";
 export * from "./llm-oauth-client";
 export * from "./llm-provider";

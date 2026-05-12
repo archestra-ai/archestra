@@ -1,5 +1,8 @@
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
+import LimitModel from "./limit";
 import MemberModel from "./member";
 
 describe("MemberModel", () => {
@@ -65,6 +68,38 @@ describe("MemberModel", () => {
       expect(result2[0]?.organizationId).toBe(org2.id);
       expect(result1[0]?.role).toBe(MEMBER_ROLE_NAME);
       expect(result2[0]?.role).toBe(ADMIN_ROLE_NAME);
+    });
+
+    test("creates the organization default user limit for a new member", async ({
+      makeUser,
+      makeOrganization,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await db
+        .update(schema.organizationsTable)
+        .set({
+          defaultUserLimitValue: 40,
+          defaultUserLimitCleanupInterval: "24h",
+        })
+        .where(eq(schema.organizationsTable.id, org.id));
+
+      await MemberModel.create(user.id, org.id, MEMBER_ROLE_NAME);
+
+      const limits = await LimitModel.findAll(
+        "user",
+        user.id,
+        "token_cost",
+        org.id,
+      );
+      expect(limits).toHaveLength(1);
+      expect(limits[0]).toMatchObject({
+        entityType: "user",
+        entityId: user.id,
+        limitType: "token_cost",
+        limitValue: 40,
+        cleanupInterval: "24h",
+      });
     });
   });
 

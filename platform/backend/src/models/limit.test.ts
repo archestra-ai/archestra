@@ -1940,6 +1940,61 @@ describe("cleanupLimitsIfNeeded", () => {
     expect(modelUsage[0].currentUsageTokensOut).toBe(500);
   });
 
+  test("uses each limit's cleanup interval when deciding whether to reset usage", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "Test Agent" });
+
+    const hourlyLimit = await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+      cleanupInterval: "1h",
+    });
+    const weeklyLimit = await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["claude-3-5-sonnet"],
+      cleanupInterval: "1w",
+    });
+
+    await LimitModel.updateTokenLimitUsage(
+      "agent",
+      agent.id,
+      "gpt-4o",
+      500,
+      500,
+    );
+    await LimitModel.updateTokenLimitUsage(
+      "agent",
+      agent.id,
+      "claude-3-5-sonnet",
+      700,
+      700,
+    );
+
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    await LimitModel.patch(hourlyLimit.id, { lastCleanup: yesterday });
+    await LimitModel.patch(weeklyLimit.id, { lastCleanup: yesterday });
+
+    await LimitModel.cleanupLimitsIfNeeded({
+      entities: { agent: agent.id },
+    });
+
+    const hourlyUsage = await LimitModel.getRawModelUsage(hourlyLimit.id);
+    expect(hourlyUsage[0].currentUsageTokensIn).toBe(0);
+    expect(hourlyUsage[0].currentUsageTokensOut).toBe(0);
+
+    const weeklyUsage = await LimitModel.getRawModelUsage(weeklyLimit.id);
+    expect(weeklyUsage[0].currentUsageTokensIn).toBe(700);
+    expect(weeklyUsage[0].currentUsageTokensOut).toBe(700);
+  });
+
   test("cleans limits with null lastCleanup", async ({
     makeAgent,
     makeOrganization,

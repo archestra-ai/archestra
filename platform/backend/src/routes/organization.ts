@@ -17,6 +17,7 @@ import {
   InvitationModel,
   KbDocumentModel,
   KnowledgeBaseConnectorModel,
+  LimitModel,
   LlmProviderApiKeyModel,
   McpToolCallModel,
   MemberModel,
@@ -149,6 +150,18 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!organization) {
         throw new ApiError(404, "Organization not found");
+      }
+
+      if (
+        (body.defaultUserLimitValue !== undefined ||
+          body.defaultUserLimitCleanupInterval !== undefined) &&
+        organization.defaultUserLimitValue !== null
+      ) {
+        await LimitModel.upsertDefaultUserLimitsForOrganization({
+          organizationId,
+          limitValue: organization.defaultUserLimitValue,
+          cleanupInterval: organization.defaultUserLimitCleanupInterval,
+        });
       }
 
       return reply.send(organization);

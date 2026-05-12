@@ -9,6 +9,7 @@ import {
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { LimitCleanupIntervalSchema } from "./limit-cleanup-interval";
 
 const DATA_URI_PREFIX = "data:image/png;base64,";
 const GIF_DATA_URI_PREFIX = "data:image/gif;base64,";
@@ -202,9 +203,8 @@ export const AppearanceSettingsSchema = z.object({
   animateChatPlaceholders: z.boolean(),
 });
 
-export const OrganizationLimitCleanupIntervalSchema = z
-  .enum(["1h", "12h", "24h", "1w", "1m"])
-  .nullable();
+export const OrganizationLimitCleanupIntervalSchema =
+  LimitCleanupIntervalSchema;
 
 export const OrganizationCompressionScopeSchema = z.enum([
   "organization",
@@ -222,6 +222,8 @@ const extendedFields = {
   theme: OrganizationThemeSchema,
   customFont: OrganizationCustomFontSchema,
   limitCleanupInterval: OrganizationLimitCleanupIntervalSchema,
+  defaultUserLimitValue: z.number().int().positive().nullable(),
+  defaultUserLimitCleanupInterval: OrganizationLimitCleanupIntervalSchema,
   compressionScope: OrganizationCompressionScopeSchema,
   globalToolPolicy: GlobalToolPolicySchema,
   embeddingModel: z.string().nullable(),
@@ -280,6 +282,9 @@ export const UpdateLlmSettingsSchema = z.object({
   convertToolResultsToToon: z.boolean().optional(),
   compressionScope: OrganizationCompressionScopeSchema.optional(),
   limitCleanupInterval: OrganizationLimitCleanupIntervalSchema.optional(),
+  defaultUserLimitValue: z.number().int().positive().nullable().optional(),
+  defaultUserLimitCleanupInterval:
+    OrganizationLimitCleanupIntervalSchema.optional(),
 });
 
 export const UpdateAgentSettingsSchema = z.object({

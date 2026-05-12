@@ -56,6 +56,8 @@ beforeEach(() => {
     compressionScope: "organization",
     convertToolResultsToToon: true,
     limitCleanupInterval: "1h",
+    defaultUserLimitValue: 25,
+    defaultUserLimitCleanupInterval: "12h",
   };
   mockTeams = [];
 });
@@ -74,5 +76,14 @@ describe("LlmSettingsPage", () => {
     );
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  });
+
+  it("shows the configured default user limit", () => {
+    renderPage();
+
+    expect(screen.getByLabelText(/default user limit/i)).toHaveValue("25");
+    expect(
+      screen.getByText(/applies to every existing and new user/i),
+    ).toBeInTheDocument();
   });
 });

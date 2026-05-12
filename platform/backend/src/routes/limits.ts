@@ -86,8 +86,8 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectLimitSchema),
       },
     },
-    async ({ body }, reply) => {
-      return reply.send(await LimitModel.create(body));
+    async ({ body, organizationId }, reply) => {
+      return reply.send(await LimitModel.create(body, { organizationId }));
     },
   );
 

@@ -2,7 +2,7 @@
 title: Costs & Limits
 category: LLM Proxy
 order: 4
-lastUpdated: 2026-05-01
+lastUpdated: 2026-05-12
 ---
 
 Archestra tracks LLM usage costs, enforces usage limits, and records savings from model optimization and tool-result compression. These controls work together: pricing defines cost, logs and statistics show what happened, limits stop or shape usage, and optimization reduces spend before a request reaches a model.
@@ -26,7 +26,7 @@ Archestra stores both raw spend and savings. Savings can come from:
 
 ## Usage Limits
 
-Usage limits are guardrails for LLM spend. Archestra supports token-cost limits scoped to the organization, team, user, agent, LLM proxy, or virtual API key. Each limit can target one or more specific models, or apply to all models. A limit with no model specified acts as a global budget across every model the entity uses.
+Usage limits are guardrails for LLM spend. Archestra supports token-cost limits scoped to the organization, team, user, agent, LLM proxy, or virtual API key. Each limit can target one or more specific models, or apply to all models. A limit with no model specified acts as a global budget across every model the entity uses. Each limit also has its own reset interval.
 
 Use organization limits for a shared platform-wide budget. Use team limits when different groups need separate spend caps. Use user limits to track and control per-user spend. Use agent limits to control spend for chat agents, and LLM proxy limits to control spend for LLM proxy profiles. Use virtual key limits to control spend per API key.
 
@@ -34,9 +34,17 @@ Limits are evaluated from recorded model usage, so pricing configuration affects
 
 ## Limit Cleanup
 
-Limit usage is periodically reset according to the configured cleanup interval. This is an operational setting, not a retention policy. It controls how often expired or completed limit windows are cleaned up so counters stay accurate and limit storage does not grow unnecessarily.
+Limit usage is periodically reset according to each limit's cleanup interval. This is an operational setting, not a retention policy. It controls how often expired or completed limit windows are cleaned up so counters stay accurate and limit storage does not grow unnecessarily.
+
+The organization cleanup interval is the default for newly created limits. You can override it on a specific limit when that limit needs a different reset window.
 
 Use shorter intervals if you rely on tighter reset windows and want counters refreshed more aggressively.
+
+## Default User Limits
+
+The LLM settings page can define a default user limit for an organization. When this value is saved, Archestra applies it to existing users in the organization. New members receive the same user limit when they join.
+
+Use this when every user should start with the same spend guardrail, then adjust individual user limits from the limits page when needed.
 
 ## Model Pricing
 

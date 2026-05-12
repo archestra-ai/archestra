@@ -1,5 +1,5 @@
 import { vi } from "vitest";
-import { LimitModel } from "@/models";
+import { LimitModel, OrganizationModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -301,6 +301,41 @@ describe("limits routes", () => {
       });
 
       cleanupSpy.mockRestore();
+    });
+  });
+
+  describe("POST /api/limits", () => {
+    test("uses the organization cleanup interval as the default for new limits", async ({
+      makeAgent,
+    }) => {
+      await OrganizationModel.patch(organizationId, {
+        limitCleanupInterval: "12h",
+      });
+      const agent = await makeAgent({
+        name: "Test Agent",
+        organizationId,
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/limits",
+        payload: {
+          entityType: "agent",
+          entityId: agent.id,
+          limitType: "token_cost",
+          limitValue: 1000000,
+          model: null,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        cleanupInterval: "12h",
+      });
     });
   });
 });

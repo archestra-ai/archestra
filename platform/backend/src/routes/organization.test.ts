@@ -1,6 +1,7 @@
 import { vi } from "vitest";
 import type * as originalConfigModule from "@/config";
 import * as embeddingClients from "@/knowledge-base/embedding-clients";
+import LimitModel from "@/models/limit";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
@@ -435,6 +436,44 @@ describe("organization routes", () => {
         compressionScope: "organization",
         convertToolResultsToToon: false,
         limitCleanupInterval: "12h",
+      });
+    });
+
+    test("upserts default user limit for existing organization members", async ({
+      makeMember,
+      makeUser,
+    }) => {
+      const memberUser = await makeUser();
+      await makeMember(memberUser.id, organizationId);
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/llm-settings",
+        payload: {
+          defaultUserLimitValue: 25,
+          defaultUserLimitCleanupInterval: "12h",
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        defaultUserLimitValue: 25,
+        defaultUserLimitCleanupInterval: "12h",
+      });
+
+      const memberLimits = await LimitModel.findAll(
+        "user",
+        memberUser.id,
+        "token_cost",
+        organizationId,
+      );
+      expect(memberLimits).toHaveLength(1);
+      expect(memberLimits[0]).toMatchObject({
+        entityType: "user",
+        entityId: memberUser.id,
+        limitType: "token_cost",
+        limitValue: 25,
+        cleanupInterval: "12h",
       });
     });
   });

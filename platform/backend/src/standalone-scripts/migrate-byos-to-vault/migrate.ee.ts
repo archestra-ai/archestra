@@ -9,17 +9,18 @@
  * Run from the `backend/` directory:
  *
  *   tsx --tsconfig standalone-scripts.tsconfig.json \
- *     src/standalone-scripts/migrate-byos-to-vault/migrate.ee.ts [--status]
+ *     src/standalone-scripts/migrate-byos-to-vault/migrate.ee.ts [--status|--rollback]
  *
  * Modes:
  *   (no flag)    # default forward migration
  *   --status     # read-only diagnostic
+ *   --rollback   # restore the secret table from the Phase 1 backup
  *
- * No automated rollback. Phase 1 creates a backup table
- * (`backup_secret_pre_vault_migration`) as a manual recovery anchor — if
- * something goes wrong, an operator can restore by hand using SQL against
- * that table. The backup is preserved across runs and is safe to drop only
- * once the migration has soaked successfully.
+ * Phase 1 creates a backup table (`backup_secret_pre_vault_migration`) as a
+ * recovery anchor. If something goes wrong, run `--rollback` to restore the
+ * secret table from it (or restore by hand from the same SQL). The backup is
+ * preserved across runs and is safe to drop only once the migration has
+ * soaked successfully.
  *
  * Vault credentials: the script reads the standard
  * `ARCHESTRA_HASHICORP_VAULT_*` env vars (same ones the live platform uses).
@@ -107,11 +108,12 @@ const FK_TABLES: { table: string; column: string }[] = [
 // CLI
 // ============================================================
 
-type Mode = "migrate" | "status";
+type Mode = "migrate" | "status" | "rollback";
 
 function parseMode(): Mode {
   const args = process.argv.slice(2);
   if (args.includes("--status")) return "status";
+  if (args.includes("--rollback")) return "rollback";
   return "migrate";
 }
 
@@ -134,9 +136,9 @@ function printWelcome(): void {
     Phase 4  Post-migration consistency audit (fail-loud)
     Phase 3  Soak guidance
 
-  No automated rollback. Phase 1's backup table
-  (backup_secret_pre_vault_migration) is preserved across runs as a manual
-  recovery anchor — restore by hand from it if something goes wrong.
+  Phase 1's backup table (backup_secret_pre_vault_migration) is preserved
+  across runs as a recovery anchor. If something goes wrong, re-run this
+  script with --rollback to restore the secret table from it.
 `);
 }
 
@@ -1128,8 +1130,9 @@ async function phase1Prestage(
          • set ARCHESTRA_SECRETS_MANAGER=Vault
          • restart the backend
 
-  No automated rollback. If something goes wrong post-flip, restore by hand
-  from ${BACKUP_TABLE}:
+  If something goes wrong post-flip, re-run this script with --rollback to
+  restore the secret table from ${BACKUP_TABLE}, or run the equivalent SQL
+  by hand:
 
        BEGIN;
        UPDATE secret AS s
@@ -2183,6 +2186,77 @@ function phase3SoakGuidance(): void {
 }
 
 // ============================================================
+// Rollback
+// ============================================================
+
+async function rollback(): Promise<void> {
+  printHeader("Rollback — restore secret table from backup");
+
+  const backup = await checkBackupTable();
+  if (!backup.exists) {
+    abort(`Backup table "${BACKUP_TABLE}" not found. Nothing to restore from.`);
+  }
+
+  const counts = await getRowCounts();
+  const currentMode = getSecretsManagerTypeBasedOnEnvVars();
+
+  console.log(`
+  Current state:
+    • Mode: ${modeLabel(currentMode)}
+    • secret table: ${counts.byos} READONLY_VAULT, ${counts.vault} Vault, ${counts.db} plain DB
+    • ${BACKUP_TABLE}: ${backup.rowCount} row${backup.rowCount === 1 ? "" : "s"}
+
+  This will revert the secret table to the backup version in a single
+  transaction. Rows created after the backup are NOT touched, and the
+  ${BACKUP_TABLE} table itself is left in place.
+
+  Before continuing, take the backend out of service and revert
+  ARCHESTRA_SECRETS_MANAGER to READONLY_VAULT (if you already flipped it).
+`);
+
+  const proceed = await confirm("Restore the secret table from the backup?");
+  if (!proceed) {
+    console.log(`\n${INFO} Aborted. No changes made.`);
+    return;
+  }
+
+  let restoredCount = 0;
+  await db.transaction(async (tx) => {
+    const result = await tx.execute(
+      sql.raw(`
+      UPDATE secret AS s
+         SET secret = b.secret,
+             is_vault = b.is_vault,
+             is_byos_vault = b.is_byos_vault,
+             name = b.name,
+             updated_at = b.updated_at
+        FROM "${BACKUP_TABLE}" AS b
+       WHERE s.id = b.id
+    `),
+    );
+    restoredCount = result.rowCount ?? 0;
+  });
+
+  printCheck(
+    true,
+    "Restore committed",
+    `${restoredCount} row${restoredCount === 1 ? "" : "s"} updated`,
+  );
+
+  const after = await getRowCounts();
+  console.log(
+    `  ${INFO} secret table now: ${after.byos} READONLY_VAULT, ${after.vault} Vault, ${after.db} plain DB`,
+  );
+  console.log(`
+  Next steps:
+    • Restart the backend under ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT.
+    • Verify health: GET /api/secrets/type — expect type "READONLY_VAULT".
+    • Once you've confirmed the rollback is good, drop the backup table:
+        DROP TABLE ${BACKUP_TABLE};
+`);
+}
+
+// ============================================================
 // Status
 // ============================================================
 
@@ -2271,6 +2345,11 @@ async function main(): Promise<void> {
 
   if (mode === "status") {
     await status();
+    return;
+  }
+
+  if (mode === "rollback") {
+    await rollback();
     return;
   }
 

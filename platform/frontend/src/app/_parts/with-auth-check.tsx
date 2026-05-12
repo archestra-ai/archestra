@@ -4,8 +4,8 @@ import * as Sentry from "@sentry/nextjs";
 import { usePathname, useRouter } from "next/navigation";
 import type React from "react";
 import { useEffect, useState } from "react";
+import { useSession } from "@/lib/auth/auth.query";
 import { isDefaultPasswordChangePending } from "@/lib/auth/default-password-change";
-import { authClient } from "@/lib/clients/auth/auth-client";
 import { getValidatedRedirectPath } from "@/lib/utils/redirect-validation";
 
 type SentryUser = Parameters<typeof Sentry.setUser>[0];
@@ -59,7 +59,7 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
     data: session,
     isPending: isAuthPending,
     isRefetching: isAuthRefetching,
-  } = authClient.useSession();
+  } = useSession();
 
   const isLoggedIn = session?.user;
   const isAuthPage = pathCorrespondsToAnAuthPage(pathname);

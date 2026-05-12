@@ -1,7 +1,6 @@
 "use client";
 
-import { archestraApiSdk, type archestraApiTypes, E2eTestId } from "@shared";
-import { useQuery } from "@tanstack/react-query";
+import { type archestraApiTypes, E2eTestId } from "@shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -38,10 +37,10 @@ import {
   useProfile,
   useProfilesPaginated,
 } from "@/lib/agent.query";
-import { useHasPermissions } from "@/lib/auth/auth.query";
-import { authClient } from "@/lib/clients/auth/auth-client";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useTeams } from "@/lib/teams/team.query";
 import { McpGatewayActions } from "./mcp-gateway-actions";
 
 type McpGatewaysInitialData = {
@@ -155,14 +154,7 @@ function McpGateways({
   });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
 
-  const { data: userTeams } = useQuery({
-    queryKey: ["teams"],
-    queryFn: async () => {
-      const { data } = await archestraApiSdk.getTeams({
-        query: { limit: 100, offset: 0 },
-      });
-      return data?.data || [];
-    },
+  const { data: userTeams } = useTeams({
     initialData: initialData?.teams,
     enabled: !!canReadTeams,
   });
@@ -171,7 +163,7 @@ function McpGateways({
   const { data: isTeamAdmin } = useHasPermissions({
     mcpGateway: ["team-admin"],
   });
-  const { data: session } = authClient.useSession();
+  const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const userTeamIdSet = new Set((userTeams ?? []).map((t) => t.id));
 

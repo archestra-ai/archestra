@@ -10,8 +10,10 @@ import { AlertTriangle } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { useDefaultCredentialsEnabled } from "@/lib/auth/auth.query";
-import { authClient } from "@/lib/clients/auth/auth-client";
+import {
+  useDefaultCredentialsEnabled,
+  useSession,
+} from "@/lib/auth/auth.query";
 
 export function DefaultCredentialsWarning({
   alwaysShow = false,
@@ -20,7 +22,7 @@ export function DefaultCredentialsWarning({
   alwaysShow?: boolean;
   slim?: boolean;
 }) {
-  const { data: session } = authClient.useSession();
+  const { data: session } = useSession();
   const userEmail = session?.user?.email;
   const { data: defaultCredentialsEnabled, isLoading } =
     useDefaultCredentialsEnabled();

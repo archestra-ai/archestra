@@ -83,6 +83,10 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   vaultSecretPath: null,
   vaultSecretKey: null,
   isPrimary: true,
+  bedrockAuthMethod: "api-key",
+  awsAccessKeyId: null,
+  awsSecretAccessKey: null,
+  awsSessionToken: null,
 };
 
 const EMBEDDING_DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
@@ -152,24 +156,35 @@ function AddApiKeyDialog({
         }) || formValues.apiKey);
 
   const handleCreate = form.handleSubmit(async (values) => {
+    const isBedrockSigV4 =
+      values.provider === "bedrock" && values.bedrockAuthMethod === "sigv4";
     try {
       await createMutation.mutateAsync({
         name: values.name,
         provider: values.provider,
-        apiKey: values.apiKey || undefined,
+        apiKey: isBedrockSigV4 ? undefined : values.apiKey || undefined,
         baseUrl: values.baseUrl || undefined,
         scope: values.scope,
         teamId:
           values.scope === "team" && values.teamId ? values.teamId : undefined,
         isPrimary: values.isPrimary,
         vaultSecretPath:
-          byosEnabled && values.vaultSecretPath
+          !isBedrockSigV4 && byosEnabled && values.vaultSecretPath
             ? values.vaultSecretPath
             : undefined,
         vaultSecretKey:
-          byosEnabled && values.vaultSecretKey
+          !isBedrockSigV4 && byosEnabled && values.vaultSecretKey
             ? values.vaultSecretKey
             : undefined,
+        awsAccessKeyId: isBedrockSigV4
+          ? values.awsAccessKeyId || undefined
+          : undefined,
+        awsSecretAccessKey: isBedrockSigV4
+          ? values.awsSecretAccessKey || undefined
+          : undefined,
+        awsSessionToken: isBedrockSigV4
+          ? values.awsSessionToken || undefined
+          : undefined,
       });
       onOpenChange(false);
     } catch {

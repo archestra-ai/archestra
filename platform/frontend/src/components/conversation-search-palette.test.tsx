@@ -8,9 +8,17 @@ global.ResizeObserver = vi.fn().mockImplementation(() => ({
   disconnect: vi.fn(),
 }));
 
-const mockRouterPush = vi.fn();
-const mockUsePathname = vi.fn();
-const mockDeleteMutate = vi.fn();
+const {
+  mockRouterPush,
+  mockUsePathname,
+  mockDeleteMutate,
+  mockUseConversations,
+} = vi.hoisted(() => ({
+  mockRouterPush: vi.fn(),
+  mockUsePathname: vi.fn(),
+  mockDeleteMutate: vi.fn(),
+  mockUseConversations: vi.fn(),
+}));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockRouterPush }),
@@ -43,24 +51,7 @@ vi.mock("@/lib/chat/chat-utils", () => ({
 }));
 
 vi.mock("@/lib/chat/chat.query", () => ({
-  useConversations: () => ({
-    data: [
-      {
-        id: "conv-1",
-        title: "First conversation",
-        updatedAt: new Date().toISOString(),
-        messages: [],
-      },
-      {
-        id: "conv-2",
-        title: "Second conversation",
-        updatedAt: new Date().toISOString(),
-        messages: [],
-      },
-    ],
-    isLoading: false,
-    isFetching: false,
-  }),
+  useConversations: mockUseConversations,
   useDeleteConversation: () => ({
     mutate: mockDeleteMutate,
   }),
@@ -155,7 +146,41 @@ describe("ConversationSearchPalette", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUsePathname.mockReturnValue("/chat");
+    mockUseConversations.mockReturnValue({
+      data: [
+        {
+          id: "conv-1",
+          title: "First conversation",
+          updatedAt: new Date().toISOString(),
+          messages: [],
+        },
+        {
+          id: "conv-2",
+          title: "Second conversation",
+          updatedAt: new Date().toISOString(),
+          messages: [],
+        },
+      ],
+      isLoading: false,
+      isFetching: false,
+    });
     capturedOnValueChange = null;
+  });
+
+  it("only enables conversation fetching while open", () => {
+    const { rerender } = render(
+      <ConversationSearchPalette {...defaultProps} open={false} />,
+    );
+
+    expect(mockUseConversations).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: false }),
+    );
+
+    rerender(<ConversationSearchPalette {...defaultProps} open={true} />);
+
+    expect(mockUseConversations).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: true }),
+    );
   });
 
   it("renders conversations when open", () => {

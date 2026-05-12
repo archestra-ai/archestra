@@ -1639,6 +1639,13 @@
       "when": 1778182339364,
       "tag": "0233_nebulous_elektra",
       "breakpoints": true
+    },
+    {
+      "idx": 234,
+      "version": "7",
+      "when": 1778189799447,
+      "tag": "0234_cool_colossus",
+      "breakpoints": true
     }
   ]
 }

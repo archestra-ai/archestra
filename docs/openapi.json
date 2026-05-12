@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.36"
+    "version": "1.2.42"
   },
   "components": {
     "schemas": {
@@ -3594,7 +3594,49 @@
               "user_id"
             ]
           },
+          "output_config": {
+            "type": "object",
+            "properties": {
+              "effort": {
+                "nullable": true,
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high",
+                  "max"
+                ]
+              },
+              "format": {
+                "nullable": true,
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "json_schema"
+                    ]
+                  },
+                  "schema": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "type",
+                  "schema"
+                ]
+              }
+            }
+          },
           "service_tier": {},
+          "speed": {
+            "type": "string",
+            "enum": [
+              "fast",
+              "standard"
+            ]
+          },
           "stop_sequences": {
             "type": "array",
             "items": {
@@ -3668,6 +3710,56 @@
           },
           "temperature": {
             "type": "number"
+          },
+          "thinking": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "enabled"
+                    ]
+                  },
+                  "budget_tokens": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "type",
+                  "budget_tokens"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "disabled"
+                    ]
+                  }
+                },
+                "required": [
+                  "type"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "adaptive"
+                    ]
+                  }
+                },
+                "required": [
+                  "type"
+                ]
+              }
+            ]
           },
           "tool_choice": {
             "anyOf": [
@@ -20599,7 +20691,51 @@
             ],
             "additionalProperties": false
           },
+          "output_config": {
+            "type": "object",
+            "properties": {
+              "effort": {
+                "nullable": true,
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high",
+                  "max"
+                ]
+              },
+              "format": {
+                "nullable": true,
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "json_schema"
+                    ]
+                  },
+                  "schema": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "type",
+                  "schema"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          },
           "service_tier": {},
+          "speed": {
+            "type": "string",
+            "enum": [
+              "fast",
+              "standard"
+            ]
+          },
           "stop_sequences": {
             "type": "array",
             "items": {
@@ -20675,6 +20811,59 @@
           },
           "temperature": {
             "type": "number"
+          },
+          "thinking": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "enabled"
+                    ]
+                  },
+                  "budget_tokens": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "type",
+                  "budget_tokens"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "disabled"
+                    ]
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "adaptive"
+                    ]
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": false
+              }
+            ]
           },
           "tool_choice": {
             "anyOf": [
@@ -45601,6 +45790,7 @@
                                 "enum": [
                                   "allow_when_context_is_sensitive",
                                   "block_when_context_is_sensitive",
+                                  "require_approval",
                                   "block_always"
                                 ]
                               },
@@ -80797,6 +80987,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "virtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
                               "sessionId": {
                                 "nullable": true,
                                 "type": "string"
@@ -81045,6 +81241,7 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "virtualKeyId",
                               "sessionId",
                               "sessionSource",
                               "authenticatedAppId",
@@ -81090,6 +81287,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -81762,6 +81965,7 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "virtualKeyId",
                               "sessionId",
                               "sessionSource",
                               "authenticatedAppId",
@@ -81807,6 +82011,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -82170,6 +82380,7 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "virtualKeyId",
                               "sessionId",
                               "sessionSource",
                               "authenticatedAppId",
@@ -82215,6 +82426,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -82464,6 +82681,7 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "virtualKeyId",
                               "sessionId",
                               "sessionSource",
                               "authenticatedAppId",
@@ -82509,6 +82727,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -82758,6 +82982,7 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "virtualKeyId",
                               "sessionId",
                               "sessionSource",
                               "authenticatedAppId",
@@ -82803,6 +83028,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -84764,6 +84995,7 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "virtualKeyId",
                               "sessionId",
                               "sessionSource",
                               "authenticatedAppId",
@@ -84809,6 +85041,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -85058,6 +85296,7 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "virtualKeyId",
                               "sessionId",
                               "sessionSource",
                               "authenticatedAppId",
@@ -85103,6 +85342,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -85352,6 +85597,7 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "virtualKeyId",
                               "sessionId",
                               "sessionSource",
                               "authenticatedAppId",
@@ -85397,6 +85643,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -85646,6 +85898,7 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "virtualKeyId",
                               "sessionId",
                               "sessionSource",
                               "authenticatedAppId",
@@ -85691,6 +85944,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -85940,6 +86199,7 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "virtualKeyId",
                               "sessionId",
                               "sessionSource",
                               "authenticatedAppId",
@@ -85985,6 +86245,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -86234,6 +86500,7 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "virtualKeyId",
                               "sessionId",
                               "sessionSource",
                               "authenticatedAppId",
@@ -86279,6 +86546,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -86528,6 +86801,7 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "virtualKeyId",
                               "sessionId",
                               "sessionSource",
                               "authenticatedAppId",
@@ -86573,6 +86847,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -86811,6 +87091,7 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "virtualKeyId",
                               "sessionId",
                               "sessionSource",
                               "authenticatedAppId",
@@ -86856,6 +87137,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -87094,6 +87381,7 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "virtualKeyId",
                               "sessionId",
                               "sessionSource",
                               "authenticatedAppId",
@@ -87139,6 +87427,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -87388,6 +87682,7 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "virtualKeyId",
                               "sessionId",
                               "sessionSource",
                               "authenticatedAppId",
@@ -87433,6 +87728,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -87682,6 +87983,7 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "virtualKeyId",
                               "sessionId",
                               "sessionSource",
                               "authenticatedAppId",
@@ -87727,6 +88029,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -87976,6 +88284,7 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "virtualKeyId",
                               "sessionId",
                               "sessionSource",
                               "authenticatedAppId",
@@ -88021,6 +88330,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -88270,6 +88585,7 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "virtualKeyId",
                               "sessionId",
                               "sessionSource",
                               "authenticatedAppId",
@@ -88315,6 +88631,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -88790,6 +89112,7 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "virtualKeyId",
                               "sessionId",
                               "sessionSource",
                               "authenticatedAppId",
@@ -88835,6 +89158,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -89507,6 +89836,7 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "virtualKeyId",
                               "sessionId",
                               "sessionSource",
                               "authenticatedAppId",
@@ -91004,6 +91334,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "virtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "sessionId": {
                           "nullable": true,
                           "type": "string"
@@ -91252,6 +91588,7 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "virtualKeyId",
                         "sessionId",
                         "sessionSource",
                         "authenticatedAppId",
@@ -91297,6 +91634,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -91969,6 +92312,7 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "virtualKeyId",
                         "sessionId",
                         "sessionSource",
                         "authenticatedAppId",
@@ -92014,6 +92358,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -92377,6 +92727,7 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "virtualKeyId",
                         "sessionId",
                         "sessionSource",
                         "authenticatedAppId",
@@ -92422,6 +92773,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -92671,6 +93028,7 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "virtualKeyId",
                         "sessionId",
                         "sessionSource",
                         "authenticatedAppId",
@@ -92716,6 +93074,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -92965,6 +93329,7 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "virtualKeyId",
                         "sessionId",
                         "sessionSource",
                         "authenticatedAppId",
@@ -93010,6 +93375,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -94971,6 +95342,7 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "virtualKeyId",
                         "sessionId",
                         "sessionSource",
                         "authenticatedAppId",
@@ -95016,6 +95388,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -95265,6 +95643,7 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "virtualKeyId",
                         "sessionId",
                         "sessionSource",
                         "authenticatedAppId",
@@ -95310,6 +95689,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -95559,6 +95944,7 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "virtualKeyId",
                         "sessionId",
                         "sessionSource",
                         "authenticatedAppId",
@@ -95604,6 +95990,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -95853,6 +96245,7 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "virtualKeyId",
                         "sessionId",
                         "sessionSource",
                         "authenticatedAppId",
@@ -95898,6 +96291,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -96147,6 +96546,7 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "virtualKeyId",
                         "sessionId",
                         "sessionSource",
                         "authenticatedAppId",
@@ -96192,6 +96592,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -96441,6 +96847,7 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "virtualKeyId",
                         "sessionId",
                         "sessionSource",
                         "authenticatedAppId",
@@ -96486,6 +96893,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -96735,6 +97148,7 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "virtualKeyId",
                         "sessionId",
                         "sessionSource",
                         "authenticatedAppId",
@@ -96780,6 +97194,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -97018,6 +97438,7 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "virtualKeyId",
                         "sessionId",
                         "sessionSource",
                         "authenticatedAppId",
@@ -97063,6 +97484,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -97301,6 +97728,7 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "virtualKeyId",
                         "sessionId",
                         "sessionSource",
                         "authenticatedAppId",
@@ -97346,6 +97774,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -97595,6 +98029,7 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "virtualKeyId",
                         "sessionId",
                         "sessionSource",
                         "authenticatedAppId",
@@ -97640,6 +98075,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -97889,6 +98330,7 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "virtualKeyId",
                         "sessionId",
                         "sessionSource",
                         "authenticatedAppId",
@@ -97934,6 +98376,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -98183,6 +98631,7 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "virtualKeyId",
                         "sessionId",
                         "sessionSource",
                         "authenticatedAppId",
@@ -98228,6 +98677,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -98477,6 +98932,7 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "virtualKeyId",
                         "sessionId",
                         "sessionSource",
                         "authenticatedAppId",
@@ -98522,6 +98978,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -98997,6 +99459,7 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "virtualKeyId",
                         "sessionId",
                         "sessionSource",
                         "authenticatedAppId",
@@ -99042,6 +99505,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -99714,6 +100183,7 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "virtualKeyId",
                         "sessionId",
                         "sessionSource",
                         "authenticatedAppId",
@@ -100542,6 +101012,12 @@
                       "authorName": {
                         "nullable": true,
                         "type": "string"
+                      },
+                      "toolCount": {
+                        "default": 0,
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
                       }
                     },
                     "required": [
@@ -100573,7 +101049,8 @@
                       "createdAt",
                       "updatedAt",
                       "labels",
-                      "teams"
+                      "teams",
+                      "toolCount"
                     ],
                     "additionalProperties": false
                   }
@@ -101911,6 +102388,12 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "toolCount": {
+                      "default": 0,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
@@ -101942,7 +102425,8 @@
                     "createdAt",
                     "updatedAt",
                     "labels",
-                    "teams"
+                    "teams",
+                    "toolCount"
                   ],
                   "additionalProperties": false
                 }
@@ -102762,6 +103246,12 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "toolCount": {
+                      "default": 0,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
@@ -102793,7 +103283,8 @@
                     "createdAt",
                     "updatedAt",
                     "labels",
-                    "teams"
+                    "teams",
+                    "toolCount"
                   ],
                   "additionalProperties": false
                 }
@@ -104130,6 +104621,12 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "toolCount": {
+                      "default": 0,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
@@ -104161,7 +104658,8 @@
                     "createdAt",
                     "updatedAt",
                     "labels",
-                    "teams"
+                    "teams",
+                    "toolCount"
                   ],
                   "additionalProperties": false
                 }
@@ -120566,7 +121064,9 @@
               "enum": [
                 "organization",
                 "team",
-                "agent"
+                "agent",
+                "user",
+                "virtual_key"
               ]
             },
             "in": "query",
@@ -120615,7 +121115,9 @@
                         "enum": [
                           "organization",
                           "team",
-                          "agent"
+                          "agent",
+                          "user",
+                          "virtual_key"
                         ]
                       },
                       "entityId": {
@@ -120964,7 +121466,9 @@
                     "enum": [
                       "organization",
                       "team",
-                      "agent"
+                      "agent",
+                      "user",
+                      "virtual_key"
                     ]
                   },
                   "entityId": {
@@ -121032,7 +121536,9 @@
                       "enum": [
                         "organization",
                         "team",
-                        "agent"
+                        "agent",
+                        "user",
+                        "virtual_key"
                       ]
                     },
                     "entityId": {
@@ -121373,7 +121879,9 @@
                       "enum": [
                         "organization",
                         "team",
-                        "agent"
+                        "agent",
+                        "user",
+                        "virtual_key"
                       ]
                     },
                     "entityId": {
@@ -121694,7 +122202,9 @@
                     "enum": [
                       "organization",
                       "team",
-                      "agent"
+                      "agent",
+                      "user",
+                      "virtual_key"
                     ]
                   },
                   "entityId": {
@@ -121768,7 +122278,9 @@
                       "enum": [
                         "organization",
                         "team",
-                        "agent"
+                        "agent",
+                        "user",
+                        "virtual_key"
                       ]
                     },
                     "entityId": {
@@ -126279,6 +126791,18 @@
                   "vaultSecretKey": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "awsAccessKeyId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "awsSecretAccessKey": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "awsSessionToken": {
+                    "type": "string",
+                    "minLength": 1
                   }
                 },
                 "required": [
@@ -127516,6 +128040,18 @@
                     "minLength": 1
                   },
                   "vaultSecretKey": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "awsAccessKeyId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "awsSecretAccessKey": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "awsSessionToken": {
                     "type": "string",
                     "minLength": 1
                   }

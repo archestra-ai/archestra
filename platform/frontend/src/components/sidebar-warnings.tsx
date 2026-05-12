@@ -7,12 +7,12 @@ import { DefaultCredentialsWarning } from "@/components/default-credentials-warn
 import {
   useDefaultCredentialsEnabled,
   useHasPermissions,
+  useSession,
 } from "@/lib/auth/auth.query";
-import { authClient } from "@/lib/clients/auth/auth-client";
 import { useDisableBasicAuth, useFeature } from "@/lib/config/config.query";
 
 export function SidebarWarnings() {
-  const { data: session } = authClient.useSession();
+  const { data: session } = useSession();
   const userEmail = session?.user?.email;
   const { data: defaultCredentialsEnabled, isLoading: isLoadingCreds } =
     useDefaultCredentialsEnabled();

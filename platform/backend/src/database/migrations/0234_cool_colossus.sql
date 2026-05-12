@@ -1,0 +1,2 @@
+ALTER TABLE "interactions" ADD COLUMN "virtual_key_id" uuid;--> statement-breakpoint
+ALTER TABLE "interactions" ADD CONSTRAINT "interactions_virtual_key_id_virtual_api_keys_id_fk" FOREIGN KEY ("virtual_key_id") REFERENCES "public"."virtual_api_keys"("id") ON DELETE set null ON UPDATE no action;

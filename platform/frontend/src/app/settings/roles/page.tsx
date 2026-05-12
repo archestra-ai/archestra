@@ -12,9 +12,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useHasPermissions } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
 import {
+  useCanImpersonate,
   useImpersonateUser,
   useImpersonationCandidates,
 } from "@/lib/impersonation.query";
@@ -25,7 +25,7 @@ const { RolesList } = config.enterpriseFeatures.core
   : await import("@/components/roles/roles-list");
 
 function RoleDebuggerCallout() {
-  const { data: canImpersonate } = useHasPermissions({ member: ["update"] });
+  const canImpersonate = useCanImpersonate();
   const { data: candidates, isLoading } = useImpersonationCandidates();
   const { mutate: impersonate, isPending } = useImpersonateUser();
   const [selectedUserId, setSelectedUserId] = useState<string>("");

@@ -47,6 +47,7 @@ interface WebSocketClientContext {
   userId: string;
   organizationId: string;
   userIsMcpServerAdmin: boolean;
+  userCanReadAuditLog: boolean;
 }
 
 type MessageHandler = (
@@ -812,10 +813,13 @@ class WebSocketService {
   private async authenticateConnection(
     request: IncomingMessage,
   ): Promise<WebSocketClientContext | null> {
-    const { success: userIsMcpServerAdmin } = await hasPermission(
-      { mcpServerInstallation: ["admin"] },
-      request.headers,
-    );
+    const [
+      { success: userIsMcpServerAdmin },
+      { success: userCanReadAuditLog },
+    ] = await Promise.all([
+      hasPermission({ mcpServerInstallation: ["admin"] }, request.headers),
+      hasPermission({ auditLog: ["read"] }, request.headers),
+    ]);
     const headers = new Headers(request.headers as HeadersInit);
 
     try {
@@ -832,6 +836,7 @@ class WebSocketService {
           userId: user.id,
           organizationId,
           userIsMcpServerAdmin,
+          userCanReadAuditLog,
         };
       }
     } catch (_sessionError) {
@@ -853,6 +858,7 @@ class WebSocketService {
             userId: user.id,
             organizationId,
             userIsMcpServerAdmin,
+            userCanReadAuditLog,
           };
         }
       } catch (_apiKeyError) {
@@ -891,6 +897,14 @@ class WebSocketService {
       type: "mcp_installation_status",
       payload: { serverId, status, error },
     });
+  }
+
+  broadcastAuditLog(event: Record<string, unknown>): void {
+    if (!this.wss) return;
+    this.sendToClients(
+      { type: "audit_log", payload: { event } },
+      (client) => this.clientContexts.get(client)?.userCanReadAuditLog === true,
+    );
   }
 }
 

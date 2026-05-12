@@ -379,6 +379,14 @@ export type ErrorMessage = {
   };
 };
 
+// Audit log live-push (server → admin clients with auditLog:read)
+export type AuditLogMessage = {
+  type: "audit_log";
+  payload: {
+    event: Record<string, unknown>;
+  };
+};
+
 export type ServerWebSocketMessage =
   | BrowserScreenshotMessage
   | BrowserNavigateResultMessage
@@ -398,7 +406,8 @@ export type ServerWebSocketMessage =
   | McpExecClosedMessage
   | McpDeploymentStatusesMessage
   | McpInstallationStatusMessage
-  | ErrorMessage;
+  | ErrorMessage
+  | AuditLogMessage;
 
 /**
  * All possible server message types (for handler maps)

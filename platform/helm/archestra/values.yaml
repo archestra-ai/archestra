@@ -250,6 +250,31 @@ archestra:
     limits:
       memory: "3Gi"
 
+  # Kubernetes probe configuration for the platform and worker containers.
+  # See: https://kubernetes.io/docs/concepts/configuration/liveness-readiness-startup-probes/
+  #
+  # The /health endpoint returns immediately without any I/O — it only fails if the
+  # Node.js event loop is blocked. The /ready endpoint additionally verifies database
+  # connectivity. Defaults are deliberately lenient (timeoutSeconds 45) because killing
+  # a pod aborts every in-flight chat stream on it; a transient event-loop pause or a
+  # slow database health check should not cause a restart. With liveness timeoutSeconds
+  # 45 and failureThreshold 5, kubelet only restarts a pod that has been unresponsive
+  # for several minutes of consecutive probes.
+  probes:
+    startup:
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      timeoutSeconds: 45
+      failureThreshold: 30
+    liveness:
+      periodSeconds: 10
+      timeoutSeconds: 45
+      failureThreshold: 5
+    readiness:
+      periodSeconds: 10
+      timeoutSeconds: 45
+      failureThreshold: 3
+
   # Configuration for the MCP Server Runtime
   orchestrator:
     # Base image for MCP server containers

@@ -496,6 +496,7 @@ const PromptInputContent = ({
   return (
     <div className="relative">
       <PromptInputQueue
+        className="absolute inset-x-0 bottom-full z-40"
         messages={queuedMessages}
         onRemove={removeQueuedMessage}
       />

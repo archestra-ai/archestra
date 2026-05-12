@@ -2833,6 +2833,84 @@ describe("ToolModel", () => {
       expect(catalog?.requiresAuth).toBe(metadata.requiresAuth);
     });
 
+    test("seeds default invocation + trusted data policies for query_knowledge_sources", async () => {
+      const catalogId = randomUUID();
+      archestraMcpBranding.syncFromOrganization(null);
+
+      await ToolModel.seedArchestraTools(catalogId);
+
+      const [kbTool] = await db
+        .select({ id: schema.toolsTable.id })
+        .from(schema.toolsTable)
+        .where(
+          eq(schema.toolsTable.name, TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME),
+        );
+      expect(kbTool).toBeDefined();
+
+      const invocationPolicies = await db
+        .select()
+        .from(schema.toolInvocationPoliciesTable)
+        .where(eq(schema.toolInvocationPoliciesTable.toolId, kbTool.id));
+      const trustedDataPolicies = await db
+        .select()
+        .from(schema.trustedDataPoliciesTable)
+        .where(eq(schema.trustedDataPoliciesTable.toolId, kbTool.id));
+
+      expect(invocationPolicies).toHaveLength(1);
+      expect(invocationPolicies[0].conditions).toEqual([]);
+      expect(invocationPolicies[0].action).toBe(
+        "allow_when_context_is_untrusted",
+      );
+
+      expect(trustedDataPolicies).toHaveLength(1);
+      expect(trustedDataPolicies[0].conditions).toEqual([]);
+      expect(trustedDataPolicies[0].action).toBe("mark_as_untrusted");
+    });
+
+    test("does not overwrite admin-customized policies for query_knowledge_sources on reseed", async () => {
+      const catalogId = randomUUID();
+      archestraMcpBranding.syncFromOrganization(null);
+
+      await ToolModel.seedArchestraTools(catalogId);
+
+      const [kbTool] = await db
+        .select({ id: schema.toolsTable.id })
+        .from(schema.toolsTable)
+        .where(
+          eq(schema.toolsTable.name, TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME),
+        );
+
+      // Admin changes both policies via the UI.
+      await db
+        .update(schema.toolInvocationPoliciesTable)
+        .set({ action: "block_when_context_is_untrusted" })
+        .where(eq(schema.toolInvocationPoliciesTable.toolId, kbTool.id));
+      await db
+        .update(schema.trustedDataPoliciesTable)
+        .set({ action: "mark_as_trusted" })
+        .where(eq(schema.trustedDataPoliciesTable.toolId, kbTool.id));
+
+      // Re-seed (simulates a server restart).
+      await ToolModel.seedArchestraTools(catalogId);
+
+      const invocationPolicies = await db
+        .select()
+        .from(schema.toolInvocationPoliciesTable)
+        .where(eq(schema.toolInvocationPoliciesTable.toolId, kbTool.id));
+      const trustedDataPolicies = await db
+        .select()
+        .from(schema.trustedDataPoliciesTable)
+        .where(eq(schema.trustedDataPoliciesTable.toolId, kbTool.id));
+
+      expect(invocationPolicies).toHaveLength(1);
+      expect(invocationPolicies[0].action).toBe(
+        "block_when_context_is_untrusted",
+      );
+
+      expect(trustedDataPolicies).toHaveLength(1);
+      expect(trustedDataPolicies[0].action).toBe("mark_as_trusted");
+    });
+
     test("rebrands built-in catalog metadata and tool names on sync for white-labeled orgs", async ({
       makeOrganization,
     }) => {

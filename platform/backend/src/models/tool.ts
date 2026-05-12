@@ -809,6 +809,71 @@ class ToolModel {
         "Removed stale Archestra tools",
       );
     }
+
+    // Ensure default policies exist for `query_knowledge_sources`.
+    // Unlike other built-ins, this tool participates in policy evaluation
+    // (its results may contain prompt injection from KB content). We seed
+    // explicit default rows so the /mcp/guardrails UI shows the same
+    // "Sensitive" / "Block when context is untrusted" defaults that admins
+    // can manage. Insert-only — never overwrite user customizations.
+    const knowledgeToolName = archestraMcpBranding.getToolName(
+      TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+    );
+    const knowledgeTool = allCatalogTools.find(
+      (t) => t.name === knowledgeToolName,
+    );
+    if (knowledgeTool) {
+      await ToolModel.ensureKnowledgeSourcesDefaultPolicies(knowledgeTool.id);
+    }
+  }
+
+  /**
+   * Insert default tool invocation + trusted data policies for the
+   * `query_knowledge_sources` tool if no default policy row exists yet.
+   * Safe to call repeatedly on startup; never overwrites existing rows.
+   */
+  private static async ensureKnowledgeSourcesDefaultPolicies(
+    toolId: string,
+  ): Promise<void> {
+    const [existingInvocation, existingTrusted] = await Promise.all([
+      db
+        .select({ id: schema.toolInvocationPoliciesTable.id })
+        .from(schema.toolInvocationPoliciesTable)
+        .where(eq(schema.toolInvocationPoliciesTable.toolId, toolId)),
+      db
+        .select({ id: schema.trustedDataPoliciesTable.id })
+        .from(schema.trustedDataPoliciesTable)
+        .where(eq(schema.trustedDataPoliciesTable.toolId, toolId)),
+    ]);
+
+    const hasDefaultInvocation = existingInvocation.length > 0;
+    const hasDefaultTrusted = existingTrusted.length > 0;
+
+    if (!hasDefaultInvocation) {
+      // KB query is read-only retrieval — safe to invoke even when context is
+      // already untrusted. The security boundary is enforced on RESULTS via
+      // the trusted-data policy below, which propagates untrusted state to
+      // downstream tools.
+      await ToolInvocationPolicyModel.bulkUpsertDefaultPolicy(
+        [toolId],
+        "allow_when_context_is_untrusted",
+      );
+      logger.info(
+        { toolId },
+        "Seeded default tool invocation policy for query_knowledge_sources",
+      );
+    }
+
+    if (!hasDefaultTrusted) {
+      await TrustedDataPolicyModel.bulkUpsertDefaultPolicy(
+        [toolId],
+        "mark_as_untrusted",
+      );
+      logger.info(
+        { toolId },
+        "Seeded default trusted data policy for query_knowledge_sources",
+      );
+    }
   }
 
   static async syncArchestraBuiltInCatalog(params: {

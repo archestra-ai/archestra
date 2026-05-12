@@ -79,11 +79,13 @@ export function CreateLlmProviderApiKeyDialog({
   });
 
   const handleCreate = form.handleSubmit(async (values) => {
+    const isBedrockSigV4 =
+      values.provider === "bedrock" && values.bedrockAuthMethod === "sigv4";
     try {
       await createMutation.mutateAsync({
         name: values.name?.trim() || PROVIDER_CONFIG[values.provider].name,
         provider: values.provider,
-        apiKey: values.apiKey || undefined,
+        apiKey: isBedrockSigV4 ? undefined : values.apiKey || undefined,
         baseUrl: values.baseUrl || undefined,
         extraHeaders: serializeExtraHeaders(values.extraHeaders) ?? undefined,
         scope: values.scope,
@@ -91,13 +93,22 @@ export function CreateLlmProviderApiKeyDialog({
           values.scope === "team" && values.teamId ? values.teamId : undefined,
         isPrimary: values.isPrimary,
         vaultSecretPath:
-          byosEnabled && values.vaultSecretPath
+          !isBedrockSigV4 && byosEnabled && values.vaultSecretPath
             ? values.vaultSecretPath
             : undefined,
         vaultSecretKey:
-          byosEnabled && values.vaultSecretKey
+          !isBedrockSigV4 && byosEnabled && values.vaultSecretKey
             ? values.vaultSecretKey
             : undefined,
+        awsAccessKeyId: isBedrockSigV4
+          ? values.awsAccessKeyId || undefined
+          : undefined,
+        awsSecretAccessKey: isBedrockSigV4
+          ? values.awsSecretAccessKey || undefined
+          : undefined,
+        awsSessionToken: isBedrockSigV4
+          ? values.awsSessionToken || undefined
+          : undefined,
       });
       onOpenChange(false);
       onSuccess?.();
@@ -165,6 +176,10 @@ function getDefaultFormValues(params: {
     vaultSecretPath: null,
     vaultSecretKey: null,
     isPrimary: false,
+    bedrockAuthMethod: "api-key",
+    awsAccessKeyId: null,
+    awsSecretAccessKey: null,
+    awsSessionToken: null,
     ...defaultValues,
   };
 }
@@ -175,6 +190,14 @@ function getIsCreateFormValid(params: {
   values: LlmProviderApiKeyFormValues;
 }) {
   const { azureOpenAiEntraIdEnabled, byosEnabled, values } = params;
+
+  if (values.provider === "bedrock" && values.bedrockAuthMethod === "sigv4") {
+    return Boolean(
+      values.awsAccessKeyId &&
+        values.awsSecretAccessKey &&
+        (values.scope !== "team" || values.teamId),
+    );
+  }
 
   return Boolean(
     values.apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER &&

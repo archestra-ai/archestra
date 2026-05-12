@@ -535,7 +535,7 @@ describe("LLM Provider API Keys CRUD", () => {
 
     expect(createResponse.statusCode).toBe(400);
     expect(createResponse.json().error.message).toContain(
-      "Either apiKey or both vaultSecretPath and vaultSecretKey must be provided",
+      "Either apiKey, both vaultSecretPath and vaultSecretKey, or AWS SigV4 credentials (Bedrock only) must be provided",
     );
   });
 });

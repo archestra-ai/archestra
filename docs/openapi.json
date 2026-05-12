@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.40"
+    "version": "1.2.42"
   },
   "components": {
     "schemas": {
@@ -125484,6 +125484,18 @@
                   "vaultSecretKey": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "awsAccessKeyId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "awsSecretAccessKey": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "awsSessionToken": {
+                    "type": "string",
+                    "minLength": 1
                   }
                 },
                 "required": [
@@ -126721,6 +126733,18 @@
                     "minLength": 1
                   },
                   "vaultSecretKey": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "awsAccessKeyId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "awsSecretAccessKey": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "awsSessionToken": {
                     "type": "string",
                     "minLength": 1
                   }

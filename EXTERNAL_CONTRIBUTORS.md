@@ -279,3 +279,17 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @XinYe-here
 - @Projetos-AI-Design-JB
 - @nguyenquockhang1610
+- @Sheldon715
+- @michaelcarpenter2000
+- @tmctuyen201
+- @havacovn
+- @Aster-amellus
+- @Laxmikant2002
+- @saixi20
+- @tmarsik42
+- @aardappvark
+- @Sagaryadav-ai
+- @heocoi
+- @daiquydev
+- @BrodoB
+- @sus689

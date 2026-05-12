@@ -561,6 +561,13 @@ class ToolModel {
 
     const existingToolsByName = new Map(existingTools.map((t) => [t.name, t]));
 
+    const [{ activeInstallCount = 0 } = { activeInstallCount: 0 }] = await db
+      .select({ activeInstallCount: count() })
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.catalogId, catalogId));
+    // Tool schemas are catalog-scoped; avoid letting later installs thrash them.
+    const shouldRefreshSharedSchema = Number(activeInstallCount) <= 1;
+
     // Prepare tools to insert (only those that don't exist)
     const toolsToInsert: InsertTool[] = [];
     const resultTools: Tool[] = [];
@@ -572,10 +579,12 @@ class ToolModel {
       const existingTool = existingToolsByName.get(tool.name);
       if (existingTool) {
         const descriptionChanged =
+          shouldRefreshSharedSchema &&
           existingTool.description !== tool.description;
         const parametersChanged =
+          shouldRefreshSharedSchema &&
           JSON.stringify(existingTool.parameters) !==
-          JSON.stringify(tool.parameters);
+            JSON.stringify(tool.parameters);
         const metaChanged =
           JSON.stringify(existingTool.meta ?? null) !==
           JSON.stringify(tool.meta ?? null);
@@ -1151,19 +1160,6 @@ class ToolModel {
       .where(inArray(schema.toolsTable.catalogId, catalogIds));
 
     return tools.map((t) => t.id);
-  }
-
-  /**
-   * Delete all tools for a specific catalog item
-   * Used when the last MCP server installation for a catalog is removed
-   * Returns the number of tools deleted
-   */
-  static async deleteByCatalogId(catalogId: string): Promise<number> {
-    const result = await db
-      .delete(schema.toolsTable)
-      .where(eq(schema.toolsTable.catalogId, catalogId));
-
-    return result.rowCount || 0;
   }
 
   /**

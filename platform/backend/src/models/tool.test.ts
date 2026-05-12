@@ -966,6 +966,53 @@ describe("ToolModel", () => {
       expect(createdTools.map((t) => t.name)).toContain("tool-3");
     });
 
+    test("does not refresh shared schema from later installs when multiple installs exist", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      await makeMcpServer({ catalogId: catalog.id });
+      await makeMcpServer({ catalogId: catalog.id });
+
+      const [created] = await ToolModel.bulkCreateToolsIfNotExists([
+        {
+          name: "multi-install-shared-tool",
+          description: "First install schema",
+          parameters: {
+            type: "object",
+            properties: {
+              query: { type: "string" },
+            },
+          },
+          catalogId: catalog.id,
+        },
+      ]);
+
+      const [result] = await ToolModel.bulkCreateToolsIfNotExists([
+        {
+          name: "multi-install-shared-tool",
+          description: "Second install schema",
+          parameters: {
+            type: "object",
+            properties: {
+              query: { type: "string" },
+              limit: { type: "number" },
+            },
+          },
+          catalogId: catalog.id,
+        },
+      ]);
+
+      expect(result.id).toBe(created.id);
+      expect(result.description).toBe("First install schema");
+      expect(result.parameters).toEqual({
+        type: "object",
+        properties: {
+          query: { type: "string" },
+        },
+      });
+    });
+
     test("maintains input order in returned tools", async ({
       makeInternalMcpCatalog,
       makeMcpServer,

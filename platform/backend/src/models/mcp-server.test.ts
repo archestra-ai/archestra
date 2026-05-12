@@ -173,6 +173,92 @@ describe("McpServerModel", () => {
       expect(trustedDataPolicyAfterDelete?.toolId).toBe(tool.id);
     });
 
+    test("preserves other installations and guardrail policies when one installation is removed", async ({
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeTool,
+      makeToolPolicy,
+      makeTrustedDataPolicy,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        name: "Delete One Of Many",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+      });
+      const firstServer = await McpServerModel.create({
+        name: `${catalog.name} first`,
+        serverType: "remote",
+        catalogId: catalog.id,
+        scope: "personal",
+      });
+      const secondServer = await McpServerModel.create({
+        name: `${catalog.name} second`,
+        serverType: "remote",
+        catalogId: catalog.id,
+        scope: "personal",
+      });
+      const tool = await makeTool({
+        name: "delete_one_of_many__read",
+        catalogId: catalog.id,
+      });
+      const firstAgent = await makeAgent();
+      const secondAgent = await makeAgent();
+      const firstAgentTool = await makeAgentTool(firstAgent.id, tool.id, {
+        mcpServerId: firstServer.id,
+        credentialResolutionMode: "static",
+      });
+      const secondAgentTool = await makeAgentTool(secondAgent.id, tool.id, {
+        mcpServerId: secondServer.id,
+        credentialResolutionMode: "static",
+      });
+      const invocationPolicy = await makeToolPolicy(tool.id, {
+        reason: "Policy survives deleting one installation",
+      });
+      const trustedDataPolicy = await makeTrustedDataPolicy(tool.id, {
+        description: "Trusted data policy survives deleting one installation",
+      });
+
+      await expect(McpServerModel.delete(firstServer.id)).resolves.toBe(true);
+
+      const remainingServer = await McpServerModel.findById(secondServer.id);
+      expect(remainingServer?.id).toBe(secondServer.id);
+
+      const [firstAssignmentAfterDelete] = await db
+        .select()
+        .from(schema.agentToolsTable)
+        .where(eq(schema.agentToolsTable.id, firstAgentTool.id));
+      expect(firstAssignmentAfterDelete).toMatchObject({
+        agentId: firstAgent.id,
+        toolId: tool.id,
+        mcpServerId: null,
+        credentialResolutionMode: "static",
+      });
+
+      const [secondAssignmentAfterDelete] = await db
+        .select()
+        .from(schema.agentToolsTable)
+        .where(eq(schema.agentToolsTable.id, secondAgentTool.id));
+      expect(secondAssignmentAfterDelete).toMatchObject({
+        agentId: secondAgent.id,
+        toolId: tool.id,
+        mcpServerId: secondServer.id,
+        credentialResolutionMode: "static",
+      });
+
+      const [invocationPolicyAfterDelete] = await db
+        .select()
+        .from(schema.toolInvocationPoliciesTable)
+        .where(eq(schema.toolInvocationPoliciesTable.id, invocationPolicy.id));
+      expect(invocationPolicyAfterDelete?.toolId).toBe(tool.id);
+
+      const [trustedDataPolicyAfterDelete] = await db
+        .select()
+        .from(schema.trustedDataPoliciesTable)
+        .where(eq(schema.trustedDataPoliciesTable.id, trustedDataPolicy.id));
+      expect(trustedDataPolicyAfterDelete?.toolId).toBe(tool.id);
+    });
+
     test("recreated credentials reuse the existing tool row, refresh schema, and repin assignments", async ({
       makeAgent,
       makeAgentTool,
@@ -219,6 +305,9 @@ describe("McpServerModel", () => {
         catalogId: catalog.id,
         scope: "personal",
       });
+
+      // Mirrors the credential install path in routes/mcp-server.ts, which
+      // fetches tools before assigning them back to agents.
       const [reusedTool] = await ToolModel.bulkCreateToolsIfNotExists([
         {
           name: tool.name,

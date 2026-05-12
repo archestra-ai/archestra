@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.40](https://github.com/archestra-ai/archestra/compare/platform-v1.2.39...platform-v1.2.40) (2026-05-12)
+
+
+### Miscellaneous Chores
+
+* reduce MCP registry request churn ([#4548](https://github.com/archestra-ai/archestra/issues/4548)) ([efba119](https://github.com/archestra-ai/archestra/commit/efba119aad8325e74430d2d6bab0595df5a754aa))
+
 ## [1.2.39](https://github.com/archestra-ai/archestra/compare/platform-v1.2.38...platform-v1.2.39) (2026-05-11)
 
 

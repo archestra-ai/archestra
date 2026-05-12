@@ -82,6 +82,25 @@ Claude Foundry deployments must exist in Azure before requests will work. Use th
 
 Azure requires Anthropic deployment metadata when creating Claude deployments: `industry`, `organizationName`, and `countryCode`. In Azure CLI this may require an ARM REST deployment call with `properties.modelProviderData`.
 
+### Anthropic Workload Identity Federation (keyless auth)
+
+Archestra supports [Anthropic Workload Identity Federation](https://docs.anthropic.com/en/docs/manage-claude/workload-identity-federation), so workloads can authenticate with short-lived tokens instead of static API keys.
+
+Set the following deployment environment variables:
+
+```bash
+ARCHESTRA_ANTHROPIC_WIF_ENABLED=true
+ARCHESTRA_ANTHROPIC_WIF_FEDERATION_RULE_ID=fdrl_...
+ARCHESTRA_ANTHROPIC_WIF_ORGANIZATION_ID=<org-id>
+ARCHESTRA_ANTHROPIC_WIF_SERVICE_ACCOUNT_ID=svac_...
+ARCHESTRA_ANTHROPIC_WIF_WORKSPACE_ID=wrkspc_...
+ARCHESTRA_ANTHROPIC_WIF_IDENTITY_TOKEN_FILE=/var/run/secrets/anthropic/identity.jwt
+```
+
+When enabled and no Anthropic API key is provided, Archestra reads the identity token file, exchanges it at Anthropic `/v1/oauth/token`, and injects the returned bearer token on each upstream Anthropic request.
+
+For full variable details, see [Platform Deployment](/docs/platform-deployment#llm-provider-configuration).
+
 See Microsoft's [Claude on Foundry guide](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-claude) for the Azure endpoint and authentication details.
 
 ## Google Gemini

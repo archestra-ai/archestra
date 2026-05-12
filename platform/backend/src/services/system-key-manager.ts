@@ -1,4 +1,5 @@
 import type { SupportedProvider } from "@shared";
+import { isAnthropicWifEnabled } from "@/clients/anthropic-wif-credentials";
 import {
   isAnthropicAzureFoundryEntraIdEnabled,
   isAzureOpenAiEntraIdEnabled,
@@ -68,10 +69,11 @@ class SystemKeyManager {
     },
     {
       provider: "anthropic",
-      name: "Anthropic Azure Foundry Entra ID",
+      name: "Anthropic keyless auth",
       isEnabled: () =>
-        isAnthropicAzureFoundryEntraIdEnabled() &&
-        isAzureAiFoundryBaseUrl(config.llm.anthropic.baseUrl),
+        (isAnthropicAzureFoundryEntraIdEnabled() &&
+          isAzureAiFoundryBaseUrl(config.llm.anthropic.baseUrl)) ||
+        isAnthropicWifEnabled(),
       customFetch: async () => {
         const models = await fetchAnthropicModels(
           "",

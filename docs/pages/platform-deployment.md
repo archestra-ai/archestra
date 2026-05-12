@@ -762,6 +762,28 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Uses Azure Identity `DefaultAzureCredential` with token scope `https://ai.azure.com/.default`
   - Claude deployments must already exist in the Azure resource. Microsoft lists additional Claude prerequisites: paid eligible subscription, supported region, Azure Marketplace access for partner models, permission to subscribe to model offerings, and Contributor or Owner role on the resource group. Azure also requires Anthropic deployment metadata: `industry`, `organizationName`, and `countryCode`.
 
+- **`ARCHESTRA_ANTHROPIC_WIF_ENABLED`** - Enable Anthropic Workload Identity Federation (WIF) keyless authentication.
+  - Default: `false`
+  - When enabled, Archestra exchanges an identity JWT for a short-lived Anthropic access token via `/v1/oauth/token`.
+  - Requires the `ARCHESTRA_ANTHROPIC_WIF_*` variables below.
+  - See [Anthropic WIF documentation](https://docs.anthropic.com/en/docs/manage-claude/workload-identity-federation) for provider-side setup.
+
+- **`ARCHESTRA_ANTHROPIC_WIF_FEDERATION_RULE_ID`** - Anthropic federation rule ID (`fdrl_...`).
+  - Required when WIF is enabled.
+
+- **`ARCHESTRA_ANTHROPIC_WIF_ORGANIZATION_ID`** - Anthropic organization ID.
+  - Required when WIF is enabled.
+
+- **`ARCHESTRA_ANTHROPIC_WIF_SERVICE_ACCOUNT_ID`** - Anthropic service account ID (`svac_...`) for the federated identity.
+  - Required when WIF is enabled.
+
+- **`ARCHESTRA_ANTHROPIC_WIF_WORKSPACE_ID`** - Anthropic workspace ID (`wrkspc_...`) to scope the token.
+  - Required when WIF is enabled.
+
+- **`ARCHESTRA_ANTHROPIC_WIF_IDENTITY_TOKEN_FILE`** - Path to an identity token JWT file mounted in the runtime.
+  - Required when WIF is enabled.
+  - The file is read for each token exchange, so rotated projected tokens are picked up automatically.
+
 - **`ARCHESTRA_GEMINI_BASE_URL`** - Override the Google Gemini API base URL.
   - Default: `https://generativelanguage.googleapis.com`
   - Use this to point to your own proxy or other custom endpoints

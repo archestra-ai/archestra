@@ -1,6 +1,7 @@
 import {
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
+  CONTEXT_COMPACTION_SYSTEM_PROMPT,
   POLICY_CONFIG_SYSTEM_PROMPT,
 } from "@shared";
 import db, { schema } from "@/database";
@@ -27,6 +28,14 @@ describe("syncBuiltInAgents", () => {
 
     expect(firstPolicyAgent).not.toBeNull();
     expect(secondPolicyAgent).not.toBeNull();
+
+    const contextCompactionAgent = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
+      firstOrg.id,
+    );
+    expect(contextCompactionAgent?.systemPrompt).toBe(
+      CONTEXT_COMPACTION_SYSTEM_PROMPT,
+    );
   });
 
   test("updates legacy policy configuration system prompts", async ({

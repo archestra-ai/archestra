@@ -40,8 +40,25 @@ Object.defineProperty(window, "matchMedia", {
 
 // Mock all the complex dependencies
 vi.mock("@/components/ai-elements/prompt-input", () => ({
-  PromptInput: ({ children }: { children: React.ReactNode }) => (
-    <form data-testid="prompt-input">{children}</form>
+  PromptInput: ({
+    children,
+    onSubmit,
+  }: {
+    children: React.ReactNode;
+    onSubmit?: (
+      message: { text: string; files: [] },
+      event: React.FormEvent<HTMLFormElement>,
+    ) => void;
+  }) => (
+    <form
+      data-testid="prompt-input"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit?.({ text: mockControllerState.value, files: [] }, event);
+      }}
+    >
+      {children}
+    </form>
   ),
   PromptInputActionAddAttachments: ({ label }: { label: string }) => (
     <span>{label}</span>
@@ -526,6 +543,66 @@ describe("ArchestraPromptInput", () => {
 
       expect(onCompactConversation).toHaveBeenCalledTimes(1);
       expect(mockTextInputClear).toHaveBeenCalled();
+    });
+
+    it("queues a follow-up submitted while the current response is streaming", () => {
+      const onSubmit = vi.fn();
+      mockControllerState.value = "Run this next";
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          onSubmit={onSubmit}
+          status="streaming"
+        />,
+      );
+
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(onSubmit).not.toHaveBeenCalled();
+      expect(screen.getByText("Run this next")).toBeInTheDocument();
+      expect(screen.getByLabelText("Queued prompts")).toBeInTheDocument();
+    });
+
+    it("submits the next queued follow-up when the chat is ready again", () => {
+      const onSubmit = vi.fn();
+      mockControllerState.value = "Run after streaming";
+
+      const { rerender } = render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          onSubmit={onSubmit}
+          status="streaming"
+        />,
+      );
+
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      rerender(
+        <ArchestraPromptInput
+          {...defaultProps}
+          onSubmit={onSubmit}
+          status="ready"
+        />,
+      );
+
+      expect(onSubmit).toHaveBeenCalledWith(
+        { text: "Run after streaming", files: [] },
+        expect.objectContaining({ preventDefault: expect.any(Function) }),
+      );
+    });
+
+    it("removes queued follow-ups from the prompt queue", () => {
+      mockControllerState.value = "Remove this queued prompt";
+
+      render(<ArchestraPromptInput {...defaultProps} status="streaming" />);
+
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+      fireEvent.click(screen.getByLabelText("Remove queued prompt"));
+
+      expect(
+        screen.queryByText("Remove this queued prompt"),
+      ).not.toBeInTheDocument();
     });
   });
 });

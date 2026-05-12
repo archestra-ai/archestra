@@ -10,6 +10,7 @@ import {
 } from "@shared";
 import type { ChatStatus } from "ai";
 import { MoreVerticalIcon, PaperclipIcon, XIcon } from "lucide-react";
+import { nanoid } from "nanoid";
 import type { FormEvent, KeyboardEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -65,6 +66,10 @@ import { useModelSelectorDisplay } from "@/lib/chat/use-model-selector-display.h
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
+import {
+  PromptInputQueue,
+  type QueuedPromptInputMessage,
+} from "./prompt-input-queue";
 
 interface ArchestraPromptInputProps {
   onSubmit: (
@@ -208,6 +213,10 @@ const PromptInputContent = ({
   const attachments = usePromptInputAttachments();
   const commandItemRefs = useRef<Array<HTMLDivElement | null>>([]);
   const [activeCommandIndex, setActiveCommandIndex] = useState(0);
+  const [queuedMessages, setQueuedMessages] = useState<
+    QueuedPromptInputMessage[]
+  >([]);
+  const isSendingQueuedMessageRef = useRef(false);
 
   // Collapsed/expanded state for the model selector (defaults to collapsed = provider icon only)
   const { isCollapsed: showDefaultLogo, expand: expandModelSelector } =
@@ -345,6 +354,35 @@ const PromptInputContent = ({
     void onCompactConversation?.();
   }, [controller.textInput, onCompactConversation, storageKey]);
 
+  const submitQueuedMessage = useCallback(
+    (message: QueuedPromptInputMessage) => {
+      localStorage.removeItem(storageKey);
+      onSubmit({ text: message.text, files: message.files }, {
+        preventDefault: () => {},
+      } as FormEvent<HTMLFormElement>);
+    },
+    [onSubmit, storageKey],
+  );
+
+  useEffect(() => {
+    if (status !== "ready") {
+      isSendingQueuedMessageRef.current = false;
+      return;
+    }
+
+    if (queuedMessages.length === 0) {
+      return;
+    }
+    if (isSendingQueuedMessageRef.current) {
+      return;
+    }
+
+    const [nextMessage] = queuedMessages;
+    isSendingQueuedMessageRef.current = true;
+    setQueuedMessages((current) => current.slice(1));
+    submitQueuedMessage(nextMessage);
+  }, [queuedMessages, status, submitQueuedMessage]);
+
   const selectSlashCommand = useCallback(
     (command: SlashCommand) => {
       if (command.kind === "real") {
@@ -412,11 +450,31 @@ const PromptInputContent = ({
         return;
       }
 
+      const hasContent =
+        message.text.trim().length > 0 || message.files.length > 0;
+      if (hasContent && (status === "submitted" || status === "streaming")) {
+        setQueuedMessages((current) => [
+          ...current,
+          {
+            id: nanoid(),
+            text: message.text,
+            files: message.files,
+          },
+        ]);
+        return;
+      }
+
       localStorage.removeItem(storageKey);
       onSubmit(message, e);
     },
-    [onSubmit, onCompactConversation, runCompactCommand, storageKey],
+    [onSubmit, onCompactConversation, runCompactCommand, status, storageKey],
   );
+
+  const removeQueuedMessage = useCallback((id: string) => {
+    setQueuedMessages((current) =>
+      current.filter((message) => message.id !== id),
+    );
+  }, []);
 
   const handleFileError = useCallback(
     (err: {
@@ -437,6 +495,10 @@ const PromptInputContent = ({
 
   return (
     <div className="relative">
+      <PromptInputQueue
+        messages={queuedMessages}
+        onRemove={removeQueuedMessage}
+      />
       {isSlashCommandOpen && (
         <div className="absolute inset-x-0 bottom-full z-50 mb-2 overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-lg">
           <PromptInputCommand className="h-auto rounded-none bg-transparent">
@@ -520,7 +582,7 @@ const PromptInputContent = ({
               className="px-4"
               autoFocus
               disabled={submitDisabled || isContextCompacting}
-              disableEnterSubmit={status !== "ready" && status !== "error"}
+              disableEnterSubmit={false}
               onKeyDown={handleTextareaKeyDown}
               data-testid={E2eTestId.ChatPromptTextarea}
             />

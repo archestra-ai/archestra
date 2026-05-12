@@ -35584,6 +35584,21 @@
                                   "name"
                                 ],
                                 "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string",
+                                    "enum": [
+                                      "context-compaction-subagent"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name"
+                                ],
+                                "additionalProperties": false
                               }
                             ]
                           },
@@ -36297,6 +36312,20 @@
                         "required": [
                           "name"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "context-compaction-subagent"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ]
                       }
                     ]
                   },
@@ -36548,6 +36577,21 @@
                               "type": "string",
                               "enum": [
                                 "dual-llm-quarantine-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "context-compaction-subagent"
                               ]
                             }
                           },
@@ -37308,6 +37352,21 @@
                               "name"
                             ],
                             "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "enum": [
+                                  "context-compaction-subagent"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "name"
+                            ],
+                            "additionalProperties": false
                           }
                         ]
                       },
@@ -37992,6 +38051,21 @@
                             "name"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "context-compaction-subagent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -38669,6 +38743,21 @@
                               "type": "string",
                               "enum": [
                                 "dual-llm-quarantine-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "context-compaction-subagent"
                               ]
                             }
                           },
@@ -39708,6 +39797,21 @@
                                 "name"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "enum": [
+                                    "context-compaction-subagent"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "name"
+                              ],
+                              "additionalProperties": false
                             }
                           ]
                         },
@@ -40439,6 +40543,21 @@
                             "name"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "context-compaction-subagent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -41104,6 +41223,20 @@
                         "required": [
                           "name"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "context-compaction-subagent"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ]
                       }
                     ]
                   },
@@ -41360,6 +41493,21 @@
                               "type": "string",
                               "enum": [
                                 "dual-llm-quarantine-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "context-compaction-subagent"
                               ]
                             }
                           },
@@ -42328,6 +42476,21 @@
                               "type": "string",
                               "enum": [
                                 "dual-llm-quarantine-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "context-compaction-subagent"
                               ]
                             }
                           },
@@ -93787,6 +93950,25 @@
                               "knowledge:query-expansion"
                             ]
                           },
+                          "sources": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "api",
+                                "model_router",
+                                "chat",
+                                "chat:compaction",
+                                "chatops:slack",
+                                "chatops:ms-teams",
+                                "email",
+                                "schedule-trigger",
+                                "knowledge:embedding",
+                                "knowledge:reranker",
+                                "knowledge:query-expansion"
+                              ]
+                            }
+                          },
                           "interactionId": {
                             "nullable": true,
                             "type": "string"
@@ -93918,6 +94100,7 @@
                           "sessionId",
                           "sessionSource",
                           "source",
+                          "sources",
                           "interactionId",
                           "requestCount",
                           "totalInputTokens",

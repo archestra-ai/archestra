@@ -191,6 +191,33 @@ function AgentToolsList({ agentId }: { agentId: string }) {
   );
 }
 
+function getBuiltInAgentConfigForSave(params: {
+  builtInAgentName?: string;
+  autoConfigureOnToolDiscovery: boolean;
+  maxRounds: number;
+}) {
+  switch (params.builtInAgentName) {
+    case BUILT_IN_AGENT_IDS.POLICY_CONFIG:
+      return {
+        name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+        autoConfigureOnToolDiscovery: params.autoConfigureOnToolDiscovery,
+      };
+    case BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN:
+      return {
+        name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+        maxRounds: params.maxRounds,
+      };
+    case BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION:
+      return {
+        name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
+      };
+    default:
+      return {
+        name: BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
+      };
+  }
+}
+
 // Single subagent pill with popover
 interface SubagentPillProps {
   agent: Agent;
@@ -912,19 +939,11 @@ export function AgentDialog({
       }
 
       if (agent && isBuiltIn) {
-        const builtInAgentConfig = isPolicyConfigBuiltIn
-          ? {
-              name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-              autoConfigureOnToolDiscovery,
-            }
-          : isDualLlmMainBuiltIn
-            ? {
-                name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
-                maxRounds: parsedDualLlmMaxRounds,
-              }
-            : {
-                name: BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
-              };
+        const builtInAgentConfig = getBuiltInAgentConfigForSave({
+          builtInAgentName,
+          autoConfigureOnToolDiscovery,
+          maxRounds: parsedDualLlmMaxRounds,
+        });
 
         const updated = await updateAgent.mutateAsync({
           id: agent.id,
@@ -1093,7 +1112,7 @@ export function AgentDialog({
     dualLlmMaxRounds,
     isDualLlmMainBuiltIn,
     isInternalAgent,
-    isPolicyConfigBuiltIn,
+    builtInAgentName,
     showSecurity,
     isAdmin,
     selectedDelegationTargetIds,

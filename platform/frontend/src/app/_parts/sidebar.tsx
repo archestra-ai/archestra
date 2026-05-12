@@ -25,7 +25,7 @@ import {
   Star,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import React from "react";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
 import { AppLogo } from "@/components/app-logo";
@@ -237,7 +237,7 @@ const NavPrimary = ({
           pathname.startsWith(item.url)
         }
       >
-        <Link
+        <SidebarPrefetchLink
           href={item.url}
           data-testid={item.testId}
           onClick={() => {
@@ -246,7 +246,7 @@ const NavPrimary = ({
         >
           <item.icon className={item.iconClassName} />
           <span>{item.title}</span>
-        </Link>
+        </SidebarPrefetchLink>
       </SidebarMenuButton>
       {item.title === "New Chat" && chatSection}
       {item.subItems && item.subItems.length > 0 && (
@@ -262,7 +262,7 @@ const NavPrimary = ({
                     pathname.startsWith(sub.url)
                   }
                 >
-                  <Link
+                  <SidebarPrefetchLink
                     href={sub.url}
                     data-testid={sub.testId}
                     onClick={() => {
@@ -270,7 +270,7 @@ const NavPrimary = ({
                     }}
                   >
                     <span>{sub.title}</span>
-                  </Link>
+                  </SidebarPrefetchLink>
                 </SidebarMenuSubButton>
               </SidebarMenuSubItem>
             ))}
@@ -337,10 +337,10 @@ const NavSecondary = ({
                   pathname.startsWith(item.url)
                 }
               >
-                <Link href={item.url}>
+                <SidebarPrefetchLink href={item.url}>
                   <item.icon className={item.iconClassName} />
                   <span>{item.title}</span>
-                </Link>
+                </SidebarPrefetchLink>
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}
@@ -459,17 +459,17 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader className="pt-4 group-data-[collapsible=icon]:pt-2 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:gap-1">
         <div className="flex items-center justify-between group-data-[collapsible=icon]:hidden">
-          <Link href="/chat" className="flex-1 min-w-0">
+          <SidebarPrefetchLink href="/chat" className="flex-1 min-w-0">
             <AppLogo centered={false} />
-          </Link>
+          </SidebarPrefetchLink>
           <SidebarTrigger className="size-7 cursor-pointer" />
         </div>
-        <Link
+        <SidebarPrefetchLink
           href="/chat"
           className="hidden group-data-[collapsible=icon]:flex"
         >
           <img src={appIconLogo} alt="Logo" className="size-7" />
-        </Link>
+        </SidebarPrefetchLink>
         <SidebarTrigger className="hidden group-data-[collapsible=icon]:flex size-8 cursor-pointer" />
       </SidebarHeader>
       <SidebarContent>
@@ -537,4 +537,61 @@ export function AppSidebar() {
       </SidebarFooter>
     </Sidebar>
   );
+}
+
+/**
+ * Sidebar links opt out of Next.js viewport prefetch to avoid fetching every
+ * visible sidebar route's RSC payload when the app shell mounts. Hover/focus
+ * prefetch keeps intentional navigation fast without competing with initial
+ * page API requests.
+ */
+function SidebarPrefetchLink({
+  href,
+  onFocus,
+  onMouseEnter,
+  ...props
+}: React.ComponentProps<typeof Link>) {
+  const router = useRouter();
+
+  return (
+    <Link
+      href={href}
+      prefetch={false}
+      onFocus={(event) => {
+        const prefetchHref = getPrefetchHref(href);
+        if (prefetchHref) router.prefetch(prefetchHref);
+        onFocus?.(event);
+      }}
+      onMouseEnter={(event) => {
+        const prefetchHref = getPrefetchHref(href);
+        if (prefetchHref) router.prefetch(prefetchHref);
+        onMouseEnter?.(event);
+      }}
+      {...props}
+    />
+  );
+}
+
+/**
+ * Converts a Next.js Link href into the string URL required by router.prefetch.
+ * Sidebar links currently pass strings, but this keeps manual prefetch safe if
+ * a future item uses a UrlObject with query or hash fields.
+ */
+function getPrefetchHref(href: React.ComponentProps<typeof Link>["href"]) {
+  if (typeof href === "string") return href;
+  if (!href.pathname) return null;
+
+  const searchParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(href.query ?? {})) {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item != null) searchParams.append(key, String(item));
+      }
+      continue;
+    }
+    if (value != null) searchParams.set(key, String(value));
+  }
+
+  const query = searchParams.toString();
+  return `${href.pathname}${query ? `?${query}` : ""}${href.hash ?? ""}`;
 }

@@ -20,13 +20,13 @@ import {
 import {
   useDefaultCredentialsEnabled,
   useHasPermissions,
+  useSession,
 } from "@/lib/auth/auth.query";
-import { authClient } from "@/lib/clients/auth/auth-client";
 import { useDisableBasicAuth, useFeature } from "@/lib/config/config.query";
 import { cn } from "@/lib/utils";
 
 export function SidebarWarningsAccordion() {
-  const { data: session } = authClient.useSession();
+  const { data: session } = useSession();
   const userEmail = session?.user?.email;
   const { data: defaultCredentialsEnabled, isLoading: isLoadingCreds } =
     useDefaultCredentialsEnabled();

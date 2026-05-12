@@ -4,14 +4,12 @@ import type { archestraApiTypes } from "@shared";
 import { Globe, Link, Lock, UserRound, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FormDialog } from "@/components/form-dialog";
-import {
-  AssignmentCombobox,
-  type AssignmentComboboxItem,
-} from "@/components/ui/assignment-combobox";
+import { AssignmentCombobox } from "@/components/ui/assignment-combobox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { UserSearchableMultiSelect } from "@/components/user-searchable-multi-select";
 import {
   type VisibilityOption,
   VisibilitySelector,
@@ -63,7 +61,7 @@ export function ShareConversationDialog({
     [currentUserId, members],
   );
 
-  const teamItems = useMemo<AssignmentComboboxItem[]>(
+  const teamItems = useMemo(
     () =>
       teams.map((team) => ({
         id: team.id,
@@ -72,12 +70,12 @@ export function ShareConversationDialog({
     [teams],
   );
 
-  const userItems = useMemo<AssignmentComboboxItem[]>(
+  const userOptions = useMemo(
     () =>
       availableMembers.map((member) => ({
-        id: member.id,
-        name: member.name || member.email,
-        description: member.email,
+        userId: member.id,
+        name: member.name,
+        email: member.email,
       })),
     [availableMembers],
   );
@@ -88,14 +86,6 @@ export function ShareConversationDialog({
         .filter((team) => teamIds.includes(team.id))
         .map((team) => team.name),
     [teamIds, teamItems],
-  );
-
-  const selectedUserLabels = useMemo(
-    () =>
-      userItems
-        .filter((user) => userIds.includes(user.id))
-        .map((user) => user.name),
-    [userIds, userItems],
   );
 
   useEffect(() => {
@@ -142,12 +132,12 @@ export function ShareConversationDialog({
         label: "Users",
         description: "Share this chat with selected people.",
         icon: UserRound,
-        disabled: userItems.length === 0,
+        disabled: userOptions.length === 0,
         disabledLabel:
-          userItems.length === 0 ? "No users available" : undefined,
+          userOptions.length === 0 ? "No users available" : undefined,
       },
     ],
-    [teams.length, userItems.length],
+    [teams.length, userOptions.length],
   );
 
   const handleSave = useCallback(async () => {
@@ -253,30 +243,15 @@ export function ShareConversationDialog({
           {visibility === "user" && (
             <div className="space-y-2">
               <Label>Users</Label>
-              <AssignmentCombobox
-                items={userItems}
-                selectedIds={userIds}
-                onToggle={(userId) =>
-                  setUserIds((current) =>
-                    current.includes(userId)
-                      ? current.filter((id) => id !== userId)
-                      : [...current, userId],
-                  )
-                }
-                label="Select users"
-                placeholder="Search users..."
+              <UserSearchableMultiSelect
+                value={userIds}
+                onValueChange={setUserIds}
+                users={userOptions}
+                placeholder="Select users"
+                searchPlaceholder="Search users..."
                 emptyMessage="No users found."
-                className="h-9 w-full justify-between border text-sm text-foreground"
+                className="w-full"
               />
-              {selectedUserLabels.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {selectedUserLabels.map((userName) => (
-                    <Badge key={userName} variant="secondary">
-                      {userName}
-                    </Badge>
-                  ))}
-                </div>
-              )}
             </div>
           )}
         </VisibilitySelector>

@@ -26,6 +26,19 @@ const {
   getMemberDefaultAgent,
 } = archestraApiSdk;
 
+export const internalAgentsQueryKey = [
+  "agents",
+  "all",
+  { agentType: "agent", excludeBuiltIn: true },
+] as const;
+
+export async function fetchInternalAgents() {
+  const response = await getAllAgents({
+    query: { agentType: "agent", excludeBuiltIn: true },
+  });
+  return response.data ?? [];
+}
+
 // Returns all agents as an array
 export function useProfiles(
   params: {
@@ -303,13 +316,8 @@ export function useDefaultAgentId() {
 
 export function useInternalAgents(params?: { enabled?: boolean }) {
   return useQuery({
-    queryKey: ["agents", "all", { agentType: "agent", excludeBuiltIn: true }],
-    queryFn: async () => {
-      const response = await getAllAgents({
-        query: { agentType: "agent", excludeBuiltIn: true },
-      });
-      return response.data ?? [];
-    },
+    queryKey: internalAgentsQueryKey,
+    queryFn: fetchInternalAgents,
     enabled: params?.enabled,
   });
 }

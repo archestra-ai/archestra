@@ -23420,6 +23420,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             executionId: string | null;
             userId: string | null;
+            virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -23466,6 +23467,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             executionId: string | null;
             userId: string | null;
+            virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -23628,6 +23630,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             executionId: string | null;
             userId: string | null;
+            virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -23694,6 +23697,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             executionId: string | null;
             userId: string | null;
+            virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -23740,6 +23744,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             executionId: string | null;
             userId: string | null;
+            virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -23786,6 +23791,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             executionId: string | null;
             userId: string | null;
+            virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -24206,6 +24212,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             executionId: string | null;
             userId: string | null;
+            virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -24252,6 +24259,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             executionId: string | null;
             userId: string | null;
+            virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -24298,6 +24306,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             executionId: string | null;
             userId: string | null;
+            virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -24344,6 +24353,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             executionId: string | null;
             userId: string | null;
+            virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -24390,6 +24400,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             executionId: string | null;
             userId: string | null;
+            virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -24436,6 +24447,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             executionId: string | null;
             userId: string | null;
+            virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -24482,6 +24494,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             executionId: string | null;
             userId: string | null;
+            virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -24526,6 +24539,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             executionId: string | null;
             userId: string | null;
+            virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -24570,6 +24584,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             executionId: string | null;
             userId: string | null;
+            virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -24616,6 +24631,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             executionId: string | null;
             userId: string | null;
+            virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -24662,6 +24678,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             executionId: string | null;
             userId: string | null;
+            virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -24708,6 +24725,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             executionId: string | null;
             userId: string | null;
+            virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -24754,6 +24772,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             executionId: string | null;
             userId: string | null;
+            virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -24867,6 +24886,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             executionId: string | null;
             userId: string | null;
+            virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -25442,6 +25462,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         executionId: string | null;
         userId: string | null;
+        virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -25488,6 +25509,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         executionId: string | null;
         userId: string | null;
+        virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -25650,6 +25672,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         executionId: string | null;
         userId: string | null;
+        virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -25716,6 +25739,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         executionId: string | null;
         userId: string | null;
+        virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -25762,6 +25786,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         executionId: string | null;
         userId: string | null;
+        virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -25808,6 +25833,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         executionId: string | null;
         userId: string | null;
+        virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -26228,6 +26254,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         executionId: string | null;
         userId: string | null;
+        virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -26274,6 +26301,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         executionId: string | null;
         userId: string | null;
+        virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -26320,6 +26348,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         executionId: string | null;
         userId: string | null;
+        virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -26366,6 +26395,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         executionId: string | null;
         userId: string | null;
+        virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -26412,6 +26442,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         executionId: string | null;
         userId: string | null;
+        virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -26458,6 +26489,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         executionId: string | null;
         userId: string | null;
+        virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -26504,6 +26536,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         executionId: string | null;
         userId: string | null;
+        virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -26548,6 +26581,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         executionId: string | null;
         userId: string | null;
+        virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -26592,6 +26626,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         executionId: string | null;
         userId: string | null;
+        virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -26638,6 +26673,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         executionId: string | null;
         userId: string | null;
+        virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -26684,6 +26720,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         executionId: string | null;
         userId: string | null;
+        virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -26730,6 +26767,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         executionId: string | null;
         userId: string | null;
+        virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -26776,6 +26814,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         executionId: string | null;
         userId: string | null;
+        virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -26889,6 +26928,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         executionId: string | null;
         userId: string | null;
+        virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
@@ -27247,6 +27287,7 @@ export type GetInternalMcpCatalogResponses = {
             name: string;
         }>;
         authorName?: string | null;
+        toolCount: number;
     }>;
 };
 
@@ -27566,6 +27607,7 @@ export type CreateInternalMcpCatalogItemResponses = {
             name: string;
         }>;
         authorName?: string | null;
+        toolCount: number;
     };
 };
 
@@ -27855,6 +27897,7 @@ export type GetInternalMcpCatalogItemResponses = {
             name: string;
         }>;
         authorName?: string | null;
+        toolCount: number;
     };
 };
 
@@ -28174,6 +28217,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
             name: string;
         }>;
         authorName?: string | null;
+        toolCount: number;
     };
 };
 
@@ -31875,7 +31919,7 @@ export type GetLimitsData = {
     body?: never;
     path?: never;
     query?: {
-        entityType?: 'organization' | 'team' | 'agent';
+        entityType?: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key';
         entityId?: string;
         limitType?: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
     };
@@ -31953,7 +31997,7 @@ export type GetLimitsResponses = {
      */
     200: Array<{
         id: string;
-        entityType: 'organization' | 'team' | 'agent';
+        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key';
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
@@ -31976,7 +32020,7 @@ export type GetLimitsResponse = GetLimitsResponses[keyof GetLimitsResponses];
 
 export type CreateLimitData = {
     body: {
-        entityType: 'organization' | 'team' | 'agent';
+        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key';
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
@@ -32061,7 +32105,7 @@ export type CreateLimitResponses = {
      */
     200: {
         id: string;
-        entityType: 'organization' | 'team' | 'agent';
+        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key';
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
@@ -32241,7 +32285,7 @@ export type GetLimitResponses = {
      */
     200: {
         id: string;
-        entityType: 'organization' | 'team' | 'agent';
+        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key';
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
@@ -32258,7 +32302,7 @@ export type GetLimitResponse = GetLimitResponses[keyof GetLimitResponses];
 
 export type UpdateLimitData = {
     body: {
-        entityType?: 'organization' | 'team' | 'agent';
+        entityType?: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key';
         entityId?: string;
         limitType?: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue?: number;
@@ -32345,7 +32389,7 @@ export type UpdateLimitResponses = {
      */
     200: {
         id: string;
-        entityType: 'organization' | 'team' | 'agent';
+        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key';
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;

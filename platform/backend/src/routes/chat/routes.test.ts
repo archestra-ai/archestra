@@ -313,6 +313,26 @@ describe("prepareMessagesForProvider", () => {
 
     expect(messages[0]).toBe(message);
   });
+
+  it("leaves bedrock messages with reasoning that carries provider metadata", () => {
+    const message = {
+      role: "assistant" as const,
+      parts: [
+        {
+          type: "reasoning",
+          text: "thinking...",
+          providerMetadata: { bedrock: { signature: "sig-abc" } },
+        },
+      ],
+    };
+
+    const messages = __test.prepareMessagesForProvider({
+      provider: "bedrock",
+      messages: [message],
+    });
+
+    expect(messages[0]).toBe(message);
+  });
 });
 
 describe("getMessagesNotYetPersisted", () => {

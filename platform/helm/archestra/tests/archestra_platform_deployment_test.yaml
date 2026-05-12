@@ -1435,9 +1435,12 @@ tests:
           value: 3
 
   # Resource requests and limits tests
-  - it: should have default memory resources configured
+  - it: should have default resources configured
     documentIndex: 1
     asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: "2"
       - equal:
           path: spec.template.spec.containers[0].resources.requests.memory
           value: "2Gi"

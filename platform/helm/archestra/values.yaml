@@ -246,6 +246,10 @@ archestra:
   # See: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
   resources:
     requests:
+      # Fastify recommends 2 vCPU per app instance for lowest latency, with the
+      # second vCPU helping GC/libuv avoid blocking the main thread.
+      # See: https://fastify.dev/docs/latest/Guides/Recommendations/#capacity-planning-for-production
+      cpu: "2"
       memory: "2Gi"
     limits:
       memory: "3Gi"
@@ -464,6 +468,10 @@ archestra:
     # Workers typically need less memory than the web server
     resources:
       requests:
+        # Fastify recommends 2 vCPU per app instance for lowest latency, with the
+        # second vCPU helping GC/libuv avoid blocking the main thread.
+        # See: https://fastify.dev/docs/latest/Guides/Recommendations/#capacity-planning-for-production
+        cpu: "2"
         memory: "1Gi"
       limits:
         memory: "2Gi"

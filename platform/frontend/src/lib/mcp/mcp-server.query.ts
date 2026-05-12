@@ -69,6 +69,48 @@ export function useMcpServers(params?: McpServersParams) {
   });
 }
 
+export function useMcpInstallationStatusCacheSync(enabled = true) {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    websocketService.connect();
+    const unsubscribe = websocketService.subscribe(
+      "mcp_installation_status",
+      (message: McpInstallationStatusMessage) => {
+        const { serverId, status, error } = message.payload;
+
+        queryClient.setQueriesData<
+          archestraApiTypes.GetMcpServersResponses["200"]
+        >({ queryKey: ["mcp-servers"] }, (servers) => {
+          if (!servers) return servers;
+          let didUpdate = false;
+          const nextServers = servers.map((server) => {
+            if (server.id !== serverId) return server;
+            didUpdate = true;
+            return {
+              ...server,
+              localInstallationStatus: status,
+              localInstallationError: error,
+            };
+          });
+          return didUpdate ? nextServers : servers;
+        });
+
+        if (status === "success" || status === "error") {
+          void queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+          void queryClient.invalidateQueries({
+            queryKey: ["mcp-servers", serverId, "tools"],
+          });
+        }
+      },
+    );
+
+    return unsubscribe;
+  }, [enabled, queryClient]);
+}
+
 /**
  * Get MCP servers grouped by catalogId with current user's credentials first.
  * Used for credential/installation selection in tool configuration.

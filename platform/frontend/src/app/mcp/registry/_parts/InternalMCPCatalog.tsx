@@ -54,6 +54,7 @@ import {
 import {
   useInstallMcpServer,
   useMcpDeploymentStatuses,
+  useMcpInstallationStatusCacheSync,
   useMcpServers,
   useReauthenticateMcpServer,
   useReinstallMcpServer,
@@ -110,8 +111,8 @@ export function InternalMCPCatalog({
   >(new Set());
   const { data: installedServers } = useMcpServers({
     initialData: initialInstalledServers,
-    hasInstallingServers: installingServerIds.size > 0,
   });
+  useMcpInstallationStatusCacheSync();
   const installMutation = useInstallMcpServer();
   const reinstallMutation = useReinstallMcpServer();
   const reauthMutation = useReauthenticateMcpServer();

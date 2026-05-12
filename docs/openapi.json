@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.38"
+    "version": "1.2.39"
   },
   "components": {
     "schemas": {
@@ -101012,6 +101012,10 @@
                       "authorName": {
                         "nullable": true,
                         "type": "string"
+                      },
+                      "toolCount": {
+                        "default": 0,
+                        "type": "number"
                       }
                     },
                     "required": [
@@ -101043,7 +101047,8 @@
                       "createdAt",
                       "updatedAt",
                       "labels",
-                      "teams"
+                      "teams",
+                      "toolCount"
                     ],
                     "additionalProperties": false
                   }
@@ -102381,6 +102386,10 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "toolCount": {
+                      "default": 0,
+                      "type": "number"
                     }
                   },
                   "required": [
@@ -102412,7 +102421,8 @@
                     "createdAt",
                     "updatedAt",
                     "labels",
-                    "teams"
+                    "teams",
+                    "toolCount"
                   ],
                   "additionalProperties": false
                 }
@@ -103232,6 +103242,10 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "toolCount": {
+                      "default": 0,
+                      "type": "number"
                     }
                   },
                   "required": [
@@ -103263,7 +103277,8 @@
                     "createdAt",
                     "updatedAt",
                     "labels",
-                    "teams"
+                    "teams",
+                    "toolCount"
                   ],
                   "additionalProperties": false
                 }
@@ -104600,6 +104615,10 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "toolCount": {
+                      "default": 0,
+                      "type": "number"
                     }
                   },
                   "required": [
@@ -104631,7 +104650,8 @@
                     "createdAt",
                     "updatedAt",
                     "labels",
-                    "teams"
+                    "teams",
+                    "toolCount"
                   ],
                   "additionalProperties": false
                 }

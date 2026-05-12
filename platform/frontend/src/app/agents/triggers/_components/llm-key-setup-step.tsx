@@ -17,6 +17,10 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   vaultSecretPath: null,
   vaultSecretKey: null,
   isPrimary: true,
+  bedrockAuthMethod: "api-key",
+  awsAccessKeyId: null,
+  awsSecretAccessKey: null,
+  awsSessionToken: null,
 };
 
 export function LlmKeySetupStep() {

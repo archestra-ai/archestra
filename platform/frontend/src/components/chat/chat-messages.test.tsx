@@ -224,6 +224,30 @@ describe("ChatMessages", () => {
     expect(screen.getByText("Switched to GitHub Agent")).toBeInTheDocument();
   });
 
+  it("keeps the loading logo visible for the whole streaming response", () => {
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={
+          [
+            {
+              id: "assistant-1",
+              role: "assistant",
+              parts: [{ type: "text", text: "partial response" }],
+            },
+          ] as UIMessage[]
+        }
+        status="streaming"
+      />,
+    );
+
+    const loadingLogo = screen.getByAltText("Loading logo");
+    expect(loadingLogo).toBeInTheDocument();
+    expect(loadingLogo).toHaveClass(
+      "[animation:archestra-chat-logo-bounce_700ms_ease-in-out_200ms_infinite]",
+    );
+  });
+
   it("deduplicates adjacent swap dividers for the same target", () => {
     const messages = [
       {

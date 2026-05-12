@@ -207,7 +207,6 @@ export function ChatMessages({
   contextCompactionFeedback = null,
   unsafeContextBoundary,
 }: ChatMessagesProps) {
-  const isStreamingStalled = useStreamingStallDetection(messages, status);
   const { data: authSession } = useSession();
   const isDebugging = authSession?.user?.name?.endsWith("(debugging)") ?? false;
 
@@ -1267,14 +1266,13 @@ export function ChatMessages({
             }
             feedback={contextCompactionFeedback}
           />
-          {(status === "submitted" ||
-            (status === "streaming" && isStreamingStalled)) && (
+          {isResponseInProgress && (
             <div className="absolute bottom-[-10] left-0">
               <Message from="assistant">
                 <img
                   src={appIconLogo}
                   alt="Loading logo"
-                  className="object-contain h-6 w-auto animate-[bounce_700ms_ease_200ms_infinite]"
+                  className="h-6 w-auto object-contain [animation:archestra-chat-logo-bounce_700ms_ease-in-out_200ms_infinite]"
                 />
               </Message>
             </div>
@@ -1327,45 +1325,6 @@ function getMessagePartSignature(part: UIMessage["parts"][number]): string {
     default:
       return `part:${JSON.stringify(part)}`;
   }
-}
-
-// Custom hook to detect when streaming has stalled (>500ms without updates)
-function useStreamingStallDetection(
-  messages: UIMessage[],
-  status: ChatStatus,
-): boolean {
-  const lastUpdateTimeRef = useRef<number>(Date.now());
-  const [isStreamingStalled, setIsStreamingStalled] = useState(false);
-
-  // Update last update time when messages change
-  // biome-ignore lint/correctness/useExhaustiveDependencies: we need to react to messages change here
-  useEffect(() => {
-    if (status === "streaming") {
-      lastUpdateTimeRef.current = Date.now();
-      setIsStreamingStalled(false);
-    }
-  }, [messages, status]);
-
-  // Check periodically if streaming has stalled
-  useEffect(() => {
-    if (status !== "streaming") {
-      setIsStreamingStalled(false);
-      return;
-    }
-
-    const interval = setInterval(() => {
-      const timeSinceLastUpdate = Date.now() - lastUpdateTimeRef.current;
-      if (timeSinceLastUpdate > 1_000) {
-        setIsStreamingStalled(true);
-      } else {
-        setIsStreamingStalled(false);
-      }
-    }, 100); // Check every 100ms
-
-    return () => clearInterval(interval);
-  }, [status]);
-
-  return isStreamingStalled;
 }
 
 // Re-engage stick-to-bottom when the user sends a new message.

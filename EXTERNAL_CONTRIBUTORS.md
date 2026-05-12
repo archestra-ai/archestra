@@ -302,3 +302,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @Darshan3690
 - @nguyen-hung-dev
 - @phungkaizen
+- @IssacDanny

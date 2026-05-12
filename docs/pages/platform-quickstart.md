@@ -41,7 +41,8 @@ docker run -p 9000:9000 -p 127.0.0.1:3000:3000 `
    archestra/platform;
 ```
 
-Binding the UI to 127.0.0.1 keeps quickstart local by default.
+The UI on port `3000` is bound to `127.0.0.1`, so you can open it locally at http://localhost:3000.
+The API on port `9000` is still published on all interfaces by `-p 9000:9000`; if you want a fully local-only quickstart, change it to `-p 127.0.0.1:9000:9000`.
 
 Once it's up, follow http://localhost:3000
 

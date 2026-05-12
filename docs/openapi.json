@@ -101015,7 +101015,9 @@
                       },
                       "toolCount": {
                         "default": 0,
-                        "type": "number"
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
                       }
                     },
                     "required": [
@@ -102389,7 +102391,9 @@
                     },
                     "toolCount": {
                       "default": 0,
-                      "type": "number"
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
@@ -103245,7 +103249,9 @@
                     },
                     "toolCount": {
                       "default": 0,
-                      "type": "number"
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
@@ -104618,7 +104624,9 @@
                     },
                     "toolCount": {
                       "default": 0,
-                      "type": "number"
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [

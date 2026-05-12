@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  type AgentType,
-  archestraApiSdk,
-  type archestraApiTypes,
-  E2eTestId,
-} from "@shared";
-import { useQuery } from "@tanstack/react-query";
+import { type AgentType, type archestraApiTypes, E2eTestId } from "@shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, Plus, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -47,6 +41,7 @@ import {
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useTeams } from "@/lib/teams/team.query";
 import { AgentActions } from "./agent-actions";
 
 type AgentsInitialData = {
@@ -155,15 +150,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
 
-  // Keep teams cache warm for AgentDialog
-  const { data: userTeams } = useQuery({
-    queryKey: ["teams"],
-    queryFn: async () => {
-      const { data } = await archestraApiSdk.getTeams({
-        query: { limit: 100, offset: 0 },
-      });
-      return data?.data || [];
-    },
+  const { data: userTeams } = useTeams({
     initialData: initialData?.teams,
     enabled: !!canReadTeams,
   });

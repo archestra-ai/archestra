@@ -1,6 +1,6 @@
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
-import { useQuery } from "@tanstack/react-query";
+import type { archestraApiTypes } from "@shared";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useTeams } from "@/lib/teams/team.query";
 
 type Gateway = archestraApiTypes.GetAgentResponses["200"] | null | undefined;
 
@@ -25,14 +25,7 @@ export function useCanManageGateway(gateway: Gateway): {
   const { data: session, isPending: isSessionLoading } = useSession();
   const currentUserId = session?.user?.id;
 
-  const { data: userTeams, isLoading: isTeamsLoading } = useQuery({
-    queryKey: ["teams"],
-    queryFn: async () => {
-      const { data } = await archestraApiSdk.getTeams({
-        query: { limit: 100, offset: 0 },
-      });
-      return data?.data ?? [];
-    },
+  const { data: userTeams, isLoading: isTeamsLoading } = useTeams({
     enabled: !!canReadTeams && gateway?.scope === "team",
   });
 

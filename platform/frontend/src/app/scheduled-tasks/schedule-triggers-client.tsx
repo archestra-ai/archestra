@@ -1,7 +1,5 @@
 "use client";
 
-import { archestraApiSdk } from "@shared";
-import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Cron } from "croner";
 import {
@@ -73,6 +71,7 @@ import {
   useScheduleTriggers,
   useUpdateScheduleTrigger,
 } from "@/lib/schedule-trigger.query";
+import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { formatCronSchedule } from "@/lib/utils/format-cron";
@@ -578,15 +577,7 @@ export function ScheduleTriggerDetailPage({
   const { data: isAgentTeamAdmin = false } = useHasPermissions({
     agent: ["team-admin"],
   });
-  const { data: userTeams = [] } = useQuery({
-    queryKey: ["teams"],
-    queryFn: async () => {
-      const response = await archestraApiSdk.getTeams({
-        query: { limit: 100, offset: 0 },
-      });
-      return response.data?.data ?? [];
-    },
-  });
+  const { data: userTeams = [] } = useTeams();
   const userTeamIdSet = useMemo(
     () => new Set(userTeams.map((t) => t.id)),
     [userTeams],

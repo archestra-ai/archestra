@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  archestraApiSdk,
   type archestraApiTypes,
   E2eTestId,
   getManageCredentialsButtonTestId,
@@ -40,10 +39,11 @@ import {
 } from "@/components/ui/tooltip";
 import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
-import { useCreateProfile } from "@/lib/agent.query";
+import { fetchInternalAgents, useCreateProfile } from "@/lib/agent.query";
 import { useBulkAssignTools } from "@/lib/agent-tools.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
+import { fetchCatalogTools } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useTeams } from "@/lib/teams/team.query";
 import {
@@ -189,9 +189,7 @@ export function McpServerCard({
     const agentName = item.name;
     try {
       // Get or create: check if a personal agent with this name already exists for the current user
-      const { data: existingAgents } = await archestraApiSdk.getAllAgents({
-        query: { agentType: "agent" },
-      });
+      const existingAgents = await fetchInternalAgents();
       const existing = existingAgents?.find(
         (a) => a.name === agentName && a.authorId === currentUserId,
       );
@@ -206,14 +204,7 @@ export function McpServerCard({
           icon: item.icon ?? undefined,
         }));
 
-      const { data: tools, error } =
-        await archestraApiSdk.getInternalMcpCatalogTools({
-          path: { id: item.id },
-        });
-      if (error) {
-        toast.error("Failed to load MCP server tools");
-        return;
-      }
+      const tools = await fetchCatalogTools(item.id);
 
       if (agent && tools && tools.length > 0) {
         const assignments = tools.map((tool) => ({

@@ -905,6 +905,9 @@ const config = {
     enableTestMcpServer: process.env.ENABLE_TEST_MCP_SERVER === "true",
     testValue: process.env.TEST_VALUE ?? null,
   },
+  maintenanceMode: {
+    message: process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE || "",
+  },
   authRateLimitDisabled:
     process.env.ARCHESTRA_AUTH_RATE_LIMIT_DISABLED === "true",
   isQuickstart: process.env.ARCHESTRA_QUICKSTART === "true",

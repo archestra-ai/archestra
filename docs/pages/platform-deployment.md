@@ -621,6 +621,53 @@ export ARCHESTRA_BASE_URL="https://api.archestra.example.com"
 
 For complete documentation, examples, and resource reference, visit the [Archestra Terraform Provider Documentation](https://registry.terraform.io/providers/archestra-ai/archestra/latest/docs).
 
+## Maintenance Mode
+
+Archestra Platform supports a maintenance mode that temporarily blocks all API requests while keeping healthcheck endpoints accessible. This is useful during database upgrades, migrations, or other maintenance operations.
+
+### How It Works
+
+When maintenance mode is active (by setting `ARCHESTRA_MAINTENANCE_MODE_MESSAGE`), all API requests receive a `503 Service Unavailable` response with your custom message. The following endpoints remain accessible:
+
+- `/health` and `/api/health` — for load balancer healthchecks
+- `/metrics` — for Prometheus metrics scraping
+
+### Enabling Maintenance Mode
+
+Set the environment variable to a non-empty string containing your maintenance message:
+
+```bash
+# Docker
+-e ARCHESTRA_MAINTENANCE_MODE_MESSAGE="We are currently performing scheduled maintenance. Please try again later."
+
+# Helm
+--set archestra.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE="We are currently performing scheduled maintenance. Please try again later."
+```
+
+### Disabling Maintenance Mode
+
+Remove the environment variable or set it to an empty string:
+
+```bash
+# Docker — simply don't include the -e flag, or:
+-e ARCHESTRA_MAINTENANCE_MODE_MESSAGE=""
+
+# Helm
+--set archestra.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE=""
+```
+
+### Response Format
+
+When maintenance mode is active, blocked requests receive:
+
+```json
+{
+  "statusCode": 503,
+  "error": "Service Unavailable",
+  "message": "Your maintenance message here"
+}
+```
+
 ## Environment Variables
 
 The following environment variables can be used to configure Archestra Platform.
@@ -671,6 +718,10 @@ The following environment variables can be used to configure Archestra Platform.
   - Values: `permissive` or `restrictive`
   - `permissive`: Tools are allowed, unless a specific policy is set for them.
   - `restrictive`: Tools are forbidden, unless a specific policy is set for them.
+
+- **`ARCHESTRA_MAINTENANCE_MODE_MESSAGE`** - Enables maintenance mode when set to a non-empty string. All API requests will receive a 503 response with this message, except healthcheck and metrics endpoints.
+  - Default: Not set (maintenance mode disabled)
+  - Example: `We are currently performing scheduled maintenance. Please try again later.`
 
 - **`ARCHESTRA_ANALYTICS`** - Controls PostHog analytics for product improvements.
   - Default: `enabled`

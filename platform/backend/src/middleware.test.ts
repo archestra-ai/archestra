@@ -5,6 +5,8 @@ import { ApiError } from "@/types";
 import {
   enterpriseLicenseMiddleware,
   isEnterpriseOnlyRoute,
+  isMaintenanceModeAllowedPath,
+  maintenanceModeMiddleware,
 } from "./middleware";
 
 /**
@@ -348,5 +350,165 @@ describe("isEnterpriseOnlyRoute", () => {
     expect(isEnterpriseOnlyRoute("/api/profiles")).toBe(false);
     expect(isEnterpriseOnlyRoute("/api/auth/session")).toBe(false);
     expect(isEnterpriseOnlyRoute("/health")).toBe(false);
+  });
+});
+
+describe.sequential("maintenanceModeMiddleware", () => {
+  let fastify: ReturnType<typeof createTestFastify>;
+  const originalMessage = config.maintenanceMode.message;
+
+  const setMaintenanceMessage = (value: string) => {
+    Object.defineProperty(config.maintenanceMode, "message", {
+      value,
+      writable: true,
+      configurable: true,
+    });
+  };
+
+  afterEach(async () => {
+    if (fastify) {
+      await fastify.close();
+    }
+    setMaintenanceMessage(originalMessage);
+  });
+
+  describe("when maintenance mode is OFF (empty message)", () => {
+    beforeEach(async () => {
+      setMaintenanceMessage("");
+
+      fastify = createTestFastify();
+      await fastify.register(maintenanceModeMiddleware);
+
+      fastify.get("/api/profiles", async () => ({ profiles: [] }));
+      fastify.get("/health", async () => ({ status: "ok" }));
+
+      await fastify.ready();
+    });
+
+    it("should allow normal requests", async () => {
+      const response = await fastify.inject({
+        method: "GET",
+        url: "/api/profiles",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(JSON.parse(response.payload)).toEqual({ profiles: [] });
+    });
+
+    it("should allow health endpoint", async () => {
+      const response = await fastify.inject({
+        method: "GET",
+        url: "/health",
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+  });
+
+  describe("when maintenance mode is ON", () => {
+    beforeEach(async () => {
+      setMaintenanceMessage("Database upgrade in progress");
+
+      fastify = createTestFastify();
+      await fastify.register(maintenanceModeMiddleware);
+
+      fastify.get("/api/profiles", async () => ({ profiles: [] }));
+      fastify.get("/api/teams", async () => ({ teams: [] }));
+      fastify.get("/health", async () => ({ status: "ok" }));
+      fastify.get("/api/health", async () => ({ status: "ok" }));
+      fastify.get("/metrics", async () => "# metrics");
+
+      await fastify.ready();
+    });
+
+    it("should return 503 for normal API routes", async () => {
+      const response = await fastify.inject({
+        method: "GET",
+        url: "/api/profiles",
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(JSON.parse(response.payload)).toEqual({
+        statusCode: 503,
+        error: "Service Unavailable",
+        message: "Database upgrade in progress",
+      });
+    });
+
+    it("should return 503 for other API routes", async () => {
+      const response = await fastify.inject({
+        method: "GET",
+        url: "/api/teams",
+      });
+
+      expect(response.statusCode).toBe(503);
+    });
+
+    it("should allow /health", async () => {
+      const response = await fastify.inject({
+        method: "GET",
+        url: "/health",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(JSON.parse(response.payload)).toEqual({ status: "ok" });
+    });
+
+    it("should allow /api/health", async () => {
+      const response = await fastify.inject({
+        method: "GET",
+        url: "/api/health",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(JSON.parse(response.payload)).toEqual({ status: "ok" });
+    });
+
+    it("should allow /metrics", async () => {
+      const response = await fastify.inject({
+        method: "GET",
+        url: "/metrics",
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it("should block POST requests", async () => {
+      fastify.post("/api/data", async () => ({ created: true }));
+
+      const response = await fastify.inject({
+        method: "POST",
+        url: "/api/data",
+        payload: { key: "value" },
+      });
+
+      expect(response.statusCode).toBe(503);
+    });
+  });
+});
+
+describe("isMaintenanceModeAllowedPath", () => {
+  it("should allow /health", () => {
+    expect(isMaintenanceModeAllowedPath("/health")).toBe(true);
+  });
+
+  it("should allow /api/health", () => {
+    expect(isMaintenanceModeAllowedPath("/api/health")).toBe(true);
+  });
+
+  it("should allow /metrics", () => {
+    expect(isMaintenanceModeAllowedPath("/metrics")).toBe(true);
+  });
+
+  it("should allow paths with query strings", () => {
+    expect(isMaintenanceModeAllowedPath("/health?verbose=true")).toBe(true);
+  });
+
+  it("should not allow /api/profiles", () => {
+    expect(isMaintenanceModeAllowedPath("/api/profiles")).toBe(false);
+  });
+
+  it("should not allow /", () => {
+    expect(isMaintenanceModeAllowedPath("/")).toBe(false);
   });
 });

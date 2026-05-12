@@ -1387,7 +1387,7 @@ tests:
           value: 10
       - equal:
           path: spec.template.spec.containers[0].startupProbe.timeoutSeconds
-          value: 5
+          value: 45
       - equal:
           path: spec.template.spec.containers[0].startupProbe.failureThreshold
           value: 30
@@ -1408,10 +1408,10 @@ tests:
           value: 10
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.timeoutSeconds
-          value: 5
+          value: 45
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.failureThreshold
-          value: 3
+          value: 5
 
   - it: should have readiness probe configured
     documentIndex: 1
@@ -1429,7 +1429,7 @@ tests:
           value: 10
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
-          value: 5
+          value: 45
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.failureThreshold
           value: 3

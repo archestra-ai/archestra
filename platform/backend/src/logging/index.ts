@@ -48,6 +48,9 @@ function createLogger(): pino.Logger {
     {
       level: LOG_LEVEL,
       mixin: injectTraceContext,
+      // Drop `pid` and `hostname` — they're noise in a containerized
+      // environment where pod metadata already identifies the host.
+      base: undefined,
     },
     pino.multistream([
       {

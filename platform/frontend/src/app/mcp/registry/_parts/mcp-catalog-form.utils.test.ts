@@ -860,3 +860,185 @@ describe("transformFormToApiData - secret env var preservation", () => {
     expect(env[1]?.value ?? "").toBe("");
   });
 });
+
+describe("parseArgumentsString", () => {
+  it("returns an empty array for empty / whitespace input", async () => {
+    const { parseArgumentsString } = await import("./mcp-catalog-form.utils");
+    expect(parseArgumentsString(undefined)).toEqual([]);
+    expect(parseArgumentsString(null)).toEqual([]);
+    expect(parseArgumentsString("")).toEqual([]);
+    expect(parseArgumentsString("   \n  ")).toEqual([]);
+  });
+
+  it("splits one-argument-per-line input on newlines and trims", async () => {
+    const { parseArgumentsString } = await import("./mcp-catalog-form.utils");
+    expect(parseArgumentsString("  server.js  \n  --verbose ")).toEqual([
+      "server.js",
+      "--verbose",
+    ]);
+  });
+
+  it("drops blank lines from one-per-line input", async () => {
+    const { parseArgumentsString } = await import("./mcp-catalog-form.utils");
+    expect(parseArgumentsString("server.js\n\n--verbose\n")).toEqual([
+      "server.js",
+      "--verbose",
+    ]);
+  });
+
+  it("parses a JSON array of strings as a list of arguments", async () => {
+    const { parseArgumentsString } = await import("./mcp-catalog-form.utils");
+    expect(parseArgumentsString('["server.js", "--verbose"]')).toEqual([
+      "server.js",
+      "--verbose",
+    ]);
+  });
+
+  it("trims and drops empty entries inside a JSON array", async () => {
+    const { parseArgumentsString } = await import("./mcp-catalog-form.utils");
+    expect(parseArgumentsString('["  server.js  ", "", "--verbose"]')).toEqual([
+      "server.js",
+      "--verbose",
+    ]);
+  });
+
+  it("falls back to newline parsing when the JSON array is malformed", async () => {
+    const { parseArgumentsString } = await import("./mcp-catalog-form.utils");
+    // Looks like a JSON array but isn't parseable - treat as text input.
+    expect(parseArgumentsString("[server.js, --verbose]")).toEqual([
+      "[server.js, --verbose]",
+    ]);
+  });
+
+  it("falls back to newline parsing when the JSON value is not an array of strings", async () => {
+    const { parseArgumentsString } = await import("./mcp-catalog-form.utils");
+    // Valid JSON but wrong shape (numbers, not strings).
+    expect(parseArgumentsString("[1, 2, 3]")).toEqual(["[1, 2, 3]"]);
+  });
+});
+
+describe("parseFullServerConfig", () => {
+  it("returns null for inputs that aren't JSON objects", async () => {
+    const { parseFullServerConfig } = await import("./mcp-catalog-form.utils");
+    expect(parseFullServerConfig("")).toBeNull();
+    expect(parseFullServerConfig("server.js\n--verbose")).toBeNull();
+    expect(parseFullServerConfig('["server.js"]')).toBeNull();
+    expect(parseFullServerConfig("not json")).toBeNull();
+  });
+
+  it("returns null when the object lacks any recognized MCP server fields", async () => {
+    const { parseFullServerConfig } = await import("./mcp-catalog-form.utils");
+    expect(parseFullServerConfig('{"name": "something"}')).toBeNull();
+  });
+
+  it("parses command / args / env from a full MCP server config", async () => {
+    const { parseFullServerConfig } = await import("./mcp-catalog-form.utils");
+    expect(
+      parseFullServerConfig(
+        JSON.stringify({
+          command: "node",
+          args: ["server.js", "--verbose"],
+          env: { API_KEY: "secret", DEBUG: "1" },
+        }),
+      ),
+    ).toEqual({
+      command: "node",
+      args: ["server.js", "--verbose"],
+      env: [
+        { key: "API_KEY", value: "secret" },
+        { key: "DEBUG", value: "1" },
+      ],
+    });
+  });
+
+  it("ignores malformed JSON gracefully", async () => {
+    const { parseFullServerConfig } = await import("./mcp-catalog-form.utils");
+    expect(parseFullServerConfig('{"command": "node"')).toBeNull();
+  });
+
+  it("coerces non-string env values to strings instead of dropping them", async () => {
+    const { parseFullServerConfig } = await import("./mcp-catalog-form.utils");
+    const result = parseFullServerConfig(
+      JSON.stringify({ env: { PORT: 8080, ENABLED: true, EMPTY: null } }),
+    );
+    expect(result?.env).toEqual([
+      { key: "PORT", value: "8080" },
+      { key: "ENABLED", value: "true" },
+      { key: "EMPTY", value: "" },
+    ]);
+  });
+
+  it("preserves the `type` field when present", async () => {
+    const { parseFullServerConfig } = await import("./mcp-catalog-form.utils");
+    expect(
+      parseFullServerConfig(JSON.stringify({ type: "stdio", command: "node" })),
+    ).toEqual({ command: "node", type: "stdio" });
+  });
+
+  it("drops args entries that are not strings", async () => {
+    const { parseFullServerConfig } = await import("./mcp-catalog-form.utils");
+    // If even one entry isn't a string the args list is unsafe - treat as missing.
+    const result = parseFullServerConfig(
+      JSON.stringify({ command: "node", args: ["server.js", 42] }),
+    );
+    expect(result).toEqual({ command: "node" });
+  });
+});
+
+describe("transformFormToApiData - JSON array arguments", () => {
+  function makeLocalValues(args: string): McpCatalogFormValues {
+    return {
+      name: "JSON Args MCP",
+      description: "",
+      icon: null,
+      serverType: "local",
+      serverUrl: "",
+      authMethod: "none",
+      includeBearerPrefix: true,
+      authHeaderName: "",
+      additionalHeaders: [],
+      oauthConfig: undefined,
+      enterpriseManagedConfig: null,
+      localConfig: {
+        command: "node",
+        arguments: args,
+        environment: [],
+        envFrom: [],
+        dockerImage: "",
+        transportType: "stdio",
+        httpPort: "",
+        httpPath: "",
+        serviceAccount: "",
+        imagePullSecrets: [],
+      },
+      deploymentSpecYaml: "",
+      originalDeploymentSpecYaml: "",
+      oauthClientSecretVaultPath: "",
+      oauthClientSecretVaultKey: "",
+      localConfigVaultPath: "",
+      localConfigVaultKey: "",
+      labels: [],
+      scope: "personal",
+      teams: [],
+    };
+  }
+
+  it("accepts a JSON array as the arguments field", () => {
+    const result = transformFormToApiData(
+      makeLocalValues('["server.js", "--verbose"]'),
+    );
+    expect(result.localConfig?.arguments).toEqual(["server.js", "--verbose"]);
+  });
+
+  it("still accepts the existing one-argument-per-line format", () => {
+    const result = transformFormToApiData(
+      makeLocalValues("server.js\n--verbose"),
+    );
+    expect(result.localConfig?.arguments).toEqual(["server.js", "--verbose"]);
+  });
+
+  it("returns undefined arguments when the field is empty", () => {
+    const result = transformFormToApiData(makeLocalValues("   "));
+    expect(result.localConfig?.arguments).toBeUndefined();
+  });
+});

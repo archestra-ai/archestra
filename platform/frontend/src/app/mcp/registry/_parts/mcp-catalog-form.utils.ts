@@ -34,13 +34,9 @@ export function transformFormToApiData(
 
   // Handle local configuration
   if (values.serverType === "local" && values.localConfig) {
-    // Parse arguments string into array
-    const argumentsArray = values.localConfig.arguments
-      ? values.localConfig.arguments
-          .split("\n")
-          .map((arg) => arg.trim())
-          .filter((arg) => arg.length > 0)
-      : [];
+    // Parse arguments string into array. Accept either one-per-line text or a
+    // JSON array of strings, since most MCP catalogs display args in JSON form.
+    const argumentsArray = parseArgumentsString(values.localConfig.arguments);
 
     data.localConfig = {
       command: values.localConfig.command || undefined,
@@ -944,4 +940,142 @@ export function stripEnvVarQuotes(value: string): string {
   }
 
   return value;
+}
+
+/**
+ * Parse the user-entered arguments string into an array of arguments.
+ *
+ * Most MCP catalogs document server arguments as a JSON array of strings
+ * (e.g. `["server.js", "--verbose"]`). The form historically only supported
+ * one-argument-per-line text, forcing users to manually split JSON before
+ * pasting. This helper accepts either format:
+ *
+ *   - A JSON array of strings -> parsed verbatim, empty entries dropped
+ *   - One argument per line (any other input) -> split on newlines, trimmed
+ *
+ * Falsy / whitespace-only input returns an empty array.
+ */
+export function parseArgumentsString(
+  input: string | undefined | null,
+): string[] {
+  if (!input) {
+    return [];
+  }
+
+  const trimmed = input.trim();
+  if (trimmed.length === 0) {
+    return [];
+  }
+
+  if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      if (
+        Array.isArray(parsed) &&
+        parsed.every((item) => typeof item === "string")
+      ) {
+        return (parsed as string[])
+          .map((arg) => arg.trim())
+          .filter((arg) => arg.length > 0);
+      }
+    } catch {
+      // Fall through to newline-based parsing below.
+    }
+  }
+
+  return input
+    .split("\n")
+    .map((arg) => arg.trim())
+    .filter((arg) => arg.length > 0);
+}
+
+export interface ParsedMcpServerConfig {
+  command?: string;
+  args?: string[];
+  env?: Array<{ key: string; value: string }>;
+  type?: string;
+}
+
+/**
+ * Detect whether a pasted string is a full MCP server config (a JSON object
+ * with fields like `command`, `args`, `env`, `type`) rather than just the
+ * arguments list. Most catalogs publish entries in this shape:
+ *
+ *     {
+ *       "command": "node",
+ *       "args": ["server.js"],
+ *       "env": { "API_KEY": "..." }
+ *     }
+ *
+ * When such a paste is detected, callers can pre-fill multiple form fields
+ * at once instead of dropping the JSON text into the Arguments textarea.
+ *
+ * Returns `null` if the input does not look like a server config object.
+ */
+export function parseFullServerConfig(
+  input: string,
+): ParsedMcpServerConfig | null {
+  if (!input) {
+    return null;
+  }
+
+  const trimmed = input.trim();
+  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
+    return null;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return null;
+  }
+
+  const obj = parsed as Record<string, unknown>;
+  const hasKnownField =
+    "command" in obj || "args" in obj || "env" in obj || "type" in obj;
+  if (!hasKnownField) {
+    return null;
+  }
+
+  const result: ParsedMcpServerConfig = {};
+
+  if (typeof obj.command === "string") {
+    result.command = obj.command;
+  }
+
+  if (Array.isArray(obj.args) && obj.args.every((a) => typeof a === "string")) {
+    result.args = (obj.args as string[])
+      .map((a) => a.trim())
+      .filter((a) => a.length > 0);
+  }
+
+  if (obj.env && typeof obj.env === "object" && !Array.isArray(obj.env)) {
+    const env: Array<{ key: string; value: string }> = [];
+    for (const [key, rawValue] of Object.entries(obj.env)) {
+      if (key.trim().length === 0) continue;
+      // Catalogs sometimes use non-string values (numbers/booleans). Coerce
+      // them to strings rather than dropping them on the floor.
+      const value =
+        typeof rawValue === "string"
+          ? rawValue
+          : rawValue == null
+            ? ""
+            : String(rawValue);
+      env.push({ key, value });
+    }
+    if (env.length > 0) {
+      result.env = env;
+    }
+  }
+
+  if (typeof obj.type === "string") {
+    result.type = obj.type;
+  }
+
+  return result;
 }

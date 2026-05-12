@@ -94,7 +94,10 @@ import {
   formSchema,
   type McpCatalogFormValues,
 } from "./mcp-catalog-form.types";
-import { transformCatalogItemToFormValues } from "./mcp-catalog-form.utils";
+import {
+  parseFullServerConfig,
+  transformCatalogItemToFormValues,
+} from "./mcp-catalog-form.utils";
 
 const { useIdentityProviders } = config.enterpriseFeatures.core
   ? // biome-ignore lint/style/noRestrictedImports: conditional EE query import for IdP selector
@@ -999,16 +1002,80 @@ export function McpCatalogForm({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>
-                          Arguments (one per line)
+                          Arguments (one per line or JSON array)
                           <ReinstallHint show={isArgumentsDirty} />
                         </FormLabel>
                         <FormControl>
                           <Textarea
-                            placeholder={`/path/to/server.js\n--verbose`}
+                            placeholder={`/path/to/server.js\n--verbose\n\nor: ["server.js", "--verbose"]`}
                             className="font-mono min-h-20"
                             {...field}
+                            onPaste={(event) => {
+                              // Smart paste: if the user pastes a full MCP
+                              // server config object (the shape published by
+                              // most catalogs), populate Command / Arguments /
+                              // Environment in one step instead of dumping the
+                              // JSON text into the Arguments textarea.
+                              const pasted =
+                                event.clipboardData.getData("text");
+                              const parsed = parseFullServerConfig(pasted);
+                              if (!parsed) return;
+
+                              event.preventDefault();
+
+                              if (parsed.command !== undefined) {
+                                form.setValue(
+                                  "localConfig.command",
+                                  parsed.command,
+                                  { shouldDirty: true, shouldValidate: true },
+                                );
+                              }
+
+                              if (parsed.args !== undefined) {
+                                form.setValue(
+                                  "localConfig.arguments",
+                                  parsed.args.join("\n"),
+                                  { shouldDirty: true, shouldValidate: true },
+                                );
+                              }
+
+                              if (parsed.env && parsed.env.length > 0) {
+                                const existing =
+                                  form.getValues("localConfig.environment") ??
+                                  [];
+                                const existingKeys = new Set(
+                                  existing.map((e) => e.key),
+                                );
+                                const additions = parsed.env
+                                  .filter((e) => !existingKeys.has(e.key))
+                                  .map((e) => ({
+                                    key: e.key,
+                                    type: "plain_text" as const,
+                                    value: e.value,
+                                    promptOnInstallation: false,
+                                    required: false,
+                                    description: "",
+                                  }));
+                                if (additions.length > 0) {
+                                  form.setValue(
+                                    "localConfig.environment",
+                                    [...existing, ...additions],
+                                    {
+                                      shouldDirty: true,
+                                      shouldValidate: true,
+                                    },
+                                  );
+                                }
+                              }
+                            }}
                           />
                         </FormControl>
+                        <FormDescription>
+                          Paste a single argument per line, a JSON array (e.g.{" "}
+                          <code>["server.js", "--verbose"]</code>), or a full
+                          MCP server config object to auto-populate Command,
+                          Arguments, and Environment.
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}

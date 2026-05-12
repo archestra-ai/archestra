@@ -56,7 +56,10 @@ import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import { seedRequiredStartingData } from "@/database/seed";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
-import { enterpriseLicenseMiddleware } from "@/middleware";
+import {
+  enterpriseLicenseMiddleware,
+  maintenanceMiddleware,
+} from "@/middleware";
 import OrganizationModel from "@/models/organization";
 import { initializeObservabilityMetrics } from "@/observability";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
@@ -748,6 +751,7 @@ const startWebServer = async () => {
    * Enterprise license middleware to enforce license requirements on certain routes.
    * This should be registered before routes to ensure enterprise-only features are checked properly.
    */
+  fastify.register(maintenanceMiddleware);
   fastify.register(enterpriseLicenseMiddleware);
 
   try {

@@ -63,3 +63,31 @@ const enterpriseLicenseMiddlewarePlugin: FastifyPluginAsync = async (
 export const enterpriseLicenseMiddleware = fp(
   enterpriseLicenseMiddlewarePlugin,
 );
+
+/**
+ * Maintenance mode middleware.
+ * When ARCHESTRA_MAINTENANCE_MODE_MESSAGE is set, all API requests
+ * return 503 with the configured message. Health check endpoints are excluded.
+ */
+const maintenanceModePlugin: FastifyPluginAsync = async (fastify) => {
+  fastify.addHook("preHandler", async (request, reply) => {
+    if (!config.maintenanceMode.enabled) {
+      return;
+    }
+    // Allow health check endpoints through
+    if (
+      request.url === "/health" ||
+      request.url === "/api/health" ||
+      request.url.startsWith("/api/health")
+    ) {
+      return;
+    }
+    reply.status(503).send({
+      error: "Service Unavailable",
+      message: config.maintenanceMode.message,
+      maintenance: true,
+    });
+  });
+};
+
+export const maintenanceMiddleware = fp(maintenanceModePlugin);

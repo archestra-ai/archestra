@@ -910,6 +910,10 @@ const config = {
   isQuickstart: process.env.ARCHESTRA_QUICKSTART === "true",
   ngrokDomain: process.env.ARCHESTRA_NGROK_DOMAIN || "",
   processType: parseProcessType(process.env.ARCHESTRA_PROCESS_TYPE),
+  maintenanceMode: {
+    enabled: Boolean(process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE),
+    message: process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE || "",
+  },
 };
 
 export const shouldRunWebServer = config.processType !== "worker";

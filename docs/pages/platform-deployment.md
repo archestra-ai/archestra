@@ -1115,3 +1115,11 @@ To learn more about enterprise licensing, please reach out to [sales@archestra.a
 - **`ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING`** - Enables full white-labeling (removes "Powered by Archestra" attribution).
   - Set to `true` to enable
   - Requires the core enterprise license (`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED=true`)
+
+### Maintenance Mode
+
+- **`ARCHESTRA_MAINTENANCE_MODE_MESSAGE`** - Put the deployment into maintenance mode.
+  - Default: unset (maintenance mode disabled)
+  - When set to any non-empty string, all API requests return HTTP 503 with the configured message. Health check endpoints (`/health`, `/api/health`) remain accessible.
+  - Useful for database maintenance, upgrades, or planned downtime.
+  - Example: `ARCHESTRA_MAINTENANCE_MODE_MESSAGE="System maintenance in progress. Please try again in 30 minutes."`

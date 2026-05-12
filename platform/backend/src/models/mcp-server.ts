@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import mcpClient from "@/clients/mcp-client";
 import db, { schema } from "@/database";
@@ -763,6 +763,44 @@ class McpServerModel {
     }
 
     return { isValid: false, errorMessage: "No catalog ID provided" };
+  }
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select({ server: schema.mcpServersTable })
+      .from(schema.mcpServersTable)
+      .leftJoin(
+        schema.teamsTable,
+        eq(schema.mcpServersTable.teamId, schema.teamsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.mcpServersTable.id, id),
+          or(
+            eq(schema.teamsTable.organizationId, organizationId),
+            isNull(schema.mcpServersTable.teamId),
+          ),
+        ),
+      )
+      .limit(1);
+
+    if (!row) return null;
+    const s = row.server;
+
+    return {
+      id: s.id,
+      name: s.name,
+      catalogId: s.catalogId,
+      serverType: s.serverType,
+      scope: s.scope,
+      ownerId: s.ownerId ?? null,
+      teamId: s.teamId ?? null,
+      localInstallationStatus: s.localInstallationStatus,
+      createdAt: s.createdAt.toISOString(),
+      updatedAt: s.updatedAt.toISOString(),
+    };
   }
 }
 

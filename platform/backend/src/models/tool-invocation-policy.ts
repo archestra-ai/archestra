@@ -654,6 +654,29 @@ class ToolInvocationPolicyModel {
 
     return result.length > 0;
   }
+
+  static async findByIdForAudit(
+    id: string,
+    _organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select()
+      .from(schema.toolInvocationPoliciesTable)
+      .where(eq(schema.toolInvocationPoliciesTable.id, id))
+      .limit(1);
+
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      toolId: row.toolId,
+      conditions: row.conditions,
+      action: row.action,
+      reason: row.reason ?? null,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  }
 }
 
 export default ToolInvocationPolicyModel;

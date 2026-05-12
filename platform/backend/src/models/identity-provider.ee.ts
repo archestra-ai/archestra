@@ -874,6 +874,36 @@ class IdentityProviderModel {
       "IdentityProviderModel.setDomainVerifiedForTesting: completed",
     );
   }
+
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select()
+      .from(schema.identityProvidersTable)
+      .where(
+        and(
+          eq(schema.identityProvidersTable.id, id),
+          eq(schema.identityProvidersTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!row) return null;
+
+    // REDACTED: oidcConfig (clientSecret), samlConfig (x509Certificate/privateKey),
+    // roleMapping, and teamSyncConfig are omitted — they contain credentials and secrets.
+    return {
+      id: row.id,
+      organizationId: row.organizationId ?? null,
+      issuer: row.issuer,
+      providerId: row.providerId,
+      domain: row.domain,
+      domainVerified: row.domainVerified ?? null,
+      ssoLoginEnabled: row.ssoLoginEnabled,
+    };
+  }
 }
 
 export default IdentityProviderModel;

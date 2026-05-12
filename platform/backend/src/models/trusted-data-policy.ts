@@ -644,6 +644,29 @@ class TrustedDataPolicyModel {
 
     return results;
   }
+
+  static async findByIdForAudit(
+    id: string,
+    _organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select()
+      .from(schema.trustedDataPoliciesTable)
+      .where(eq(schema.trustedDataPoliciesTable.id, id))
+      .limit(1);
+
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      toolId: row.toolId,
+      description: row.description ?? null,
+      conditions: row.conditions,
+      action: row.action,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  }
 }
 
 export default TrustedDataPolicyModel;

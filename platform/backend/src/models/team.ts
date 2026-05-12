@@ -1034,6 +1034,34 @@ class TeamModel {
       throw new ApiError(403, "Not authorized to access this team");
     }
   }
+
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [team] = await db
+      .select()
+      .from(schema.teamsTable)
+      .where(
+        and(
+          eq(schema.teamsTable.id, id),
+          eq(schema.teamsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!team) return null;
+
+    return {
+      id: team.id,
+      name: team.name,
+      description: team.description ?? null,
+      organizationId: team.organizationId,
+      createdBy: team.createdBy,
+      createdAt: team.createdAt.toISOString(),
+      updatedAt: team.updatedAt.toISOString(),
+    };
+  }
 }
 
 export default TeamModel;

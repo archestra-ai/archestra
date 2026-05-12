@@ -40,6 +40,31 @@ class ApiKeyModel {
 
     return apiKey ? normalizeApiKey(apiKey) : null;
   }
+  static async findByIdForAudit(
+    id: string,
+    _organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [apiKey] = await db
+      .select()
+      .from(schema.apikeysTable)
+      .where(eq(schema.apikeysTable.id, id))
+      .limit(1);
+
+    if (!apiKey) return null;
+
+    // REDACTED: the raw `key` field is never included in audit snapshots.
+    return {
+      id: apiKey.id,
+      name: apiKey.name ?? null,
+      start: apiKey.start ?? null,
+      prefix: apiKey.prefix ?? null,
+      userId: apiKey.referenceId,
+      enabled: apiKey.enabled ?? null,
+      expiresAt: apiKey.expiresAt?.toISOString() ?? null,
+      createdAt: apiKey.createdAt.toISOString(),
+      updatedAt: apiKey.updatedAt.toISOString(),
+    };
+  }
 }
 
 export default ApiKeyModel;

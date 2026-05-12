@@ -381,6 +381,42 @@ class KnowledgeBaseConnectorModel {
 
     return result ?? null;
   }
+
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select()
+      .from(schema.knowledgeBaseConnectorsTable)
+      .where(
+        and(
+          eq(schema.knowledgeBaseConnectorsTable.id, id),
+          eq(
+            schema.knowledgeBaseConnectorsTable.organizationId,
+            organizationId,
+          ),
+        ),
+      )
+      .limit(1);
+
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      name: row.name,
+      description: row.description ?? null,
+      organizationId: row.organizationId,
+      connectorType: row.connectorType,
+      visibility: row.visibility,
+      schedule: row.schedule,
+      enabled: row.enabled,
+      lastSyncStatus: row.lastSyncStatus ?? null,
+      lastSyncAt: row.lastSyncAt?.toISOString() ?? null,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  }
 }
 
 export default KnowledgeBaseConnectorModel;

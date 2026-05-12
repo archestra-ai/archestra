@@ -228,6 +228,25 @@ describe("createDirectLLMModel", () => {
     );
   });
 
+  it("allows anthropic provider without API key when workload identity is enabled", () => {
+    const originalValue = config.llm.anthropic.workloadIdentityEnabled;
+    // @ts-expect-error - overriding for test
+    config.llm.anthropic.workloadIdentityEnabled = true;
+
+    try {
+      const model = createDirectLLMModel({
+        provider: "anthropic",
+        apiKey: undefined,
+        modelName: "claude-3-5-haiku-20241022",
+        baseUrl: null,
+      });
+      expect(model).toBeDefined();
+    } finally {
+      // @ts-expect-error - restoring after test
+      config.llm.anthropic.workloadIdentityEnabled = originalValue;
+    }
+  });
+
   it("throws descriptive error for openai provider without API key", () => {
     expect(() =>
       createDirectLLMModel({

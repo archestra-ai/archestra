@@ -10,7 +10,7 @@ import config from "@/config";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import { OrganizationModel } from "@/models";
 import { getByosVaultKvVersion, isByosEnabled } from "@/secrets-manager";
-import { EmailProviderTypeSchema, type GlobalToolPolicy } from "@/types";
+import { EmailProviderTypeSchema, ErrorResponsesSchema, type GlobalToolPolicy } from "@/types";
 import { PUBLIC_CONFIG_PATH } from "./route-paths";
 
 const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -25,6 +25,8 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           200: z.strictObject({
             disableBasicAuth: z.boolean(),
             disableInvitations: z.boolean(),
+            maintenanceMode: z.boolean(),
+            siteNotification: z.string(),
             analytics: z.strictObject({
               enabled: z.boolean(),
               posthog: z.strictObject({
@@ -33,6 +35,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               }),
             }),
           }),
+          ...ErrorResponsesSchema,
         },
       },
     },
@@ -40,6 +43,8 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send({
         disableBasicAuth: config.auth.disableBasicAuth,
         disableInvitations: config.auth.disableInvitations,
+        maintenanceMode: config.maintenanceMode,
+        siteNotification: config.siteNotification,
         analytics: config.analytics,
       });
     },

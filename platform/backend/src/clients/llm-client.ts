@@ -111,6 +111,13 @@ export function isApiKeyRequired(
   if (apiKey) return false;
   // Gemini with Vertex AI doesn't require an API key
   if (provider === "gemini" && isVertexAiEnabled()) return false;
+  // Anthropic with Workload Identity Federation doesn't require an API key
+  if (
+    provider === "anthropic" &&
+    config.llm.anthropic.workloadIdentityEnabled
+  ) {
+    return false;
+  }
   return !!providerModelConfigs[provider].apiKeyRequiredMessage;
 }
 
@@ -133,8 +140,8 @@ export function createDirectLLMModel({
   if (!cfg) {
     throw new ApiError(400, `Unsupported provider: ${provider}`);
   }
-  if (cfg.apiKeyRequiredMessage && !apiKey) {
-    throw new ApiError(400, cfg.apiKeyRequiredMessage);
+  if (isApiKeyRequired(provider, apiKey)) {
+    throw new ApiError(400, cfg.apiKeyRequiredMessage || "API key is required");
   }
   const resolvedBaseUrl = baseUrl ?? cfg.defaultBaseUrl;
   const baseURL =
@@ -286,6 +293,9 @@ export async function createLLMModelForAgent(params: {
   // Check if Bedrock with IAM auth (doesn't require API key)
   const isBedrockWithIamAuth =
     provider === "bedrock" && isBedrockIamAuthEnabled();
+  // Check if Anthropic with Workload Identity Federation (doesn't require API key)
+  const isAnthropicWithWorkloadIdentity =
+    provider === "anthropic" && config.llm.anthropic.workloadIdentityEnabled;
   // vLLM and Ollama typically don't require API keys
   const isVllm = provider === "vllm";
   const isOllama = provider === "ollama";
@@ -296,6 +306,7 @@ export async function createLLMModelForAgent(params: {
       provider,
       isGeminiWithVertexAi,
       isBedrockWithIamAuth,
+      isAnthropicWithWorkloadIdentity,
       isVllm,
       isOllama,
     },
@@ -306,6 +317,7 @@ export async function createLLMModelForAgent(params: {
     !apiKey &&
     !isGeminiWithVertexAi &&
     !isBedrockWithIamAuth &&
+    !isAnthropicWithWorkloadIdentity &&
     !isVllm &&
     !isOllama
   ) {

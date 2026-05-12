@@ -8,7 +8,9 @@ import { ThemeProvider } from "./_parts/theme-provider";
 import "./globals.css";
 import { DEFAULT_APP_DESCRIPTION } from "@shared";
 import { DynamicHead } from "@/components/dynamic-head";
+import { MaintenanceOverlay } from "@/components/maintenance-overlay";
 import { OrgThemeLoader } from "@/components/org-theme-loader";
+import { SiteNotificationBanner } from "@/components/site-notification-banner";
 import { ChatProvider } from "@/lib/chat/global-chat.context";
 import { WebsocketInitializer } from "./_parts/websocket-initializer";
 import { WithAuthCheck } from "./_parts/with-auth-check";
@@ -187,6 +189,8 @@ export default function RootLayout({
                 <PostHogProviderWrapper>
                   <OrgThemeLoader />
                   <DynamicHead />
+                  <SiteNotificationBanner />
+                  <MaintenanceOverlay />
                   <WithAuthCheck>
                     <WebsocketInitializer />
                     <AppShell>

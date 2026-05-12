@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/node";
-import { type RouteId, SupportedProviders } from "@shared";
+import { type RouteId, SupportedProviders, ADMIN_ROLE_NAME } from "@shared";
 import { requiredEndpointPermissionsMap } from "@shared/access-control";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { betterAuth, hasPermission } from "@/auth";
@@ -24,12 +24,29 @@ export class Authnz {
     const requestId = request.id;
 
     // custom logic to skip auth check
-    if (await this.shouldSkipAuthCheck(request)) {
+    const skipAuthCheck = await this.shouldSkipAuthCheck(request);
+
+    // Check for maintenance mode
+    if (config.maintenanceMode && !skipAuthCheck) {
+      // Try to authenticate the user to see if they are an admin
+      if (await this.isAuthenticated(request)) {
+        await this.populateUserInfo(request);
+      }
+
+      if (request.user?.role !== ADMIN_ROLE_NAME) {
+        throw new ApiError(
+          503,
+          "Archestra is currently under maintenance. Please try again later.",
+        );
+      }
+    }
+
+    if (skipAuthCheck) {
       return;
     }
 
     // return 401 if unauthenticated
-    if (!(await this.isAuthenticated(request))) {
+    if (!request.user && !(await this.isAuthenticated(request))) {
       logger.trace(
         { requestId, url: request.url },
         "[Authnz] Authentication failed",
@@ -43,7 +60,9 @@ export class Authnz {
     );
 
     // Populate request.user and request.organizationId after successful authentication
-    await this.populateUserInfo(request);
+    if (!request.user) {
+      await this.populateUserInfo(request);
+    }
 
     // Guard: if populateUserInfo silently failed, user info is missing
     if (!request.user || !request.organizationId) {

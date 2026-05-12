@@ -609,6 +609,8 @@ const config = {
       azureFoundryEntraIdEnabled:
         process.env.ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED ===
         "true",
+      workloadIdentityEnabled:
+        process.env.ARCHESTRA_ANTHROPIC_WORKLOAD_IDENTITY_ENABLED === "true",
     },
     gemini: {
       baseUrl:
@@ -909,6 +911,8 @@ const config = {
     process.env.ARCHESTRA_AUTH_RATE_LIMIT_DISABLED === "true",
   isQuickstart: process.env.ARCHESTRA_QUICKSTART === "true",
   ngrokDomain: process.env.ARCHESTRA_NGROK_DOMAIN || "",
+  maintenanceMode: process.env.ARCHESTRA_MAINTENANCE_MODE === "true",
+  siteNotification: process.env.ARCHESTRA_SITE_NOTIFICATION || "",
   processType: parseProcessType(process.env.ARCHESTRA_PROCESS_TYPE),
 };
 

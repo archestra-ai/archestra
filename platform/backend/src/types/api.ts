@@ -36,6 +36,7 @@ export const ErrorResponsesSchema = {
   404: generateErrorResponseSchema("api_not_found_error"),
   409: generateErrorResponseSchema("api_conflict_error"),
   500: generateErrorResponseSchema("api_internal_server_error"),
+  503: generateErrorResponseSchema("unknown_api_error"),
 };
 
 export const constructResponseSchema = <T extends z.ZodTypeAny>(

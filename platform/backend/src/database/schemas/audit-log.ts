@@ -7,6 +7,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { AuditAction, AuditableSnapshot } from "@/types/audit-log";
 import organizationsTable from "./organization";
 import usersTable from "./user";
 
@@ -22,11 +23,11 @@ const auditLogsTable = pgTable(
     }),
     actorName: text("actor_name"),
     actorEmail: text("actor_email"),
-    action: text("action").notNull(),
+    action: text("action").$type<AuditAction>().notNull(),
     resourceType: text("resource_type"),
     resourceId: text("resource_id"),
-    priorState: jsonb("prior_state"),
-    postState: jsonb("post_state"),
+    priorState: jsonb("prior_state").$type<AuditableSnapshot>(),
+    postState: jsonb("post_state").$type<AuditableSnapshot>(),
     httpMethod: text("http_method"),
     httpPath: text("http_path"),
     httpRoute: text("http_route"),

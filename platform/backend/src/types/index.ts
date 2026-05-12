@@ -11,6 +11,7 @@ export * from "./agent-suggested-prompt";
 export * from "./agent-tool";
 export * from "./api";
 export * from "./api-key";
+export * from "./audit-log";
 export * from "./autonomy-policies";
 export * from "./chat";
 export * from "./chatops";

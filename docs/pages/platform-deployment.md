@@ -1101,6 +1101,16 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
   - Default: `true`
   - Set to `false` to use vector similarity search only.
 
+### Audit Log Configuration
+
+The audit log records administrative actions (mutations via `/api/*` and auth events) across your organization. Rows are automatically purged after a configurable retention window.
+
+- **`ARCHESTRA_AUDIT_LOG_RETENTION_DAYS`** - Number of days to retain audit log records before they are automatically deleted by the daily retention sweep.
+  - Default: `180`
+  - Set to `0` to disable automatic deletion (rows are kept indefinitely).
+  - Must be a non-negative integer; invalid values fall back to the default.
+  - The sweep runs once every 24 hours as a background task.
+
 ### Enterprise Licensing
 
 To learn more about enterprise licensing, please reach out to [sales@archestra.ai](mailto:sales@archestra.ai).

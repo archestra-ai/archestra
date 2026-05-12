@@ -500,6 +500,51 @@ export const parseTrustProxy = (
 };
 
 /** @public — exported for testability */
+export function parseConnectorSyncMaxDuration(
+  value: string | undefined,
+): number | undefined {
+  const DEFAULT = 3300; // 55 minutes
+  const seconds = Number.parseInt(value || String(DEFAULT), 10);
+  if (Number.isNaN(seconds) || seconds <= 0) return undefined;
+  return seconds;
+}
+
+/** @public — exported for testability */
+export function parseProcessType(value: string | undefined): ProcessType {
+  const normalized = value?.toLowerCase();
+  if (normalized === "web" || normalized === "worker") return normalized;
+  return "all";
+}
+
+/**
+ * Parse ARCHESTRA_AUDIT_LOG_RETENTION_DAYS into a non-negative integer.
+ * 0 disables the retention sweep. Invalid values fall back to the default (180 days).
+ * @public — exported for testability
+ */
+export const parseAuditLogRetentionDays = (
+  envValue: string | undefined,
+): number => {
+  const DEFAULT_RETENTION_DAYS = 180;
+  const value = envValue?.trim();
+  if (!value) return DEFAULT_RETENTION_DAYS;
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed < 0) {
+    logger.warn(
+      `Invalid ARCHESTRA_AUDIT_LOG_RETENTION_DAYS value "${value}", using default ${DEFAULT_RETENTION_DAYS}`,
+    );
+    return DEFAULT_RETENTION_DAYS;
+  }
+  return parsed;
+};
+
+export function parseCommaSeparatedList(value: string): string[] {
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** @public — exported for testability */
 export const getAnalyticsConfig = () => ({
   enabled: process.env.ARCHESTRA_ANALYTICS !== "disabled",
   posthog: {
@@ -910,6 +955,11 @@ const config = {
   isQuickstart: process.env.ARCHESTRA_QUICKSTART === "true",
   ngrokDomain: process.env.ARCHESTRA_NGROK_DOMAIN || "",
   processType: parseProcessType(process.env.ARCHESTRA_PROCESS_TYPE),
+  auditLog: {
+    retentionDays: parseAuditLogRetentionDays(
+      process.env.ARCHESTRA_AUDIT_LOG_RETENTION_DAYS,
+    ),
+  },
 };
 
 export const shouldRunWebServer = config.processType !== "worker";
@@ -918,16 +968,6 @@ export const shouldRunWorker = config.processType !== "web";
 export default config;
 
 // ===== Internal helpers =====
-
-/** @public — exported for testability */
-export function parseConnectorSyncMaxDuration(
-  value: string | undefined,
-): number | undefined {
-  const DEFAULT = 3300; // 55 minutes
-  const seconds = Number.parseInt(value || String(DEFAULT), 10);
-  if (Number.isNaN(seconds) || seconds <= 0) return undefined;
-  return seconds;
-}
 
 /**
  * Get the environment variable API key for a provider.
@@ -941,19 +981,4 @@ export function getProviderEnvApiKey(
     return entry.apiKey || undefined;
   }
   return undefined;
-}
-
-/** @public — exported for testability */
-export function parseProcessType(value: string | undefined): ProcessType {
-  const normalized = value?.toLowerCase();
-  if (normalized === "web" || normalized === "worker") return normalized;
-  return "all";
-}
-
-/** @public — exported for testability */
-export function parseCommaSeparatedList(value: string): string[] {
-  return value
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
 }

@@ -15,6 +15,7 @@ import {
   getOtelExporterOtlpLogEndpoint,
   getOtlpAuthHeaders,
   getTrustedOrigins,
+  parseAuditLogRetentionDays,
   parseBodyLimit,
   parseCommaSeparatedList,
   parseConnectorSyncMaxDuration,
@@ -1219,5 +1220,38 @@ describe("parseTrustProxy", () => {
 
   test("should filter empty entries from extra commas", () => {
     expect(parseTrustProxy("127.0.0.1,,10.0.0.1")).toBe("127.0.0.1,10.0.0.1");
+  });
+});
+
+describe("parseAuditLogRetentionDays", () => {
+  test("returns 180 when env var is not set", () => {
+    expect(parseAuditLogRetentionDays(undefined)).toBe(180);
+  });
+
+  test("returns 180 when env var is empty string", () => {
+    expect(parseAuditLogRetentionDays("")).toBe(180);
+  });
+
+  test("returns 0 to disable the sweep", () => {
+    expect(parseAuditLogRetentionDays("0")).toBe(0);
+  });
+
+  test("returns a valid positive integer", () => {
+    expect(parseAuditLogRetentionDays("90")).toBe(90);
+    expect(parseAuditLogRetentionDays("365")).toBe(365);
+  });
+
+  test("trims whitespace before parsing", () => {
+    expect(parseAuditLogRetentionDays("  30  ")).toBe(30);
+  });
+
+  test("returns default and warns on non-numeric value", () => {
+    expect(parseAuditLogRetentionDays("abc")).toBe(180);
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("abc"));
+  });
+
+  test("returns default and warns on negative value", () => {
+    expect(parseAuditLogRetentionDays("-1")).toBe(180);
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("-1"));
   });
 });

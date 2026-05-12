@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.37"
+    "version": "1.2.40"
   },
   "components": {
     "schemas": {
@@ -101012,6 +101012,12 @@
                       "authorName": {
                         "nullable": true,
                         "type": "string"
+                      },
+                      "toolCount": {
+                        "default": 0,
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
                       }
                     },
                     "required": [
@@ -101043,7 +101049,8 @@
                       "createdAt",
                       "updatedAt",
                       "labels",
-                      "teams"
+                      "teams",
+                      "toolCount"
                     ],
                     "additionalProperties": false
                   }
@@ -102381,6 +102388,12 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "toolCount": {
+                      "default": 0,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
@@ -102412,7 +102425,8 @@
                     "createdAt",
                     "updatedAt",
                     "labels",
-                    "teams"
+                    "teams",
+                    "toolCount"
                   ],
                   "additionalProperties": false
                 }
@@ -103232,6 +103246,12 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "toolCount": {
+                      "default": 0,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
@@ -103263,7 +103283,8 @@
                     "createdAt",
                     "updatedAt",
                     "labels",
-                    "teams"
+                    "teams",
+                    "toolCount"
                   ],
                   "additionalProperties": false
                 }
@@ -104600,6 +104621,12 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "toolCount": {
+                      "default": 0,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
@@ -104631,7 +104658,8 @@
                     "createdAt",
                     "updatedAt",
                     "labels",
-                    "teams"
+                    "teams",
+                    "toolCount"
                   ],
                   "additionalProperties": false
                 }

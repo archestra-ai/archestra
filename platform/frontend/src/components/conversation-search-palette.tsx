@@ -240,7 +240,7 @@ export function ConversationSearchPalette({
     isLoading,
     isFetching,
   } = useConversations({
-    enabled: isAuthenticated && canReadConversation === true,
+    enabled: open && isAuthenticated && canReadConversation === true,
     search: debouncedSearch,
   });
 

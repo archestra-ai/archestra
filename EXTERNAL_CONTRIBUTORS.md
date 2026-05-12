@@ -266,3 +266,17 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @Prajwal6898
 - @ritwikareddykancharla
 - @macomoroni
+- @grp06
+- @JB-Bryant
+- @MANISH-LAB
+- @Draconna
+- @NoeFabris
+- @seoeaa
+- @Sami-ul
+- @AceCoder127
+- @ixhxpns
+- @jojo2a
+- @XinYe-here
+- @Projetos-AI-Design-JB
+- @nguyenquockhang1610
+- @Sheldon715

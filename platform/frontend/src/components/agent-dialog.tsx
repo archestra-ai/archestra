@@ -4,7 +4,6 @@ import {
   type AgentScope,
   type AgentToolAssignmentMode,
   type AgentType,
-  archestraApiSdk,
   type archestraApiTypes,
   BLOCKED_PASSTHROUGH_HEADERS,
   BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS,
@@ -23,7 +22,6 @@ import {
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@shared";
-import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Bot,
@@ -141,6 +139,7 @@ import { useConnectors } from "@/lib/knowledge/connector.query";
 import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
 import { useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import {
   getDescriptionPlaceholder,
@@ -582,14 +581,7 @@ export function AgentDialog({
 
   // Fetch fresh agent data when dialog opens
   const { data: freshAgent, refetch: refetchAgent } = useProfile(agent?.id);
-  const { data: teams } = useQuery({
-    queryKey: ["teams"],
-    queryFn: async () => {
-      const response = await archestraApiSdk.getTeams({
-        query: { limit: 100, offset: 0 },
-      });
-      return response.data?.data ?? [];
-    },
+  const { data: teams } = useTeams({
     enabled: open && !!canReadTeams,
   });
   const resource = getResourceForAgentType(agentType);

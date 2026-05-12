@@ -13,6 +13,7 @@ import {
   AgentTeamModel,
   LlmOauthClientModel,
   LlmProviderApiKeyModel,
+  LlmProviderApiKeyModelLinkModel,
   MemberModel,
   ModelModel,
   OAuthAccessTokenModel,
@@ -242,11 +243,7 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const auth = await getModelRouterAuth(request);
       const agent = await getDefaultModelRouterAgent();
       await ensureModelRouterAgentAccess({ agent, auth });
-      return reply.send(
-        await listModels({
-          providers: getMappedProviders(auth),
-        }),
-      );
+      return reply.send(await listModels({ auth }));
     },
   );
 
@@ -268,11 +265,7 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const auth = await getModelRouterAuth(request);
       const agent = await getModelRouterAgent(request.params.agentId);
       await ensureModelRouterAgentAccess({ agent, auth });
-      return reply.send(
-        await listModels({
-          providers: getMappedProviders(auth),
-        }),
-      );
+      return reply.send(await listModels({ auth }));
     },
   );
 
@@ -379,6 +372,7 @@ async function routeChatCompletion(
   const resolution = await resolveModelRoute({
     requestedModel: body.model,
     allowedProviders: getMappedProviders(auth),
+    allowedApiKeyIds: getMappedApiKeyIds(auth),
   });
   const routedBody = {
     ...body,
@@ -419,6 +413,7 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
   const resolution = await resolveModelRoute({
     requestedModel: chatBody.model,
     allowedProviders: getMappedProviders(auth),
+    allowedApiKeyIds: getMappedApiKeyIds(auth),
   });
   const routedChatBody = {
     ...chatBody,
@@ -571,21 +566,24 @@ function handleModelRouterResponsesProvider(
   }
 }
 
-async function listModels(params: { providers: Set<SupportedProvider> }) {
-  const providers = [...params.providers].filter((provider) =>
-    modelRouterSupportedProviders.has(provider),
-  );
-  const allModels = await ModelModel.findAll({ providers });
+async function listModels(params: { auth: ModelRouterAuth }) {
+  const apiKeyIds = [...params.auth.providerApiKeysByProvider.values()]
+    .filter((mapping) => modelRouterSupportedProviders.has(mapping.provider))
+    .map((mapping) => mapping.providerApiKeyId);
+  const linkedModels =
+    await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds(apiKeyIds);
   const chatModels = sortRoutableModels(
-    allModels.filter((model) => {
-      if (!ModelModel.supportsTextChat(model)) {
-        return false;
-      }
-      if (!modelRouterSupportedProviders.has(model.provider)) {
-        return false;
-      }
-      return true;
-    }),
+    linkedModels
+      .map(({ model }) => model)
+      .filter((model) => {
+        if (!ModelModel.supportsTextChat(model)) {
+          return false;
+        }
+        if (!modelRouterSupportedProviders.has(model.provider)) {
+          return false;
+        }
+        return true;
+      }),
   );
 
   return {
@@ -704,6 +702,12 @@ async function getModelRouterAuth(
 
 function getMappedProviders(auth: ModelRouterAuth): Set<SupportedProvider> {
   return new Set(auth.providerApiKeysByProvider.keys());
+}
+
+function getMappedApiKeyIds(auth: ModelRouterAuth): string[] {
+  return [...auth.providerApiKeysByProvider.values()].map(
+    (mapping) => mapping.providerApiKeyId,
+  );
 }
 
 function isTranslatedModelRouterProvider(

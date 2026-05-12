@@ -1,27 +1,45 @@
 import { archestraApiSdk, type Permissions } from "@shared";
 import { useQuery } from "@tanstack/react-query";
-import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { hasPermissions } from "@/lib/auth/auth.utils";
 import { authClient } from "@/lib/clients/auth/auth-client";
 
+export const authQueryKeys = {
+  all: ["auth"] as const,
+  session: () => [...authQueryKeys.all, "session"] as const,
+  orgMembers: () => [...authQueryKeys.all, "orgMembers"] as const,
+  userPermissions: () => [...authQueryKeys.all, "userPermissions"] as const,
+  defaultCredentialsEnabled: () =>
+    [...authQueryKeys.all, "defaultCredentialsEnabled"] as const,
+};
+
 /**
- * Fetch current session
+ * Fetch the current session through the shared TanStack Query cache.
+ *
+ * Always use this hook instead of calling `authClient.getSession()` directly in
+ * components/hooks. This keeps every session consumer on one query key with the
+ * same stale-time and invalidation path, and prevents repeated session requests
+ * when many auth-aware components mount together.
  */
 export function useSession() {
   return useQuery({
-    queryKey: ["auth", "session"],
+    queryKey: authQueryKeys.session(),
     queryFn: async () => {
       const { data } = await authClient.getSession();
       return data;
     },
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    // Keep focus refetching on so backgrounded tabs discover revoked or changed sessions promptly.
+    refetchOnWindowFocus: true,
   });
 }
 
 export function useCurrentOrgMembers() {
-  const isAuthenticated = useIsAuthenticated();
+  const { data: session } = useSession();
+  const isAuthenticated = !!session?.user;
 
   return useQuery({
-    queryKey: ["auth", "orgMembers"],
+    queryKey: authQueryKeys.orgMembers(),
     queryFn: async () => {
       const { data } = await authClient.organization.listMembers();
       return data?.members ?? [];
@@ -98,17 +116,20 @@ export function useMissingPermissions(
  * Avoid using directly in components and use useHasPermissions instead.
  */
 export function useAllPermissions() {
-  const isAuthenticated = useIsAuthenticated();
+  const { data: session, isPending: isSessionPending } = useSession();
+  const isAuthenticated = !!session?.user;
 
   return useQuery({
-    queryKey: ["auth", "userPermissions"],
+    queryKey: authQueryKeys.userPermissions(),
     queryFn: async () => {
       const { data } = await archestraApiSdk.getUserPermissions();
       return data;
     },
     retry: false,
     throwOnError: false,
-    enabled: isAuthenticated,
+    enabled: !isSessionPending && isAuthenticated,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
   });
 }
 
@@ -140,7 +161,7 @@ export function usePermissionMap<Key extends string>(
 
 export function useDefaultCredentialsEnabled() {
   return useQuery({
-    queryKey: ["auth", "defaultCredentialsEnabled"],
+    queryKey: authQueryKeys.defaultCredentialsEnabled(),
     queryFn: async () => {
       const { data } = await archestraApiSdk.getDefaultCredentialsStatus();
       return data?.enabled ?? false;

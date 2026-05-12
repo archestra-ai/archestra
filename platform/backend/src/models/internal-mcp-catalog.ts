@@ -1,10 +1,11 @@
-import { and, desc, eq, ilike, inArray, or } from "drizzle-orm";
+import { and, count, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { secretManager } from "@/secrets-manager";
-import type {
-  InsertInternalMcpCatalog,
-  InternalMcpCatalog,
-  UpdateInternalMcpCatalog,
+import {
+  ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
+  type InsertInternalMcpCatalog,
+  type InternalMcpCatalog,
+  type UpdateInternalMcpCatalog,
 } from "@/types";
 import McpCatalogLabelModel from "./mcp-catalog-label";
 import McpCatalogTeamModel from "./mcp-catalog-team";
@@ -53,6 +54,7 @@ class InternalMcpCatalogModel {
       ...createdItem,
       labels: itemLabels,
       teams: itemTeams,
+      toolCount: 0,
     };
     await InternalMcpCatalogModel.populateAuthorNames([result]);
     return result;
@@ -62,14 +64,28 @@ class InternalMcpCatalogModel {
     expandSecrets?: boolean;
     userId?: string;
     isAdmin?: boolean;
+    organizationId?: string;
   }): Promise<InternalMcpCatalog[]> {
-    const { expandSecrets = true, userId, isAdmin } = options ?? {};
+    const {
+      expandSecrets = true,
+      userId,
+      isAdmin,
+      organizationId,
+    } = options ?? {};
 
     let dbItems: Array<typeof schema.internalMcpCatalogTable.$inferSelect>;
 
-    if (userId && !isAdmin) {
+    if (userId && !isAdmin && !organizationId) {
+      return [];
+    }
+
+    if (userId && organizationId) {
       const accessibleIds =
-        await McpCatalogTeamModel.getUserAccessibleCatalogIds(userId, false);
+        await McpCatalogTeamModel.getUserAccessibleCatalogIds(
+          userId,
+          !!isAdmin,
+          organizationId,
+        );
       if (accessibleIds.length === 0) return [];
       dbItems = await db
         .select()
@@ -84,7 +100,7 @@ class InternalMcpCatalogModel {
     }
 
     const catalogItems =
-      await InternalMcpCatalogModel.attachLabelsAndTeams(dbItems);
+      await InternalMcpCatalogModel.attachListMetadata(dbItems);
 
     if (expandSecrets) {
       await InternalMcpCatalogModel.expandSecrets(catalogItems);
@@ -101,9 +117,15 @@ class InternalMcpCatalogModel {
       expandSecrets?: boolean;
       userId?: string;
       isAdmin?: boolean;
+      organizationId?: string;
     },
   ): Promise<InternalMcpCatalog[]> {
-    const { expandSecrets = true, userId, isAdmin } = options ?? {};
+    const {
+      expandSecrets = true,
+      userId,
+      isAdmin,
+      organizationId,
+    } = options ?? {};
 
     let dbItems: Array<typeof schema.internalMcpCatalogTable.$inferSelect>;
 
@@ -112,9 +134,17 @@ class InternalMcpCatalogModel {
       ilike(schema.internalMcpCatalogTable.description, `%${query}%`),
     );
 
-    if (userId && !isAdmin) {
+    if (userId && !isAdmin && !organizationId) {
+      return [];
+    }
+
+    if (userId && organizationId) {
       const accessibleIds =
-        await McpCatalogTeamModel.getUserAccessibleCatalogIds(userId, false);
+        await McpCatalogTeamModel.getUserAccessibleCatalogIds(
+          userId,
+          !!isAdmin,
+          organizationId,
+        );
       if (accessibleIds.length === 0) return [];
       dbItems = await db
         .select()
@@ -133,7 +163,7 @@ class InternalMcpCatalogModel {
     }
 
     const catalogItems =
-      await InternalMcpCatalogModel.attachLabelsAndTeams(dbItems);
+      await InternalMcpCatalogModel.attachListMetadata(dbItems);
 
     if (expandSecrets) {
       await InternalMcpCatalogModel.expandSecrets(catalogItems);
@@ -150,15 +180,26 @@ class InternalMcpCatalogModel {
       expandSecrets?: boolean;
       userId?: string;
       isAdmin?: boolean;
+      organizationId?: string;
     },
   ): Promise<InternalMcpCatalog | null> {
-    const { expandSecrets = true, userId, isAdmin } = options ?? {};
+    const {
+      expandSecrets = true,
+      userId,
+      isAdmin,
+      organizationId,
+    } = options ?? {};
 
-    if (userId && !isAdmin) {
+    if (userId && !isAdmin && !organizationId) {
+      return null;
+    }
+
+    if (userId && organizationId) {
       const hasAccess = await McpCatalogTeamModel.userHasCatalogAccess(
         userId,
         id,
-        false,
+        !!isAdmin,
+        organizationId,
       );
       if (!hasAccess) return null;
     }
@@ -174,7 +215,13 @@ class InternalMcpCatalogModel {
 
     const labels = await McpCatalogLabelModel.getLabelsForCatalogItem(id);
     const teams = await McpCatalogTeamModel.getTeamDetailsForCatalog(id);
-    const catalogItem: InternalMcpCatalog = { ...dbItem, labels, teams };
+    const toolCount = await InternalMcpCatalogModel.getToolCount(id);
+    const catalogItem: InternalMcpCatalog = {
+      ...dbItem,
+      labels,
+      teams,
+      toolCount,
+    };
 
     if (expandSecrets) {
       await InternalMcpCatalogModel.expandSecrets([catalogItem]);
@@ -203,7 +250,13 @@ class InternalMcpCatalogModel {
 
     const labels = await McpCatalogLabelModel.getLabelsForCatalogItem(id);
     const teams = await McpCatalogTeamModel.getTeamDetailsForCatalog(id);
-    const catalogItem: InternalMcpCatalog = { ...dbItem, labels, teams };
+    const toolCount = await InternalMcpCatalogModel.getToolCount(id);
+    const catalogItem: InternalMcpCatalog = {
+      ...dbItem,
+      labels,
+      teams,
+      toolCount,
+    };
 
     await InternalMcpCatalogModel.expandSecretsAndAlwaysResolveValues([
       catalogItem,
@@ -229,7 +282,7 @@ class InternalMcpCatalogModel {
       .where(inArray(schema.internalMcpCatalogTable.id, ids));
 
     const catalogItems =
-      await InternalMcpCatalogModel.attachLabelsAndTeams(dbItems);
+      await InternalMcpCatalogModel.attachListMetadata(dbItems);
 
     const result = new Map<string, InternalMcpCatalog>();
     for (const item of catalogItems) {
@@ -239,11 +292,24 @@ class InternalMcpCatalogModel {
     return result;
   }
 
-  static async findByName(name: string): Promise<InternalMcpCatalog | null> {
+  static async findByName(
+    name: string,
+    options?: { organizationId?: string },
+  ): Promise<InternalMcpCatalog | null> {
+    const whereCondition = options?.organizationId
+      ? and(
+          eq(schema.internalMcpCatalogTable.name, name),
+          eq(
+            schema.internalMcpCatalogTable.organizationId,
+            options.organizationId,
+          ),
+        )
+      : eq(schema.internalMcpCatalogTable.name, name);
+
     const [dbItem] = await db
       .select()
       .from(schema.internalMcpCatalogTable)
-      .where(eq(schema.internalMcpCatalogTable.name, name));
+      .where(whereCondition);
 
     if (!dbItem) {
       return null;
@@ -253,7 +319,8 @@ class InternalMcpCatalogModel {
       dbItem.id,
     );
     const teams = await McpCatalogTeamModel.getTeamDetailsForCatalog(dbItem.id);
-    return { ...dbItem, labels, teams };
+    const toolCount = await InternalMcpCatalogModel.getToolCount(dbItem.id);
+    return { ...dbItem, labels, teams, toolCount };
   }
 
   static async update(
@@ -294,10 +361,12 @@ class InternalMcpCatalogModel {
 
     const itemLabels = await McpCatalogLabelModel.getLabelsForCatalogItem(id);
     const itemTeams = await McpCatalogTeamModel.getTeamDetailsForCatalog(id);
+    const toolCount = await InternalMcpCatalogModel.getToolCount(id);
     const result: InternalMcpCatalog = {
       ...dbItem,
       labels: itemLabels,
       teams: itemTeams,
+      toolCount,
     };
     await InternalMcpCatalogModel.populateAuthorNames([result]);
     return result;
@@ -386,6 +455,21 @@ class InternalMcpCatalogModel {
         }
       }
 
+      if (catalogItem.clientSecretId && catalogItem.enterpriseManagedConfig) {
+        const unresolvedSecret = unresolvedSecretMap.get(
+          catalogItem.clientSecretId,
+        );
+        const secret = unresolvedSecret?.isByosVault
+          ? unresolvedSecret
+          : resolvedSecretMap.get(catalogItem.clientSecretId);
+        const value =
+          secret?.secret[ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY];
+        if (value) {
+          catalogItem.enterpriseManagedConfig.clientSecretOverride =
+            String(value);
+        }
+      }
+
       // Enrich local config secret env vars
       if (
         catalogItem.localConfigSecretId &&
@@ -448,6 +532,16 @@ class InternalMcpCatalogModel {
         }
       }
 
+      if (catalogItem.clientSecretId && catalogItem.enterpriseManagedConfig) {
+        const secret = secretMap.get(catalogItem.clientSecretId);
+        const value =
+          secret?.secret[ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY];
+        if (value) {
+          catalogItem.enterpriseManagedConfig.clientSecretOverride =
+            String(value);
+        }
+      }
+
       if (
         catalogItem.localConfigSecretId &&
         catalogItem.localConfig?.environment
@@ -466,9 +560,9 @@ class InternalMcpCatalogModel {
   }
 
   /**
-   * Bulk-load labels and teams for an array of DB rows and attach them.
+   * Bulk-load list metadata for an array of DB rows and attach it.
    */
-  private static async attachLabelsAndTeams(
+  private static async attachListMetadata(
     dbItems: Array<typeof schema.internalMcpCatalogTable.$inferSelect>,
   ): Promise<InternalMcpCatalog[]> {
     if (dbItems.length === 0) {
@@ -476,16 +570,52 @@ class InternalMcpCatalogModel {
     }
 
     const ids = dbItems.map((item) => item.id);
-    const [labelsMap, teamsMap] = await Promise.all([
+    const [labelsMap, teamsMap, toolCountMap] = await Promise.all([
       McpCatalogLabelModel.getLabelsForCatalogItems(ids),
       McpCatalogTeamModel.getTeamDetailsForCatalogs(ids),
+      InternalMcpCatalogModel.getToolCounts(ids),
     ]);
 
     return dbItems.map((item) => ({
       ...item,
       labels: labelsMap.get(item.id) || [],
       teams: teamsMap.get(item.id) || [],
+      toolCount: toolCountMap.get(item.id) ?? 0,
     }));
+  }
+
+  private static async getToolCounts(
+    catalogIds: string[],
+  ): Promise<Map<string, number>> {
+    if (catalogIds.length === 0) {
+      return new Map();
+    }
+
+    const rows = await db
+      .select({
+        catalogId: schema.toolsTable.catalogId,
+        toolCount: count(schema.toolsTable.id),
+      })
+      .from(schema.toolsTable)
+      .where(inArray(schema.toolsTable.catalogId, catalogIds))
+      .groupBy(schema.toolsTable.catalogId);
+
+    return new Map(
+      rows
+        .filter(
+          (row): row is { catalogId: string; toolCount: number } =>
+            row.catalogId !== null,
+        )
+        .map((row) => [row.catalogId, row.toolCount]),
+    );
+  }
+
+  private static async getToolCount(catalogId: string): Promise<number> {
+    return (
+      (await InternalMcpCatalogModel.getToolCounts([catalogId])).get(
+        catalogId,
+      ) ?? 0
+    );
   }
 
   /**

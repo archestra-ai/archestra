@@ -2,9 +2,10 @@
  * Azure AI Foundry LLM Proxy Adapter - OpenAI-compatible
  *
  * Azure AI Foundry uses an OpenAI-compatible API.
- * The baseURL must be the full deployment URL:
+ * The baseURL can be either the full deployment URL:
  *   https://<resource>.openai.azure.com/openai/deployments/<deployment>
- * An api-version query param is required (default: 2024-02-01).
+ * or the v1 Foundry endpoint:
+ *   https://<resource>.services.ai.azure.com/openai/v1
  *
  * This adapter delegates request/response/stream parsing to the OpenAI adapters
  * and only overrides provider-specific configuration.
@@ -16,7 +17,15 @@ import type {
   ChatCompletionCreateParamsNonStreaming,
   ChatCompletionCreateParamsStreaming,
 } from "openai/resources/chat/completions/completions";
-import { normalizeAzureApiKey } from "@/clients/azure-url";
+import {
+  getAzureOpenAiBearerTokenProvider,
+  isAzureOpenAiEntraIdEnabled,
+} from "@/clients/azure-openai-credentials";
+import {
+  buildAzureDeploymentBaseUrl,
+  normalizeAzureApiKey,
+  shouldUseAzureOpenAiApiVersion,
+} from "@/clients/azure-url";
 import config from "@/config";
 import { metrics } from "@/observability";
 import type {
@@ -43,6 +52,14 @@ type AzureResponse = Azure.Types.ChatCompletionsResponse;
 type AzureMessages = Azure.Types.ChatCompletionsRequest["messages"];
 type AzureHeaders = Azure.Types.ChatCompletionsHeaders;
 type AzureStreamChunk = Azure.Types.ChatCompletionChunk;
+
+type AzureClient = {
+  apiKey: string | undefined;
+  baseUrl: string | undefined;
+  defaultHeaders: Record<string, string> | undefined;
+  fetch: typeof globalThis.fetch | undefined;
+  openai: OpenAIProvider;
+};
 
 // =============================================================================
 // ADAPTER CLASSES (delegate to OpenAI adapters, override provider)
@@ -219,11 +236,7 @@ export const azureAdapterFactory: LLMProvider<
   createClient(
     apiKey: string | undefined,
     options: CreateClientOptions,
-  ): OpenAIProvider {
-    if (!apiKey) {
-      throw new ApiError(401, "API key required for Azure AI Foundry");
-    }
-
+  ): AzureClient {
     const customFetch = options.agent
       ? metrics.llm.getObservableFetch(
           "azure",
@@ -232,25 +245,60 @@ export const azureAdapterFactory: LLMProvider<
           options.externalAgentId,
         )
       : undefined;
-    const normalizedApiKey = normalizeAzureApiKey(apiKey);
 
-    return new OpenAIProvider({
+    if (!apiKey && isAzureOpenAiEntraIdEnabled()) {
+      const client = new OpenAIProvider({
+        apiKey: getAzureOpenAiBearerTokenProvider(options.baseUrl),
+        baseURL: options.baseUrl,
+        defaultQuery: getAzureDefaultQuery(options.baseUrl),
+        fetch: customFetch,
+        defaultHeaders: options.defaultHeaders,
+      });
+      return {
+        apiKey,
+        baseUrl: options.baseUrl,
+        defaultHeaders: options.defaultHeaders,
+        fetch: customFetch,
+        openai: client,
+      };
+    }
+
+    if (!apiKey) {
+      throw new ApiError(401, "API key required for Azure AI Foundry");
+    }
+
+    const normalizedApiKey = normalizeAzureApiKey(apiKey);
+    if (!normalizedApiKey) {
+      throw new ApiError(401, "API key required for Azure AI Foundry");
+    }
+
+    const defaultHeaders = {
+      ...options.defaultHeaders,
+      "api-key": normalizedApiKey,
+    };
+
+    const client = new OpenAIProvider({
       apiKey: normalizedApiKey,
       baseURL: options.baseUrl,
-      defaultQuery: { "api-version": config.llm.azure.apiVersion },
+      defaultQuery: getAzureDefaultQuery(options.baseUrl),
       fetch: customFetch,
-      defaultHeaders: {
-        ...options.defaultHeaders,
-        "api-key": normalizedApiKey,
-      },
+      defaultHeaders,
     });
+
+    return {
+      apiKey: normalizedApiKey,
+      baseUrl: options.baseUrl,
+      defaultHeaders,
+      fetch: customFetch,
+      openai: client,
+    };
   },
 
   async execute(
     client: unknown,
     request: AzureRequest,
   ): Promise<AzureResponse> {
-    const azureClient = client as OpenAIProvider;
+    const azureClient = getAzureClientForRequest(client, request.model);
     const azureRequest = {
       ...request,
       stream: false,
@@ -265,7 +313,7 @@ export const azureAdapterFactory: LLMProvider<
     client: unknown,
     request: AzureRequest,
   ): Promise<AsyncIterable<AzureStreamChunk>> {
-    const azureClient = client as OpenAIProvider;
+    const azureClient = getAzureClientForRequest(client, request.model);
     const azureRequest = {
       ...request,
       stream: true,
@@ -303,3 +351,36 @@ export const azureAdapterFactory: LLMProvider<
     return "Internal server error";
   },
 };
+
+function getAzureDefaultQuery(
+  baseUrl: string | undefined,
+): Record<string, string> | undefined {
+  return shouldUseAzureOpenAiApiVersion(baseUrl)
+    ? { "api-version": config.llm.azure.apiVersion }
+    : undefined;
+}
+
+function getAzureClientForRequest(
+  client: unknown,
+  model: string,
+): OpenAIProvider {
+  const azureClient = client as AzureClient;
+  const deploymentBaseUrl = buildAzureDeploymentBaseUrl({
+    baseUrl: azureClient.baseUrl,
+    deploymentName: model,
+  });
+
+  if (!deploymentBaseUrl || deploymentBaseUrl === azureClient.baseUrl) {
+    return azureClient.openai;
+  }
+
+  return new OpenAIProvider({
+    apiKey:
+      azureClient.apiKey ??
+      getAzureOpenAiBearerTokenProvider(deploymentBaseUrl),
+    baseURL: deploymentBaseUrl,
+    defaultQuery: getAzureDefaultQuery(deploymentBaseUrl),
+    fetch: azureClient.fetch,
+    defaultHeaders: azureClient.defaultHeaders,
+  });
+}

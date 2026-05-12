@@ -6,19 +6,38 @@ export type EmbeddingModel = string;
 /** Maximum number of chunks to embed per embedding API call */
 export const EMBEDDING_BATCH_SIZE = 100;
 
+export const SUPPORTED_EMBEDDING_DIMENSIONS = [3072, 1536, 768] as const;
+export type SupportedEmbeddingDimension =
+  (typeof SUPPORTED_EMBEDDING_DIMENSIONS)[number];
+
 /**
  * Supported embedding column sizes. Each entry maps to a dedicated
  * `vector(N)` column and HNSW index in the `kb_chunks` table.
  */
-export const EmbeddingDimensionsSchema = z.union([
-  z.literal(3072),
-  z.literal(1536),
-  z.literal(768),
-]);
-export type SupportedEmbeddingDimension = z.infer<
-  typeof EmbeddingDimensionsSchema
->;
-export const SUPPORTED_EMBEDDING_DIMENSIONS = [3072, 1536, 768] as const;
+export const EmbeddingDimensionsSchema = z
+  .number()
+  .int()
+  .refine(
+    (value) =>
+      SUPPORTED_EMBEDDING_DIMENSIONS.includes(
+        value as SupportedEmbeddingDimension,
+      ),
+    {
+      message: `Embedding dimensions must be one of: ${SUPPORTED_EMBEDDING_DIMENSIONS.join(", ")}`,
+    },
+  )
+  .meta({
+    id: "EmbeddingDimensions",
+    enum: [...SUPPORTED_EMBEDDING_DIMENSIONS],
+  });
+
+/**
+ * Use this alias where the backing storage or application contract is already
+ * constrained to supported dimensions. The runtime schema object stays shared,
+ * so OpenAPI still emits one reusable component.
+ */
+export const SupportedEmbeddingDimensionsSchema =
+  EmbeddingDimensionsSchema as z.ZodType<SupportedEmbeddingDimension>;
 
 /**
  * Maps a dimension size to its database column name.
@@ -34,21 +53,25 @@ export function getEmbeddingColumnName(dimensions: number): string {
  * Display labels for connector types.
  * Used in UI placeholders and titles.
  */
-export const CONNECTOR_TYPE_LABELS: Record<string, string> = {
+export const CONNECTOR_TYPE_LABELS = {
   jira: "Jira",
   confluence: "Confluence",
   github: "GitHub",
   gitlab: "GitLab",
   notion: "Notion",
+  servicenow: "ServiceNow",
   sharepoint: "SharePoint",
   gdrive: "Google Drive",
+  file_upload: "File Upload",
   dropbox: "Dropbox",
   onedrive: "OneDrive",
   asana: "Asana",
   linear: "Linear",
   outline: "Outline",
   salesforce: "Salesforce",
-};
+} as const;
+
+export type ConnectorType = keyof typeof CONNECTOR_TYPE_LABELS;
 
 const CONNECTOR_PLACEHOLDER_DEPARTMENTS = [
   "Engineering",
@@ -65,7 +88,9 @@ const CONNECTOR_PLACEHOLDER_DEPARTMENTS = [
  * Generate a placeholder connector name like "Marketing Confluence Connector".
  * Picks a random department each call.
  */
-export function getConnectorNamePlaceholder(connectorType: string): string {
+export function getConnectorNamePlaceholder(
+  connectorType: ConnectorType,
+): string {
   const department =
     CONNECTOR_PLACEHOLDER_DEPARTMENTS[
       Math.floor(Math.random() * CONNECTOR_PLACEHOLDER_DEPARTMENTS.length)
@@ -85,7 +110,7 @@ export const RERANKER_MIN_RELEVANCE_SCORE = 3;
 type NomicTaskType = "search_document" | "search_query";
 
 export function isNomicModel(model: string): boolean {
-  return model.startsWith("nomic");
+  return model.startsWith("nomic") || model.includes("/nomic-embed-text");
 }
 
 /**

@@ -1,3 +1,4 @@
+import { OAUTH_TOKEN_TYPE } from "@shared";
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
@@ -1076,7 +1077,7 @@ describe("mcp server inspect route", () => {
         tokenEndpointAuthentication: "client_secret_post",
         enterpriseManagedCredentials: {
           exchangeStrategy: "rfc8693",
-          subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
         },
       },
     });
@@ -1101,7 +1102,7 @@ describe("mcp server inspect route", () => {
     exchangeEnterpriseManagedCredentialMock.mockResolvedValueOnce({
       credentialType: "bearer_token",
       expiresInSeconds: null,
-      issuedTokenType: "urn:ietf:params:oauth:token-type:access_token",
+      issuedTokenType: OAUTH_TOKEN_TYPE.AccessToken,
       value: "exchanged-github-token",
     });
 
@@ -1139,6 +1140,166 @@ describe("mcp server inspect route", () => {
     expect(connectAndGetToolsMock.mock.calls[1][0]).toMatchObject({
       secrets: { access_token: "exchanged-github-token" },
     });
+  });
+
+  test("exchanges an install-time session ID token for an ID-JAG before protected resource discovery", async ({
+    makeAccount,
+    makeAgent,
+    makeIdentityProvider,
+    makeInternalMcpCatalog,
+  }) => {
+    const { default: AgentToolModel } = await import("@/models/agent-tool");
+    const { ToolModel } = await import("@/models");
+
+    const agent = await makeAgent({
+      name: "Protected Resource Demo Agent",
+      agentType: "mcp_gateway",
+      scope: "personal",
+      organizationId,
+      authorId: user.id,
+    });
+
+    const identityProvider = await makeIdentityProvider(user.id, {
+      providerId: "GenericOIDC",
+      issuer: "https://idp.example.com",
+      oidcConfig: {
+        clientId: "archestra-client-id",
+        clientSecret: "archestra-client-secret",
+        tokenEndpoint: "https://idp.example.com/token",
+        tokenEndpointAuthentication: "client_secret_basic",
+        enterpriseManagedCredentials: {
+          exchangeStrategy: "rfc8693",
+          subjectTokenType: OAUTH_TOKEN_TYPE.IdToken,
+        },
+      },
+    });
+
+    const catalog = await makeInternalMcpCatalog({
+      name: "Protected Resource Remote",
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com/mcp",
+      enterpriseManagedConfig: {
+        identityProviderId: identityProvider.id,
+        requestedCredentialType: "id_jag",
+        resourceType: "oauth_protected_resource",
+        resourceIdentifier: "https://mcp.example.com/mcp",
+        tokenInjectionMode: "authorization_bearer",
+      },
+    });
+
+    await makeAccount(user.id, {
+      providerId: "GenericOIDC",
+      accessToken: "session-access-token",
+      idToken: "session-id-token",
+    });
+
+    exchangeEnterpriseManagedCredentialMock.mockResolvedValueOnce({
+      credentialType: "id_jag",
+      expiresInSeconds: 300,
+      issuedTokenType: OAUTH_TOKEN_TYPE.IdJag,
+      value: "session-id-jag",
+    });
+
+    const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const href = String(url);
+      if (
+        href ===
+        "https://mcp.example.com/.well-known/oauth-protected-resource/mcp"
+      ) {
+        return Response.json({
+          resource: "https://mcp.example.com/mcp",
+          authorization_servers: ["https://auth.example.com"],
+        });
+      }
+
+      if (
+        href ===
+        "https://auth.example.com/.well-known/oauth-authorization-server"
+      ) {
+        return Response.json({
+          token_endpoint: "https://auth.example.com/oauth/token",
+        });
+      }
+
+      if (href === "https://auth.example.com/oauth/token") {
+        expect(init?.method).toBe("POST");
+        expect(init?.body?.toString()).toContain("assertion=session-id-jag");
+        return Response.json({
+          access_token: "mcp-server-access-token",
+          expires_in: 300,
+        });
+      }
+
+      return new Response(null, { status: 404 });
+    });
+    global.fetch = fetchMock as typeof fetch;
+
+    connectAndGetToolsMock
+      .mockRejectedValueOnce(
+        new Error(
+          "Failed to connect to MCP server Protected Resource: Streamable HTTP error: unauthorized",
+        ),
+      )
+      .mockResolvedValueOnce([
+        {
+          name: "read_resource_todos",
+          description: "Read todos",
+          inputSchema: { type: "object", properties: {} },
+          _meta: {
+            archestraResourceUri: "todo://todos",
+          },
+        },
+      ]);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: "Protected Resource",
+        catalogId: catalog.id,
+        agentIds: [agent.id],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(exchangeEnterpriseManagedCredentialMock).toHaveBeenCalledWith({
+      identityProviderId: identityProvider.id,
+      assertion: "session-id-token",
+      enterpriseManagedConfig: expect.objectContaining({
+        requestedCredentialType: "id_jag",
+      }),
+    });
+    expect(connectAndGetToolsMock.mock.calls[1][0]).toMatchObject({
+      secrets: { access_token: "mcp-server-access-token" },
+    });
+
+    const persistedTool = await ToolModel.findByName(
+      "protected_resource__read_resource_todos",
+    );
+    expect(persistedTool).toMatchObject({
+      catalogId: catalog.id,
+      meta: {
+        _meta: {
+          archestraResourceUri: "todo://todos",
+        },
+      },
+    });
+    const assignedToolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+    expect(assignedToolIds).toContain(persistedTool?.id);
+    if (!persistedTool) throw new Error("expected persisted tool");
+    const [assignment] = await db
+      .select({
+        credentialResolutionMode:
+          schema.agentToolsTable.credentialResolutionMode,
+      })
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agent.id),
+          eq(schema.agentToolsTable.toolId, persistedTool.id),
+        ),
+      );
+    expect(assignment?.credentialResolutionMode).toBe("enterprise_managed");
   });
 
   test("persists enterprise-managed config on installed MCP servers", async ({

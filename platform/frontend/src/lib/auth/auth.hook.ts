@@ -1,6 +1,6 @@
-import { authClient } from "@/lib/clients/auth/auth-client";
+import { useSession } from "@/lib/auth/auth.query";
 
 export function useIsAuthenticated() {
-  const session = authClient.useSession();
+  const session = useSession();
   return session.data?.user != null;
 }

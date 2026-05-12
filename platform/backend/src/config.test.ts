@@ -19,6 +19,7 @@ import {
   parseCommaSeparatedList,
   parseConnectorSyncMaxDuration,
   parseContentMaxLength,
+  parseDatabasePoolMax,
   parseMetricsPort,
   parseProcessType,
   parseSampleRate,
@@ -784,6 +785,61 @@ describe("parseContentMaxLength", () => {
     expect(parseContentMaxLength("-100")).toBe(10_000);
     expect(logger.warn).toHaveBeenCalledWith(
       'Invalid ARCHESTRA_OTEL_CONTENT_MAX_LENGTH value "-100", using default 10000',
+    );
+  });
+});
+
+describe("parseDatabasePoolMax", () => {
+  test("should return default 50 when no value provided", () => {
+    expect(parseDatabasePoolMax(undefined)).toBe(50);
+  });
+
+  test("should return default when empty string provided", () => {
+    expect(parseDatabasePoolMax("")).toBe(50);
+  });
+
+  test("should return default when whitespace-only string provided", () => {
+    expect(parseDatabasePoolMax("   ")).toBe(50);
+  });
+
+  test("should parse valid value", () => {
+    expect(parseDatabasePoolMax("100")).toBe(100);
+  });
+
+  test("should accept boundary values", () => {
+    expect(parseDatabasePoolMax("1")).toBe(1);
+    expect(parseDatabasePoolMax("500")).toBe(500);
+  });
+
+  test("should trim whitespace and parse value", () => {
+    expect(parseDatabasePoolMax("  75  ")).toBe(75);
+  });
+
+  test("should return default and warn for non-numeric value", () => {
+    expect(parseDatabasePoolMax("abc")).toBe(50);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_DATABASE_POOL_MAX value "abc", using default 50',
+    );
+  });
+
+  test("should return default and warn for zero", () => {
+    expect(parseDatabasePoolMax("0")).toBe(50);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_DATABASE_POOL_MAX value "0", using default 50',
+    );
+  });
+
+  test("should return default and warn for negative value", () => {
+    expect(parseDatabasePoolMax("-1")).toBe(50);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_DATABASE_POOL_MAX value "-1", using default 50',
+    );
+  });
+
+  test("should return default and warn for value above cap", () => {
+    expect(parseDatabasePoolMax("501")).toBe(50);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_DATABASE_POOL_MAX value "501", using default 50',
     );
   });
 });

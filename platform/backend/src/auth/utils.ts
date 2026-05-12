@@ -28,8 +28,8 @@ export const hasPermission = async (
     return result;
   } catch (error) {
     /**
-     * Handle API key sessions that don't have organization context
-     * API keys have all permissions by default (see auth config)
+     * Fall back to API key verification and check the key owner's current
+     * RBAC permissions.
      */
     logger.trace(
       { error: error instanceof Error ? error.message : "unknown" },
@@ -44,12 +44,35 @@ export const hasPermission = async (
         const apiKeyResult = await betterAuth.api.verifyApiKey({
           body: { key: authHeader },
         });
-        if (apiKeyResult?.valid) {
-          // API keys have all permissions, so allow the request
+        if (apiKeyResult?.valid && apiKeyResult.key?.referenceId) {
+          const apiKeyUserId = apiKeyResult.key.referenceId;
           logger.trace(
-            "[hasPermission] Valid API key found, granting all permissions",
+            { apiKeyUserId },
+            "[hasPermission] Valid API key found, checking owner permissions",
           );
-          return { success: true, error: null };
+
+          const apiKeyOwner = await UserModel.getById(apiKeyUserId);
+          const organizationId = apiKeyOwner?.organizationId;
+          if (!organizationId) {
+            logger.trace(
+              "[hasPermission] API key missing organization context",
+            );
+            return { success: false, error: new Error("Forbidden") };
+          }
+
+          const userPermissions = await UserModel.getUserPermissions(
+            apiKeyUserId,
+            organizationId,
+          );
+          const hasAllPermissions = hasRequiredPermissions(
+            userPermissions,
+            permissions,
+          );
+
+          return {
+            success: hasAllPermissions,
+            error: hasAllPermissions ? null : new Error("Forbidden"),
+          };
         }
         logger.trace("[hasPermission] API key verification returned invalid");
       } catch (_apiKeyError) {
@@ -82,3 +105,18 @@ export const userHasPermission = async (
   );
   return permissions[resource]?.includes(action) ?? false;
 };
+
+function hasRequiredPermissions(
+  userPermissions: Permissions,
+  requiredPermissions: Permissions,
+): boolean {
+  for (const [resource, actions] of Object.entries(requiredPermissions)) {
+    for (const action of actions) {
+      if (!userPermissions[resource as Resource]?.includes(action as Action)) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}

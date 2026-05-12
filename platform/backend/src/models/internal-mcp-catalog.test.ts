@@ -1,6 +1,9 @@
 import { ARCHESTRA_MCP_CATALOG_ID, DEFAULT_APP_NAME } from "@shared";
 import { describe, expect, test } from "@/test";
-import { SelectInternalMcpCatalogSchema } from "@/types";
+import {
+  ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
+  SelectInternalMcpCatalogSchema,
+} from "@/types";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpCatalogLabelModel from "./mcp-catalog-label";
 
@@ -72,6 +75,37 @@ describe("InternalMcpCatalogModel", () => {
       );
       expect(foundCatalog?.localConfig?.environment?.[1].value).toBe(
         "test-db-pass-789",
+      );
+    });
+
+    test("expands enterprise-managed client secret override from catalog secret", async ({
+      makeSecret,
+    }) => {
+      const clientSecret = await makeSecret({
+        name: "enterprise-managed-resource-secret",
+        secret: {
+          [ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY]:
+            "resource-client-secret",
+        },
+      });
+
+      const catalog = await InternalMcpCatalogModel.create({
+        name: "test-catalog-with-enterprise-secret",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        clientSecretId: clientSecret.id,
+        enterpriseManagedConfig: {
+          resourceType: "oauth_protected_resource",
+          resourceIdentifier: "https://example.com/mcp",
+          requestedCredentialType: "id_jag",
+        },
+      });
+
+      const catalogItems = await InternalMcpCatalogModel.findAll();
+      const foundCatalog = catalogItems.find((item) => item.id === catalog.id);
+
+      expect(foundCatalog?.enterpriseManagedConfig?.clientSecretOverride).toBe(
+        "resource-client-secret",
       );
     });
 
@@ -325,7 +359,9 @@ describe("InternalMcpCatalogModel", () => {
       expect(found?.labels[0].value).toBe("ai");
     });
 
-    test("findAll returns labels for all items", async () => {
+    test("findAll returns labels and tool counts for all items", async ({
+      makeTool,
+    }) => {
       const catalog = await InternalMcpCatalogModel.create({
         name: "catalog-find-all-labels",
         serverType: "remote",
@@ -334,6 +370,8 @@ describe("InternalMcpCatalogModel", () => {
           { key: "team", value: "platform" },
         ],
       });
+      await makeTool({ catalogId: catalog.id, name: "catalog-label-tool-1" });
+      await makeTool({ catalogId: catalog.id, name: "catalog-label-tool-2" });
 
       const all = await InternalMcpCatalogModel.findAll({
         expandSecrets: false,
@@ -344,6 +382,7 @@ describe("InternalMcpCatalogModel", () => {
       expect(found?.labels).toHaveLength(2);
       expect(found?.labels[0].key).toBe("region");
       expect(found?.labels[1].key).toBe("team");
+      expect(found?.toolCount).toBe(2);
     });
 
     test("searchByQuery returns labels", async () => {
@@ -509,6 +548,7 @@ describe("InternalMcpCatalogModel", () => {
       const found = await InternalMcpCatalogModel.findById(catalog.id, {
         userId: author.id,
         isAdmin: false,
+        organizationId: org.id,
       });
       expect(found).not.toBeNull();
 
@@ -516,6 +556,7 @@ describe("InternalMcpCatalogModel", () => {
       const denied = await InternalMcpCatalogModel.findById(catalog.id, {
         userId: otherUser.id,
         isAdmin: false,
+        organizationId: org.id,
       });
       expect(denied).toBeNull();
 
@@ -523,6 +564,7 @@ describe("InternalMcpCatalogModel", () => {
       const adminAccess = await InternalMcpCatalogModel.findById(catalog.id, {
         userId: otherUser.id,
         isAdmin: true,
+        organizationId: org.id,
       });
       expect(adminAccess).not.toBeNull();
     });
@@ -571,7 +613,12 @@ describe("InternalMcpCatalogModel", () => {
       // Author finds it
       const authorResults = await InternalMcpCatalogModel.searchByQuery(
         "searchscope-personal",
-        { expandSecrets: false, userId: author.id, isAdmin: false },
+        {
+          expandSecrets: false,
+          userId: author.id,
+          isAdmin: false,
+          organizationId: org.id,
+        },
       );
       expect(
         authorResults.some((r) => r.name === "searchscope-personal-item"),
@@ -580,7 +627,12 @@ describe("InternalMcpCatalogModel", () => {
       // Other user does not
       const otherResults = await InternalMcpCatalogModel.searchByQuery(
         "searchscope-personal",
-        { expandSecrets: false, userId: otherUser.id, isAdmin: false },
+        {
+          expandSecrets: false,
+          userId: otherUser.id,
+          isAdmin: false,
+          organizationId: org.id,
+        },
       );
       expect(
         otherResults.some((r) => r.name === "searchscope-personal-item"),

@@ -21,6 +21,15 @@ const adminRole = ac.newRole(allAvailableActions);
 const editorRole = ac.newRole(editorPermissions);
 const memberRole = ac.newRole(memberPermissions);
 
+/**
+ * Low-level Better Auth client.
+ *
+ * Do not call `authClient.useSession()` directly. It maintains session state
+ * outside the app's TanStack Query cache, which can create duplicate session
+ * fetches on pages with many auth-aware components. Use `useSession()` from
+ * `@/lib/auth/auth.query` instead so session reads share one query key,
+ * stale-time, and invalidation path.
+ */
 export const authClient = createAuthClient({
   baseURL: "", // Always use relative URLs (proxied through Next.js)
   plugins: [

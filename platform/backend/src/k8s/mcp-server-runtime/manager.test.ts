@@ -127,6 +127,9 @@ vi.mock("./k8s-deployment", () => {
       static collectImagePullSecretNames(): string[] {
         return [];
       }
+      static constructDeploymentName(mcpServer: { name: string }): string {
+        return `mcp-${mcpServer.name.replaceAll(" ", "-")}`;
+      }
     },
     fetchPlatformPodNodeSelector: vi.fn().mockResolvedValue(undefined),
     fetchPlatformPodTolerations: vi.fn().mockResolvedValue(undefined),
@@ -1192,5 +1195,117 @@ describe("McpServerRuntimeManager.backfillRegcredTeamLabels", () => {
     const manager = new McpServerRuntimeManager();
     // k8sApi is undefined — should return without error
     await callBackfill(manager, [{ id: "srv-1", teamId: "team-x" }]);
+  });
+});
+
+describe("McpServerRuntimeManager.cleanupOrphanedDeployments", () => {
+  async function createManagerWithMockK8s(params: {
+    mockK8sApi: Record<string, unknown>;
+    mockK8sAppsApi: Record<string, unknown>;
+  }) {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+    (manager as unknown as { k8sApi: unknown }).k8sApi = params.mockK8sApi;
+    (manager as unknown as { k8sAppsApi: unknown }).k8sAppsApi =
+      params.mockK8sAppsApi;
+    return manager;
+  }
+
+  function callCleanup(
+    manager: unknown,
+    servers: Array<{ id: string; name: string; catalogId: string }>,
+  ) {
+    const castServers = servers.map((s) => ({
+      ...s,
+      secretId: null,
+      ownerId: null,
+      teamId: null,
+      scope: "org" as const,
+      reinstallRequired: false,
+      localInstallationStatus: "idle" as const,
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      serverType: "local" as const,
+    }));
+    return (
+      manager as { cleanupOrphanedDeployments: (s: unknown[]) => Promise<void> }
+    ).cleanupOrphanedDeployments(castServers);
+  }
+
+  test("deletes legacy name-derived deployments for existing servers", async () => {
+    const mockDeleteDeployment = vi.fn().mockResolvedValue({});
+    const mockDeleteService = vi.fn().mockResolvedValue({});
+    const manager = await createManagerWithMockK8s({
+      mockK8sApi: { deleteNamespacedService: mockDeleteService },
+      mockK8sAppsApi: {
+        listNamespacedDeployment: vi.fn().mockResolvedValue({
+          items: [
+            {
+              metadata: {
+                name: "mcp-legacy-name",
+                labels: {
+                  app: "mcp-server",
+                  "mcp-server-id": "123e4567-e89b-12d3-a456-426614174000",
+                },
+              },
+            },
+            {
+              metadata: {
+                name: "mcp-current-name",
+                labels: {
+                  app: "mcp-server",
+                  "mcp-server-id": "123e4567-e89b-12d3-a456-426614174000",
+                },
+              },
+            },
+          ],
+        }),
+        deleteNamespacedDeployment: mockDeleteDeployment,
+      },
+    });
+
+    await callCleanup(manager, [
+      {
+        id: "123e4567-e89b-12d3-a456-426614174000",
+        name: "current-name",
+        catalogId: "cat-1",
+      },
+    ]);
+
+    expect(mockDeleteDeployment).toHaveBeenCalledOnce();
+    expect(mockDeleteDeployment).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "mcp-legacy-name" }),
+    );
+    expect(mockDeleteService).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "mcp-legacy-name-service" }),
+    );
+  });
+
+  test("ignores deployments that do not belong to installed servers", async () => {
+    const mockDeleteDeployment = vi.fn().mockResolvedValue({});
+    const manager = await createManagerWithMockK8s({
+      mockK8sApi: { deleteNamespacedService: vi.fn().mockResolvedValue({}) },
+      mockK8sAppsApi: {
+        listNamespacedDeployment: vi.fn().mockResolvedValue({
+          items: [
+            {
+              metadata: {
+                name: "mcp-orphan",
+                labels: {
+                  app: "mcp-server",
+                  "mcp-server-id": "missing-server",
+                },
+              },
+            },
+          ],
+        }),
+        deleteNamespacedDeployment: mockDeleteDeployment,
+      },
+    });
+
+    await callCleanup(manager, []);
+
+    expect(mockDeleteDeployment).not.toHaveBeenCalled();
   });
 });

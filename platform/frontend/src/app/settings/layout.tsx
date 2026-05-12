@@ -22,7 +22,8 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
   },
   "/settings/identity-providers": {
     title: "Identity Providers",
-    description: "Configure SSO and identity provider integrations.",
+    description:
+      "Configure SSO, linked downstream IdPs, and identity provider integrations.",
   },
   "/settings/knowledge": {
     title: "Knowledge",

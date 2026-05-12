@@ -50,8 +50,7 @@ import {
   type VisibilityOption,
   VisibilitySelector,
 } from "@/components/visibility-selector";
-import { useHasPermissions } from "@/lib/auth/auth.query";
-import { authClient } from "@/lib/clients/auth/auth-client";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
@@ -63,7 +62,7 @@ import {
   useDeleteVirtualApiKey,
   useUpdateVirtualApiKey,
 } from "@/lib/virtual-api-keys.query";
-import { useSetProxyAuthAction } from "../layout";
+import { useSetCredentialsAction } from "../layout";
 
 type VirtualKeyWithParent =
   archestraApiTypes.GetAllVirtualApiKeysResponses["200"]["data"][number];
@@ -94,7 +93,7 @@ export default function VirtualKeysPage() {
   const paginationMeta = response?.pagination;
 
   const { data: apiKeys = [] } = useLlmProviderApiKeys();
-  const { data: session } = authClient.useSession();
+  const { data: session } = useSession();
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: isVirtualKeyAdmin } = useHasPermissions({
     llmVirtualKey: ["admin"],
@@ -219,9 +218,9 @@ export default function VirtualKeysPage() {
     [canReadTeams, isVirtualKeyAdmin],
   );
 
-  const setProxyAuthAction = useSetProxyAuthAction();
+  const setCredentialsAction = useSetCredentialsAction();
   useEffect(() => {
-    setProxyAuthAction(
+    setCredentialsAction(
       <Button
         onClick={() => setIsCreateDialogOpen(true)}
         disabled={parentableKeys.length === 0}
@@ -231,8 +230,8 @@ export default function VirtualKeysPage() {
         Create Virtual Key
       </Button>,
     );
-    return () => setProxyAuthAction(null);
-  }, [setProxyAuthAction, parentableKeys.length]);
+    return () => setCredentialsAction(null);
+  }, [setCredentialsAction, parentableKeys.length]);
 
   return (
     <>

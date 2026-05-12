@@ -149,7 +149,7 @@ export async function addCustomSelfHostedCatalogItem({
   };
 }
 
-export async function findCatalogItem(
+async function findCatalogItem(
   request: APIRequestContext,
   name: string,
 ): Promise<{ id: string; name: string } | undefined> {
@@ -167,15 +167,78 @@ export async function findCatalogItem(
     );
   }
 
-  const catalog = await response.json();
+  const catalog = extractCatalogItems(await response.json());
 
-  if (!Array.isArray(catalog)) {
+  return catalog.find((item: { name: string }) => item.name === name);
+}
+
+export async function ensureInternalDevTestServerCatalogItem(
+  request: APIRequestContext,
+): Promise<{ id: string; name: string }> {
+  const existing = await findCatalogItem(request, "internal-dev-test-server");
+  if (existing) {
+    return existing;
+  }
+
+  const response = await request.post(
+    getE2eRequestUrl("/api/internal_mcp_catalog"),
+    {
+      headers: {
+        "Content-Type": "application/json",
+        Origin: UI_BASE_URL,
+      },
+      data: {
+        name: "internal-dev-test-server",
+        description:
+          "Simple test MCP server for e2e tests. Has one tool that prints an env var.",
+        serverType: "local",
+        localConfig: {
+          command: "sh",
+          arguments: ["-c", testMcpServerCommand],
+          transportType: "stdio",
+          environment: [
+            {
+              key: "ARCHESTRA_TEST",
+              type: "plain_text",
+              promptOnInstallation: true,
+              required: true,
+              description: "Test value to print",
+            },
+          ],
+        },
+      },
+    },
+  );
+
+  if (!response.ok()) {
     throw new Error(
-      `Expected catalog to be an array, got: ${JSON.stringify(catalog)}`,
+      `Failed to create internal-dev-test-server catalog item: ${response.status()} ${await response.text()}`,
     );
   }
 
-  return catalog.find((item: { name: string }) => item.name === name);
+  const created = await response.json();
+  return { id: created.id, name: created.name };
+}
+
+function extractCatalogItems(
+  data: unknown,
+): Array<{ id: string; name: string }> {
+  if (Array.isArray(data)) {
+    return data as Array<{ id: string; name: string }>;
+  }
+
+  if (
+    data &&
+    typeof data === "object" &&
+    "data" in data &&
+    Array.isArray(data.data)
+  ) {
+    return data.data as Array<{ id: string; name: string }>;
+  }
+
+  throw new Error(
+    `Expected catalog list response, got: ${JSON.stringify(data)}`,
+  );
 }
 
 export async function findInstalledServer(

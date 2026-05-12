@@ -1,4 +1,5 @@
 import { SecretsManagerType, SupportedProviders } from "@shared";
+import { encodeBedrockSigV4Marker } from "@/clients/bedrock-credentials";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -218,6 +219,9 @@ export function assertByosEnabled(): ReadonlyVaultSecretManager {
  * Retrieve the API key value for an LLM provider from the secrets store.
  *
  * Current format: `{ apiKey: "sk-..." }`
+ * Bedrock SigV4 format: `{ accessKeyId, secretAccessKey, sessionToken? }` —
+ *   encoded as a marker string so it flows through the existing single-string
+ *   apiKey pipeline. Only Bedrock terminal call sites decode it.
  * Legacy formats (pre-v1.0): `{ <provider>ApiKey: "sk-..." }` (e.g. `anthropicApiKey`, `openaiApiKey`).
  * These provider-specific keys were used before the unified API key system.
  * They may still exist in databases that were created before the migration.
@@ -231,6 +235,19 @@ export async function getSecretValueForLlmProviderApiKey(
 
   // Current format
   if (typeof data.apiKey === "string") return data.apiKey;
+
+  // Bedrock SigV4 (no apiKey, but AWS access key pair)
+  if (
+    typeof data.accessKeyId === "string" &&
+    typeof data.secretAccessKey === "string"
+  ) {
+    return encodeBedrockSigV4Marker({
+      accessKeyId: data.accessKeyId,
+      secretAccessKey: data.secretAccessKey,
+      sessionToken:
+        typeof data.sessionToken === "string" ? data.sessionToken : undefined,
+    });
+  }
 
   // Legacy format: `<provider>ApiKey` (e.g. anthropicApiKey, openaiApiKey)
   for (const provider of SupportedProviders) {

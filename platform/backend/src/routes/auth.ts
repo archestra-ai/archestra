@@ -1,10 +1,10 @@
 import { randomBytes } from "node:crypto";
-import type { IncomingHttpHeaders } from "node:http";
 import {
   DEFAULT_ADMIN_EMAIL,
   IDENTITY_PROVIDER_ID,
   LLM_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS,
   LLM_PROXY_OAUTH_SCOPE,
+  OAUTH_GRANT_TYPE,
   RouteId,
 } from "@shared";
 import { verifyPassword } from "better-auth/crypto";
@@ -28,7 +28,6 @@ import {
 import {
   buildOAuthIssuer,
   exchangeIdentityAssertionForAccessToken,
-  JWT_BEARER_GRANT_TYPE,
   MCP_RESOURCE_REFERENCE_PREFIX,
 } from "@/services/identity-providers/enterprise-managed/authorization";
 import { ApiError, constructResponseSchema } from "@/types";
@@ -36,6 +35,7 @@ import {
   isLoopbackRedirectUri,
   loopbackRedirectUriMatchesIgnoringPort,
 } from "@/utils/network";
+import { getPublicRequestOrigin } from "./request-origin";
 
 const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.route({
@@ -388,7 +388,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      if (body?.grant_type === JWT_BEARER_GRANT_TYPE) {
+      if (body?.grant_type === OAUTH_GRANT_TYPE.JwtBearer) {
         const { clientId: authenticatedClientId, clientSecret } =
           extractOAuthClientCredentials({
             authorizationHeader: request.headers.authorization,
@@ -431,10 +431,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         delete body.resource;
       }
 
-      const tokenEndpointOrigin = getRequestOrigin({
-        protocol: request.protocol,
-        headers: request.headers,
-      });
+      const tokenEndpointOrigin = getPublicRequestOrigin(request);
       const url = new URL(request.url, tokenEndpointOrigin);
       const headers = new Headers();
       Object.entries(request.headers).forEach(([key, value]) => {
@@ -1107,31 +1104,6 @@ function getProfileIdFromReferenceId(
   }
 
   return referenceId.slice(MCP_RESOURCE_REFERENCE_PREFIX.length) || null;
-}
-
-function getRequestOrigin(params: {
-  protocol: string;
-  headers: IncomingHttpHeaders;
-}): string {
-  const host = Array.isArray(params.headers.host)
-    ? params.headers.host[0]
-    : params.headers.host;
-  const forwardedProto = getFirstHeaderValue(
-    params.headers["x-forwarded-proto"],
-  );
-  const protocol = (forwardedProto || params.protocol || "http").replace(
-    /:$/,
-    "",
-  );
-
-  return `${protocol}://${host}`;
-}
-
-function getFirstHeaderValue(
-  header: string | string[] | undefined,
-): string | undefined {
-  const value = Array.isArray(header) ? header[0] : header;
-  return value?.split(",")[0]?.trim() || undefined;
 }
 
 function hashOAuthAccessTokenForLookup(oauthAccessToken: string): string {

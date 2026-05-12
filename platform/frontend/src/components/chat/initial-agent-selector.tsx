@@ -71,8 +71,7 @@ import {
   useSyncAgentDelegations,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
-import { useHasPermissions } from "@/lib/auth/auth.query";
-import { authClient } from "@/lib/clients/auth/auth-client";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useConnectors } from "@/lib/knowledge/connector.query";
 import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
@@ -111,7 +110,7 @@ export function InitialAgentSelector({
   onAgentChange,
 }: InitialAgentSelectorProps) {
   const { data: allAgents = [] } = useInternalAgents();
-  const { data: session } = authClient.useSession();
+  const { data: session } = useSession();
   const userId = session?.user?.id;
   const { data: isAgentAdmin } = useHasPermissions({ agent: ["admin"] });
   const createProfile = useCreateProfile();
@@ -131,8 +130,6 @@ export function InitialAgentSelector({
   const [configureToolFrom, setConfigureToolFrom] = useState<
     "settings" | "add-tool"
   >("settings");
-  const installer = useMcpInstallOrchestrator();
-
   const filteredAgents = useMemo(() => {
     return filterAndSortInitialAgents({
       allAgents,
@@ -149,6 +146,11 @@ export function InitialAgentSelector({
   );
   const displayAgentName =
     currentAgent?.name ?? currentAgentName ?? "Select agent";
+  const effectiveAgentId = currentAgent?.id ?? currentAgentId;
+  const shouldLoadAgentManagementDetails = open || !!editingAgentId;
+  const installer = useMcpInstallOrchestrator({
+    enabled: shouldLoadAgentManagementDetails,
+  });
 
   const canEditCurrentAgent = useMemo(() => {
     if (!currentAgent) return false;
@@ -157,7 +159,6 @@ export function InitialAgentSelector({
     return authorId === userId;
   }, [currentAgent, isAgentAdmin, userId]);
 
-  const effectiveAgentId = currentAgent?.id ?? currentAgentId;
   const { data: canReadMcpRegistry } = useHasPermissions({
     mcpRegistry: ["read"],
   });
@@ -1035,7 +1036,7 @@ function AssignedToolsGrid({
             <span className="text-xs font-medium truncate w-full">
               {agent.name}
             </span>
-            <AgentToolAvatars agentId={agent.id} />
+            <AgentToolAvatars agentId={agent.id} enabled />
           </div>
         </div>
       ))}
@@ -1710,7 +1711,7 @@ function AddDelegationView({
                     className="text-[10px] px-1.5 py-0"
                   />
                   <div className="flex-1" />
-                  <AgentToolAvatars agentId={agent.id} />
+                  <AgentToolAvatars agentId={agent.id} enabled />
                 </div>
               </button>
             ))}
@@ -1984,15 +1985,21 @@ function EditKnowledgeSourcesView({
   );
 }
 
-function AgentToolAvatars({ agentId }: { agentId: string }) {
-  const { data: catalogItems = [] } = useInternalMcpCatalog();
+function AgentToolAvatars({
+  agentId,
+  enabled = true,
+}: {
+  agentId: string;
+  enabled?: boolean;
+}) {
+  const { data: catalogItems = [] } = useInternalMcpCatalog({ enabled });
   const { data: allAgents = [] } = useInternalAgents();
   const { data: assignedToolsData } = useAllProfileTools({
     filters: { agentId },
     skipPagination: true,
-    enabled: !!agentId,
+    enabled: enabled && !!agentId,
   });
-  const { data: delegations = [] } = useAgentDelegations(agentId);
+  const { data: delegations = [] } = useAgentDelegations(agentId, { enabled });
 
   const catalogs = useMemo(() => {
     const catalogIds = new Set<string>();

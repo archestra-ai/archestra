@@ -18,13 +18,21 @@ export const GenericMcpToolErrorSchema = z
   })
   .strict();
 
+export const AuthRequiredActionSchema = z.enum([
+  "install_mcp_credentials",
+  "connect_identity_provider",
+]);
+
 export const AuthRequiredMcpToolErrorSchema = z
   .object({
     type: z.literal("auth_required"),
     message: z.string(),
     catalogId: z.string(),
     catalogName: z.string(),
-    installUrl: z.string().url(),
+    action: AuthRequiredActionSchema.optional(),
+    actionUrl: z.string().url().optional(),
+    installUrl: z.string().url().optional(),
+    providerId: z.string().optional(),
   })
   .strict();
 
@@ -86,6 +94,7 @@ export type GenericMcpToolError = z.infer<typeof GenericMcpToolErrorSchema>;
 export type AuthRequiredMcpToolError = z.infer<
   typeof AuthRequiredMcpToolErrorSchema
 >;
+export type AuthRequiredAction = z.infer<typeof AuthRequiredActionSchema>;
 export type AuthExpiredMcpToolError = z.infer<
   typeof AuthExpiredMcpToolErrorSchema
 >;

@@ -3,7 +3,7 @@
 import {
   E2eTestId,
   formatSecretStorageType,
-  PROVIDERS_WITH_OPTIONAL_API_KEY,
+  isProviderApiKeyOptional,
   type ResourceVisibilityScope,
 } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -85,6 +85,10 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   vaultSecretPath: null,
   vaultSecretKey: null,
   isPrimary: false,
+  bedrockAuthMethod: "api-key",
+  awsAccessKeyId: null,
+  awsSecretAccessKey: null,
+  awsSessionToken: null,
 };
 
 export default function ApiKeysPage() {
@@ -111,6 +115,7 @@ export default function ApiKeysPage() {
   const updateMutation = useUpdateLlmProviderApiKey();
   const deleteMutation = useDeleteLlmProviderApiKey();
   const byosEnabled = useFeature("byosEnabled");
+  const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
 
   const getKeyUsage = useCallback(
     (keyId: string): string | null => {
@@ -152,6 +157,10 @@ export default function ApiKeysPage() {
         vaultSecretPath: selectedApiKey.vaultSecretPath ?? null,
         vaultSecretKey: selectedApiKey.vaultSecretKey ?? null,
         isPrimary: selectedApiKey.isPrimary ?? false,
+        bedrockAuthMethod: "api-key",
+        awsAccessKeyId: null,
+        awsSecretAccessKey: null,
+        awsSessionToken: null,
       });
     }
   }, [isEditDialogOpen, selectedApiKey, editForm]);
@@ -167,12 +176,21 @@ export default function ApiKeysPage() {
     const scopeChanged = values.scope !== selectedApiKey.scope;
     const teamIdChanged = values.teamId !== (selectedApiKey.teamId ?? "");
 
+    const isBedrockSigV4 =
+      values.provider === "bedrock" && values.bedrockAuthMethod === "sigv4";
+    const sigV4Provided = Boolean(
+      isBedrockSigV4 && values.awsAccessKeyId && values.awsSecretAccessKey,
+    );
+
     try {
       await updateMutation.mutateAsync({
         id: selectedApiKey.id,
         data: {
           name: values.name || undefined,
-          apiKey: apiKeyChanged ? (values.apiKey ?? undefined) : undefined,
+          apiKey:
+            !isBedrockSigV4 && apiKeyChanged
+              ? (values.apiKey ?? undefined)
+              : undefined,
           baseUrl: values.baseUrl || null,
           extraHeaders: serializeExtraHeaders(values.extraHeaders),
           scope: scopeChanged ? values.scope : undefined,
@@ -184,13 +202,22 @@ export default function ApiKeysPage() {
               : undefined,
           isPrimary: values.isPrimary,
           vaultSecretPath:
-            byosEnabled && values.vaultSecretPath
+            !isBedrockSigV4 && byosEnabled && values.vaultSecretPath
               ? values.vaultSecretPath
               : undefined,
           vaultSecretKey:
-            byosEnabled && values.vaultSecretKey
+            !isBedrockSigV4 && byosEnabled && values.vaultSecretKey
               ? values.vaultSecretKey
               : undefined,
+          awsAccessKeyId: sigV4Provided
+            ? (values.awsAccessKeyId ?? undefined)
+            : undefined,
+          awsSecretAccessKey: sigV4Provided
+            ? (values.awsSecretAccessKey ?? undefined)
+            : undefined,
+          awsSessionToken: sigV4Provided
+            ? (values.awsSessionToken ?? undefined)
+            : undefined,
         },
       });
 
@@ -354,7 +381,10 @@ export default function ApiKeysPage() {
           <div className="flex items-center gap-2">
             {row.original.isSystem ||
             row.original.secretId ||
-            PROVIDERS_WITH_OPTIONAL_API_KEY.has(row.original.provider) ? (
+            isProviderApiKeyOptional({
+              provider: row.original.provider,
+              azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
+            }) ? (
               <>
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
                 <span className="text-sm text-muted-foreground">
@@ -416,7 +446,13 @@ export default function ApiKeysPage() {
         },
       },
     ],
-    [docsUrl, openEditDialog, openDeleteDialog, getKeyUsage],
+    [
+      docsUrl,
+      openEditDialog,
+      openDeleteDialog,
+      getKeyUsage,
+      azureOpenAiEntraIdEnabled,
+    ],
   );
 
   return (

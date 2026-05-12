@@ -1,6 +1,10 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import {
+  type archestraApiTypes,
+  CONNECTOR_TYPE_LABELS,
+  type ConnectorType,
+} from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
 import { Database, Pencil, Trash2, Users } from "lucide-react";
@@ -51,7 +55,8 @@ const CONNECTOR_TYPE_OPTIONS = [
   "github",
   "gitlab",
   "servicenow",
-] as const;
+  "file_upload",
+] as ConnectorType[];
 
 function formatAgentType(agentType: string): string {
   return AGENT_TYPE_LABELS[agentType] ?? agentType;
@@ -166,35 +171,55 @@ function ConnectorsList() {
     {
       id: "status",
       header: "Status",
-      cell: ({ row }) => (
-        <div className="flex items-center gap-2">
-          {row.original.lastSyncAt ? (
-            <>
-              <ConnectorStatusBadge status={row.original.lastSyncStatus} />
-              <span
-                className="text-xs text-muted-foreground"
-                title={formatDate({ date: row.original.lastSyncAt })}
-              >
-                {formatDistanceToNow(new Date(row.original.lastSyncAt), {
-                  addSuffix: true,
-                })}
+      cell: ({ row }) => {
+        if (row.original.connectorType === "file_upload") {
+          return (
+            <span className="text-xs text-muted-foreground">
+              Manual uploads
+            </span>
+          );
+        }
+        return (
+          <div className="flex items-center gap-2">
+            {row.original.lastSyncAt ? (
+              <>
+                <ConnectorStatusBadge status={row.original.lastSyncStatus} />
+                <span
+                  className="text-xs text-muted-foreground"
+                  title={formatDate({ date: row.original.lastSyncAt })}
+                >
+                  {formatDistanceToNow(new Date(row.original.lastSyncAt), {
+                    addSuffix: true,
+                  })}
+                </span>
+              </>
+            ) : (
+              <span className="text-xs text-muted-foreground">
+                Never synced
               </span>
-            </>
-          ) : (
-            <span className="text-xs text-muted-foreground">Never synced</span>
-          )}
-        </div>
-      ),
+            )}
+          </div>
+        );
+      },
     },
     {
       id: "schedule",
       header: "Schedule",
-      cell: ({ row }) => (
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Database className="h-3.5 w-3.5" />
-          <span>{formatCronSchedule(row.original.schedule)}</span>
-        </div>
-      ),
+      cell: ({ row }) => {
+        if (row.original.connectorType === "file_upload") {
+          return (
+            <span className="text-xs text-muted-foreground">
+              Manual uploads
+            </span>
+          );
+        }
+        return (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Database className="h-3.5 w-3.5" />
+            <span>{formatCronSchedule(row.original.schedule)}</span>
+          </div>
+        );
+      },
     },
     {
       id: "assigned",
@@ -235,11 +260,7 @@ function ConnectorsList() {
       <div>
         <div className="mb-6 flex flex-col gap-2">
           <div className="flex items-center gap-4">
-            <SearchInput
-              objectNamePlural="connectors"
-              searchFields={["name", "description"]}
-              paramName="search"
-            />
+            <SearchInput paramName="search" className="relative w-[330px]" />
             <Select
               value={connectorTypeFilter}
               onValueChange={handleConnectorTypeChange}
@@ -251,9 +272,9 @@ function ConnectorsList() {
                 <SelectItem value="all">All connector types</SelectItem>
                 {CONNECTOR_TYPE_OPTIONS.map((type) => (
                   <SelectItem key={type} value={type}>
-                    <div className="flex items-center gap-2 capitalize">
+                    <div className="flex items-center gap-2">
                       <ConnectorTypeIcon type={type} className="h-4 w-4" />
-                      {type}
+                      {CONNECTOR_TYPE_LABELS[type]}
                     </div>
                   </SelectItem>
                 ))}

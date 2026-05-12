@@ -23,6 +23,7 @@ import type {
 } from "@/types";
 import agentsTable from "./agent";
 import usersTable from "./user";
+import virtualApiKeysTable from "./virtual-api-key";
 
 const interactionsTable = pgTable(
   "interactions",
@@ -51,6 +52,10 @@ const interactionsTable = pgTable(
     userId: text("user_id").references(() => usersTable.id, {
       onDelete: "set null",
     }),
+    virtualKeyId: uuid("virtual_key_id").references(
+      () => virtualApiKeysTable.id,
+      { onDelete: "set null" },
+    ),
     /**
      * Session ID to group related LLM requests together.
      * Can be extracted from:

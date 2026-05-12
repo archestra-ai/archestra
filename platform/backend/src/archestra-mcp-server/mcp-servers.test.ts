@@ -11,9 +11,11 @@ import { type ArchestraContext, executeArchestraTool } from ".";
 describe("mcp server tool execution", () => {
   let testAgent: Agent;
   let mockContext: ArchestraContext;
+  let organizationId: string;
 
   beforeEach(async ({ makeAgent, makeUser, makeOrganization, makeMember }) => {
     const org = await makeOrganization();
+    organizationId = org.id;
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "admin" });
     testAgent = await makeAgent({ name: "Test Agent", organizationId: org.id });
@@ -105,6 +107,7 @@ describe("mcp server tool execution", () => {
     const catalog = await makeInternalMcpCatalog({
       name: "Test MCP Server",
       description: "A test server",
+      organizationId,
     });
 
     const result = await executeArchestraTool(
@@ -131,6 +134,7 @@ describe("mcp server tool execution", () => {
     const catalog = await makeInternalMcpCatalog({
       name: "UniqueSearchableServer",
       description: "Unique description for search",
+      organizationId,
     });
 
     const result = await executeArchestraTool(
@@ -150,6 +154,7 @@ describe("mcp server tool execution", () => {
   }) => {
     const catalog = await makeInternalMcpCatalog({
       name: "Server With Tools",
+      organizationId,
     });
     await makeTool({ catalogId: catalog.id, name: "test_tool_1" });
     await makeTool({ catalogId: catalog.id, name: "test_tool_2" });
@@ -173,6 +178,7 @@ describe("mcp server tool execution", () => {
     const catalog = await makeInternalMcpCatalog({
       name: "Original Name",
       description: "Original description",
+      organizationId,
     });
 
     const result = await executeArchestraTool(
@@ -227,6 +233,7 @@ describe("mcp server tool execution", () => {
     const catalog = await makeInternalMcpCatalog({
       name: "Configurable MCP Server",
       serverType: "local",
+      organizationId,
     });
 
     const result = await executeArchestraTool(

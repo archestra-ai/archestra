@@ -1,11 +1,11 @@
-import { OAUTH_ENDPOINTS, OAUTH_SCOPES } from "@shared";
+import { OAUTH_ENDPOINTS, OAUTH_GRANT_TYPE, OAUTH_SCOPES } from "@shared";
 import { eq } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import db, { schema as dbSchema } from "@/database";
 import { AgentModel } from "@/models";
-import { JWT_BEARER_GRANT_TYPE } from "@/services/identity-providers/enterprise-managed/authorization";
+import { getPublicRequestOrigin } from "./request-origin";
 
 /**
  * OAuth 2.1 well-known discovery endpoints.
@@ -40,9 +40,7 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const host = request.headers.host;
-      const protocol = request.protocol;
-      const baseUrl = `${protocol}://${host}`;
+      const baseUrl = getPublicRequestOrigin(request);
 
       // Extract the resource path (everything after /.well-known/oauth-protected-resource)
       const resourcePath = request.url.replace(
@@ -100,9 +98,7 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const host = request.headers.host;
-      const protocol = request.protocol;
-      const baseUrl = `${protocol}://${host}`;
+      const baseUrl = getPublicRequestOrigin(request);
 
       // authorization_endpoint must be browser-facing (for session cookies).
       // Use the frontend URL so the browser sends its session cookie via
@@ -130,7 +126,7 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "authorization_code",
           "refresh_token",
           "client_credentials",
-          JWT_BEARER_GRANT_TYPE,
+          OAUTH_GRANT_TYPE.JwtBearer,
         ],
         token_endpoint_auth_methods_supported: [
           "client_secret_basic",

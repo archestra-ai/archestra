@@ -65131,6 +65131,71 @@
                           ],
                           "additionalProperties": false
                         }
+                      },
+                      "compactions": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "conversationId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "summary": {
+                              "type": "string"
+                            },
+                            "compactedThroughMessageId": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "trigger": {
+                              "type": "string",
+                              "enum": [
+                                "auto",
+                                "manual"
+                              ]
+                            },
+                            "provider": {
+                              "type": "string"
+                            },
+                            "model": {
+                              "type": "string"
+                            },
+                            "originalTokenEstimate": {
+                              "type": "integer",
+                              "minimum": -2147483648,
+                              "maximum": 2147483647
+                            },
+                            "compactedTokenEstimate": {
+                              "type": "integer",
+                              "minimum": -2147483648,
+                              "maximum": 2147483647
+                            },
+                            "createdAt": {
+                              "type": "string",
+                              "format": "date-time"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "conversationId",
+                            "summary",
+                            "compactedThroughMessageId",
+                            "trigger",
+                            "provider",
+                            "model",
+                            "originalTokenEstimate",
+                            "compactedTokenEstimate",
+                            "createdAt"
+                          ],
+                          "additionalProperties": false
+                        }
                       }
                     },
                     "required": [
@@ -65151,7 +65216,8 @@
                       "agent",
                       "share",
                       "messages",
-                      "chatErrors"
+                      "chatErrors",
+                      "compactions"
                     ],
                     "additionalProperties": false
                   }
@@ -65742,6 +65808,71 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "compactions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "conversationId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "compactedThroughMessageId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "trigger": {
+                            "type": "string",
+                            "enum": [
+                              "auto",
+                              "manual"
+                            ]
+                          },
+                          "provider": {
+                            "type": "string"
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "originalTokenEstimate": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
+                          "compactedTokenEstimate": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "conversationId",
+                          "summary",
+                          "compactedThroughMessageId",
+                          "trigger",
+                          "provider",
+                          "model",
+                          "originalTokenEstimate",
+                          "compactedTokenEstimate",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -65762,7 +65893,8 @@
                     "agent",
                     "share",
                     "messages",
-                    "chatErrors"
+                    "chatErrors",
+                    "compactions"
                   ],
                   "additionalProperties": false
                 }
@@ -66311,6 +66443,71 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "compactions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "conversationId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "compactedThroughMessageId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "trigger": {
+                            "type": "string",
+                            "enum": [
+                              "auto",
+                              "manual"
+                            ]
+                          },
+                          "provider": {
+                            "type": "string"
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "originalTokenEstimate": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
+                          "compactedTokenEstimate": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "conversationId",
+                          "summary",
+                          "compactedThroughMessageId",
+                          "trigger",
+                          "provider",
+                          "model",
+                          "originalTokenEstimate",
+                          "compactedTokenEstimate",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -66331,7 +66528,8 @@
                     "agent",
                     "share",
                     "messages",
-                    "chatErrors"
+                    "chatErrors",
+                    "compactions"
                   ],
                   "additionalProperties": false
                 }
@@ -66940,6 +67138,71 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "compactions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "conversationId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "compactedThroughMessageId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "trigger": {
+                            "type": "string",
+                            "enum": [
+                              "auto",
+                              "manual"
+                            ]
+                          },
+                          "provider": {
+                            "type": "string"
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "originalTokenEstimate": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
+                          "compactedTokenEstimate": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "conversationId",
+                          "summary",
+                          "compactedThroughMessageId",
+                          "trigger",
+                          "provider",
+                          "model",
+                          "originalTokenEstimate",
+                          "compactedTokenEstimate",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -66960,7 +67223,8 @@
                     "agent",
                     "share",
                     "messages",
-                    "chatErrors"
+                    "chatErrors",
+                    "compactions"
                   ],
                   "additionalProperties": false
                 }
@@ -67803,6 +68067,71 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "compactions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "conversationId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "compactedThroughMessageId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "trigger": {
+                            "type": "string",
+                            "enum": [
+                              "auto",
+                              "manual"
+                            ]
+                          },
+                          "provider": {
+                            "type": "string"
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "originalTokenEstimate": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
+                          "compactedTokenEstimate": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "conversationId",
+                          "summary",
+                          "compactedThroughMessageId",
+                          "trigger",
+                          "provider",
+                          "model",
+                          "originalTokenEstimate",
+                          "compactedTokenEstimate",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -67823,7 +68152,8 @@
                     "agent",
                     "share",
                     "messages",
-                    "chatErrors"
+                    "chatErrors",
+                    "compactions"
                   ],
                   "additionalProperties": false
                 }
@@ -68739,6 +69069,71 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "compactions": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "conversationId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "summary": {
+                                "type": "string"
+                              },
+                              "compactedThroughMessageId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "trigger": {
+                                "type": "string",
+                                "enum": [
+                                  "auto",
+                                  "manual"
+                                ]
+                              },
+                              "provider": {
+                                "type": "string"
+                              },
+                              "model": {
+                                "type": "string"
+                              },
+                              "originalTokenEstimate": {
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "compactedTokenEstimate": {
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "conversationId",
+                              "summary",
+                              "compactedThroughMessageId",
+                              "trigger",
+                              "provider",
+                              "model",
+                              "originalTokenEstimate",
+                              "compactedTokenEstimate",
+                              "createdAt"
+                            ],
+                            "additionalProperties": false
+                          }
                         }
                       },
                       "required": [
@@ -68759,7 +69154,8 @@
                         "agent",
                         "share",
                         "messages",
-                        "chatErrors"
+                        "chatErrors",
+                        "compactions"
                       ],
                       "additionalProperties": false
                     }
@@ -70265,6 +70661,71 @@
                         "additionalProperties": false
                       }
                     },
+                    "compactions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "conversationId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "compactedThroughMessageId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "trigger": {
+                            "type": "string",
+                            "enum": [
+                              "auto",
+                              "manual"
+                            ]
+                          },
+                          "provider": {
+                            "type": "string"
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "originalTokenEstimate": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
+                          "compactedTokenEstimate": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "conversationId",
+                          "summary",
+                          "compactedThroughMessageId",
+                          "trigger",
+                          "provider",
+                          "model",
+                          "originalTokenEstimate",
+                          "compactedTokenEstimate",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "sharedByUserId": {
                       "type": "string"
                     }
@@ -70288,6 +70749,7 @@
                     "share",
                     "messages",
                     "chatErrors",
+                    "compactions",
                     "sharedByUserId"
                   ],
                   "additionalProperties": false
@@ -70857,6 +71319,71 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "compactions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "conversationId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "compactedThroughMessageId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "trigger": {
+                            "type": "string",
+                            "enum": [
+                              "auto",
+                              "manual"
+                            ]
+                          },
+                          "provider": {
+                            "type": "string"
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "originalTokenEstimate": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
+                          "compactedTokenEstimate": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "conversationId",
+                          "summary",
+                          "compactedThroughMessageId",
+                          "trigger",
+                          "provider",
+                          "model",
+                          "originalTokenEstimate",
+                          "compactedTokenEstimate",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -70877,7 +71404,8 @@
                     "agent",
                     "share",
                     "messages",
-                    "chatErrors"
+                    "chatErrors",
+                    "compactions"
                   ],
                   "additionalProperties": false
                 }
@@ -71442,6 +71970,71 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "compactions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "conversationId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "compactedThroughMessageId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "trigger": {
+                            "type": "string",
+                            "enum": [
+                              "auto",
+                              "manual"
+                            ]
+                          },
+                          "provider": {
+                            "type": "string"
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "originalTokenEstimate": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
+                          "compactedTokenEstimate": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "conversationId",
+                          "summary",
+                          "compactedThroughMessageId",
+                          "trigger",
+                          "provider",
+                          "model",
+                          "originalTokenEstimate",
+                          "compactedTokenEstimate",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -71462,7 +72055,8 @@
                     "agent",
                     "share",
                     "messages",
-                    "chatErrors"
+                    "chatErrors",
+                    "compactions"
                   ],
                   "additionalProperties": false
                 }
@@ -72037,6 +72631,71 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "compactions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "conversationId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "compactedThroughMessageId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "trigger": {
+                            "type": "string",
+                            "enum": [
+                              "auto",
+                              "manual"
+                            ]
+                          },
+                          "provider": {
+                            "type": "string"
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "originalTokenEstimate": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
+                          "compactedTokenEstimate": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "conversationId",
+                          "summary",
+                          "compactedThroughMessageId",
+                          "trigger",
+                          "provider",
+                          "model",
+                          "originalTokenEstimate",
+                          "compactedTokenEstimate",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -72057,7 +72716,8 @@
                     "agent",
                     "share",
                     "messages",
-                    "chatErrors"
+                    "chatErrors",
+                    "compactions"
                   ],
                   "additionalProperties": false
                 }
@@ -81657,6 +82317,7 @@
                                   "api",
                                   "model_router",
                                   "chat",
+                                  "chat:compaction",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -82066,6 +82727,7 @@
                                   "api",
                                   "model_router",
                                   "chat",
+                                  "chat:compaction",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -82898,6 +83560,7 @@
                                   "api",
                                   "model_router",
                                   "chat",
+                                  "chat:compaction",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -83421,6 +84084,7 @@
                                   "api",
                                   "model_router",
                                   "chat",
+                                  "chat:compaction",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -83830,6 +84494,7 @@
                                   "api",
                                   "model_router",
                                   "chat",
+                                  "chat:compaction",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -84239,6 +84904,7 @@
                                   "api",
                                   "model_router",
                                   "chat",
+                                  "chat:compaction",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -86360,6 +87026,7 @@
                                   "api",
                                   "model_router",
                                   "chat",
+                                  "chat:compaction",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -86769,6 +87436,7 @@
                                   "api",
                                   "model_router",
                                   "chat",
+                                  "chat:compaction",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -87178,6 +87846,7 @@
                                   "api",
                                   "model_router",
                                   "chat",
+                                  "chat:compaction",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -87587,6 +88256,7 @@
                                   "api",
                                   "model_router",
                                   "chat",
+                                  "chat:compaction",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -87996,6 +88666,7 @@
                                   "api",
                                   "model_router",
                                   "chat",
+                                  "chat:compaction",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -88405,6 +89076,7 @@
                                   "api",
                                   "model_router",
                                   "chat",
+                                  "chat:compaction",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -88814,6 +89486,7 @@
                                   "api",
                                   "model_router",
                                   "chat",
+                                  "chat:compaction",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -89212,6 +89885,7 @@
                                   "api",
                                   "model_router",
                                   "chat",
+                                  "chat:compaction",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -89610,6 +90284,7 @@
                                   "api",
                                   "model_router",
                                   "chat",
+                                  "chat:compaction",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -90019,6 +90694,7 @@
                                   "api",
                                   "model_router",
                                   "chat",
+                                  "chat:compaction",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -90428,6 +91104,7 @@
                                   "api",
                                   "model_router",
                                   "chat",
+                                  "chat:compaction",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -90837,6 +91514,7 @@
                                   "api",
                                   "model_router",
                                   "chat",
+                                  "chat:compaction",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -91246,6 +91924,7 @@
                                   "api",
                                   "model_router",
                                   "chat",
+                                  "chat:compaction",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -91881,6 +92560,7 @@
                                   "api",
                                   "model_router",
                                   "chat",
+                                  "chat:compaction",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -92991,6 +93671,7 @@
                 "api",
                 "model_router",
                 "chat",
+                "chat:compaction",
                 "chatops:slack",
                 "chatops:ms-teams",
                 "email",
@@ -93096,6 +93777,7 @@
                               "api",
                               "model_router",
                               "chat",
+                              "chat:compaction",
                               "chatops:slack",
                               "chatops:ms-teams",
                               "email",
@@ -94164,6 +94846,7 @@
                             "api",
                             "model_router",
                             "chat",
+                            "chat:compaction",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -94573,6 +95256,7 @@
                             "api",
                             "model_router",
                             "chat",
+                            "chat:compaction",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -95405,6 +96089,7 @@
                             "api",
                             "model_router",
                             "chat",
+                            "chat:compaction",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -95928,6 +96613,7 @@
                             "api",
                             "model_router",
                             "chat",
+                            "chat:compaction",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -96337,6 +97023,7 @@
                             "api",
                             "model_router",
                             "chat",
+                            "chat:compaction",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -96746,6 +97433,7 @@
                             "api",
                             "model_router",
                             "chat",
+                            "chat:compaction",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -98867,6 +99555,7 @@
                             "api",
                             "model_router",
                             "chat",
+                            "chat:compaction",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -99276,6 +99965,7 @@
                             "api",
                             "model_router",
                             "chat",
+                            "chat:compaction",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -99685,6 +100375,7 @@
                             "api",
                             "model_router",
                             "chat",
+                            "chat:compaction",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -100094,6 +100785,7 @@
                             "api",
                             "model_router",
                             "chat",
+                            "chat:compaction",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -100503,6 +101195,7 @@
                             "api",
                             "model_router",
                             "chat",
+                            "chat:compaction",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -100912,6 +101605,7 @@
                             "api",
                             "model_router",
                             "chat",
+                            "chat:compaction",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -101321,6 +102015,7 @@
                             "api",
                             "model_router",
                             "chat",
+                            "chat:compaction",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -101719,6 +102414,7 @@
                             "api",
                             "model_router",
                             "chat",
+                            "chat:compaction",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -102117,6 +102813,7 @@
                             "api",
                             "model_router",
                             "chat",
+                            "chat:compaction",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -102526,6 +103223,7 @@
                             "api",
                             "model_router",
                             "chat",
+                            "chat:compaction",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -102935,6 +103633,7 @@
                             "api",
                             "model_router",
                             "chat",
+                            "chat:compaction",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -103344,6 +104043,7 @@
                             "api",
                             "model_router",
                             "chat",
+                            "chat:compaction",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -103753,6 +104453,7 @@
                             "api",
                             "model_router",
                             "chat",
+                            "chat:compaction",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -104388,6 +105089,7 @@
                             "api",
                             "model_router",
                             "chat",
+                            "chat:compaction",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -173652,6 +174354,71 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "compactions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "conversationId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "compactedThroughMessageId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "trigger": {
+                            "type": "string",
+                            "enum": [
+                              "auto",
+                              "manual"
+                            ]
+                          },
+                          "provider": {
+                            "type": "string"
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "originalTokenEstimate": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
+                          "compactedTokenEstimate": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "conversationId",
+                          "summary",
+                          "compactedThroughMessageId",
+                          "trigger",
+                          "provider",
+                          "model",
+                          "originalTokenEstimate",
+                          "compactedTokenEstimate",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -173672,7 +174439,8 @@
                     "agent",
                     "share",
                     "messages",
-                    "chatErrors"
+                    "chatErrors",
+                    "compactions"
                   ],
                   "additionalProperties": false
                 }

@@ -2566,7 +2566,9 @@ function ContextCompactionTimelineEvent({
       <div className="inline-flex max-w-full items-center gap-2 rounded-full border bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
         <CheckCircleIcon className="size-4 text-emerald-500" />
         <span>Conversation context compacted</span>
-        {timestamp && <span className="text-muted-foreground/70">{timestamp}</span>}
+        {timestamp && (
+          <span className="text-muted-foreground/70">{timestamp}</span>
+        )}
       </div>
     </div>
   );

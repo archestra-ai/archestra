@@ -1,6 +1,6 @@
+import { createRequire } from "node:module";
 import type { SupportedProvider } from "@shared";
 import { generateText } from "ai";
-import { createRequire } from "node:module";
 import { createLLMModel, isApiKeyRequired } from "@/clients/llm-client";
 import logger from "@/logging";
 import { ConversationCompactionModel, ModelModel } from "@/models";
@@ -538,8 +538,7 @@ function getFilePartMediaType(
 
 function getDataUrlMediaType(url: string): string {
   return (
-    /^data:([^;,]+)?(?:;base64)?,/s.exec(url)?.[1] ??
-    "application/octet-stream"
+    /^data:([^;,]+)?(?:;base64)?,/s.exec(url)?.[1] ?? "application/octet-stream"
   );
 }
 

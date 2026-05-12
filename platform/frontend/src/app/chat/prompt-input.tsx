@@ -331,7 +331,7 @@ const PromptInputContent = ({
     if (isSlashCommandOpen) {
       setActiveCommandIndex(0);
     }
-  }, [controller.textInput.value, isSlashCommandOpen]);
+  }, [isSlashCommandOpen]);
 
   useEffect(() => {
     commandItemRefs.current[selectedCommandIndex]?.scrollIntoView({

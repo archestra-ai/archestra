@@ -44,6 +44,7 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
+import { InlineChatError } from "@/components/chat/inline-chat-error";
 import {
   hasKnowledgeBaseToolCall,
   KnowledgeGraphCitations,
@@ -67,28 +68,49 @@ import {
   getRenderedToolName,
   getSwapToolShortName,
 } from "@/lib/chat/swap-agent.utils";
+import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
+
+type PersistedChatError =
+  archestraApiTypes.GetChatConversationResponses["200"]["chatErrors"][number];
+
+type TimelineItem =
+  | { kind: "message"; message: PartialUIMessage; messageIndex: number }
+  | { kind: "chat-error"; chatError: PersistedChatError };
 
 const MessageThread = ({
   messages,
+  chatErrors = [],
+  conversationId,
   reload,
   isEnded,
   containerClassName,
   topPart,
   hideDivider,
   profileId,
+  agentName,
+  selectedModel,
   unsafeContextBoundary,
 }: {
   messages: PartialUIMessage[];
+  chatErrors?: PersistedChatError[];
+  conversationId?: string;
   reload?: () => void;
   isEnded?: boolean;
   containerClassName?: string;
   topPart?: React.ReactNode;
   hideDivider?: boolean;
   profileId?: string;
+  agentName?: string;
+  selectedModel?: string;
   unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
 }) => {
   const status: ChatStatus = "streaming" as ChatStatus;
+  const { data: organization } = useOrganization();
+  const timelineItems = useMemo(
+    () => buildMessageTimeline({ messages, chatErrors }),
+    [messages, chatErrors],
+  );
 
   const lastAssistantMessageIndex = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -156,418 +178,242 @@ const MessageThread = ({
             )}
             {!hideDivider && <Divider className="my-4" />}
             <div className="max-w-4xl mx-auto">
-              {messages.map((message, idx) => (
-                <div key={message.id || idx}>
-                  {message.role === "assistant" &&
-                    message.parts.filter((part) => part.type === "source-url")
-                      .length > 0 && (
-                      <Sources>
-                        <SourcesTrigger
-                          count={
-                            message.parts.filter(
-                              (part) => part.type === "source-url",
-                            ).length
+              {timelineItems.map((item) => {
+                if (item.kind === "chat-error") {
+                  return (
+                    <InlineChatError
+                      key={`chat-error-${item.chatError.id}`}
+                      error={new Error(JSON.stringify(item.chatError.error))}
+                      conversationId={conversationId}
+                      supportMessage={organization?.chatErrorSupportMessage}
+                      slimChatErrorUi={organization?.slimChatErrorUi ?? false}
+                      agentName={agentName}
+                      selectedModel={selectedModel}
+                    />
+                  );
+                }
+
+                const { message, messageIndex: idx } = item;
+
+                return (
+                  <div key={message.id || idx}>
+                    {message.role === "assistant" &&
+                      message.parts.filter((part) => part.type === "source-url")
+                        .length > 0 && (
+                        <Sources>
+                          <SourcesTrigger
+                            count={
+                              message.parts.filter(
+                                (part) => part.type === "source-url",
+                              ).length
+                            }
+                          />
+                          {message.parts
+                            .filter((part) => part.type === "source-url")
+                            .map((part) => (
+                              <SourcesContent key={part.url}>
+                                <Source href={part.url} title={part.url} />
+                              </SourcesContent>
+                            ))}
+                        </Sources>
+                      )}
+
+                    {(() => {
+                      const partKeyTracker = new Map<string, number>();
+                      return message.parts.map((part, i) => {
+                        const partKey = getPartKey(
+                          message.id,
+                          part,
+                          partKeyTracker,
+                        );
+                        // Skip tool result parts that immediately follow a tool invocation with same toolCallId
+                        if (
+                          (part.type === "dynamic-tool" ||
+                            part.type === "tool-invocation" ||
+                            _isToolPrefixedPart(part)) &&
+                          (part as { state?: string }).state ===
+                            "output-available" &&
+                          i > 0
+                        ) {
+                          const prevPart = message.parts[i - 1];
+                          if (
+                            (prevPart.type === "dynamic-tool" ||
+                              prevPart.type === "tool-invocation" ||
+                              _isToolPrefixedPart(prevPart)) &&
+                            (prevPart as { state?: string }).state ===
+                              "input-available" &&
+                            (prevPart as { toolCallId?: string }).toolCallId ===
+                              (part as { toolCallId?: string }).toolCallId
+                          ) {
+                            return null;
                           }
-                        />
-                        {message.parts
-                          .filter((part) => part.type === "source-url")
-                          .map((part) => (
-                            <SourcesContent key={part.url}>
-                              <Source href={part.url} title={part.url} />
-                            </SourcesContent>
-                          ))}
-                      </Sources>
-                    )}
-
-                  {(() => {
-                    const partKeyTracker = new Map<string, number>();
-                    return message.parts.map((part, i) => {
-                      const partKey = getPartKey(
-                        message.id,
-                        part,
-                        partKeyTracker,
-                      );
-                      // Skip tool result parts that immediately follow a tool invocation with same toolCallId
-                      if (
-                        (part.type === "dynamic-tool" ||
-                          part.type === "tool-invocation" ||
-                          _isToolPrefixedPart(part)) &&
-                        (part as { state?: string }).state ===
-                          "output-available" &&
-                        i > 0
-                      ) {
-                        const prevPart = message.parts[i - 1];
-                        if (
-                          (prevPart.type === "dynamic-tool" ||
-                            prevPart.type === "tool-invocation" ||
-                            _isToolPrefixedPart(prevPart)) &&
-                          (prevPart as { state?: string }).state ===
-                            "input-available" &&
-                          (prevPart as { toolCallId?: string }).toolCallId ===
-                            (part as { toolCallId?: string }).toolCallId
-                        ) {
-                          return null;
                         }
-                      }
 
-                      // Skip dual-llm-analysis parts that follow a tool (invocation or result)
-                      // They will be rendered together with the tool
-                      if (_isDualLlmPart(part) && i > 0) {
-                        const prevPart = message.parts[i - 1];
-                        if (
-                          prevPart.type === "dynamic-tool" ||
-                          ("type" in prevPart &&
-                            prevPart.type === "tool-invocation") ||
-                          _isToolPrefixedPart(prevPart)
-                        ) {
-                          return null;
+                        // Skip dual-llm-analysis parts that follow a tool (invocation or result)
+                        // They will be rendered together with the tool
+                        if (_isDualLlmPart(part) && i > 0) {
+                          const prevPart = message.parts[i - 1];
+                          if (
+                            prevPart.type === "dynamic-tool" ||
+                            ("type" in prevPart &&
+                              prevPart.type === "tool-invocation") ||
+                            _isToolPrefixedPart(prevPart)
+                          ) {
+                            return null;
+                          }
                         }
-                      }
 
-                      switch (part.type) {
-                        case "text": {
-                          const policyDenied = parsePolicyDenied(part.text);
-                          const shouldRenderUnsafeContextDivider =
-                            message.role === "assistant" &&
-                            shouldRenderToolResultUnsafeBoundary({
-                              message,
-                              partIndex: i,
-                              unsafeContextBoundary,
-                            });
-                          const shouldRenderPolicyDeniedUnsafeBoundary =
-                            policyDenied?.unsafeContextActiveAtRequestStart &&
-                            !hasUnsafeBoundaryBefore({
-                              messages,
-                              beforeMessageIndex: idx,
-                              beforePartIndex: i,
-                              unsafeContextBoundary,
-                            });
-                          if (policyDenied) {
-                            return (
-                              <Fragment key={partKey}>
-                                {shouldRenderPolicyDeniedUnsafeBoundary && (
-                                  <PreexistingUnsafeContextDivider
-                                    dividerRef={unsafeBoundaryRef}
+                        switch (part.type) {
+                          case "text": {
+                            const policyDenied = parsePolicyDenied(part.text);
+                            const shouldRenderUnsafeContextDivider =
+                              message.role === "assistant" &&
+                              shouldRenderToolResultUnsafeBoundary({
+                                message,
+                                partIndex: i,
+                                unsafeContextBoundary,
+                              });
+                            const shouldRenderPolicyDeniedUnsafeBoundary =
+                              policyDenied?.unsafeContextActiveAtRequestStart &&
+                              !hasUnsafeBoundaryBefore({
+                                messages,
+                                beforeMessageIndex: idx,
+                                beforePartIndex: i,
+                                unsafeContextBoundary,
+                              });
+                            if (policyDenied) {
+                              return (
+                                <Fragment key={partKey}>
+                                  {shouldRenderPolicyDeniedUnsafeBoundary && (
+                                    <PreexistingUnsafeContextDivider
+                                      dividerRef={unsafeBoundaryRef}
+                                    />
+                                  )}
+                                  <PolicyDeniedTool
+                                    policyDenied={policyDenied}
+                                    {...(profileId
+                                      ? { editable: true, profileId }
+                                      : { editable: false })}
                                   />
-                                )}
-                                <PolicyDeniedTool
-                                  policyDenied={policyDenied}
-                                  {...(profileId
-                                    ? { editable: true, profileId }
-                                    : { editable: false })}
-                                />
-                              </Fragment>
-                            );
-                          }
-                          const isLastAssistantMessage =
-                            message.role === "assistant" &&
-                            idx === lastAssistantMessageIndex;
-                          const isLastTextPartInMessage =
-                            isLastAssistantMessage &&
-                            message.parts
-                              .slice(i + 1)
-                              .every((p) => p.type !== "text");
-                          // Show citations on the last text part of the last
-                          // assistant message, scoped to the current assistant turn
-                          // (stop at the next user message to avoid stale citations).
-                          let citationParts: typeof message.parts | undefined;
-                          if (isLastTextPartInMessage) {
-                            if (hasKnowledgeBaseToolCall(message.parts ?? [])) {
-                              citationParts = message.parts;
-                            } else {
-                              for (
-                                let prevIdx = idx - 1;
-                                prevIdx >= 0;
-                                prevIdx--
+                                </Fragment>
+                              );
+                            }
+                            const isLastAssistantMessage =
+                              message.role === "assistant" &&
+                              idx === lastAssistantMessageIndex;
+                            const isLastTextPartInMessage =
+                              isLastAssistantMessage &&
+                              message.parts
+                                .slice(i + 1)
+                                .every((p) => p.type !== "text");
+                            // Show citations on the last text part of the last
+                            // assistant message, scoped to the current assistant turn
+                            // (stop at the next user message to avoid stale citations).
+                            let citationParts: typeof message.parts | undefined;
+                            if (isLastTextPartInMessage) {
+                              if (
+                                hasKnowledgeBaseToolCall(message.parts ?? [])
                               ) {
-                                const prev = messages[prevIdx];
-                                if (prev.role === "user") break;
-                                if (
-                                  prev.role === "assistant" &&
-                                  hasKnowledgeBaseToolCall(prev.parts ?? [])
+                                citationParts = message.parts;
+                              } else {
+                                for (
+                                  let prevIdx = idx - 1;
+                                  prevIdx >= 0;
+                                  prevIdx--
                                 ) {
-                                  citationParts = prev.parts;
-                                  break;
+                                  const prev = messages[prevIdx];
+                                  if (prev.role === "user") break;
+                                  if (
+                                    prev.role === "assistant" &&
+                                    hasKnowledgeBaseToolCall(prev.parts ?? [])
+                                  ) {
+                                    citationParts = prev.parts;
+                                    break;
+                                  }
                                 }
                               }
                             }
-                          }
 
-                          return (
-                            <Fragment key={partKey}>
-                              {shouldRenderUnsafeContextDivider && (
-                                <UnsafeContextStartsHereDivider
-                                  dividerRef={unsafeBoundaryRef}
-                                />
-                              )}
-                              <Message from={message.role}>
-                                <MessageContent>
-                                  {message.role === "system" && (
-                                    <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                      System Prompt
-                                    </div>
-                                  )}
-                                  {message.role === "user" ? (
-                                    <UserMessageText text={part.text} />
-                                  ) : (
-                                    <Response>{part.text}</Response>
-                                  )}
-                                  {citationParts && (
-                                    <KnowledgeGraphCitations
-                                      parts={citationParts}
-                                    />
-                                  )}
-                                </MessageContent>
-                              </Message>
-                              {message.role === "assistant" &&
-                                i === messages.length - 1 && (
-                                  <MessageActions
-                                    textToCopy={part.text}
-                                    className="-mt-1 w-fit"
+                            return (
+                              <Fragment key={partKey}>
+                                {shouldRenderUnsafeContextDivider && (
+                                  <UnsafeContextStartsHereDivider
+                                    dividerRef={unsafeBoundaryRef}
                                   />
                                 )}
-                            </Fragment>
-                          );
-                        }
-                        case "file": {
-                          const filePart = part as {
-                            type: "file";
-                            url: string;
-                            mediaType: string;
-                            filename?: string;
-                          };
-                          if (filePart.mediaType?.startsWith("image/")) {
+                                <Message from={message.role}>
+                                  <MessageContent>
+                                    {message.role === "system" && (
+                                      <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                        System Prompt
+                                      </div>
+                                    )}
+                                    {message.role === "user" ? (
+                                      <UserMessageText text={part.text} />
+                                    ) : (
+                                      <Response>{part.text}</Response>
+                                    )}
+                                    {citationParts && (
+                                      <KnowledgeGraphCitations
+                                        parts={citationParts}
+                                      />
+                                    )}
+                                  </MessageContent>
+                                </Message>
+                                {message.role === "assistant" &&
+                                  i === messages.length - 1 && (
+                                    <MessageActions
+                                      textToCopy={part.text}
+                                      className="-mt-1 w-fit"
+                                    />
+                                  )}
+                              </Fragment>
+                            );
+                          }
+                          case "file": {
+                            const filePart = part as {
+                              type: "file";
+                              url: string;
+                              mediaType: string;
+                              filename?: string;
+                            };
+                            if (filePart.mediaType?.startsWith("image/")) {
+                              return (
+                                <div
+                                  key={partKey}
+                                  className="py-1 flex justify-start"
+                                >
+                                  <img
+                                    src={filePart.url}
+                                    alt={filePart.filename || "Image"}
+                                    className="max-h-32 rounded-lg object-cover"
+                                  />
+                                </div>
+                              );
+                            }
                             return (
                               <div
                                 key={partKey}
                                 className="py-1 flex justify-start"
                               >
-                                <img
-                                  src={filePart.url}
-                                  alt={filePart.filename || "Image"}
-                                  className="max-h-32 rounded-lg object-cover"
-                                />
-                              </div>
-                            );
-                          }
-                          return (
-                            <div
-                              key={partKey}
-                              className="py-1 flex justify-start"
-                            >
-                              <div className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2">
-                                <Paperclip className="size-4 text-muted-foreground" />
-                                <span className="truncate">
-                                  {filePart.filename || "Attached file"}
-                                </span>
-                              </div>
-                            </div>
-                          );
-                        }
-                        case "tool-invocation":
-                        case "dynamic-tool": {
-                          const toolName =
-                            part.type === "dynamic-tool"
-                              ? part.toolName
-                              : part.toolCallId;
-                          const swapToolShortName = getSwapToolShortName({
-                            toolName,
-                          });
-                          if (
-                            swapToolShortName === TOOL_SWAP_AGENT_SHORT_NAME ||
-                            swapToolShortName ===
-                              TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME
-                          ) {
-                            return null;
-                          }
-                          const isDanger = [
-                            "gather_sensitive_data",
-                            "send_email",
-                            "analyze_email_blocked",
-                          ].includes(part.toolCallId);
-                          const isShield =
-                            part.toolCallId === "dual_llm_activated";
-                          const isSuccess =
-                            part.toolCallId === "attack_blocked";
-                          const getIcon = () => {
-                            if (isDanger)
-                              return (
-                                <TriangleAlert className="size-4 text-muted-foreground" />
-                              );
-                            if (isShield)
-                              return (
-                                <ShieldCheck className="size-4 text-muted-foreground" />
-                              );
-                            if (isSuccess)
-                              return (
-                                <Check className="size-4 text-muted-foreground" />
-                              );
-                            return undefined;
-                          };
-                          const getColorClass = () => {
-                            if (isDanger) return "bg-red-500/30";
-                            if (isShield) return "bg-sky-400/60";
-                            if (isSuccess) return "bg-emerald-700/60";
-                            return "";
-                          };
-
-                          // Look ahead for tool result and dual LLM analysis
-                          let toolResultPart = null;
-                          let dualLlmPart: DualLlmPart | null = null;
-
-                          // Check if next part is a tool result (same tool call ID)
-                          const nextPart = message.parts[i + 1];
-                          if (
-                            nextPart &&
-                            (nextPart.type === "dynamic-tool" ||
-                              nextPart.type === "tool-invocation") &&
-                            nextPart.state === "output-available" &&
-                            nextPart.toolCallId === part.toolCallId
-                          ) {
-                            toolResultPart = nextPart;
-
-                            // Check if there's a dual LLM part after the tool result
-                            const dualLlmPartCandidate = message.parts[i + 2];
-                            if (_isDualLlmPart(dualLlmPartCandidate)) {
-                              dualLlmPart = dualLlmPartCandidate;
-                            }
-                          } else {
-                            // Check if the next part is directly a dual LLM analysis
-                            if (_isDualLlmPart(nextPart)) {
-                              dualLlmPart = nextPart;
-                            }
-                          }
-
-                          return (
-                            <Tool
-                              key={part.toolCallId ?? partKey}
-                              className={getColorClass()}
-                            >
-                              <ToolHeader
-                                type={`tool-${toolName}`}
-                                state={
-                                  dualLlmPart
-                                    ? "output-available-dual-llm"
-                                    : toolResultPart
-                                      ? "output-available"
-                                      : part.state
-                                }
-                                icon={getIcon()}
-                              />
-                              <ToolContent>
-                                {part.input &&
-                                Object.keys(part.input).length > 0 ? (
-                                  <ToolInput input={part.input} />
-                                ) : null}
-                                {toolResultPart && (
-                                  <ToolOutput
-                                    label={
-                                      toolResultPart.errorText
-                                        ? "Error"
-                                        : dualLlmPart
-                                          ? "Unsafe result"
-                                          : "Result"
-                                    }
-                                    output={toolResultPart.output as unknown}
-                                    errorText={toolResultPart.errorText}
-                                  />
-                                )}
-                                {!toolResultPart && Boolean(part.output) && (
-                                  <ToolOutput
-                                    label={
-                                      part.errorText
-                                        ? "Error"
-                                        : dualLlmPart
-                                          ? "Unsafe result"
-                                          : "Result"
-                                    }
-                                    output={part.output as unknown}
-                                    errorText={part.errorText}
-                                  />
-                                )}
-                                {dualLlmPart && (
-                                  <>
-                                    <ToolOutput
-                                      label="Safe result"
-                                      output={dualLlmPart.safeResult}
-                                    />
-                                    <ToolOutput
-                                      label="Questions and Answers"
-                                      output={undefined}
-                                      conversations={dualLlmPart.conversations.slice(
-                                        1,
-                                      )}
-                                    />
-                                  </>
-                                )}
-                              </ToolContent>
-                            </Tool>
-                          );
-                        }
-                        case "reasoning":
-                          return (
-                            <Reasoning
-                              key={partKey}
-                              className="w-full"
-                              isStreaming={
-                                status === "streaming" &&
-                                i === message.parts.length - 1 &&
-                                message.id === messages.at(-1)?.id
-                              }
-                            >
-                              <ReasoningTrigger />
-                              <ReasoningContent>{part.text}</ReasoningContent>
-                            </Reasoning>
-                          );
-                        default: {
-                          // Handle custom blocked-tool type
-                          if (_isBlockedToolPart(part)) {
-                            const blockedPart = part as BlockedToolPart;
-                            return (
-                              <div
-                                key={partKey}
-                                className="my-2 p-4 bg-red-50 dark:bg-red-950/30 border border-red-300 dark:border-red-800 rounded-lg"
-                              >
-                                <div className="flex items-start gap-3">
-                                  <TriangleAlert className="size-5 text-destructive dark:text-red-400 mt-0.5 flex-shrink-0" />
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 mb-2">
-                                      <p className="text-sm font-semibold text-red-900 dark:text-red-100">
-                                        {blockedPart.reason}
-                                      </p>
-                                    </div>
-                                    <div className="space-y-2">
-                                      <div className="flex items-center gap-2 text-xs">
-                                        <span className="font-medium text-red-800 dark:text-red-200">
-                                          Tool:
-                                        </span>
-                                        <code className="px-2 py-1 bg-red-100 dark:bg-red-900/50 rounded text-red-900 dark:text-red-100">
-                                          {blockedPart.toolName}
-                                        </code>
-                                      </div>
-                                      {blockedPart.toolArguments && (
-                                        <div className="flex items-center gap-2 text-xs">
-                                          <span className="font-medium text-red-800 dark:text-red-200 flex-shrink-0">
-                                            Arguments:
-                                          </span>
-                                          <code className="px-2 py-1 bg-red-100 dark:bg-red-900/50 rounded text-red-900 dark:text-red-100 break-all">
-                                            {blockedPart.toolArguments}
-                                          </code>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
+                                <div className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2">
+                                  <Paperclip className="size-4 text-muted-foreground" />
+                                  <span className="truncate">
+                                    {filePart.filename || "Attached file"}
+                                  </span>
                                 </div>
                               </div>
                             );
                           }
-
-                          // Handle tool-* prefixed parts (persisted tool calls from DB)
-                          if (_isToolPrefixedPart(part)) {
-                            const toolName = getRenderedToolName(part);
-                            const swapToolShortName = toolName
-                              ? getSwapToolShortName({ toolName })
-                              : null;
+                          case "tool-invocation":
+                          case "dynamic-tool": {
+                            const toolName =
+                              part.type === "dynamic-tool"
+                                ? part.toolName
+                                : part.toolCallId;
+                            const swapToolShortName = getSwapToolShortName({
+                              toolName,
+                            });
                             if (
                               swapToolShortName ===
                                 TOOL_SWAP_AGENT_SHORT_NAME ||
@@ -576,30 +422,71 @@ const MessageThread = ({
                             ) {
                               return null;
                             }
+                            const isDanger = [
+                              "gather_sensitive_data",
+                              "send_email",
+                              "analyze_email_blocked",
+                            ].includes(part.toolCallId);
+                            const isShield =
+                              part.toolCallId === "dual_llm_activated";
+                            const isSuccess =
+                              part.toolCallId === "attack_blocked";
+                            const getIcon = () => {
+                              if (isDanger)
+                                return (
+                                  <TriangleAlert className="size-4 text-muted-foreground" />
+                                );
+                              if (isShield)
+                                return (
+                                  <ShieldCheck className="size-4 text-muted-foreground" />
+                                );
+                              if (isSuccess)
+                                return (
+                                  <Check className="size-4 text-muted-foreground" />
+                                );
+                              return undefined;
+                            };
+                            const getColorClass = () => {
+                              if (isDanger) return "bg-red-500/30";
+                              if (isShield) return "bg-sky-400/60";
+                              if (isSuccess) return "bg-emerald-700/60";
+                              return "";
+                            };
+
                             // Look ahead for tool result and dual LLM analysis
                             let toolResultPart = null;
                             let dualLlmPart: DualLlmPart | null = null;
 
+                            // Check if next part is a tool result (same tool call ID)
                             const nextPart = message.parts[i + 1];
                             if (
                               nextPart &&
-                              _isToolPrefixedPart(nextPart) &&
+                              (nextPart.type === "dynamic-tool" ||
+                                nextPart.type === "tool-invocation") &&
                               nextPart.state === "output-available" &&
                               nextPart.toolCallId === part.toolCallId
                             ) {
                               toolResultPart = nextPart;
-                              const dualLlmCandidate = message.parts[i + 2];
-                              if (_isDualLlmPart(dualLlmCandidate)) {
-                                dualLlmPart = dualLlmCandidate;
+
+                              // Check if there's a dual LLM part after the tool result
+                              const dualLlmPartCandidate = message.parts[i + 2];
+                              if (_isDualLlmPart(dualLlmPartCandidate)) {
+                                dualLlmPart = dualLlmPartCandidate;
                               }
-                            } else if (_isDualLlmPart(nextPart)) {
-                              dualLlmPart = nextPart;
+                            } else {
+                              // Check if the next part is directly a dual LLM analysis
+                              if (_isDualLlmPart(nextPart)) {
+                                dualLlmPart = nextPart;
+                              }
                             }
 
                             return (
-                              <Tool key={`${message.id}-${part.toolCallId}`}>
+                              <Tool
+                                key={part.toolCallId ?? partKey}
+                                className={getColorClass()}
+                              >
                                 <ToolHeader
-                                  type={part.type}
+                                  type={`tool-${toolName}`}
                                   state={
                                     dualLlmPart
                                       ? "output-available-dual-llm"
@@ -607,13 +494,11 @@ const MessageThread = ({
                                         ? "output-available"
                                         : part.state
                                   }
+                                  icon={getIcon()}
                                 />
                                 <ToolContent>
                                   {part.input &&
-                                  typeof part.input === "object" &&
-                                  Object.keys(
-                                    part.input as Record<string, unknown>,
-                                  ).length > 0 ? (
+                                  Object.keys(part.input).length > 0 ? (
                                     <ToolInput input={part.input} />
                                   ) : null}
                                   {toolResultPart && (
@@ -626,11 +511,7 @@ const MessageThread = ({
                                             : "Result"
                                       }
                                       output={toolResultPart.output as unknown}
-                                      errorText={
-                                        toolResultPart.errorText as
-                                          | string
-                                          | undefined
-                                      }
+                                      errorText={toolResultPart.errorText}
                                     />
                                   )}
                                   {!toolResultPart && Boolean(part.output) && (
@@ -643,9 +524,7 @@ const MessageThread = ({
                                             : "Result"
                                       }
                                       output={part.output as unknown}
-                                      errorText={
-                                        part.errorText as string | undefined
-                                      }
+                                      errorText={part.errorText}
                                     />
                                   )}
                                   {dualLlmPart && (
@@ -667,57 +546,224 @@ const MessageThread = ({
                               </Tool>
                             );
                           }
-
-                          // Handle custom dual-llm-analysis type (standalone, not following a tool)
-                          if (_isDualLlmPart(part)) {
-                            const dualLlmPart = part as DualLlmPart;
-
+                          case "reasoning":
                             return (
-                              <Tool key={partKey} className="bg-sky-400/20">
-                                <ToolHeader
-                                  type="tool-dual-llm-action"
-                                  state="output-available-dual-llm"
-                                  icon={
-                                    <ShieldCheck className="size-4 text-muted-foreground" />
-                                  }
-                                />
-                                <ToolContent>
-                                  <ToolOutput
-                                    label="Safe result"
-                                    output={dualLlmPart.safeResult}
-                                  />
-                                  <ToolOutput
-                                    label="Questions and answers"
-                                    output={undefined}
-                                    conversations={dualLlmPart.conversations.slice(
-                                      1,
-                                    )}
-                                  />
-                                </ToolContent>
-                              </Tool>
+                              <Reasoning
+                                key={partKey}
+                                className="w-full"
+                                isStreaming={
+                                  status === "streaming" &&
+                                  i === message.parts.length - 1 &&
+                                  message.id === messages.at(-1)?.id
+                                }
+                              >
+                                <ReasoningTrigger />
+                                <ReasoningContent>{part.text}</ReasoningContent>
+                              </Reasoning>
                             );
+                          default: {
+                            // Handle custom blocked-tool type
+                            if (_isBlockedToolPart(part)) {
+                              const blockedPart = part as BlockedToolPart;
+                              return (
+                                <div
+                                  key={partKey}
+                                  className="my-2 p-4 bg-red-50 dark:bg-red-950/30 border border-red-300 dark:border-red-800 rounded-lg"
+                                >
+                                  <div className="flex items-start gap-3">
+                                    <TriangleAlert className="size-5 text-destructive dark:text-red-400 mt-0.5 flex-shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2 mb-2">
+                                        <p className="text-sm font-semibold text-red-900 dark:text-red-100">
+                                          {blockedPart.reason}
+                                        </p>
+                                      </div>
+                                      <div className="space-y-2">
+                                        <div className="flex items-center gap-2 text-xs">
+                                          <span className="font-medium text-red-800 dark:text-red-200">
+                                            Tool:
+                                          </span>
+                                          <code className="px-2 py-1 bg-red-100 dark:bg-red-900/50 rounded text-red-900 dark:text-red-100">
+                                            {blockedPart.toolName}
+                                          </code>
+                                        </div>
+                                        {blockedPart.toolArguments && (
+                                          <div className="flex items-center gap-2 text-xs">
+                                            <span className="font-medium text-red-800 dark:text-red-200 flex-shrink-0">
+                                              Arguments:
+                                            </span>
+                                            <code className="px-2 py-1 bg-red-100 dark:bg-red-900/50 rounded text-red-900 dark:text-red-100 break-all">
+                                              {blockedPart.toolArguments}
+                                            </code>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            // Handle tool-* prefixed parts (persisted tool calls from DB)
+                            if (_isToolPrefixedPart(part)) {
+                              const toolName = getRenderedToolName(part);
+                              const swapToolShortName = toolName
+                                ? getSwapToolShortName({ toolName })
+                                : null;
+                              if (
+                                swapToolShortName ===
+                                  TOOL_SWAP_AGENT_SHORT_NAME ||
+                                swapToolShortName ===
+                                  TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME
+                              ) {
+                                return null;
+                              }
+                              // Look ahead for tool result and dual LLM analysis
+                              let toolResultPart = null;
+                              let dualLlmPart: DualLlmPart | null = null;
+
+                              const nextPart = message.parts[i + 1];
+                              if (
+                                nextPart &&
+                                _isToolPrefixedPart(nextPart) &&
+                                nextPart.state === "output-available" &&
+                                nextPart.toolCallId === part.toolCallId
+                              ) {
+                                toolResultPart = nextPart;
+                                const dualLlmCandidate = message.parts[i + 2];
+                                if (_isDualLlmPart(dualLlmCandidate)) {
+                                  dualLlmPart = dualLlmCandidate;
+                                }
+                              } else if (_isDualLlmPart(nextPart)) {
+                                dualLlmPart = nextPart;
+                              }
+
+                              return (
+                                <Tool key={`${message.id}-${part.toolCallId}`}>
+                                  <ToolHeader
+                                    type={part.type}
+                                    state={
+                                      dualLlmPart
+                                        ? "output-available-dual-llm"
+                                        : toolResultPart
+                                          ? "output-available"
+                                          : part.state
+                                    }
+                                  />
+                                  <ToolContent>
+                                    {part.input &&
+                                    typeof part.input === "object" &&
+                                    Object.keys(
+                                      part.input as Record<string, unknown>,
+                                    ).length > 0 ? (
+                                      <ToolInput input={part.input} />
+                                    ) : null}
+                                    {toolResultPart && (
+                                      <ToolOutput
+                                        label={
+                                          toolResultPart.errorText
+                                            ? "Error"
+                                            : dualLlmPart
+                                              ? "Unsafe result"
+                                              : "Result"
+                                        }
+                                        output={
+                                          toolResultPart.output as unknown
+                                        }
+                                        errorText={
+                                          toolResultPart.errorText as
+                                            | string
+                                            | undefined
+                                        }
+                                      />
+                                    )}
+                                    {!toolResultPart &&
+                                      Boolean(part.output) && (
+                                        <ToolOutput
+                                          label={
+                                            part.errorText
+                                              ? "Error"
+                                              : dualLlmPart
+                                                ? "Unsafe result"
+                                                : "Result"
+                                          }
+                                          output={part.output as unknown}
+                                          errorText={
+                                            part.errorText as string | undefined
+                                          }
+                                        />
+                                      )}
+                                    {dualLlmPart && (
+                                      <>
+                                        <ToolOutput
+                                          label="Safe result"
+                                          output={dualLlmPart.safeResult}
+                                        />
+                                        <ToolOutput
+                                          label="Questions and Answers"
+                                          output={undefined}
+                                          conversations={dualLlmPart.conversations.slice(
+                                            1,
+                                          )}
+                                        />
+                                      </>
+                                    )}
+                                  </ToolContent>
+                                </Tool>
+                              );
+                            }
+
+                            // Handle custom dual-llm-analysis type (standalone, not following a tool)
+                            if (_isDualLlmPart(part)) {
+                              const dualLlmPart = part as DualLlmPart;
+
+                              return (
+                                <Tool key={partKey} className="bg-sky-400/20">
+                                  <ToolHeader
+                                    type="tool-dual-llm-action"
+                                    state="output-available-dual-llm"
+                                    icon={
+                                      <ShieldCheck className="size-4 text-muted-foreground" />
+                                    }
+                                  />
+                                  <ToolContent>
+                                    <ToolOutput
+                                      label="Safe result"
+                                      output={dualLlmPart.safeResult}
+                                    />
+                                    <ToolOutput
+                                      label="Questions and answers"
+                                      output={undefined}
+                                      conversations={dualLlmPart.conversations.slice(
+                                        1,
+                                      )}
+                                    />
+                                  </ToolContent>
+                                </Tool>
+                              );
+                            }
+                            return null;
                           }
-                          return null;
                         }
-                      }
-                    });
-                  })()}
-                  {shouldRenderUnsafeContextDividerAfterMessage({
-                    message,
-                    unsafeContextBoundary,
-                  }) && (
-                    <UnsafeContextStartsHereDivider
-                      dividerRef={unsafeBoundaryRef}
-                    />
-                  )}
-                  {message.role === "assistant" && (
-                    <SwapAgentBoundaryDivider
-                      parts={message.parts ?? []}
-                      hasToolError={hasSwapToolErrorInMessageThread}
-                    />
-                  )}
-                </div>
-              ))}
+                      });
+                    })()}
+                    {shouldRenderUnsafeContextDividerAfterMessage({
+                      message,
+                      unsafeContextBoundary,
+                    }) && (
+                      <UnsafeContextStartsHereDivider
+                        dividerRef={unsafeBoundaryRef}
+                      />
+                    )}
+                    {message.role === "assistant" && (
+                      <SwapAgentBoundaryDivider
+                        parts={message.parts ?? []}
+                        hasToolError={hasSwapToolErrorInMessageThread}
+                      />
+                    )}
+                  </div>
+                );
+              })}
               {status === "submitted" && <Loader />}
             </div>
           </ConversationContent>
@@ -783,6 +829,53 @@ function _isBlockedToolPart(part: unknown): part is BlockedToolPart {
 }
 
 export default MessageThread;
+
+function buildMessageTimeline(params: {
+  messages: PartialUIMessage[];
+  chatErrors: PersistedChatError[];
+}): TimelineItem[] {
+  const sortedChatErrors = [...params.chatErrors].sort(
+    (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt),
+  );
+  const timelineItems: TimelineItem[] = [];
+  let errorIndex = 0;
+
+  params.messages.forEach((message, messageIndex) => {
+    const messageCreatedAt = getMessageCreatedAt(message);
+    while (
+      errorIndex < sortedChatErrors.length &&
+      messageCreatedAt !== null &&
+      Date.parse(sortedChatErrors[errorIndex].createdAt) <= messageCreatedAt
+    ) {
+      timelineItems.push({
+        kind: "chat-error",
+        chatError: sortedChatErrors[errorIndex],
+      });
+      errorIndex++;
+    }
+
+    timelineItems.push({ kind: "message", message, messageIndex });
+  });
+
+  for (; errorIndex < sortedChatErrors.length; errorIndex++) {
+    timelineItems.push({
+      kind: "chat-error",
+      chatError: sortedChatErrors[errorIndex],
+    });
+  }
+
+  return timelineItems;
+}
+
+function getMessageCreatedAt(message: PartialUIMessage): number | null {
+  const metadata = message.metadata as { createdAt?: unknown } | undefined;
+  if (typeof metadata?.createdAt !== "string") {
+    return null;
+  }
+
+  const createdAt = Date.parse(metadata.createdAt);
+  return Number.isNaN(createdAt) ? null : createdAt;
+}
 
 function shouldRenderToolResultUnsafeBoundary(params: {
   message: PartialUIMessage;

@@ -43,12 +43,25 @@ import { getActiveSessionId } from "@/observability/request-context";
 let _instance: pino.Logger | null = null;
 
 function createLogger(): pino.Logger {
-  const prettyStream = pretty({
-    colorize: true,
-    translateTime: "HH:MM:ss Z",
-    ignore: "pid,hostname",
-    singleLine: true,
-  });
+  const isProduction = process.env.NODE_ENV === "production";
+
+  // In production, write raw JSON to stdout via an async, buffered destination
+  // so log writes don't block the event loop when the container log pipe is
+  // backpressured. In development, keep pino-pretty for human-readable output.
+  const stdoutStream: pino.StreamEntry = isProduction
+    ? {
+        level: "trace",
+        stream: pino.destination({ fd: 1, sync: false, minLength: 4096 }),
+      }
+    : {
+        level: "trace",
+        stream: pretty({
+          colorize: true,
+          translateTime: "HH:MM:ss Z",
+          ignore: "pid,hostname",
+          singleLine: true,
+        }),
+      };
 
   return pino(
     {
@@ -56,7 +69,7 @@ function createLogger(): pino.Logger {
       mixin: injectTraceContext,
     },
     pino.multistream([
-      { level: "trace", stream: prettyStream },
+      stdoutStream,
       { level: "trace", stream: createOtelLogStream() },
     ]),
   );

@@ -31,10 +31,12 @@ import { LOG_LEVEL } from "@/logging/log-level";
 // Import directly from files to avoid circular dependency through barrel export
 import AccountModel from "@/models/account";
 import AgentModel from "@/models/agent";
+import AuditLogModel from "@/models/audit-log";
 import InvitationModel from "@/models/invitation";
 import MemberModel from "@/models/member";
 import SessionModel from "@/models/session";
 import UserModel from "@/models/user";
+import type { AuditAction } from "@/types/audit-log";
 import { linkedIdentityProviderPlugin } from "./linked-idp";
 
 const { ssoConfig, syncSsoRole, syncSsoTeams } = config.enterpriseFeatures.core
@@ -768,6 +770,25 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
   // NOTE: User deletion on member removal is handled in routes/auth.ts
   // Better-auth handles member deletion, we just clean up orphaned users
 
+  // Capture sign-out audit event
+  if (path.startsWith("/sign-out")) {
+    const sessionCtx = context?.session;
+    if (sessionCtx?.user && sessionCtx?.session) {
+      void writeAuthAuditLog({
+        user: sessionCtx.user,
+        session: sessionCtx.session,
+        action: "sign_out",
+        path,
+        request,
+      }).catch((err) =>
+        logger.error(
+          { err },
+          "[auth:audit] failed to write sign-out audit row",
+        ),
+      );
+    }
+  }
+
   if (path.startsWith("/sign-up")) {
     const newSession = context?.newSession;
 
@@ -797,7 +818,19 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         { invitationId, userId: user.id },
         "[auth:afterHook] Accepting invitation after sign-up",
       );
-      return await InvitationModel.accept(session, user, invitationId);
+      // Accept first so the membership row exists when writeAuthAuditLog falls
+      // back to MemberModel.getFirstMembershipForUser to resolve the org.
+      await InvitationModel.accept(session, user, invitationId);
+      void writeAuthAuditLog({
+        user,
+        session,
+        action: "sign_up",
+        path,
+        request,
+      }).catch((err) =>
+        logger.error({ err }, "[auth:audit] failed to write sign-up audit row"),
+      );
+      return;
     }
   }
 
@@ -830,6 +863,22 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
           sessionId,
         });
       }
+
+      // Audit: successful sign-in or SSO callback (fires after domain check so
+      // rejected SSO logins that throw above never produce a row)
+      const authAction: AuditAction = path.startsWith("/sso/callback")
+        ? "sso_callback"
+        : "sign_in";
+      void writeAuthAuditLog({
+        user,
+        session,
+        action: authAction,
+        path,
+        request,
+        ...(providerIdHint ? { providerId: providerIdHint } : {}),
+      }).catch((err) =>
+        logger.error({ err }, "[auth:audit] failed to write sign-in audit row"),
+      );
 
       // Auto-accept any pending invitations for this user's email
       try {
@@ -1047,4 +1096,66 @@ async function cleanupRejectedSsoLogin(params: {
       await UserModel.delete(params.userId, tx);
     }
   });
+}
+
+/**
+ * Writes a single auth-event row to audit_logs and broadcasts it via WebSocket.
+ * Always called with `void … .catch(logger.error)` so it never blocks or throws.
+ *
+ * Dynamic import of @/websocket avoids the circular:
+ *   better-auth → websocket → @/auth → better-auth
+ */
+async function writeAuthAuditLog(params: {
+  user: { id: string; name?: string | null; email: string };
+  session: { id: string; activeOrganizationId?: string | null };
+  action: AuditAction;
+  path: string;
+  request?: Request;
+  providerId?: string;
+}): Promise<void> {
+  const { user, session, action, path, request, providerId } = params;
+
+  const organizationId =
+    session.activeOrganizationId ??
+    (await MemberModel.getFirstMembershipForUser(user.id))?.organizationId;
+
+  if (!organizationId) {
+    logger.debug(
+      { userId: user.id, action },
+      "[auth:audit] skipping: no organization found for actor",
+    );
+    return;
+  }
+
+  const ipAddress = request?.headers.get("x-forwarded-for") ?? null;
+  const userAgent = request?.headers.get("user-agent") ?? null;
+
+  let postState: Record<string, unknown> | null = null;
+  if (action === "sign_in" || action === "sso_callback") {
+    postState = { sessionId: session.id };
+    if (providerId) {
+      postState.providerId = providerId;
+    }
+  }
+
+  const row = await AuditLogModel.create({
+    organizationId,
+    actorUserId: user.id,
+    actorName: user.name ?? null,
+    actorEmail: user.email,
+    action,
+    resourceType: "auth",
+    resourceId: user.id,
+    priorState: null,
+    postState,
+    httpMethod: null,
+    httpPath: path,
+    httpRoute: null,
+    httpStatus: null,
+    ipAddress,
+    userAgent,
+  });
+
+  const { default: ws } = await import("@/websocket");
+  void ws.broadcastAuditLog(row as Record<string, unknown>);
 }

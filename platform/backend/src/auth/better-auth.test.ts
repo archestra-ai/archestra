@@ -10,7 +10,12 @@ import {
   TeamModel,
   UserModel,
 } from "@/models";
+import AuditLogModel from "@/models/audit-log";
 import { beforeEach, describe, expect, test } from "@/test";
+
+vi.mock("@/websocket", () => ({
+  default: { broadcastAuditLog: vi.fn() },
+}));
 
 // Create a hoisted ref to control disableInvitations in tests
 const mockDisableInvitations = vi.hoisted(() => ({ value: false }));
@@ -64,6 +69,11 @@ function createMockContext(overrides: {
   context?: {
     newSession?: {
       user: { id: string; email: string };
+      session: { id: string; activeOrganizationId?: string | null };
+    } | null;
+    /** Present on sign-out: the session being terminated. */
+    session?: {
+      user: { id: string; email: string; name?: string | null };
       session: { id: string; activeOrganizationId?: string | null };
     } | null;
   };
@@ -1920,5 +1930,304 @@ describe("handleAfterHook", () => {
       const member = await MemberModel.getByUserId(user.id, org.id);
       expect(member?.role).toBe("admin");
     });
+  });
+});
+
+describe("auth event audit logging", () => {
+  // Let each fire-and-forget audit write settle before querying the DB.
+  async function waitForAuditWrite() {
+    await new Promise((r) => setTimeout(r, 50));
+  }
+
+  test("sign-in produces one audit row with action=sign_in", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const user = await makeUser({ email: "audit-signin@example.com" });
+    const org = await makeOrganization();
+    await makeMember(user.id, org.id, { role: "member" });
+
+    const ctx = createMockContext({
+      path: "/sign-in/email",
+      method: "POST",
+      body: {},
+      context: {
+        newSession: {
+          user: { id: user.id, email: user.email },
+          session: { id: "sess-signin-audit", activeOrganizationId: org.id },
+        },
+      },
+    });
+
+    await handleAfterHook(ctx);
+    await waitForAuditWrite();
+
+    const { data } = await AuditLogModel.findPaginated({
+      organizationId: org.id,
+      limit: 10,
+      offset: 0,
+    });
+
+    const auditRows = data.filter((r) => r.action === "sign_in");
+    expect(auditRows).toHaveLength(1);
+    expect(auditRows[0].action).toBe("sign_in");
+    expect(auditRows[0].resourceType).toBe("auth");
+    expect(auditRows[0].actorUserId).toBe(user.id);
+    expect(auditRows[0].organizationId).toBe(org.id);
+    expect(auditRows[0].httpMethod).toBeNull();
+    expect(auditRows[0].postState).toMatchObject({
+      sessionId: "sess-signin-audit",
+    });
+    expect(auditRows[0].priorState).toBeNull();
+  });
+
+  test("sign-out produces one audit row with action=sign_out", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const user = await makeUser({ email: "audit-signout@example.com" });
+    const org = await makeOrganization();
+    await makeMember(user.id, org.id, { role: "member" });
+
+    const ctx = createMockContext({
+      path: "/sign-out",
+      method: "POST",
+      body: {},
+      context: {
+        session: {
+          user: { id: user.id, email: user.email },
+          session: { id: "sess-signout-audit", activeOrganizationId: org.id },
+        },
+      },
+    });
+
+    await handleAfterHook(ctx);
+    await waitForAuditWrite();
+
+    const { data } = await AuditLogModel.findPaginated({
+      organizationId: org.id,
+      limit: 10,
+      offset: 0,
+    });
+
+    expect(data).toHaveLength(1);
+    expect(data[0].action).toBe("sign_out");
+    expect(data[0].resourceType).toBe("auth");
+    expect(data[0].actorUserId).toBe(user.id);
+    expect(data[0].postState).toBeNull();
+    expect(data[0].priorState).toBeNull();
+  });
+
+  test("SSO callback produces one audit row with action=sso_callback and providerId", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeAccount,
+    makeIdentityProvider,
+  }) => {
+    const user = await makeUser({ email: "audit-sso@example.com" });
+    const org = await makeOrganization();
+    await makeMember(user.id, org.id, { role: "member" });
+    await makeIdentityProvider(org.id, { providerId: "audit-idp" });
+    await makeAccount(user.id, { providerId: "audit-idp" });
+
+    const ctx = createMockContext({
+      path: "/sso/callback/audit-idp",
+      method: "GET",
+      body: {},
+      context: {
+        newSession: {
+          user: { id: user.id, email: user.email },
+          session: { id: "sess-sso-audit", activeOrganizationId: org.id },
+        },
+      },
+    });
+
+    await handleAfterHook(ctx);
+    await waitForAuditWrite();
+
+    const { data } = await AuditLogModel.findPaginated({
+      organizationId: org.id,
+      limit: 10,
+      offset: 0,
+    });
+
+    const auditRows = data.filter((r) => r.action === "sso_callback");
+    expect(auditRows).toHaveLength(1);
+    expect(auditRows[0].action).toBe("sso_callback");
+    expect(auditRows[0].resourceType).toBe("auth");
+    expect(auditRows[0].actorUserId).toBe(user.id);
+    expect(auditRows[0].postState).toMatchObject({
+      sessionId: "sess-sso-audit",
+      providerId: "audit-idp",
+    });
+  });
+
+  test("sign-up with valid invitation produces one audit row with action=sign_up", async ({
+    makeUser,
+    makeOrganization,
+    makeInvitation,
+  }) => {
+    const inviter = await makeUser({ email: "audit-inviter@example.com" });
+    const newUser = await makeUser({ email: "audit-signup-user@example.com" });
+    const org = await makeOrganization();
+    const invitation = await makeInvitation(org.id, inviter.id, {
+      email: "audit-signup-user@example.com",
+      status: "pending",
+    });
+
+    const ctx = createMockContext({
+      path: "/sign-up/email",
+      method: "POST",
+      body: {
+        callbackURL: `http://example.com?invitationId=${invitation.id}`,
+      },
+      context: {
+        newSession: {
+          user: { id: newUser.id, email: newUser.email },
+          session: { id: "sess-signup-audit", activeOrganizationId: null },
+        },
+      },
+    });
+
+    await handleAfterHook(ctx);
+    await waitForAuditWrite();
+
+    const { data } = await AuditLogModel.findPaginated({
+      organizationId: org.id,
+      limit: 10,
+      offset: 0,
+    });
+
+    const auditRows = data.filter((r) => r.action === "sign_up");
+    expect(auditRows).toHaveLength(1);
+    expect(auditRows[0].action).toBe("sign_up");
+    expect(auditRows[0].resourceType).toBe("auth");
+    expect(auditRows[0].actorUserId).toBe(newUser.id);
+    expect(auditRows[0].organizationId).toBe(org.id);
+    expect(auditRows[0].postState).toBeNull();
+    expect(auditRows[0].priorState).toBeNull();
+  });
+
+  test("sign-in with no newSession (failed auth) produces zero rows", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+
+    const ctx = createMockContext({
+      path: "/sign-in/email",
+      method: "POST",
+      body: {},
+      context: {
+        newSession: null,
+      },
+    });
+
+    await handleAfterHook(ctx);
+    await waitForAuditWrite();
+
+    const { data } = await AuditLogModel.findPaginated({
+      organizationId: org.id,
+      limit: 10,
+      offset: 0,
+    });
+
+    expect(data).toHaveLength(0);
+  });
+
+  test("sign-out with no session context produces zero rows", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+
+    const ctx = createMockContext({
+      path: "/sign-out",
+      method: "POST",
+      body: {},
+      context: {
+        session: null,
+      },
+    });
+
+    await handleAfterHook(ctx);
+    await waitForAuditWrite();
+
+    const { data } = await AuditLogModel.findPaginated({
+      organizationId: org.id,
+      limit: 10,
+      offset: 0,
+    });
+
+    expect(data).toHaveLength(0);
+  });
+
+  test("AuditLogModel.create rejection does not affect auth response", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const user = await makeUser({ email: "audit-failure@example.com" });
+    const org = await makeOrganization();
+    await makeMember(user.id, org.id, { role: "member" });
+
+    const createSpy = vi
+      .spyOn(AuditLogModel, "create")
+      .mockRejectedValueOnce(new Error("DB write failed"));
+
+    const ctx = createMockContext({
+      path: "/sign-in/email",
+      method: "POST",
+      body: {},
+      context: {
+        newSession: {
+          user: { id: user.id, email: user.email },
+          session: { id: "sess-failure-audit", activeOrganizationId: org.id },
+        },
+      },
+    });
+
+    // The hook must not throw despite the audit write failing
+    await expect(handleAfterHook(ctx)).resolves.not.toThrow();
+
+    await waitForAuditWrite();
+    createSpy.mockRestore();
+  });
+
+  test("sign-in for user with no membership falls back to primary org lookup", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const user = await makeUser({ email: "audit-fallback-org@example.com" });
+    const org = await makeOrganization();
+    await makeMember(user.id, org.id, { role: "member" });
+
+    // Session has no activeOrganizationId — triggers MemberModel fallback
+    const ctx = createMockContext({
+      path: "/sign-in/email",
+      method: "POST",
+      body: {},
+      context: {
+        newSession: {
+          user: { id: user.id, email: user.email },
+          session: { id: "sess-fallback-audit", activeOrganizationId: null },
+        },
+      },
+    });
+
+    await handleAfterHook(ctx);
+    await waitForAuditWrite();
+
+    const { data } = await AuditLogModel.findPaginated({
+      organizationId: org.id,
+      limit: 10,
+      offset: 0,
+    });
+
+    const auditRows = data.filter((r) => r.action === "sign_in");
+    expect(auditRows).toHaveLength(1);
+    expect(auditRows[0].organizationId).toBe(org.id);
   });
 });

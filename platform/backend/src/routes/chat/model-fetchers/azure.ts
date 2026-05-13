@@ -174,10 +174,17 @@ async function fetchAzureManagementDeployments(
   try {
     const tokenProvider = getAzureManagementBearerTokenProvider();
     const headers = { Authorization: `Bearer ${await tokenProvider()}` };
-    const accountResourceIds = await fetchAzureCognitiveServicesAccountIds({
+    let accountResourceIds = await fetchAzureCognitiveServicesAccountIds({
       accountName,
       headers,
     });
+    if (accountResourceIds.length === 0) {
+      accountResourceIds =
+        await fetchAzureCognitiveServicesAccountIdsForProject({
+          projectName: accountName,
+          headers,
+        });
+    }
 
     for (const accountResourceId of accountResourceIds) {
       const deployments = await fetchAzureManagementDeploymentsForAccount({
@@ -230,6 +237,46 @@ async function fetchAzureCognitiveServicesAccountIds(params: {
   }
 
   return accountIds;
+}
+
+async function fetchAzureCognitiveServicesAccountIdsForProject(params: {
+  projectName: string;
+  headers: Record<string, string>;
+}): Promise<string[]> {
+  const subscriptions = await fetchAzureSubscriptions(params.headers);
+  const accountIds: string[] = [];
+
+  for (const subscriptionId of subscriptions) {
+    const filter =
+      "resourceType eq 'Microsoft.CognitiveServices/accounts/projects'";
+    const url = new URL(
+      `https://management.azure.com/subscriptions/${encodeURIComponent(subscriptionId)}/resources`,
+    );
+    url.searchParams.set("api-version", "2021-04-01");
+    url.searchParams.set("$filter", filter);
+
+    const response = await fetch(url, { headers: params.headers });
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error(
+        { status: response.status, error: errorText, subscriptionId },
+        "Failed to find Azure Cognitive Services project",
+      );
+      continue;
+    }
+
+    const data = (await response.json()) as { value?: { id?: string }[] };
+    accountIds.push(
+      ...(data.value ?? [])
+        .filter((resource) =>
+          isAzureProjectResourceIdForProject(resource.id, params.projectName),
+        )
+        .map((resource) => extractAccountResourceIdFromProjectId(resource.id))
+        .filter((id): id is string => Boolean(id)),
+    );
+  }
+
+  return [...new Set(accountIds)];
 }
 
 async function fetchAzureSubscriptions(
@@ -346,6 +393,40 @@ function extractAzureResourceName(baseUrl: string): string | null {
   }
 
   return null;
+}
+
+function isAzureProjectResourceIdForProject(
+  projectResourceId: string | undefined,
+  projectName: string,
+): boolean {
+  if (!projectResourceId) {
+    return false;
+  }
+
+  const segments = projectResourceId.split("/");
+  const projectsIndex = segments.findIndex(
+    (segment) => segment.toLowerCase() === "projects",
+  );
+  if (projectsIndex === -1) {
+    return false;
+  }
+
+  return (
+    segments[projectsIndex + 1]?.toLowerCase() === projectName.toLowerCase()
+  );
+}
+
+function extractAccountResourceIdFromProjectId(
+  projectResourceId: string | undefined,
+): string | null {
+  if (!projectResourceId) {
+    return null;
+  }
+
+  const match = projectResourceId.match(
+    /^(\/subscriptions\/[^/]+\/resourceGroups\/[^/]+\/providers\/Microsoft\.CognitiveServices\/accounts\/[^/]+)\/projects\/[^/]+$/i,
+  );
+  return match?.[1] ?? null;
 }
 
 const AZURE_RESOURCE_HOST_SUFFIXES = [

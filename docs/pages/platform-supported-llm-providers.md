@@ -768,6 +768,11 @@ https://<resource-name>.openai.azure.com/openai
 
 Archestra discovers deployments from `/openai/deployments` and routes each request to the deployment named in the request `model` field.
 Do not configure a deployment-specific URL such as `https://<resource-name>.openai.azure.com/openai/deployments/<deployment-name>`.
+If your Foundry project has its own OpenAI endpoint, use the same resource-level format with the project hostname:
+
+```
+https://<project-name>.openai.azure.com/openai
+```
 
 For Microsoft Foundry v1, use the OpenAI-compatible API root:
 
@@ -780,6 +785,7 @@ The same formats apply when configuring a Base URL in the API key settings UI.
 ### Deployment Discovery and RBAC
 
 - For Entra ID configurations, Archestra first tries Azure deployment discovery. If the inference endpoint cannot list deployments, Archestra uses Azure management APIs to find the Cognitive Services account and list its deployments.
+- Some Foundry project endpoints are backed by a parent Azure AI Services account, for example `/providers/Microsoft.CognitiveServices/accounts/<account-name>/projects/<project-name>`. Archestra resolves the project to its parent account before listing deployments.
 - For Azure OpenAI resource URLs, Archestra does not fall back to the available model catalog because that catalog includes undeployed models.
 - For built-in Azure RBAC, assign `Cognitive Services OpenAI User` at the backing Azure AI Services resource when possible. Use the full ARM resource scope, for example `/subscriptions/<subscription-id>/resourceGroups/<resource-group>/providers/Microsoft.CognitiveServices/accounts/<resource-name>`. For the narrowest access, use a custom role with `Microsoft.Resources/subscriptions/read`, `Microsoft.Resources/subscriptions/resources/read`, `Microsoft.CognitiveServices/accounts/read`, and `Microsoft.CognitiveServices/accounts/deployments/read`.
 

@@ -1,8 +1,10 @@
+import { ChatErrorCode } from "@shared";
 import { beforeEach, describe, expect, test } from "@/test";
 import { SelectInteractionSchema } from "@/types";
 import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
 import ConversationModel from "./conversation";
+import ConversationChatErrorModel from "./conversation-chat-error";
 import InteractionModel from "./interaction";
 import LimitModel from "./limit";
 import TeamModel from "./team";
@@ -50,6 +52,67 @@ describe("InteractionModel", () => {
       expect(interaction.profileId).toBe(profileId);
       expect(interaction.request).toBeDefined();
       expect(interaction.response).toBeDefined();
+    });
+
+    test("returns chat errors for chat conversation sessions", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const agent = await makeAgent({ organizationId: org.id });
+      const conversation = await ConversationModel.create({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        selectedModel: "gpt-4",
+      });
+      await ConversationChatErrorModel.create({
+        conversationId: conversation.id,
+        error: {
+          code: ChatErrorCode.ServerError,
+          message: "Provider failed.",
+          isRetryable: true,
+        },
+      });
+      const interaction = await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: conversation.id,
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Hello" }],
+        },
+        response: {
+          id: "test-response",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: "Hi there",
+                refusal: null,
+              },
+              finish_reason: "stop",
+              logprobs: null,
+            },
+          ],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const found = await InteractionModel.findById(interaction.id);
+
+      expect(found?.chatErrors?.map((chatError) => chatError.error)).toEqual([
+        {
+          code: ChatErrorCode.ServerError,
+          message: "Provider failed.",
+          isRetryable: true,
+        },
+      ]);
     });
 
     test("can create and serialize an Azure interaction", async () => {

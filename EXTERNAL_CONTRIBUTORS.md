@@ -306,3 +306,15 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @lyraforge
 - @ErnestHysa
 - @mgalavai
+- @Gammarays1980
+- @AshuraXX2206
+- @surbhitCodes
+- @quietpatchlab
+- @CyberSarvesh
+- @itsbryanman
+- @im-shafiqurrehman
+- @mitochondria-7
+- @Amaaz28
+- @Deepam02
+- @harxhist
+- @artabr

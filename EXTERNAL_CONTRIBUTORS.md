@@ -316,3 +316,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @mitochondria-7
 - @Amaaz28
 - @Deepam02
+- @harxhist

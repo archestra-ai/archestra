@@ -1793,9 +1793,13 @@ export function ChatPageContent({
                 {isReadOnlyConversation ? (
                   <MessageThread
                     messages={sharedConversationMessages}
+                    chatErrors={conversation?.chatErrors ?? []}
+                    conversationId={conversationId}
                     containerClassName="h-full"
                     hideDivider
                     profileId={conversation?.agent?.id}
+                    agentName={conversation?.agent?.name}
+                    selectedModel={conversation?.selectedModel ?? undefined}
                   />
                 ) : (
                   <ChatMessages

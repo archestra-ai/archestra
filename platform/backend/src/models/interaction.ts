@@ -32,6 +32,7 @@ import type {
 } from "@/types";
 import { InteractionAuthMethodSchema } from "@/types";
 import AgentTeamModel from "./agent-team";
+import ConversationChatErrorModel from "./conversation-chat-error";
 import LimitModel from "./limit";
 
 /**
@@ -40,6 +41,14 @@ import LimitModel from "./limit";
  */
 function escapeLikePattern(value: string): string {
   return value.replace(/[%_\\]/g, "\\$&");
+}
+
+async function findChatErrorsForSessionId(sessionId: string | null) {
+  if (!sessionId || !isUuid(sessionId)) {
+    return [];
+  }
+
+  return ConversationChatErrorModel.findByConversation(sessionId);
 }
 
 /**
@@ -467,7 +476,10 @@ class InteractionModel {
       }
     }
 
-    return interaction as Interaction;
+    return {
+      ...interaction,
+      chatErrors: await findChatErrorsForSessionId(interaction.sessionId),
+    } as Interaction;
   }
 
   static async getAllInteractionsForProfile(

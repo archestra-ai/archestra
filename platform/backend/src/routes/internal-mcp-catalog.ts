@@ -28,6 +28,7 @@ import {
   DeleteObjectResponseSchema,
   ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
   InsertInternalMcpCatalogSchema,
+  ListInternalMcpCatalogSchema,
   PartialUpdateInternalMcpCatalogSchema,
   SelectInternalMcpCatalogSchema,
   UuidIdSchema,
@@ -59,7 +60,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get all Internal MCP catalog items",
         tags: ["MCP Catalog"],
         response: constructResponseSchema(
-          z.array(SelectInternalMcpCatalogSchema),
+          z.array(ListInternalMcpCatalogSchema),
         ),
       },
     },

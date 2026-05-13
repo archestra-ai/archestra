@@ -300,3 +300,17 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @phquand2000
 - @elfketchup
 - @basdilhan
+- @Darshan3690
+- @nguyen-hung-dev
+- @phungkaizen
+- @IssacDanny
+- @lyraforge
+- @ErnestHysa
+- @mgalavai
+- @Gammarays1980
+- @AshuraXX2206
+- @surbhitCodes
+- @quietpatchlab
+- @CyberSarvesh
+- @itsbryanman
+- @im-shafiqurrehman

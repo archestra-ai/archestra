@@ -139,7 +139,11 @@ async function fetchAzureModelList(params: {
     };
 
     return (data.data ?? [])
-      .filter((model) => model.capabilities?.chat_completion !== false)
+      .filter(
+        (model) =>
+          model.capabilities?.chat_completion !== false ||
+          isAzureEmbeddingModelId(model.id),
+      )
       .map((model) => ({
         id: model.id,
         displayName: model.id,
@@ -181,4 +185,8 @@ function fallbackToConfiguredDeployment(
       provider: "azure",
     },
   ];
+}
+
+function isAzureEmbeddingModelId(modelId: string): boolean {
+  return modelId.toLowerCase().includes("embedding");
 }

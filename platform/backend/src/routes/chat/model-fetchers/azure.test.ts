@@ -140,6 +140,11 @@ describe("fetchAzureModels", () => {
     expect(result).toEqual([
       { id: "gpt-5.2-chat", displayName: "gpt-5.2-chat", provider: "azure" },
       { id: "gpt-5.4-mini", displayName: "gpt-5.4-mini", provider: "azure" },
+      {
+        id: "text-embedding-3-large",
+        displayName: "text-embedding-3-large",
+        provider: "azure",
+      },
     ]);
     expect(mockFetch).toHaveBeenNthCalledWith(
       1,
@@ -225,6 +230,11 @@ describe("fetchAzureModels", () => {
     expect(result).toEqual([
       { id: "gpt-4.1", displayName: "gpt-4.1", provider: "azure" },
       { id: "grok-3", displayName: "grok-3", provider: "azure" },
+      {
+        id: "text-embedding",
+        displayName: "text-embedding",
+        provider: "azure",
+      },
     ]);
     expect(mockFetch).toHaveBeenCalledWith(
       "https://my-resource.services.ai.azure.com/openai/v1/models",

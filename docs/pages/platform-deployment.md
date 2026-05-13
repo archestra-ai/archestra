@@ -726,17 +726,33 @@ The following environment variables can be used to configure Archestra Platform.
 
 - **`ARCHESTRA_SECRETS_MANAGER`** - Secrets storage backend for managing sensitive data (API keys, tokens, etc.)
   - Default: `DB` (database storage)
-  - Options: `DB` or `Vault`
-  - Note: When set to `Vault`, requires `HASHICORP_VAULT_ADDR` and `HASHICORP_VAULT_TOKEN` to be configured
+  - Options: `DB`, `VAULT`, or `READONLY_VAULT`
+  - Note: When set to `VAULT` or `READONLY_VAULT`, requires `ARCHESTRA_HASHICORP_VAULT_ADDR` and the credentials for the selected auth method. See [Secrets Management](/docs/platform-secrets-management) for the full configuration reference (KV version, secret path prefix, auth methods).
 
 - **`ARCHESTRA_HASHICORP_VAULT_ADDR`** - HashiCorp Vault server address
-  - Required when: `ARCHESTRA_SECRETS_MANAGER=Vault`
+  - Required when: `ARCHESTRA_SECRETS_MANAGER=VAULT` or `READONLY_VAULT`
   - Example: `http://localhost:8200`
   - Note: System falls back to database storage if Vault is configured but credentials are missing
 
-- **`ARCHESTRA_HASHICORP_VAULT_TOKEN`** - HashiCorp Vault authentication token
-  - Required when: `ARCHESTRA_SECRETS_MANAGER=Vault`
-  - Note: System falls back to database storage if Vault is configured but credentials are missing
+- **`ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD`** - Authentication method used to connect to Vault.
+  - Default: `TOKEN`
+  - Options: `TOKEN`, `K8S`, `AWS`
+  - See [Vault Authentication](/docs/platform-secrets-management#vault-authentication) for the per-method env vars (`ARCHESTRA_HASHICORP_VAULT_TOKEN`, `..._K8S_ROLE`, `..._AWS_ROLE`, etc.).
+
+- **`ARCHESTRA_HASHICORP_VAULT_KV_VERSION`** - Version of Vault's KV secrets engine.
+  - Default: `2`
+  - Options: `1` or `2`
+  - Applies to both `VAULT` and `READONLY_VAULT` modes. Changes the default secret path prefix and the API paths used for read/write/list/delete.
+
+- **`ARCHESTRA_HASHICORP_VAULT_SECRET_PATH`** - Path prefix for Archestra-managed secrets in Vault.
+  - Default: `secret/data/archestra` (KV v2) or `secret/archestra` (KV v1)
+  - Use it to store secrets under a custom path.
+  - KV v2 example: `kv/data/platform/archestra` (resolves to `kv/data/platform/archestra/{secretName}`)
+  - KV v1 example: `kv/platform/archestra` (resolves to `kv/platform/archestra/{secretName}`)
+
+- **`ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH`** - Override path prefix for KV v2 metadata operations (list, delete).
+  - Default: derived from `ARCHESTRA_HASHICORP_VAULT_SECRET_PATH` by replacing `/data/` with `/metadata/`.
+  - Only needed when your prefix doesn't follow the `/data/` ↔ `/metadata/` convention.
 
 - **`ARCHESTRA_DATABASE_URL_VAULT_REF`** - Read the database connection string from Vault instead of environment variables.
   - Optional: Only used when `ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT`

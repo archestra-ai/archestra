@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { LLM_PROXY_OAUTH_SCOPE } from "@shared";
 import { hashPassword, verifyPassword } from "better-auth/crypto";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, ilike, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import {
   LLM_OAUTH_CLIENT_METADATA_TYPE,
@@ -19,20 +19,18 @@ class LlmOauthClientModel {
       .select()
       .from(schema.oauthClientsTable)
       .where(
-        sql`${schema.oauthClientsTable.metadata}->>'type' = ${LLM_OAUTH_CLIENT_METADATA_TYPE}
-          AND ${schema.oauthClientsTable.metadata}->>'organizationId' = ${params.organizationId}`,
+        and(
+          sql`${schema.oauthClientsTable.metadata}->>'type' = ${LLM_OAUTH_CLIENT_METADATA_TYPE}`,
+          sql`${schema.oauthClientsTable.metadata}->>'organizationId' = ${params.organizationId}`,
+          params.search
+            ? ilike(schema.oauthClientsTable.name, `%${params.search.trim()}%`)
+            : undefined,
+        ),
       )
       .orderBy(schema.oauthClientsTable.createdAt);
 
     const clients = await hydrateOauthClients(rows);
     return clients.filter((client) => {
-      if (
-        params.search &&
-        !client.name.toLowerCase().includes(params.search.trim().toLowerCase())
-      ) {
-        return false;
-      }
-
       if (
         params.providerApiKeyId &&
         !client.providerApiKeys.some(

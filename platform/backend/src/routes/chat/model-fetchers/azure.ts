@@ -35,7 +35,7 @@ export async function fetchAzureModels(
     baseUrl,
   });
   if (v1ModelsUrl) {
-    const deployments = await fetchAzureManagementDeployments(baseUrl);
+    const deployments = await tryAzureManagementDeployments(baseUrl);
     if (deployments.length > 0) {
       return deployments;
     }
@@ -71,14 +71,12 @@ export async function fetchAzureModels(
         "Failed to fetch Azure deployments",
       );
       if (modelsUrl) {
-        const deployments = await fetchAzureManagementDeployments(baseUrl);
+        const deployments = await tryAzureManagementDeployments(baseUrl, {
+          warnOnEmpty: true,
+        });
         if (deployments.length > 0) {
           return deployments;
         }
-        logger.warn(
-          { baseUrl },
-          "Azure deployment discovery failed and management deployment discovery returned no deployments; not falling back to the model catalog for resource-level Azure OpenAI URL",
-        );
       }
       return fallbackToConfiguredDeployment(deploymentName);
     }
@@ -95,14 +93,12 @@ export async function fetchAzureModels(
   } catch (error) {
     logger.error({ error }, "Error fetching Azure deployments");
     if (modelsUrl) {
-      const deployments = await fetchAzureManagementDeployments(baseUrl);
+      const deployments = await tryAzureManagementDeployments(baseUrl, {
+        warnOnEmpty: true,
+      });
       if (deployments.length > 0) {
         return deployments;
       }
-      logger.warn(
-        { baseUrl },
-        "Azure deployment discovery failed and management deployment discovery returned no deployments; not falling back to the model catalog for resource-level Azure OpenAI URL",
-      );
     }
     return fallbackToConfiguredDeployment(deploymentName);
   }
@@ -159,6 +155,21 @@ async function fetchAzureModelList(params: {
   }
 }
 
+async function tryAzureManagementDeployments(
+  baseUrl: string,
+  options?: { warnOnEmpty?: boolean },
+): Promise<ModelInfo[]> {
+  const deployments = await fetchAzureManagementDeployments(baseUrl);
+  if (deployments.length === 0 && options?.warnOnEmpty) {
+    logger.warn(
+      { baseUrl },
+      "Azure deployment discovery failed and management deployment discovery returned no deployments; not falling back to the model catalog for resource-level Azure OpenAI URL",
+    );
+  }
+
+  return deployments;
+}
+
 async function fetchAzureManagementDeployments(
   baseUrl: string,
 ): Promise<ModelInfo[]> {
@@ -174,14 +185,17 @@ async function fetchAzureManagementDeployments(
   try {
     const tokenProvider = getAzureManagementBearerTokenProvider();
     const headers = { Authorization: `Bearer ${await tokenProvider()}` };
+    const subscriptions = await fetchAzureSubscriptions(headers);
     let accountResourceIds = await fetchAzureCognitiveServicesAccountIds({
       accountName,
+      subscriptions,
       headers,
     });
     if (accountResourceIds.length === 0) {
       accountResourceIds =
         await fetchAzureCognitiveServicesAccountIdsForProject({
           projectName: accountName,
+          subscriptions,
           headers,
         });
     }
@@ -204,79 +218,45 @@ async function fetchAzureManagementDeployments(
 
 async function fetchAzureCognitiveServicesAccountIds(params: {
   accountName: string;
+  subscriptions: string[];
   headers: Record<string, string>;
 }): Promise<string[]> {
-  const subscriptions = await fetchAzureSubscriptions(params.headers);
-  const accountIds: string[] = [];
+  const safeAccountName = params.accountName.replace(/'/g, "''");
+  const filter = `resourceType eq 'Microsoft.CognitiveServices/accounts' and name eq '${safeAccountName}'`;
+  const resources = await fetchAzureResourcesForSubscriptions({
+    subscriptions: params.subscriptions,
+    headers: params.headers,
+    filter,
+    errorMessage: "Failed to find Azure Cognitive Services account",
+  });
 
-  for (const subscriptionId of subscriptions) {
-    const safeAccountName = params.accountName.replace(/'/g, "''");
-    const filter = `resourceType eq 'Microsoft.CognitiveServices/accounts' and name eq '${safeAccountName}'`;
-    const url = new URL(
-      `https://management.azure.com/subscriptions/${encodeURIComponent(subscriptionId)}/resources`,
-    );
-    url.searchParams.set("api-version", "2021-04-01");
-    url.searchParams.set("$filter", filter);
-
-    const response = await fetch(url, { headers: params.headers });
-    if (!response.ok) {
-      const errorText = await response.text();
-      logger.error(
-        { status: response.status, error: errorText, subscriptionId },
-        "Failed to find Azure Cognitive Services account",
-      );
-      continue;
-    }
-
-    const data = (await response.json()) as { value?: { id?: string }[] };
-    accountIds.push(
-      ...(data.value ?? [])
-        .map((resource) => resource.id)
-        .filter((id): id is string => Boolean(id)),
-    );
-  }
-
-  return accountIds;
+  return resources
+    .map((resource) => resource.id)
+    .filter((id): id is string => Boolean(id));
 }
 
 async function fetchAzureCognitiveServicesAccountIdsForProject(params: {
   projectName: string;
+  subscriptions: string[];
   headers: Record<string, string>;
 }): Promise<string[]> {
-  const subscriptions = await fetchAzureSubscriptions(params.headers);
-  const accountIds: string[] = [];
+  const resources = await fetchAzureResourcesForSubscriptions({
+    subscriptions: params.subscriptions,
+    headers: params.headers,
+    filter: "resourceType eq 'Microsoft.CognitiveServices/accounts/projects'",
+    errorMessage: "Failed to find Azure Cognitive Services project",
+  });
 
-  for (const subscriptionId of subscriptions) {
-    const filter =
-      "resourceType eq 'Microsoft.CognitiveServices/accounts/projects'";
-    const url = new URL(
-      `https://management.azure.com/subscriptions/${encodeURIComponent(subscriptionId)}/resources`,
-    );
-    url.searchParams.set("api-version", "2021-04-01");
-    url.searchParams.set("$filter", filter);
-
-    const response = await fetch(url, { headers: params.headers });
-    if (!response.ok) {
-      const errorText = await response.text();
-      logger.error(
-        { status: response.status, error: errorText, subscriptionId },
-        "Failed to find Azure Cognitive Services project",
-      );
-      continue;
-    }
-
-    const data = (await response.json()) as { value?: { id?: string }[] };
-    accountIds.push(
-      ...(data.value ?? [])
+  return [
+    ...new Set(
+      resources
         .filter((resource) =>
           isAzureProjectResourceIdForProject(resource.id, params.projectName),
         )
         .map((resource) => extractAccountResourceIdFromProjectId(resource.id))
         .filter((id): id is string => Boolean(id)),
-    );
-  }
-
-  return [...new Set(accountIds)];
+    ),
+  ];
 }
 
 async function fetchAzureSubscriptions(
@@ -305,10 +285,50 @@ async function fetchAzureSubscriptions(
     );
 }
 
+async function fetchAzureResourcesForSubscriptions(params: {
+  subscriptions: string[];
+  headers: Record<string, string>;
+  filter: string;
+  errorMessage: string;
+}): Promise<{ id?: string }[]> {
+  const resourceLists = await Promise.all(
+    params.subscriptions.map(async (subscriptionId) => {
+      const url = new URL(
+        `https://management.azure.com/subscriptions/${encodeURIComponent(subscriptionId)}/resources`,
+      );
+      url.searchParams.set("api-version", "2021-04-01");
+      url.searchParams.set("$filter", params.filter);
+
+      const response = await fetch(url, { headers: params.headers });
+      if (!response.ok) {
+        const errorText = await response.text();
+        logger.error(
+          { status: response.status, error: errorText, subscriptionId },
+          params.errorMessage,
+        );
+        return [];
+      }
+
+      const data = (await response.json()) as { value?: { id?: string }[] };
+      return data.value ?? [];
+    }),
+  );
+
+  return resourceLists.flat();
+}
+
 async function fetchAzureManagementDeploymentsForAccount(params: {
   accountResourceId: string;
   headers: Record<string, string>;
 }): Promise<ModelInfo[]> {
+  if (!isAzureAccountResourceId(params.accountResourceId)) {
+    logger.error(
+      { accountResourceId: params.accountResourceId },
+      "Unexpected Azure Cognitive Services account resource ID",
+    );
+    return [];
+  }
+
   const url = new URL(
     `https://management.azure.com${params.accountResourceId}/deployments`,
   );
@@ -427,6 +447,12 @@ function extractAccountResourceIdFromProjectId(
     /^(\/subscriptions\/[^/]+\/resourceGroups\/[^/]+\/providers\/Microsoft\.CognitiveServices\/accounts\/[^/]+)\/projects\/[^/]+$/i,
   );
   return match?.[1] ?? null;
+}
+
+function isAzureAccountResourceId(accountResourceId: string): boolean {
+  return /^\/subscriptions\/[^/]+\/resourceGroups\/[^/]+\/providers\/Microsoft\.CognitiveServices\/accounts\/[^/]+$/i.test(
+    accountResourceId,
+  );
 }
 
 const AZURE_RESOURCE_HOST_SUFFIXES = [

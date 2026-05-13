@@ -219,12 +219,6 @@ describe("fetchAzureModels", () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          value: [{ subscriptionId: "sub-1" }],
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
           value: [
             {
               id: "/subscriptions/sub-1/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/parent-resource/projects/project-resource",
@@ -264,14 +258,14 @@ describe("fetchAzureModels", () => {
       },
     ]);
     expect(mockFetch).toHaveBeenNthCalledWith(
-      5,
+      4,
       expect.objectContaining({
         href: "https://management.azure.com/subscriptions/sub-1/resources?api-version=2021-04-01&%24filter=resourceType+eq+%27Microsoft.CognitiveServices%2Faccounts%2Fprojects%27",
       }),
       { headers: { Authorization: "Bearer mgmt-token" } },
     );
     expect(mockFetch).toHaveBeenNthCalledWith(
-      6,
+      5,
       expect.objectContaining({
         href: "https://management.azure.com/subscriptions/sub-1/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/parent-resource/deployments?api-version=2024-10-01",
       }),
@@ -296,7 +290,7 @@ describe("fetchAzureModels", () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          value: [],
+          value: [{ subscriptionId: "sub-1" }],
         }),
       })
       .mockResolvedValueOnce({
@@ -319,7 +313,7 @@ describe("fetchAzureModels", () => {
     );
 
     expect(result).toEqual([]);
-    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(mockFetch).toHaveBeenCalledTimes(4);
     expect(mockFetch).not.toHaveBeenCalledWith(
       "https://my-resource.openai.azure.com/openai/models?api-version=2024-02-01",
       expect.any(Object),
@@ -382,6 +376,10 @@ describe("fetchAzureModels", () => {
       .fn()
       .mockResolvedValueOnce({
         ok: true,
+        json: async () => ({ value: [{ subscriptionId: "sub-1" }] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
         json: async () => ({ value: [] }),
       })
       .mockResolvedValueOnce({
@@ -415,7 +413,7 @@ describe("fetchAzureModels", () => {
       },
     ]);
     expect(mockFetch).toHaveBeenNthCalledWith(
-      3,
+      4,
       "https://my-resource.services.ai.azure.com/openai/v1/models",
       { headers: { Authorization: "Bearer entra-token" } },
     );

@@ -1,6 +1,6 @@
 import { render, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { authClient } from "@/lib/clients/auth/auth-client";
+import { useSession } from "@/lib/auth/auth.query";
 import { usePublicConfig } from "@/lib/config/config.query";
 import { PostHogProviderWrapper } from "./posthog-provider";
 
@@ -27,10 +27,8 @@ vi.mock("posthog-js/react", () => ({
   }) => <>{children}</>,
 }));
 
-vi.mock("@/lib/clients/auth/auth-client", () => ({
-  authClient: {
-    useSession: vi.fn(),
-  },
+vi.mock("@/lib/auth/auth.query", () => ({
+  useSession: vi.fn(),
 }));
 
 vi.mock("@/lib/config/config.query", () => ({
@@ -62,7 +60,7 @@ describe("PostHogProviderWrapper", () => {
       isRefetching: false,
       error: null,
       refetch: vi.fn(),
-    }) as unknown as ReturnType<typeof authClient.useSession>;
+    }) as unknown as ReturnType<typeof useSession>;
 
   const makePublicConfigResult = ({
     enabled,
@@ -93,7 +91,7 @@ describe("PostHogProviderWrapper", () => {
     }) as unknown as ReturnType<typeof usePublicConfig>;
 
   it("initializes PostHog and identifies the authenticated user", async () => {
-    vi.mocked(authClient.useSession).mockReturnValue(
+    vi.mocked(useSession).mockReturnValue(
       makeSessionResult({
         data: {
           user: {
@@ -138,7 +136,7 @@ describe("PostHogProviderWrapper", () => {
       session: { id: "session-123" },
     };
 
-    vi.mocked(authClient.useSession).mockImplementation(() =>
+    vi.mocked(useSession).mockImplementation(() =>
       makeSessionResult({ data: sessionData }),
     );
 
@@ -182,7 +180,7 @@ describe("PostHogProviderWrapper", () => {
       session: { id: "session-123" },
     };
 
-    vi.mocked(authClient.useSession).mockImplementation(() =>
+    vi.mocked(useSession).mockImplementation(() =>
       makeSessionResult({ data: sessionData }),
     );
 
@@ -224,7 +222,7 @@ describe("PostHogProviderWrapper", () => {
   });
 
   it("uses the email as the fallback name when the user has no display name", async () => {
-    vi.mocked(authClient.useSession).mockReturnValue(
+    vi.mocked(useSession).mockReturnValue(
       makeSessionResult({
         data: {
           user: {
@@ -261,7 +259,7 @@ describe("PostHogProviderWrapper", () => {
       session: { id: "session-123" },
     };
 
-    vi.mocked(authClient.useSession).mockImplementation(() =>
+    vi.mocked(useSession).mockImplementation(() =>
       makeSessionResult({ data: sessionData }),
     );
 
@@ -297,7 +295,7 @@ describe("PostHogProviderWrapper", () => {
       }),
     );
 
-    vi.mocked(authClient.useSession).mockReturnValue(
+    vi.mocked(useSession).mockReturnValue(
       makeSessionResult({
         data: {
           user: {
@@ -332,7 +330,7 @@ describe("PostHogProviderWrapper", () => {
       }),
     );
 
-    vi.mocked(authClient.useSession).mockReturnValue(
+    vi.mocked(useSession).mockReturnValue(
       makeSessionResult({
         data: {
           user: {
@@ -359,7 +357,7 @@ describe("PostHogProviderWrapper", () => {
   });
 
   it("does not reset PostHog while the auth session is still loading", async () => {
-    vi.mocked(authClient.useSession).mockReturnValue(
+    vi.mocked(useSession).mockReturnValue(
       makeSessionResult({
         data: null,
         isPending: true,

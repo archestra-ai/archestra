@@ -359,7 +359,9 @@ describe("InternalMcpCatalogModel", () => {
       expect(found?.labels[0].value).toBe("ai");
     });
 
-    test("findAll returns labels for all items", async () => {
+    test("findAll returns labels and tool counts for all items", async ({
+      makeTool,
+    }) => {
       const catalog = await InternalMcpCatalogModel.create({
         name: "catalog-find-all-labels",
         serverType: "remote",
@@ -368,6 +370,8 @@ describe("InternalMcpCatalogModel", () => {
           { key: "team", value: "platform" },
         ],
       });
+      await makeTool({ catalogId: catalog.id, name: "catalog-label-tool-1" });
+      await makeTool({ catalogId: catalog.id, name: "catalog-label-tool-2" });
 
       const all = await InternalMcpCatalogModel.findAll({
         expandSecrets: false,
@@ -378,6 +382,24 @@ describe("InternalMcpCatalogModel", () => {
       expect(found?.labels).toHaveLength(2);
       expect(found?.labels[0].key).toBe("region");
       expect(found?.labels[1].key).toBe("team");
+      expect(found?.toolCount).toBe(2);
+    });
+
+    test("findById omits list-only tool count metadata", async ({
+      makeTool,
+    }) => {
+      const catalog = await InternalMcpCatalogModel.create({
+        name: "catalog-find-by-id-without-tool-count",
+        serverType: "remote",
+      });
+      await makeTool({ catalogId: catalog.id, name: "catalog-detail-tool" });
+
+      const found = await InternalMcpCatalogModel.findById(catalog.id, {
+        expandSecrets: false,
+      });
+
+      expect(found).not.toBeNull();
+      expect(found).not.toHaveProperty("toolCount");
     });
 
     test("searchByQuery returns labels", async () => {

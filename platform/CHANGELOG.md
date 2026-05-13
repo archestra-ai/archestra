@@ -1,5 +1,92 @@
 # Changelog
 
+## [1.2.45](https://github.com/archestra-ai/archestra/compare/platform-v1.2.44...platform-v1.2.45) (2026-05-12)
+
+
+### Bug Fixes
+
+* Bedrock empty chat content ([#4598](https://github.com/archestra-ai/archestra/issues/4598)) ([e39d9d4](https://github.com/archestra-ai/archestra/commit/e39d9d4b9ac18995630f5b6ba992b53916d52930))
+* stop computing toolCount on singular find/update paths ([#4603](https://github.com/archestra-ai/archestra/issues/4603)) ([f8a926e](https://github.com/archestra-ai/archestra/commit/f8a926ed2dc41bdccfd3252e924e5789a01b1df0))
+
+
+### Performance Improvements
+
+* **logging:** async stdout in prod, gate pino-pretty to dev ([#4602](https://github.com/archestra-ai/archestra/issues/4602)) ([46b1756](https://github.com/archestra-ai/archestra/commit/46b175624a27483f019636db1a8afa853fdb6974))
+
+
+### Miscellaneous Chores
+
+* add default Helm CPU requests ([#4605](https://github.com/archestra-ai/archestra/issues/4605)) ([8b8851c](https://github.com/archestra-ai/archestra/commit/8b8851cb2d8d1cb23233b87f42b6c4bf27d8b793))
+
+## [1.2.44](https://github.com/archestra-ai/archestra/compare/platform-v1.2.43...platform-v1.2.44) (2026-05-12)
+
+
+### Bug Fixes
+
+* relax probe timeouts and make them configurable ([#4595](https://github.com/archestra-ai/archestra/issues/4595)) ([58568bc](https://github.com/archestra-ai/archestra/commit/58568bcbb9656881d9a2fea9f9bbad23432040f7))
+
+## [1.2.43](https://github.com/archestra-ai/archestra/compare/platform-v1.2.42...platform-v1.2.43) (2026-05-12)
+
+
+### Bug Fixes
+
+* **security:** clear Docker Scout HIGH CVEs ([#4578](https://github.com/archestra-ai/archestra/issues/4578)) ([5d6b758](https://github.com/archestra-ai/archestra/commit/5d6b7587dd7e541ff71f958460197e0b58ab0586))
+
+
+### Miscellaneous Chores
+
+* add separate --check mode for the vault migrate script ([#4588](https://github.com/archestra-ai/archestra/issues/4588)) ([04323e0](https://github.com/archestra-ai/archestra/commit/04323e0497126d73c89217507045320a14a6f31e))
+* reduce shell noncritical startup requests ([#4585](https://github.com/archestra-ai/archestra/issues/4585)) ([fae7a67](https://github.com/archestra-ai/archestra/commit/fae7a674f516cbf7f53c93982c35d438ec48991d))
+
+## [1.2.42](https://github.com/archestra-ai/archestra/compare/platform-v1.2.41...platform-v1.2.42) (2026-05-12)
+
+
+### Bug Fixes
+
+* **dev:** stop vault-k8s release from claiming e2e-tests NodePorts ([#4571](https://github.com/archestra-ai/archestra/issues/4571)) ([953a696](https://github.com/archestra-ai/archestra/commit/953a6964a068ba08ac711f62fdbd9863c9df43fe))
+
+
+### Miscellaneous Chores
+
+* vault readonly migration ([#4528](https://github.com/archestra-ai/archestra/issues/4528)) ([8df421b](https://github.com/archestra-ai/archestra/commit/8df421b2b67dbd6e5087d63fe6c4a11a57a9c3c6))
+
+## [1.2.41](https://github.com/archestra-ai/archestra/compare/platform-v1.2.40...platform-v1.2.41) (2026-05-12)
+
+
+### Features
+
+* new bedrock auth ([#4562](https://github.com/archestra-ai/archestra/issues/4562)) ([51a017b](https://github.com/archestra-ai/archestra/commit/51a017b8a9895673af9275226b530a129fa0fdf6))
+
+## [1.2.40](https://github.com/archestra-ai/archestra/compare/platform-v1.2.39...platform-v1.2.40) (2026-05-12)
+
+
+### Miscellaneous Chores
+
+* reduce MCP registry request churn ([#4548](https://github.com/archestra-ai/archestra/issues/4548)) ([efba119](https://github.com/archestra-ai/archestra/commit/efba119aad8325e74430d2d6bab0595df5a754aa))
+
+## [1.2.39](https://github.com/archestra-ai/archestra/compare/platform-v1.2.38...platform-v1.2.39) (2026-05-11)
+
+
+### Miscellaneous Chores
+
+* reduce frontend request churn ([#4538](https://github.com/archestra-ai/archestra/issues/4538)) ([173056a](https://github.com/archestra-ai/archestra/commit/173056a6fba80a2346af258977de4d4716204978))
+
+## [1.2.38](https://github.com/archestra-ai/archestra/compare/platform-v1.2.37...platform-v1.2.38) (2026-05-11)
+
+
+### Features
+
+* add granular llm cost limits ([#4258](https://github.com/archestra-ai/archestra/issues/4258)) ([4b6f50c](https://github.com/archestra-ai/archestra/commit/4b6f50c27a516f7d2eeaba96f958e8dcd14f5fc5))
+
+
+### Bug Fixes
+
+* add require-approval to built-in config policy subagent ([#4521](https://github.com/archestra-ai/archestra/issues/4521)) ([9942310](https://github.com/archestra-ai/archestra/commit/994231064c5487bac0b7fe1f9e6bd071c3f62fdc))
+* allow scroll on alternative-onboarding-dialog ([#4534](https://github.com/archestra-ai/archestra/issues/4534)) ([0fc0674](https://github.com/archestra-ai/archestra/commit/0fc0674fabb2604c4e76e63d536e5b2938f596cf))
+* change frontend visibility settings for roles ([#4456](https://github.com/archestra-ai/archestra/issues/4456)) ([4c94643](https://github.com/archestra-ai/archestra/commit/4c94643aca404c88d8fa163e4c14238f6e694daf))
+* make pool max configurable via ARCHESTRA_DATABASE_POOL_MAX, defa… ([#4537](https://github.com/archestra-ai/archestra/issues/4537)) ([85fb79f](https://github.com/archestra-ai/archestra/commit/85fb79f766d23a79a06fee15344cb1e64a23967e))
+* **model-router:** hide models not linked to mapped API keys ([#4533](https://github.com/archestra-ai/archestra/issues/4533)) ([6565c43](https://github.com/archestra-ai/archestra/commit/6565c4374def50e2a2b75409e162856a5af36c63))
+
 ## [1.2.37](https://github.com/archestra-ai/archestra/compare/platform-v1.2.36...platform-v1.2.37) (2026-05-09)
 
 

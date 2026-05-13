@@ -3,7 +3,7 @@
 import posthog from "posthog-js";
 import { PostHogProvider } from "posthog-js/react";
 import { useEffect, useRef } from "react";
-import { authClient } from "@/lib/clients/auth/auth-client";
+import { useSession } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
 import { usePublicConfig } from "@/lib/config/config.query";
 
@@ -12,8 +12,7 @@ export function PostHogProviderWrapper({
 }: {
   children: React.ReactNode;
 }) {
-  const { data: session, isPending: isSessionPending } =
-    authClient.useSession();
+  const { data: session, isPending: isSessionPending } = useSession();
   const { data: publicConfig, isLoading: isPublicConfigLoading } =
     usePublicConfig();
   const hasIdentifiedUserRef = useRef(false);

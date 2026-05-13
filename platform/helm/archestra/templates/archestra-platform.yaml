@@ -136,32 +136,31 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           # Startup probe - gives the application time to start up
-          # Checks every 10 seconds for up to 5 minutes (30 failures * 10s)
           startupProbe:
             httpGet:
               path: /health
               port: backend
-            initialDelaySeconds: 5
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 30
+            initialDelaySeconds: {{ .Values.archestra.probes.startup.initialDelaySeconds }}
+            periodSeconds: {{ .Values.archestra.probes.startup.periodSeconds }}
+            timeoutSeconds: {{ .Values.archestra.probes.startup.timeoutSeconds }}
+            failureThreshold: {{ .Values.archestra.probes.startup.failureThreshold }}
           # Liveness probe - restarts the container if it becomes unresponsive
           livenessProbe:
             httpGet:
               path: /health
               port: backend
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 3
+            periodSeconds: {{ .Values.archestra.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.archestra.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.archestra.probes.liveness.failureThreshold }}
           # Readiness probe - marks the container as ready to receive traffic
           # Uses /ready endpoint which checks database connectivity
           readinessProbe:
             httpGet:
               path: /ready
               port: backend
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 3
+            periodSeconds: {{ .Values.archestra.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.archestra.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.archestra.probes.readiness.failureThreshold }}
           {{- include "archestra-platform.volumeMounts" . | nindent 10 }}
       {{- with .Values.archestra.nodeSelector }}
       nodeSelector:

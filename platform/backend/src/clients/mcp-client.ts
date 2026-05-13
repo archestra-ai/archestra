@@ -187,6 +187,7 @@ const CLIENT_CREDENTIALS_FALLBACK_TTL_MS = 5 * TimeInMs.Minute;
 // reclaiming abandoned connections on a reasonable operational timescale.
 const ACTIVE_CONNECTION_CACHE_TTL_MS = 15 * TimeInMs.Minute;
 const ACTIVE_CONNECTION_CACHE_MAX_SIZE = 500;
+const ACTIVE_CONNECTION_PING_VALIDATION_INTERVAL_MS = 30 * TimeInMs.Second;
 
 const RESOURCE_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 1 day
 const RESOURCE_CACHE_MAX_SIZE = 1000;
@@ -224,9 +225,11 @@ class McpClient {
       this.activeConnectionServerState.delete(key);
       this.toolNameCache.delete(key);
       this.pendingHttpSessionMetadata.delete(key);
+      this.activeConnectionLastValidatedAt.delete(key);
     },
   });
   private activeConnectionServerState = new Map<string, CachedServerState>();
+  private activeConnectionLastValidatedAt = new Map<string, number>();
   private connectionLimiter = new ConnectionLimiter();
   // Cache of actual tool names per connection key: lowercased name -> original cased name
   private toolNameCache = new LRUCacheManager<Map<string, string>>({
@@ -298,10 +301,7 @@ class McpClient {
           "Error closing MCP session (non-fatal)",
         );
       }
-      this.activeConnections.delete(connectionKey);
-      this.activeConnectionServerState.delete(connectionKey);
-      this.toolNameCache.delete(connectionKey);
-      this.pendingHttpSessionMetadata.delete(connectionKey);
+      this.clearConnectionState(connectionKey);
       logger.info({ connectionKey }, "Closed cached MCP session");
     }
 
@@ -656,10 +656,7 @@ class McpClient {
                 );
               }
             }
-            this.activeConnections.delete(connectionKey);
-            this.activeConnectionServerState.delete(connectionKey);
-            this.toolNameCache.delete(connectionKey);
-            this.pendingHttpSessionMetadata.delete(connectionKey);
+            this.clearConnectionState(connectionKey);
             return await executeToolCall(getTransport, currentSecrets, true);
           } finally {
             resolveRecovery();
@@ -745,10 +742,7 @@ class McpClient {
             secrets: resetSecrets,
             secretId,
           });
-          this.activeConnections.delete(connectionKey);
-          this.activeConnectionServerState.delete(connectionKey);
-          this.toolNameCache.delete(connectionKey);
-          this.pendingHttpSessionMetadata.delete(connectionKey);
+          this.clearConnectionState(connectionKey);
 
           return await executeToolCall(
             () =>
@@ -920,22 +914,20 @@ class McpClient {
             "Error closing stale cached MCP client after credential change",
           );
         }
-        this.activeConnections.delete(connectionKey);
-        this.activeConnectionServerState.delete(connectionKey);
-        this.toolNameCache.delete(connectionKey);
-        this.pendingHttpSessionMetadata.delete(connectionKey);
+        this.clearConnectionState(connectionKey);
       }
     }
 
     const reusableClient = this.activeConnections.get(connectionKey);
     if (reusableClient) {
-      // Health check: ping the client to verify connection is still alive
+      // Health check idle clients to verify the connection is still alive.
+      // Recently-used clients skip the ping and recover on actual call failure.
       try {
-        await reusableClient.ping();
-        logger.debug(
-          { connectionKey },
-          "Client ping successful, reusing cached client",
-        );
+        if (this.shouldValidateActiveConnection(connectionKey)) {
+          await reusableClient.ping();
+          this.activeConnectionLastValidatedAt.set(connectionKey, Date.now());
+        }
+        logger.debug({ connectionKey }, "Reusing cached MCP client");
         this.activeConnections.set(connectionKey, reusableClient);
         this.activeConnectionServerState.set(connectionKey, currentServerState);
         return reusableClient;
@@ -948,10 +940,7 @@ class McpClient {
           },
           "Client ping failed, creating fresh client",
         );
-        this.activeConnections.delete(connectionKey);
-        this.activeConnectionServerState.delete(connectionKey);
-        this.toolNameCache.delete(connectionKey);
-        this.pendingHttpSessionMetadata.delete(connectionKey);
+        this.clearConnectionState(connectionKey);
         // If the transport carries a stored session ID the session is likely
         // stale (e.g. Playwright pod restarted).  Delete it from the DB so
         // the retry path creates a truly fresh connection instead of reading
@@ -1030,6 +1019,7 @@ class McpClient {
     // while the upsert is in flight.
     this.activeConnections.set(connectionKey, client);
     this.activeConnectionServerState.set(connectionKey, currentServerState);
+    this.activeConnectionLastValidatedAt.set(connectionKey, Date.now());
 
     // Persist the MCP session ID so other backend pods can reuse it.
     // With --isolated, each Mcp-Session-Id maps to a separate browser context;
@@ -1059,6 +1049,31 @@ class McpClient {
     }
 
     return client;
+  }
+
+  private shouldValidateActiveConnection(connectionKey: string): boolean {
+    const lastValidatedAt =
+      this.activeConnectionLastValidatedAt.get(connectionKey) ?? 0;
+    return (
+      Date.now() - lastValidatedAt >=
+      ACTIVE_CONNECTION_PING_VALIDATION_INTERVAL_MS
+    );
+  }
+
+  private clearConnectionState(connectionKey: string): void {
+    this.activeConnections.delete(connectionKey);
+    this.activeConnectionServerState.delete(connectionKey);
+    this.toolNameCache.delete(connectionKey);
+    this.pendingHttpSessionMetadata.delete(connectionKey);
+    this.activeConnectionLastValidatedAt.delete(connectionKey);
+  }
+
+  private clearAllConnectionState(): void {
+    this.activeConnections.clear();
+    this.activeConnectionServerState.clear();
+    this.toolNameCache.clear();
+    this.pendingHttpSessionMetadata.clear();
+    this.activeConnectionLastValidatedAt.clear();
   }
 
   /**
@@ -2152,9 +2167,7 @@ class McpClient {
         } catch {
           // Ignore close errors during refresh teardown.
         }
-        this.activeConnections.delete(connectionKey);
-        this.activeConnectionServerState.delete(connectionKey);
-        this.pendingHttpSessionMetadata.delete(connectionKey);
+        this.clearConnectionState(connectionKey);
       }
 
       const refreshed = await refreshOAuthToken(secretId, catalogId);
@@ -2657,9 +2670,7 @@ class McpClient {
     });
 
     await Promise.all([...disconnectPromises, ...activeDisconnectPromises]);
-    this.activeConnections.clear();
-    this.activeConnectionServerState.clear();
-    this.pendingHttpSessionMetadata.clear();
+    this.clearAllConnectionState();
   }
 
   async invalidateConnectionsForServer(
@@ -2686,10 +2697,7 @@ class McpClient {
           }
         }
 
-        this.activeConnections.delete(connectionKey);
-        this.activeConnectionServerState.delete(connectionKey);
-        this.toolNameCache.delete(connectionKey);
-        this.pendingHttpSessionMetadata.delete(connectionKey);
+        this.clearConnectionState(connectionKey);
         await McpHttpSessionModel.deleteStaleSession(connectionKey).catch(
           (error) => {
             logger.warn(

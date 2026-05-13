@@ -39,8 +39,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useUpdateAccountNameMutation } from "@/lib/auth/account.query";
-import { useAllPermissions } from "@/lib/auth/auth.query";
-import { authClient } from "@/lib/clients/auth/auth-client";
+import { useAllPermissions, useSession } from "@/lib/auth/auth.query";
 import {
   useActiveMemberRole,
   useActiveOrganization,
@@ -65,7 +64,7 @@ const actionLabels: Record<Action, string> = {
 };
 
 export function RolePermissionsCard() {
-  const { data: session } = authClient.useSession();
+  const { data: session } = useSession();
   const { data: activeOrg } = useActiveOrganization();
   const { data: role, isLoading: isRoleLoading } = useActiveMemberRole(
     activeOrg?.id,

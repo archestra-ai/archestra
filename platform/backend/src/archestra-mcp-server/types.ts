@@ -18,6 +18,8 @@ export interface ArchestraContext {
   agentId?: string;
   /** The organization ID */
   organizationId?: string;
+  /** Virtual API key ID used for the request */
+  virtualKeyId?: string;
   /** Token authentication context */
   tokenAuth?: TokenAuthContext;
   /** Session ID for grouping related LLM requests in logs */

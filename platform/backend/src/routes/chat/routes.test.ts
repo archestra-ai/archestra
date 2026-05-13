@@ -193,6 +193,86 @@ describe("prepareMessagesForProvider", () => {
     );
   });
 
+  it("pads bedrock messages that only contain ignored UI data parts", () => {
+    const messages = __test.prepareMessagesForProvider({
+      provider: "bedrock",
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            {
+              type: "data-token-usage",
+              data: {
+                inputTokens: 10,
+                outputTokens: 5,
+                totalTokens: 15,
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(messages[0].parts).toContainEqual(
+      expect.objectContaining({
+        type: "text",
+        text: expect.stringMatching(/\S/),
+      }),
+    );
+  });
+
+  it("pads bedrock messages that only contain step markers and ignored data parts", () => {
+    const messages = __test.prepareMessagesForProvider({
+      provider: "bedrock",
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            { type: "step-start" },
+            {
+              type: "data-heartbeat",
+              data: { timestamp: 1778603432000 },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(messages[0].parts).toContainEqual(
+      expect.objectContaining({
+        type: "text",
+        text: expect.stringMatching(/\S/),
+      }),
+    );
+  });
+
+  it("pads bedrock messages that only contain streaming tool input", () => {
+    const messages = __test.prepareMessagesForProvider({
+      provider: "bedrock",
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-search",
+              toolCallId: "call_123",
+              toolName: "search",
+              state: "input-streaming",
+              input: { q: "partial" },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(messages[0].parts).toContainEqual(
+      expect.objectContaining({
+        type: "text",
+        text: expect.stringMatching(/\S/),
+      }),
+    );
+  });
+
   it("leaves bedrock assistant messages with a tool-call part untouched", () => {
     const message = {
       role: "assistant" as const,
@@ -222,6 +302,26 @@ describe("prepareMessagesForProvider", () => {
           type: "reasoning",
           text: "thinking...",
           providerOptions: { bedrock: { signature: "sig-abc" } },
+        },
+      ],
+    };
+
+    const messages = __test.prepareMessagesForProvider({
+      provider: "bedrock",
+      messages: [message],
+    });
+
+    expect(messages[0]).toBe(message);
+  });
+
+  it("leaves bedrock messages with reasoning that carries provider metadata", () => {
+    const message = {
+      role: "assistant" as const,
+      parts: [
+        {
+          type: "reasoning",
+          text: "thinking...",
+          providerMetadata: { bedrock: { signature: "sig-abc" } },
         },
       ],
     };

@@ -110,6 +110,7 @@ export function buildInteractionRecord(params: {
   };
   executionId?: string;
   userId?: string;
+  virtualKeyId?: string;
   sessionId?: string | null;
   sessionSource?: SessionSource;
   source?: InteractionSource | null;
@@ -134,6 +135,7 @@ export function buildInteractionRecord(params: {
     authenticatedAppName: params.authenticatedApp?.name,
     executionId: params.executionId,
     userId: params.userId,
+    virtualKeyId: params.virtualKeyId,
     sessionId: params.sessionId,
     sessionSource: params.sessionSource,
     source: params.source,

@@ -2207,19 +2207,29 @@ function ensureBedrockMessageHasContent(message: ChatMessage): ChatMessage {
   };
 }
 
-// Mirrors the AI SDK's bedrock converter: text/reasoning blocks without usable
-// payload are silently dropped; everything else (tool-call, tool-result, file,
-// image) always produces a content block.
+// Mirrors the AI SDK's UI-to-model conversion plus Bedrock's converter:
+// data/control parts are ignored without a converter, streaming tool inputs are
+// dropped, and empty text/reasoning blocks are not provider-visible content.
 function producesBedrockContentBlock(part: ChatMessagePart): boolean {
   if (part.type === "text") {
     return typeof part.text === "string" && part.text.trim().length > 0;
   }
+  if (part.type === "file") {
+    return true;
+  }
   if (part.type === "reasoning") {
-    const bedrock = (part.providerOptions as { bedrock?: unknown } | undefined)
-      ?.bedrock as { signature?: unknown; redactedData?: unknown } | undefined;
+    const providerMetadata =
+      (part.providerMetadata as { bedrock?: unknown } | undefined) ??
+      (part.providerOptions as { bedrock?: unknown } | undefined);
+    const bedrock = providerMetadata?.bedrock as
+      | { signature?: unknown; redactedData?: unknown }
+      | undefined;
     return Boolean(bedrock?.signature || bedrock?.redactedData);
   }
-  return true;
+  if (part.type.startsWith("tool-")) {
+    return part.state !== "input-streaming";
+  }
+  return false;
 }
 
 const BEDROCK_DOCUMENT_PLACEHOLDER_TEXT =

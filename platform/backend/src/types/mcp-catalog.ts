@@ -115,6 +115,11 @@ export const SelectInternalMcpCatalogSchema = createSelectSchema(
   authorName: z.string().nullable().optional(),
 });
 
+export const ListInternalMcpCatalogSchema =
+  SelectInternalMcpCatalogSchema.extend({
+    toolCount: z.number().int().default(0),
+  });
+
 const InsertInternalMcpCatalogSchemaBase = createInsertSchema(
   schema.internalMcpCatalogTable,
 )
@@ -198,6 +203,9 @@ export type OAuthConfig = z.infer<typeof OAuthConfigSchema>;
 export type LocalConfig = z.infer<typeof LocalConfigSelectSchema>;
 
 export type InternalMcpCatalog = z.infer<typeof SelectInternalMcpCatalogSchema>;
+export type ListInternalMcpCatalog = z.infer<
+  typeof ListInternalMcpCatalogSchema
+>;
 export type InsertInternalMcpCatalog = z.infer<
   typeof InsertInternalMcpCatalogSchema
 >;

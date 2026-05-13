@@ -372,6 +372,52 @@ describe("chat-mcp-client health check", () => {
     await chatClient.__test.clearToolCache(cacheKey);
   });
 
+  test("skips ping for recently validated cached clients", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ teams: [team.id] });
+    await makeTeamMember(team.id, user.id);
+    await TeamTokenModel.createTeamToken(team.id, team.name);
+
+    const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
+    chatClient.clearChatMcpClient(agent.id);
+    await chatClient.__test.clearToolCache(cacheKey);
+
+    const cachedClient = {
+      ping: vi.fn().mockResolvedValue(undefined),
+      listTools: vi.fn().mockResolvedValue({ tools: [] }),
+      callTool: vi.fn(),
+      close: vi.fn(),
+    };
+
+    chatClient.__test.setCachedClient(
+      cacheKey,
+      cachedClient as unknown as Client,
+    );
+    chatClient.__test.setCachedClientLastValidatedAt(cacheKey, Date.now());
+
+    const tools = await chatClient.getChatMcpTools({
+      agentName: agent.name,
+      agentId: agent.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
+
+    expect(cachedClient.ping).not.toHaveBeenCalled();
+    expect(cachedClient.listTools).toHaveBeenCalledTimes(1);
+    expect(tools).toEqual({});
+
+    chatClient.clearChatMcpClient(agent.id);
+    await chatClient.__test.clearToolCache(cacheKey);
+  });
+
   test("discards cached client when ping hangs past timeout", async ({
     makeAgent,
     makeUser,

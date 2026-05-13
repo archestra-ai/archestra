@@ -5,6 +5,7 @@ import {
   ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
   type InsertInternalMcpCatalog,
   type InternalMcpCatalog,
+  type ListInternalMcpCatalog,
   type UpdateInternalMcpCatalog,
 } from "@/types";
 import McpCatalogLabelModel from "./mcp-catalog-label";
@@ -54,7 +55,6 @@ class InternalMcpCatalogModel {
       ...createdItem,
       labels: itemLabels,
       teams: itemTeams,
-      toolCount: 0,
     };
     await InternalMcpCatalogModel.populateAuthorNames([result]);
     return result;
@@ -65,7 +65,7 @@ class InternalMcpCatalogModel {
     userId?: string;
     isAdmin?: boolean;
     organizationId?: string;
-  }): Promise<InternalMcpCatalog[]> {
+  }): Promise<ListInternalMcpCatalog[]> {
     const {
       expandSecrets = true,
       userId,
@@ -119,7 +119,7 @@ class InternalMcpCatalogModel {
       isAdmin?: boolean;
       organizationId?: string;
     },
-  ): Promise<InternalMcpCatalog[]> {
+  ): Promise<ListInternalMcpCatalog[]> {
     const {
       expandSecrets = true,
       userId,
@@ -174,6 +174,11 @@ class InternalMcpCatalogModel {
     return catalogItems;
   }
 
+  /**
+   * Return the singular catalog shape. Do not add toolCount here: it is list
+   * metadata used by registry/card UIs and would require an otherwise-unused
+   * COUNT(*) on runtime paths that fetch one catalog item by id.
+   */
   static async findById(
     id: string,
     options?: {
@@ -215,12 +220,10 @@ class InternalMcpCatalogModel {
 
     const labels = await McpCatalogLabelModel.getLabelsForCatalogItem(id);
     const teams = await McpCatalogTeamModel.getTeamDetailsForCatalog(id);
-    const toolCount = await InternalMcpCatalogModel.getToolCount(id);
     const catalogItem: InternalMcpCatalog = {
       ...dbItem,
       labels,
       teams,
-      toolCount,
     };
 
     if (expandSecrets) {
@@ -250,12 +253,10 @@ class InternalMcpCatalogModel {
 
     const labels = await McpCatalogLabelModel.getLabelsForCatalogItem(id);
     const teams = await McpCatalogTeamModel.getTeamDetailsForCatalog(id);
-    const toolCount = await InternalMcpCatalogModel.getToolCount(id);
     const catalogItem: InternalMcpCatalog = {
       ...dbItem,
       labels,
       teams,
-      toolCount,
     };
 
     await InternalMcpCatalogModel.expandSecretsAndAlwaysResolveValues([
@@ -271,7 +272,7 @@ class InternalMcpCatalogModel {
    */
   static async getByIds(
     ids: string[],
-  ): Promise<Map<string, InternalMcpCatalog>> {
+  ): Promise<Map<string, ListInternalMcpCatalog>> {
     if (ids.length === 0) {
       return new Map();
     }
@@ -284,7 +285,7 @@ class InternalMcpCatalogModel {
     const catalogItems =
       await InternalMcpCatalogModel.attachListMetadata(dbItems);
 
-    const result = new Map<string, InternalMcpCatalog>();
+    const result = new Map<string, ListInternalMcpCatalog>();
     for (const item of catalogItems) {
       result.set(item.id, item);
     }
@@ -319,8 +320,7 @@ class InternalMcpCatalogModel {
       dbItem.id,
     );
     const teams = await McpCatalogTeamModel.getTeamDetailsForCatalog(dbItem.id);
-    const toolCount = await InternalMcpCatalogModel.getToolCount(dbItem.id);
-    return { ...dbItem, labels, teams, toolCount };
+    return { ...dbItem, labels, teams };
   }
 
   static async update(
@@ -361,12 +361,10 @@ class InternalMcpCatalogModel {
 
     const itemLabels = await McpCatalogLabelModel.getLabelsForCatalogItem(id);
     const itemTeams = await McpCatalogTeamModel.getTeamDetailsForCatalog(id);
-    const toolCount = await InternalMcpCatalogModel.getToolCount(id);
     const result: InternalMcpCatalog = {
       ...dbItem,
       labels: itemLabels,
       teams: itemTeams,
-      toolCount,
     };
     await InternalMcpCatalogModel.populateAuthorNames([result]);
     return result;
@@ -564,7 +562,7 @@ class InternalMcpCatalogModel {
    */
   private static async attachListMetadata(
     dbItems: Array<typeof schema.internalMcpCatalogTable.$inferSelect>,
-  ): Promise<InternalMcpCatalog[]> {
+  ): Promise<ListInternalMcpCatalog[]> {
     if (dbItems.length === 0) {
       return [];
     }
@@ -607,14 +605,6 @@ class InternalMcpCatalogModel {
             row.catalogId !== null,
         )
         .map((row) => [row.catalogId, row.toolCount]),
-    );
-  }
-
-  private static async getToolCount(catalogId: string): Promise<number> {
-    return (
-      (await InternalMcpCatalogModel.getToolCounts([catalogId])).get(
-        catalogId,
-      ) ?? 0
     );
   }
 

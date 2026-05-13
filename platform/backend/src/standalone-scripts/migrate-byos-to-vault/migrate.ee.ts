@@ -9,11 +9,16 @@
  * Run from the `backend/` directory:
  *
  *   tsx --tsconfig standalone-scripts.tsconfig.json \
- *     src/standalone-scripts/migrate-byos-to-vault/migrate.ee.ts [--status|--rollback]
+ *     src/standalone-scripts/migrate-byos-to-vault/migrate.ee.ts [--status|--check|--rollback]
  *
  * Modes:
  *   (no flag)    # default forward migration
  *   --status     # read-only diagnostic
+ *   --check      # standalone post-migration consistency audit (subset of
+ *                # Phase 4 that doesn't need Phase 0/1 baselines). Requires
+ *                # the Phase 1 backup table to exist. Re-runnable any time
+ *                # after a migration to verify the live state is internally
+ *                # consistent with the backup + Vault.
  *   --rollback   # restore the secret table from the Phase 1 backup
  *
  * Phase 1 creates a backup table (`backup_secret_pre_vault_migration`) as a
@@ -108,11 +113,12 @@ const FK_TABLES: { table: string; column: string }[] = [
 // CLI
 // ============================================================
 
-type Mode = "migrate" | "status" | "rollback";
+type Mode = "migrate" | "status" | "check" | "rollback";
 
 function parseMode(): Mode {
   const args = process.argv.slice(2);
   if (args.includes("--status")) return "status";
+  if (args.includes("--check")) return "check";
   if (args.includes("--rollback")) return "rollback";
   return "migrate";
 }
@@ -128,13 +134,12 @@ function printWelcome(): void {
   This tool walks you through migrating the secrets from READONLY_VAULT
   (customer-Vault references) to Archestra-managed Vault storage.
 
-  Five phases, with explicit confirmation between each one:
+  Four phases, with explicit confirmation between each one:
 
     Phase 0  Pre-flight checks (no writes anywhere)
     Phase 1  Snapshot the secret table + write values to Vault
     Phase 2  Atomic DB flip + env-var change
     Phase 4  Post-migration consistency audit (fail-loud)
-    Phase 3  Soak guidance
 
   Phase 1's backup table (backup_secret_pre_vault_migration) is preserved
   across runs as a recovery anchor. If something goes wrong, re-run this
@@ -1105,45 +1110,8 @@ async function phase1Prestage(
   console.log(SECTION);
   console.log(`
   At this point:
-    • All values are present in the target Vault at the paths
-      VaultSecretManager will use after the env-var flip.
-    • Database is unchanged. Live service still serves reads
-      through the READONLY_VAULT resolver normally.
-    • To abandon the migration at this point: DROP TABLE ${BACKUP_TABLE}
-      and (optionally) delete the target-Vault entries — they're inert
-      in READONLY_VAULT mode and harmless if left in place.
-`);
-
-  console.log(`
-  Next, Phase 2 — switch from READONLY_VAULT to Archestra-managed Vault.
-
-  This needs a maintenance window. Between the SQL flip and the backend
-  restart under the new env, the secret table won't read correctly: the
-  rows have empty references that READONLY_VAULT mode can't resolve, and
-  the env still says READONLY_VAULT (so VAULT-mode reads aren't enabled yet).
-
-  Once you take the platform out of service, the script will:
-
-    1. Run a single SQL transaction to upgrade the secrets format in the database.
-
-    2. Pause and ask you to:
-         • set ARCHESTRA_SECRETS_MANAGER=Vault
-         • restart the backend
-
-  If something goes wrong post-flip, re-run this script with --rollback to
-  restore the secret table from ${BACKUP_TABLE}, or run the equivalent SQL
-  by hand:
-
-       BEGIN;
-       UPDATE secret AS s
-          SET secret = b.secret,
-              is_vault = b.is_vault,
-              is_byos_vault = b.is_byos_vault,
-              name = b.name,
-              updated_at = b.updated_at
-         FROM ${BACKUP_TABLE} AS b
-        WHERE s.id = b.id;
-       COMMIT;
+    • All values are present in the target Vault.
+    • Database is unchanged.
 `);
   const cont = await confirm("Proceed with Phase 2?");
   if (!cont) {
@@ -1265,12 +1233,13 @@ async function phase2AtomicFlip(
   The DB transaction completed. Now do the following:
 
   1. In your backend deployment, change ARCHESTRA_SECRETS_MANAGER from
-     READONLY_VAULT to Vault. Leave the other ARCHESTRA_HASHICORP_VAULT_*
-     vars as they are.
-  2. Start the backend back up.
+     READONLY_VAULT to Vault.
+  2. Start the platform.
   3. Verify health: GET /api/secrets/type — expect type "Vault".
 `);
-  await pressEnter("Press Enter once the backend is up under the new config: ");
+  await pressEnter(
+    "Press Enter once the platform is up under the new config: ",
+  );
 
   // Final live-side verification
   const counts = await getRowCounts();
@@ -1296,9 +1265,15 @@ async function phase2AtomicFlip(
 // ============================================================
 // Phase 4 — Post-migration consistency audit (required tier)
 //
-// Runs immediately after Phase 2's final verification, before Phase 3's
-// soak guidance. Fails loudly on any anomaly. Operator must fix the
+// In the migration flow, this runs immediately after Phase 2's final
+// verification. Fails loudly on any anomaly. Operator must fix the
 // finding (or roll back) before treating the migration as complete.
+//
+// In standalone --check mode, this runs anytime against the live DB +
+// backup table. Baseline-dependent checks (C1, C2, C5, C7, C12, C13) are
+// skipped because the Phase 0 snapshot only exists in-memory during a
+// migration run; the live-derivable checks (C3, C4, C6, C8–C11, C14–C18)
+// all run identically.
 // ============================================================
 
 interface AuditFinding {
@@ -1306,11 +1281,36 @@ interface AuditFinding {
   detail: string;
 }
 
-async function phase4Audit(
-  prestaged: PrestagedRow[],
-  preflight: PreflightResult,
-  commitTs: Date,
-): Promise<void> {
+/**
+ * Per-row info needed by the live-derivable checks (C3, C4, C6, C8). In
+ * migration mode this is built from `PrestagedRow`s; in --check mode it's
+ * reconstructed from the live `secret` table + the Phase 1 backup table.
+ */
+interface LiveCheckRow {
+  id: string;
+  name: string;
+  sanitizedName: string;
+  vaultPath: string;
+  /** archestra key names expected to exist in the Vault entry */
+  expectedKeys: string[];
+}
+
+/**
+ * Phase 0 snapshot — required for the baseline-dependent checks (C1, C2,
+ * C5, C7, C12, C13). Pass `null` in --check mode to skip those.
+ */
+type AuditBaselines = Phase0Snapshot;
+
+async function phase4Audit(args: {
+  rows: LiveCheckRow[];
+  vaultClient: MigrationVaultClient;
+  vaultConfig: VaultConfig;
+  /** Phase 0 baseline snapshot; null in standalone --check mode */
+  baselines: AuditBaselines | null;
+  /** Phase 2 commit timestamp; null in standalone --check mode */
+  commitTs: Date | null;
+}): Promise<{ findings: AuditFinding[]; warnings: AuditFinding[] }> {
+  const { rows, vaultClient, vaultConfig, baselines, commitTs } = args;
   printHeader("Phase 4 — Post-migration consistency audit");
 
   const findings: AuditFinding[] = [];
@@ -1321,8 +1321,12 @@ async function phase4Audit(
     printWarn(check, detail);
     warnings.push({ check, detail });
   };
+  const skipped = (check: string) =>
+    console.log(
+      `  ${INFO} ${check} — skipped (standalone mode: Phase 0 baseline unavailable)`,
+    );
 
-  const migratedIdSet = new Set(prestaged.map((r) => r.id));
+  const migratedIdSet = new Set(rows.map((r) => r.id));
   const migratedArr = Array.from(migratedIdSet);
   const idsArrayLit =
     migratedArr.length > 0
@@ -1334,41 +1338,46 @@ async function phase4Audit(
 
   // ---- DB state ----
 
-  // C1: row-count parity. Phase 2 only UPDATEs — total count must equal
-  // Phase 0 baseline.
-  const liveCountResult = await db.execute(
-    sql`SELECT count(*)::int AS c FROM secret`,
-  );
-  const liveCount = (liveCountResult.rows[0] as { c: number }).c;
-  if (liveCount !== preflight.snapshot.totalSecretCount) {
-    fail(
-      "C1 row-count parity",
-      `live=${liveCount} but Phase 0 baseline=${preflight.snapshot.totalSecretCount}`,
-    );
-  } else {
-    printCheck(true, "C1 row-count parity", `live=${liveCount} = baseline`);
-  }
-
-  // C2: id-set unchanged.
+  // Always fetch the live row set — C11 (orphan check) needs it even when
+  // baseline checks are skipped.
   const liveIdsResult = await db.execute(
     sql`SELECT id::text AS id FROM secret`,
   );
   const liveIds = new Set(
     (liveIdsResult.rows as { id: string }[]).map((r) => r.id),
   );
-  const addedIds = Array.from(liveIds).filter(
-    (id) => !preflight.snapshot.allSecretIds.has(id),
-  );
-  const removedIds = Array.from(preflight.snapshot.allSecretIds).filter(
-    (id) => !liveIds.has(id),
-  );
-  if (addedIds.length > 0 || removedIds.length > 0) {
-    fail(
-      "C2 id-set unchanged",
-      `added=${addedIds.length} (${addedIds.slice(0, 3).join(", ") || "—"}), removed=${removedIds.length} (${removedIds.slice(0, 3).join(", ") || "—"})`,
+
+  if (baselines) {
+    // C1: row-count parity. Phase 2 only UPDATEs — total count must equal
+    // Phase 0 baseline.
+    const liveCount = liveIds.size;
+    if (liveCount !== baselines.totalSecretCount) {
+      fail(
+        "C1 row-count parity",
+        `live=${liveCount} but Phase 0 baseline=${baselines.totalSecretCount}`,
+      );
+    } else {
+      printCheck(true, "C1 row-count parity", `live=${liveCount} = baseline`);
+    }
+
+    // C2: id-set unchanged.
+    const addedIds = Array.from(liveIds).filter(
+      (id) => !baselines.allSecretIds.has(id),
     );
+    const removedIds = Array.from(baselines.allSecretIds).filter(
+      (id) => !liveIds.has(id),
+    );
+    if (addedIds.length > 0 || removedIds.length > 0) {
+      fail(
+        "C2 id-set unchanged",
+        `added=${addedIds.length} (${addedIds.slice(0, 3).join(", ") || "—"}), removed=${removedIds.length} (${removedIds.slice(0, 3).join(", ") || "—"})`,
+      );
+    } else {
+      printCheck(true, "C2 id-set unchanged", `${liveIds.size} rows`);
+    }
   } else {
-    printCheck(true, "C2 id-set unchanged", `${liveIds.size} rows`);
+    skipped("C1 row-count parity");
+    skipped("C2 id-set unchanged");
   }
 
   // C3: every migrated id has is_vault=true / is_byos_vault=false AND a
@@ -1469,33 +1478,37 @@ async function phase4Audit(
 
   // C5: every migrated row's updated_at is in [Phase 0 baseline, commit + 1s].
   // Tolerance: clock skew between Node and Postgres can be a few seconds.
-  const skewMs = 5000;
-  const upperBound = new Date(commitTs.getTime() + skewMs);
-  const lowerBound = preflight.snapshot.maxSecretUpdatedAt
-    ? new Date(preflight.snapshot.maxSecretUpdatedAt.getTime())
-    : new Date(0);
-  const a6 = await db.execute(sql`
-    SELECT count(*)::int AS c
-    FROM secret
-    WHERE id = ANY(${idsArrayLit})
-      AND (updated_at < ${lowerBound} OR updated_at > ${upperBound})
-  `);
-  const a6BadCount = (a6.rows[0] as { c: number }).c;
-  if (a6BadCount > 0) {
-    fail(
-      "C5 updated_at within commit window",
-      `${a6BadCount} migrated row(s) have updated_at outside [Phase0 max, commit+${skewMs}ms]`,
-    );
+  if (baselines && commitTs) {
+    const skewMs = 5000;
+    const upperBound = new Date(commitTs.getTime() + skewMs);
+    const lowerBound = baselines.maxSecretUpdatedAt
+      ? new Date(baselines.maxSecretUpdatedAt.getTime())
+      : new Date(0);
+    const a6 = await db.execute(sql`
+      SELECT count(*)::int AS c
+      FROM secret
+      WHERE id = ANY(${idsArrayLit})
+        AND (updated_at < ${lowerBound} OR updated_at > ${upperBound})
+    `);
+    const a6BadCount = (a6.rows[0] as { c: number }).c;
+    if (a6BadCount > 0) {
+      fail(
+        "C5 updated_at within commit window",
+        `${a6BadCount} migrated row(s) have updated_at outside [Phase0 max, commit+${skewMs}ms]`,
+      );
+    } else {
+      printCheck(
+        true,
+        "C5 updated_at within commit window",
+        `commit=${commitTs.toISOString()}`,
+      );
+    }
   } else {
-    printCheck(
-      true,
-      "C5 updated_at within commit window",
-      `commit=${commitTs.toISOString()}`,
-    );
+    skipped("C5 updated_at within commit window");
   }
 
   // C6: every migrated row's `name` matches its sanitized name.
-  const expectedNames = new Map(prestaged.map((r) => [r.id, r.sanitizedName]));
+  const expectedNames = new Map(rows.map((r) => [r.id, r.sanitizedName]));
   const a7Result = await db.execute(sql`
     SELECT id::text AS id, name FROM secret WHERE id = ANY(${idsArrayLit})
   `);
@@ -1524,54 +1537,54 @@ async function phase4Audit(
 
   // C7: only migrated rows changed; stale-skipped rows have unchanged
   // updated_at from Phase 0. Approximation: stale ids' updated_at <= baseline.
-  if (
-    preflight.snapshot.staleIds.size > 0 &&
-    preflight.snapshot.maxSecretUpdatedAt
-  ) {
-    const staleArr = Array.from(preflight.snapshot.staleIds);
-    const staleArrayLit = sql`ARRAY[${sql.join(
-      staleArr.map((id) => sql`${id}::uuid`),
-      sql`, `,
-    )}]`;
-    const f1 = await db.execute(sql`
-      SELECT count(*)::int AS c
-      FROM secret
-      WHERE id = ANY(${staleArrayLit})
-        AND updated_at > ${preflight.snapshot.maxSecretUpdatedAt}
-    `);
-    const f1BadCount = (f1.rows[0] as { c: number }).c;
-    if (f1BadCount > 0) {
-      fail(
-        "C7 stale rows untouched",
-        `${f1BadCount} stale-skipped row(s) have updated_at newer than Phase 0 baseline`,
-      );
-    } else {
-      printCheck(
-        true,
-        "C7 stale rows untouched",
-        `${staleArr.length} stale row(s) preserved`,
-      );
+  if (baselines) {
+    if (baselines.staleIds.size > 0 && baselines.maxSecretUpdatedAt) {
+      const staleArr = Array.from(baselines.staleIds);
+      const staleArrayLit = sql`ARRAY[${sql.join(
+        staleArr.map((id) => sql`${id}::uuid`),
+        sql`, `,
+      )}]`;
+      const f1 = await db.execute(sql`
+        SELECT count(*)::int AS c
+        FROM secret
+        WHERE id = ANY(${staleArrayLit})
+          AND updated_at > ${baselines.maxSecretUpdatedAt}
+      `);
+      const f1BadCount = (f1.rows[0] as { c: number }).c;
+      if (f1BadCount > 0) {
+        fail(
+          "C7 stale rows untouched",
+          `${f1BadCount} stale-skipped row(s) have updated_at newer than Phase 0 baseline`,
+        );
+      } else {
+        printCheck(
+          true,
+          "C7 stale rows untouched",
+          `${staleArr.length} stale row(s) preserved`,
+        );
+      }
     }
+  } else {
+    skipped("C7 stale rows untouched");
   }
 
   // ---- Vault state ----
 
   // C8: every migrated id has a Vault entry with all expected archestra keys.
   let b1Ok = 0;
-  const b1Failures: { row: PrestagedRow; reason: string }[] = [];
-  for (const r of prestaged) {
+  const b1Failures: { row: LiveCheckRow; reason: string }[] = [];
+  for (const r of rows) {
     try {
-      const response = await preflight.vaultClient.readOrNull(r.vaultPath);
+      const response = await vaultClient.readOrNull(r.vaultPath);
       if (!response) {
         b1Failures.push({ row: r, reason: "Vault entry missing" });
         continue;
       }
       const value = JSON.parse(
-        preflight.vaultClient.extractValueFrom(response),
+        vaultClient.extractValueFrom(response),
       ) as Record<string, unknown>;
-      const expectedKeys = Object.keys(r.references);
       const actualKeys = Object.keys(value);
-      const missingKeys = expectedKeys.filter((k) => !(k in value));
+      const missingKeys = r.expectedKeys.filter((k) => !(k in value));
       if (missingKeys.length > 0) {
         b1Failures.push({
           row: r,
@@ -1579,7 +1592,7 @@ async function phase4Audit(
         });
         continue;
       }
-      const extraKeys = actualKeys.filter((k) => !expectedKeys.includes(k));
+      const extraKeys = actualKeys.filter((k) => !r.expectedKeys.includes(k));
       if (extraKeys.length > 0) {
         b1Failures.push({
           row: r,
@@ -1598,7 +1611,7 @@ async function phase4Audit(
   if (b1Failures.length > 0) {
     fail(
       "C8 Vault entries present and key-complete",
-      `${b1Failures.length}/${prestaged.length} Vault entries failed: ${b1Failures
+      `${b1Failures.length}/${rows.length} Vault entries failed: ${b1Failures
         .slice(0, 3)
         .map((f) => `${f.row.id} — ${f.reason}`)
         .join("; ")}`,
@@ -1607,20 +1620,18 @@ async function phase4Audit(
     printCheck(
       true,
       "C8 Vault entries present and key-complete",
-      `${b1Ok}/${prestaged.length}`,
+      `${b1Ok}/${rows.length}`,
     );
   }
 
   // C9 / C10 / C11: list under secretPath, identify orphans + probe-key residue.
   let listed: { name: string; path: string }[];
   try {
-    listed = await preflight.vaultClient.listSecretsInFolder(
-      preflight.vaultConfig.secretPath,
-    );
+    listed = await vaultClient.listSecretsInFolder(vaultConfig.secretPath);
   } catch (e) {
     fail(
       "C9 Vault entry listing",
-      `cannot list ${preflight.vaultConfig.secretPath}: ${e instanceof Error ? e.message : String(e)}`,
+      `cannot list ${vaultConfig.secretPath}: ${e instanceof Error ? e.message : String(e)}`,
     );
     listed = [];
   }
@@ -1653,7 +1664,7 @@ async function phase4Audit(
   if (orphans.length > 0) {
     fail(
       "C11 no orphan Vault entries",
-      `${orphans.length} entries under ${preflight.vaultConfig.secretPath}/ reference an id not in the secret table: ${orphans
+      `${orphans.length} entries under ${vaultConfig.secretPath}/ reference an id not in the secret table: ${orphans
         .slice(0, 3)
         .map((o) => o.entryName)
         .join(", ")}`,
@@ -1669,40 +1680,46 @@ async function phase4Audit(
   // ---- FK consumer integrity ----
 
   // C12 / C13: per FK column, non-null-total and refs-to-migrated-set match
-  // baseline.
-
-  for (const { table, column } of FK_TABLES) {
-    const key = `${table}.${column}`;
-    const baseline = preflight.snapshot.fkBaseline.get(key);
-    if (!baseline) continue;
-    const r = await db.execute(sql`
-      SELECT
-        count(*) FILTER (WHERE ${sql.identifier(column)} IS NOT NULL)::int AS non_null_total,
-        count(*) FILTER (WHERE ${sql.identifier(column)} = ANY(${idsArrayLit}))::int AS to_migrated
-      FROM ${sql.identifier(table)}
-    `);
-    const { non_null_total, to_migrated } = r.rows[0] as {
-      non_null_total: number;
-      to_migrated: number;
-    };
-    if (non_null_total !== baseline.nonNullTotal) {
-      fail(
-        `C12 ${key} non-null count`,
-        `live=${non_null_total} but baseline=${baseline.nonNullTotal}`,
-      );
-    } else if (to_migrated !== baseline.refsToMigratedSet) {
-      fail(
-        `C13 ${key} refs to migrated set`,
-        `live=${to_migrated} but baseline=${baseline.refsToMigratedSet}`,
-      );
-    } else {
-      printCheck(
-        true,
-        `C12+C13 ${key}`,
-        `non_null=${non_null_total}, to_migrated=${to_migrated}`,
-      );
+  // baseline. Only `secret` was snapshotted into BACKUP_TABLE, not the FK
+  // consumer tables — so in standalone mode (baselines.fkBaseline empty)
+  // these stay skipped.
+  if (baselines && baselines.fkBaseline.size > 0) {
+    for (const { table, column } of FK_TABLES) {
+      const key = `${table}.${column}`;
+      const baseline = baselines.fkBaseline.get(key);
+      if (!baseline) continue;
+      const r = await db.execute(sql`
+        SELECT
+          count(*) FILTER (WHERE ${sql.identifier(column)} IS NOT NULL)::int AS non_null_total,
+          count(*) FILTER (WHERE ${sql.identifier(column)} = ANY(${idsArrayLit}))::int AS to_migrated
+        FROM ${sql.identifier(table)}
+      `);
+      const { non_null_total, to_migrated } = r.rows[0] as {
+        non_null_total: number;
+        to_migrated: number;
+      };
+      if (non_null_total !== baseline.nonNullTotal) {
+        fail(
+          `C12 ${key} non-null count`,
+          `live=${non_null_total} but baseline=${baseline.nonNullTotal}`,
+        );
+      } else if (to_migrated !== baseline.refsToMigratedSet) {
+        fail(
+          `C13 ${key} refs to migrated set`,
+          `live=${to_migrated} but baseline=${baseline.refsToMigratedSet}`,
+        );
+      } else {
+        printCheck(
+          true,
+          `C12+C13 ${key}`,
+          `non_null=${non_null_total}, to_migrated=${to_migrated}`,
+        );
+      }
     }
   }
+  // C12/C13 silently skipped when fkBaseline is empty (standalone --check
+  // mode — only `secret` is snapshotted in the backup table). C14 below
+  // still catches the most important FK integrity failure (dangling refs).
 
   // C14: no FK consumer references a non-existent secret_id.
   for (const { table, column } of FK_TABLES) {
@@ -1911,30 +1928,18 @@ async function phase4Audit(
   // C18 silently skipped when MIGRATION_BACKEND_URL is unset — env var
   // is documented in the file header and the migration plan doc.
 
-  // ---- Forensic audit-trail manifest ----
-  //
-  // Write a plain-text record of what happened to a file in CWD so the
-  // operator has an artifact for compliance / post-mortem review without
-  // needing to re-derive it from logs. NEVER include secret VALUES, only:
-  //   - row IDs, original + sanitized names, destination Vault paths
-  //   - the source READONLY_VAULT path#key references (addresses, not values)
-  //   - the destination key names (e.g. "API_KEY") within each entry
-  //   - counts, timestamps, FK baselines, audit findings
-  // The path#key references are addresses to BYOS Vault locations — they
-  // describe WHERE values lived, never WHAT they were. Including them gives
-  // the audit trail a complete old→new mapping for traceability.
-  const manifestPath = await writeAuditManifest({
-    preflight,
-    prestaged,
-    commitTs,
-    findings,
-    warnings,
-  });
-  console.log(`\n  ${INFO} Audit-trail manifest written to ${manifestPath}`);
-  console.log(`     (No secret values are recorded in the file.)`);
+  return { findings, warnings };
+}
 
-  // ---- Audit summary ----
-
+/**
+ * Render the Phase 4 audit summary block. Caller is responsible for any
+ * subsequent abort()/exit on `findings.length > 0`. Shared by the migration
+ * path and --check mode.
+ */
+function printAuditSummary(
+  findings: AuditFinding[],
+  warnings: AuditFinding[],
+): void {
   console.log(`\n${SECTION}`);
   console.log(`  Phase 4 audit summary`);
   console.log(SECTION);
@@ -1960,14 +1965,11 @@ async function phase4Audit(
     }
   }
   console.log(SECTION);
-  if (findings.length > 0) {
-    abort(
-      `Post-migration audit found ${findings.length} anomaly/anomalies. Investigate each one before treating the migration as complete. If the anomalies indicate broken state that can't be repaired in place, restore manually from ${BACKUP_TABLE} (see the SQL block in the post-flip verification error message above). DO NOT skip these.`,
+  if (findings.length === 0) {
+    console.log(
+      `  ${INFO} Required checks passed; recommended checks above are advisory — review them, but they do not block proceeding.`,
     );
   }
-  console.log(
-    `  ${INFO} Required checks passed; recommended checks above are advisory — review them, but they do not block proceeding.`,
-  );
 }
 
 // ============================================================
@@ -2163,26 +2165,283 @@ async function writeAuditManifest(args: {
 }
 
 // ============================================================
-// Phase 3 — Soak guidance
+// Check-mode manifest (leaner than the migration audit trail)
 // ============================================================
 
-function phase3SoakGuidance(): void {
-  printHeader("Phase 3 — Soak");
-  console.log(`
-  Migration appears successful.
+async function writeCheckManifest(args: {
+  vaultConfig: VaultConfig;
+  rows: LiveCheckRow[];
+  findings: AuditFinding[];
+  warnings: AuditFinding[];
+}): Promise<string> {
+  const { vaultConfig, rows, findings, warnings } = args;
+  const generatedAt = new Date();
+  const filenameTs = generatedAt.toISOString().replace(/[:.]/g, "-");
+  const filename = `vault-migration-check-${filenameTs}.txt`;
+  const filepath = path.resolve(process.cwd(), filename);
 
-  Suggested soak: at least 24 hours of normal traffic before cleanup.
+  const HR = "=".repeat(70);
+  const lines: string[] = [];
 
-  Risks during the soak window:
-    • Secrets created or updated through the UI in this window live
-      in the target Vault and are NOT in the backup table.
-      A manual restore from ${BACKUP_TABLE} during the soak would lose
-      those new secrets.
+  lines.push("Vault Migration Standalone Consistency Check");
+  lines.push(`Generated:         ${generatedAt.toISOString()}`);
+  lines.push(`Script:            migrate-byos-to-vault --check`);
+  lines.push(`Working directory: ${process.cwd()}`);
+  lines.push(`Node version:      ${process.version}`);
+  lines.push("");
+  lines.push(
+    "NOTE: --check runs C1–C11, C14–C18 with baselines derived from the",
+  );
+  lines.push(
+    `${BACKUP_TABLE} table (Phase 1 snapshot of \`secret\`). C12/C13 (FK`,
+  );
+  lines.push("consumer baseline parity) are not derivable — only `secret` was");
+  lines.push("snapshotted, not the FK consumer tables — so they stay skipped.");
+  lines.push(
+    "C1/C2 use strict equality: any drift since Phase 1 (new rows from",
+  );
+  lines.push("soak-window UI activity, deletions) will surface as findings.");
+  lines.push("");
 
-  When ready to commit (no manual recovery possible after this):
+  lines.push(HR);
+  lines.push("VAULT TARGET");
+  lines.push(HR);
+  lines.push(`Vault address:        ${vaultConfig.address}`);
+  lines.push(`Auth method:          ${vaultConfig.authMethod}`);
+  lines.push(`KV version:           ${vaultConfig.kvVersion}`);
+  lines.push(`Secret path:          ${vaultConfig.secretPath}`);
+  if (vaultConfig.secretMetadataPath) {
+    lines.push(`Metadata path:        ${vaultConfig.secretMetadataPath}`);
+  }
+  lines.push(`(Auth credentials are NOT recorded.)`);
+  lines.push("");
 
-    DROP TABLE ${BACKUP_TABLE};
-`);
+  lines.push(HR);
+  lines.push(`MIGRATED ROWS UNDER AUDIT (${rows.length})`);
+  lines.push(HR);
+  lines.push(
+    "Per row: ID, names, destination Vault path, and the archestra key",
+  );
+  lines.push(
+    "names expected in the Vault entry (reconstructed from the backup table).",
+  );
+  lines.push("");
+  for (const r of rows) {
+    lines.push(`Row ${r.id}`);
+    lines.push(`  Sanitized name: ${r.sanitizedName}`);
+    lines.push(`  Original name:  ${r.name}`);
+    lines.push(`  Vault path:     ${r.vaultPath}`);
+    if (r.expectedKeys.length === 0) {
+      lines.push(`  Keys (0):       <none>`);
+    } else {
+      lines.push(`  Keys (${r.expectedKeys.length}):`);
+      for (const k of r.expectedKeys) {
+        lines.push(`    ${k}`);
+      }
+    }
+    lines.push("");
+  }
+
+  lines.push(HR);
+  lines.push("AUDIT FINDINGS");
+  lines.push(HR);
+  if (findings.length === 0) {
+    lines.push("Required checks: ALL PASSED");
+  } else {
+    lines.push(`Required checks: ${findings.length} FAILURE(S)`);
+    for (const f of findings) {
+      lines.push(`  [FAIL] ${f.check}`);
+      lines.push(`         ${f.detail}`);
+    }
+  }
+  lines.push("");
+  if (warnings.length === 0) {
+    lines.push("Recommended checks: ALL PASSED");
+  } else {
+    lines.push(`Recommended checks: ${warnings.length} WARNING(S)`);
+    for (const w of warnings) {
+      lines.push(`  [WARN] ${w.check}`);
+      lines.push(`         ${w.detail}`);
+    }
+  }
+  lines.push("");
+
+  lines.push(HR);
+  lines.push("END OF CONSISTENCY CHECK");
+  lines.push(HR);
+
+  await writeFile(filepath, `${lines.join("\n")}\n`, "utf8");
+  return filepath;
+}
+
+// ============================================================
+// --check — standalone post-migration consistency audit
+//
+// Re-runs Phase 4 against the current DB + Phase 1 backup table. Baselines
+// for C1, C2, C5, C7 are derived from BACKUP_TABLE (which is itself a
+// snapshot of `secret` taken in Phase 1). C12/C13 stay skipped because the
+// FK consumer tables weren't snapshotted. Everything else is reconstructed
+// from live state. Re-runnable any time after a migration; expect C1/C2
+// drift if run during the soak window after new secrets are created.
+// ============================================================
+
+async function runCheck(): Promise<void> {
+  printHeader("Standalone consistency check");
+
+  // 1. Backup table must exist.
+  const backup = await checkBackupTable();
+  if (!backup.exists) {
+    abort(
+      `Backup table "${BACKUP_TABLE}" not found. --check audits a completed migration against its Phase 1 backup; without it there is nothing to compare. Run the migration first, or use --status for a lightweight read-only report.`,
+    );
+  }
+  printCheck(
+    true,
+    `Backup table "${BACKUP_TABLE}" present`,
+    `${backup.rowCount} row${backup.rowCount === 1 ? "" : "s"}`,
+  );
+
+  // 2. Vault config + client.
+  let vaultConfig: VaultConfig;
+  try {
+    vaultConfig = getVaultConfigFromEnv();
+  } catch (e) {
+    printVaultEnvHelp();
+    abort(
+      `Vault config not readable: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+  const vaultClient = new MigrationVaultClient(vaultConfig);
+  try {
+    await vaultClient.listSecretsInFolder(vaultConfig.secretPath);
+    printCheck(true, "Vault reachable (list)");
+  } catch (e) {
+    abort(
+      `Vault not reachable at ${vaultConfig.address}/${vaultConfig.secretPath}: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+
+  // 3. Reconstruct LiveCheckRow[] from current `secret` (is_vault=true,
+  // is_byos_vault=false) joined with the Phase 1 backup. The backup's
+  // `secret` JSONB column — decrypted if necessary — gives us the original
+  // archestra key names that were folded into the Vault entry.
+  const joined = await db.execute(sql`
+    SELECT
+      s.id::text AS id,
+      s.name     AS name,
+      b.secret   AS backup_secret
+    FROM secret s
+    JOIN ${sql.identifier(BACKUP_TABLE)} b USING (id)
+    WHERE s.is_vault = true AND s.is_byos_vault = false
+  `);
+  const rows: LiveCheckRow[] = [];
+  for (const r of joined.rows as {
+    id: string;
+    name: string;
+    backup_secret: unknown;
+  }[]) {
+    let decrypted: unknown = r.backup_secret;
+    if (isEncryptedSecret(decrypted)) {
+      decrypted = decryptSecretValue(decrypted as { __encrypted: string });
+    }
+    const expectedKeys =
+      decrypted && typeof decrypted === "object"
+        ? Object.keys(decrypted as Record<string, unknown>)
+        : [];
+    const sanitizedName = sanitizeVaultSecretName(r.name);
+    rows.push({
+      id: r.id,
+      name: r.name,
+      sanitizedName,
+      vaultPath: `${vaultConfig.secretPath}/${sanitizedName}-${r.id}`,
+      expectedKeys,
+    });
+  }
+  printCheck(
+    true,
+    "Migrated rows reconstructed from backup",
+    `${rows.length} row${rows.length === 1 ? "" : "s"}`,
+  );
+
+  // 4. Derive a baseline from the backup table itself (it IS a snapshot of
+  // the `secret` table at Phase 1 time). This lets the otherwise baseline-
+  // dependent checks (C1, C2, C5, C7) run with adapted semantics:
+  //   • C1/C2 compare live row-count + id-set against backup. Drift from
+  //     soak-window UI activity (new secrets created) will surface as
+  //     failures — that's intentional, so the operator notices the drift
+  //     and decides whether it's benign.
+  //   • C5 uses NOW() as a loose upper bound for commitTs; the lower bound
+  //     (backup's max updated_at) is tight.
+  //   • C7 finds stale rows post-facto as "still is_byos_vault=true in live
+  //     AND was is_byos_vault=true in backup".
+  // C12/C13 (FK consumer parity) cannot be derived: only the `secret` table
+  // was snapshotted, not the FK consumer tables — so those stay skipped.
+  const backupSnapshot = await db.execute(sql`
+    SELECT
+      count(*)::int                                                AS total,
+      array_agg(id::text)                                          AS all_ids,
+      max(updated_at)                                              AS max_updated_at,
+      array_agg(id::text) FILTER (WHERE is_byos_vault = true)      AS byos_ids
+    FROM ${sql.identifier(BACKUP_TABLE)}
+  `);
+  const snapRow = backupSnapshot.rows[0] as {
+    total: number;
+    all_ids: string[] | null;
+    max_updated_at: Date | string | null;
+    byos_ids: string[] | null;
+  };
+  const liveByosResult = await db.execute(sql`
+    SELECT id::text AS id FROM secret WHERE is_byos_vault = true
+  `);
+  const liveByosIds = new Set(
+    (liveByosResult.rows as { id: string }[]).map((r) => r.id),
+  );
+  const backupByosIds = snapRow.byos_ids ?? [];
+  const baselines: AuditBaselines = {
+    totalSecretCount: snapRow.total,
+    allSecretIds: new Set(snapRow.all_ids ?? []),
+    maxSecretUpdatedAt: snapRow.max_updated_at
+      ? new Date(snapRow.max_updated_at)
+      : null,
+    // Not derivable from backup — only `secret` was snapshotted, not the
+    // FK consumer tables. phase4Audit will skip C12/C13 on empty map.
+    fkBaseline: new Map(),
+    // Stale rows: were BYOS in backup AND still BYOS in live (i.e., NOT
+    // migrated). Their updated_at should be unchanged from backup.
+    staleIds: new Set(backupByosIds.filter((id) => liveByosIds.has(id))),
+  };
+  // Synthesize a commitTs: backup's `backed_up_at` is the pre-Phase-2 lower
+  // bound; we don't know the exact commit time, so use NOW() as the upper
+  // bound. C5 will admit any migrated row that was touched in [backup.max
+  // updated_at, now()] — looser than migrate-mode but still useful.
+  const commitTs = new Date();
+
+  // 5. Run Phase 4 with backup-derived baselines.
+  const { findings, warnings } = await phase4Audit({
+    rows,
+    vaultClient,
+    vaultConfig,
+    baselines,
+    commitTs,
+  });
+
+  // 5. Write the check manifest.
+  const manifestPath = await writeCheckManifest({
+    vaultConfig,
+    rows,
+    findings,
+    warnings,
+  });
+  console.log(`\n  ${INFO} Check manifest written to ${manifestPath}`);
+  console.log(`     (No secret values are recorded in the file.)`);
+
+  // 6. Summary + exit code.
+  printAuditSummary(findings, warnings);
+  if (findings.length > 0) {
+    abort(
+      `Standalone consistency check found ${findings.length} anomaly/anomalies. Investigate each one. If the live state is broken, restore manually from ${BACKUP_TABLE}; if you can repair in place, do that first then re-run --check.`,
+    );
+  }
 }
 
 // ============================================================
@@ -2200,6 +2459,16 @@ async function rollback(): Promise<void> {
   const counts = await getRowCounts();
   const currentMode = getSecretsManagerTypeBasedOnEnvVars();
 
+  // Rollback writes BYOS-shaped rows back into the `secret` table. If the
+  // backend is currently running under Vault mode, those rows will be
+  // unreadable to it (Vault-mode reads expect empty payloads + Vault
+  // entries). Refuse to proceed until the env is reverted.
+  if (currentMode !== SecretsManagerType.BYOS_VAULT) {
+    abort(
+      `ARCHESTRA_SECRETS_MANAGER is currently "${modeLabel(currentMode)}". Rollback restores BYOS-shaped rows that only READONLY_VAULT mode can read.\n\nBefore re-running --rollback:\n  1. Take the backend out of service.\n  2. Set ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT.\n  3. Re-run this script with --rollback.`,
+    );
+  }
+
   console.log(`
   Current state:
     • Mode: ${modeLabel(currentMode)}
@@ -2209,9 +2478,6 @@ async function rollback(): Promise<void> {
   This will revert the secret table to the backup version in a single
   transaction. Rows created after the backup are NOT touched, and the
   ${BACKUP_TABLE} table itself is left in place.
-
-  Before continuing, take the backend out of service and revert
-  ARCHESTRA_SECRETS_MANAGER to READONLY_VAULT (if you already flipped it).
 `);
 
   const proceed = await confirm("Restore the secret table from the backup?");
@@ -2249,8 +2515,6 @@ async function rollback(): Promise<void> {
   );
   console.log(`
   Next steps:
-    • Restart the backend under ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT.
-    • Verify health: GET /api/secrets/type — expect type "READONLY_VAULT".
     • Once you've confirmed the rollback is good, drop the backup table:
         DROP TABLE ${BACKUP_TABLE};
 `);
@@ -2353,6 +2617,11 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (mode === "check") {
+    await runCheck();
+    return;
+  }
+
   // Forward migration. Briefly wait so pino's async streams flush the
   // initializeDatabase boot logs before we print the welcome banner,
   // otherwise stdout interleaves the banner with the DB init lines.
@@ -2367,8 +2636,42 @@ async function main(): Promise<void> {
   const preflight = await phase0Preflight();
   const prestaged = await phase1Prestage(preflight);
   const { commitTs } = await phase2AtomicFlip(prestaged, preflight);
-  await phase4Audit(prestaged, preflight, commitTs);
-  phase3SoakGuidance();
+
+  // Phase 4 — consistency audit. Build the leaner LiveCheckRow shape from
+  // prestaged data; the migration-path caller has full baselines.
+  const liveRows: LiveCheckRow[] = prestaged.map((r) => ({
+    id: r.id,
+    name: r.name,
+    sanitizedName: r.sanitizedName,
+    vaultPath: r.vaultPath,
+    expectedKeys: Object.keys(r.references),
+  }));
+  const { findings, warnings } = await phase4Audit({
+    rows: liveRows,
+    vaultClient: preflight.vaultClient,
+    vaultConfig: preflight.vaultConfig,
+    baselines: preflight.snapshot,
+    commitTs,
+  });
+
+  // Write the full migration audit trail (Phase 0 baseline + Phase 1
+  // mappings + Phase 4 findings).
+  const manifestPath = await writeAuditManifest({
+    preflight,
+    prestaged,
+    commitTs,
+    findings,
+    warnings,
+  });
+  console.log(`\n  ${INFO} Audit-trail manifest written to ${manifestPath}`);
+  console.log(`     (No secret values are recorded in the file.)`);
+
+  printAuditSummary(findings, warnings);
+  if (findings.length > 0) {
+    abort(
+      `Post-migration audit found ${findings.length} anomaly/anomalies. Investigate each one before treating the migration as complete. If the anomalies indicate broken state that can't be repaired in place, restore manually from ${BACKUP_TABLE} (see the SQL block in the post-flip verification error message above). DO NOT skip these.`,
+    );
+  }
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {

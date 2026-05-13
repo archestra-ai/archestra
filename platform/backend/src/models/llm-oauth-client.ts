@@ -29,23 +29,14 @@ class LlmOauthClientModel {
                 `%${escapeLikePattern(params.search.trim())}%`,
               )
             : undefined,
+          params.providerApiKeyId
+            ? sql`${schema.oauthClientsTable.metadata}->'providerApiKeys' @> ${JSON.stringify([{ providerApiKeyId: params.providerApiKeyId }])}::jsonb`
+            : undefined,
         ),
       )
       .orderBy(schema.oauthClientsTable.createdAt);
 
-    const clients = await hydrateOauthClients(rows);
-    return clients.filter((client) => {
-      if (
-        params.providerApiKeyId &&
-        !client.providerApiKeys.some(
-          (mapping) => mapping.providerApiKeyId === params.providerApiKeyId,
-        )
-      ) {
-        return false;
-      }
-
-      return true;
-    });
+    return hydrateOauthClients(rows);
   }
 
   static async create(params: {

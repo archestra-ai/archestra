@@ -250,6 +250,63 @@ describe("LlmOauthClientModel", () => {
     ]);
   });
 
+  test("filters OAuth clients by provider API key mapping", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const organization = await makeOrganization();
+    const firstSecret = await makeSecret();
+    const secondSecret = await makeSecret();
+    const firstProviderKey = await makeLlmProviderApiKey(
+      organization.id,
+      firstSecret.id,
+      { name: "First Provider Key", provider: "openai" },
+    );
+    const secondProviderKey = await makeLlmProviderApiKey(
+      organization.id,
+      secondSecret.id,
+      { name: "Second Provider Key", provider: "anthropic" },
+    );
+
+    await LlmOauthClientModel.create({
+      organizationId: organization.id,
+      name: "First Client",
+      allowedLlmProxyIds: [],
+      providerApiKeys: [
+        {
+          provider: "openai",
+          providerApiKeyId: firstProviderKey.id,
+        },
+      ],
+    });
+    await LlmOauthClientModel.create({
+      organizationId: organization.id,
+      name: "Second Client",
+      allowedLlmProxyIds: [],
+      providerApiKeys: [
+        {
+          provider: "anthropic",
+          providerApiKeyId: secondProviderKey.id,
+        },
+      ],
+    });
+
+    const clients = await LlmOauthClientModel.findAllByOrganization({
+      organizationId: organization.id,
+      providerApiKeyId: secondProviderKey.id,
+    });
+
+    expect(clients.map((client) => client.name)).toEqual(["Second Client"]);
+    expect(clients[0].providerApiKeys).toEqual([
+      {
+        provider: "anthropic",
+        providerApiKeyId: secondProviderKey.id,
+        providerApiKeyName: "Second Provider Key",
+      },
+    ]);
+  });
+
   test("stores the expected OAuth registration shape", async ({
     makeOrganization,
   }) => {

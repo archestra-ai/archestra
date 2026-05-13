@@ -143,6 +143,12 @@ const organizationsTable = pgTable("organization", {
   /** When enabled, chat shows only support text plus correlation IDs in error cards */
   slimChatErrorUi: boolean("slim_chat_error_ui").notNull().default(false),
 
+  /** Markdown notification banner shown in the authenticated app shell */
+  siteNotificationMarkdown: text("site_notification_markdown"),
+
+  /** Optional expiration time for the site notification banner */
+  siteNotificationExpiresAt: timestamp("site_notification_expires_at"),
+
   /** Organization-level 2FA visibility toggle */
   showTwoFactor: boolean("show_two_factor").notNull().default(false),
 

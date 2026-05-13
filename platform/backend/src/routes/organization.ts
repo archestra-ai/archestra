@@ -31,7 +31,10 @@ import {
   AppearanceSettingsSchema,
   CompleteOnboardingSchema,
   constructResponseSchema,
+  type Organization,
+  type OrganizationRecord,
   SelectOrganizationSchema,
+  SiteNotificationSchema,
   UpdateAgentSettingsSchema,
   UpdateAppearanceSettingsSchema,
   UpdateAuthSettingsSchema,
@@ -39,6 +42,7 @@ import {
   UpdateKnowledgeSettingsSchema,
   UpdateLlmSettingsSchema,
   UpdateSecuritySettingsSchema,
+  UpdateSiteNotificationSchema,
 } from "@/types";
 
 const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -59,7 +63,58 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Organization not found");
       }
 
-      return reply.send(organization);
+      return reply.send(toPublicOrganization(organization));
+    },
+  );
+
+  fastify.get(
+    "/api/organization/site-notification",
+    {
+      schema: {
+        operationId: RouteId.GetSiteNotification,
+        description: "Get the active site notification banner",
+        tags: ["Organization"],
+        response: constructResponseSchema(SiteNotificationSchema),
+      },
+    },
+    async ({ organizationId }, reply) => {
+      return reply.send(
+        await OrganizationModel.getActiveSiteNotification(organizationId),
+      );
+    },
+  );
+
+  fastify.patch(
+    "/api/organization/site-notification",
+    {
+      schema: {
+        operationId: RouteId.UpdateSiteNotification,
+        description: "Update the site notification banner",
+        tags: ["Organization"],
+        body: UpdateSiteNotificationSchema,
+        response: constructResponseSchema(SiteNotificationSchema),
+      },
+    },
+    async ({ organizationId, body }, reply) => {
+      const organization = await OrganizationModel.patch(organizationId, {
+        siteNotificationMarkdown: normalizeSiteNotificationMarkdown(
+          body.markdown,
+        ),
+        siteNotificationExpiresAt:
+          body.expiresAt === undefined
+            ? undefined
+            : body.expiresAt === null
+              ? null
+              : new Date(body.expiresAt),
+      });
+
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
+      }
+
+      return reply.send(
+        await OrganizationModel.getSiteNotification(organizationId),
+      );
     },
   );
 
@@ -105,7 +160,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      return reply.send(organization);
+      return reply.send(toPublicOrganization(organization));
     },
   );
 
@@ -128,7 +183,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Organization not found");
       }
 
-      return reply.send(organization);
+      return reply.send(toPublicOrganization(organization));
     },
   );
 
@@ -151,7 +206,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Organization not found");
       }
 
-      return reply.send(organization);
+      return reply.send(toPublicOrganization(organization));
     },
   );
 
@@ -189,7 +244,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Organization not found");
       }
 
-      return reply.send(organization);
+      return reply.send(toPublicOrganization(organization));
     },
   );
 
@@ -239,7 +294,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Organization not found");
       }
 
-      return reply.send(organization);
+      return reply.send(toPublicOrganization(organization));
     },
   );
 
@@ -261,7 +316,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Organization not found");
       }
 
-      return reply.send(organization);
+      return reply.send(toPublicOrganization(organization));
     },
   );
 
@@ -355,7 +410,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Organization not found");
       }
 
-      return reply.send(organization);
+      return reply.send(toPublicOrganization(organization));
     },
   );
 
@@ -397,7 +452,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Organization not found");
       }
 
-      return reply.send(organization);
+      return reply.send(toPublicOrganization(organization));
     },
   );
 
@@ -505,7 +560,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Organization not found");
       }
 
-      return reply.send(organization);
+      return reply.send(toPublicOrganization(organization));
     },
   );
 
@@ -804,3 +859,28 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default organizationRoutes;
+
+function toPublicOrganization(organization: OrganizationRecord): Organization {
+  const {
+    siteNotificationMarkdown: _siteNotificationMarkdown,
+    siteNotificationExpiresAt: _siteNotificationExpiresAt,
+    ...publicOrganization
+  } = organization;
+
+  return publicOrganization as Organization;
+}
+
+function normalizeSiteNotificationMarkdown(
+  markdown: string | null | undefined,
+) {
+  if (markdown === undefined) {
+    return undefined;
+  }
+
+  if (markdown === null) {
+    return null;
+  }
+
+  const trimmedMarkdown = markdown.trim();
+  return trimmedMarkdown.length === 0 ? null : trimmedMarkdown;
+}

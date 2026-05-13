@@ -770,4 +770,120 @@ describe("organization routes", () => {
       );
     });
   });
+
+  describe("site notification routes", () => {
+    test("returns an empty notification when nothing is configured", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/organization/site-notification",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        markdown: null,
+        expiresAt: null,
+      });
+    });
+
+    test("stores and returns an active site notification", async () => {
+      const expiresAt = "2030-01-01T00:00:00.000Z";
+
+      const updateResponse = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/site-notification",
+        payload: {
+          markdown: "**Maintenance** [details](https://example.com)",
+          expiresAt,
+        },
+      });
+
+      expect(updateResponse.statusCode).toBe(200);
+      expect(updateResponse.json()).toEqual({
+        markdown: "**Maintenance** [details](https://example.com)",
+        expiresAt,
+      });
+
+      const getResponse = await app.inject({
+        method: "GET",
+        url: "/api/organization/site-notification",
+      });
+
+      expect(getResponse.statusCode).toBe(200);
+      expect(getResponse.json()).toEqual({
+        markdown: "**Maintenance** [details](https://example.com)",
+        expiresAt,
+      });
+    });
+
+    test("hides expired notifications from readers", async () => {
+      const updateResponse = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/site-notification",
+        payload: {
+          markdown: "This should expire",
+          expiresAt: "2000-01-01T00:00:00.000Z",
+        },
+      });
+
+      expect(updateResponse.statusCode).toBe(200);
+
+      const getResponse = await app.inject({
+        method: "GET",
+        url: "/api/organization/site-notification",
+      });
+
+      expect(getResponse.statusCode).toBe(200);
+      expect(getResponse.json()).toEqual({
+        markdown: null,
+        expiresAt: null,
+      });
+    });
+
+    test("does not leak notification fields from the generic organization payload", async () => {
+      const updateResponse = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/site-notification",
+        payload: {
+          markdown: "Private notification content",
+          expiresAt: null,
+        },
+      });
+
+      expect(updateResponse.statusCode).toBe(200);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/organization",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).not.toHaveProperty("siteNotificationMarkdown");
+      expect(response.json()).not.toHaveProperty("siteNotificationExpiresAt");
+    });
+
+    test("site notification routes require dedicated RBAC permissions", async () => {
+      const { RouteId } = await import("@shared");
+      const { requiredEndpointPermissionsMap } = await import(
+        "@shared/access-control"
+      );
+
+      expect(
+        requiredEndpointPermissionsMap[RouteId.GetSiteNotification],
+      ).toEqual({
+        siteNotification: ["read"],
+      });
+      expect(
+        requiredEndpointPermissionsMap[RouteId.UpdateSiteNotification],
+      ).toEqual({
+        siteNotification: ["update"],
+      });
+    });
+
+    test("member defaults can read but not update site notifications", async () => {
+      const { memberPermissions } = await import("@shared/access-control");
+
+      expect(memberPermissions.siteNotification).toContain("read");
+      expect(memberPermissions.siteNotification).not.toContain("update");
+    });
+  });
 });

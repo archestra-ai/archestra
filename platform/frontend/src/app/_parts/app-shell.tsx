@@ -4,15 +4,23 @@ import type { Permissions } from "@shared/permission.types";
 import { usePathname } from "next/navigation";
 import { ConversationSearchProvider } from "@/components/conversation-search-provider";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
+import { MaintenanceModeScreen } from "@/components/maintenance-mode-screen";
 import { OnboardingDialogWrapper } from "@/components/onboarding-dialog-wrapper";
+import { SiteNotificationBanner } from "@/components/site-notification-banner";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { Version } from "@/components/version";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { usePublicConfig } from "@/lib/config/config.query";
+import { useSiteNotification } from "@/lib/organization.query";
 import { AppSidebar } from "./sidebar";
 
 const SIDEBAR_COLLAPSED_PERMISSION: Permissions = {
   simpleView: ["enable"],
+};
+
+const SITE_NOTIFICATION_PERMISSION: Permissions = {
+  siteNotification: ["read"],
 };
 
 interface AppShellProps {
@@ -23,8 +31,36 @@ export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const isBrowserPreview = pathname.startsWith("/chat/browser-preview/");
   const isAuthPage = pathname.startsWith("/auth/");
+  const { data: publicConfig, isLoading: isPublicConfigLoading } =
+    usePublicConfig();
   const { data: shouldCollapse, isSuccess: permissionLoaded } =
     useHasPermissions(SIDEBAR_COLLAPSED_PERMISSION);
+  const { data: canReadSiteNotification } = useHasPermissions(
+    SITE_NOTIFICATION_PERMISSION,
+  );
+  const { data: siteNotification } = useSiteNotification(
+    !isBrowserPreview && !isAuthPage && !!canReadSiteNotification,
+  );
+  const maintenance = publicConfig?.maintenance;
+
+  if (isPublicConfigLoading) {
+    return (
+      <main className="h-screen w-full flex flex-col bg-background min-w-0 relative">
+        <div className="flex-1 min-w-0 flex flex-col" />
+        <Toaster />
+      </main>
+    );
+  }
+
+  if (maintenance?.enabled) {
+    return (
+      <main className="h-screen w-full flex flex-col bg-background min-w-0 relative">
+        <MaintenanceModeScreen message={maintenance.message ?? null} />
+        <Version />
+        <Toaster />
+      </main>
+    );
+  }
 
   // Browser preview mode: render children directly without sidebar/header/version
   if (isBrowserPreview) {
@@ -67,6 +103,9 @@ export function AppShell({ children }: AppShellProps) {
       <AppSidebar />
       <main className="h-screen w-full flex flex-col bg-background min-w-0 relative">
         <ImpersonationBanner />
+        {siteNotification?.markdown ? (
+          <SiteNotificationBanner markdown={siteNotification.markdown} />
+        ) : null}
         <header className="h-14 border-b border-border flex md:hidden items-center justify-between px-6 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">
           <SidebarTrigger className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2 -ml-2" />
           <div id="mobile-header-actions" className="flex items-center gap-2" />

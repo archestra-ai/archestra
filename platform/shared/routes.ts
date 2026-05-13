@@ -324,6 +324,7 @@ export const RouteId = {
 
   // Organization Routes
   GetOrganization: "getOrganization",
+  GetSiteNotification: "getSiteNotification",
   GetOnboardingStatus: "getOnboardingStatus",
   GetMemberSignupStatus: "getMemberSignupStatus",
   GetOrganizationMembers: "getOrganizationMembers",
@@ -334,6 +335,7 @@ export const RouteId = {
   // Appearance Settings Routes
   GetAppearanceSettings: "getAppearanceSettings",
   UpdateAppearanceSettings: "updateAppearanceSettings",
+  UpdateSiteNotification: "updateSiteNotification",
 
   // Security Settings Routes
   UpdateSecuritySettings: "updateSecuritySettings",

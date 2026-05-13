@@ -52,6 +52,8 @@ export const organizationKeys = {
   activeMemberRole: () =>
     [...organizationKeys.activeOrg(), "member-role"] as const,
   details: () => [...organizationKeys.all, "details"] as const,
+  siteNotification: () =>
+    [...organizationKeys.all, "site-notification"] as const,
   onboardingStatus: () =>
     [...organizationKeys.all, "onboarding-status"] as const,
   memberSignupStatus: () =>
@@ -265,6 +267,26 @@ export function useOrganization(enabled = true) {
     enabled: enabled && !!session.data?.user,
     retry: false, // Don't retry on auth pages to avoid repeated 401 errors
     throwOnError: false, // Don't throw errors to prevent crashes
+  });
+}
+
+export function useSiteNotification(enabled = true) {
+  const session = useSession();
+
+  return useQuery({
+    queryKey: organizationKeys.siteNotification(),
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getSiteNotification();
+
+      if (error || !data) {
+        return null;
+      }
+
+      return data;
+    },
+    enabled: enabled && !!session.data?.user,
+    retry: false,
+    throwOnError: false,
   });
 }
 
@@ -522,6 +544,36 @@ export function useUpdateKnowledgeSettings(
     onSuccess: (updatedOrganization) => {
       if (!updatedOrganization) return;
       queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      toast.success(onSuccessMessage);
+    },
+  });
+}
+
+export function useUpdateSiteNotification(
+  onSuccessMessage: string,
+  onErrorMessage: string,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: archestraApiTypes.UpdateSiteNotificationData["body"],
+    ) => {
+      const { data: updatedNotification, error } =
+        await archestraApiSdk.updateSiteNotification({ body: data });
+
+      if (error) {
+        toast.error(onErrorMessage);
+        return null;
+      }
+
+      return updatedNotification;
+    },
+    onSuccess: (updatedNotification) => {
+      if (!updatedNotification) return;
+      queryClient.setQueryData(
+        organizationKeys.siteNotification(),
+        updatedNotification,
+      );
       toast.success(onSuccessMessage);
     },
   });

@@ -3,13 +3,17 @@ import { eq } from "drizzle-orm";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";
 import logger from "@/logging";
-import type { AppearanceSettings, Organization } from "@/types";
+import type {
+  AppearanceSettings,
+  OrganizationRecord,
+  SiteNotification,
+} from "@/types";
 
 class OrganizationModel {
   /**
    * Get the first organization in the database (fallback for various operations)
    */
-  static async getFirst(): Promise<Organization | null> {
+  static async getFirst(): Promise<OrganizationRecord | null> {
     logger.debug("OrganizationModel.getFirst: fetching first organization");
     const [organization] = await db
       .select()
@@ -25,7 +29,7 @@ class OrganizationModel {
   /**
    * Get or create the default organization
    */
-  static async getOrCreateDefaultOrganization(): Promise<Organization> {
+  static async getOrCreateDefaultOrganization(): Promise<OrganizationRecord> {
     logger.debug("OrganizationModel.getOrCreateDefaultOrganization: starting");
     // Try to get existing default organization
     const existingOrg = await OrganizationModel.getFirst();
@@ -64,8 +68,8 @@ class OrganizationModel {
    */
   static async patch(
     id: string,
-    data: Partial<Organization>,
-  ): Promise<Organization | null> {
+    data: Partial<OrganizationRecord>,
+  ): Promise<OrganizationRecord | null> {
     logger.debug(
       { id, dataKeys: Object.keys(data) },
       "OrganizationModel.patch: updating organization",
@@ -93,7 +97,7 @@ class OrganizationModel {
   /**
    * Get an organization by ID
    */
-  static async getById(id: string): Promise<Organization | null> {
+  static async getById(id: string): Promise<OrganizationRecord | null> {
     logger.debug({ id }, "OrganizationModel.getById: fetching organization");
     const [organization] = await db
       .select()
@@ -106,6 +110,34 @@ class OrganizationModel {
       "OrganizationModel.getById: completed",
     );
     return organization || null;
+  }
+
+  static async getSiteNotification(id: string): Promise<SiteNotification> {
+    const [organization] = await db
+      .select({
+        markdown: schema.organizationsTable.siteNotificationMarkdown,
+        expiresAt: schema.organizationsTable.siteNotificationExpiresAt,
+      })
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, id))
+      .limit(1);
+
+    return toSiteNotification(organization ?? null, false);
+  }
+
+  static async getActiveSiteNotification(
+    id: string,
+  ): Promise<SiteNotification> {
+    const [organization] = await db
+      .select({
+        markdown: schema.organizationsTable.siteNotificationMarkdown,
+        expiresAt: schema.organizationsTable.siteNotificationExpiresAt,
+      })
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, id))
+      .limit(1);
+
+    return toSiteNotification(organization ?? null, true);
   }
 
   /**
@@ -190,4 +222,35 @@ export default OrganizationModel;
 
 function getOrganizationSettingsCacheKey(organizationId: string) {
   return `${CacheKey.OrganizationSettings}-${organizationId}` as const;
+}
+
+function toSiteNotification(
+  notification: {
+    markdown: string | null;
+    expiresAt: Date | null;
+  } | null,
+  activeOnly: boolean,
+): SiteNotification {
+  if (!notification?.markdown) {
+    return {
+      markdown: null,
+      expiresAt: null,
+    };
+  }
+
+  if (
+    activeOnly &&
+    notification.expiresAt !== null &&
+    notification.expiresAt.getTime() <= Date.now()
+  ) {
+    return {
+      markdown: null,
+      expiresAt: null,
+    };
+  }
+
+  return {
+    markdown: notification.markdown,
+    expiresAt: notification.expiresAt?.toISOString() ?? null,
+  };
 }

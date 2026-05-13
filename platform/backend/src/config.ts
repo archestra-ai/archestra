@@ -40,6 +40,7 @@ const frontendBaseUrl =
   process.env.ARCHESTRA_FRONTEND_URL?.trim() || "http://localhost:3000";
 const DEFAULT_POSTHOG_KEY = "phc_FFZO7LacnsvX2exKFWehLDAVaXLBfoBaJypdOuYoTk7";
 const DEFAULT_POSTHOG_HOST = "https://eu.i.posthog.com";
+const maintenanceMessage = getMaintenanceMessage();
 
 /**
  * Determines OTLP authentication headers based on environment variables
@@ -583,6 +584,10 @@ const config = {
     disableInvitations:
       process.env.ARCHESTRA_AUTH_DISABLE_INVITATIONS === "true",
   },
+  maintenance: {
+    enabled: maintenanceMessage !== null,
+    message: maintenanceMessage,
+  },
   analytics: getAnalyticsConfig(),
   database: {
     url: getDatabaseUrl(),
@@ -956,4 +961,12 @@ export function parseCommaSeparatedList(value: string): string[] {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+function getMaintenanceMessage(): string | null {
+  const message = process.env.ARCHESTRA_PLATFORM_MAINTENANCE_MESSAGE;
+  if (!message || message.trim().length === 0) {
+    return null;
+  }
+  return message;
 }

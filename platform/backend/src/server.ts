@@ -56,7 +56,10 @@ import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import { seedRequiredStartingData } from "@/database/seed";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
-import { enterpriseLicenseMiddleware } from "@/middleware";
+import {
+  enterpriseLicenseMiddleware,
+  maintenanceModeMiddleware,
+} from "@/middleware";
 import OrganizationModel from "@/models/organization";
 import { initializeObservabilityMetrics } from "@/observability";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
@@ -742,6 +745,7 @@ const startWebServer = async () => {
    * such that they can easily be handled inside route handlers
    * by simply using the request.user and request.organizationId decorators
    */
+  fastify.register(maintenanceModeMiddleware);
   fastify.register(fastifyAuthPlugin);
 
   /**

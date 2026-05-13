@@ -1168,6 +1168,53 @@ describe("parseCommaSeparatedList", () => {
   });
 });
 
+describe("maintenance config", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    delete process.env.ARCHESTRA_PLATFORM_MAINTENANCE_MESSAGE;
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test("enables maintenance mode when a message is configured", async () => {
+    process.env.ARCHESTRA_PLATFORM_MAINTENANCE_MESSAGE =
+      "Scheduled maintenance in progress";
+
+    const { default: reloadedConfig } = await import("./config");
+    const maintenance = (
+      reloadedConfig as {
+        maintenance?: { enabled: boolean; message: string | null };
+      }
+    ).maintenance;
+
+    expect(maintenance).toEqual({
+      enabled: true,
+      message: "Scheduled maintenance in progress",
+    });
+  });
+
+  test("treats blank maintenance messages as disabled", async () => {
+    process.env.ARCHESTRA_PLATFORM_MAINTENANCE_MESSAGE = "   ";
+
+    const { default: reloadedConfig } = await import("./config");
+    const maintenance = (
+      reloadedConfig as {
+        maintenance?: { enabled: boolean; message: string | null };
+      }
+    ).maintenance;
+
+    expect(maintenance).toEqual({
+      enabled: false,
+      message: null,
+    });
+  });
+});
+
 describe("parseTrustProxy", () => {
   test("should return false when undefined", () => {
     expect(parseTrustProxy(undefined)).toBe(false);

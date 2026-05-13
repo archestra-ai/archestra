@@ -21979,6 +21979,10 @@ export type GetPublicConfigResponses = {
     200: {
         disableBasicAuth: boolean;
         disableInvitations: boolean;
+        maintenance: {
+            enabled: boolean;
+            message: string | null;
+        };
         analytics: {
             enabled: boolean;
             posthog: {
@@ -40155,6 +40159,177 @@ export type GetOrganizationResponses = {
 };
 
 export type GetOrganizationResponse = GetOrganizationResponses[keyof GetOrganizationResponses];
+
+export type GetSiteNotificationData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization/site-notification';
+};
+
+export type GetSiteNotificationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetSiteNotificationError = GetSiteNotificationErrors[keyof GetSiteNotificationErrors];
+
+export type GetSiteNotificationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        markdown: string | null;
+        expiresAt: string | null;
+    };
+};
+
+export type GetSiteNotificationResponse = GetSiteNotificationResponses[keyof GetSiteNotificationResponses];
+
+export type UpdateSiteNotificationData = {
+    body: {
+        markdown?: string | null;
+        expiresAt?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/site-notification';
+};
+
+export type UpdateSiteNotificationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateSiteNotificationError = UpdateSiteNotificationErrors[keyof UpdateSiteNotificationErrors];
+
+export type UpdateSiteNotificationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        markdown: string | null;
+        expiresAt: string | null;
+    };
+};
+
+export type UpdateSiteNotificationResponse = UpdateSiteNotificationResponses[keyof UpdateSiteNotificationResponses];
 
 export type GetAppearanceSettingsData = {
     body?: never;

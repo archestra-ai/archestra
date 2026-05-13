@@ -661,6 +661,12 @@ The following environment variables can be used to configure Archestra Platform.
   - Highly recommended for production.
   - If users access the platform via a LAN IP (e.g., `http://192.168.1.5:3000`), set this to that URL
 
+- **`ARCHESTRA_PLATFORM_MAINTENANCE_MESSAGE`** - Enables deployment maintenance mode and defines the message shown to users while it is active.
+  - Default: unset (maintenance mode disabled)
+  - Set this to any non-empty string to block most application routes with `503` responses and replace the normal app shell with a maintenance screen
+  - Leave it unset or set it to an empty string to disable maintenance mode
+  - Example: `Scheduled database maintenance in progress. Please try again in 15 minutes.`
+
 - **`ARCHESTRA_MCP_SANDBOX_DOMAIN`** - Wildcard domain for MCP App sandbox isolation. Gives each MCP server a unique subdomain origin, enabling localStorage, CORS, and OAuth for MCP Apps. Not needed for local development (automatic localhost swap provides isolation).
   - Example: `mcp.example.com`
   - Requires wildcard DNS (`*.mcp.example.com`) and wildcard TLS certificate pointing to the backend

@@ -13,12 +13,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useOnUnmount } from "@/lib/hooks/use-lifecycle";
 import {
   organizationKeys,
   useOrganization,
+  useSiteNotification,
   useUpdateAppearanceSettings,
   useUpdateAuthSettings,
+  useUpdateSiteNotification,
 } from "@/lib/organization.query";
 import { useOrgTheme } from "@/lib/theme.hook";
 import { ChatLinksEditor } from "./_components/chat-links-editor";
@@ -39,6 +42,7 @@ import {
   validateOnboardingWizard,
 } from "./_components/onboarding-wizards-editor.utils";
 import { OrganizationTokenSection } from "./_components/organization-token-section";
+import { SiteNotificationSettingsCard } from "./_components/site-notification-settings-card";
 import { ThemeSelector } from "./_components/theme-selector";
 
 export default function OrganizationSettingsPage() {
@@ -50,9 +54,22 @@ export default function OrganizationSettingsPage() {
     "Auth settings updated",
     "Failed to update Auth settings",
   );
+  const updateSiteNotificationMutation = useUpdateSiteNotification(
+    "Site notification updated",
+    "Failed to update site notification",
+  );
   const [hasThemeChanges, setHasThemeChanges] = useState(false);
   const queryClient = useQueryClient();
   const { data: organization } = useOrganization();
+  const { data: canReadSiteNotification = false } = useHasPermissions({
+    siteNotification: ["read"],
+  });
+  const { data: canUpdateSiteNotification = false } = useHasPermissions({
+    siteNotification: ["update"],
+  });
+  const { data: siteNotification } = useSiteNotification(
+    canReadSiteNotification,
+  );
 
   const orgTheme = useOrgTheme();
   const {
@@ -407,6 +424,20 @@ export default function OrganizationSettingsPage() {
               />
             </CardContent>
           </Card>
+        </SettingsSectionStack>
+      </div>
+
+      <div>
+        <h3 className="text-lg font-medium mb-4">Announcements</h3>
+        <SettingsSectionStack>
+          <SiteNotificationSettingsCard
+            initialNotification={siteNotification}
+            canUpdate={canUpdateSiteNotification}
+            isSaving={updateSiteNotificationMutation.isPending}
+            onSave={async (notification) => {
+              await updateSiteNotificationMutation.mutateAsync(notification);
+            }}
+          />
         </SettingsSectionStack>
       </div>
 

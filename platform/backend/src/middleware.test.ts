@@ -5,6 +5,8 @@ import { ApiError } from "@/types";
 import {
   enterpriseLicenseMiddleware,
   isEnterpriseOnlyRoute,
+  isMaintenanceBypassRoute,
+  maintenanceModeMiddleware,
 } from "./middleware";
 
 /**
@@ -319,6 +321,112 @@ describe.sequential("enterpriseLicenseMiddleware", () => {
   });
 });
 
+describe.sequential("maintenanceModeMiddleware", () => {
+  let fastify: ReturnType<typeof createTestFastify>;
+  const originalEnabled = config.maintenance.enabled;
+  const originalMessage = config.maintenance.message;
+
+  const setMaintenance = (enabled: boolean, message: string | null) => {
+    Object.defineProperty(config, "maintenance", {
+      value: {
+        ...config.maintenance,
+        enabled,
+        message,
+      },
+      writable: true,
+      configurable: true,
+    });
+  };
+
+  afterEach(async () => {
+    if (fastify) {
+      await fastify.close();
+    }
+    setMaintenance(originalEnabled, originalMessage);
+  });
+
+  describe("when maintenance mode is enabled", () => {
+    beforeEach(async () => {
+      setMaintenance(true, "Scheduled maintenance in progress");
+
+      fastify = createTestFastify();
+      await fastify.register(maintenanceModeMiddleware);
+
+      fastify.get("/health", async () => ({ status: "ok" }));
+      fastify.get("/ready", async () => ({ status: "ok" }));
+      fastify.get("/metrics", async () => ({ metrics: true }));
+      fastify.get("/api/config/public", async () => ({ public: true }));
+      fastify.get("/api/organization/appearance-settings", async () => ({
+        branding: true,
+      }));
+      fastify.get("/api/identity-providers/public", async () => ({
+        providers: [],
+      }));
+      fastify.get("/api/auth/session", async () => ({ session: null }));
+      fastify.get("/api/profiles", async () => ({ profiles: [] }));
+
+      await fastify.ready();
+    });
+
+    it("returns 503 for protected application routes", async () => {
+      const response = await fastify.inject({
+        method: "GET",
+        url: "/api/profiles",
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(JSON.parse(response.payload)).toEqual({
+        error: {
+          message: "Scheduled maintenance in progress",
+          type: "unknown_api_error",
+        },
+      });
+    });
+
+    it("allows public bootstrap routes through during maintenance", async () => {
+      const routes = [
+        "/health",
+        "/ready",
+        "/metrics",
+        "/api/config/public",
+        "/api/organization/appearance-settings",
+        "/api/identity-providers/public",
+        "/api/auth/session",
+      ];
+
+      for (const url of routes) {
+        const response = await fastify.inject({
+          method: "GET",
+          url,
+        });
+
+        expect(response.statusCode, url).toBe(200);
+      }
+    });
+  });
+
+  describe("when maintenance mode is disabled", () => {
+    beforeEach(async () => {
+      setMaintenance(false, null);
+
+      fastify = createTestFastify();
+      await fastify.register(maintenanceModeMiddleware);
+      fastify.get("/api/profiles", async () => ({ profiles: [] }));
+      await fastify.ready();
+    });
+
+    it("does not block protected routes", async () => {
+      const response = await fastify.inject({
+        method: "GET",
+        url: "/api/profiles",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(JSON.parse(response.payload)).toEqual({ profiles: [] });
+    });
+  });
+});
+
 describe("isEnterpriseOnlyRoute", () => {
   it("should return true for SSO provider routes", () => {
     expect(isEnterpriseOnlyRoute("/api/identity-providers")).toBe(true);
@@ -348,5 +456,46 @@ describe("isEnterpriseOnlyRoute", () => {
     expect(isEnterpriseOnlyRoute("/api/profiles")).toBe(false);
     expect(isEnterpriseOnlyRoute("/api/auth/session")).toBe(false);
     expect(isEnterpriseOnlyRoute("/health")).toBe(false);
+  });
+});
+
+describe("isMaintenanceBypassRoute", () => {
+  it("returns true for health, auth, and public bootstrap routes", () => {
+    expect(isMaintenanceBypassRoute({ method: "GET", url: "/health" })).toBe(
+      true,
+    );
+    expect(isMaintenanceBypassRoute({ method: "GET", url: "/ready" })).toBe(
+      true,
+    );
+    expect(isMaintenanceBypassRoute({ method: "GET", url: "/metrics" })).toBe(
+      true,
+    );
+    expect(
+      isMaintenanceBypassRoute({ method: "GET", url: "/api/config/public" }),
+    ).toBe(true);
+    expect(
+      isMaintenanceBypassRoute({
+        method: "GET",
+        url: "/api/organization/appearance-settings",
+      }),
+    ).toBe(true);
+    expect(
+      isMaintenanceBypassRoute({
+        method: "GET",
+        url: "/api/identity-providers/public",
+      }),
+    ).toBe(true);
+    expect(
+      isMaintenanceBypassRoute({ method: "POST", url: "/api/auth/sign-in" }),
+    ).toBe(true);
+  });
+
+  it("returns false for protected application routes", () => {
+    expect(
+      isMaintenanceBypassRoute({ method: "GET", url: "/api/profiles" }),
+    ).toBe(false);
+    expect(
+      isMaintenanceBypassRoute({ method: "POST", url: "/api/config/public" }),
+    ).toBe(false);
   });
 });

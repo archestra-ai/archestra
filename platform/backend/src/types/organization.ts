@@ -202,6 +202,11 @@ export const AppearanceSettingsSchema = z.object({
   animateChatPlaceholders: z.boolean(),
 });
 
+export const SiteNotificationSchema = z.object({
+  markdown: z.string().nullable(),
+  expiresAt: z.string().datetime().nullable(),
+});
+
 export const OrganizationLimitCleanupIntervalSchema = z
   .enum(["1h", "12h", "24h", "1w", "1m"])
   .nullable();
@@ -238,6 +243,8 @@ const extendedFields = {
   onboardingWizard: OnboardingWizardSchema.nullable(),
   chatErrorSupportMessage: z.string().nullable(),
   slimChatErrorUi: z.boolean(),
+  siteNotificationMarkdown: z.string().nullable(),
+  siteNotificationExpiresAt: z.date().nullable(),
   chatPlaceholders: z.array(z.string()).nullable(),
   animateChatPlaceholders: z.boolean(),
   showTwoFactor: z.boolean(),
@@ -245,10 +252,14 @@ const extendedFields = {
   connectionBaseUrls: z.array(ConnectionBaseUrlSchema).nullable(),
 };
 
-export const SelectOrganizationSchema = createSelectSchema(
+export const OrganizationRecordSchema = createSelectSchema(
   schema.organizationsTable,
   extendedFields,
 );
+export const SelectOrganizationSchema = OrganizationRecordSchema.omit({
+  siteNotificationMarkdown: true,
+  siteNotificationExpiresAt: true,
+});
 export const InsertOrganizationSchema = createInsertSchema(
   schema.organizationsTable,
   extendedFields,
@@ -343,6 +354,11 @@ export const UpdateConnectionSettingsSchema = z.object({
     }),
 });
 
+export const UpdateSiteNotificationSchema = z.object({
+  markdown: z.string().max(5000).nullable().optional(),
+  expiresAt: z.string().datetime().nullable().optional(),
+});
+
 export const CompleteOnboardingSchema = z.object({
   onboardingComplete: z.literal(true),
 });
@@ -355,8 +371,10 @@ export type OrganizationCompressionScope = z.infer<
 >;
 export type GlobalToolPolicy = z.infer<typeof GlobalToolPolicySchema>;
 export type Organization = z.infer<typeof SelectOrganizationSchema>;
+export type OrganizationRecord = z.infer<typeof OrganizationRecordSchema>;
 export type InsertOrganization = z.infer<typeof InsertOrganizationSchema>;
 export type AppearanceSettings = z.infer<typeof AppearanceSettingsSchema>;
+export type SiteNotification = z.infer<typeof SiteNotificationSchema>;
 export type OrganizationChatLink = z.infer<typeof OrganizationChatLinkSchema>;
 export type OnboardingWizardPage = z.infer<typeof OnboardingWizardPageSchema>;
 export type OnboardingWizard = z.infer<typeof OnboardingWizardSchema>;

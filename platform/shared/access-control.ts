@@ -65,6 +65,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   identityProvider: ["read", "create", "update", "delete"],
   secret: ["read", "update"],
   organizationSettings: ["read", "update"],
+  siteNotification: ["read", "update"],
 
   // UI behavior resources
   simpleView: ["enable"],
@@ -118,6 +119,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   identityProvider: ["read"],
   secret: ["read"],
   organizationSettings: ["read", "update"],
+  siteNotification: ["read", "update"],
 
   // UI behavior resources
   simpleView: [],
@@ -171,6 +173,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   identityProvider: [],
   secret: [],
   organizationSettings: [],
+  siteNotification: ["read"],
 
   // UI behavior resources
   simpleView: ["enable"],
@@ -333,6 +336,10 @@ export const permissionDescriptions: Record<string, string> = {
     "View organization settings (appearance, authentication, etc)",
   "organizationSettings:update":
     "Customize organization appearance, authentication, etc",
+  "siteNotification:read":
+    "View organization-wide site notification banners in the app shell",
+  "siteNotification:update":
+    "Create, edit, or clear organization-wide site notification banners",
   "knowledgeSource:read": "View Knowledge Bases and Connectors",
   "knowledgeSource:create": "Create Knowledge Bases and Connectors",
   "knowledgeSource:update": "Modify Knowledge Bases and Connectors",
@@ -367,6 +374,9 @@ export const requiredEndpointPermissionsMap: Partial<
    * require the user to be authenticated but don't require any specific permissions.
    */
   [RouteId.GetOrganization]: {},
+  [RouteId.GetSiteNotification]: {
+    siteNotification: ["read"],
+  },
   [RouteId.CompleteOnboarding]: {},
 
   // Generic agent CRUD routes - enforcement is handled dynamically in route handlers
@@ -821,6 +831,9 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.UpdateAppearanceSettings]: {
     organizationSettings: ["update"],
+  },
+  [RouteId.UpdateSiteNotification]: {
+    siteNotification: ["update"],
   },
   [RouteId.UpdateSecuritySettings]: {
     agentSettings: ["update"],

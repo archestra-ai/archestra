@@ -38,17 +38,22 @@ describe("config routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({
-      disableBasicAuth: expect.any(Boolean),
-      disableInvitations: expect.any(Boolean),
-      analytics: {
-        enabled: expect.any(Boolean),
-        posthog: {
-          key: expect.any(String),
-          host: expect.any(String),
-        },
+    const payload = response.json();
+
+    expect(payload.disableBasicAuth).toEqual(expect.any(Boolean));
+    expect(payload.disableInvitations).toEqual(expect.any(Boolean));
+    expect(payload.analytics).toEqual({
+      enabled: expect.any(Boolean),
+      posthog: {
+        key: expect.any(String),
+        host: expect.any(String),
       },
     });
+    expect(payload.maintenance?.enabled).toEqual(expect.any(Boolean));
+    expect(
+      payload.maintenance?.message === null ||
+        typeof payload.maintenance?.message === "string",
+    ).toBe(true);
   });
 
   test("returns authenticated config with feature flags and provider base URLs", async () => {

@@ -17,7 +17,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import type { ModelSource } from "@/lib/chat/use-chat-preferences";
+import type { ModelSource } from "@/app/chat/chat-initial-state";
 import {
   formatOriginalError,
   mapClientError,

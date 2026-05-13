@@ -32,7 +32,13 @@ type LlmModelsParams = Partial<GeneratedLlmModelsQuery> & {
   enabled?: boolean;
 };
 
-export type LlmModel = archestraApiTypes.GetLlmModelsResponses["200"][number];
+type GeneratedLlmModelsResponse = archestraApiTypes.GetLlmModelsResponses["200"];
+export type LlmModel =
+  GeneratedLlmModelsResponse extends { data: Array<infer T> }
+    ? T
+    : GeneratedLlmModelsResponse extends Array<infer T>
+      ? T
+      : never;
 type LlmModelsResponse = {
   data: LlmModel[];
   pagination: PaginationMeta;

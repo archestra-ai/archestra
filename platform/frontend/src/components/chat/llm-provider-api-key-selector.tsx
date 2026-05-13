@@ -8,7 +8,7 @@ import {
   type ResourceVisibilityScope,
   type SupportedProvider,
 } from "@shared";
-import { Building2, CheckIcon, Key, User, Users } from "lucide-react";
+import { Building2, CheckIcon, Key, Loader2, User, Users } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { Badge } from "@/components/ui/badge";
@@ -46,7 +46,7 @@ interface LlmProviderApiKeySelectorProps {
   onProviderChange?: (provider: SupportedProvider, apiKeyId: string) => void;
   /** Callback when the selector opens or closes */
   onOpenChange?: (open: boolean) => void;
-  /** Whether models are still loading - don't render until models are loaded */
+  /** Whether key/model selection is resolving - keeps the trigger mounted but disabled */
   isModelsLoading?: boolean;
   /** Agent's configured LLM API key ID - included in available keys even if user lacks direct access */
   agentLlmApiKeyId?: string | null;
@@ -96,7 +96,9 @@ export function LlmProviderApiKeySelector({
   // Using the provider value (not a boolean) so we can re-run auto-select when
   // the provider genuinely changes (e.g., user picks a model from a different provider)
   // without looping when our own mutations cause provider changes.
-  const autoSelectedForProviderRef = useRef<string | null>(null);
+  const autoSelectedForProviderRef = useRef<string | null | undefined>(
+    undefined,
+  );
 
   // Group keys by provider for display
   const keysByProvider = useMemo(() => {
@@ -147,7 +149,7 @@ export function LlmProviderApiKeySelector({
   // re-runs for the new conversation.
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally only resetting on conversationId
   useEffect(() => {
-    autoSelectedForProviderRef.current = null;
+    autoSelectedForProviderRef.current = undefined;
   }, [conversationId]);
 
   // Auto-select first key when no key is selected or current key doesn't match provider.
@@ -163,6 +165,14 @@ export function LlmProviderApiKeySelector({
 
     // Skip if we already handled this exact provider
     if (autoSelectedForProviderRef.current === providerKey) return;
+
+    // When a key is already selected but the provider is temporarily unknown
+    // (for example while model availability is resolving), keep the current key.
+    // Falling back to an arbitrary key here can desync selectedModel + chatApiKeyId.
+    if (!currentProvider && currentConversationChatApiKeyId) {
+      autoSelectedForProviderRef.current = providerKey;
+      return;
+    }
 
     // Check if current key is valid AND matches the current provider
     const currentKeyValid =
@@ -252,18 +262,25 @@ export function LlmProviderApiKeySelector({
       }
     } else {
       // For initial (no conversation) state, update key state and notify parent
-      if (onApiKeyChange) {
-        onApiKeyChange(keyId);
-      }
       if (selectedKeyProvider && onProviderChange) {
         onProviderChange(selectedKeyProvider, keyId);
+      } else if (onApiKeyChange) {
+        onApiKeyChange(keyId);
       }
     }
   };
 
-  // Don't render until models are loaded (prevents flashing)
-  if (isModelsLoading) {
-    return null;
+  if (isLoadingKeys) {
+    return (
+      <PromptInputButton
+        disabled
+        className="max-w-[220px] min-w-0"
+        data-testid={E2eTestId.ChatApiKeySelectorTrigger}
+      >
+        <Loader2 className="size-4 shrink-0 animate-spin" />
+        <span className="sr-only">Loading API keys</span>
+      </PromptInputButton>
+    );
   }
 
   // If no keys available for this provider
@@ -275,7 +292,7 @@ export function LlmProviderApiKeySelector({
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <PromptInputButton
-          disabled={disabled}
+          disabled={disabled || isModelsLoading}
           className="max-w-[220px] min-w-0"
           data-testid={E2eTestId.ChatApiKeySelectorTrigger}
         >

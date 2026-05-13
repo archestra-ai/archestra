@@ -80,7 +80,7 @@ import {
   getSwapToolShortName,
   type SwapToolPart,
 } from "@/lib/chat/swap-agent.utils";
-import type { ModelSource } from "@/lib/chat/use-chat-preferences";
+import type { ModelSource } from "@/app/chat/chat-initial-state";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";

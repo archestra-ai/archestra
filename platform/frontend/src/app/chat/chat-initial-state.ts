@@ -2,6 +2,7 @@ import {
   resolveInitialModel,
   resolveModelForAgent,
 } from "@/lib/chat/use-chat-preferences";
+export type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import type { LlmModel } from "@/lib/llm-models.query";
 import type { SupportedProvider } from "@/lib/llm-provider-api-keys.query";
 

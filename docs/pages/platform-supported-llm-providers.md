@@ -781,7 +781,7 @@ The same formats apply when configuring a Base URL in the API key settings UI.
 
 - For Entra ID configurations, Archestra first tries Azure deployment discovery. If the inference endpoint cannot list deployments, Archestra uses Azure management APIs to find the Cognitive Services account and list its deployments.
 - For Azure OpenAI resource URLs, Archestra does not fall back to the available model catalog because that catalog includes undeployed models.
-- For built-in Azure RBAC, assign `Cognitive Services OpenAI User` at the Azure AI Services resource when possible. For the narrowest access, use a custom role with `Microsoft.Resources/subscriptions/read`, `Microsoft.Resources/subscriptions/resources/read`, `Microsoft.CognitiveServices/accounts/read`, and `Microsoft.CognitiveServices/accounts/deployments/read`.
+- For built-in Azure RBAC, assign `Cognitive Services OpenAI User` at the backing Azure AI Services resource when possible. Use the full ARM resource scope, for example `/subscriptions/<subscription-id>/resourceGroups/<resource-group>/providers/Microsoft.CognitiveServices/accounts/<resource-name>`. For the narrowest access, use a custom role with `Microsoft.Resources/subscriptions/read`, `Microsoft.Resources/subscriptions/resources/read`, `Microsoft.CognitiveServices/accounts/read`, and `Microsoft.CognitiveServices/accounts/deployments/read`.
 
 ### Routing Notes
 

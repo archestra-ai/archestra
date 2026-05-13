@@ -2,8 +2,7 @@ import type { AuditLogMessage } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import websocketService from "@/lib/websocket/websocket";
-
-export const AUDIT_LOG_QUERY_KEY = ["audit-logs"] as const;
+import { AUDIT_LOG_QUERY_KEY } from "./audit-log.query";
 
 /**
  * Subscribes to live `audit_log` WebSocket messages pushed from the server to

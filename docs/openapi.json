@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.42"
+    "version": "1.2.45"
   },
   "components": {
     "schemas": {
@@ -102388,12 +102388,6 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "toolCount": {
-                      "default": 0,
-                      "type": "integer",
-                      "minimum": -9007199254740991,
-                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
@@ -102425,8 +102419,7 @@
                     "createdAt",
                     "updatedAt",
                     "labels",
-                    "teams",
-                    "toolCount"
+                    "teams"
                   ],
                   "additionalProperties": false
                 }
@@ -103246,12 +103239,6 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "toolCount": {
-                      "default": 0,
-                      "type": "integer",
-                      "minimum": -9007199254740991,
-                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
@@ -103283,8 +103270,7 @@
                     "createdAt",
                     "updatedAt",
                     "labels",
-                    "teams",
-                    "toolCount"
+                    "teams"
                   ],
                   "additionalProperties": false
                 }
@@ -104621,12 +104607,6 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "toolCount": {
-                      "default": 0,
-                      "type": "integer",
-                      "minimum": -9007199254740991,
-                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
@@ -104658,8 +104638,7 @@
                     "createdAt",
                     "updatedAt",
                     "labels",
-                    "teams",
-                    "toolCount"
+                    "teams"
                   ],
                   "additionalProperties": false
                 }

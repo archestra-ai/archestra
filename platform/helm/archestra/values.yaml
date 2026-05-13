@@ -9,7 +9,7 @@ archestra:
   # We use the "generic" updater with inline annotation to preserve YAML comments throughout the file.
   # See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
   # See: https://github.com/googleapis/release-please/issues/2195
-  imageTag: "1.2.42" # x-release-please-version
+  imageTag: "1.2.45" # x-release-please-version
 
   # Image pull policy for the Archestra container
   # Options: Always, IfNotPresent, Never
@@ -246,9 +246,38 @@ archestra:
   # See: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
   resources:
     requests:
+      # Fastify recommends 2 vCPU per app instance for lowest latency, with the
+      # second vCPU helping GC/libuv avoid blocking the main thread.
+      # See: https://fastify.dev/docs/latest/Guides/Recommendations/#capacity-planning-for-production
+      cpu: "2"
       memory: "2Gi"
     limits:
       memory: "3Gi"
+
+  # Kubernetes probe configuration for the platform and worker containers.
+  # See: https://kubernetes.io/docs/concepts/configuration/liveness-readiness-startup-probes/
+  #
+  # The /health endpoint returns immediately without any I/O — it only fails if the
+  # Node.js event loop is blocked. The /ready endpoint additionally verifies database
+  # connectivity. Defaults are deliberately lenient (timeoutSeconds 45) because killing
+  # a pod aborts every in-flight chat stream on it; a transient event-loop pause or a
+  # slow database health check should not cause a restart. With liveness timeoutSeconds
+  # 45 and failureThreshold 5, kubelet only restarts a pod that has been unresponsive
+  # for several minutes of consecutive probes.
+  probes:
+    startup:
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      timeoutSeconds: 45
+      failureThreshold: 30
+    liveness:
+      periodSeconds: 10
+      timeoutSeconds: 45
+      failureThreshold: 5
+    readiness:
+      periodSeconds: 10
+      timeoutSeconds: 45
+      failureThreshold: 3
 
   # Configuration for the MCP Server Runtime
   orchestrator:
@@ -439,6 +468,10 @@ archestra:
     # Workers typically need less memory than the web server
     resources:
       requests:
+        # Fastify recommends 2 vCPU per app instance for lowest latency, with the
+        # second vCPU helping GC/libuv avoid blocking the main thread.
+        # See: https://fastify.dev/docs/latest/Guides/Recommendations/#capacity-planning-for-production
+        cpu: "2"
         memory: "1Gi"
       limits:
         memory: "2Gi"

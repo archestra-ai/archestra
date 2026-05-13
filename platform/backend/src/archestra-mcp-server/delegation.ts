@@ -115,9 +115,10 @@ export async function handleDelegation(
     return errorResult("Agent not found or not configured for delegation.");
   }
 
-  // Check user has access if user token is being used
-  const userId = tokenAuth?.userId;
-  if (userId && organizationId) {
+  // Check user access when a real caller is available. The caller user can be
+  // present even when the selected gateway token is team/org scoped.
+  const userId = context.userId ?? tokenAuth?.userId;
+  if (userId && userId !== "system" && organizationId) {
     const isAgentAdmin = await userHasPermission(
       userId,
       organizationId,

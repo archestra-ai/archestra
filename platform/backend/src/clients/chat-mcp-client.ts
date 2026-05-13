@@ -1099,6 +1099,7 @@ export async function getChatMcpTools({
           agent: { id: agentId, name: agentName },
           agentId,
           organizationId,
+          userId,
           conversationId,
           chatOpsBindingId,
           chatOpsThreadId,

@@ -33,7 +33,16 @@ import type {
 import { InteractionAuthMethodSchema } from "@/types";
 import { escapeLikePattern } from "@/utils/sql-search";
 import AgentTeamModel from "./agent-team";
+import ConversationChatErrorModel from "./conversation-chat-error";
 import LimitModel from "./limit";
+
+async function findChatErrorsForSessionId(sessionId: string | null) {
+  if (!sessionId || !isUuid(sessionId)) {
+    return [];
+  }
+
+  return ConversationChatErrorModel.findByConversation(sessionId);
+}
 
 /**
  * Extracts text content from a message content field.
@@ -460,7 +469,10 @@ class InteractionModel {
       }
     }
 
-    return interaction as Interaction;
+    return {
+      ...interaction,
+      chatErrors: await findChatErrorsForSessionId(interaction.sessionId),
+    } as Interaction;
   }
 
   static async getAllInteractionsForProfile(

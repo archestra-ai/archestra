@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/select";
 import { useOrgScopedAgents } from "@/lib/agent.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { useLlmModels } from "@/lib/llm-models.query";
+import { useInfiniteLlmModels } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import {
@@ -69,6 +69,7 @@ export default function AgentSettingsPage() {
   const [defaultAgentId, setDefaultAgentId] = useState<string>("");
   const [toolPolicy, setToolPolicy] = useState<GlobalToolPolicy>("permissive");
   const [fileUploads, setFileUploads] = useState<FileUploadsEnabled>("enabled");
+  const [modelSearch, setModelSearch] = useState("");
   const initializedRef = useRef(false);
   const savedStateRef = useRef<AgentSettingsState>({
     selectedApiKeyId: "",
@@ -80,10 +81,6 @@ export default function AgentSettingsPage() {
     fileUploads: "enabled" as FileUploadsEnabled,
   });
 
-  const { data: allModels, isPending: modelsLoading } = useLlmModels({
-    apiKeyId: selectedApiKeyId || undefined,
-  });
-
   const updateAgentMutation = useUpdateAgentSettings(
     "Agent settings updated",
     "Failed to update agent settings",
@@ -92,6 +89,13 @@ export default function AgentSettingsPage() {
     "Agent settings updated",
     "Failed to update agent settings",
   );
+  const { models, hasNextPage, isFetchingNextPage, fetchNextPage } =
+    useInfiniteLlmModels({
+      apiKeyId: selectedApiKeyId || undefined,
+      q: modelSearch.trim() || undefined,
+      limit: 50,
+      enabled: !!selectedApiKeyId,
+    });
 
   useEffect(() => {
     if (!organization || !apiKeys) return;
@@ -152,28 +156,30 @@ export default function AgentSettingsPage() {
     setSelectedApiKeyId(saved.selectedApiKeyId);
     setDefaultModel(saved.defaultModel);
     setDefaultAgentId(saved.defaultAgentId);
+    setModelSearch("");
     setToolPolicy(savedSecurityStateRef.current.toolPolicy);
     setFileUploads(savedSecurityStateRef.current.fileUploads);
   };
-
-  const modelItems = useMemo(() => {
-    if (!allModels) return [];
-    return allModels.map((model) => ({
-      value: model.dbId,
-      model: model.displayName ?? model.id,
-      modelId: model.id,
-      provider: model.provider,
-      isFree: model.isFree,
-      isFastest: model.isFastest,
-      isBest: model.isBest,
-    }));
-  }, [allModels]);
 
   const selectedApiKey = useMemo(
     () => availableKeys.find((key) => key.id === selectedApiKeyId) ?? null,
     [availableKeys, selectedApiKeyId],
   );
   const canFilterFreeModels = selectedApiKey?.provider === "openrouter";
+
+  const modelItems = useMemo(
+    () =>
+      models.map((model) => ({
+        value: model.dbId ?? model.id,
+        model: model.displayName ?? model.id,
+        modelId: model.id,
+        provider: model.provider,
+        isFree: model.isFree,
+        isFastest: model.isFastest,
+        isBest: model.isBest,
+      })),
+    [models],
+  );
 
   const agentItems = useMemo(() => {
     const items: AgentSelectItem[] = [
@@ -213,7 +219,13 @@ export default function AgentSettingsPage() {
   const handleResetDefaultModel = useCallback(() => {
     setSelectedApiKeyId("");
     setDefaultModel("");
+    setModelSearch("");
   }, []);
+
+  const handleLoadMoreModels = useCallback(() => {
+    if (!hasNextPage || isFetchingNextPage) return;
+    void fetchNextPage();
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
   const isRestrictive = toolPolicy === "restrictive";
   const isSaving =
@@ -236,6 +248,7 @@ export default function AgentSettingsPage() {
                   onValueChange={(value) => {
                     setSelectedApiKeyId(value);
                     setDefaultModel("");
+                    setModelSearch("");
                   }}
                   disabled={isSaving || !hasPermission}
                 >
@@ -273,19 +286,17 @@ export default function AgentSettingsPage() {
                   options={modelItems}
                   freeFilterable={canFilterFreeModels}
                   placeholder={
-                    !selectedApiKeyId
-                      ? "Select API key first..."
-                      : modelsLoading
-                        ? "Loading models..."
-                        : "Select model..."
+                    selectedApiKeyId
+                      ? "Select model..."
+                      : "Select API key first"
                   }
                   className="w-80"
-                  disabled={
-                    isSaving ||
-                    !hasPermission ||
-                    modelsLoading ||
-                    !selectedApiKeyId
-                  }
+                  onSearchQueryChange={setModelSearch}
+                  filterItems={false}
+                  hasMore={!!hasNextPage}
+                  isLoadingMore={isFetchingNextPage}
+                  onLoadMore={handleLoadMoreModels}
+                  disabled={isSaving || !hasPermission || !selectedApiKeyId}
                 />
                 <Button
                   type="button"

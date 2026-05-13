@@ -100,8 +100,8 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
 }));
 
 vi.mock("@/lib/llm-models.query", () => ({
-  useLlmModels: () => ({
-    data: [
+  useInfiniteLlmModels: () => ({
+    models: [
       { id: "gpt-4o", provider: "openai", displayName: "GPT-4o" },
       {
         id: "claude-3-opus",
@@ -110,10 +110,16 @@ vi.mock("@/lib/llm-models.query", () => ({
       },
     ],
     isPending: false,
+    hasNextPage: false,
+    isFetchingNextPage: false,
+    fetchNextPage: vi.fn(),
   }),
-  useEmbeddingModels: () => ({
-    data: mockEmbeddingModels,
+  useInfiniteEmbeddingModels: () => ({
+    models: mockEmbeddingModels,
     isPending: false,
+    hasNextPage: false,
+    isFetchingNextPage: false,
+    fetchNextPage: vi.fn(),
   }),
   useModelsWithApiKeys: () => ({
     data: mockEmbeddingModels.map((m) => ({

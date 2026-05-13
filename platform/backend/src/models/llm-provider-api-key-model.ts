@@ -1,6 +1,16 @@
-import { MODEL_MARKER_PATTERNS, type SupportedProvider } from "@shared";
+import {
+  MODEL_MARKER_PATTERNS,
+  type ModelInputModality,
+  type PaginationQuery,
+  type SupportedProvider,
+} from "@shared";
+import type { SQL } from "drizzle-orm";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import {
+  createPaginatedResult,
+  type PaginatedResult,
+} from "@/database/utils/pagination";
 import type { LlmProviderApiKey, Model } from "@/types";
 
 /**
@@ -346,6 +356,150 @@ class LlmProviderApiKeyModelLinkModel {
       isFastest: r.isFastest,
     }));
   }
+
+  /**
+   * Get available models for selector-style browsing.
+   * Applies filtering and offset pagination in the database.
+   */
+  static async getAvailableModelsForApiKeyIds(params: {
+    apiKeyIds: string[];
+    provider?: SupportedProvider;
+    modelId?: string;
+    isEmbedding?: boolean;
+    q?: string;
+    inputModalities?: ModelInputModality[];
+    supportsToolCalling?: boolean;
+    pagination: PaginationQuery;
+  }): Promise<
+    PaginatedResult<{ model: Model; isBest: boolean; isFastest: boolean }>
+  > {
+    const {
+      apiKeyIds,
+      provider,
+      modelId,
+      isEmbedding,
+      q,
+      inputModalities,
+      supportsToolCalling,
+      pagination,
+    } = params;
+
+    if (apiKeyIds.length === 0) {
+      return createPaginatedResult([], 0, pagination);
+    }
+
+    const conditions: SQL[] = [
+      inArray(schema.llmProviderApiKeyModelsTable.apiKeyId, apiKeyIds),
+      eq(schema.modelsTable.ignored, false),
+    ];
+
+    if (provider) {
+      conditions.push(eq(schema.modelsTable.provider, provider));
+    }
+
+    if (modelId) {
+      conditions.push(eq(schema.modelsTable.modelId, modelId));
+    }
+
+    if (isEmbedding !== undefined) {
+      conditions.push(
+        isEmbedding
+          ? sql`${schema.modelsTable.embeddingDimensions} is not null`
+          : sql`${schema.modelsTable.embeddingDimensions} is null`,
+      );
+    }
+
+    if (!isEmbedding) {
+      conditions.push(sql`${schema.modelsTable.embeddingDimensions} is null`);
+      conditions.push(
+        sql`(${schema.modelsTable.inputModalities} is null or ${schema.modelsTable.inputModalities} @> '["text"]'::jsonb)`,
+      );
+      conditions.push(
+        sql`(${schema.modelsTable.outputModalities} is null or ${schema.modelsTable.outputModalities} @> '["text"]'::jsonb)`,
+      );
+    }
+
+    const searchTokens = q
+      ?.trim()
+      .split(/\s+/)
+      .filter((token) => token.length > 0);
+    for (const token of searchTokens ?? []) {
+      const pattern = `%${escapeLikePattern(token)}%`;
+      conditions.push(
+        sql`(${schema.modelsTable.modelId} ilike ${pattern} or ${schema.modelsTable.description} ilike ${pattern})`,
+      );
+    }
+
+    for (const modality of inputModalities ?? []) {
+      conditions.push(
+        sql`${schema.modelsTable.inputModalities} @> ${JSON.stringify([modality])}::jsonb`,
+      );
+    }
+
+    if (supportsToolCalling !== undefined) {
+      conditions.push(
+        eq(schema.modelsTable.supportsToolCalling, supportsToolCalling),
+      );
+    }
+
+    const whereClause = and(...conditions);
+    const [results, totalRows] = await Promise.all([
+      db
+        .select({
+          model: schema.modelsTable,
+          isBest:
+            sql<boolean>`bool_or(${schema.llmProviderApiKeyModelsTable.isBest})`.as(
+              "is_best_agg",
+            ),
+          isFastest:
+            sql<boolean>`bool_or(${schema.llmProviderApiKeyModelsTable.isFastest})`.as(
+              "is_fastest_agg",
+            ),
+        })
+        .from(schema.llmProviderApiKeyModelsTable)
+        .innerJoin(
+          schema.modelsTable,
+          eq(
+            schema.llmProviderApiKeyModelsTable.modelId,
+            schema.modelsTable.id,
+          ),
+        )
+        .where(whereClause)
+        .groupBy(schema.modelsTable.id)
+        .orderBy(
+          sql`bool_or(${schema.llmProviderApiKeyModelsTable.isBest}) desc`,
+          asc(schema.modelsTable.provider),
+          asc(schema.modelsTable.modelId),
+          asc(schema.modelsTable.id),
+        )
+        .limit(pagination.limit)
+        .offset(pagination.offset),
+      db
+        .select({
+          total: sql<number>`count(distinct ${schema.modelsTable.id})::int`,
+        })
+        .from(schema.llmProviderApiKeyModelsTable)
+        .innerJoin(
+          schema.modelsTable,
+          eq(
+            schema.llmProviderApiKeyModelsTable.modelId,
+            schema.modelsTable.id,
+          ),
+        )
+        .where(whereClause),
+    ]);
+
+    return createPaginatedResult(
+      results.map((row) => ({
+        model: row.model,
+        isBest: row.isBest,
+        isFastest: row.isFastest,
+      })),
+      Number(totalRows[0]?.total ?? 0),
+      pagination,
+    );
+  }
+
   /**
    * Get the "best" model for a specific API key.
    * Returns the model marked with is_best=true, or falls back to the first model.
@@ -523,6 +677,10 @@ class LlmProviderApiKeyModelLinkModel {
 }
 
 export default LlmProviderApiKeyModelLinkModel;
+
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, "\\$&");
+}
 
 // ============================================================================
 // Helper functions

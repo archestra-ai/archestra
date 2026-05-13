@@ -18,6 +18,10 @@ const mockSearchableSelect = vi.fn(
     <div>{value || placeholder}</div>
   ),
 );
+const { useInfiniteLlmModelsMock, fetchNextPageMock } = vi.hoisted(() => ({
+  useInfiniteLlmModelsMock: vi.fn(),
+  fetchNextPageMock: vi.fn(),
+}));
 
 vi.mock("next/link", () => ({
   default: ({
@@ -44,6 +48,50 @@ vi.mock("@/components/llm-provider-api-key-form", () => ({
       name: "OpenRouter",
     },
   },
+}));
+
+vi.mock("@/components/llm-model-select", () => ({
+  LlmModelSearchableSelect: ({
+    value,
+    placeholder,
+    disabled,
+    freeFilterable,
+    onSearchQueryChange,
+    hasMore,
+    isLoadingMore,
+    onLoadMore,
+    onValueChange,
+  }: {
+    value: string;
+    placeholder: string;
+    disabled?: boolean;
+    freeFilterable?: boolean;
+    onSearchQueryChange?: (value: string) => void;
+    hasMore?: boolean;
+    isLoadingMore?: boolean;
+    onLoadMore?: () => void;
+    onValueChange: (value: string) => void;
+  }) => (
+    <div>
+      <button type="button" disabled={disabled}>
+        {value || placeholder}
+      </button>
+      {freeFilterable && <span>Free models only</span>}
+      <button type="button" onClick={() => onValueChange("gpt-4o")}>
+        Select gpt-4o
+      </button>
+      <button type="button" onClick={() => onSearchQueryChange?.("sonnet")}>
+        Search sonnet
+      </button>
+      <button
+        type="button"
+        disabled={!hasMore || isLoadingMore}
+        onClick={onLoadMore}
+      >
+        Load more models
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock("@/components/llm-provider-options", () => ({
@@ -88,8 +136,21 @@ vi.mock("@/components/settings/settings-block", () => ({
   SettingsSectionStack: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
-  SettingsSaveBar: ({ hasChanges }: { hasChanges: boolean }) =>
-    hasChanges ? <div>Unsaved changes</div> : null,
+  SettingsSaveBar: ({
+    hasChanges,
+    disabledSave,
+  }: {
+    hasChanges: boolean;
+    disabledSave?: boolean;
+  }) =>
+    hasChanges ? (
+      <div>
+        <div>Unsaved changes</div>
+        <button type="button" disabled={disabledSave}>
+          Save
+        </button>
+      </div>
+    ) : null,
 }));
 
 vi.mock("@/components/ui/searchable-select", () => ({
@@ -104,8 +165,23 @@ vi.mock("@/components/log-filter-option", () => ({
 }));
 
 vi.mock("@/components/ui/select", () => ({
-  Select: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
+  Select: ({
+    children,
+    value,
+    onValueChange,
+  }: {
+    children: React.ReactNode;
+    value?: string;
+    onValueChange?: (value: string) => void;
+  }) => (
+    <div>
+      {children}
+      {(value === "" || value === "key-1") && onValueChange ? (
+        <button type="button" onClick={() => onValueChange("key-1")}>
+          Select key-1
+        </button>
+      ) : null}
+    </div>
   ),
   SelectTrigger: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
@@ -131,24 +207,14 @@ vi.mock("@/lib/agent.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/llm-models.query", () => ({
-  useLlmModels: () => ({
-    data: [
-      {
-        id: "gemini-2.5-pro",
-        dbId: "gemini-2.5-pro",
-        provider: "vertex_ai",
-        displayName: "Gemini 2.5 Pro",
-      },
-    ],
-    isPending: false,
-  }),
-}));
-
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   useAvailableLlmProviderApiKeys: () => ({
     data: mockApiKeys,
   }),
+}));
+
+vi.mock("@/lib/llm-models.query", () => ({
+  useInfiniteLlmModels: useInfiniteLlmModelsMock,
 }));
 
 const mutateAsync = vi.fn();
@@ -204,9 +270,40 @@ beforeEach(() => {
     },
   ];
   mockAgents = [];
+  fetchNextPageMock.mockResolvedValue(undefined);
+  useInfiniteLlmModelsMock.mockReturnValue({
+    models: [
+      {
+        id: "gemini-2.5-pro",
+        displayName: "Gemini 2.5 Pro",
+        provider: "vertex_ai",
+      },
+    ],
+    hasNextPage: false,
+    isFetchingNextPage: false,
+    fetchNextPage: fetchNextPageMock,
+  });
 });
 
 describe("AgentSettingsPage", () => {
+  it("shows a disabled model selector placeholder until an API key is selected", () => {
+    mockOrganization = {
+      defaultLlmModel: null,
+      defaultLlmProvider: null,
+      defaultLlmApiKeyId: null,
+      defaultAgentId: null,
+      globalToolPolicy: "permissive",
+      allowChatFileUploads: true,
+    };
+
+    renderPage();
+
+    expect(screen.getByText("Select API key first")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Select API key first" }),
+    ).toBeDisabled();
+  });
+
   it("lets users reset the org default model selection", async () => {
     const user = userEvent.setup();
 
@@ -216,7 +313,7 @@ describe("AgentSettingsPage", () => {
 
     await user.click(screen.getByRole("button", { name: "Reset" }));
 
-    expect(screen.getByText("Select API key first...")).toBeInTheDocument();
+    expect(screen.getByText("Select API key first")).toBeInTheDocument();
     expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
   });
 
@@ -239,6 +336,106 @@ describe("AgentSettingsPage", () => {
     renderPage();
 
     expect(screen.getByText("Free models only")).toBeInTheDocument();
+  });
+
+  it("does not expose a standalone model clear action", () => {
+    renderPage();
+
+    expect(screen.getByText("gemini-2.5-pro")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Clear model" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps save disabled when an API key is selected without a model", async () => {
+    const user = userEvent.setup();
+    mockOrganization = {
+      defaultLlmModel: null,
+      defaultLlmProvider: null,
+      defaultLlmApiKeyId: null,
+      defaultAgentId: null,
+      globalToolPolicy: "permissive",
+      allowChatFileUploads: true,
+    };
+
+    renderPage();
+
+    await user.click(
+      screen.getAllByRole("button", { name: "Select key-1" })[0],
+    );
+
+    expect(screen.getByText("Select model...")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  });
+
+  it("enables save after selecting a model for the selected API key", async () => {
+    const user = userEvent.setup();
+    mockOrganization = {
+      defaultLlmModel: null,
+      defaultLlmProvider: null,
+      defaultLlmApiKeyId: null,
+      defaultAgentId: null,
+      globalToolPolicy: "permissive",
+      allowChatFileUploads: true,
+    };
+
+    renderPage();
+
+    await user.click(
+      screen.getAllByRole("button", { name: "Select key-1" })[0],
+    );
+    await user.click(screen.getByRole("button", { name: "Select gpt-4o" }));
+
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+  });
+
+  it("passes search text to the infinite model query", async () => {
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await user.click(screen.getByRole("button", { name: "Search sonnet" }));
+
+    expect(useInfiniteLlmModelsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        apiKeyId: "key-1",
+        q: "sonnet",
+        limit: 50,
+        enabled: true,
+      }),
+    );
+  });
+
+  it("loads more models when more pages are available", async () => {
+    const user = userEvent.setup();
+    useInfiniteLlmModelsMock.mockReturnValue({
+      models: [],
+      hasNextPage: true,
+      isFetchingNextPage: false,
+      fetchNextPage: fetchNextPageMock,
+    });
+
+    renderPage();
+
+    await user.click(screen.getByRole("button", { name: "Load more models" }));
+
+    expect(fetchNextPageMock).toHaveBeenCalledOnce();
+  });
+
+  it("does not load more models while a page is already fetching", async () => {
+    const user = userEvent.setup();
+    useInfiniteLlmModelsMock.mockReturnValue({
+      models: [],
+      hasNextPage: true,
+      isFetchingNextPage: true,
+      fetchNextPage: fetchNextPageMock,
+    });
+
+    renderPage();
+
+    await user.click(screen.getByRole("button", { name: "Load more models" }));
+
+    expect(fetchNextPageMock).not.toHaveBeenCalled();
   });
 
   it("uses the shared profile filter renderer for org agent rows in the default agent dropdown", () => {

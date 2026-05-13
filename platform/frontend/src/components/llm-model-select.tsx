@@ -217,6 +217,11 @@ type SharedProps = {
   searchPlaceholder?: string;
   allowCustom?: boolean;
   emptyMessage?: string;
+  onSearchQueryChange?: (value: string) => void;
+  filterItems?: boolean;
+  hasMore?: boolean;
+  isLoadingMore?: boolean;
+  onLoadMore?: () => void;
   popoverContentClassName?: string;
   popoverListClassName?: string;
   truncateOptionLabels?: boolean;
@@ -270,6 +275,11 @@ export function LlmModelSearchableSelect(props: LlmModelSearchableSelectProps) {
     popoverAvoidCollisions,
     freeFilterable = false,
     preserveOrder = false,
+    hasMore,
+    isLoadingMore,
+    onLoadMore,
+    onSearchQueryChange,
+    filterItems,
   } = props;
 
   const [freeOnly, setFreeOnly] = useState(false);
@@ -352,6 +362,11 @@ export function LlmModelSearchableSelect(props: LlmModelSearchableSelectProps) {
       className={cn("w-full", className)}
       multiline={showPricing}
       allowCustom={allowCustom}
+      onSearchQueryChange={onSearchQueryChange}
+      filterItems={filterItems}
+      hasMore={hasMore}
+      isLoadingMore={isLoadingMore}
+      onLoadMore={onLoadMore}
       emptyMessage={emptyMessage}
       contentClassName={popoverContentClassName}
       listClassName={popoverListClassName}

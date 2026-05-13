@@ -56,8 +56,8 @@ import {
 } from "@/components/ui/select";
 import { useFeature } from "@/lib/config/config.query";
 import {
-  useEmbeddingModels,
-  useLlmModels,
+  useInfiniteEmbeddingModels,
+  useInfiniteLlmModels,
   useModelsWithApiKeys,
 } from "@/lib/llm-models.query";
 import {
@@ -363,18 +363,20 @@ function RerankerModelSelector({
   selectedKeyId: string | null;
   pulse?: boolean;
 }) {
-  const { data: apiKeys } = useAvailableLlmProviderApiKeys();
-  const { data: allModels, isPending: modelsLoading } = useLlmModels();
+  const [search, setSearch] = useState("");
 
-  const selectedProvider = useMemo(() => {
-    if (!selectedKeyId || !apiKeys) return null;
-    return apiKeys.find((k) => k.id === selectedKeyId)?.provider ?? null;
-  }, [selectedKeyId, apiKeys]);
-
-  const models = useMemo(() => {
-    if (!allModels || !selectedProvider) return [];
-    return allModels.filter((m) => m.provider === selectedProvider);
-  }, [allModels, selectedProvider]);
+  const {
+    models,
+    isPending: modelsLoading,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  } = useInfiniteLlmModels({
+    apiKeyId: selectedKeyId ?? undefined,
+    q: search.trim() || undefined,
+    limit: 50,
+    enabled: !!selectedKeyId,
+  });
 
   if (!selectedKeyId) {
     return (
@@ -405,6 +407,15 @@ function RerankerModelSelector({
       onValueChange={(v) => onChange(v || null)}
       options={rerankerItems}
       placeholder="Select reranking model..."
+      onSearchQueryChange={setSearch}
+      filterItems={false}
+      hasMore={!!hasNextPage}
+      isLoadingMore={isFetchingNextPage}
+      onLoadMore={() => {
+        if (hasNextPage && !isFetchingNextPage) {
+          void fetchNextPage();
+        }
+      }}
       className={cn("w-full", pulse && "animate-pulse ring-2 ring-primary/40")}
       popoverContentClassName={KNOWLEDGE_MODEL_POPOVER_CLASS}
       popoverListClassName={KNOWLEDGE_MODEL_POPOVER_LIST_CLASS}
@@ -482,8 +493,18 @@ function KnowledgeSettingsContent() {
     string | null
   >(null);
   const [rerankerModel, setRerankerModel] = useState<string | null>(null);
+  const [embeddingSearch, setEmbeddingSearch] = useState("");
 
-  const { data: embeddingModels } = useEmbeddingModels(embeddingChatApiKeyId);
+  const {
+    models: embeddingModels,
+    hasNextPage: hasMoreEmbeddingModels,
+    isFetchingNextPage: isFetchingMoreEmbeddingModels,
+    fetchNextPage: fetchNextEmbeddingModelsPage,
+  } = useInfiniteEmbeddingModels({
+    apiKeyId: embeddingChatApiKeyId,
+    q: embeddingSearch.trim() || undefined,
+    limit: 50,
+  });
   const { data: modelsWithApiKeys } = useModelsWithApiKeys();
   const embeddingCapableKeyIds = useMemo(() => {
     const ids = new Set<string>();
@@ -637,6 +658,18 @@ function KnowledgeSettingsContent() {
                       }))}
                       placeholder="Select embedding model..."
                       searchPlaceholder="Search embedding models..."
+                      onSearchQueryChange={setEmbeddingSearch}
+                      filterItems={false}
+                      hasMore={!!hasMoreEmbeddingModels}
+                      isLoadingMore={isFetchingMoreEmbeddingModels}
+                      onLoadMore={() => {
+                        if (
+                          hasMoreEmbeddingModels &&
+                          !isFetchingMoreEmbeddingModels
+                        ) {
+                          void fetchNextEmbeddingModelsPage();
+                        }
+                      }}
                       emptyMessage={embeddingEmptyMessage}
                       className={cn(
                         "w-full",

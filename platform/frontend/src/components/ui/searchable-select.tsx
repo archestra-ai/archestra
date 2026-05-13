@@ -32,6 +32,10 @@ interface SearchableSelectProps {
   showSearchIcon?: boolean;
   hint?: string;
   onSearchQueryChange?: (value: string) => void;
+  filterItems?: boolean;
+  hasMore?: boolean;
+  isLoadingMore?: boolean;
+  onLoadMore?: () => void;
   emptyMessage?: string;
   multiline?: boolean;
   contentClassName?: string;
@@ -53,6 +57,10 @@ export function SearchableSelect({
   showSearchIcon = true,
   hint,
   onSearchQueryChange,
+  filterItems = true,
+  hasMore = false,
+  isLoadingMore = false,
+  onLoadMore,
   emptyMessage = "No results found.",
   multiline = false,
   contentClassName,
@@ -63,8 +71,10 @@ export function SearchableSelect({
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
+  const loadMoreRef = React.useRef<HTMLDivElement | null>(null);
 
   const filteredItems = React.useMemo(() => {
+    if (!filterItems) return items;
     if (!searchQuery) return items;
 
     const query = searchQuery.toLowerCase();
@@ -73,7 +83,7 @@ export function SearchableSelect({
         (item.searchText ?? item.label).toLowerCase().includes(query) ||
         item.description?.toLowerCase().includes(query),
     );
-  }, [items, searchQuery]);
+  }, [filterItems, items, searchQuery]);
 
   const selectedItem = items.find((item) => item.value === value);
 
@@ -82,9 +92,29 @@ export function SearchableSelect({
       e.preventDefault();
       onValueChange(searchQuery);
       setOpen(false);
-      setSearchQuery("");
+      clearSearchQuery();
     }
   };
+
+  const clearSearchQuery = React.useCallback(() => {
+    setSearchQuery("");
+    onSearchQueryChange?.("");
+  }, [onSearchQueryChange]);
+
+  React.useEffect(() => {
+    if (!open || !hasMore || isLoadingMore || !onLoadMore) return;
+    const node = loadMoreRef.current;
+    if (!node) return;
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        onLoadMore();
+      }
+    });
+    observer.observe(node);
+
+    return () => observer.disconnect();
+  }, [hasMore, isLoadingMore, onLoadMore, open]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -163,45 +193,55 @@ export function SearchableSelect({
               )}
             </div>
           ) : (
-            filteredItems.map((item) => (
-              <button
-                type="button"
-                key={item.value}
-                disabled={item.disabled}
-                aria-disabled={item.disabled}
-                onClick={() => {
-                  if (item.disabled) {
-                    return;
-                  }
-                  onValueChange(item.value);
-                  setOpen(false);
-                  setSearchQuery("");
-                }}
-                className={cn(
-                  "relative flex w-full cursor-default select-none items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground",
-                  value === item.value && "bg-accent/50",
-                  item.disabled &&
-                    "cursor-not-allowed opacity-60 hover:bg-transparent hover:text-inherit",
-                )}
-              >
-                <span className="min-w-0 flex-1">
-                  {item.content ?? item.label}
-                  {item.description && (
-                    <span className="block text-xs text-muted-foreground truncate">
-                      {item.description}
-                    </span>
-                  )}
-                </span>
-                <Check
+            <>
+              {filteredItems.map((item) => (
+                <button
+                  type="button"
+                  key={item.value}
+                  disabled={item.disabled}
+                  aria-disabled={item.disabled}
+                  onClick={() => {
+                    if (item.disabled) {
+                      return;
+                    }
+                    onValueChange(item.value);
+                    setOpen(false);
+                    clearSearchQuery();
+                  }}
                   className={cn(
-                    "ml-2 h-4 w-4 shrink-0",
-                    value === item.value || item.checked
-                      ? "opacity-100"
-                      : "opacity-0",
+                    "relative flex w-full cursor-default select-none items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground",
+                    value === item.value && "bg-accent/50",
+                    item.disabled &&
+                      "cursor-not-allowed opacity-60 hover:bg-transparent hover:text-inherit",
                   )}
-                />
-              </button>
-            ))
+                >
+                  <span className="min-w-0 flex-1">
+                    {item.content ?? item.label}
+                    {item.description && (
+                      <span className="block text-xs text-muted-foreground truncate">
+                        {item.description}
+                      </span>
+                    )}
+                  </span>
+                  <Check
+                    className={cn(
+                      "ml-2 h-4 w-4 shrink-0",
+                      value === item.value || item.checked
+                        ? "opacity-100"
+                        : "opacity-0",
+                    )}
+                  />
+                </button>
+              ))}
+              {(hasMore || isLoadingMore) && (
+                <div
+                  ref={loadMoreRef}
+                  className="px-4 py-2 text-center text-xs text-muted-foreground"
+                >
+                  {isLoadingMore ? "Loading more..." : "Load more"}
+                </div>
+              )}
+            </>
           )}
         </div>
       </PopoverContent>

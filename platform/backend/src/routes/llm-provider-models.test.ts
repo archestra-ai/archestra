@@ -155,13 +155,333 @@ describe("chat model routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual([
+    expect(response.json()).toEqual({
+      data: [
+        expect.objectContaining({
+          id: "gemini-2.5-flash",
+          displayName: "Gemini 2.5 Flash",
+          provider: "gemini",
+        }),
+      ],
+      pagination: {
+        currentPage: 1,
+        limit: 20,
+        total: 1,
+        totalPages: 1,
+        hasNext: false,
+        hasPrev: false,
+      },
+    });
+  });
+
+  test("GET /api/llm-models/available paginates with an offset", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "gemini",
+      scope: "personal",
+      userId: user.id,
+    });
+
+    const models = await Promise.all(
+      ["gemini-alpha", "gemini-beta", "gemini-gamma"].map((modelId) =>
+        ModelModel.create({
+          externalId: `gemini/${modelId}`,
+          provider: "gemini",
+          modelId,
+          description: modelId,
+          contextLength: 1_000_000,
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+          supportsToolCalling: true,
+          promptPricePerToken: "0.000001",
+          completionPricePerToken: "0.000002",
+          ignored: false,
+          lastSyncedAt: new Date(),
+        }),
+      ),
+    );
+
+    await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+      apiKey.id,
+      models.map((model) => ({ id: model.id, modelId: model.modelId })),
+      "gemini",
+    );
+
+    const firstPage = await app.inject({
+      method: "GET",
+      url: "/api/llm-models/available?limit=2",
+    });
+
+    expect(firstPage.statusCode).toBe(200);
+    expect(firstPage.json()).toEqual({
+      data: [
+        expect.objectContaining({ id: "gemini-alpha" }),
+        expect.objectContaining({ id: "gemini-beta" }),
+      ],
+      pagination: {
+        currentPage: 1,
+        limit: 2,
+        total: 3,
+        totalPages: 2,
+        hasNext: true,
+        hasPrev: false,
+      },
+    });
+
+    const secondPage = await app.inject({
+      method: "GET",
+      url: "/api/llm-models/available?limit=2&offset=2",
+    });
+
+    expect(secondPage.statusCode).toBe(200);
+    expect(secondPage.json()).toEqual({
+      data: [expect.objectContaining({ id: "gemini-gamma" })],
+      pagination: {
+        currentPage: 2,
+        limit: 2,
+        total: 3,
+        totalPages: 2,
+        hasNext: false,
+        hasPrev: true,
+      },
+    });
+  });
+
+  test("GET /api/llm-models/available returns the best model first for a key", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "gemini",
+      scope: "personal",
+      userId: user.id,
+    });
+
+    const alphabeticallyFirstModel = await ModelModel.create({
+      externalId: "gemini/gemini-alpha",
+      provider: "gemini",
+      modelId: "gemini-alpha",
+      description: "Gemini Alpha",
+      contextLength: 1_000_000,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      promptPricePerToken: "0.000001",
+      completionPricePerToken: "0.000002",
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+    const bestModel = await ModelModel.create({
+      externalId: "gemini/gemini-3.1-pro-preview",
+      provider: "gemini",
+      modelId: "gemini-3.1-pro-preview",
+      description: "Gemini Pro",
+      contextLength: 1_000_000,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      promptPricePerToken: "0.000001",
+      completionPricePerToken: "0.000002",
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+
+    await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+      apiKey.id,
+      [
+        {
+          id: alphabeticallyFirstModel.id,
+          modelId: alphabeticallyFirstModel.modelId,
+        },
+        { id: bestModel.id, modelId: bestModel.modelId },
+      ],
+      "gemini",
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/llm-models/available?apiKeyId=${apiKey.id}&limit=1`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      data: [
+        expect.objectContaining({
+          id: "gemini-3.1-pro-preview",
+          isBest: true,
+        }),
+      ],
+      pagination: {
+        currentPage: 1,
+        limit: 1,
+        total: 2,
+        totalPages: 2,
+        hasNext: true,
+        hasPrev: false,
+      },
+    });
+  });
+
+  test("GET /api/llm-models/available filters by search, modalities, and tool calling", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "gemini",
+      scope: "personal",
+      userId: user.id,
+    });
+
+    const matchingModel = await ModelModel.create({
+      externalId: "gemini/gemini-2.5-vision-pro",
+      provider: "gemini",
+      modelId: "gemini-2.5-vision-pro",
+      description: "Gemini Vision Pro",
+      contextLength: 1_000_000,
+      inputModalities: ["text", "image", "pdf"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      promptPricePerToken: "0.000001",
+      completionPricePerToken: "0.000002",
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+    const noToolModel = await ModelModel.create({
+      externalId: "gemini/gemini-2.5-vision-lite",
+      provider: "gemini",
+      modelId: "gemini-2.5-vision-lite",
+      description: "Gemini Vision Lite",
+      contextLength: 1_000_000,
+      inputModalities: ["text", "image", "pdf"],
+      outputModalities: ["text"],
+      supportsToolCalling: false,
+      promptPricePerToken: "0.000001",
+      completionPricePerToken: "0.000002",
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+    const missingPdfModel = await ModelModel.create({
+      externalId: "gemini/gemini-2.5-vision-basic",
+      provider: "gemini",
+      modelId: "gemini-2.5-vision-basic",
+      description: "Gemini Vision Basic",
+      contextLength: 1_000_000,
+      inputModalities: ["text", "image"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      promptPricePerToken: "0.000001",
+      completionPricePerToken: "0.000002",
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+
+    await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+      apiKey.id,
+      [matchingModel, noToolModel, missingPdfModel].map((model) => ({
+        id: model.id,
+        modelId: model.modelId,
+      })),
+      "gemini",
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/llm-models/available?q=vision%20pro&inputModalities=image,pdf&supportsToolCalling=true",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toEqual([
       expect.objectContaining({
-        id: "gemini-2.5-flash",
-        displayName: "Gemini 2.5 Flash",
-        provider: "gemini",
+        id: "gemini-2.5-vision-pro",
+        displayName: "Gemini Vision Pro",
       }),
     ]);
+    expect(response.json().pagination).toEqual({
+      currentPage: 1,
+      limit: 20,
+      total: 1,
+      totalPages: 1,
+      hasNext: false,
+      hasPrev: false,
+    });
+  });
+
+  test("GET /api/llm-models/available filters by exact modelId", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "gemini",
+      scope: "personal",
+      userId: user.id,
+    });
+
+    const selectedModel = await ModelModel.create({
+      externalId: "gemini/gemini-2.5-flash",
+      provider: "gemini",
+      modelId: "gemini-2.5-flash",
+      description: "Gemini 2.5 Flash",
+      contextLength: 1_000_000,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      promptPricePerToken: "0.000001",
+      completionPricePerToken: "0.000002",
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+    const otherModel = await ModelModel.create({
+      externalId: "gemini/gemini-2.5-pro",
+      provider: "gemini",
+      modelId: "gemini-2.5-pro",
+      description: "Gemini 2.5 Pro",
+      contextLength: 1_000_000,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      promptPricePerToken: "0.00001",
+      completionPricePerToken: "0.00003",
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+
+    await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+      apiKey.id,
+      [selectedModel, otherModel].map((model) => ({
+        id: model.id,
+        modelId: model.modelId,
+      })),
+      "gemini",
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/llm-models/available?modelId=gemini-2.5-flash",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      data: [
+        expect.objectContaining({
+          id: "gemini-2.5-flash",
+          displayName: "Gemini 2.5 Flash",
+        }),
+      ],
+      pagination: {
+        currentPage: 1,
+        limit: 20,
+        total: 1,
+        totalPages: 1,
+        hasNext: false,
+        hasPrev: false,
+      },
+    });
   });
 
   test("GET /api/llm-models/available?isEmbedding=true only returns embedding models with configured dimensions", async ({
@@ -227,11 +547,98 @@ describe("chat model routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual([
-      expect.objectContaining({
-        id: "gemini-embedding-001",
-        embeddingDimensions: 3072,
-      }),
+    expect(response.json()).toEqual({
+      data: [
+        expect.objectContaining({
+          id: "gemini-embedding-001",
+          embeddingDimensions: 3072,
+        }),
+      ],
+      pagination: {
+        currentPage: 1,
+        limit: 20,
+        total: 1,
+        totalPages: 1,
+        hasNext: false,
+        hasPrev: false,
+      },
+    });
+  });
+
+  test("GET /api/llm-models/available falls back to accessible keys for inaccessible apiKeyId", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeUser,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+    const otherUser = await makeUser();
+    const accessibleKey = await makeLlmProviderApiKey(
+      organizationId,
+      secret.id,
+      {
+        provider: "gemini",
+        scope: "personal",
+        userId: user.id,
+      },
+    );
+    const inaccessibleKey = await makeLlmProviderApiKey(
+      organizationId,
+      secret.id,
+      {
+        provider: "gemini",
+        scope: "personal",
+        userId: otherUser.id,
+      },
+    );
+
+    const accessibleModel = await ModelModel.create({
+      externalId: "gemini/gemini-accessible",
+      provider: "gemini",
+      modelId: "gemini-accessible",
+      description: "Gemini Accessible",
+      contextLength: 1_000_000,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      promptPricePerToken: "0.000001",
+      completionPricePerToken: "0.000002",
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+    const inaccessibleModel = await ModelModel.create({
+      externalId: "gemini/gemini-inaccessible",
+      provider: "gemini",
+      modelId: "gemini-inaccessible",
+      description: "Gemini Inaccessible",
+      contextLength: 1_000_000,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      promptPricePerToken: "0.000001",
+      completionPricePerToken: "0.000002",
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+
+    await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+      accessibleKey.id,
+      [{ id: accessibleModel.id, modelId: accessibleModel.modelId }],
+      "gemini",
+    );
+    await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+      inaccessibleKey.id,
+      [{ id: inaccessibleModel.id, modelId: inaccessibleModel.modelId }],
+      "gemini",
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/llm-models/available?apiKeyId=${inaccessibleKey.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toEqual([
+      expect.objectContaining({ id: "gemini-accessible" }),
     ]);
   });
 

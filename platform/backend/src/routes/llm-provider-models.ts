@@ -1,7 +1,10 @@
 import {
+  createPaginatedResponseSchema,
   EmbeddingDimensionsSchema,
   isFreeModel,
   isProviderApiKeyOptional,
+  ModelInputModalitySchema,
+  PaginationQuerySchema,
   RouteId,
   SupportedProvidersSchema,
 } from "@shared";
@@ -46,6 +49,16 @@ const LlmModelSchema = z.object({
   embeddingDimensions: EmbeddingDimensionsSchema.nullable().optional(),
 });
 
+const InputModalitiesQuerySchema = z
+  .preprocess((value) => {
+    const values = Array.isArray(value) ? value : [value];
+    return values
+      .flatMap((item) => String(item).split(","))
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+  }, z.array(ModelInputModalitySchema))
+  .optional();
+
 const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
     "/api/llm-models/available",
@@ -55,19 +68,38 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Get available LLM models from configured provider API keys. Models are fetched from the provider-backed catalog and include capabilities when available.",
         tags: ["LLM Models"],
-        querystring: z.object({
+        querystring: PaginationQuerySchema.extend({
           provider: SupportedProvidersSchema.optional(),
           apiKeyId: z.string().uuid().optional(),
+          modelId: z.string().optional(),
+          q: z.string().optional(),
+          inputModalities: InputModalitiesQuerySchema,
+          supportsToolCalling: z
+            .string()
+            .transform((v) => v === "true")
+            .optional(),
           isEmbedding: z
             .string()
             .transform((v) => v === "true")
             .optional(),
         }),
-        response: constructResponseSchema(z.array(LlmModelSchema)),
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(LlmModelSchema),
+        ),
       },
     },
     async ({ query, organizationId, user }, reply) => {
-      const { provider, apiKeyId, isEmbedding } = query;
+      const {
+        provider,
+        apiKeyId,
+        modelId,
+        limit,
+        offset,
+        q,
+        inputModalities,
+        supportsToolCalling,
+        isEmbedding,
+      } = query;
 
       modelsDevClient.syncIfNeeded();
 
@@ -107,37 +139,31 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         apiKeyId && accessibleKeyIds.includes(apiKeyId)
           ? [apiKeyId]
           : accessibleKeyIds;
-      const dbModels =
-        await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds(apiKeyIds);
+      const availableModels =
+        await LlmProviderApiKeyModelLinkModel.getAvailableModelsForApiKeyIds({
+          apiKeyIds,
+          provider,
+          modelId,
+          isEmbedding,
+          q,
+          inputModalities,
+          supportsToolCalling,
+          pagination: { limit, offset },
+        });
 
       logger.info(
         {
           organizationId,
           provider,
           apiKeyIds,
-          modelCount: dbModels.length,
+          modelCount: availableModels.data.length,
+          hasNext: availableModels.pagination.hasNext,
         },
         "Models fetched from database",
       );
 
-      let filteredModels = provider
-        ? dbModels.filter(({ model }) => model.provider === provider)
-        : dbModels;
-
-      // Filter by embedding status if requested
-      if (isEmbedding !== undefined) {
-        filteredModels = filteredModels.filter(({ model }) =>
-          isEmbedding
-            ? model.embeddingDimensions !== null
-            : model.embeddingDimensions === null,
-        );
-      }
-
-      const models = filteredModels
-        .filter(({ model }) =>
-          isEmbedding ? true : ModelModel.supportsTextChat(model),
-        )
-        .map(({ model, isBest, isFastest }) => ({
+      const models = availableModels.data.map(
+        ({ model, isBest, isFastest }) => ({
           id: model.modelId,
           dbId: model.id,
           displayName: model.description || model.modelId,
@@ -147,14 +173,23 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           isFastest,
           isFree: isFreeModel(model),
           embeddingDimensions: model.embeddingDimensions,
-        }));
+        }),
+      );
 
       logger.info(
-        { organizationId, provider, totalModels: models.length },
+        {
+          organizationId,
+          provider,
+          returnedModels: models.length,
+          hasNext: availableModels.pagination.hasNext,
+        },
         "Returning available LLM models from database",
       );
 
-      return reply.send(models);
+      return reply.send({
+        data: models,
+        pagination: availableModels.pagination,
+      });
     },
   );
 

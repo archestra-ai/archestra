@@ -122,4 +122,31 @@ describe("SearchableSelect", () => {
       screen.getByRole("button", { name: /Model A/i }).parentElement,
     ).toHaveClass("max-h-[220px]");
   });
+
+  it("notifies controlled server search when selection clears the local query", async () => {
+    const user = userEvent.setup();
+    const onSearchQueryChange = vi.fn();
+
+    render(
+      <SearchableSelect
+        value=""
+        onValueChange={vi.fn()}
+        placeholder="Select a model"
+        filterItems={false}
+        onSearchQueryChange={onSearchQueryChange}
+        items={[
+          {
+            value: "model-a",
+            label: "Model A",
+          },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox"));
+    await user.type(screen.getByPlaceholderText("Search..."), "claude");
+    await user.click(screen.getByRole("button", { name: /Model A/i }));
+
+    expect(onSearchQueryChange).toHaveBeenLastCalledWith("");
+  });
 });

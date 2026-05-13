@@ -34476,8 +34476,14 @@ export type GetLlmModelsData = {
     body?: never;
     path?: never;
     query?: {
+        limit?: number;
+        offset?: number;
         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         apiKeyId?: string;
+        modelId?: string;
+        q?: string;
+        inputModalities?: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'>;
+        supportsToolCalling?: string;
         isEmbedding?: string;
     };
     url: '/api/llm-models/available';
@@ -34552,27 +34558,37 @@ export type GetLlmModelsResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        id: string;
-        dbId: string;
-        displayName: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
-        createdAt?: string;
-        capabilities?: {
-            contextLength: number | null;
-            inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
-            outputModalities: Array<'text' | 'image' | 'audio'> | null;
-            supportsToolCalling: boolean | null;
-            pricePerMillionInput: string | null;
-            pricePerMillionOutput: string | null;
-            isCustomPrice: boolean;
-            priceSource: 'custom' | 'models_dev' | 'default';
+    200: {
+        data: Array<{
+            id: string;
+            dbId: string;
+            displayName: string;
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+            createdAt?: string;
+            capabilities?: {
+                contextLength: number | null;
+                inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
+                outputModalities: Array<'text' | 'image' | 'audio'> | null;
+                supportsToolCalling: boolean | null;
+                pricePerMillionInput: string | null;
+                pricePerMillionOutput: string | null;
+                isCustomPrice: boolean;
+                priceSource: 'custom' | 'models_dev' | 'default';
+            };
+            isBest?: boolean;
+            isFastest?: boolean;
+            isFree: boolean;
+            embeddingDimensions?: EmbeddingDimensions | null;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
         };
-        isBest?: boolean;
-        isFastest?: boolean;
-        isFree: boolean;
-        embeddingDimensions?: EmbeddingDimensions | null;
-    }>;
+    };
 };
 
 export type GetLlmModelsResponse = GetLlmModelsResponses[keyof GetLlmModelsResponses];

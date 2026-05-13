@@ -13,6 +13,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
@@ -32,17 +33,25 @@ export const ModelSelectorTrigger = (props: ModelSelectorTriggerProps) => (
 
 export type ModelSelectorContentProps = ComponentProps<typeof DialogContent> & {
   title?: ReactNode;
+  description?: ReactNode;
+  shouldFilter?: ComponentProps<typeof Command>["shouldFilter"];
 };
 
 export const ModelSelectorContent = ({
   className,
   children,
+  description = "Search and select an available language model.",
+  shouldFilter,
   title = "Model Selector",
   ...props
 }: ModelSelectorContentProps) => (
   <DialogContent className={cn("p-0", className)} {...props}>
     <DialogTitle className="sr-only">{title}</DialogTitle>
-    <Command className="**:data-[slot=command-input-wrapper]:h-auto">
+    <DialogDescription className="sr-only">{description}</DialogDescription>
+    <Command
+      className="**:data-[slot=command-input-wrapper]:h-auto"
+      shouldFilter={shouldFilter}
+    >
       {children}
     </Command>
   </DialogContent>

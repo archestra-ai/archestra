@@ -16,7 +16,6 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
@@ -33,7 +32,12 @@ import {
   useUpdateConversation,
 } from "@/lib/chat/chat.query";
 import { useChatSession } from "@/lib/chat/global-chat.context";
-import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
+import { useLatestAsyncGuard } from "@/lib/hooks/use-latest-async-guard";
+import {
+  fetchPreferredLlmModelForApiKey,
+  type LlmModel,
+  useAvailableLlmModel,
+} from "@/lib/llm-models.query";
 import { useOrganization } from "@/lib/organization.query";
 import {
   useCreateScheduleTriggerRunConversation,
@@ -111,18 +115,22 @@ export function ScheduleTriggerRunPage({
     run?.chatConversationId ?? bootstrappedConversationId ?? undefined;
   const { data: conversation, isLoading: conversationLoading } =
     useConversation(conversationId);
+  const conversationRef = useRef(conversation);
+  conversationRef.current = conversation;
   const chatSession = useChatSession({ conversationId });
 
   const isRunActive = isScheduleTriggerRunActive(run?.status);
 
-  const { data: chatModels = [] } = useLlmModels();
-  const { modelsByProvider } = useLlmModelsByProvider();
+  const selectedModelQuery = useAvailableLlmModel({
+    modelId: conversation?.modelId,
+  });
   const { data: organization } = useOrganization();
   const { data: internalAgents = [] } = useInternalAgents({
     enabled: !!conversation?.agentId,
   });
 
   const updateConversationMutation = useUpdateConversation();
+  const providerChangeGuard = useLatestAsyncGuard();
   const stopChatStreamMutation = useStopChatStream();
 
   const messages = chatSession?.messages ?? [];
@@ -136,14 +144,7 @@ export function ScheduleTriggerRunPage({
   const tokenUsage = chatSession?.tokenUsage;
   const tokensUsed = tokenUsage?.totalTokens;
 
-  const selectedModel = useMemo(
-    () =>
-      conversation?.modelId
-        ? chatModels.find((item) => item.dbId === conversation.modelId)
-        : undefined,
-    [conversation?.modelId, chatModels],
-  );
-
+  const selectedModel = selectedModelQuery.data ?? undefined;
   const currentProvider = selectedModel?.provider;
   const selectedModelContextLength =
     selectedModel?.capabilities?.contextLength ?? null;
@@ -263,7 +264,7 @@ export function ScheduleTriggerRunPage({
   }, []);
 
   const handleModelChange = useCallback(
-    (modelId: string) => {
+    (modelId: string, _modelDetails?: LlmModel | null) => {
       if (!conversation) return;
       updateConversationMutation.mutate({
         id: conversation.id,
@@ -274,20 +275,29 @@ export function ScheduleTriggerRunPage({
   );
 
   const handleProviderChange = useCallback(
-    (provider: SupportedProvider, chatApiKeyId: string) => {
+    async (provider: SupportedProvider, chatApiKeyId: string) => {
       if (!conversation) return;
 
-      const providerModels = modelsByProvider[provider];
-      const bestModel =
-        providerModels?.find((item) => item.isBest) ?? providerModels?.[0];
+      const conversationId = conversation.id;
+      const requestToken = providerChangeGuard.start();
+      const preferredModel = await fetchPreferredLlmModelForApiKey({
+        apiKeyId: chatApiKeyId,
+        provider,
+      });
+      if (
+        !providerChangeGuard.isCurrent(requestToken) ||
+        conversationRef.current?.id !== conversationId
+      ) {
+        return;
+      }
 
       updateConversationMutation.mutate({
-        id: conversation.id,
+        id: conversationId,
         chatApiKeyId,
-        modelId: bestModel?.dbId,
+        modelId: preferredModel?.dbId ?? preferredModel?.id,
       });
     },
-    [conversation, modelsByProvider, updateConversationMutation],
+    [conversation, providerChangeGuard, updateConversationMutation],
   );
 
   const handleSubmit = useCallback(

@@ -10,6 +10,8 @@ const {
   useAgentDelegationsMock,
   useHasPermissionsMock,
   useInternalAgentsMock,
+  useAvailableLlmModelMock,
+  fetchPreferredLlmModelForApiKeyMock,
   useLlmModelsByProviderMock,
   useProfileMock,
   useSyncAgentDelegationsMock,
@@ -26,6 +28,8 @@ const {
     }),
   ),
   useAvailableLlmProviderApiKeysMock: vi.fn(() => ({ data: [] })),
+  useAvailableLlmModelMock: vi.fn(() => ({ data: null })),
+  fetchPreferredLlmModelForApiKeyMock: vi.fn(),
   useLlmModelsByProviderMock: vi.fn(() => ({ modelsByProvider: {} })),
   useHasPermissionsMock: vi.fn((..._args: unknown[]) => ({ data: true })),
   useUpdateProfileMock: vi.fn(() => ({
@@ -92,6 +96,8 @@ vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
 }));
 
 vi.mock("@/lib/llm-models.query", () => ({
+  fetchPreferredLlmModelForApiKey: fetchPreferredLlmModelForApiKeyMock,
+  useAvailableLlmModel: useAvailableLlmModelMock,
   useLlmModelsByProvider: useLlmModelsByProviderMock,
 }));
 

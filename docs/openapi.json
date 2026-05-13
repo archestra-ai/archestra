@@ -131379,6 +131379,28 @@
         "parameters": [
           {
             "schema": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 0,
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "in": "query",
+            "name": "offset",
+            "required": false
+          },
+          {
+            "schema": {
               "type": "string",
               "enum": [
                 "openai",
@@ -131419,6 +131441,48 @@
               "type": "string"
             },
             "in": "query",
+            "name": "modelId",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "q",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "text",
+                  "image",
+                  "audio",
+                  "video",
+                  "pdf"
+                ]
+              }
+            },
+            "in": "query",
+            "name": "inputModalities",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "supportsToolCalling",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
             "name": "isEmbedding",
             "required": false
           }
@@ -131429,142 +131493,192 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string"
-                      },
-                      "dbId": {
-                        "type": "string"
-                      },
-                      "displayName": {
-                        "type": "string"
-                      },
-                      "provider": {
-                        "type": "string",
-                        "enum": [
-                          "openai",
-                          "gemini",
-                          "anthropic",
-                          "bedrock",
-                          "cohere",
-                          "cerebras",
-                          "mistral",
-                          "perplexity",
-                          "groq",
-                          "xai",
-                          "openrouter",
-                          "vllm",
-                          "ollama",
-                          "zhipuai",
-                          "deepseek",
-                          "minimax",
-                          "azure"
-                        ]
-                      },
-                      "createdAt": {
-                        "type": "string"
-                      },
-                      "capabilities": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
                         "type": "object",
                         "properties": {
-                          "contextLength": {
-                            "nullable": true,
-                            "type": "integer",
-                            "minimum": -2147483648,
-                            "maximum": 2147483647
-                          },
-                          "inputModalities": {
-                            "nullable": true,
-                            "type": "array",
-                            "items": {
-                              "type": "string",
-                              "enum": [
-                                "text",
-                                "image",
-                                "audio",
-                                "video",
-                                "pdf"
-                              ]
-                            }
-                          },
-                          "outputModalities": {
-                            "nullable": true,
-                            "type": "array",
-                            "items": {
-                              "type": "string",
-                              "enum": [
-                                "text",
-                                "image",
-                                "audio"
-                              ]
-                            }
-                          },
-                          "supportsToolCalling": {
-                            "nullable": true,
-                            "type": "boolean"
-                          },
-                          "pricePerMillionInput": {
-                            "nullable": true,
+                          "id": {
                             "type": "string"
                           },
-                          "pricePerMillionOutput": {
-                            "nullable": true,
+                          "dbId": {
                             "type": "string"
                           },
-                          "isCustomPrice": {
-                            "type": "boolean"
+                          "displayName": {
+                            "type": "string"
                           },
-                          "priceSource": {
+                          "provider": {
                             "type": "string",
                             "enum": [
-                              "custom",
-                              "models_dev",
-                              "default"
+                              "openai",
+                              "gemini",
+                              "anthropic",
+                              "bedrock",
+                              "cohere",
+                              "cerebras",
+                              "mistral",
+                              "perplexity",
+                              "groq",
+                              "xai",
+                              "openrouter",
+                              "vllm",
+                              "ollama",
+                              "zhipuai",
+                              "deepseek",
+                              "minimax",
+                              "azure"
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "capabilities": {
+                            "type": "object",
+                            "properties": {
+                              "contextLength": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "inputModalities": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "text",
+                                    "image",
+                                    "audio",
+                                    "video",
+                                    "pdf"
+                                  ]
+                                }
+                              },
+                              "outputModalities": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "text",
+                                    "image",
+                                    "audio"
+                                  ]
+                                }
+                              },
+                              "supportsToolCalling": {
+                                "nullable": true,
+                                "type": "boolean"
+                              },
+                              "pricePerMillionInput": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "pricePerMillionOutput": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "isCustomPrice": {
+                                "type": "boolean"
+                              },
+                              "priceSource": {
+                                "type": "string",
+                                "enum": [
+                                  "custom",
+                                  "models_dev",
+                                  "default"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "contextLength",
+                              "inputModalities",
+                              "outputModalities",
+                              "supportsToolCalling",
+                              "pricePerMillionInput",
+                              "pricePerMillionOutput",
+                              "isCustomPrice",
+                              "priceSource"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "isBest": {
+                            "type": "boolean"
+                          },
+                          "isFastest": {
+                            "type": "boolean"
+                          },
+                          "isFree": {
+                            "type": "boolean"
+                          },
+                          "embeddingDimensions": {
+                            "nullable": true,
+                            "allOf": [
+                              {
+                                "$ref": "#/components/schemas/EmbeddingDimensions"
+                              }
                             ]
                           }
                         },
                         "required": [
-                          "contextLength",
-                          "inputModalities",
-                          "outputModalities",
-                          "supportsToolCalling",
-                          "pricePerMillionInput",
-                          "pricePerMillionOutput",
-                          "isCustomPrice",
-                          "priceSource"
+                          "id",
+                          "dbId",
+                          "displayName",
+                          "provider",
+                          "isFree"
                         ],
                         "additionalProperties": false
-                      },
-                      "isBest": {
-                        "type": "boolean"
-                      },
-                      "isFastest": {
-                        "type": "boolean"
-                      },
-                      "isFree": {
-                        "type": "boolean"
-                      },
-                      "embeddingDimensions": {
-                        "nullable": true,
-                        "allOf": [
-                          {
-                            "$ref": "#/components/schemas/EmbeddingDimensions"
-                          }
-                        ]
                       }
                     },
-                    "required": [
-                      "id",
-                      "dbId",
-                      "displayName",
-                      "provider",
-                      "isFree"
-                    ],
-                    "additionalProperties": false
-                  }
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "currentPage": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "limit": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "total": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "totalPages": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "hasNext": {
+                          "type": "boolean"
+                        },
+                        "hasPrev": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "currentPage",
+                        "limit",
+                        "total",
+                        "totalPages",
+                        "hasNext",
+                        "hasPrev"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "pagination"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }

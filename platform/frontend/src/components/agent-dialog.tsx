@@ -135,9 +135,14 @@ import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useLatestAsyncGuard } from "@/lib/hooks/use-latest-async-guard";
 import { useConnectors } from "@/lib/knowledge/connector.query";
 import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
-import { useLlmModelsByProvider } from "@/lib/llm-models.query";
+import {
+  fetchPreferredLlmModelForApiKey,
+  type LlmModel,
+  useAvailableLlmModel,
+} from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
@@ -609,9 +614,6 @@ export function AgentDialog({
     includeKeyId: agentLlmApiKeyId ?? undefined,
     enabled: shouldLoadLlmConfiguration && !!canReadLlmProviderApiKeys,
   });
-  const { modelsByProvider } = useLlmModelsByProvider({
-    enabled: shouldLoadLlmConfiguration && !!canReadLlmModels,
-  });
 
   // Fetch fresh agent data when dialog opens
   const { data: freshAgent, refetch: refetchAgent } = useProfile(agent?.id);
@@ -645,6 +647,12 @@ export function AgentDialog({
     useState(false);
   const [llmApiKeyId, setLlmApiKeyId] = useState<string | null>(null);
   const [llmModel, setLlmModel] = useState<string | null>(null);
+  const llmApiKeyChangeGuard = useLatestAsyncGuard();
+  const selectedLlmModelQuery = useAvailableLlmModel({
+    modelId: llmModel,
+    apiKeyId: llmApiKeyId,
+    enabled: shouldLoadLlmConfiguration && !!canReadLlmModels,
+  });
   const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);
   const [selectedToolsCount, setSelectedToolsCount] = useState(0);
   const [identityProviderId, setIdentityProviderId] = useState<
@@ -813,14 +821,8 @@ export function AgentDialog({
 
   // Derive provider from selected model (like prompt input's initialProvider/currentProvider)
   const currentLlmProvider = useMemo((): SupportedProvider | null => {
-    if (!llmModel) return null;
-    for (const [provider, models] of Object.entries(modelsByProvider)) {
-      if (models?.some((m) => m.dbId === llmModel)) {
-        return provider as SupportedProvider;
-      }
-    }
-    return null;
-  }, [llmModel, modelsByProvider]);
+    return selectedLlmModelQuery.data?.provider ?? null;
+  }, [selectedLlmModelQuery.data]);
 
   // Track the provider that was active when auto-selection last ran,
   // so we only auto-select when the provider actually changes (not when the user clears the key).
@@ -861,15 +863,27 @@ export function AgentDialog({
   }, [currentLlmProvider, availableApiKeys, selectedApiKey]);
 
   // Model change handler - just sets model, key auto-selection is reactive via useEffect above
-  const handleLlmModelChange = useCallback((modelId: string | null) => {
-    setLlmModel(modelId);
-    // Reset auto-select tracking so provider change triggers key selection
-    lastAutoSelectedProviderRef.current = null;
-  }, []);
+  const handleLlmModelChange = useCallback(
+    (modelId: string | null, modelDetails?: LlmModel | null) => {
+      setLlmModel(modelId);
+      if (modelDetails?.provider) {
+        const key = availableApiKeys.find(
+          (k) => k.provider === modelDetails.provider,
+        );
+        if (key) {
+          setLlmApiKeyId(key.id);
+        }
+      }
+      // Reset auto-select tracking so provider change triggers key selection
+      lastAutoSelectedProviderRef.current = null;
+    },
+    [availableApiKeys],
+  );
 
   // Key change handler - imperatively auto-selects model (like prompt input's onProviderChange)
   const handleLlmApiKeyChange = useCallback(
-    (keyId: string | null) => {
+    async (keyId: string | null) => {
+      const requestToken = llmApiKeyChangeGuard.start();
       setLlmApiKeyId(keyId);
       if (!keyId) return;
 
@@ -877,18 +891,19 @@ export function AgentDialog({
       if (!key) return;
 
       // Auto-select model: always prefer bestModelId, fall back to first model when switching providers
-      const bestModelId = key.bestModelId;
-      if (bestModelId) {
-        setLlmModel(bestModelId);
-      } else if (currentLlmProvider !== key.provider) {
-        // Only fall back to first model when switching providers (no bestModelId available)
-        const providerModels = modelsByProvider[key.provider];
-        if (providerModels?.length) {
-          setLlmModel(providerModels[0].dbId);
+      if (key.bestModelId || currentLlmProvider !== key.provider) {
+        const preferredModel = await fetchPreferredLlmModelForApiKey({
+          apiKeyId: key.id,
+          bestModelId: key.bestModelId,
+          provider: key.provider,
+        });
+        if (!llmApiKeyChangeGuard.isCurrent(requestToken)) return;
+        if (preferredModel) {
+          setLlmModel(preferredModel.dbId ?? preferredModel.id);
         }
       }
     },
-    [availableApiKeys, currentLlmProvider, modelsByProvider],
+    [availableApiKeys, currentLlmProvider, llmApiKeyChangeGuard],
   );
 
   // Non-admin users must select at least one team for team-scoped resources
@@ -1955,6 +1970,7 @@ export function AgentDialog({
                                         disabled
                                         variant="outline"
                                         enabled={false}
+                                        disabledEmptyLabel="Best available model"
                                       />
                                     </div>
                                   </TooltipTrigger>
@@ -1969,8 +1985,8 @@ export function AgentDialog({
                             ) : (
                               <ModelSelector
                                 selectedModel={llmModel || ""}
-                                onModelChange={(modelId) =>
-                                  handleLlmModelChange(modelId)
+                                onModelChange={(modelId, modelDetails) =>
+                                  handleLlmModelChange(modelId, modelDetails)
                                 }
                                 onClear={() => {
                                   setLlmModel(null);

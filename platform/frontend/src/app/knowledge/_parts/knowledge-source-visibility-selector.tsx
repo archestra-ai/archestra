@@ -1,6 +1,6 @@
 "use client";
 
-import { Globe, Users } from "lucide-react";
+import { Globe, ShieldCheck, Users } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import {
@@ -10,7 +10,20 @@ import {
 import { useEnterpriseFeature } from "@/lib/config/config.query";
 import { useTeams } from "@/lib/teams/team.query";
 
-export type KnowledgeSourceVisibility = "org-wide" | "team-scoped";
+export type KnowledgeSourceVisibility =
+  | "org-wide"
+  | "team-scoped"
+  | "auto-sync-permissions";
+
+/**
+ * Connector types that support `auto-sync-permissions` visibility today.
+ * Kept in sync with the backend list at
+ * `backend/src/types/knowledge-base.ts:AUTO_SYNC_PERMISSIONS_SUPPORTED_CONNECTOR_TYPES`.
+ */
+const AUTO_SYNC_PERMISSIONS_CONNECTOR_TYPES = new Set<string>([
+  "jira",
+  "confluence",
+]);
 
 const VISIBILITY_OPTIONS: Record<
   KnowledgeSourceVisibility,
@@ -28,6 +41,13 @@ const VISIBILITY_OPTIONS: Record<
     description: "Share this knowledge source with selected teams",
     icon: Users,
   },
+  "auto-sync-permissions": {
+    value: "auto-sync-permissions",
+    label: "Auto-sync permissions",
+    description:
+      "Mirror per-document access from the source system at query time",
+    icon: ShieldCheck,
+  },
 };
 
 const visibilityEntries = Object.entries(VISIBILITY_OPTIONS) as [
@@ -41,23 +61,39 @@ export function KnowledgeSourceVisibilitySelector({
   teamIds,
   onTeamIdsChange,
   showTeamRequired,
+  connectorType,
 }: {
   visibility: KnowledgeSourceVisibility;
   onVisibilityChange: (visibility: KnowledgeSourceVisibility) => void;
   teamIds: string[];
   onTeamIdsChange: (ids: string[]) => void;
   showTeamRequired?: boolean;
+  /**
+   * Optional connector type. When provided, `auto-sync-permissions` is only
+   * offered for connectors that support upstream ACL extraction.
+   */
+  connectorType?: string;
 }) {
   const { data: teams } = useTeams();
   const knowledgeBaseEnterprise = useEnterpriseFeature("knowledgeBase");
 
+  const supportsAutoSync = connectorType
+    ? AUTO_SYNC_PERMISSIONS_CONNECTOR_TYPES.has(connectorType)
+    : true;
+
   const options = visibilityEntries
-    .filter(
-      ([value]) =>
-        value !== "team-scoped" ||
-        knowledgeBaseEnterprise ||
-        visibility === "team-scoped",
-    )
+    .filter(([value]) => {
+      if (value === "team-scoped") {
+        return knowledgeBaseEnterprise || visibility === "team-scoped";
+      }
+      if (value === "auto-sync-permissions") {
+        return (
+          (knowledgeBaseEnterprise && supportsAutoSync) ||
+          visibility === "auto-sync-permissions"
+        );
+      }
+      return true;
+    })
     .map(([value, option]) => ({
       ...option,
       value,
@@ -97,6 +133,13 @@ export function KnowledgeSourceVisibilitySelector({
             emptyMessage="No teams found."
           />
         </div>
+      )}
+      {visibility === "auto-sync-permissions" && (
+        <p className="text-muted-foreground text-sm">
+          Each document inherits the access list from its source. Users only see
+          results they can already read in the upstream system. Available for
+          Jira and Confluence today.
+        </p>
       )}
     </SharedVisibilitySelector>
   );

@@ -17,15 +17,31 @@ Connectors pull data from external tools into Knowledge Bases. A connector can b
 
 Each connector has a visibility setting that determines which users can retrieve its data when an agent calls `query_knowledge_sources`. Connectors and Knowledge Bases are filtered by visibility throughout the UI: users only see sources they have access to, and only those can be assigned to agents and MCP Gateways.
 
-| Mode                      | Behavior                                                                          |
-| ------------------------- | --------------------------------------------------------------------------------- |
-| **Org-wide**              | All documents accessible to every user in the organization.                       |
-| **Team-scoped**           | Documents accessible only to members of the assigned teams.                       |
-| **Auto-sync permissions** | ACL entries synced from the source system (user emails, groups). Coming soon — see [#3218](https://github.com/archestra-ai/archestra/issues/3218). |
+| Mode                      | Behavior                                                                                                                            |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| **Org-wide**              | All documents accessible to every user in the organization.                                                                         |
+| **Team-scoped**           | Documents accessible only to members of the assigned teams.                                                                         |
+| **Auto-sync permissions** | Each document inherits its access list from the source system. Supported for Jira and Confluence today (see details below).         |
 
 Users with the `knowledgeSource:admin` role can view and query every connector regardless of visibility.
 
-> **Enterprise only.** Team-scoped visibility and auto-synced ACLs require an enterprise license. Contact [sales@archestra.ai](mailto:sales@archestra.ai) for licensing information.
+> **Enterprise only.** Team-scoped visibility and auto-sync permissions both require an enterprise license. Contact [sales@archestra.ai](mailto:sales@archestra.ai) for licensing information.
+
+### Auto-sync permissions
+
+When a connector uses **Auto-sync permissions** visibility, Archestra extracts the read ACL for every document from the source system during sync and stores it alongside the document. At query time, `query_knowledge_sources` filters chunks so users only see results they can already read upstream.
+
+**Supported connectors:** Jira, Confluence.
+
+**Identity mapping.** Users are matched by their email address — the email on the Archestra account must match the email on the upstream user profile. Atlassian Cloud can hide profile emails for privacy reasons; users with hidden emails are skipped during ACL ingestion and will not see their restricted documents until the email is exposed to the integration account.
+
+**Jira ACL source.** For each Jira project, Archestra collects the actors (users + groups) of every project role and uses that as the per-issue ACL. Issue-level security levels are not consulted today — those documents fall back to the project ACL. ACL refresh is incremental: every time a connector syncs an issue, its ACL is re-fetched and replaced.
+
+**Confluence ACL source.** For each Confluence page, Archestra first checks page-level read restrictions. When a page has no explicit restriction it falls back to the space-level read permissions. Both lookups are cached per sync run.
+
+**Group sync (limitation).** Group ACL entries are stored on the document but Archestra does not currently sync upstream group memberships back to user identities. Pages and issues that are restricted to a group will be invisible to callers until the upstream system also lists those users explicitly. Plan accordingly when migrating from team-scoped access.
+
+**Fail-closed behavior.** When the connector fails to fetch ACL for a document (network error, missing scope, hidden email), the document is ingested with an empty ACL and remains invisible to every caller. Look for `Document has no resolvable ACL under auto-sync-permissions` warnings in the connector run logs.
 
 ## Jira
 

@@ -19,6 +19,7 @@ import {
   buildCheckpoint,
   extractErrorMessage,
 } from "../base-connector";
+import { JiraPermissionResolver } from "./jira-permissions";
 
 const BATCH_SIZE = 50;
 const SEARCH_FIELDS = [
@@ -135,6 +136,7 @@ export class JiraConnector extends BaseConnector {
     checkpoint: Record<string, unknown> | null;
     startTime?: Date;
     endTime?: Date;
+    extractPermissions?: boolean;
   }): AsyncGenerator<ConnectorSyncBatch> {
     const parsed = parseJiraConfig(params.config);
     if (!parsed) {
@@ -145,6 +147,7 @@ export class JiraConnector extends BaseConnector {
       type: "jira" as const,
     };
     const jql = buildJql(parsed, checkpoint, params.startTime);
+    const extractPermissions = params.extractPermissions === true;
 
     this.log.info(
       {
@@ -153,14 +156,27 @@ export class JiraConnector extends BaseConnector {
         projectKey: parsed.projectKey,
         jql,
         checkpoint,
+        extractPermissions,
       },
       "Starting sync",
     );
 
     if (parsed.isCloud) {
-      yield* this.syncCloud(parsed, params.credentials, jql, checkpoint);
+      yield* this.syncCloud(
+        parsed,
+        params.credentials,
+        jql,
+        checkpoint,
+        extractPermissions,
+      );
     } else {
-      yield* this.syncServer(parsed, params.credentials, jql, checkpoint);
+      yield* this.syncServer(
+        parsed,
+        params.credentials,
+        jql,
+        checkpoint,
+        extractPermissions,
+      );
     }
   }
 
@@ -171,8 +187,16 @@ export class JiraConnector extends BaseConnector {
     credentials: ConnectorCredentials,
     jql: string,
     checkpoint: JiraCheckpoint,
+    extractPermissions: boolean,
   ): AsyncGenerator<ConnectorSyncBatch> {
     const client = createV3Client(config, credentials, this.log);
+    const permissionResolver = extractPermissions
+      ? new JiraPermissionResolver({
+          client,
+          log: this.log,
+          isCloud: true,
+        })
+      : null;
     let nextPageToken: string | undefined;
     let hasMore = true;
     let batchIndex = 0;
@@ -193,6 +217,7 @@ export class JiraConnector extends BaseConnector {
 
         const issues = searchResult.issues ?? [];
         const documents = issuesToDocuments(issues, config);
+        await this.attachPermissions(documents, issues, permissionResolver);
 
         nextPageToken = searchResult.nextPageToken ?? undefined;
         hasMore = !!nextPageToken;
@@ -235,8 +260,16 @@ export class JiraConnector extends BaseConnector {
     credentials: ConnectorCredentials,
     jql: string,
     checkpoint: JiraCheckpoint,
+    extractPermissions: boolean,
   ): AsyncGenerator<ConnectorSyncBatch> {
     const client = createV2Client(config, credentials, this.log);
+    const permissionResolver = extractPermissions
+      ? new JiraPermissionResolver({
+          client,
+          log: this.log,
+          isCloud: false,
+        })
+      : null;
     let startAt = 0;
     let hasMore = true;
     let batchIndex = 0;
@@ -257,6 +290,7 @@ export class JiraConnector extends BaseConnector {
 
         const issues = searchResult.issues ?? [];
         const documents = issuesToDocuments(issues, config);
+        await this.attachPermissions(documents, issues, permissionResolver);
 
         startAt += issues.length;
         hasMore =
@@ -293,6 +327,38 @@ export class JiraConnector extends BaseConnector {
           "Server batch fetch failed",
         );
         throw error;
+      }
+    }
+  }
+
+  private async attachPermissions(
+    documents: ConnectorDocument[],
+    // biome-ignore lint/suspicious/noExplicitAny: SDK issue types vary between v2/v3
+    issues: any[],
+    resolver: JiraPermissionResolver | null,
+  ): Promise<void> {
+    if (!resolver || documents.length === 0) return;
+
+    const issueByKey = new Map<string, unknown>();
+    for (const issue of issues) {
+      if (issue?.key) issueByKey.set(String(issue.key), issue);
+    }
+
+    for (const doc of documents) {
+      const issue = issueByKey.get(doc.id) as
+        | { fields?: { project?: { key?: string } } }
+        | undefined;
+      const metadataProject = doc.metadata?.project;
+      const projectKey =
+        issue?.fields?.project?.key ??
+        (typeof metadataProject === "string" ? metadataProject : undefined);
+      const permissions = await resolver.resolveForIssue({ projectKey });
+      const payload = this.buildDocumentPermissions({
+        users: permissions?.users,
+        groups: permissions?.groups,
+      });
+      if (payload) {
+        doc.permissions = payload;
       }
     }
   }

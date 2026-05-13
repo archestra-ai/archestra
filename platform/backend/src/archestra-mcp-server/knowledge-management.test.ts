@@ -714,6 +714,57 @@ describe("knowledge-management tool execution", () => {
       );
     });
 
+    test("create_knowledge_connector rejects auto-sync-permissions without enterprise license", async () => {
+      const result = await executeArchestraTool(
+        t("create_knowledge_connector"),
+        {
+          name: "Auto Sync Connector",
+          connector_type: "jira",
+          visibility: "auto-sync-permissions",
+          config: {
+            jiraBaseUrl: "https://test.atlassian.net",
+            isCloud: true,
+            projectKey: "TEST",
+          },
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "auto-sync-permissions visibility requires the knowledge-base enterprise license",
+      );
+    });
+
+    test("create_knowledge_connector rejects auto-sync-permissions for unsupported connector type", async () => {
+      const configModule = await import("@/config");
+      const originalKb = configModule.default.enterpriseFeatures.knowledgeBase;
+      configModule.default.enterpriseFeatures.knowledgeBase = true;
+
+      try {
+        const result = await executeArchestraTool(
+          t("create_knowledge_connector"),
+          {
+            name: "Auto Sync Unsupported",
+            connector_type: "github",
+            visibility: "auto-sync-permissions",
+            config: {
+              githubUrl: "https://github.com",
+              owner: "test",
+            },
+          },
+          mockContext,
+        );
+
+        expect(result.isError).toBe(true);
+        expect((result.content[0] as any).text).toContain(
+          'auto-sync-permissions visibility is not supported for connector type "github"',
+        );
+      } finally {
+        configModule.default.enterpriseFeatures.knowledgeBase = originalKb;
+      }
+    });
+
     test("get_knowledge_connectors returns empty list", async () => {
       const result = await executeArchestraTool(
         t("get_knowledge_connectors"),

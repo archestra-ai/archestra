@@ -256,6 +256,7 @@ export function EditConnectorDialog({
             teamIds={teamIds}
             onTeamIdsChange={setTeamIds}
             showTeamRequired
+            connectorType={connectorType}
           />
 
           {urlConfig && (

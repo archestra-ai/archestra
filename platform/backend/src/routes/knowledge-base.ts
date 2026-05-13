@@ -39,6 +39,7 @@ import {
   ConnectorCredentialsSchema,
   type ConnectorType,
   ConnectorTypeSchema,
+  connectorTypeSupportsAutoSyncPermissions,
   constructResponseSchema,
   DeleteObjectResponseSchema,
   EmbeddingStatusSchema,
@@ -476,6 +477,21 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
+      if (visibility === "auto-sync-permissions") {
+        if (!config.enterpriseFeatures.knowledgeBase) {
+          throw new ApiError(
+            403,
+            "Auto-sync permissions connectors require an enterprise license. Please contact sales@archestra.ai to enable it.",
+          );
+        }
+        if (!connectorTypeSupportsAutoSyncPermissions(body.connectorType)) {
+          throw new ApiError(
+            400,
+            `Auto-sync permissions visibility is not supported for connector type "${body.connectorType}".`,
+          );
+        }
+      }
+
       // Validate connector config
       const connectorImpl = getConnector(body.connectorType);
       const validation = await connectorImpl.validateConfig(body.config);
@@ -627,6 +643,26 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           403,
           "Team-scoped connectors require an enterprise license. Please contact sales@archestra.ai to enable it.",
         );
+      }
+
+      if (
+        nextVisibility === "auto-sync-permissions" &&
+        connector.visibility !== "auto-sync-permissions"
+      ) {
+        if (!config.enterpriseFeatures.knowledgeBase) {
+          throw new ApiError(
+            403,
+            "Auto-sync permissions connectors require an enterprise license. Please contact sales@archestra.ai to enable it.",
+          );
+        }
+        if (
+          !connectorTypeSupportsAutoSyncPermissions(connector.connectorType)
+        ) {
+          throw new ApiError(
+            400,
+            `Auto-sync permissions visibility is not supported for connector type "${connector.connectorType}".`,
+          );
+        }
       }
 
       // Reset checkpoint when config changes to force a full re-sync

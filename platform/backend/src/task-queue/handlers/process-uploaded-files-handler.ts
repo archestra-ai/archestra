@@ -49,6 +49,7 @@ export async function handleProcessUploadedFiles(
     knowledgeSourceAccessControlService.buildConnectorDocumentAccessControlList(
       { connector },
     );
+  const documentAcl = acl ?? [];
 
   const files = await KbUploadedFileModel.findByIdsWithData(fileIds);
   const documentIds: string[] = [];
@@ -123,7 +124,7 @@ export async function handleProcessUploadedFiles(
             title,
             content: extractedFile.text,
             contentHash,
-            acl,
+            acl: documentAcl,
             metadata: {
               originalFilename: extractedFile.filename,
               mimeType: extractedFile.mimeType,
@@ -139,7 +140,7 @@ export async function handleProcessUploadedFiles(
               chunkIndex: chunk.chunkIndex,
               metadataSuffixSemantic: chunk.metadataSuffixSemantic,
               metadataSuffixKeyword: chunk.metadataSuffixKeyword,
-              acl,
+              acl: documentAcl,
             })),
           );
         }

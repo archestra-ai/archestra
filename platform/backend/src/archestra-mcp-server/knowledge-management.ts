@@ -18,6 +18,7 @@ import {
   TOOL_UPDATE_KNOWLEDGE_CONNECTOR_SHORT_NAME,
 } from "@shared";
 import { z } from "zod";
+import config from "@/config";
 import {
   buildUserAccessControlList,
   didKnowledgeSourceAclInputsChange,
@@ -36,8 +37,10 @@ import {
 } from "@/models";
 import {
   type AclEntry,
+  connectorTypeSupportsAutoSyncPermissions,
   InsertKnowledgeBaseConnectorSchema,
   InsertKnowledgeBaseSchema,
+  type KnowledgeSourceVisibility,
   KnowledgeSourceVisibilitySchema,
   UpdateKnowledgeBaseConnectorSchema,
   UpdateKnowledgeBaseSchema,
@@ -743,6 +746,13 @@ async function handleCreateKnowledgeConnector(params: {
         "At least one team must be selected for team-scoped connectors",
       );
     }
+    const autoSyncError = validateAutoSyncPermissions({
+      visibility,
+      connectorType: args.connector_type,
+    });
+    if (autoSyncError) {
+      return errorResult(autoSyncError);
+    }
 
     const connector = await KnowledgeBaseConnectorModel.create(
       InsertKnowledgeBaseConnectorSchema.parse({
@@ -897,6 +907,13 @@ async function handleUpdateKnowledgeConnector(params: {
       return errorResult(
         "At least one team must be selected for team-scoped connectors",
       );
+    }
+    const autoSyncError = validateAutoSyncPermissions({
+      visibility: nextVisibility,
+      connectorType: existingConnector.connectorType,
+    });
+    if (autoSyncError) {
+      return errorResult(autoSyncError);
     }
     const connector = await KnowledgeBaseConnectorModel.update(
       args.id,
@@ -1103,4 +1120,26 @@ async function handleUnassignKnowledgeConnectorFromAgent(params: {
   } catch (error) {
     return catchError(error, "unassigning knowledge connector from agent");
   }
+}
+
+/**
+ * Validate that `auto-sync-permissions` is only used by connectors that can
+ * actually extract upstream ACL data, and only when the knowledge-base
+ * enterprise license is active. Returns an error message when the
+ * configuration is invalid and `null` otherwise.
+ */
+function validateAutoSyncPermissions(params: {
+  visibility: KnowledgeSourceVisibility | undefined;
+  connectorType: string;
+}): string | null {
+  if (params.visibility !== "auto-sync-permissions") {
+    return null;
+  }
+  if (!config.enterpriseFeatures.knowledgeBase) {
+    return "auto-sync-permissions visibility requires the knowledge-base enterprise license";
+  }
+  if (!connectorTypeSupportsAutoSyncPermissions(params.connectorType)) {
+    return `auto-sync-permissions visibility is not supported for connector type "${params.connectorType}"`;
+  }
+  return null;
 }

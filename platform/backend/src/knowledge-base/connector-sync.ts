@@ -15,7 +15,6 @@ import type {
   AclEntry,
   ConnectorCredentials,
   ConnectorDocument,
-  KnowledgeBaseConnector,
 } from "@/types";
 import { chunkDocument } from "./chunker";
 import {
@@ -49,11 +48,16 @@ class ConnectorSyncService {
       throw new Error(`Connector not found: ${connectorId}`);
     }
 
-    // Load credentials from secrets manager
-    const [credentials, documentAcl] = await Promise.all([
-      this.loadCredentials(connector.secretId, log),
-      this.buildDocumentAccessControlList(connector),
-    ]);
+    // Load credentials from secrets manager. For `auto-sync-permissions`
+    // visibility there is no connector-wide ACL — each document gets its
+    // own ACL computed from `doc.permissions` inside the ingest loop.
+    const credentials = await this.loadCredentials(connector.secretId, log);
+    const connectorAcl =
+      knowledgeSourceAccessControlService.buildConnectorDocumentAccessControlList(
+        { connector },
+      );
+    const useAutoSyncPermissions =
+      connector.visibility === "auto-sync-permissions";
 
     // Get the connector implementation
     const connectorImpl = getConnector(connector.connectorType);
@@ -154,6 +158,7 @@ class ConnectorSyncService {
         credentials,
         checkpoint: connector.checkpoint as Record<string, unknown> | null,
         embeddingInputModalities,
+        extractPermissions: useAutoSyncPermissions,
       });
 
       for await (const batch of syncGenerator) {
@@ -161,12 +166,28 @@ class ConnectorSyncService {
         for (const doc of batch.documents) {
           documentsProcessed++;
           try {
+            const acl = useAutoSyncPermissions
+              ? knowledgeSourceAccessControlService.buildDocumentAccessControlListForDocument(
+                  { connector, permissions: doc.permissions },
+                )
+              : (connectorAcl ?? []);
+
+            if (useAutoSyncPermissions && acl.length === 0) {
+              runLog.warn(
+                {
+                  documentId: doc.id,
+                  hasPermissions: Boolean(doc.permissions),
+                },
+                "Document has no resolvable ACL under auto-sync-permissions; it will not be visible to any user",
+              );
+            }
+
             const result = await this.ingestDocument({
               doc,
               connectorId,
               connectorType: connector.connectorType,
               organizationId: connector.organizationId,
-              acl: documentAcl,
+              acl,
               log: runLog,
             });
             if (result.ingested) {
@@ -616,14 +637,6 @@ class ConnectorSyncService {
       email: (data.email as string) || "",
       apiToken: (data.apiToken as string) || "",
     };
-  }
-
-  private buildDocumentAccessControlList(
-    connector: KnowledgeBaseConnector,
-  ): AclEntry[] {
-    return knowledgeSourceAccessControlService.buildConnectorDocumentAccessControlList(
-      { connector },
-    );
   }
 }
 

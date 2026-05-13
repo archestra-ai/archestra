@@ -14,6 +14,7 @@ import {
   buildCheckpoint,
   extractErrorMessage,
 } from "../base-connector";
+import { ConfluencePermissionResolver } from "./confluence-permissions";
 
 const DEFAULT_BATCH_SIZE = 50;
 
@@ -125,6 +126,7 @@ export class ConfluenceConnector extends BaseConnector {
     checkpoint: Record<string, unknown> | null;
     startTime?: Date;
     endTime?: Date;
+    extractPermissions?: boolean;
   }): AsyncGenerator<ConnectorSyncBatch> {
     const parsed = parseConfluenceConfig(params.config);
     if (!parsed) {
@@ -137,6 +139,14 @@ export class ConfluenceConnector extends BaseConnector {
     const batchSize = parsed.batchSize ?? DEFAULT_BATCH_SIZE;
     const cql = buildCql(parsed, checkpoint, params.startTime);
     const client = createConfluenceClient(parsed, params.credentials, this.log);
+    const extractPermissions = params.extractPermissions === true;
+    const permissionResolver = extractPermissions
+      ? new ConfluencePermissionResolver({
+          client,
+          log: this.log,
+          isCloud: parsed.isCloud,
+        })
+      : null;
 
     this.log.debug(
       {
@@ -198,9 +208,30 @@ export class ConfluenceConnector extends BaseConnector {
             continue;
           }
 
-          documents.push(
-            pageToDocument(page, parsed.confluenceUrl, parsed.isCloud),
+          const document = pageToDocument(
+            page,
+            parsed.confluenceUrl,
+            parsed.isCloud,
           );
+
+          if (permissionResolver) {
+            const permissions = await permissionResolver.resolveForPage({
+              pageId: String(page.id),
+              spaceKey:
+                typeof page?.space?.key === "string"
+                  ? page.space.key
+                  : undefined,
+            });
+            const payload = this.buildDocumentPermissions({
+              users: permissions?.users,
+              groups: permissions?.groups,
+            });
+            if (payload) {
+              document.permissions = payload;
+            }
+          }
+
+          documents.push(document);
         }
 
         const nextUrl: string | undefined = searchResult._links?.next;

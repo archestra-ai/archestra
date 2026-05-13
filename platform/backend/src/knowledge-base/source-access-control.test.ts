@@ -232,4 +232,177 @@ describe("knowledgeSourceAccessControlService", () => {
     expect(refreshedDocument?.acl).toEqual(["org:*"]);
     expect(refreshedChunks[0]?.acl).toEqual(["org:*"]);
   });
+
+  test("auto-sync-permissions builds a per-document ACL from doc.permissions", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const knowledgeBase = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(
+      knowledgeBase.id,
+      org.id,
+      { visibility: "auto-sync-permissions" },
+    );
+
+    const acl =
+      knowledgeSourceAccessControlService.buildDocumentAccessControlListForDocument(
+        {
+          connector,
+          permissions: {
+            users: [
+              "Alice@Example.com",
+              "alice@example.com",
+              " bob@example.com ",
+            ],
+            groups: ["engineers", "engineers", " support "],
+          },
+        },
+      );
+
+    expect(acl).toEqual([
+      "user_email:alice@example.com",
+      "user_email:bob@example.com",
+      "group:engineers",
+      "group:support",
+    ]);
+  });
+
+  test("auto-sync-permissions yields an empty ACL when permissions are missing", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const knowledgeBase = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(
+      knowledgeBase.id,
+      org.id,
+      { visibility: "auto-sync-permissions" },
+    );
+
+    const acl =
+      knowledgeSourceAccessControlService.buildDocumentAccessControlListForDocument(
+        {
+          connector,
+          permissions: undefined,
+        },
+      );
+
+    expect(acl).toEqual([]);
+  });
+
+  test("auto-sync-permissions marks isPublic documents as org-wide", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const knowledgeBase = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(
+      knowledgeBase.id,
+      org.id,
+      { visibility: "auto-sync-permissions" },
+    );
+
+    const acl =
+      knowledgeSourceAccessControlService.buildDocumentAccessControlListForDocument(
+        {
+          connector,
+          permissions: { isPublic: true, users: ["alice@example.com"] },
+        },
+      );
+
+    expect(acl).toEqual(["org:*"]);
+  });
+
+  test("buildConnectorDocumentAccessControlList returns null for auto-sync connectors", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const knowledgeBase = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(
+      knowledgeBase.id,
+      org.id,
+      { visibility: "auto-sync-permissions" },
+    );
+
+    expect(
+      knowledgeSourceAccessControlService.buildConnectorDocumentAccessControlList(
+        { connector },
+      ),
+    ).toBeNull();
+  });
+
+  test("refresh skips auto-sync connectors so per-document ACLs are preserved", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const knowledgeBase = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(
+      knowledgeBase.id,
+      org.id,
+      { visibility: "auto-sync-permissions" },
+    );
+    const document = await KbDocumentModel.create({
+      organizationId: org.id,
+      sourceId: "ext-auto-sync-1",
+      connectorId: connector.id,
+      title: "Doc",
+      content: "content",
+      contentHash: "hash-auto",
+      acl: ["user_email:alice@example.com"],
+    });
+    await KbChunkModel.insertMany([
+      {
+        documentId: document.id,
+        content: "chunk 1",
+        chunkIndex: 0,
+        acl: ["user_email:alice@example.com"],
+      },
+    ]);
+
+    await knowledgeSourceAccessControlService.refreshConnectorDocumentAccessControlLists(
+      connector.id,
+    );
+
+    const refreshedDocument = await KbDocumentModel.findById(document.id);
+    const refreshedChunks = await KbChunkModel.findByDocument(document.id);
+
+    expect(refreshedDocument?.acl).toEqual(["user_email:alice@example.com"]);
+    expect(refreshedChunks[0]?.acl).toEqual(["user_email:alice@example.com"]);
+  });
+
+  test("auto-sync connectors remain visible to all users (per-doc ACL filters at query time)", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+    const knowledgeBase = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(
+      knowledgeBase.id,
+      org.id,
+      { visibility: "auto-sync-permissions" },
+    );
+
+    const access =
+      await knowledgeSourceAccessControlService.buildAccessControlContext({
+        userId: user.id,
+        organizationId: org.id,
+      });
+
+    expect(
+      knowledgeSourceAccessControlService.canAccessConnector(access, connector),
+    ).toBe(true);
+  });
 });

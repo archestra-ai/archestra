@@ -331,6 +331,7 @@ export function CreateConnectorDialog({
                   teamIds={teamIds}
                   onTeamIdsChange={setTeamIds}
                   showTeamRequired
+                  connectorType={connectorType}
                 />
 
                 {urlConfig && (

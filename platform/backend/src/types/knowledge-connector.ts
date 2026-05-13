@@ -526,5 +526,14 @@ export interface Connector {
      * (e.g. images) only when the embedding model can handle it.
      */
     embeddingInputModalities?: ModelInputModality[];
+    /**
+     * When true, the connector should populate `ConnectorDocument.permissions`
+     * for every yielded document with the per-document ACL extracted from the
+     * upstream source system. Used by knowledge sources whose visibility is
+     * set to `auto-sync-permissions`. Connectors that cannot extract upstream
+     * permissions should leave `permissions` unset; the sync pipeline will
+     * mark those documents as inaccessible to all users.
+     */
+    extractPermissions?: boolean;
   }): AsyncGenerator<ConnectorSyncBatch>;
 }

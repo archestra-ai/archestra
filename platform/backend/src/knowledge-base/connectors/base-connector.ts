@@ -133,7 +133,58 @@ export abstract class BaseConnector implements Connector {
     checkpoint: Record<string, unknown> | null;
     startTime?: Date;
     endTime?: Date;
+    extractPermissions?: boolean;
   }): AsyncGenerator<ConnectorSyncBatch>;
+
+  /**
+   * Convenience helper used by connectors that support `auto-sync-permissions`.
+   * Builds the `ConnectorDocument.permissions` payload consumed by the sync
+   * pipeline. Returns `undefined` when there is nothing to publish — callers
+   * should leave the field unset on the document in that case.
+   *
+   * Emails are lower-cased so they line up with the lower-cased emails the
+   * query layer uses when building the caller's `user_email:<email>` ACL.
+   */
+  protected buildDocumentPermissions(params: {
+    users?: Iterable<string | null | undefined>;
+    groups?: Iterable<string | null | undefined>;
+    isPublic?: boolean;
+  }): { users?: string[]; groups?: string[]; isPublic?: boolean } | undefined {
+    const users: string[] = [];
+    const groups: string[] = [];
+    const seenUsers = new Set<string>();
+    const seenGroups = new Set<string>();
+
+    for (const raw of params.users ?? []) {
+      if (typeof raw !== "string") continue;
+      const email = raw.trim().toLowerCase();
+      if (email.length === 0 || seenUsers.has(email)) continue;
+      seenUsers.add(email);
+      users.push(email);
+    }
+
+    for (const raw of params.groups ?? []) {
+      if (typeof raw !== "string") continue;
+      const group = raw.trim();
+      if (group.length === 0 || seenGroups.has(group)) continue;
+      seenGroups.add(group);
+      groups.push(group);
+    }
+
+    if (users.length === 0 && groups.length === 0 && params.isPublic !== true) {
+      return undefined;
+    }
+
+    const payload: {
+      users?: string[];
+      groups?: string[];
+      isPublic?: boolean;
+    } = {};
+    if (users.length > 0) payload.users = users;
+    if (groups.length > 0) payload.groups = groups;
+    if (params.isPublic === true) payload.isPublic = true;
+    return payload;
+  }
 
   protected buildBasicAuthHeader(email: string, apiToken: string): string {
     const encoded = Buffer.from(`${email}:${apiToken}`).toString("base64");

@@ -1,4 +1,5 @@
 import {
+  getAzureManagementBearerTokenProvider,
   getAzureOpenAiBearerTokenProvider,
   isAzureOpenAiEntraIdEnabled,
 } from "@/clients/azure-openai-credentials";
@@ -34,6 +35,11 @@ export async function fetchAzureModels(
     baseUrl,
   });
   if (v1ModelsUrl) {
+    const deployments = await fetchAzureManagementDeployments(baseUrl);
+    if (deployments.length > 0) {
+      return deployments;
+    }
+
     return fetchAzureModelList({
       apiKey,
       extraHeaders,
@@ -65,6 +71,11 @@ export async function fetchAzureModels(
         "Failed to fetch Azure deployments",
       );
       if (modelsUrl) {
+        const deployments = await fetchAzureManagementDeployments(baseUrl);
+        if (deployments.length > 0) {
+          return deployments;
+        }
+
         const models = await fetchAzureModelList({
           apiKey,
           extraHeaders,
@@ -90,6 +101,11 @@ export async function fetchAzureModels(
   } catch (error) {
     logger.error({ error }, "Error fetching Azure deployments");
     if (modelsUrl) {
+      const deployments = await fetchAzureManagementDeployments(baseUrl);
+      if (deployments.length > 0) {
+        return deployments;
+      }
+
       const models = await fetchAzureModelList({
         apiKey,
         extraHeaders,
@@ -155,6 +171,143 @@ async function fetchAzureModelList(params: {
   }
 }
 
+async function fetchAzureManagementDeployments(
+  baseUrl: string,
+): Promise<ModelInfo[]> {
+  if (!isAzureOpenAiEntraIdEnabled()) {
+    return [];
+  }
+
+  const accountName = extractAzureResourceName(baseUrl);
+  if (!accountName) {
+    return [];
+  }
+
+  try {
+    const tokenProvider = getAzureManagementBearerTokenProvider();
+    const headers = { Authorization: `Bearer ${await tokenProvider()}` };
+    const accountResourceIds = await fetchAzureCognitiveServicesAccountIds({
+      accountName,
+      headers,
+    });
+
+    for (const accountResourceId of accountResourceIds) {
+      const deployments = await fetchAzureManagementDeploymentsForAccount({
+        accountResourceId,
+        headers,
+      });
+      if (deployments.length > 0) {
+        return deployments;
+      }
+    }
+  } catch (error) {
+    logger.error({ error }, "Error fetching Azure deployments from management");
+  }
+
+  return [];
+}
+
+async function fetchAzureCognitiveServicesAccountIds(params: {
+  accountName: string;
+  headers: Record<string, string>;
+}): Promise<string[]> {
+  const subscriptions = await fetchAzureSubscriptions(params.headers);
+  const accountIds: string[] = [];
+
+  for (const subscriptionId of subscriptions) {
+    const filter = `resourceType eq 'Microsoft.CognitiveServices/accounts' and name eq '${params.accountName}'`;
+    const url = new URL(
+      `https://management.azure.com/subscriptions/${encodeURIComponent(subscriptionId)}/resources`,
+    );
+    url.searchParams.set("api-version", "2021-04-01");
+    url.searchParams.set("$filter", filter);
+
+    const response = await fetch(url, { headers: params.headers });
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error(
+        { status: response.status, error: errorText, subscriptionId },
+        "Failed to find Azure Cognitive Services account",
+      );
+      continue;
+    }
+
+    const data = (await response.json()) as { value?: { id?: string }[] };
+    accountIds.push(
+      ...(data.value ?? [])
+        .map((resource) => resource.id)
+        .filter((id): id is string => Boolean(id)),
+    );
+  }
+
+  return accountIds;
+}
+
+async function fetchAzureSubscriptions(
+  headers: Record<string, string>,
+): Promise<string[]> {
+  const url = new URL("https://management.azure.com/subscriptions");
+  url.searchParams.set("api-version", "2020-01-01");
+
+  const response = await fetch(url, { headers });
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch Azure subscriptions",
+    );
+    return [];
+  }
+
+  const data = (await response.json()) as {
+    value?: { subscriptionId?: string }[];
+  };
+  return (data.value ?? [])
+    .map((subscription) => subscription.subscriptionId)
+    .filter((subscriptionId): subscriptionId is string =>
+      Boolean(subscriptionId),
+    );
+}
+
+async function fetchAzureManagementDeploymentsForAccount(params: {
+  accountResourceId: string;
+  headers: Record<string, string>;
+}): Promise<ModelInfo[]> {
+  const url = new URL(
+    `https://management.azure.com${params.accountResourceId}/deployments`,
+  );
+  url.searchParams.set("api-version", "2024-10-01");
+
+  const response = await fetch(url, { headers: params.headers });
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch Azure deployments from management",
+    );
+    return [];
+  }
+
+  const data = (await response.json()) as {
+    value?: {
+      name?: string;
+      properties?: { provisioningState?: string };
+    }[];
+  };
+
+  return (data.value ?? [])
+    .filter(
+      (deployment) => deployment.properties?.provisioningState !== "Failed",
+    )
+    .map((deployment) => deployment.name)
+    .filter((name): name is string => Boolean(name))
+    .map((name) => ({
+      id: name,
+      displayName: name,
+      provider: "azure" as const,
+    }));
+}
+
 async function getAzureAuthHeaders(
   apiKey: string | undefined,
   baseUrl?: string,
@@ -190,3 +343,24 @@ function fallbackToConfiguredDeployment(
 function isAzureEmbeddingModelId(modelId: string): boolean {
   return modelId.toLowerCase().includes("embedding");
 }
+
+function extractAzureResourceName(baseUrl: string): string | null {
+  try {
+    const hostname = new URL(baseUrl).hostname;
+    for (const suffix of AZURE_RESOURCE_HOST_SUFFIXES) {
+      if (hostname.endsWith(suffix)) {
+        return hostname.slice(0, -suffix.length);
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+const AZURE_RESOURCE_HOST_SUFFIXES = [
+  ".openai.azure.com",
+  ".services.ai.azure.com",
+  ".cognitiveservices.azure.com",
+];

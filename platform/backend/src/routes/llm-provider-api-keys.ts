@@ -65,10 +65,11 @@ async function testKeylessAzureEntraOrThrow(
 ): Promise<void> {
   try {
     await testProviderApiKey("azure", "", baseUrl, extraHeaders);
-  } catch {
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     throw new ApiError(
       400,
-      "Azure Entra ID validation failed: Archestra could not discover any Azure model deployments. Confirm the Base URL points to an Azure OpenAI resource or Foundry v1 endpoint, and that the Azure identity has permission to read deployments on that resource.",
+      `Azure Entra ID validation failed: Archestra could not discover any Azure model deployments. Confirm the Base URL points to an Azure OpenAI resource or Foundry v1 endpoint, and that the Azure identity has permission to read deployments on that resource. Provider error: ${errorMessage}`,
     );
   }
 }

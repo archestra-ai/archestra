@@ -548,6 +548,9 @@ describe("LLM Provider API Keys CRUD", () => {
     expect(createResponse.json().error.message).toContain(
       "Azure Entra ID validation failed: Archestra could not discover any Azure model deployments.",
     );
+    expect(createResponse.json().error.message).toContain(
+      "Provider error: Models list is empty",
+    );
 
     const listResponse = await app.inject({
       method: "GET",

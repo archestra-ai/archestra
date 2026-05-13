@@ -7,6 +7,8 @@ import { useEffect, useMemo, useState } from "react";
 import { CopyableCode } from "@/components/copyable-code";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
+import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
+import { LlmProviderApiKeyFilterSelect } from "@/components/llm-provider-options";
 import {
   formatProviderKeySummary,
   type ProviderApiKeyMap,
@@ -14,6 +16,7 @@ import {
   providerApiKeyMapToArray,
 } from "@/components/provider-key-mappings-field";
 import { ProviderKeyAccessFields } from "@/components/proxy-auth-provider-key-fields";
+import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -26,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { useProfiles } from "@/lib/agent.query";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
   useCreateLlmOauthClient,
   useDeleteLlmOauthClient,
@@ -41,7 +45,15 @@ type LlmOauthClient =
   archestraApiTypes.GetLlmOauthClientsResponses["200"][number];
 
 export default function OAuthClientsPage() {
-  const { data: oauthClients = [], isPending } = useLlmOauthClients();
+  const { searchParams, updateQueryParams } = useDataTableQueryParams();
+  const search = searchParams.get("search") || "";
+  const providerApiKeyIdFilter = searchParams.get("providerApiKeyId") || "all";
+
+  const { data: oauthClients = [], isPending } = useLlmOauthClients({
+    search: search || undefined,
+    providerApiKeyId:
+      providerApiKeyIdFilter === "all" ? undefined : providerApiKeyIdFilter,
+  });
   const { data: llmProxies = [] } = useProfiles({
     filters: { agentTypes: ["llm_proxy"] },
   });
@@ -155,11 +167,47 @@ export default function OAuthClientsPage() {
 
   return (
     <>
+      <div className="mb-4 flex flex-wrap gap-4">
+        <SearchInput
+          objectNamePlural="OAuth clients"
+          searchFields={["name"]}
+          paramName="search"
+        />
+        <LlmProviderApiKeyFilterSelect
+          value={providerApiKeyIdFilter}
+          onValueChange={(value) =>
+            updateQueryParams({
+              providerApiKeyId: value === "all" ? null : value,
+              page: "1",
+            })
+          }
+          allLabel="All provider API keys"
+          options={providerApiKeys.map((key) => {
+            const config = PROVIDER_CONFIG[key.provider];
+            return {
+              value: key.id,
+              icon: config.icon,
+              providerName: config.name,
+              keyName: key.name,
+            };
+          })}
+        />
+      </div>
+
       <DataTable
         columns={columns}
         data={oauthClients}
         isLoading={isPending}
         emptyMessage="No OAuth clients registered. Create one for backend services or bots that call LLM proxies."
+        hasActiveFilters={Boolean(search || providerApiKeyIdFilter !== "all")}
+        filteredEmptyMessage="No OAuth clients match your filters. Try adjusting your search."
+        onClearFilters={() =>
+          updateQueryParams({
+            search: null,
+            providerApiKeyId: null,
+            page: "1",
+          })
+        }
       />
 
       <CreateOAuthClientDialog

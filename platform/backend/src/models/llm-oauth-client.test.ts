@@ -202,9 +202,9 @@ describe("LlmOauthClientModel", () => {
       providerApiKeys: [],
     });
 
-    const clients = await LlmOauthClientModel.findAllByOrganization(
-      organization.id,
-    );
+    const clients = await LlmOauthClientModel.findAllByOrganization({
+      organizationId: organization.id,
+    });
 
     expect(clients).toHaveLength(1);
     expect(clients[0].name).toBe("LLM OAuth Client");

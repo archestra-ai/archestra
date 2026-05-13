@@ -10,17 +10,40 @@ import {
 } from "@/types/llm-oauth-client";
 
 class LlmOauthClientModel {
-  static async findAllByOrganization(organizationId: string) {
+  static async findAllByOrganization(params: {
+    organizationId: string;
+    search?: string;
+    providerApiKeyId?: string;
+  }) {
     const rows = await db
       .select()
       .from(schema.oauthClientsTable)
       .where(
         sql`${schema.oauthClientsTable.metadata}->>'type' = ${LLM_OAUTH_CLIENT_METADATA_TYPE}
-          AND ${schema.oauthClientsTable.metadata}->>'organizationId' = ${organizationId}`,
+          AND ${schema.oauthClientsTable.metadata}->>'organizationId' = ${params.organizationId}`,
       )
       .orderBy(schema.oauthClientsTable.createdAt);
 
-    return hydrateOauthClients(rows);
+    const clients = await hydrateOauthClients(rows);
+    return clients.filter((client) => {
+      if (
+        params.search &&
+        !client.name.toLowerCase().includes(params.search.trim().toLowerCase())
+      ) {
+        return false;
+      }
+
+      if (
+        params.providerApiKeyId &&
+        !client.providerApiKeys.some(
+          (mapping) => mapping.providerApiKeyId === params.providerApiKeyId,
+        )
+      ) {
+        return false;
+      }
+
+      return true;
+    });
   }
 
   static async create(params: {
@@ -99,9 +122,10 @@ class LlmOauthClientModel {
     providerApiKeyId: string;
     organizationId: string;
   }) {
-    const clients = await LlmOauthClientModel.findAllByOrganization(
-      params.organizationId,
-    );
+    const clients = await LlmOauthClientModel.findAllByOrganization({
+      organizationId: params.organizationId,
+      providerApiKeyId: params.providerApiKeyId,
+    });
     return clients.filter((client) =>
       client.providerApiKeys.some(
         (mapping) => mapping.providerApiKeyId === params.providerApiKeyId,

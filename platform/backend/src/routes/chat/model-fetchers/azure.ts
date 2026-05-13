@@ -4,6 +4,7 @@ import {
 } from "@/clients/azure-openai-credentials";
 import {
   buildAzureDeploymentsUrl,
+  buildAzureModelsUrl,
   buildAzureOpenAiV1ModelsUrl,
   extractAzureDeploymentName,
   normalizeAzureApiKey,
@@ -28,8 +29,12 @@ export async function fetchAzureModels(
   });
   const deploymentName = extractAzureDeploymentName(baseUrl);
   const v1ModelsUrl = buildAzureOpenAiV1ModelsUrl(baseUrl);
+  const modelsUrl = buildAzureModelsUrl({
+    apiVersion: config.llm.azure.apiVersion,
+    baseUrl,
+  });
   if (v1ModelsUrl) {
-    return fetchAzureOpenAiV1Models({
+    return fetchAzureModelList({
       apiKey,
       extraHeaders,
       url: v1ModelsUrl,
@@ -59,6 +64,17 @@ export async function fetchAzureModels(
         { status: response.status, error: errorText },
         "Failed to fetch Azure deployments",
       );
+      if (modelsUrl) {
+        const models = await fetchAzureModelList({
+          apiKey,
+          extraHeaders,
+          url: modelsUrl,
+          baseUrl,
+        });
+        if (models.length > 0) {
+          return models;
+        }
+      }
       return fallbackToConfiguredDeployment(deploymentName);
     }
 
@@ -73,11 +89,22 @@ export async function fetchAzureModels(
       : fallbackToConfiguredDeployment(deploymentName);
   } catch (error) {
     logger.error({ error }, "Error fetching Azure deployments");
+    if (modelsUrl) {
+      const models = await fetchAzureModelList({
+        apiKey,
+        extraHeaders,
+        url: modelsUrl,
+        baseUrl,
+      });
+      if (models.length > 0) {
+        return models;
+      }
+    }
     return fallbackToConfiguredDeployment(deploymentName);
   }
 }
 
-async function fetchAzureOpenAiV1Models(params: {
+async function fetchAzureModelList(params: {
   apiKey: string;
   baseUrl: string;
   extraHeaders?: Record<string, string> | null;
@@ -99,7 +126,7 @@ async function fetchAzureOpenAiV1Models(params: {
       const errorText = await response.text();
       logger.error(
         { status: response.status, error: errorText },
-        "Failed to fetch Azure OpenAI v1 models",
+        "Failed to fetch Azure models",
       );
       return [];
     }
@@ -119,7 +146,7 @@ async function fetchAzureOpenAiV1Models(params: {
         provider: "azure" as const,
       }));
   } catch (error) {
-    logger.error({ error }, "Error fetching Azure OpenAI v1 models");
+    logger.error({ error }, "Error fetching Azure models");
     return [];
   }
 }

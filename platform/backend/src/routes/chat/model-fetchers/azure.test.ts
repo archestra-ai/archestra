@@ -106,6 +106,56 @@ describe("fetchAzureModels", () => {
     vi.unstubAllGlobals();
   });
 
+  test("falls back to resource-level models when deployment discovery is unavailable", async () => {
+    mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(true);
+
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        text: async () =>
+          '{"error":{"code":"404","message":"Resource not found"}}',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: [
+            { id: "gpt-5.2-chat", capabilities: { chat_completion: true } },
+            { id: "gpt-5.4-mini", capabilities: { chat_completion: true } },
+            {
+              id: "text-embedding-3-large",
+              capabilities: { chat_completion: false },
+            },
+          ],
+        }),
+      });
+    vi.stubGlobal("fetch", mockFetch);
+
+    const result = await fetchAzureModels(
+      "",
+      "https://my-resource.openai.azure.com/openai",
+    );
+
+    expect(result).toEqual([
+      { id: "gpt-5.2-chat", displayName: "gpt-5.2-chat", provider: "azure" },
+      { id: "gpt-5.4-mini", displayName: "gpt-5.4-mini", provider: "azure" },
+    ]);
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      1,
+      "https://my-resource.openai.azure.com/openai/deployments?api-version=2024-02-01",
+      { headers: { Authorization: "Bearer entra-token" } },
+    );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      2,
+      "https://my-resource.openai.azure.com/openai/models?api-version=2024-02-01",
+      { headers: { Authorization: "Bearer entra-token" } },
+    );
+
+    mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(false);
+    vi.unstubAllGlobals();
+  });
+
   test("strips a Bearer prefix before sending the api-key header", async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -276,6 +326,25 @@ describe("fetchAzureModels", () => {
         provider: "azure",
       },
     ]);
+
+    vi.unstubAllGlobals();
+  });
+
+  test("does not treat a resource-level /openai path as a deployment name", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      text: async () =>
+        '{"error":{"code":"404","message":"Resource not found"}}',
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    const result = await fetchAzureModels(
+      "test-key",
+      "https://my-resource.openai.azure.com/openai",
+    );
+
+    expect(result).toEqual([]);
 
     vi.unstubAllGlobals();
   });

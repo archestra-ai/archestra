@@ -74,6 +74,7 @@ export function CreateLlmProviderApiKeyDialog({
 
   const formValues = form.watch();
   const isValid = getIsCreateFormValid({
+    anthropicWifEnabled,
     azureOpenAiEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
     byosEnabled: Boolean(byosEnabled),
     values: formValues,
@@ -187,11 +188,17 @@ function getDefaultFormValues(params: {
 }
 
 function getIsCreateFormValid(params: {
+  anthropicWifEnabled: boolean;
   azureOpenAiEntraIdEnabled: boolean;
   byosEnabled: boolean;
   values: LlmProviderApiKeyFormValues;
 }) {
-  const { azureOpenAiEntraIdEnabled, byosEnabled, values } = params;
+  const {
+    anthropicWifEnabled,
+    azureOpenAiEntraIdEnabled,
+    byosEnabled,
+    values,
+  } = params;
 
   if (values.provider === "bedrock" && values.bedrockAuthMethod === "sigv4") {
     return Boolean(
@@ -208,6 +215,7 @@ function getIsCreateFormValid(params: {
         ? values.vaultSecretPath && values.vaultSecretKey
         : isProviderApiKeyOptional({
             provider: values.provider,
+            anthropicWifEnabled,
             azureEntraIdEnabled: azureOpenAiEntraIdEnabled,
           }) || values.apiKey),
   );

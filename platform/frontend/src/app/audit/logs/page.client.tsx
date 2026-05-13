@@ -1,9 +1,14 @@
 "use client";
 
+import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { AuditLogTable } from "./_components/audit-log-table";
+
 export default function AuditLogsPage() {
   return (
-    <div className="flex items-center justify-center py-24 text-muted-foreground text-sm">
-      Audit log coming soon.
+    <div>
+      <ErrorBoundary>
+        <AuditLogTable />
+      </ErrorBoundary>
     </div>
   );
 }

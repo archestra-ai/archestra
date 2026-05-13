@@ -5,6 +5,22 @@ import {
 } from "./model-constants";
 
 describe("provider API key optional helpers", () => {
+  test("treats Anthropic as optional only when WIF is enabled", () => {
+    expect(isProviderApiKeyOptional({ provider: "anthropic" })).toBe(false);
+    expect(
+      isProviderApiKeyOptional({
+        provider: "anthropic",
+        anthropicWifEnabled: false,
+      }),
+    ).toBe(false);
+    expect(
+      isProviderApiKeyOptional({
+        provider: "anthropic",
+        anthropicWifEnabled: true,
+      }),
+    ).toBe(true);
+  });
+
   test("treats self-hosted providers as optional", () => {
     expect(isProviderApiKeyOptional({ provider: "ollama" })).toBe(true);
     expect(isProviderApiKeyOptional({ provider: "vllm" })).toBe(true);
@@ -28,6 +44,9 @@ describe("provider API key optional helpers", () => {
 
   test("lists providers with optional API keys", () => {
     expect(getProvidersWithOptionalApiKey()).toEqual(["ollama", "vllm"]);
+    expect(
+      getProvidersWithOptionalApiKey({ anthropicWifEnabled: true }),
+    ).toEqual(["ollama", "vllm", "anthropic"]);
     expect(
       getProvidersWithOptionalApiKey({ azureEntraIdEnabled: true }),
     ).toEqual(["ollama", "vllm", "azure"]);

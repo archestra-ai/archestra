@@ -719,6 +719,7 @@ function createAnthropicHarness(options: HarnessOptions = {}) {
                 content: [],
                 model,
                 stop_reason: null,
+                stop_details: null,
                 stop_sequence: null,
                 usage: {
                   input_tokens: usage.inputTokens,
@@ -760,6 +761,7 @@ function createAnthropicHarness(options: HarnessOptions = {}) {
                 delta: {
                   container: null,
                   stop_reason: "tool_use",
+                  stop_details: null,
                   stop_sequence: null,
                 },
                 usage: {
@@ -795,6 +797,7 @@ function createAnthropicHarness(options: HarnessOptions = {}) {
                 delta: {
                   container: null,
                   stop_reason: "end_turn",
+                  stop_details: null,
                   stop_sequence: null,
                 },
                 usage: {

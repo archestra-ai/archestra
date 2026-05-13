@@ -232,6 +232,7 @@ function createAnthropicStream(options: AnthropicStubOptions) {
         content: [],
         model: "claude-3-5-sonnet-20241022",
         stop_reason: null,
+        stop_details: null,
         stop_sequence: null,
         usage: {
           input_tokens: 12,
@@ -322,6 +323,7 @@ function createAnthropicStream(options: AnthropicStubOptions) {
       delta: {
         container: null,
         stop_reason: "end_turn",
+        stop_details: null,
         stop_sequence: null,
       },
       usage: {

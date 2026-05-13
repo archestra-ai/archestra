@@ -762,6 +762,33 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Uses Azure Identity `DefaultAzureCredential` with token scope `https://ai.azure.com/.default`
   - Claude deployments must already exist in the Azure resource. Microsoft lists additional Claude prerequisites: paid eligible subscription, supported region, Azure Marketplace access for partner models, permission to subscribe to model offerings, and Contributor or Owner role on the resource group. Azure also requires Anthropic deployment metadata: `industry`, `organizationName`, and `countryCode`.
 
+- **`ARCHESTRA_ANTHROPIC_WIF_ENABLED`** - Enable Anthropic Workload Identity Federation (OIDC token exchange).
+  - Default: `false`
+  - When enabled, Archestra uses Anthropic SDK OIDC federation credentials instead of static API keys for Anthropic proxy execution.
+  - Mutually exclusive with `ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED`.
+
+- **`ARCHESTRA_ANTHROPIC_FEDERATION_RULE_ID`** - Anthropic federation rule ID.
+  - Required when `ARCHESTRA_ANTHROPIC_WIF_ENABLED=true`
+  - Example: `fdrl_xxx`
+
+- **`ARCHESTRA_ANTHROPIC_ORGANIZATION_ID`** - Anthropic organization UUID for token exchange.
+  - Required when `ARCHESTRA_ANTHROPIC_WIF_ENABLED=true`
+
+- **`ARCHESTRA_ANTHROPIC_SERVICE_ACCOUNT_ID`** - Anthropic service account ID.
+  - Required when `ARCHESTRA_ANTHROPIC_WIF_ENABLED=true`
+  - Example: `svac_xxx`
+
+- **`ARCHESTRA_ANTHROPIC_WORKSPACE_ID`** - Anthropic workspace ID.
+  - Required when `ARCHESTRA_ANTHROPIC_WIF_ENABLED=true`
+  - Example: `wrkspc_xxx`
+
+- **`ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE`** - Path to workload OIDC identity token file.
+  - Required when `ARCHESTRA_ANTHROPIC_WIF_ENABLED=true`
+  - Example: `/var/run/secrets/anthropic.com/token`
+
+- **Credential precedence warning**
+  - Remove `ANTHROPIC_API_KEY` when using Anthropic WIF. Anthropic SDK credential precedence can select API-key auth before federation if both are present.
+
 - **`ARCHESTRA_GEMINI_BASE_URL`** - Override the Google Gemini API base URL.
   - Default: `https://generativelanguage.googleapis.com`
   - Use this to point to your own proxy or other custom endpoints

@@ -84,6 +84,31 @@ Azure requires Anthropic deployment metadata when creating Claude deployments: `
 
 See Microsoft's [Claude on Foundry guide](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-claude) for the Azure endpoint and authentication details.
 
+### Anthropic Workload Identity Federation (WIF)
+
+Archestra supports keyless Anthropic authentication via OIDC federation.
+
+Set the following environment variables:
+
+```env
+ARCHESTRA_ANTHROPIC_WIF_ENABLED=true
+ARCHESTRA_ANTHROPIC_FEDERATION_RULE_ID=fdrl_xxx
+ARCHESTRA_ANTHROPIC_ORGANIZATION_ID=00000000-0000-0000-0000-000000000000
+ARCHESTRA_ANTHROPIC_SERVICE_ACCOUNT_ID=svac_xxx
+ARCHESTRA_ANTHROPIC_WORKSPACE_ID=wrkspc_xxx
+ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE=/var/run/secrets/anthropic.com/token
+```
+
+How it works:
+
+- Archestra reads an OIDC identity token from `ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE`
+- Anthropic SDK exchanges it for a short-lived access token using your federation rule
+- Anthropic API requests are authenticated with the short-lived token
+
+Important credential precedence note:
+
+- Remove `ANTHROPIC_API_KEY` when using WIF. If an API key is still present, Anthropic SDK credential precedence can select API-key authentication instead of federation.
+
 ## Google Gemini
 
 Archestra supports both the [Google AI Studio](https://ai.google.dev/) (Gemini Developer API) and [Vertex AI](https://cloud.google.com/vertex-ai) implementations of the Gemini API.

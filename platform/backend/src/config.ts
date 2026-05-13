@@ -276,6 +276,50 @@ const MAX_TCP_PORT = 65_535;
 const OTEL_TRACES_PATH = "/v1/traces";
 const OTEL_LOGS_PATH = "/v1/logs";
 
+/** @public - exported for testability */
+export function getMissingAnthropicWifEnvVars(
+  env: NodeJS.ProcessEnv,
+): string[] {
+  if (env.ARCHESTRA_ANTHROPIC_WIF_ENABLED !== "true") {
+    return [];
+  }
+
+  const requiredVars = [
+    "ARCHESTRA_ANTHROPIC_FEDERATION_RULE_ID",
+    "ARCHESTRA_ANTHROPIC_ORGANIZATION_ID",
+    "ARCHESTRA_ANTHROPIC_SERVICE_ACCOUNT_ID",
+    "ARCHESTRA_ANTHROPIC_WORKSPACE_ID",
+    "ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE",
+  ] as const;
+
+  return requiredVars.filter((name) => !env[name]?.trim());
+}
+
+const missingAnthropicWifEnvVars = getMissingAnthropicWifEnvVars(process.env);
+if (missingAnthropicWifEnvVars.length > 0) {
+  throw new Error(
+    `Anthropic WIF is enabled but missing required environment variables: ${missingAnthropicWifEnvVars.join(", ")}`,
+  );
+}
+
+if (
+  process.env.ARCHESTRA_ANTHROPIC_WIF_ENABLED === "true" &&
+  process.env.ANTHROPIC_API_KEY?.trim()
+) {
+  logger.warn(
+    "ANTHROPIC_API_KEY is set while ARCHESTRA_ANTHROPIC_WIF_ENABLED=true. Anthropic SDK credential precedence may select API key auth over WIF. Remove ANTHROPIC_API_KEY when using WIF.",
+  );
+}
+
+if (
+  process.env.ARCHESTRA_ANTHROPIC_WIF_ENABLED === "true" &&
+  process.env.ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED === "true"
+) {
+  throw new Error(
+    "Anthropic WIF and Anthropic Azure Foundry Entra ID modes are mutually exclusive. Disable one of ARCHESTRA_ANTHROPIC_WIF_ENABLED or ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED.",
+  );
+}
+
 /**
  * Get OTEL exporter endpoint for traces.
  * Reads from ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT and intelligently ensures
@@ -609,6 +653,15 @@ const config = {
       azureFoundryEntraIdEnabled:
         process.env.ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED ===
         "true",
+      wifEnabled: process.env.ARCHESTRA_ANTHROPIC_WIF_ENABLED === "true",
+      federationRuleId:
+        process.env.ARCHESTRA_ANTHROPIC_FEDERATION_RULE_ID || "",
+      organizationId: process.env.ARCHESTRA_ANTHROPIC_ORGANIZATION_ID || "",
+      serviceAccountId:
+        process.env.ARCHESTRA_ANTHROPIC_SERVICE_ACCOUNT_ID || "",
+      workspaceId: process.env.ARCHESTRA_ANTHROPIC_WORKSPACE_ID || "",
+      identityTokenFile:
+        process.env.ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE || "",
     },
     gemini: {
       baseUrl:

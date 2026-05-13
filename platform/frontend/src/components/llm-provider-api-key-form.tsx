@@ -274,6 +274,8 @@ interface LlmProviderApiKeyFormProps {
   geminiVertexAiEnabled?: boolean;
   /** Whether Bedrock IAM auth is enabled, making direct API key entry optional. */
   bedrockIamAuthEnabled?: boolean;
+  /** Whether Anthropic WIF is enabled, making direct API key entry optional. */
+  anthropicWifEnabled?: boolean;
   /** Prevent changing the selected provider. */
   disableProvider?: boolean;
   /** Optional allowlist for provider selection. */
@@ -291,6 +293,7 @@ export function LlmProviderApiKeyForm({
   isPending = false,
   geminiVertexAiEnabled = false,
   bedrockIamAuthEnabled = false,
+  anthropicWifEnabled = false,
   disableProvider = false,
   allowedProviders,
   hideScopeAndPrimary = false,
@@ -618,6 +621,7 @@ export function LlmProviderApiKeyForm({
                   {isProviderApiKeyOptional({
                     provider,
                     azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
+                    anthropicWifEnabled,
                   }) ? (
                     <span className="font-normal text-muted-foreground">
                       (optional)

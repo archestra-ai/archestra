@@ -2,6 +2,7 @@ import AnthropicProvider from "@anthropic-ai/sdk";
 import { ArchestraInternalErrorCode } from "@shared";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
+import { getAnthropicWifCredentials } from "@/clients/anthropic-wif-credentials";
 import {
   getAzureAiFoundryBearerTokenProvider,
   isAnthropicAzureFoundryEntraIdEnabled,
@@ -1170,6 +1171,21 @@ export const anthropicAdapterFactory: LLMProvider<
           Authorization: "Bearer <entra-id-managed>",
         },
       });
+    }
+
+    if (!apiKey) {
+      const credentials = getAnthropicWifCredentials(
+        customFetch ?? globalThis.fetch,
+      );
+
+      if (credentials) {
+        return new AnthropicProvider({
+          credentials,
+          baseURL: options.baseUrl,
+          fetch: customFetch,
+          defaultHeaders: options.defaultHeaders,
+        });
+      }
     }
 
     return new AnthropicProvider({

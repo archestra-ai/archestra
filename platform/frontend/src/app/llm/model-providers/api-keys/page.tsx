@@ -57,7 +57,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
+import { useAnthropicWifEnabled, useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
@@ -116,6 +116,7 @@ export default function ApiKeysPage() {
   const deleteMutation = useDeleteLlmProviderApiKey();
   const byosEnabled = useFeature("byosEnabled");
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
+  const anthropicWifEnabled = useAnthropicWifEnabled();
 
   const getKeyUsage = useCallback(
     (keyId: string): string | null => {
@@ -384,6 +385,7 @@ export default function ApiKeysPage() {
             isProviderApiKeyOptional({
               provider: row.original.provider,
               azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
+              anthropicWifEnabled,
             }) ? (
               <>
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
@@ -452,6 +454,7 @@ export default function ApiKeysPage() {
       openDeleteDialog,
       getKeyUsage,
       azureOpenAiEntraIdEnabled,
+      anthropicWifEnabled,
     ],
   );
 

@@ -54,7 +54,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useFeature } from "@/lib/config/config.query";
+import { useAnthropicWifEnabled, useFeature } from "@/lib/config/config.query";
 import {
   useEmbeddingModels,
   useLlmModels,
@@ -128,6 +128,7 @@ function AddApiKeyDialog({
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
   const bedrockIamAuthEnabled = useFeature("bedrockIamAuthEnabled");
   const geminiVertexAiEnabled = useFeature("geminiVertexAiEnabled");
+  const anthropicWifEnabled = useAnthropicWifEnabled();
 
   const defaults = forEmbedding
     ? EMBEDDING_DEFAULT_FORM_VALUES
@@ -153,6 +154,7 @@ function AddApiKeyDialog({
       : isProviderApiKeyOptional({
           provider: formValues.provider,
           azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
+          anthropicWifEnabled,
         }) || formValues.apiKey);
 
   const handleCreate = form.handleSubmit(async (values) => {

@@ -19,7 +19,7 @@ import {
   DialogStickyFooter,
 } from "@/components/ui/dialog";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
+import { useAnthropicWifEnabled, useFeature } from "@/lib/config/config.query";
 import {
   useCreateLlmProviderApiKey,
   useLlmProviderApiKeys,
@@ -50,6 +50,7 @@ export function CreateLlmProviderApiKeyDialog({
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
   const bedrockIamAuthEnabled = useFeature("bedrockIamAuthEnabled");
   const geminiVertexAiEnabled = useFeature("geminiVertexAiEnabled");
+  const anthropicWifEnabled = useAnthropicWifEnabled();
   const { data: canCreateOrgScopedKey } = useHasPermissions({
     llmProviderApiKey: ["admin"],
   });
@@ -138,6 +139,7 @@ export function CreateLlmProviderApiKeyDialog({
             isPending={createMutation.isPending}
             bedrockIamAuthEnabled={bedrockIamAuthEnabled}
             geminiVertexAiEnabled={geminiVertexAiEnabled}
+            anthropicWifEnabled={anthropicWifEnabled}
           />
         </DialogBody>
         <DialogStickyFooter className="mt-0">

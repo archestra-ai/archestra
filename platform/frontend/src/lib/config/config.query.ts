@@ -45,6 +45,16 @@ export function useProviderBaseUrls() {
   return { data: data?.providerBaseUrls ?? null, ...rest };
 }
 
+export function useAnthropicWifEnabled(): boolean {
+  const { data } = useConfig();
+  return Boolean(
+    data &&
+      typeof data.features === "object" &&
+      data.features !== null &&
+      (data.features as Record<string, unknown>).anthropicWifEnabled === true,
+  );
+}
+
 export function useFeature<K extends keyof FeaturesResponse>(
   flag: K,
 ): FeaturesResponse[K] | undefined {

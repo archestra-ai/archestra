@@ -11,6 +11,7 @@ import {
   getAnalyticsConfig,
   getCorsOrigins,
   getDatabaseUrl,
+  getMissingAnthropicWifEnvVars,
   getOtelExporterOtlpEndpoint,
   getOtelExporterOtlpLogEndpoint,
   getOtlpAuthHeaders,
@@ -146,6 +147,45 @@ describe("getDatabaseUrl", () => {
     const result = getDatabaseUrl();
 
     expect(result).toBe("postgresql://other:pass@host:5432/other_db");
+  });
+});
+
+describe("getMissingAnthropicWifEnvVars", () => {
+  test("returns empty list when WIF is disabled", () => {
+    const env = {
+      ARCHESTRA_ANTHROPIC_WIF_ENABLED: "false",
+    } as NodeJS.ProcessEnv;
+
+    expect(getMissingAnthropicWifEnvVars(env)).toEqual([]);
+  });
+
+  test("returns all required vars when WIF is enabled and vars are missing", () => {
+    const env = {
+      ARCHESTRA_ANTHROPIC_WIF_ENABLED: "true",
+    } as NodeJS.ProcessEnv;
+
+    expect(getMissingAnthropicWifEnvVars(env)).toEqual([
+      "ARCHESTRA_ANTHROPIC_FEDERATION_RULE_ID",
+      "ARCHESTRA_ANTHROPIC_ORGANIZATION_ID",
+      "ARCHESTRA_ANTHROPIC_SERVICE_ACCOUNT_ID",
+      "ARCHESTRA_ANTHROPIC_WORKSPACE_ID",
+      "ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE",
+    ]);
+  });
+
+  test("returns only missing vars when WIF is enabled and partially configured", () => {
+    const env = {
+      ARCHESTRA_ANTHROPIC_WIF_ENABLED: "true",
+      ARCHESTRA_ANTHROPIC_FEDERATION_RULE_ID: "fdrl_123",
+      ARCHESTRA_ANTHROPIC_ORGANIZATION_ID:
+        "00000000-0000-0000-0000-000000000000",
+    } as NodeJS.ProcessEnv;
+
+    expect(getMissingAnthropicWifEnvVars(env)).toEqual([
+      "ARCHESTRA_ANTHROPIC_SERVICE_ACCOUNT_ID",
+      "ARCHESTRA_ANTHROPIC_WORKSPACE_ID",
+      "ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE",
+    ]);
   });
 });
 

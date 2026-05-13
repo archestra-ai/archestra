@@ -210,6 +210,46 @@ describe("LlmOauthClientModel", () => {
     expect(clients[0].name).toBe("LLM OAuth Client");
   });
 
+  test("treats OAuth client search wildcards as literal characters", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    await LlmOauthClientModel.create({
+      organizationId: organization.id,
+      name: "Client with % literal",
+      allowedLlmProxyIds: [],
+      providerApiKeys: [],
+    });
+    await LlmOauthClientModel.create({
+      organizationId: organization.id,
+      name: "Client with _ literal",
+      allowedLlmProxyIds: [],
+      providerApiKeys: [],
+    });
+    await LlmOauthClientModel.create({
+      organizationId: organization.id,
+      name: "Client with alpha literal",
+      allowedLlmProxyIds: [],
+      providerApiKeys: [],
+    });
+
+    const percentMatches = await LlmOauthClientModel.findAllByOrganization({
+      organizationId: organization.id,
+      search: "%",
+    });
+    const underscoreMatches = await LlmOauthClientModel.findAllByOrganization({
+      organizationId: organization.id,
+      search: "_",
+    });
+
+    expect(percentMatches.map((client) => client.name)).toEqual([
+      "Client with % literal",
+    ]);
+    expect(underscoreMatches.map((client) => client.name)).toEqual([
+      "Client with _ literal",
+    ]);
+  });
+
   test("stores the expected OAuth registration shape", async ({
     makeOrganization,
   }) => {

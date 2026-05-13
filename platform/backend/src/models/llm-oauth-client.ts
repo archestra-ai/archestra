@@ -8,6 +8,7 @@ import {
   LlmOauthClientMetadataSchema,
   type LlmOauthClientProviderKey,
 } from "@/types/llm-oauth-client";
+import { escapeLikePattern } from "@/utils/sql-search";
 
 class LlmOauthClientModel {
   static async findAllByOrganization(params: {
@@ -23,7 +24,10 @@ class LlmOauthClientModel {
           sql`${schema.oauthClientsTable.metadata}->>'type' = ${LLM_OAUTH_CLIENT_METADATA_TYPE}`,
           sql`${schema.oauthClientsTable.metadata}->>'organizationId' = ${params.organizationId}`,
           params.search
-            ? ilike(schema.oauthClientsTable.name, `%${params.search.trim()}%`)
+            ? ilike(
+                schema.oauthClientsTable.name,
+                `%${escapeLikePattern(params.search.trim())}%`,
+              )
             : undefined,
         ),
       )

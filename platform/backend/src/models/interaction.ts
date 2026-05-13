@@ -31,16 +31,9 @@ import type {
   UserInfo,
 } from "@/types";
 import { InteractionAuthMethodSchema } from "@/types";
+import { escapeLikePattern } from "@/utils/sql-search";
 import AgentTeamModel from "./agent-team";
 import LimitModel from "./limit";
-
-/**
- * Escapes special LIKE pattern characters (%, _, \) to treat them as literals.
- * This prevents users from crafting searches that behave unexpectedly.
- */
-function escapeLikePattern(value: string): string {
-  return value.replace(/[%_\\]/g, "\\$&");
-}
 
 /**
  * Extracts text content from a message content field.

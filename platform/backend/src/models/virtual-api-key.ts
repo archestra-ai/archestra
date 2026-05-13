@@ -15,6 +15,7 @@ import type {
   SelectVirtualApiKey,
   VirtualApiKeyWithParentInfo,
 } from "@/types";
+import { escapeLikePattern } from "@/utils/sql-search";
 
 /** Length of random part (32 bytes = 64 hex chars = 256 bits of entropy) */
 const TOKEN_RANDOM_LENGTH = 32;
@@ -764,10 +765,6 @@ class VirtualApiKeyModel {
       authorName: authorNameByVirtualApiKeyId,
     };
   }
-}
-
-function escapeLikePattern(value: string): string {
-  return value.replace(/[%_\\]/g, "\\$&");
 }
 
 export default VirtualApiKeyModel;

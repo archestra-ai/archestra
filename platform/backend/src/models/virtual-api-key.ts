@@ -393,7 +393,7 @@ class VirtualApiKeyModel {
       providerApiKeyId,
     });
 
-    if (!isAdmin && accessibleIds.length === 0) {
+    if ((!isAdmin || providerApiKeyId) && accessibleIds.length === 0) {
       return createPaginatedResult([], 0, pagination);
     }
 
@@ -401,7 +401,7 @@ class VirtualApiKeyModel {
       eq(schema.virtualApiKeysTable.organizationId, organizationId),
     ];
 
-    if (!isAdmin) {
+    if (!isAdmin || providerApiKeyId) {
       whereConditions.push(
         inArray(schema.virtualApiKeysTable.id, accessibleIds),
       );

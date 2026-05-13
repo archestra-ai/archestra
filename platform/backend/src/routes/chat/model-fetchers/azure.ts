@@ -215,7 +215,8 @@ async function fetchAzureCognitiveServicesAccountIds(params: {
   const accountIds: string[] = [];
 
   for (const subscriptionId of subscriptions) {
-    const filter = `resourceType eq 'Microsoft.CognitiveServices/accounts' and name eq '${params.accountName}'`;
+    const safeAccountName = params.accountName.replace(/'/g, "''");
+    const filter = `resourceType eq 'Microsoft.CognitiveServices/accounts' and name eq '${safeAccountName}'`;
     const url = new URL(
       `https://management.azure.com/subscriptions/${encodeURIComponent(subscriptionId)}/resources`,
     );

@@ -122,15 +122,10 @@ class LlmOauthClientModel {
     providerApiKeyId: string;
     organizationId: string;
   }) {
-    const clients = await LlmOauthClientModel.findAllByOrganization({
+    return LlmOauthClientModel.findAllByOrganization({
       organizationId: params.organizationId,
       providerApiKeyId: params.providerApiKeyId,
     });
-    return clients.filter((client) =>
-      client.providerApiKeys.some(
-        (mapping) => mapping.providerApiKeyId === params.providerApiKeyId,
-      ),
-    );
   }
 
   static async findClientForCredentials(params: {

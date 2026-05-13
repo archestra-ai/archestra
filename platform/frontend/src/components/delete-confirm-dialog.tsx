@@ -43,10 +43,16 @@ export function DeleteConfirmDialog({
             return;
           }
           e.preventDefault();
+          if (isPending || confirmDisabled) {
+            return;
+          }
           onConfirm();
         }}
         onSubmit={(e) => {
           e.preventDefault();
+          if (isPending || confirmDisabled) {
+            return;
+          }
           onConfirm();
         }}
       >

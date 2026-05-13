@@ -66,6 +66,7 @@ Vault paths are built as `{prefix}/{secretName}` — a secret named `github_toke
 
 For KV v2, list and delete operations use a metadata path derived from `ARCHESTRA_HASHICORP_VAULT_SECRET_PATH` by swapping `/data/` for `/metadata/` (e.g., `kv/data/platform/archestra` → `kv/metadata/platform/archestra`). Only set `ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH` when your metadata prefix doesn't follow this `/data/` ↔ `/metadata/` convention.
 
+<!--
 ## Readonly Vault
 
 > **Enterprise feature:** Contact sales@archestra.ai for licensing information.
@@ -144,6 +145,7 @@ path "<mount>/<path>/*" {
   capabilities = ["read", "list"]
 }
 ```
+-->
 
 ## Vault Authentication
 

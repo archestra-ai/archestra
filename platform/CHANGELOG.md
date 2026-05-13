@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.2.46](https://github.com/archestra-ai/archestra/compare/platform-v1.2.45...platform-v1.2.46) (2026-05-13)
+
+
+### Bug Fixes
+
+* Bedrock empty assistant step messages ([#4630](https://github.com/archestra-ai/archestra/issues/4630)) ([d03c216](https://github.com/archestra-ai/archestra/commit/d03c216f7cc7223a6ce26ec244a623d61c7c5c48))
+* bump deps ([#4621](https://github.com/archestra-ai/archestra/issues/4621)) ([b055573](https://github.com/archestra-ai/archestra/commit/b0555737aaa980f31919e2e4b2327824240b1d30))
+* handle terminated chat streams as network errors ([#4638](https://github.com/archestra-ai/archestra/issues/4638)) ([80540b4](https://github.com/archestra-ai/archestra/commit/80540b485484c15a68cc099b370dbd3377de0efc))
+* subagent artifact user context ([#4637](https://github.com/archestra-ai/archestra/issues/4637)) ([44c7d03](https://github.com/archestra-ai/archestra/commit/44c7d03a0961d05ae5313d3091137b16c3af9498))
+* subagent save persistence ([#4631](https://github.com/archestra-ai/archestra/issues/4631)) ([278e44a](https://github.com/archestra-ai/archestra/commit/278e44a895892c8457be5736d76586aa9f3ee0eb))
+
+
+### Performance Improvements
+
+* reduce MCP client ping hot path ([#4609](https://github.com/archestra-ai/archestra/issues/4609)) ([393b5ac](https://github.com/archestra-ai/archestra/commit/393b5ac8f9823a207627b729debaad659b2f307c))
+
+
+### Miscellaneous Chores
+
+* interlace chat errors in read-only views ([#4612](https://github.com/archestra-ai/archestra/issues/4612)) ([139331c](https://github.com/archestra-ai/archestra/commit/139331cc3cb723275adfed52a2edfc4f5cfa4815))
+
 ## [1.2.45](https://github.com/archestra-ai/archestra/compare/platform-v1.2.44...platform-v1.2.45) (2026-05-12)
 
 

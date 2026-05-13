@@ -75,16 +75,10 @@ export async function fetchAzureModels(
         if (deployments.length > 0) {
           return deployments;
         }
-
-        const models = await fetchAzureModelList({
-          apiKey,
-          extraHeaders,
-          url: modelsUrl,
-          baseUrl,
-        });
-        if (models.length > 0) {
-          return models;
-        }
+        logger.warn(
+          { baseUrl },
+          "Azure deployment discovery failed and management deployment discovery returned no deployments; not falling back to the model catalog for resource-level Azure OpenAI URL",
+        );
       }
       return fallbackToConfiguredDeployment(deploymentName);
     }
@@ -105,16 +99,10 @@ export async function fetchAzureModels(
       if (deployments.length > 0) {
         return deployments;
       }
-
-      const models = await fetchAzureModelList({
-        apiKey,
-        extraHeaders,
-        url: modelsUrl,
-        baseUrl,
-      });
-      if (models.length > 0) {
-        return models;
-      }
+      logger.warn(
+        { baseUrl },
+        "Azure deployment discovery failed and management deployment discovery returned no deployments; not falling back to the model catalog for resource-level Azure OpenAI URL",
+      );
     }
     return fallbackToConfiguredDeployment(deploymentName);
   }

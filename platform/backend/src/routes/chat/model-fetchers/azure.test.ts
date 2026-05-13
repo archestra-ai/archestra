@@ -193,7 +193,7 @@ describe("fetchAzureModels", () => {
     vi.unstubAllGlobals();
   });
 
-  test("falls back to resource-level models when deployment discovery and management discovery are unavailable", async () => {
+  test("does not fall back to resource-level model catalog when deployment discovery and management discovery are unavailable", async () => {
     mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(true);
 
     const mockFetch = vi
@@ -209,19 +209,6 @@ describe("fetchAzureModels", () => {
         json: async () => ({
           value: [],
         }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          data: [
-            { id: "gpt-5.2-chat", capabilities: { chat_completion: true } },
-            { id: "gpt-5.4-mini", capabilities: { chat_completion: true } },
-            {
-              id: "text-embedding-3-large",
-              capabilities: { chat_completion: false },
-            },
-          ],
-        }),
       });
     vi.stubGlobal("fetch", mockFetch);
 
@@ -230,19 +217,11 @@ describe("fetchAzureModels", () => {
       "https://my-resource.openai.azure.com/openai",
     );
 
-    expect(result).toEqual([
-      { id: "gpt-5.2-chat", displayName: "gpt-5.2-chat", provider: "azure" },
-      { id: "gpt-5.4-mini", displayName: "gpt-5.4-mini", provider: "azure" },
-      {
-        id: "text-embedding-3-large",
-        displayName: "text-embedding-3-large",
-        provider: "azure",
-      },
-    ]);
-    expect(mockFetch).toHaveBeenNthCalledWith(
-      3,
+    expect(result).toEqual([]);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch).not.toHaveBeenCalledWith(
       "https://my-resource.openai.azure.com/openai/models?api-version=2024-02-01",
-      { headers: { Authorization: "Bearer entra-token" } },
+      expect.any(Object),
     );
 
     mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(false);

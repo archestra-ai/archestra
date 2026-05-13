@@ -307,7 +307,8 @@ const MessageThread = ({
                                 unsafeContextBoundary,
                               }) &&
                               firstUnsafeDividerLocation?.kind === "tool" &&
-                              firstUnsafeDividerLocation.messageId === message.id;
+                              firstUnsafeDividerLocation.messageId ===
+                                message.id;
                             const shouldRenderPolicyDeniedUnsafeBoundary =
                               isFirstDividerAtText(
                                 firstUnsafeDividerLocation,
@@ -786,10 +787,10 @@ const MessageThread = ({
                     }) &&
                       firstUnsafeDividerLocation?.kind === "tool" &&
                       firstUnsafeDividerLocation.messageId === message.id && (
-                      <UnsafeContextStartsHereDivider
-                        dividerRef={unsafeBoundaryRef}
-                      />
-                    )}
+                        <UnsafeContextStartsHereDivider
+                          dividerRef={unsafeBoundaryRef}
+                        />
+                      )}
                     {message.role === "assistant" && (
                       <SwapAgentBoundaryDivider
                         parts={message.parts ?? []}

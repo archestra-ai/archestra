@@ -91,11 +91,22 @@ const internalMcpCatalogTable = pgTable(
     /**
      * Values for fields the parent declared with promptOnPreset: true.
      * Meaningful on parent (= default preset values) AND child (= preset overlay).
+     * Stores only non-secret values; secret-typed preset values live in the
+     * secret bundle referenced by presetSecretId.
      */
     presetFieldValues: jsonb("preset_field_values")
       .$type<Record<string, UserConfigFieldDefault>>()
       .notNull()
       .default({}),
+    /**
+     * Bundle of secret-typed preset values (userConfig.sensitive=true or env
+     * type=secret) for this catalog row. Same `{ <field_key>: <value> }`
+     * shape as clientSecretId / localConfigSecretId — one row per catalog
+     * row (parent or child).
+     */
+    presetSecretId: uuid("preset_secret_id").references(() => secretTable.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

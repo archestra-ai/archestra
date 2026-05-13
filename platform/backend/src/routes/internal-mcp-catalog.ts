@@ -32,6 +32,7 @@ import {
   type InternalMcpCatalog,
   ListInternalMcpCatalogSchema,
   PartialUpdateInternalMcpCatalogSchema,
+  type PresetFieldValues,
   SelectInternalMcpCatalogSchema,
   UpdateChildCatalogSchema,
   UuidIdSchema,
@@ -714,6 +715,25 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
+      // Default-preset values land on the parent row. Route them through the
+      // secret partitioner so secret-flagged keys end up in a secret bundle
+      // rather than the plaintext preset_field_values jsonb.
+      if (restBody.presetFieldValues !== undefined) {
+        const { nonSecretFieldValues, presetSecretId } =
+          await partitionPresetFieldValuesAndUpsertSecrets({
+            parent: originalCatalogItem,
+            catalogRow: {
+              name: restBody.name ?? originalCatalogItem.name,
+              presetSecretId: originalCatalogItem.presetSecretId,
+            },
+            incoming: restBody.presetFieldValues,
+          });
+        restBody.presetFieldValues = nonSecretFieldValues;
+        if (presetSecretId !== originalCatalogItem.presetSecretId) {
+          (restBody as Record<string, unknown>).presetSecretId = presetSecretId;
+        }
+      }
+
       // Update the catalog item
       const catalogItem = await InternalMcpCatalogModel.update(id, restBody);
 
@@ -794,13 +814,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      if (catalogItem.clientSecretId) {
-        await secretManager().deleteSecret(catalogItem.clientSecretId);
-      }
-
-      if (catalogItem.localConfigSecretId) {
-        await secretManager().deleteSecret(catalogItem.localConfigSecretId);
-      }
+      await deleteCatalogSecretsCascade(catalogItem);
 
       return reply.send({
         success: await InternalMcpCatalogModel.delete(id),
@@ -851,13 +865,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      if (catalogItem.clientSecretId) {
-        await secretManager().deleteSecret(catalogItem.clientSecretId);
-      }
-
-      if (catalogItem.localConfigSecretId) {
-        await secretManager().deleteSecret(catalogItem.localConfigSecretId);
-      }
+      await deleteCatalogSecretsCascade(catalogItem);
 
       return reply.send({
         success: await InternalMcpCatalogModel.delete(catalogItem.id),
@@ -1154,10 +1162,18 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, (e as Error).message);
       }
 
+      const { nonSecretFieldValues, presetSecretId } =
+        await partitionPresetFieldValuesAndUpsertSecrets({
+          parent,
+          catalogRow: { name, presetSecretId: null },
+          incoming: presetFieldValues ?? {},
+        });
+
       const childInsert = {
         ...pickSyncableFields(parent),
         name,
-        presetFieldValues: presetFieldValues ?? {},
+        presetFieldValues: nonSecretFieldValues,
+        presetSecretId,
         parentCatalogItemId: parent.id,
         scope: parent.scope,
       };
@@ -1217,8 +1233,21 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const updates: Record<string, unknown> = {};
       if (name !== undefined) updates.name = name;
-      if (presetFieldValues !== undefined)
-        updates.presetFieldValues = presetFieldValues;
+      if (presetFieldValues !== undefined) {
+        const { nonSecretFieldValues, presetSecretId } =
+          await partitionPresetFieldValuesAndUpsertSecrets({
+            parent,
+            catalogRow: {
+              name: name ?? originalChild.name,
+              presetSecretId: originalChild.presetSecretId,
+            },
+            incoming: presetFieldValues,
+          });
+        updates.presetFieldValues = nonSecretFieldValues;
+        if (presetSecretId !== originalChild.presetSecretId) {
+          updates.presetSecretId = presetSecretId;
+        }
+      }
 
       const updatedChild = await InternalMcpCatalogModel.update(
         childId,
@@ -1258,6 +1287,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Child catalog item not found");
       }
 
+      await deleteCatalogSecretsCascade(child);
+
       return reply.send({
         success: await InternalMcpCatalogModel.delete(childId),
       });
@@ -1286,6 +1317,31 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 };
+
+async function deleteCatalogSecretsCascade(
+  item: InternalMcpCatalog,
+): Promise<void> {
+  const ids = collectCatalogSecretIds(item);
+
+  if (item.parentCatalogItemId === null) {
+    const children = await InternalMcpCatalogModel.findChildren(item.id);
+    for (const child of children) {
+      for (const id of collectCatalogSecretIds(child)) ids.add(id);
+    }
+  }
+
+  for (const id of ids) {
+    await secretManager().deleteSecret(id);
+  }
+}
+
+function collectCatalogSecretIds(item: InternalMcpCatalog): Set<string> {
+  const ids = new Set<string>();
+  if (item.clientSecretId) ids.add(item.clientSecretId);
+  if (item.localConfigSecretId) ids.add(item.localConfigSecretId);
+  if (item.presetSecretId) ids.add(item.presetSecretId);
+  return ids;
+}
 
 async function upsertCatalogClientSecretValue(params: {
   clientSecretId: string | null | undefined;
@@ -1331,6 +1387,80 @@ async function getCatalogClientSecretValues(
       String(value),
     ]),
   );
+}
+
+/**
+ * Identify which preset-scoped fields on a parent catalog are secret-typed
+ * (userConfig.sensitive=true OR localConfig env type=secret).
+ */
+function collectSecretPresetKeys(parent: InternalMcpCatalog): Set<string> {
+  const keys = new Set<string>();
+  for (const [key, field] of Object.entries(parent.userConfig ?? {})) {
+    if (field.promptOnPreset && field.sensitive) keys.add(key);
+  }
+  for (const env of parent.localConfig?.environment ?? []) {
+    if (env.promptOnPreset && env.type === "secret") keys.add(env.key);
+  }
+  return keys;
+}
+
+/**
+ * Split an incoming `presetFieldValues` payload into a non-secret subset
+ * (persisted on the catalog row as plain JSONB) and a secret bundle
+ * (persisted via secretManager and referenced by `presetSecretId`).
+ *
+ * Semantics for secret fields:
+ *   - non-empty incoming value → write to secret bag (replace existing key)
+ *   - empty / missing incoming value → preserve existing stored secret
+ *     (this mirrors how the install dialog handles already-stored secrets)
+ *
+ * Returns the values to persist on the row.
+ */
+async function partitionPresetFieldValuesAndUpsertSecrets(params: {
+  parent: InternalMcpCatalog;
+  catalogRow: { name: string; presetSecretId: string | null };
+  incoming: PresetFieldValues;
+}): Promise<{
+  nonSecretFieldValues: PresetFieldValues;
+  presetSecretId: string | null;
+}> {
+  const { parent, catalogRow, incoming } = params;
+  const secretKeys = collectSecretPresetKeys(parent);
+
+  const nonSecretFieldValues: PresetFieldValues = {};
+  const incomingSecretValues: Record<string, string> = {};
+  for (const [key, value] of Object.entries(incoming)) {
+    if (secretKeys.has(key)) {
+      if (value !== undefined && value !== null && value !== "") {
+        incomingSecretValues[key] = String(value);
+      }
+    } else {
+      nonSecretFieldValues[key] = value;
+    }
+  }
+
+  let existingBag: Record<string, unknown> = {};
+  if (catalogRow.presetSecretId) {
+    const existing = await secretManager().getSecret(catalogRow.presetSecretId);
+    if (existing?.secret) existingBag = existing.secret;
+  }
+
+  const mergedBag = { ...existingBag, ...incomingSecretValues };
+
+  let presetSecretId = catalogRow.presetSecretId;
+  if (Object.keys(mergedBag).length > 0) {
+    if (presetSecretId) {
+      await secretManager().updateSecret(presetSecretId, mergedBag);
+    } else {
+      const secret = await secretManager().createSecret(
+        mergedBag,
+        `${catalogRow.name}-preset-secrets`,
+      );
+      presetSecretId = secret.id;
+    }
+  }
+
+  return { nonSecretFieldValues, presetSecretId };
 }
 
 async function cascadeReinstallForCatalog(

@@ -18,6 +18,7 @@ import {
   type ListInternalMcpCatalog,
   type PresetFieldValues,
   type UpdateInternalMcpCatalog,
+  type UserConfigFieldDefault,
 } from "@/types";
 import McpCatalogLabelModel from "./mcp-catalog-label";
 import McpCatalogTeamModel from "./mcp-catalog-team";
@@ -413,7 +414,13 @@ class InternalMcpCatalogModel {
       .where(eq(schema.internalMcpCatalogTable.parentCatalogItemId, parentId))
       .orderBy(asc(schema.internalMcpCatalogTable.createdAt));
 
-    return InternalMcpCatalogModel.attachLabelsAndTeams(dbItems);
+    const catalogItems =
+      await InternalMcpCatalogModel.attachLabelsAndTeams(dbItems);
+    // Same as findById/findAll: surface secret-typed preset values merged
+    // into presetFieldValues so callers (e.g. the install dialog's "preset
+    // fields not filled" section) see the full set of filled keys.
+    await InternalMcpCatalogModel.expandSecrets(catalogItems);
+    return catalogItems;
   }
 
   /**
@@ -478,6 +485,7 @@ class InternalMcpCatalogModel {
     for (const item of catalogItems) {
       if (item.clientSecretId) secretIds.add(item.clientSecretId);
       if (item.localConfigSecretId) secretIds.add(item.localConfigSecretId);
+      if (item.presetSecretId) secretIds.add(item.presetSecretId);
     }
 
     if (secretIds.size === 0) return;
@@ -564,6 +572,22 @@ class InternalMcpCatalogModel {
           }
         }
       }
+
+      // Enrich preset secret values (merge into presetFieldValues)
+      if (catalogItem.presetSecretId) {
+        const unresolvedSecret = unresolvedSecretMap.get(
+          catalogItem.presetSecretId,
+        );
+        const secret = unresolvedSecret?.isByosVault
+          ? unresolvedSecret
+          : resolvedSecretMap.get(catalogItem.presetSecretId);
+        if (secret) {
+          catalogItem.presetFieldValues = {
+            ...catalogItem.presetFieldValues,
+            ...(secret.secret as Record<string, UserConfigFieldDefault>),
+          };
+        }
+      }
     }
   }
 
@@ -578,6 +602,7 @@ class InternalMcpCatalogModel {
     for (const item of catalogItems) {
       if (item.clientSecretId) secretIds.add(item.clientSecretId);
       if (item.localConfigSecretId) secretIds.add(item.localConfigSecretId);
+      if (item.presetSecretId) secretIds.add(item.presetSecretId);
     }
 
     if (secretIds.size === 0) return;
@@ -627,6 +652,17 @@ class InternalMcpCatalogModel {
               envVar.value = String(value);
             }
           }
+        }
+      }
+
+      // Preset secret values
+      if (catalogItem.presetSecretId) {
+        const secret = secretMap.get(catalogItem.presetSecretId);
+        if (secret) {
+          catalogItem.presetFieldValues = {
+            ...catalogItem.presetFieldValues,
+            ...(secret.secret as Record<string, UserConfigFieldDefault>),
+          };
         }
       }
     }

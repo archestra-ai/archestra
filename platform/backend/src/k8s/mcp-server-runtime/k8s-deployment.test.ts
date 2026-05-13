@@ -451,6 +451,136 @@ describe("K8sDeployment.constructDeploymentName", () => {
     expect(result1).toBe(result2);
     expect(result1).toBe("mcp-firecrawl-joey");
   });
+
+  test("appends preset name when install targets a child preset catalog", () => {
+    const mockServer = {
+      name: "mcp-everything",
+      id: "123e4567-e89b-12d3-a456-426614174000",
+      catalogId: "7e573392-4a72-4391-8612-f5680788edfc",
+      // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
+    } as any;
+    const presetCatalog = {
+      name: "staging",
+      parentCatalogItemId: "eca87a8f-8ac5-43e9-98a5-bb4465f671a2",
+      multitenant: false,
+      // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
+    } as any;
+
+    const result = K8sDeployment.constructDeploymentName(
+      mockServer,
+      presetCatalog,
+    );
+    expect(result).toBe("mcp-mcp-everything-staging");
+  });
+
+  test("omits preset suffix for parent catalog installs", () => {
+    const mockServer = {
+      name: "mcp-everything",
+      id: "123e4567-e89b-12d3-a456-426614174000",
+      catalogId: "eca87a8f-8ac5-43e9-98a5-bb4465f671a2",
+      // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
+    } as any;
+    const parentCatalog = {
+      name: "mcp-everything",
+      parentCatalogItemId: null,
+      multitenant: false,
+      // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
+    } as any;
+
+    const result = K8sDeployment.constructDeploymentName(
+      mockServer,
+      parentCatalog,
+    );
+    expect(result).toBe("mcp-mcp-everything");
+  });
+
+  test("produces distinct deployment names for parent and preset installs sharing the same mcp_server.name", () => {
+    // Reproduces the collision bug: a single user installing into the parent
+    // AND a preset both end up with the same generated mcp_server.name (derived
+    // from the parent catalog). Without the preset suffix, both rows would
+    // map to one K8s deployment and thus one shared pod.
+    const sharedName = "mcp-everything-lf84okfh13vwrvqni00ylu3aq0cabp9g";
+    const parentServer = {
+      name: sharedName,
+      id: "14ea4b9b-6f50-4063-aaf4-215ff387dd34",
+      catalogId: "eca87a8f-8ac5-43e9-98a5-bb4465f671a2",
+      // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
+    } as any;
+    const presetServer = {
+      name: sharedName,
+      id: "33f54c25-9785-4ed0-be77-bdf7a3a65099",
+      catalogId: "7e573392-4a72-4391-8612-f5680788edfc",
+      // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
+    } as any;
+    const parentCatalog = {
+      name: "mcp-everything",
+      parentCatalogItemId: null,
+      multitenant: false,
+      // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
+    } as any;
+    const presetCatalog = {
+      name: "staging",
+      parentCatalogItemId: "eca87a8f-8ac5-43e9-98a5-bb4465f671a2",
+      multitenant: false,
+      // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
+    } as any;
+
+    const parentName = K8sDeployment.constructDeploymentName(
+      parentServer,
+      parentCatalog,
+    );
+    const presetName = K8sDeployment.constructDeploymentName(
+      presetServer,
+      presetCatalog,
+    );
+
+    expect(parentName).not.toBe(presetName);
+    expect(parentName).toBe(`mcp-${sharedName.toLowerCase()}`);
+    expect(presetName).toBe(`mcp-${sharedName.toLowerCase()}-staging`);
+  });
+
+  test("slugifies preset name with non-RFC1123 characters", () => {
+    const mockServer = {
+      name: "mcp-everything",
+      id: "123e4567-e89b-12d3-a456-426614174000",
+      catalogId: "7e573392-4a72-4391-8612-f5680788edfc",
+      // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
+    } as any;
+    const presetCatalog = {
+      name: "Staging Env!",
+      parentCatalogItemId: "eca87a8f-8ac5-43e9-98a5-bb4465f671a2",
+      multitenant: false,
+      // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
+    } as any;
+
+    const result = K8sDeployment.constructDeploymentName(
+      mockServer,
+      presetCatalog,
+    );
+    expect(result).toBe("mcp-mcp-everything-staging-env");
+    expect(result).toMatch(/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/);
+  });
+
+  test("multitenant takes precedence over preset suffix", () => {
+    const mockServer = {
+      name: "mcp-everything",
+      id: "123e4567-e89b-12d3-a456-426614174000",
+      catalogId: "7e573392-4a72-4391-8612-f5680788edfc",
+      // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
+    } as any;
+    const presetCatalog = {
+      name: "staging",
+      parentCatalogItemId: "eca87a8f-8ac5-43e9-98a5-bb4465f671a2",
+      multitenant: true,
+      // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
+    } as any;
+
+    const result = K8sDeployment.constructDeploymentName(
+      mockServer,
+      presetCatalog,
+    );
+    expect(result).toBe("mcp-mt-7e573392-staging");
+  });
 });
 
 describe("K8sDeployment.generateDeploymentSpec", () => {

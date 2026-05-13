@@ -1,0 +1,2 @@
+ALTER TABLE "internal_mcp_catalog" ADD COLUMN "preset_secret_id" uuid;--> statement-breakpoint
+ALTER TABLE "internal_mcp_catalog" ADD CONSTRAINT "internal_mcp_catalog_preset_secret_id_secret_id_fk" FOREIGN KEY ("preset_secret_id") REFERENCES "public"."secret"("id") ON DELETE set null ON UPDATE no action;

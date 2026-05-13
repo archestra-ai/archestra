@@ -33,13 +33,21 @@ test("can create and delete an agent", {
   await waitForElementWithReload(page, createButton);
   await createButton.click();
   await page.getByRole("textbox", { name: "Name" }).fill(AGENT_NAME);
-  await page.getByRole("button", { name: "Create" }).click();
 
-  // Skip the "dialog has closed" assertion — on webkit the Radix dialog can
-  // remain mounted (data-state=open) for several seconds after the create
-  // request succeeds, even though the agent has already been persisted. The
-  // semantically meaningful check is that the agent appears in the table
-  // below; that is sufficient evidence that the create flow worked.
+  // Wait for the POST /api/agents response before polling the table.
+  // On webkit, clicking submit and immediately continuing leaves a window
+  // where the API call hasn't fired (or response hasn't been processed)
+  // and waitForLoadState("domcontentloaded") returns instantly because
+  // there's no navigation. That made the subsequent "agent in table"
+  // poll exhaust its timeout on webkit while passing on chromium/firefox.
+  const createResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/agents") &&
+      response.request().method() === "POST",
+    { timeout: 30_000 },
+  );
+  await page.getByRole("button", { name: "Create" }).click();
+  await createResponsePromise;
   await page.waitForLoadState("domcontentloaded");
 
   // Poll for the agent to appear in the table
@@ -80,13 +88,18 @@ test("can clone an agent and rename it", {
   await waitForElementWithReload(page, createButton);
   await createButton.click();
   await page.getByRole("textbox", { name: "Name" }).fill(AGENT_NAME);
-  await page.getByRole("button", { name: "Create" }).click();
 
-  // Skip the "dialog has closed" assertion — on webkit the Radix dialog can
-  // remain mounted (data-state=open) for several seconds after the create
-  // request succeeds, even though the agent has already been persisted. The
-  // semantically meaningful check is that the agent appears in the table
-  // below; that is sufficient evidence that the create flow worked.
+  // Wait for the POST /api/agents response — same webkit timing issue as
+  // the create test above. Without this, the subsequent "agent in table"
+  // poll can exhaust its timeout on webkit before the API call lands.
+  const createResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/agents") &&
+      response.request().method() === "POST",
+    { timeout: 30_000 },
+  );
+  await page.getByRole("button", { name: "Create" }).click();
+  await createResponsePromise;
   await page.waitForLoadState("domcontentloaded");
 
   // Poll for the agent to appear in the table

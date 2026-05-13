@@ -3,7 +3,7 @@ title: "Secrets Management"
 category: Administration
 description: "Configure external secrets storage for sensitive data"
 order: 3
-lastUpdated: 2025-12-15
+lastUpdated: 2026-05-13
 ---
 
 <!--
@@ -37,24 +37,34 @@ See [`ARCHESTRA_AUTH_SECRET`](./platform-deployment#authentication--security) fo
 
 > **Enterprise feature:** Contact sales@archestra.ai for licensing information.
 
+In this mode, secret values are stored in Vault instead of the database. Archestra reads, writes, and deletes them in Vault; only references to the secret paths stay in the database.
+
 To enable Vault, set `ARCHESTRA_SECRETS_MANAGER` to `VAULT` and configure the address and authentication method.
 
-| Variable                                 | Value                     |
-| ---------------------------------------- | ------------------------- |
-| `ARCHESTRA_SECRETS_MANAGER`              | `VAULT`                   |
-| `ARCHESTRA_HASHICORP_VAULT_ADDR`         | Your Vault server address |
-| `ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD`  | `TOKEN`, `K8S`, or `AWS`  |
-| `ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED` | Your license value        |
+| Variable                                          | Required | Value                                                                                  |
+| ------------------------------------------------- | -------- | -------------------------------------------------------------------------------------- |
+| `ARCHESTRA_SECRETS_MANAGER`                       | Yes      | `VAULT`                                                                                |
+| `ARCHESTRA_HASHICORP_VAULT_ADDR`                  | Yes      | Your Vault server address                                                              |
+| `ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`          | Yes      | Your license value                                                                     |
+| `ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD`           | No       | `TOKEN` (default), `K8S`, or `AWS`                                                     |
+| `ARCHESTRA_HASHICORP_VAULT_KV_VERSION`            | No       | KV secrets engine version, `1` or `2` (default: `2`)                                   |
+| `ARCHESTRA_HASHICORP_VAULT_SECRET_PATH`           | No       | Path prefix to store secrets under (see [Secret Storage Paths](#secret-storage-paths)) |
+| `ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH`  | No       | Override path prefix for KV v2 metadata operations (see [Secret Storage Paths](#secret-storage-paths)) |
 
-Configure authentication using one of the methods described in [Vault Authentication](#vault-authentication).
+> **Required next step:** Set the credentials for your chosen auth method — see [Vault Authentication](#vault-authentication).
 
 > **Note:** If `ARCHESTRA_SECRETS_MANAGER` is set to `VAULT` but the required environment variables are missing, the system falls back to database storage.
 
 ### Secret Storage Paths
 
-Secrets are stored using the KV secrets engine v2:
+Vault paths are built as `{prefix}/{secretName}` — a secret named `github_token` is written to `{prefix}/github_token`. `ARCHESTRA_HASHICORP_VAULT_SECRET_PATH` sets the prefix; its default depends on the configured KV engine version.
 
-- **Data path:** `secret/data/archestra/{secretName}`
+| KV version | Default prefix      | Resolved path                              |
+| ---------- | ------------------- | ------------------------------------------ |
+| `2`        | `secret/data/archestra` | `secret/data/archestra/{secretName}`   |
+| `1`        | `secret/archestra`      | `secret/archestra/{secretName}`        |
+
+For KV v2, list and delete operations use a metadata path derived from `ARCHESTRA_HASHICORP_VAULT_SECRET_PATH` by swapping `/data/` for `/metadata/` (e.g., `kv/data/platform/archestra` → `kv/metadata/platform/archestra`). Only set `ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH` when your metadata prefix doesn't follow this `/data/` ↔ `/metadata/` convention.
 
 ## Readonly Vault
 

@@ -582,10 +582,7 @@ async function ensureExistingUsersHavePersonalMcpGateways(): Promise<void> {
 
 export async function seedRequiredStartingData(): Promise<void> {
   ensureEncryptionKeyAvailable();
-  // TODO: DO NOT RELEASE - debug bypass for secret encryption migration
-  if (process.env.ARCHESTRA_DISABLE_SECRET_ENCRYPTION !== "true") {
-    await migrateSecretsToEncrypted();
-  }
+  await migrateSecretsToEncrypted();
   await seedDefaultUserAndOrg();
   // Create default agents before seeding internal agents
   await AgentModel.getLLMProxyOrCreateDefault();

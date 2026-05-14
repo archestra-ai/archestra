@@ -14,20 +14,6 @@ const SALT = "archestra-hkdf-salt-v1";
 const INFO = "archestra-secret-encryption-v1";
 const VERSION_PREFIX = "v1";
 
-// ============================================================================
-// ============================================================================
-// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-// TODO: DO NOT RELEASE - DEBUG-ONLY SECRET ENCRYPTION BYPASS
-// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-// Setting ARCHESTRA_DISABLE_SECRET_ENCRYPTION=true stores secrets as plaintext
-// inside a "v1:plain:<json>" envelope. REMOVE BEFORE MERGING / RELEASING.
-// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-// ============================================================================
-// ============================================================================
-const BYPASS_ENCRYPTION =
-  process.env.ARCHESTRA_DISABLE_SECRET_ENCRYPTION === "true";
-const PLAIN_PREFIX = "v1:plain:";
-
 let cachedKey: Buffer | null = null;
 
 function getEncryptionKey(): Buffer {
@@ -106,10 +92,6 @@ function decryptSecretValueWithKey(
 export function encryptSecretValue(plaintext: Record<string, unknown>): {
   __encrypted: string;
 } {
-  // TODO: DO NOT RELEASE - debug bypass
-  if (BYPASS_ENCRYPTION) {
-    return { __encrypted: `${PLAIN_PREFIX}${JSON.stringify(plaintext)}` };
-  }
   return encryptSecretValueWithKey(plaintext, getEncryptionKey());
 }
 
@@ -119,10 +101,6 @@ export function encryptSecretValue(plaintext: Record<string, unknown>): {
 export function decryptSecretValue(encrypted: {
   __encrypted: string;
 }): Record<string, unknown> {
-  // TODO: DO NOT RELEASE - debug bypass
-  if (encrypted.__encrypted.startsWith(PLAIN_PREFIX)) {
-    return JSON.parse(encrypted.__encrypted.slice(PLAIN_PREFIX.length));
-  }
   return decryptSecretValueWithKey(encrypted, getEncryptionKey());
 }
 
@@ -145,8 +123,6 @@ export function isEncryptedSecret(
  * Call at startup to fail fast if ARCHESTRA_AUTH_SECRET is missing.
  */
 export function ensureEncryptionKeyAvailable(): void {
-  // TODO: DO NOT RELEASE - debug bypass
-  if (BYPASS_ENCRYPTION) return;
   getEncryptionKey();
 }
 

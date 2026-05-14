@@ -9,9 +9,16 @@ vi.mock("@/websocket", () => ({
   default: { broadcastAuditLog: vi.fn() },
 }));
 
-vi.mock("./audit-log-registry", () => ({
-  AUDITABLE_ROUTES: {
-    "/api/things": { resourceType: "thing" },
+vi.mock("./audit-log-registry", () => {
+  const ROUTES: Record<
+    string,
+    import("./audit-log-registry").AuditableRouteConfig
+  > = {
+    "/api/things": {
+      resourceType: "thing",
+      fetchById: async (id: string) =>
+        id === KNOWN_RESOURCE_ID ? { id, name: "Existing Thing" } : null,
+    },
     "/api/things/:id": {
       resourceType: "thing",
       fetchById: async (id: string) =>
@@ -19,9 +26,28 @@ vi.mock("./audit-log-registry", () => ({
     },
     "/api/no-fetch-things": { resourceType: "noFetchThing" },
     "/api/no-fetch-things/:id": { resourceType: "noFetchThing" },
-  },
-  initAuditRegistry: vi.fn(),
-}));
+  };
+
+  function resolveAuditableRouteConfig(
+    routePattern: string | undefined,
+  ): import("./audit-log-registry").AuditableRouteConfig | undefined {
+    if (!routePattern) return undefined;
+    let p = routePattern;
+    for (;;) {
+      const cfg = ROUTES[p];
+      if (cfg) return cfg;
+      const lastSlash = p.lastIndexOf("/");
+      if (lastSlash <= 0) return undefined;
+      p = p.slice(0, lastSlash);
+    }
+  }
+
+  return {
+    AUDITABLE_ROUTES: ROUTES,
+    resolveAuditableRouteConfig,
+    initAuditRegistry: vi.fn(),
+  };
+});
 
 import AuditLogModel from "@/models/audit-log";
 import type { FastifyInstanceWithZod } from "@/server";

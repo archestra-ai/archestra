@@ -28,10 +28,9 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/lib/audit-log/audit-log.query", async () => {
-  const actual =
-    await vi.importActual<typeof import("@/lib/audit-log/audit-log.query")>(
-      "@/lib/audit-log/audit-log.query",
-    );
+  const actual = await vi.importActual<
+    typeof import("@/lib/audit-log/audit-log.query")
+  >("@/lib/audit-log/audit-log.query");
   return {
     ...actual,
     useAuditLogs: (...args: unknown[]) => mockUseAuditLogs(...args),
@@ -170,7 +169,8 @@ describe("AuditLogTable", () => {
 
     const row = screen.getByText("Ada Lovelace").closest("tr");
     expect(row).not.toBeNull();
-    await userEvent.click(row!);
+    if (!row) throw new Error("expected table row");
+    await userEvent.click(row);
 
     expect(
       await screen.findByRole("heading", { name: /Event details/i }),

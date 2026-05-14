@@ -1,27 +1,31 @@
 import logger from "@/logging";
 import AuditLogModel from "@/models/audit-log";
+import UserTokenModel from "@/models/user-token";
 import type { FastifyInstanceWithZod } from "@/server";
 import type { AuditAction } from "@/types";
 import websocketService from "@/websocket";
-import { AUDITABLE_ROUTES } from "./audit-log-registry";
+import {
+  type AuditableRouteConfig,
+  resolveAuditableRouteConfig,
+} from "./audit-log-registry";
 
 export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
   fastify.addHook("preHandler", async (request) => {
     if (shouldSkip(request.method, request.url, request.user)) return;
 
     const routePattern = request.routeOptions.url;
-    const cfg = routePattern ? AUDITABLE_ROUTES[routePattern] : undefined;
+    const cfg = resolveAuditableRouteConfig(routePattern);
     if (!cfg?.fetchById) return;
 
-    const id = extractId(request);
+    const id = await resolveAuditedResourceId(request, cfg);
     if (!id) return;
 
-    request.auditPriorState = await cfg
-      .fetchById(id, request.organizationId)
-      .catch((err) => {
+    request.auditPriorState = sanitizeAuditSnapshot(
+      await cfg.fetchById(id, request.organizationId).catch((err) => {
         logger.error({ err }, "audit: fetchById (prior) failed");
         return null;
-      });
+      }),
+    );
   });
 
   // Capture the created resource's id from POST response bodies so the
@@ -31,7 +35,7 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
       return payload;
 
     const routePattern = request.routeOptions.url;
-    const cfg = routePattern ? AUDITABLE_ROUTES[routePattern] : undefined;
+    const cfg = resolveAuditableRouteConfig(routePattern);
     if (!cfg?.fetchById) return payload;
 
     try {
@@ -57,11 +61,14 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
     if (reply.statusCode >= 400) return;
 
     const routePattern = request.routeOptions.url;
-    const cfg = routePattern ? AUDITABLE_ROUTES[routePattern] : undefined;
+    const cfg = resolveAuditableRouteConfig(routePattern);
     const action = httpMethodToAction(request.method);
     if (!action) return;
 
-    const id = extractId(request) ?? request.auditResponseBodyId ?? null;
+    const id =
+      (cfg ? await resolveAuditedResourceId(request, cfg) : null) ??
+      request.auditResponseBodyId ??
+      null;
 
     const postState = await resolvePostState({
       method: request.method,
@@ -83,8 +90,8 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
       action,
       resourceType: cfg?.resourceType ?? null,
       resourceId: id,
-      priorState: request.auditPriorState ?? null,
-      postState,
+      priorState: sanitizeAuditSnapshot(request.auditPriorState ?? null),
+      postState: sanitizeAuditSnapshot(postState),
       httpMethod: request.method,
       httpPath,
       httpRoute: routePattern ?? null,
@@ -107,7 +114,20 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
 
 const AUDIT_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
-const AUDIT_DENYLIST_PREFIXES = ["/api/auth/", "/api/health", "/api/ready"];
+/**
+ * High-volume or non-administrative `/api/*` surfaces excluded from org audit
+ * (per product direction: MCP session proxy traffic and chat/browser streams
+ * stay out of the org audit log; dedicated surfaces cover them).
+ */
+const AUDIT_DENYLIST_PREFIXES = [
+  "/api/auth/",
+  "/api/health",
+  "/api/ready",
+  "/api/mcp/",
+  "/api/chat",
+  "/api/browser-stream/",
+  "/api/secrets/check-connectivity",
+];
 
 function shouldSkip(method: string, url: string, user: unknown): boolean {
   if (!AUDIT_METHODS.has(method)) return true;
@@ -131,10 +151,34 @@ function httpMethodToAction(method: string): AuditAction | null {
   }
 }
 
-function extractId(request: { params: unknown }): string | null {
+async function resolveAuditedResourceId(
+  request: {
+    params: unknown;
+    organizationId?: string;
+    user?: { id: string };
+  },
+  cfg: AuditableRouteConfig,
+): Promise<string | null> {
+  if (cfg.resourceIdSource === "organizationContext") {
+    return request.organizationId ?? null;
+  }
+
+  if (cfg.resourceIdSource === "currentUserPersonalToken") {
+    if (!request.user?.id || !request.organizationId) return null;
+    const token = await UserTokenModel.findByUserAndOrg(
+      request.user.id,
+      request.organizationId,
+    );
+    return token?.id ?? null;
+  }
+
   const params = request.params as Record<string, unknown> | undefined;
-  const id = params?.id;
-  return typeof id === "string" ? id : null;
+  if (!params) return null;
+  const primary = cfg.resourceIdParam ?? "id";
+  const v = params[primary];
+  if (typeof v === "string") return v;
+  const fallback = params.id;
+  return typeof fallback === "string" ? fallback : null;
 }
 
 function extractIp(request: {
@@ -151,7 +195,7 @@ async function resolvePostState(params: {
   method: string;
   id: string | null;
   organizationId: string;
-  cfg: (typeof AUDITABLE_ROUTES)[string] | undefined;
+  cfg: AuditableRouteConfig | undefined;
 }): Promise<Record<string, unknown> | null> {
   const { method, id, organizationId, cfg } = params;
 
@@ -162,4 +206,31 @@ async function resolvePostState(params: {
     logger.error({ err }, "audit: fetchById (post) failed");
     return null;
   });
+}
+
+/** Drop volatile timestamp fields so diffs surface real config changes. */
+function sanitizeAuditSnapshot(
+  state: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  if (state === null) return null;
+  return deepOmitKeys(state, new Set(["updatedAt"])) as Record<string, unknown>;
+}
+
+function deepOmitKeys(value: unknown, keys: Set<string>): unknown {
+  if (value === null || value === undefined) return value;
+  if (value instanceof Date) return value;
+  if (Array.isArray(value)) return value.map((v) => deepOmitKeys(v, keys));
+  if (
+    typeof value === "object" &&
+    Object.getPrototypeOf(value) === Object.prototype
+  ) {
+    const obj = value as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (keys.has(k)) continue;
+      out[k] = deepOmitKeys(v, keys);
+    }
+    return out;
+  }
+  return value;
 }

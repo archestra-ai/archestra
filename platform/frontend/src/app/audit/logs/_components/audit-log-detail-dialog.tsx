@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useMemo } from "react";
 import { FormDialog } from "@/components/form-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,10 @@ import {
   formatAction,
   formatResourceType,
 } from "./audit-log-action-labels";
-import { AuditLogDiffView } from "./audit-log-diff-view";
+import {
+  AuditLogDiffView,
+  summarizeAuditDiffHints,
+} from "./audit-log-diff-view";
 
 interface AuditLogDetailDialogProps {
   event: AuditLog | null;
@@ -24,7 +28,6 @@ export function AuditLogDetailDialog({
   onClose,
 }: AuditLogDetailDialogProps) {
   const open = event !== null;
-  const isAuthEvent = event?.resourceType === "auth";
 
   return (
     <FormDialog
@@ -36,54 +39,7 @@ export function AuditLogDetailDialog({
       size="large"
     >
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-        {event && (
-          <div className="space-y-6">
-            <DetailGrid>
-              <DetailRow label="When">
-                <div className="space-y-1">
-                  <div className="font-mono text-xs">
-                    {formatDate({ date: event.createdAt })}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {formatRelativeTimeFromNow(event.createdAt)}
-                  </div>
-                </div>
-              </DetailRow>
-
-              <DetailRow label="Actor">
-                <ActorBlock event={event} />
-              </DetailRow>
-
-              <DetailRow label="Action">
-                <Badge variant={ACTION_BADGE_VARIANT[event.action]}>
-                  {formatAction(event.action)}
-                </Badge>
-              </DetailRow>
-
-              <DetailRow label="Resource">
-                <ResourceBlock event={event} />
-              </DetailRow>
-
-              {!isAuthEvent && (
-                <DetailRow label="Where">
-                  <WhereBlock event={event} />
-                </DetailRow>
-              )}
-
-              <DetailRow label="Source">
-                <SourceBlock event={event} />
-              </DetailRow>
-            </DetailGrid>
-
-            <section className="space-y-2">
-              <h3 className="text-sm font-medium">Changes</h3>
-              <AuditLogDiffView
-                prior={event.priorState}
-                post={event.postState}
-              />
-            </section>
-          </div>
-        )}
+        {event && <AuditLogDetailBody event={event} />}
       </div>
       <DialogStickyFooter>
         <Button type="button" variant="outline" onClick={onClose}>
@@ -91,6 +47,70 @@ export function AuditLogDetailDialog({
         </Button>
       </DialogStickyFooter>
     </FormDialog>
+  );
+}
+
+function AuditLogDetailBody({ event }: { event: AuditLog }) {
+  const isAuthEvent = event.resourceType === "auth";
+  const diffSummary = useMemo(
+    () =>
+      summarizeAuditDiffHints(
+        event.priorState ?? null,
+        event.postState ?? null,
+      ),
+    [event],
+  );
+
+  return (
+    <div className="space-y-6">
+      <DetailGrid>
+        <DetailRow label="When">
+          <div className="space-y-1">
+            <div className="font-mono text-xs">
+              {formatDate({ date: event.createdAt })}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {formatRelativeTimeFromNow(event.createdAt)}
+            </div>
+          </div>
+        </DetailRow>
+
+        <DetailRow label="Actor">
+          <ActorBlock event={event} />
+        </DetailRow>
+
+        <DetailRow label="Action">
+          <Badge variant={ACTION_BADGE_VARIANT[event.action]}>
+            {formatAction(event.action)}
+          </Badge>
+        </DetailRow>
+
+        <DetailRow label="Resource">
+          <ResourceBlock event={event} />
+        </DetailRow>
+
+        {!isAuthEvent && (
+          <DetailRow label="Where">
+            <WhereBlock event={event} />
+          </DetailRow>
+        )}
+
+        <DetailRow label="Source">
+          <SourceBlock event={event} />
+        </DetailRow>
+      </DetailGrid>
+
+      <section className="space-y-2">
+        <h3 className="text-sm font-medium">Changes</h3>
+        {diffSummary && (
+          <p className="text-xs text-muted-foreground">{diffSummary}</p>
+        )}
+        <AuditLogDiffView
+          prior={event.priorState ?? null}
+          post={event.postState ?? null}
+        />
+      </section>
+    </div>
   );
 }
 
@@ -167,8 +187,7 @@ function WhereBlock({ event }: { event: AuditLog }) {
       )}
       {event.httpRoute && (
         <div className="text-muted-foreground">
-          Route:{" "}
-          <code className="font-mono">{event.httpRoute}</code>
+          Route: <code className="font-mono">{event.httpRoute}</code>
         </div>
       )}
       {event.httpStatus !== null && (
@@ -192,9 +211,7 @@ function SourceBlock({ event }: { event: AuditLog }) {
         </div>
       )}
       {event.userAgent && (
-        <div className="break-all text-muted-foreground">
-          {event.userAgent}
-        </div>
+        <div className="break-all text-muted-foreground">{event.userAgent}</div>
       )}
     </div>
   );

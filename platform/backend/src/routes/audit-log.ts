@@ -9,8 +9,8 @@ import { AuditLogModel } from "@/models";
 import {
   AuditActionSchema,
   constructResponseSchema,
-  createSortingQuerySchema,
   SelectAuditLogSchema,
+  SortDirectionSchema,
 } from "@/types";
 
 const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -52,8 +52,10 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 "Case-insensitive search across actor email, actor name, HTTP path, and resource ID",
               ),
           })
-          .merge(PaginationQuerySchema)
-          .merge(createSortingQuerySchema(["createdAt"] as const)),
+          .extend({
+            sortDirection: SortDirectionSchema.optional().default("desc"),
+          })
+          .merge(PaginationQuerySchema),
         response: constructResponseSchema(
           createPaginatedResponseSchema(SelectAuditLogSchema),
         ),

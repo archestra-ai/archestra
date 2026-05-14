@@ -410,6 +410,66 @@ export const auth = betterAuth({
   },
 });
 
+type SignOutAuditStash = {
+  user: { id: string; email: string; name?: string | null };
+  session: { id: string; activeOrganizationId?: string | null };
+};
+
+const signOutAuditSessionByRequest = new WeakMap<Request, SignOutAuditStash>();
+
+function isAuthSignOutPath(path: string | undefined): boolean {
+  if (!path) return false;
+  const p = path.split("?")[0] ?? path;
+  if (p === "/sign-out" || p === "sign-out") return true;
+  if (p.endsWith("/sign-out")) return true;
+  if (p.includes("/sign-out/")) return true;
+  return false;
+}
+
+async function stashSignOutSessionForAudit(
+  ctx: HookEndpointContext,
+): Promise<void> {
+  const { path, request, context } = ctx;
+  if (!isAuthSignOutPath(path) || !request) return;
+
+  type SessionBundle = {
+    user: { id: string; email: string; name?: string | null };
+    session: { id: string; activeOrganizationId?: string | null };
+  };
+
+  const bundle = context?.session as Partial<SessionBundle> | undefined;
+  let user = bundle?.user;
+  let session = bundle?.session;
+
+  if (!user || !session) {
+    try {
+      const headers = new Headers(request.headers as HeadersInit);
+      const resolved = await auth.api.getSession({ headers });
+      if (resolved?.user && resolved?.session) {
+        user = resolved.user as SessionBundle["user"];
+        session = resolved.session as SessionBundle["session"];
+      }
+    } catch (err) {
+      logger.debug(
+        { err },
+        "[auth:audit] sign-out stash: getSession fallback failed",
+      );
+    }
+  }
+
+  if (!user || !session) return;
+  signOutAuditSessionByRequest.set(request, { user, session });
+}
+
+function consumeStashedSignOutSession(
+  request: Request | undefined,
+): SignOutAuditStash | undefined {
+  if (!request) return undefined;
+  const v = signOutAuditSessionByRequest.get(request);
+  if (v) signOutAuditSessionByRequest.delete(request);
+  return v;
+}
+
 function getBetterAuthLogLevel(
   logLevel: string,
 ): "debug" | "info" | "warn" | "error" | undefined {
@@ -520,6 +580,10 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
   }
 
   logger.trace({ path, method }, "[auth:beforeHook] Processing auth request");
+
+  if (isAuthSignOutPath(path)) {
+    await stashSignOutSessionForAudit(ctx);
+  }
 
   // Block invitation creation when invitations are disabled
   if (path === "/organization/invite-member" && method === "POST") {
@@ -770,9 +834,32 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
   // NOTE: User deletion on member removal is handled in routes/auth.ts
   // Better-auth handles member deletion, we just clean up orphaned users
 
-  // Capture sign-out audit event
-  if (path.startsWith("/sign-out")) {
-    const sessionCtx = context?.session;
+  // Capture sign-out audit event (session is often cleared before/without
+  // reliable context in the after hook — see stashSignOutSessionForAudit).
+  if (isAuthSignOutPath(path)) {
+    const fromBefore = consumeStashedSignOutSession(request);
+    if (fromBefore) {
+      void writeAuthAuditLog({
+        user: fromBefore.user,
+        session: fromBefore.session,
+        action: "sign_out",
+        path,
+        request,
+      }).catch((err) =>
+        logger.error(
+          { err },
+          "[auth:audit] failed to write sign-out audit row (pre-hook capture)",
+        ),
+      );
+      return ctx;
+    }
+
+    const sessionCtx = context?.session as
+      | {
+          user?: { id: string; email: string; name?: string | null };
+          session?: { id: string; activeOrganizationId?: string | null };
+        }
+      | undefined;
     if (sessionCtx?.user && sessionCtx?.session) {
       void writeAuthAuditLog({
         user: sessionCtx.user,
@@ -786,7 +873,45 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
           "[auth:audit] failed to write sign-out audit row",
         ),
       );
+    } else {
+      // better-auth may not always populate context.session on sign-out
+      // (e.g. revoke-session or token-based flows).  Try to resolve the
+      // actor from the incoming request headers so we still capture the event.
+      logger.debug(
+        { path, hasContext: !!context, hasSession: !!sessionCtx },
+        "[auth:afterHook] sign-out: context.session not populated, attempting header-based resolution",
+      );
+      try {
+        const headers = new Headers(
+          request?.headers as HeadersInit | undefined,
+        );
+        const resolved = await auth.api.getSession({ headers });
+        if (resolved?.user && resolved?.session) {
+          void writeAuthAuditLog({
+            user: resolved.user,
+            session: resolved.session,
+            action: "sign_out",
+            path,
+            request,
+          }).catch((err) =>
+            logger.error(
+              { err },
+              "[auth:audit] failed to write sign-out audit row (fallback)",
+            ),
+          );
+        } else {
+          logger.debug(
+            "[auth:afterHook] sign-out: could not resolve session from headers either, skipping audit",
+          );
+        }
+      } catch (err) {
+        logger.debug(
+          { err },
+          "[auth:afterHook] sign-out: header-based session resolution failed, skipping audit",
+        );
+      }
     }
+    return ctx;
   }
 
   if (path.startsWith("/sign-up")) {
@@ -806,21 +931,25 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         ?.split("invitationId=")[1]
         ?.split("&")[0];
 
-      // If there is no invitation ID, it means this is a direct sign-up which is not allowed
-      if (!invitationId) {
+      if (invitationId) {
         logger.debug(
-          "[auth:afterHook] Sign-up without invitation ID, skipping",
+          { invitationId, userId: user.id },
+          "[auth:afterHook] Accepting invitation after sign-up",
         );
-        return;
+        // Accept first so the membership row exists when writeAuthAuditLog
+        // falls back to MemberModel.getFirstMembershipForUser for the org.
+        await InvitationModel.accept(session, user, invitationId);
+      } else {
+        logger.debug(
+          { userId: user.id },
+          "[auth:afterHook] Direct sign-up (no invitation id)",
+        );
       }
 
-      logger.debug(
-        { invitationId, userId: user.id },
-        "[auth:afterHook] Accepting invitation after sign-up",
-      );
-      // Accept first so the membership row exists when writeAuthAuditLog falls
-      // back to MemberModel.getFirstMembershipForUser to resolve the org.
-      await InvitationModel.accept(session, user, invitationId);
+      // Audit every completed sign-up (invitation-based or direct).  For
+      // direct sign-ups the org resolves via getFirstMembershipForUser inside
+      // writeAuthAuditLog; if the user has no membership yet the audit row
+      // is skipped (logged as debug) instead of throwing.
       void writeAuthAuditLog({
         user,
         session,
@@ -1127,7 +1256,7 @@ async function writeAuthAuditLog(params: {
     return;
   }
 
-  const ipAddress = request?.headers.get("x-forwarded-for") ?? null;
+  const ipAddress = resolveAuthClientIp(request);
   const userAgent = request?.headers.get("user-agent") ?? null;
 
   let postState: Record<string, unknown> | null = null;
@@ -1136,6 +1265,8 @@ async function writeAuthAuditLog(params: {
     if (providerId) {
       postState.providerId = providerId;
     }
+  } else if (action === "sign_out") {
+    postState = { sessionId: session.id, ended: true };
   }
 
   const row = await AuditLogModel.create({
@@ -1148,7 +1279,7 @@ async function writeAuthAuditLog(params: {
     resourceId: user.id,
     priorState: null,
     postState,
-    httpMethod: null,
+    httpMethod: "POST",
     httpPath: path,
     httpRoute: null,
     httpStatus: null,
@@ -1158,4 +1289,25 @@ async function writeAuthAuditLog(params: {
 
   const { default: ws } = await import("@/websocket");
   void ws.broadcastAuditLog(row as Record<string, unknown>);
+}
+
+/**
+ * Resolve the client IP for auth audit events. Better-auth hands us a Web
+ * `Request`, which has no socket-level remote address — so we walk the usual
+ * reverse-proxy headers and fall back to `x-archestra-client-ip`, which the
+ * `/api/auth/*` Fastify catch-all injects from `request.ip`.
+ */
+function resolveAuthClientIp(request: Request | undefined): string | null {
+  if (!request) return null;
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  if (forwardedFor) {
+    const first = forwardedFor.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  return (
+    request.headers.get("x-real-ip") ??
+    request.headers.get("cf-connecting-ip") ??
+    request.headers.get("x-archestra-client-ip") ??
+    null
+  );
 }

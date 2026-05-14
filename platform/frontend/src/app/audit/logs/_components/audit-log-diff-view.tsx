@@ -2,47 +2,68 @@
 
 import { cn } from "@/lib/utils";
 
-type JsonValue = any;
-type JsonObject = { [key: string]: any };
+/** Top-level audit `prior_state` / `post_state` payloads from the API. */
+export type AuditSnapshot = Record<string, unknown>;
+
+type DiffKind = "context" | "added" | "removed";
 
 type DiffLine = {
-  kind: "context" | "added" | "removed";
+  kind: DiffKind;
   /** Number of indent levels (2 spaces per level). */
   indent: number;
   /** The literal text after the leading glyph. */
   text: string;
 };
 
+type DiffLineWithKey = DiffLine & { rowKey: string };
+
+function assignStableRowKeys(lines: DiffLine[]): DiffLineWithKey[] {
+  const counts = new Map<string, number>();
+  return lines.map((line) => {
+    const base = `${line.kind}|${line.indent}|${line.text}`;
+    const n = counts.get(base) ?? 0;
+    counts.set(base, n + 1);
+    const rowKey = n === 0 ? base : `${base}#${n}`;
+    return { ...line, rowKey };
+  });
+}
+
 interface AuditLogDiffViewProps {
-  prior: JsonObject | null;
-  post: JsonObject | null;
+  prior: AuditSnapshot | null;
+  post: AuditSnapshot | null;
   /** Optional label shown in the empty state. */
   emptyMessage?: string;
 }
 
 /**
- * Renders a git-diff-style view between two JSON snapshots produced by the
- * audit log's `prior_state` / `post_state` columns.
+ * Renders a git-diff-style view of two JSON snapshots produced by the audit
+ * log's `prior_state` / `post_state` columns.
+ *
+ * The output is **valid-looking JSON** wrapped in `{ … }` with quoted keys,
+ * full context lines, and `+` / `-` glyphs only on changed lines — mirroring
+ * the diff-tool aesthetic the issue maintainer asked for.
  *
  * - Both null → "no tracked changes" empty state (typical of auth events).
- * - Prior null → full block of `+` lines (create).
- * - Post null → full block of `-` lines (delete).
- * - Both populated → field-level unified diff with `+` / `-` glyphs.
+ * - Prior null → every line tagged `added` (create).
+ * - Post null → every line tagged `removed` (delete).
+ * - Both populated → unified diff with full context.
  */
 export function AuditLogDiffView({
   prior,
   post,
   emptyMessage = "No tracked changes for this event.",
 }: AuditLogDiffViewProps) {
-  if (prior === null && post === null) {
+  const bothNull = prior === null && post === null;
+  const lines = bothNull ? [] : computeDiffLines(prior, post);
+  const keyedLines = assignStableRowKeys(lines);
+
+  if (bothNull) {
     return (
       <div className="rounded-md border border-dashed bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground">
         {emptyMessage}
       </div>
     );
   }
-
-  const lines = computeDiffLines(prior, post);
 
   if (lines.length === 0) {
     return (
@@ -54,13 +75,10 @@ export function AuditLogDiffView({
 
   return (
     <div className="overflow-hidden rounded-md border bg-muted/20 font-mono text-xs">
-      <ul role="list" className="divide-y divide-border/50">
-        {lines.map((line, i) => (
+      <ul className="divide-y divide-border/50">
+        {keyedLines.map((line) => (
           <li
-            // The diff is content-derived and order-stable; a positional key is
-            // fine here because the list is fully re-rendered when prior/post
-            // change.
-            key={i}
+            key={line.rowKey}
             data-diff-kind={line.kind}
             className={cn(
               "flex whitespace-pre",
@@ -73,7 +91,11 @@ export function AuditLogDiffView({
               aria-hidden
               className="select-none px-2 py-0.5 text-muted-foreground/70"
             >
-              {line.kind === "added" ? "+" : line.kind === "removed" ? "-" : " "}
+              {line.kind === "added"
+                ? "+"
+                : line.kind === "removed"
+                  ? "-"
+                  : " "}
             </span>
             <span className="flex-1 break-all py-0.5 pr-3">
               {indentSpaces(line.indent)}
@@ -88,118 +110,277 @@ export function AuditLogDiffView({
 
 // === Internal helpers
 
+const INDENT = "  ";
+
 function indentSpaces(level: number): string {
-  return "  ".repeat(level);
+  return INDENT.repeat(level);
 }
 
 function computeDiffLines(
-  prior: JsonObject | null,
-  post: JsonObject | null,
+  prior: AuditSnapshot | null,
+  post: AuditSnapshot | null,
 ): DiffLine[] {
   if (prior === null && post !== null) {
-    return renderFullBlock(post, "added", 0);
+    return renderFullBlock(post, "added");
   }
   if (post === null && prior !== null) {
-    return renderFullBlock(prior, "removed", 0);
+    return renderFullBlock(prior, "removed");
   }
   if (prior === null || post === null) {
     return [];
   }
-  return diffJsonObjects(prior, post, 0);
+  return diffObjectAsBlock(prior, post, 0, false);
 }
 
-function diffJsonObjects(
-  prior: JsonObject,
-  post: JsonObject,
+/**
+ * Produces a JSON-shaped unified diff for an object pair. `terminated` controls
+ * whether the closing `}` gets a trailing comma (used when nested inside a
+ * parent object/array).
+ */
+function diffObjectAsBlock(
+  prior: AuditSnapshot,
+  post: AuditSnapshot,
   indent: number,
+  terminated: boolean,
 ): DiffLine[] {
-  const out: DiffLine[] = [];
+  const out: DiffLine[] = [{ kind: "context", indent, text: "{" }];
   const keys = orderedUnionKeys(prior, post);
 
-  for (const key of keys) {
+  keys.forEach((key, i) => {
+    const isLast = i === keys.length - 1;
     const hasPrior = Object.hasOwn(prior, key);
     const hasPost = Object.hasOwn(post, key);
 
     if (hasPrior && !hasPost) {
-      out.push(...renderField(key, prior[key], "removed", indent));
-      continue;
+      out.push(...renderField(key, prior[key], "removed", indent + 1, !isLast));
+      return;
     }
     if (!hasPrior && hasPost) {
-      out.push(...renderField(key, post[key], "added", indent));
-      continue;
+      out.push(...renderField(key, post[key], "added", indent + 1, !isLast));
+      return;
     }
 
     const priorValue = prior[key];
     const postValue = post[key];
 
     if (deepEqual(priorValue, postValue)) {
-      continue;
+      out.push(...renderField(key, priorValue, "context", indent + 1, !isLast));
+      return;
     }
 
     // Both sides have the key with different values.
-    if (isJsonObject(priorValue) && isJsonObject(postValue)) {
-      const nested = diffJsonObjects(priorValue, postValue, indent + 1);
-      if (nested.length > 0) {
-        out.push({ kind: "context", indent, text: `${key}: {` });
-        out.push(...nested);
-        out.push({ kind: "context", indent, text: "}" });
-      }
-      continue;
+    if (isPlainObject(priorValue) && isPlainObject(postValue)) {
+      const nested = diffObjectAsBlock(
+        priorValue,
+        postValue,
+        indent + 1,
+        !isLast,
+      );
+      // Prepend `"key": ` to the opening `{` line so the diff reads naturally.
+      const [opening, ...rest] = nested;
+      out.push({
+        kind: "context",
+        indent: indent + 1,
+        text: `${quoteKey(key)}: ${opening.text}`,
+      });
+      out.push(...rest);
+      return;
     }
 
-    out.push(...renderField(key, priorValue, "removed", indent));
-    out.push(...renderField(key, postValue, "added", indent));
-  }
+    if (Array.isArray(priorValue) && Array.isArray(postValue)) {
+      out.push(
+        ...diffArrayAsBlock(key, priorValue, postValue, indent + 1, !isLast),
+      );
+      return;
+    }
 
+    // Mixed types or primitive vs primitive → emit removed then added.
+    out.push(...renderField(key, priorValue, "removed", indent + 1, !isLast));
+    out.push(...renderField(key, postValue, "added", indent + 1, !isLast));
+  });
+
+  out.push({ kind: "context", indent, text: terminated ? "}," : "}" });
   return out;
 }
 
-function renderFullBlock(
-  value: JsonObject,
-  kind: "added" | "removed",
+/**
+ * Position-by-position array diff. Equal elements stay as context; mismatches
+ * render the prior element as removed immediately followed by the post
+ * element as added — like `git diff` on a sorted list.
+ */
+function diffArrayAsBlock(
+  key: string,
+  prior: unknown[],
+  post: unknown[],
   indent: number,
+  terminated: boolean,
 ): DiffLine[] {
-  const out: DiffLine[] = [];
-  for (const key of Object.keys(value)) {
-    out.push(...renderField(key, value[key], kind, indent));
+  const out: DiffLine[] = [
+    { kind: "context", indent, text: `${quoteKey(key)}: [` },
+  ];
+
+  const max = Math.max(prior.length, post.length);
+  for (let i = 0; i < max; i++) {
+    const isLast = i === max - 1;
+    const inPrior = i < prior.length;
+    const inPost = i < post.length;
+    if (inPrior && inPost) {
+      const a = prior[i];
+      const b = post[i];
+      if (deepEqual(a, b)) {
+        out.push(...renderValueAsItem(a, "context", indent + 1, !isLast));
+      } else {
+        out.push(
+          ...renderValueAsItem(a, "removed", indent + 1, !isLast),
+          ...renderValueAsItem(b, "added", indent + 1, !isLast),
+        );
+      }
+    } else if (inPrior) {
+      out.push(...renderValueAsItem(prior[i], "removed", indent + 1, !isLast));
+    } else if (inPost) {
+      out.push(...renderValueAsItem(post[i], "added", indent + 1, !isLast));
+    }
   }
+
+  out.push({ kind: "context", indent, text: terminated ? "]," : "]" });
+  return out;
+}
+
+/**
+ * Renders a `prior` (or `post`) snapshot as a single-kind block — used for
+ * create / delete events where the other side is null.
+ */
+function renderFullBlock(value: AuditSnapshot, kind: DiffKind): DiffLine[] {
+  const out: DiffLine[] = [{ kind, indent: 0, text: "{" }];
+  const keys = Object.keys(value);
+  keys.forEach((key, i) => {
+    const isLast = i === keys.length - 1;
+    out.push(...renderField(key, value[key], kind, 1, !isLast));
+  });
+  out.push({ kind, indent: 0, text: "}" });
   return out;
 }
 
 function renderField(
   key: string,
-  value: JsonValue,
-  kind: "added" | "removed",
+  value: unknown,
+  kind: DiffKind,
   indent: number,
+  trailingComma: boolean,
 ): DiffLine[] {
-  if (isJsonObject(value) || Array.isArray(value)) {
-    const formatted = formatJson(value);
+  if (isPlainObject(value) || Array.isArray(value)) {
+    const formatted = formatJsonLines(value, indent);
+    if (formatted.length === 0) {
+      return [
+        {
+          kind,
+          indent,
+          text: `${quoteKey(key)}: ${isPlainObject(value) ? "{}" : "[]"}${trailingComma ? "," : ""}`,
+        },
+      ];
+    }
     const [first, ...rest] = formatted;
-    return [
-      { kind, indent, text: `${key}: ${first ?? ""}` },
-      ...rest.map((text) => ({ kind, indent, text })),
-    ];
+    const last = rest.length > 0 ? rest[rest.length - 1] : null;
+    const head: DiffLine = {
+      kind,
+      indent,
+      text: `${quoteKey(key)}: ${first.text}`,
+    };
+    const middle = rest.slice(0, -1).map((line) => ({ ...line, kind }));
+    const tail: DiffLine[] = last
+      ? [
+          {
+            kind,
+            indent: last.indent,
+            text: `${last.text}${trailingComma ? "," : ""}`,
+          },
+        ]
+      : [];
+    return [head, ...middle, ...tail];
   }
-  return [{ kind, indent, text: `${key}: ${formatPrimitive(value)}` }];
+  return [
+    {
+      kind,
+      indent,
+      text: `${quoteKey(key)}: ${formatPrimitive(value)}${trailingComma ? "," : ""}`,
+    },
+  ];
 }
 
-function formatJson(value: JsonValue): string[] {
+function renderValueAsItem(
+  value: unknown,
+  kind: DiffKind,
+  indent: number,
+  trailingComma: boolean,
+): DiffLine[] {
+  if (isPlainObject(value) || Array.isArray(value)) {
+    const formatted = formatJsonLines(value, indent);
+    if (formatted.length === 0) {
+      return [
+        {
+          kind,
+          indent,
+          text: `${isPlainObject(value) ? "{}" : "[]"}${trailingComma ? "," : ""}`,
+        },
+      ];
+    }
+    return formatted.map((line, i, arr) => ({
+      ...line,
+      kind,
+      text: i === arr.length - 1 && trailingComma ? `${line.text},` : line.text,
+    }));
+  }
+  return [
+    {
+      kind,
+      indent,
+      text: `${formatPrimitive(value)}${trailingComma ? "," : ""}`,
+    },
+  ];
+}
+
+/**
+ * Pretty-print a value as a sequence of indented JSON lines starting at the
+ * given indent depth.  Used for both nested objects and array elements.
+ */
+function formatJsonLines(value: unknown, indent: number): DiffLine[] {
   const pretty = JSON.stringify(value, null, 2);
   if (pretty === undefined) {
-    return ["undefined"];
+    return [{ kind: "context", indent, text: "undefined" }];
   }
-  // The first line is anchored next to the key; continuation lines get one
-  // extra indent level so nested structures align visually.
-  return pretty.split("\n").map((line, i) => (i === 0 ? line : `  ${line}`));
+  const rawLines = pretty.split("\n");
+  return rawLines.map((raw) => {
+    // Count leading spaces from JSON.stringify (2 per level) to recover depth.
+    const match = raw.match(/^ */);
+    const leadingSpaces = match ? match[0].length : 0;
+    const depthFromJson = Math.floor(leadingSpaces / 2);
+    return {
+      kind: "context",
+      indent: indent + depthFromJson,
+      text: raw.slice(leadingSpaces),
+    };
+  });
 }
 
-function formatPrimitive(value: JsonValue): string {
+function formatPrimitive(value: unknown): string {
+  if (value === undefined) return "undefined";
   if (value === null) return "null";
   if (typeof value === "string") return JSON.stringify(value);
-  return String(value);
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 }
 
-function orderedUnionKeys(a: JsonObject, b: JsonObject): string[] {
+function quoteKey(key: string): string {
+  return JSON.stringify(key);
+}
+
+function orderedUnionKeys(a: AuditSnapshot, b: AuditSnapshot): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const key of Object.keys(a)) {
@@ -217,7 +398,7 @@ function orderedUnionKeys(a: JsonObject, b: JsonObject): string[] {
   return out;
 }
 
-function isJsonObject(value: unknown): value is JsonObject {
+function isPlainObject(value: unknown): value is AuditSnapshot {
   return (
     typeof value === "object" &&
     value !== null &&
@@ -226,7 +407,9 @@ function isJsonObject(value: unknown): value is JsonObject {
   );
 }
 
-function deepEqual(a: JsonValue, b: JsonValue): boolean {
+function deepEqual(a: unknown, b: unknown): boolean {
+  if (a === undefined && b === undefined) return true;
+  if (a === undefined || b === undefined) return false;
   if (a === b) return true;
   if (typeof a !== typeof b) return false;
   if (a === null || b === null) return a === b;
@@ -234,13 +417,62 @@ function deepEqual(a: JsonValue, b: JsonValue): boolean {
     if (a.length !== b.length) return false;
     return a.every((v, i) => deepEqual(v, b[i]));
   }
-  if (isJsonObject(a) && isJsonObject(b)) {
+  if (isPlainObject(a) && isPlainObject(b)) {
     const keysA = Object.keys(a);
     const keysB = Object.keys(b);
     if (keysA.length !== keysB.length) return false;
-    return keysA.every(
-      (k) => Object.hasOwn(b, k) && deepEqual(a[k], b[k] as JsonValue),
-    );
+    return keysA.every((k) => Object.hasOwn(b, k) && deepEqual(a[k], b[k]));
   }
   return false;
+}
+
+const AUDIT_DIFF_METADATA_KEYS = new Set(["updatedAt", "createdAt"]);
+
+/**
+ * One-line summary of which top-level fields differ between two audit
+ * snapshots (shown above the diff for update events).
+ */
+export function summarizeAuditDiffHints(
+  prior: AuditSnapshot | null,
+  post: AuditSnapshot | null,
+): string | null {
+  if (prior === null && post === null) return null;
+
+  if (prior === null && post !== null) {
+    const keys = Object.keys(post).filter(
+      (k) => !AUDIT_DIFF_METADATA_KEYS.has(k),
+    );
+    if (keys.length === 0) {
+      return "Created resource (see snapshot below).";
+    }
+    return `Created — captured fields: ${keys.sort().join(", ")}.`;
+  }
+
+  if (post === null && prior !== null) {
+    const keys = Object.keys(prior).filter(
+      (k) => !AUDIT_DIFF_METADATA_KEYS.has(k),
+    );
+    if (keys.length === 0) {
+      return "Deleted resource (see prior snapshot below).";
+    }
+    return `Deleted — had fields: ${keys.sort().join(", ")}.`;
+  }
+
+  if (prior !== null && post !== null) {
+    const keys = new Set([...Object.keys(prior), ...Object.keys(post)]);
+    const substantive: string[] = [];
+    for (const key of keys) {
+      if (AUDIT_DIFF_METADATA_KEYS.has(key)) continue;
+      if (!deepEqual(prior[key], post[key])) substantive.push(key);
+    }
+    if (substantive.length > 0) {
+      return `Changed: ${substantive.sort().join(", ")}.`;
+    }
+    for (const key of AUDIT_DIFF_METADATA_KEYS) {
+      if (keys.has(key) && !deepEqual(prior[key], post[key])) {
+        return "Only timestamp fields changed; all other captured fields match.";
+      }
+    }
+  }
+  return null;
 }

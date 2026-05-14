@@ -5,6 +5,7 @@ import type {
   KnowledgeBase,
   UpdateKnowledgeBase,
 } from "@/types";
+import KnowledgeBaseConnectorModel from "./knowledge-base-connector";
 
 class KnowledgeBaseModel {
   static async findByOrganization(params: {
@@ -155,14 +156,18 @@ class KnowledgeBaseModel {
 
     if (!row) return null;
 
+    // Fetch connectors to include in the audit snapshot
+    const connectors =
+      await KnowledgeBaseConnectorModel.findByKnowledgeBaseId(id);
+
     return {
       id: row.id,
       name: row.name,
       description: row.description ?? null,
       organizationId: row.organizationId,
       status: row.status,
+      connectors: connectors.map((c) => c.name).sort(),
       createdAt: row.createdAt.toISOString(),
-      updatedAt: row.updatedAt.toISOString(),
     };
   }
 }

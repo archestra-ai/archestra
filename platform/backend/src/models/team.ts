@@ -1052,11 +1052,20 @@ class TeamModel {
 
     if (!team) return null;
 
+    // Fetch relational data (members and external groups) to provide a complete
+    // picture in the audit log diff.
+    const [members, externalGroups] = await Promise.all([
+      TeamModel.getTeamMembersWithUsers(id),
+      TeamModel.getExternalGroups(id),
+    ]);
+
     return {
       id: team.id,
       name: team.name,
       description: team.description ?? null,
       organizationId: team.organizationId,
+      members: members.map((m) => `${m.name} (${m.email})`).sort(),
+      externalGroups: externalGroups.map((g) => g.groupIdentifier).sort(),
       createdBy: team.createdBy,
       createdAt: team.createdAt.toISOString(),
       updatedAt: team.updatedAt.toISOString(),

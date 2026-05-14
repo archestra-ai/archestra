@@ -18,12 +18,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
-import { useAuditLogWebsocket } from "@/lib/audit-log/audit-log-websocket.hook";
 import {
   type AuditAction,
   type AuditLog,
   useAuditLogs,
 } from "@/lib/audit-log/audit-log.query";
+import { useAuditLogWebsocket } from "@/lib/audit-log/audit-log-websocket.hook";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import { useMembersPaginated } from "@/lib/member.query";
 import { formatDate } from "@/lib/utils";
@@ -39,11 +39,7 @@ import { AuditLogDetailDialog } from "./audit-log-detail-dialog";
 const ACTOR_FILTER_LIMIT = 100;
 const ALL_VALUE = "all";
 
-function SortIcon({
-  isSorted,
-}: {
-  isSorted: "asc" | "desc" | false;
-}) {
+function SortIcon({ isSorted }: { isSorted: "asc" | "desc" | false }) {
   const upArrow = <ChevronUp className="h-3 w-3" />;
   const downArrow = <ChevronDown className="h-3 w-3" />;
   if (isSorted === "asc") return upArrow;
@@ -67,8 +63,7 @@ export function AuditLogTable() {
   const actionFromUrl = (searchParams.get("action") ?? ALL_VALUE) as
     | typeof ALL_VALUE
     | AuditAction;
-  const resourceTypeFromUrl =
-    searchParams.get("resourceType") ?? ALL_VALUE;
+  const resourceTypeFromUrl = searchParams.get("resourceType") ?? ALL_VALUE;
   const actorFromUrl = searchParams.get("actorUserId") ?? ALL_VALUE;
 
   const [pagination, setPagination] = useState({
@@ -131,22 +126,22 @@ export function AuditLogTable() {
     [updateUrlParams],
   );
 
-  const sortBy = sorting[0]?.id === "createdAt" ? "createdAt" : undefined;
   const sortDirection = sorting[0]?.desc === false ? "asc" : "desc";
 
-  const action = (
-    ALL_ACTIONS as readonly string[]
-  ).includes(actionFromUrl)
+  const action = (ALL_ACTIONS as readonly string[]).includes(actionFromUrl)
     ? (actionFromUrl as AuditAction)
     : undefined;
   const resourceType =
     resourceTypeFromUrl === ALL_VALUE ? undefined : resourceTypeFromUrl;
   const actorUserId = actorFromUrl === ALL_VALUE ? undefined : actorFromUrl;
 
-  const { data: response, isFetching, refetch } = useAuditLogs({
+  const {
+    data: response,
+    isFetching,
+    refetch,
+  } = useAuditLogs({
     limit: pagination.pageSize,
     offset: pagination.pageIndex * pagination.pageSize,
-    sortBy,
     sortDirection,
     startDate: dateTimePicker.startDateParam,
     endDate: dateTimePicker.endDateParam,
@@ -251,23 +246,14 @@ export function AuditLogTable() {
         id: "resource",
         header: "Resource",
         cell: ({ row }) => {
-          const { resourceType: rt, resourceId } = row.original;
-          if (!rt && !resourceId) {
+          const { resourceType: rt } = row.original;
+          if (!rt) {
             return <span className="text-xs text-muted-foreground">—</span>;
           }
           return (
-            <div className="flex flex-wrap items-center gap-1.5">
-              {rt && (
-                <Badge variant="secondary" className="text-xs">
-                  {formatResourceType(rt)}
-                </Badge>
-              )}
-              {resourceId && (
-                <code className="text-xs">
-                  <TruncatedText message={resourceId} maxLength={20} />
-                </code>
-              )}
-            </div>
+            <Badge variant="secondary" className="text-xs">
+              {formatResourceType(rt)}
+            </Badge>
           );
         },
       },

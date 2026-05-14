@@ -1,13 +1,18 @@
 import db, { schema } from "@/database";
 import AgentModel from "@/models/agent";
+import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
 import KnowledgeBaseModel from "@/models/knowledge-base";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
+import ScheduleTriggerModel from "@/models/schedule-trigger";
 import TeamModel from "@/models/team";
 import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
 import TrustedDataPolicyModel from "@/models/trusted-data-policy";
 import { describe, expect, test } from "@/test";
-import { AUDITABLE_ROUTES } from "./audit-log-registry";
+import {
+  AUDITABLE_ROUTES,
+  resolveAuditableRouteConfig,
+} from "./audit-log-registry";
 
 describe("audit snapshot redaction", () => {
   describe("ApiKeyModel.findByIdForAudit", () => {
@@ -103,6 +108,7 @@ describe("audit snapshot shape — non-redacted models", () => {
     expect(snapshot).toHaveProperty("organizationId", org.id);
     expect(snapshot).toHaveProperty("agentType");
     expect(snapshot).toHaveProperty("scope", "org");
+    expect(Array.isArray(snapshot?.delegationTargets)).toBe(true);
     expect(typeof snapshot?.createdAt).toBe("string");
     expect(typeof snapshot?.updatedAt).toBe("string");
   });
@@ -226,6 +232,59 @@ describe("audit snapshot shape — non-redacted models", () => {
       await KnowledgeBaseModel.findByIdForAudit(fakeId, org.id),
     ).toBeNull();
   });
+
+  test("ScheduleTriggerModel.findByIdForAudit scopes to organization", async ({
+    makeOrganization,
+    makeScheduleTrigger,
+  }) => {
+    const org = await makeOrganization();
+    const org2 = await makeOrganization();
+    const trigger = await makeScheduleTrigger({
+      organizationId: org.id,
+      name: "Cron audit label",
+    });
+
+    const snap = await ScheduleTriggerModel.findByIdForAudit(
+      trigger.id,
+      org.id,
+    );
+    expect(snap).not.toBeNull();
+    expect(snap?.name).toBe("Cron audit label");
+    expect(snap).toHaveProperty("cronExpression");
+
+    expect(
+      await ScheduleTriggerModel.findByIdForAudit(trigger.id, org2.id),
+    ).toBeNull();
+  });
+
+  test("AgentToolModel.findByIdForAudit scopes to organization", async ({
+    makeOrganization,
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const org = await makeOrganization();
+    const org2 = await makeOrganization();
+    const agent = await makeAgent({
+      name: "Host",
+      organizationId: org.id,
+      scope: "org",
+      teams: [],
+      knowledgeBaseIds: [],
+    });
+    const tool = await makeTool({
+      name: `at-audit-${crypto.randomUUID().slice(0, 8)}`,
+    });
+    const row = await makeAgentTool(agent.id, tool.id);
+    if (!row) throw new Error("expected agent tool row");
+
+    const snap = await AgentToolModel.findByIdForAudit(row.id, org.id);
+    expect(snap).not.toBeNull();
+    expect(snap?.toolName).toBe(tool.name);
+    expect(snap?.agentId).toBe(agent.id);
+
+    expect(await AgentToolModel.findByIdForAudit(row.id, org2.id)).toBeNull();
+  });
 });
 
 describe("AUDITABLE_ROUTES registry", () => {
@@ -251,16 +310,46 @@ describe("AUDITABLE_ROUTES registry", () => {
     }
   });
 
-  test("POST base routes (no :param) do not have fetchById", () => {
-    const baseRoutes = Object.entries(AUDITABLE_ROUTES).filter(
-      ([pattern]) => !pattern.includes(":"),
-    );
-
-    for (const [pattern, cfg] of baseRoutes) {
+  test("collection routes include fetchById for POST create post_state snapshots", () => {
+    const collectionPatterns = [
+      "/api/agents",
+      "/api/mcp_server",
+      "/api/teams",
+      "/api/api-keys",
+      "/api/llm-provider-api-keys",
+      "/api/autonomy-policies/tool-invocation",
+      "/api/trusted-data-policies",
+      "/api/knowledge-bases",
+      "/api/connectors",
+      "/api/limits",
+      "/api/optimization-rules",
+      "/api/schedule-triggers",
+      "/api/roles",
+    ];
+    for (const pattern of collectionPatterns) {
       expect(
-        cfg.fetchById,
-        `base route "${pattern}" should not have fetchById`,
-      ).toBeUndefined();
+        AUDITABLE_ROUTES[pattern]?.fetchById,
+        `route "${pattern}" should expose fetchById for create auditing`,
+      ).toBeDefined();
     }
+  });
+});
+
+describe("resolveAuditableRouteConfig", () => {
+  test("inherits auditable config from parent path for MCP server sub-routes", () => {
+    const cfg = resolveAuditableRouteConfig("/api/mcp_server/:id/reinstall");
+    expect(cfg?.resourceType).toBe("mcpServer");
+    expect(typeof cfg?.fetchById).toBe("function");
+    expect(typeof AUDITABLE_ROUTES["/api/mcp_server/:id"].fetchById).toBe(
+      "function",
+    );
+  });
+
+  test("inherits config for connector knowledge-base assignment routes", () => {
+    const cfg = resolveAuditableRouteConfig(
+      "/api/connectors/:id/knowledge-bases",
+    );
+    expect(cfg?.resourceType).toBe("connector");
+    expect(cfg?.fetchById).toBeDefined();
   });
 });

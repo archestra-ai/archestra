@@ -769,11 +769,24 @@ class McpServerModel {
     organizationId: string,
   ): Promise<Record<string, unknown> | null> {
     const [row] = await db
-      .select({ server: schema.mcpServersTable })
+      .select({
+        server: schema.mcpServersTable,
+        catalogName: schema.internalMcpCatalogTable.name,
+        catalogVersion: schema.internalMcpCatalogTable.version,
+        catalogServerUrl: schema.internalMcpCatalogTable.serverUrl,
+        catalogRequiresAuth: schema.internalMcpCatalogTable.requiresAuth,
+        catalogLocalConfig: schema.internalMcpCatalogTable.localConfig,
+        catalogOauthConfig: schema.internalMcpCatalogTable.oauthConfig,
+        catalogUserConfig: schema.internalMcpCatalogTable.userConfig,
+      })
       .from(schema.mcpServersTable)
       .leftJoin(
         schema.teamsTable,
         eq(schema.mcpServersTable.teamId, schema.teamsTable.id),
+      )
+      .leftJoin(
+        schema.internalMcpCatalogTable,
+        eq(schema.mcpServersTable.catalogId, schema.internalMcpCatalogTable.id),
       )
       .where(
         and(
@@ -789,17 +802,35 @@ class McpServerModel {
     if (!row) return null;
     const s = row.server;
 
+    const localConfig = row.catalogLocalConfig;
+    const transportType = localConfig?.transportType ?? "stdio";
+    const envKeys = Array.isArray(localConfig?.environment)
+      ? localConfig.environment.map((e) => e.key).sort()
+      : [];
+    const userConfigKeys = row.catalogUserConfig
+      ? Object.keys(row.catalogUserConfig).sort()
+      : [];
+
     return {
       id: s.id,
       name: s.name,
       catalogId: s.catalogId,
+      catalogName: row.catalogName ?? null,
+      catalogVersion: row.catalogVersion ?? null,
       serverType: s.serverType,
       scope: s.scope,
       ownerId: s.ownerId ?? null,
       teamId: s.teamId ?? null,
+      transportType,
+      serverUrl: row.catalogServerUrl ?? null,
+      requiresAuth: row.catalogRequiresAuth ?? null,
+      envKeys,
+      userConfigKeys,
+      hasOauthConfig: row.catalogOauthConfig !== null,
+      hasSecret: Boolean(s.secretId),
       localInstallationStatus: s.localInstallationStatus,
+      oauthRefreshError: s.oauthRefreshError ?? null,
       createdAt: s.createdAt.toISOString(),
-      updatedAt: s.updatedAt.toISOString(),
     };
   }
 }

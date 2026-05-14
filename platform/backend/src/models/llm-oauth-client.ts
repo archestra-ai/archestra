@@ -207,6 +207,30 @@ class LlmOauthClientModel {
 
     return result.length > 0;
   }
+
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const client = await LlmOauthClientModel.findById({ id, organizationId });
+    if (!client) return null;
+
+    return {
+      id: client.id,
+      name: client.name,
+      clientId: client.clientId,
+      organizationId: client.organizationId,
+      allowedLlmProxyIds: [...client.allowedLlmProxyIds].sort(),
+      providerApiKeys: client.providerApiKeys.map((p) => ({
+        provider: p.provider,
+        providerApiKeyId: p.providerApiKeyId,
+        providerApiKeyName: p.providerApiKeyName,
+      })),
+      disabled: client.disabled,
+      createdAt: client.createdAt.toISOString(),
+      updatedAt: client.updatedAt.toISOString(),
+    };
+  }
 }
 
 export default LlmOauthClientModel;

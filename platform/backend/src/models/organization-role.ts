@@ -590,7 +590,6 @@ class OrganizationRoleModel {
       permission: role.permission,
       predefined: role.predefined,
       createdAt: role.createdAt?.toISOString() ?? null,
-      updatedAt: role.updatedAt?.toISOString() ?? null,
     };
   }
 

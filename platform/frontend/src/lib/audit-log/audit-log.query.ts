@@ -30,7 +30,6 @@ const EMPTY_RESPONSE = (limit: number): AuditLogsResponse => ({
 export function useAuditLogs({
   limit = DEFAULT_TABLE_LIMIT,
   offset = 0,
-  sortBy = "createdAt",
   sortDirection = "desc",
   startDate,
   endDate,
@@ -41,7 +40,6 @@ export function useAuditLogs({
 }: {
   limit?: number;
   offset?: number;
-  sortBy?: AuditLogsQuery["sortBy"];
   sortDirection?: AuditLogsQuery["sortDirection"];
   startDate?: string;
   endDate?: string;
@@ -56,7 +54,6 @@ export function useAuditLogs({
       {
         limit,
         offset,
-        sortBy,
         sortDirection,
         startDate,
         endDate,
@@ -71,7 +68,6 @@ export function useAuditLogs({
         query: {
           limit,
           offset,
-          ...(sortBy ? { sortBy } : {}),
           ...(sortDirection ? { sortDirection } : {}),
           ...(startDate ? { startDate } : {}),
           ...(endDate ? { endDate } : {}),

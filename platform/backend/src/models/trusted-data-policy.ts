@@ -1,5 +1,5 @@
 import { CONTEXT_EXTERNAL_AGENT_ID, CONTEXT_TEAM_IDS } from "@shared";
-import { desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { get } from "lodash-es";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import db, { schema } from "@/database";
@@ -643,6 +643,43 @@ class TrustedDataPolicyModel {
     }
 
     return results;
+  }
+
+  /**
+   * Default trusted-data policies (empty conditions) for tools assigned to
+   * agents in the organization — audit footprint for bulk-default routes.
+   */
+  static async findDefaultPoliciesSnapshotForOrganization(
+    organizationId: string,
+  ): Promise<Record<string, unknown>> {
+    const rows = await db
+      .selectDistinct({
+        toolId: schema.trustedDataPoliciesTable.toolId,
+        action: schema.trustedDataPoliciesTable.action,
+      })
+      .from(schema.trustedDataPoliciesTable)
+      .innerJoin(
+        schema.agentToolsTable,
+        eq(
+          schema.agentToolsTable.toolId,
+          schema.trustedDataPoliciesTable.toolId,
+        ),
+      )
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          sql`coalesce(jsonb_array_length(${schema.trustedDataPoliciesTable.conditions}), 0) = 0`,
+        ),
+      );
+
+    const entries = rows
+      .map((r) => `${r.toolId}:${r.action}`)
+      .sort((a, b) => a.localeCompare(b));
+    return { defaultTrustedDataPolicies: entries };
   }
 
   static async findByIdForAudit(

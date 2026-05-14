@@ -1,6 +1,9 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { AuditLogDiffView } from "./audit-log-diff-view";
+import {
+  AuditLogDiffView,
+  summarizeAuditDiffHints,
+} from "./audit-log-diff-view";
 
 describe("AuditLogDiffView", () => {
   it("renders the empty state when both snapshots are null", () => {
@@ -35,10 +38,7 @@ describe("AuditLogDiffView", () => {
 
   it("renders a full - block when post is null (delete event)", () => {
     render(
-      <AuditLogDiffView
-        prior={{ name: "Old name", id: "abc" }}
-        post={null}
-      />,
+      <AuditLogDiffView prior={{ name: "Old name", id: "abc" }} post={null} />,
     );
 
     const removed = screen.getAllByRole("listitem");
@@ -48,7 +48,7 @@ describe("AuditLogDiffView", () => {
     }
   });
 
-  it("emits only the changed field on an update", () => {
+  it("shows unchanged fields as context and marks changed fields on update", () => {
     render(
       <AuditLogDiffView
         prior={{
@@ -61,13 +61,19 @@ describe("AuditLogDiffView", () => {
     );
 
     const items = screen.getAllByRole("listitem");
-    expect(items).toHaveLength(2);
+    expect(items).toHaveLength(4);
 
-    expect(items[0]).toHaveAttribute("data-diff-kind", "removed");
-    expect(items[0]).toHaveTextContent(`name: "Engineering Team Agent"`);
+    expect(items[0]).toHaveAttribute("data-diff-kind", "context");
+    expect(items[0]).toHaveTextContent(`id: "abc"`);
 
-    expect(items[1]).toHaveAttribute("data-diff-kind", "added");
-    expect(items[1]).toHaveTextContent(`name: "My Agent"`);
+    expect(items[1]).toHaveAttribute("data-diff-kind", "removed");
+    expect(items[1]).toHaveTextContent(`name: "Engineering Team Agent"`);
+
+    expect(items[2]).toHaveAttribute("data-diff-kind", "added");
+    expect(items[2]).toHaveTextContent(`name: "My Agent"`);
+
+    expect(items[3]).toHaveAttribute("data-diff-kind", "context");
+    expect(items[3]).toHaveTextContent(`description: "Same"`);
   });
 
   it("renders nothing when prior and post are deeply equal", () => {
@@ -127,5 +133,40 @@ describe("AuditLogDiffView", () => {
     expect(items[2]).toHaveTextContent("retries: 5");
     expect(items[3]).toHaveAttribute("data-diff-kind", "context");
     expect(items[3]).toHaveTextContent("}");
+  });
+});
+
+describe("summarizeAuditDiffHints", () => {
+  it("lists substantive keys that differ", () => {
+    expect(
+      summarizeAuditDiffHints(
+        { name: "a", updatedAt: "t1" },
+        { name: "b", updatedAt: "t2" },
+      ),
+    ).toBe("Changed: name.");
+  });
+
+  it("detects metadata-only changes", () => {
+    expect(
+      summarizeAuditDiffHints(
+        { id: "x", updatedAt: "t1" },
+        { id: "x", updatedAt: "t2" },
+      ),
+    ).toContain("timestamp");
+  });
+
+  it("summarizes create snapshots", () => {
+    expect(
+      summarizeAuditDiffHints(null, {
+        id: "1",
+        name: "N",
+      }),
+    ).toContain("Created");
+  });
+
+  it("summarizes delete snapshots", () => {
+    expect(summarizeAuditDiffHints({ id: "1", name: "N" }, null)).toContain(
+      "Deleted",
+    );
   });
 });

@@ -66,6 +66,7 @@ function createMockContext(overrides: {
   method: string;
   body?: Record<string, unknown>;
   requestUrl?: string;
+  request?: Request;
   context?: {
     newSession?: {
       user: { id: string; email: string };
@@ -82,9 +83,9 @@ function createMockContext(overrides: {
     path: overrides.path,
     method: overrides.method,
     body: overrides.body ?? {},
-    request: overrides.requestUrl
-      ? new Request(overrides.requestUrl)
-      : undefined,
+    request:
+      overrides.request ??
+      (overrides.requestUrl ? new Request(overrides.requestUrl) : undefined),
     context: overrides.context,
   } as HookEndpointContext;
 }
@@ -2008,16 +2009,75 @@ describe("auth event audit logging", () => {
 
     const { data } = await AuditLogModel.findPaginated({
       organizationId: org.id,
-      limit: 10,
+      limit: 20,
       offset: 0,
     });
 
-    expect(data).toHaveLength(1);
-    expect(data[0].action).toBe("sign_out");
-    expect(data[0].resourceType).toBe("auth");
-    expect(data[0].actorUserId).toBe(user.id);
-    expect(data[0].postState).toBeNull();
-    expect(data[0].priorState).toBeNull();
+    const rows = data.filter((r) => r.action === "sign_out");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].resourceType).toBe("auth");
+    expect(rows[0].actorUserId).toBe(user.id);
+    expect(rows[0].postState).toMatchObject({
+      sessionId: "sess-signout-audit",
+      ended: true,
+    });
+    expect(rows[0].priorState).toBeNull();
+  });
+
+  test("sign-out with /api/auth/sign-out path uses pre-hook session stash when after hook has no session", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const user = await makeUser({
+      email: "audit-signout-prefixed@example.com",
+    });
+    const org = await makeOrganization();
+    await makeMember(user.id, org.id, { role: "member" });
+
+    const request = new Request("http://localhost:3000/api/auth/sign-out", {
+      method: "POST",
+    });
+
+    const sessionBundle = {
+      user: { id: user.id, email: user.email, name: "A" },
+      session: { id: "sess-stash-audit", activeOrganizationId: org.id },
+    };
+
+    await handleBeforeHook(
+      createMockContext({
+        path: "/api/auth/sign-out",
+        method: "POST",
+        body: {},
+        request,
+        context: { session: sessionBundle },
+      }),
+    );
+
+    await handleAfterHook(
+      createMockContext({
+        path: "/api/auth/sign-out",
+        method: "POST",
+        body: {},
+        request,
+        context: { session: undefined },
+      }),
+    );
+    await waitForAuditWrite();
+
+    const { data } = await AuditLogModel.findPaginated({
+      organizationId: org.id,
+      limit: 20,
+      offset: 0,
+    });
+
+    const rows = data.filter((r) => r.action === "sign_out");
+    expect(rows.length).toBeGreaterThanOrEqual(1);
+    const row = rows.find((r) => r.actorUserId === user.id);
+    expect(row?.postState).toMatchObject({
+      sessionId: "sess-stash-audit",
+      ended: true,
+    });
   });
 
   test("SSO callback produces one audit row with action=sso_callback and providerId", async ({
@@ -2137,17 +2197,33 @@ describe("auth event audit logging", () => {
     expect(data).toHaveLength(0);
   });
 
-  test("sign-out with no session context produces zero rows", async ({
+  test("sign-out with no session context falls back to header-based lookup", async ({
+    makeUser,
     makeOrganization,
+    makeMember,
   }) => {
+    const user = await makeUser({
+      email: "audit-signout-fallback@example.com",
+    });
     const org = await makeOrganization();
+    await makeMember(user.id, org.id, { role: "member" });
+
+    // Mock auth.api.getSession to simulate successful header-based resolution
+    const getSessionSpy = vi
+      .spyOn(auth.api, "getSession")
+      .mockResolvedValueOnce({
+        user: { id: user.id, email: user.email },
+        session: { id: "sess-signout-fallback", activeOrganizationId: org.id },
+      } as unknown as NonNullable<
+        Awaited<ReturnType<typeof auth.api.getSession>>
+      >);
 
     const ctx = createMockContext({
       path: "/sign-out",
       method: "POST",
       body: {},
       context: {
-        session: null,
+        session: null, // Triggers fallback
       },
     });
 
@@ -2160,7 +2236,12 @@ describe("auth event audit logging", () => {
       offset: 0,
     });
 
-    expect(data).toHaveLength(0);
+    expect(data).toHaveLength(1);
+    expect(data[0].action).toBe("sign_out");
+    expect(data[0].actorUserId).toBe(user.id);
+    expect(getSessionSpy).toHaveBeenCalled();
+
+    getSessionSpy.mockRestore();
   });
 
   test("AuditLogModel.create rejection does not affect auth response", async ({

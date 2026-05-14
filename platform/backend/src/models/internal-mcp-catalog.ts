@@ -323,6 +323,17 @@ class InternalMcpCatalogModel {
     return { ...dbItem, labels, teams, toolCount };
   }
 
+  static async findByNameForAudit(
+    name: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const item = await InternalMcpCatalogModel.findByName(name, {
+      organizationId,
+    });
+    if (!item) return null;
+    return InternalMcpCatalogModel.findByIdForAudit(item.id, organizationId);
+  }
+
   static async update(
     id: string,
     catalogItem: Partial<UpdateInternalMcpCatalog>,
@@ -643,6 +654,58 @@ class InternalMcpCatalogModel {
         ? (nameMap.get(item.authorId) ?? null)
         : null;
     }
+  }
+
+  static async findByIdForAudit(
+    id: string,
+    _organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select()
+      .from(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.id, id))
+      .limit(1);
+
+    if (!row) return null;
+
+    const toolCount = await InternalMcpCatalogModel.getToolCount(id);
+
+    const transportType = row.localConfig?.transportType ?? "stdio";
+    const envKeys = Array.isArray(row.localConfig?.environment)
+      ? row.localConfig.environment.map((e) => e.key).sort()
+      : [];
+    const userConfigKeys = row.userConfig
+      ? Object.keys(row.userConfig).sort()
+      : [];
+    const authFieldKeys = Array.isArray(row.authFields)
+      ? row.authFields.map((f) => f.name).sort()
+      : [];
+
+    return {
+      id: row.id,
+      name: row.name,
+      version: row.version ?? null,
+      description: row.description ?? null,
+      serverType: row.serverType,
+      scope: row.scope,
+      organizationId: row.organizationId ?? null,
+      authorId: row.authorId,
+      multitenant: row.multitenant,
+      serverUrl: row.serverUrl ?? null,
+      docsUrl: row.docsUrl ?? null,
+      requiresAuth: row.requiresAuth,
+      transportType,
+      envKeys,
+      userConfigKeys,
+      authFieldKeys,
+      hasOauthConfig: row.oauthConfig !== null,
+      hasClientSecret: Boolean(row.clientSecretId),
+      hasLocalConfigSecret: Boolean(row.localConfigSecretId),
+      hasDeploymentSpecYaml: Boolean(row.deploymentSpecYaml),
+      hasEnterpriseManagedConfig: row.enterpriseManagedConfig !== null,
+      toolCount,
+      createdAt: row.createdAt.toISOString(),
+    };
   }
 }
 

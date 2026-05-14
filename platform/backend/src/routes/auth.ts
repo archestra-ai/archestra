@@ -710,6 +710,12 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (value) headers.append(key, value.toString());
       });
 
+      // Forward Fastify's resolved client IP so the auth audit hook can record
+      // it in non-proxied environments where x-forwarded-for is absent.
+      if (request.ip && !headers.has("x-archestra-client-ip")) {
+        headers.set("x-archestra-client-ip", request.ip);
+      }
+
       // Handle body based on content type
       // SAML callbacks use application/x-www-form-urlencoded
       let body: string | undefined;

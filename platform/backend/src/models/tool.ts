@@ -294,6 +294,39 @@ class ToolModel {
     return tool;
   }
 
+  static async findByIdForAudit(
+    id: string,
+    _organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [tool] = await db
+      .select({
+        id: schema.toolsTable.id,
+        name: schema.toolsTable.name,
+        description: schema.toolsTable.description,
+        catalogId: schema.toolsTable.catalogId,
+        agentId: schema.toolsTable.agentId,
+        delegateToAgentId: schema.toolsTable.delegateToAgentId,
+        createdAt: schema.toolsTable.createdAt,
+        updatedAt: schema.toolsTable.updatedAt,
+      })
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.id, id))
+      .limit(1);
+
+    if (!tool) return null;
+
+    return {
+      id: tool.id,
+      name: tool.name,
+      description: tool.description ?? null,
+      catalogId: tool.catalogId ?? null,
+      agentId: tool.agentId ?? null,
+      delegateToAgentId: tool.delegateToAgentId ?? null,
+      createdAt: tool.createdAt.toISOString(),
+      updatedAt: tool.updatedAt.toISOString(),
+    };
+  }
+
   static async findAll(
     userId?: string,
     isAgentAdmin?: boolean,

@@ -10,16 +10,17 @@ import {
   type SQL,
 } from "drizzle-orm";
 import db, { schema } from "@/database";
-import {
-  normalizeCronExpression,
-  normalizeTimezone,
-} from "@/schedule-triggers/utils";
 import type {
   InsertScheduleTrigger,
   ScheduleTrigger,
   UpdateScheduleTrigger,
 } from "@/types";
 import { InsertScheduleTriggerSchema } from "@/types";
+import {
+  normalizeCronExpression,
+  normalizeTimezone,
+} from "@/utils/schedule-trigger";
+import { escapeLikePattern } from "@/utils/sql-search";
 
 type ScheduleTriggerListFilters = {
   organizationId: string;
@@ -209,10 +210,6 @@ class ScheduleTriggerModel {
 }
 
 export default ScheduleTriggerModel;
-
-function escapeLikePattern(value: string): string {
-  return value.replace(/[%_\\]/g, "\\$&");
-}
 
 function buildListFilters(
   params: Pick<

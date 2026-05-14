@@ -461,6 +461,13 @@ describe("virtualApiKeysRoutes", () => {
     const parentKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "openai",
     });
+    const otherParentKey = await makeLlmProviderApiKey(
+      organizationId,
+      secret.id,
+      {
+        provider: "anthropic",
+      },
+    );
 
     const firstResponse = await app.inject({
       method: "POST",
@@ -485,6 +492,20 @@ describe("virtualApiKeysRoutes", () => {
 
     expect(firstResponse.statusCode).toBe(200);
     expect(secondResponse.statusCode).toBe(200);
+    const otherResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "key-gamma",
+        providerApiKeys: [
+          {
+            provider: otherParentKey.provider,
+            providerApiKeyId: otherParentKey.id,
+          },
+        ],
+      },
+    });
+    expect(otherResponse.statusCode).toBe(200);
 
     const response = await app.inject({
       method: "GET",
@@ -492,12 +513,15 @@ describe("virtualApiKeysRoutes", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    const body = response.json().data as Array<{
+    const json = response.json();
+    expect(json.pagination.total).toBe(2);
+    const body = json.data as Array<{
       id: string;
       name: string;
       tokenStart: string;
       value?: string;
     }>;
+    expect(body).toHaveLength(2);
     expect(body).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -507,6 +531,14 @@ describe("virtualApiKeysRoutes", () => {
         expect.objectContaining({
           id: secondResponse.json().id,
           name: "key-beta",
+        }),
+      ]),
+    );
+    expect(body).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: otherResponse.json().id,
+          name: "key-gamma",
         }),
       ]),
     );

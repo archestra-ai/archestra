@@ -767,6 +767,12 @@ https://<resource-name>.openai.azure.com/openai
 ```
 
 Archestra discovers deployments from `/openai/deployments` and routes each request to the deployment named in the request `model` field.
+Do not configure a deployment-specific URL such as `https://<resource-name>.openai.azure.com/openai/deployments/<deployment-name>`.
+If your Foundry project has its own OpenAI endpoint, use the same resource-level format with the project hostname:
+
+```
+https://<project-name>.openai.azure.com/openai
+```
 
 For Microsoft Foundry v1, use the OpenAI-compatible API root:
 
@@ -776,12 +782,19 @@ https://<resource-name>.services.ai.azure.com/openai/v1
 
 The same formats apply when configuring a Base URL in the API key settings UI.
 
-### Notes
+### Deployment Discovery and RBAC
+
+- For Entra ID configurations, Archestra first tries Azure deployment discovery. If the inference endpoint cannot list deployments, Archestra uses Azure management APIs to find the Cognitive Services account and list its deployments.
+- Some Foundry project endpoints are backed by a parent Azure AI Services account, for example `/providers/Microsoft.CognitiveServices/accounts/<account-name>/projects/<project-name>`. Archestra resolves the project to its parent account before listing deployments.
+- For Azure OpenAI resource URLs, Archestra does not fall back to the available model catalog because that catalog includes undeployed models.
+- For built-in Azure RBAC, assign `Cognitive Services OpenAI User` at the backing Azure AI Services resource when possible. Use the full ARM resource scope, for example `/subscriptions/<subscription-id>/resourceGroups/<resource-group>/providers/Microsoft.CognitiveServices/accounts/<resource-name>`. For the narrowest access, use a custom role with `Microsoft.Resources/subscriptions/read`, `Microsoft.Resources/subscriptions/resources/read`, `Microsoft.CognitiveServices/accounts/read`, and `Microsoft.CognitiveServices/accounts/deployments/read`.
+
+### Routing Notes
 
 - **API Version**: Azure OpenAI resource URLs use `ARCHESTRA_AZURE_OPENAI_API_VERSION` for Chat Completions and model discovery. Azure `/responses` requests use `ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION`. Foundry v1 URLs do not use either query parameter.
 - **Microsoft Entra ID**: When `ARCHESTRA_AZURE_OPENAI_ENTRA_ID_ENABLED=true`, Azure provider keys can omit the API key value and Archestra sends `Authorization: Bearer <token>` to Azure OpenAI instead of `api-key`.
 - **Grok on Azure**: Grok models sold directly by Azure use the Foundry v1 OpenAI-compatible Chat Completions API. The model must be deployed in the Azure resource before Archestra can route to it.
 - **Claude on Azure**: Claude models on Microsoft Foundry use Anthropic's Messages API shape, not the OpenAI-compatible Azure route. Configure the Anthropic provider section above.
-- **Multiple Deployments**: Azure OpenAI is the main provider that exposes multiple deployment names behind one resource-level credential. Use one Azure provider key per Azure resource, then select the deployment by model name.
+- **Multiple Deployments**: Azure OpenAI is the main provider that exposes multiple deployment names behind one resource-level credential. One Azure provider key should represent the Azure resource or Foundry v1 endpoint, not an individual deployment. After model sync, select the deployment by model name.
 - **Responses API model field**: For Azure `/responses` requests, send the deployment name in the `model` field. Archestra will route the request to Azure's `/openai/responses` endpoint while preserving the configured deployment URL for discovery and management.
 - **OpenAI-compatible API**: Azure AI Foundry supports both Chat Completions and Responses-style request flows through Archestra.

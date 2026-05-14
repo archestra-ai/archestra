@@ -11,17 +11,32 @@ const {
   deleteLlmOauthClient,
 } = archestraApiSdk;
 
-export function useLlmOauthClients() {
+type LlmOauthClientsParams = {
+  search?: string;
+  providerApiKeyId?: string;
+  enabled?: boolean;
+};
+
+export function useLlmOauthClients(params?: LlmOauthClientsParams) {
+  const search = params?.search;
+  const providerApiKeyId = params?.providerApiKeyId;
+
   return useQuery({
-    queryKey: ["llm-oauth-clients"],
+    queryKey: ["llm-oauth-clients", search, providerApiKeyId],
     queryFn: async () => {
-      const { data, error } = await getLlmOauthClients();
+      const { data, error } = await getLlmOauthClients({
+        query: {
+          search: search || undefined,
+          providerApiKeyId: providerApiKeyId || undefined,
+        },
+      });
       if (error) {
         handleApiError(error);
         return [];
       }
       return data ?? [];
     },
+    enabled: params?.enabled,
   });
 }
 

@@ -325,3 +325,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @devroy10
 - @yqx07
 - @hala-el
+- @supermax-33

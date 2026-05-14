@@ -194,6 +194,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             provider: SupportedProvidersSchema,
             apiKey: z.string().min(1).optional(),
             baseUrl: z.string().url().nullable().optional(),
+            inferenceBaseUrl: z.string().url().nullable().optional(),
             extraHeaders: z
               .record(z.string(), z.string())
               .nullable()
@@ -362,6 +363,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         provider: body.provider,
         secretId: secret?.id ?? null,
         baseUrl: body.baseUrl ?? null,
+        inferenceBaseUrl: body.inferenceBaseUrl ?? null,
         extraHeaders: body.extraHeaders ?? null,
         scope: body.scope,
         userId: body.scope === "personal" ? user.id : null,
@@ -468,6 +470,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             name: z.string().min(1).optional(),
             apiKey: z.string().min(1).optional(),
             baseUrl: z.string().url().nullable().optional(),
+            inferenceBaseUrl: z.string().url().nullable().optional(),
             extraHeaders: z
               .record(z.string(), z.string())
               .nullable()
@@ -683,6 +686,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const updateData: Partial<{
         name: string;
         baseUrl: string | null;
+        inferenceBaseUrl: string | null;
         extraHeaders: Record<string, string> | null;
         scope: ResourceVisibilityScope;
         userId: string | null;
@@ -697,6 +701,10 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (body.baseUrl !== undefined) {
         updateData.baseUrl = body.baseUrl;
+      }
+
+      if (body.inferenceBaseUrl !== undefined) {
+        updateData.inferenceBaseUrl = body.inferenceBaseUrl;
       }
 
       if (body.extraHeaders !== undefined) {

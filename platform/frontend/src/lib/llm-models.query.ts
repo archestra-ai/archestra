@@ -8,6 +8,7 @@ import {
 } from "@shared";
 import {
   keepPreviousData,
+  queryOptions,
   useInfiniteQuery,
   useMutation,
   useQuery,
@@ -47,6 +48,48 @@ export type ModelCapabilities = NonNullable<LlmModel["capabilities"]>;
 export type ModelWithApiKeys =
   archestraApiTypes.GetModelsWithApiKeysResponses["200"][number];
 export type LinkedApiKey = ModelWithApiKeys["apiKeys"][number];
+
+export function availableLlmModelQueryOptions(params: {
+  modelId: string | null | undefined;
+  apiKeyId?: string | null;
+  provider?: SupportedProvider;
+}) {
+  const normalizedParams = normalizeAvailableLlmModelParams(params);
+  return queryOptions({
+    queryKey: [
+      "llm-models",
+      "available-model",
+      normalizedParams.modelId ?? null,
+      normalizedParams.apiKeyId ?? null,
+      normalizedParams.provider ?? null,
+    ],
+    queryFn: () => fetchAvailableLlmModel(normalizedParams),
+  });
+}
+
+export function preferredLlmModelForApiKeyQueryOptions(params: {
+  apiKeyId: string;
+  bestModelId?: string | null;
+  provider?: SupportedProvider;
+}) {
+  if (params.bestModelId) {
+    return availableLlmModelQueryOptions({
+      apiKeyId: params.apiKeyId,
+      modelId: params.bestModelId,
+    });
+  }
+
+  return queryOptions({
+    queryKey: [
+      "llm-models",
+      "preferred-model",
+      params.apiKeyId,
+      params.provider ?? null,
+      params.bestModelId ?? null,
+    ],
+    queryFn: () => fetchPreferredLlmModelForApiKey(params),
+  });
+}
 
 export function useLlmModels(params?: LlmModelsParams) {
   const query = useInfiniteLlmModels(params);
@@ -158,27 +201,7 @@ export function useAvailableLlmModel(params: {
   enabled?: boolean;
 }) {
   return useQuery({
-    queryKey: [
-      "llm-models",
-      "available-model",
-      params.modelId ?? null,
-      params.apiKeyId ?? null,
-      params.provider ?? null,
-    ],
-    queryFn: async (): Promise<LlmModel | null> => {
-      if (!params.modelId) return null;
-
-      const data = await fetchLlmModelsPage({
-        params: {
-          apiKeyId: params.apiKeyId ?? undefined,
-          provider: params.provider,
-          modelId: params.modelId,
-          limit: 1,
-          offset: 0,
-        },
-      });
-      return data.data[0] ?? null;
-    },
+    ...availableLlmModelQueryOptions(params),
     enabled: params.enabled !== false && !!params.modelId,
   });
 }
@@ -188,12 +211,13 @@ export async function fetchAvailableLlmModel(params: {
   apiKeyId?: string | null;
   provider?: SupportedProvider;
 }): Promise<LlmModel | null> {
-  if (!params.modelId) return null;
+  const normalizedParams = normalizeAvailableLlmModelParams(params);
+  if (!normalizedParams.modelId) return null;
   const data = await fetchLlmModelsPage({
     params: {
-      apiKeyId: params.apiKeyId ?? undefined,
-      provider: params.provider,
-      modelId: params.modelId,
+      apiKeyId: normalizedParams.apiKeyId ?? undefined,
+      provider: normalizedParams.provider,
+      modelId: normalizedParams.modelId,
       limit: 1,
       offset: 0,
     },
@@ -210,7 +234,6 @@ export async function fetchPreferredLlmModelForApiKey(params: {
     const bestModel = await fetchAvailableLlmModel({
       modelId: params.bestModelId,
       apiKeyId: params.apiKeyId,
-      provider: params.provider,
     });
     if (bestModel) return bestModel;
   }
@@ -264,6 +287,18 @@ async function fetchLlmModelsPage({
       }),
     }
   );
+}
+
+function normalizeAvailableLlmModelParams(params: {
+  modelId: string | null | undefined;
+  apiKeyId?: string | null;
+  provider?: SupportedProvider;
+}) {
+  return {
+    modelId: params.modelId,
+    apiKeyId: params.apiKeyId,
+    provider: params.apiKeyId ? undefined : params.provider,
+  };
 }
 
 /**

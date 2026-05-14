@@ -119,6 +119,8 @@ interface ModelSelectorProps {
   disabledEmptyLabel?: string;
   /** Whether the selected key/model pair is being resolved by the parent */
   isResolvingSelection?: boolean;
+  /** Whether to load the model list and select the best/first model when no model is selected */
+  autoSelectBestAvailable?: boolean;
 }
 
 /** Map our provider names to logo provider names
@@ -560,11 +562,22 @@ export const ModelSelector = memo(function ModelSelector({
   enabled = true,
   disabledEmptyLabel,
   isResolvingSelection = false,
+  autoSelectBestAvailable = true,
 }: ModelSelectorProps) {
   const [open, setOpen] = useState(false);
   const [filters, setFilters] = useState<ModelFilters>(INITIAL_FILTERS);
   const [searchQuery, setSearchQuery] = useState("");
   const [loadMoreNode, setLoadMoreNode] = useState<HTMLDivElement | null>(null);
+  const shouldAutoSelectBestAvailable =
+    enabled !== false &&
+    autoSelectBestAvailable &&
+    !selectedModel &&
+    !isResolvingSelection &&
+    !onClear;
+  const shouldFetchModelList =
+    enabled !== false && (open || shouldAutoSelectBestAvailable);
+  const modelListInputModalities =
+    filters.modalities.size > 0 ? Array.from(filters.modalities) : undefined;
 
   const {
     models,
@@ -578,10 +591,10 @@ export const ModelSelector = memo(function ModelSelector({
     apiKeyId: apiKeyId ?? undefined,
     provider: filters.provider,
     q: searchQuery.trim() || undefined,
-    inputModalities: Array.from(filters.modalities),
+    inputModalities: modelListInputModalities,
     supportsToolCalling: filters.toolCalling ? "true" : undefined,
     limit: 50,
-    enabled,
+    enabled: shouldFetchModelList,
   });
   const selectedModelQuery = useAvailableLlmModel({
     modelId: selectedModel || null,
@@ -721,8 +734,7 @@ export const ModelSelector = memo(function ModelSelector({
 
   // Auto-select the best loaded model when the parent has no explicit model.
   useEffect(() => {
-    if (isResolvingSelection) return;
-    if (selectedModel) return;
+    if (!shouldAutoSelectBestAvailable) return;
     if (isLoading || modelIndexes.allModels.length === 0) return;
     const modelToSelect =
       modelIndexes.allModels.find((model) => model.isBest) ??
@@ -732,14 +744,13 @@ export const ModelSelector = memo(function ModelSelector({
     }
   }, [
     isLoading,
-    isResolvingSelection,
     modelIndexes.allModels,
-    selectedModel,
     onModelChange,
+    shouldAutoSelectBestAvailable,
   ]);
 
   // If loading, show loading state
-  if (isQueryEnabled && isLoading && !open) {
+  if (shouldFetchModelList && isLoading && !open) {
     return (
       <PromptInputButton className={MODEL_SELECTOR_TRIGGER_CLASSNAME} disabled>
         <Loader2 className="size-4 animate-spin" />
@@ -802,6 +813,7 @@ export const ModelSelector = memo(function ModelSelector({
     !selectedModel &&
     !hasActiveFilters &&
     !hasSearch &&
+    (enabled === false || (shouldFetchModelList && !isLoading)) &&
     models.length === 0
   ) {
     return (

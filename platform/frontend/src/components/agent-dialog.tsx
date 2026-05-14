@@ -22,6 +22,7 @@ import {
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@shared";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Bot,
@@ -139,8 +140,8 @@ import { useLatestAsyncGuard } from "@/lib/hooks/use-latest-async-guard";
 import { useConnectors } from "@/lib/knowledge/connector.query";
 import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
 import {
-  fetchPreferredLlmModelForApiKey,
   type LlmModel,
+  preferredLlmModelForApiKeyQueryOptions,
   useAvailableLlmModel,
 } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
@@ -567,6 +568,7 @@ export function AgentDialog({
   openToolsCombobox = false,
 }: AgentDialogProps) {
   const appName = useAppName();
+  const queryClient = useQueryClient();
   const shouldLoadInternalAgents = open && agentType !== "llm_proxy";
   const shouldLoadIdentityProviders =
     open && (agentType === "mcp_gateway" || agentType === "llm_proxy");
@@ -892,18 +894,29 @@ export function AgentDialog({
 
       // Auto-select model: always prefer bestModelId, fall back to first model when switching providers
       if (key.bestModelId || currentLlmProvider !== key.provider) {
-        const preferredModel = await fetchPreferredLlmModelForApiKey({
-          apiKeyId: key.id,
-          bestModelId: key.bestModelId,
-          provider: key.provider,
-        });
+        let preferredModel = await queryClient.fetchQuery(
+          preferredLlmModelForApiKeyQueryOptions({
+            apiKeyId: key.id,
+            bestModelId: key.bestModelId,
+            provider: key.provider,
+          }),
+        );
+
+        if (!preferredModel && key.bestModelId) {
+          preferredModel = await queryClient.fetchQuery(
+            preferredLlmModelForApiKeyQueryOptions({
+              apiKeyId: key.id,
+              provider: key.provider,
+            }),
+          );
+        }
         if (!llmApiKeyChangeGuard.isCurrent(requestToken)) return;
         if (preferredModel) {
           setLlmModel(preferredModel.dbId ?? preferredModel.id);
         }
       }
     },
-    [availableApiKeys, currentLlmProvider, llmApiKeyChangeGuard],
+    [availableApiKeys, currentLlmProvider, llmApiKeyChangeGuard, queryClient],
   );
 
   // Non-admin users must select at least one team for team-scoped resources

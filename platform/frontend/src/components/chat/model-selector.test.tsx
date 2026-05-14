@@ -121,11 +121,23 @@ describe("ModelSelector", () => {
     );
 
     expect(screen.queryByPlaceholderText("Search models...")).toBeNull();
+    expect(useInfiniteLlmModelsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        enabled: false,
+        inputModalities: undefined,
+      }),
+    );
 
     await userEvent.click(screen.getByRole("button", { name: /GPT 4\.1/i }));
 
     expect(screen.getByPlaceholderText("Search models...")).toBeInTheDocument();
     expect(screen.getByText("(gpt-4.1)")).toBeInTheDocument();
+    expect(useInfiniteLlmModelsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        enabled: true,
+        inputModalities: undefined,
+      }),
+    );
   });
 
   it("provides an accessible dialog description", async () => {
@@ -226,6 +238,9 @@ describe("ModelSelector", () => {
 
     render(<ModelSelector selectedModel="" onModelChange={onModelChange} />);
 
+    expect(useInfiniteLlmModelsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: true }),
+    );
     expect(onModelChange).toHaveBeenCalledWith(
       "gpt-4.1-mini",
       expect.objectContaining({ id: "gpt-4.1-mini", isBest: true }),
@@ -325,6 +340,40 @@ describe("ModelSelector", () => {
         supportsToolCalling: "true",
       }),
     );
+  });
+
+  it("does not auto-select or fetch the list when best available can be cleared at runtime", () => {
+    const onModelChange = vi.fn();
+
+    render(
+      <ModelSelector
+        selectedModel=""
+        onModelChange={onModelChange}
+        onClear={vi.fn()}
+      />,
+    );
+
+    expect(useInfiniteLlmModelsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: false }),
+    );
+    expect(onModelChange).not.toHaveBeenCalled();
+  });
+
+  it("does not auto-select or fetch the list when auto-select is disabled", () => {
+    const onModelChange = vi.fn();
+
+    render(
+      <ModelSelector
+        selectedModel=""
+        onModelChange={onModelChange}
+        autoSelectBestAvailable={false}
+      />,
+    );
+
+    expect(useInfiniteLlmModelsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: false }),
+    );
+    expect(onModelChange).not.toHaveBeenCalled();
   });
 
   it("sends the selected provider filter to the query hook", async () => {

@@ -1,8 +1,8 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { forwardRef, useImperativeHandle } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { AgentDialog } from "./agent-dialog";
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { forwardRef, useImperativeHandle } from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { AgentDialog } from './agent-dialog';
 
 const {
   pendingSaveChanges,
@@ -16,6 +16,7 @@ const {
   useProfileMock,
   useSyncAgentDelegationsMock,
   useUpdateProfileMock,
+  useQueryClientMock,
 } = vi.hoisted(() => ({
   pendingSaveChanges: vi.fn(
     () => new Promise<void>((resolve) => setTimeout(resolve, 50)),
@@ -34,7 +35,6 @@ const {
   useHasPermissionsMock: vi.fn((..._args: unknown[]) => ({ data: true })),
   useUpdateProfileMock: vi.fn(() => ({
     mutateAsync: vi.fn(),
-    isPending: false,
   })),
   useAgentDelegationsMock: vi.fn(
     (): { data: unknown[]; isFetched: boolean } => ({
@@ -46,17 +46,19 @@ const {
     mutateAsync: vi.fn(),
     isPending: false,
   })),
+  useQueryClientMock: vi.fn(() => ({ fetchQuery: vi.fn() })),
 }));
 
-vi.mock("@tanstack/react-query", async () => {
-  const actual = await vi.importActual("@tanstack/react-query");
+vi.mock('@tanstack/react-query', async () => {
+  const actual = await vi.importActual('@tanstack/react-query');
   return {
     ...actual,
     useQuery: () => ({ data: [] }),
+    useQueryClient: useQueryClientMock,
   };
 });
 
-vi.mock("@/lib/agent.query", () => ({
+vi.mock('@/lib/agent.query', () => ({
   useCreateProfile: () => ({
     mutateAsync: vi.fn(),
     isPending: false,
@@ -70,55 +72,65 @@ vi.mock("@/lib/agent.query", () => ({
   useUpdateProfile: useUpdateProfileMock,
 }));
 
-vi.mock("@/lib/agent-tools.query", () => ({
+vi.mock('@/lib/agent-tools.query', () => ({
   useAgentDelegations: useAgentDelegationsMock,
   useSyncAgentDelegations: useSyncAgentDelegationsMock,
 }));
 
-vi.mock("@/lib/auth/auth.query", () => ({
+vi.mock('@/lib/auth/auth.query', () => ({
   useHasPermissions: useHasPermissionsMock,
 }));
 
-vi.mock("@/lib/chat/chat.query", () => ({
+vi.mock('@/lib/chat/chat.query', () => ({
   useChatProfileMcpTools: () => ({ data: [], isLoading: false }),
 }));
 
-vi.mock("@/lib/config/config.query", () => ({
+vi.mock('@/lib/config/config.query', () => ({
   useFeature: () => false,
 }));
 
-vi.mock("@/lib/knowledge/connector.query", () => ({
+vi.mock('@/lib/knowledge/connector.query', () => ({
   useConnectors: () => ({ data: [] }),
 }));
 
-vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
+vi.mock('@/lib/knowledge/knowledge-base.query', () => ({
   useKnowledgeBases: () => ({ data: [] }),
 }));
 
-vi.mock("@/lib/llm-models.query", () => ({
+vi.mock('@/lib/llm-models.query', () => ({
+  availableLlmModelQueryOptions: vi.fn((params: Record<string, unknown>) => ({
+    queryKey: ['llm-models', 'available-model', params],
+    queryFn: vi.fn(),
+  })),
+  preferredLlmModelForApiKeyQueryOptions: vi.fn(
+    (params: Record<string, unknown>) => ({
+      queryKey: ['llm-models', 'preferred-model', params],
+      queryFn: vi.fn(),
+    }),
+  ),
   fetchPreferredLlmModelForApiKey: fetchPreferredLlmModelForApiKeyMock,
   useAvailableLlmModel: useAvailableLlmModelMock,
   useLlmModelsByProvider: useLlmModelsByProviderMock,
 }));
 
-vi.mock("@/lib/llm-provider-api-keys.query", () => ({
+vi.mock('@/lib/llm-provider-api-keys.query', () => ({
   useAvailableLlmProviderApiKeys: useAvailableLlmProviderApiKeysMock,
 }));
 
-vi.mock("@/lib/hooks/use-app-name", () => ({
-  useAppName: () => "Archestra",
+vi.mock('@/lib/hooks/use-app-name', () => ({
+  useAppName: () => 'Archestra',
 }));
 
-vi.mock("@/lib/docs/docs", () => ({
-  getFrontendDocsUrl: () => "/docs",
+vi.mock('@/lib/docs/docs', () => ({
+  getFrontendDocsUrl: () => '/docs',
 }));
 
-vi.mock("@/lib/utils", () => ({
+vi.mock('@/lib/utils', () => ({
   cn: (...classes: Array<string | false | null | undefined>) =>
-    classes.filter(Boolean).join(" "),
+    classes.filter(Boolean).join(' '),
 }));
 
-vi.mock("@/lib/config/config", () => ({
+vi.mock('@/lib/config/config', () => ({
   default: {
     enterpriseFeatures: {
       core: false,
@@ -126,7 +138,7 @@ vi.mock("@/lib/config/config", () => ({
   },
 }));
 
-vi.mock("@/components/agent-tools-editor", () => ({
+vi.mock('@/components/agent-tools-editor', () => ({
   AgentToolsEditor: forwardRef((_props, ref) => {
     useImperativeHandle(ref, () => ({
       saveChanges: pendingSaveChanges,
@@ -136,42 +148,42 @@ vi.mock("@/components/agent-tools-editor", () => ({
   }),
 }));
 
-vi.mock("@/components/agent-labels", () => ({
+vi.mock('@/components/agent-labels', () => ({
   ProfileLabels: () => null,
 }));
 
-vi.mock("@/components/agent-badge", () => ({
+vi.mock('@/components/agent-badge', () => ({
   AgentBadge: () => null,
 }));
 
-vi.mock("@/components/agent-icon-picker", () => ({
+vi.mock('@/components/agent-icon-picker', () => ({
   AgentIconPicker: () => null,
 }));
 
-vi.mock("@/components/chat/model-selector", () => ({
+vi.mock('@/components/chat/model-selector', () => ({
   ModelSelector: () => null,
 }));
 
-vi.mock("@/components/external-docs-link", () => ({
+vi.mock('@/components/external-docs-link', () => ({
   ExternalDocsLink: () => null,
 }));
 
-vi.mock("@/components/permission-requirement-hint", () => ({
+vi.mock('@/components/permission-requirement-hint', () => ({
   PermissionRequirementHint: () => null,
-  formatPermissionRequirement: () => "",
+  formatPermissionRequirement: () => '',
 }));
 
-vi.mock("@/components/system-prompt-editor", () => ({
+vi.mock('@/components/system-prompt-editor', () => ({
   SystemPromptEditor: () => null,
 }));
 
-vi.mock("@/components/visibility-selector", () => ({
+vi.mock('@/components/visibility-selector', () => ({
   VisibilitySelector: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
   ),
 }));
 
-vi.mock("@/components/ui/alert", () => ({
+vi.mock('@/components/ui/alert', () => ({
   Alert: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
   ),
@@ -180,17 +192,17 @@ vi.mock("@/components/ui/alert", () => ({
   ),
 }));
 
-vi.mock("@/components/ui/assignment-combobox", () => ({
+vi.mock('@/components/ui/assignment-combobox', () => ({
   AssignmentCombobox: () => null,
 }));
 
-vi.mock("@/components/ui/badge", () => ({
+vi.mock('@/components/ui/badge', () => ({
   Badge: ({ children }: { children?: React.ReactNode }) => (
     <span>{children}</span>
   ),
 }));
 
-vi.mock("@/components/ui/button", () => ({
+vi.mock('@/components/ui/button', () => ({
   Button: ({
     children,
     ...props
@@ -199,7 +211,7 @@ vi.mock("@/components/ui/button", () => ({
   ),
 }));
 
-vi.mock("@/components/ui/collapsible", () => ({
+vi.mock('@/components/ui/collapsible', () => ({
   Collapsible: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
   ),
@@ -211,7 +223,7 @@ vi.mock("@/components/ui/collapsible", () => ({
   ),
 }));
 
-vi.mock("@/components/ui/command", () => ({
+vi.mock('@/components/ui/command', () => ({
   Command: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
   ),
@@ -230,7 +242,7 @@ vi.mock("@/components/ui/command", () => ({
   ),
 }));
 
-vi.mock("@/components/ui/dialog", () => ({
+vi.mock('@/components/ui/dialog', () => ({
   Dialog: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
   ),
@@ -255,31 +267,31 @@ vi.mock("@/components/ui/dialog", () => ({
   ),
 }));
 
-vi.mock("@/components/ui/expandable-text", () => ({
+vi.mock('@/components/ui/expandable-text', () => ({
   ExpandableText: ({ text }: { text: string }) => <span>{text}</span>,
 }));
 
-vi.mock("@/components/ui/input", () => ({
+vi.mock('@/components/ui/input', () => ({
   Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => (
     <input {...props} />
   ),
 }));
 
-vi.mock("@/components/ui/label", () => ({
+vi.mock('@/components/ui/label', () => ({
   Label: ({ children }: React.LabelHTMLAttributes<HTMLLabelElement>) => (
     <span>{children}</span>
   ),
 }));
 
-vi.mock("@/components/ui/multi-select-combobox", () => ({
+vi.mock('@/components/ui/multi-select-combobox', () => ({
   MultiSelectCombobox: () => null,
 }));
 
-vi.mock("@/components/ui/overlapped-icons", () => ({
+vi.mock('@/components/ui/overlapped-icons', () => ({
   OverlappedIcons: () => null,
 }));
 
-vi.mock("@/components/ui/popover", () => ({
+vi.mock('@/components/ui/popover', () => ({
   Popover: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
   ),
@@ -291,7 +303,7 @@ vi.mock("@/components/ui/popover", () => ({
   ),
 }));
 
-vi.mock("@/components/ui/select", () => ({
+vi.mock('@/components/ui/select', () => ({
   Select: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
   ),
@@ -307,17 +319,17 @@ vi.mock("@/components/ui/select", () => ({
   SelectValue: () => null,
 }));
 
-vi.mock("@/components/ui/switch", () => ({
+vi.mock('@/components/ui/switch', () => ({
   Switch: () => null,
 }));
 
-vi.mock("@/components/ui/textarea", () => ({
+vi.mock('@/components/ui/textarea', () => ({
   Textarea: (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => (
     <textarea {...props} />
   ),
 }));
 
-vi.mock("@/components/ui/tooltip", () => ({
+vi.mock('@/components/ui/tooltip', () => ({
   Tooltip: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
   ),
@@ -333,23 +345,23 @@ vi.mock("@/components/ui/tooltip", () => ({
 }));
 
 const baseAgent = {
-  id: "00000000-0000-4000-8000-000000000001",
-  organizationId: "00000000-0000-4000-8000-000000000010",
-  name: "Existing Agent",
+  id: '00000000-0000-4000-8000-000000000001',
+  organizationId: '00000000-0000-4000-8000-000000000010',
+  name: 'Existing Agent',
   builtIn: false,
   icon: null,
   description: null,
   systemPrompt: null,
-  agentType: "agent" as const,
-  toolExposureMode: "full" as const,
-  scope: "personal" as const,
+  agentType: 'agent' as const,
+  toolExposureMode: 'full' as const,
+  scope: 'personal' as const,
   isDefault: false,
   isPersonalGateway: false,
   teams: [],
   tools: [],
   labels: [],
-  authorId: "00000000-0000-4000-8000-000000000020",
-  authorName: "Test User",
+  authorId: '00000000-0000-4000-8000-000000000020',
+  authorName: 'Test User',
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
   knowledgeBaseIds: [],
@@ -362,20 +374,20 @@ const baseAgent = {
   identityProviderId: null,
   builtInAgentConfig: null,
   passthroughHeaders: null,
-  toolAssignmentMode: "manual" as const,
+  toolAssignmentMode: 'manual' as const,
   incomingEmailEnabled: false,
-  incomingEmailSecurityMode: "public" as const,
+  incomingEmailSecurityMode: 'public' as const,
   incomingEmailAllowedDomain: null,
   slug: null,
 };
 
 const targetAgent = {
   ...baseAgent,
-  id: "00000000-0000-4000-8000-000000000002",
-  name: "Target Agent",
+  id: '00000000-0000-4000-8000-000000000002',
+  name: 'Target Agent',
 };
 
-describe("AgentDialog delegation state", () => {
+describe('AgentDialog delegation state', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useHasPermissionsMock.mockImplementation(() => ({ data: true }));
@@ -387,7 +399,7 @@ describe("AgentDialog delegation state", () => {
     });
   });
 
-  it("keeps selected subagents when fresh agent data refetches", async () => {
+  it('keeps selected subagents when fresh agent data refetches', async () => {
     const { rerender } = render(
       <AgentDialog
         open={true}
@@ -397,10 +409,10 @@ describe("AgentDialog delegation state", () => {
       />,
     );
 
-    await screen.findByText("Subagents (1)");
+    await screen.findByText('Subagents (1)');
 
     useProfileMock.mockReturnValue({
-      data: { ...baseAgent, description: "Refetched description" },
+      data: { ...baseAgent, description: 'Refetched description' },
       refetch: vi.fn(),
     });
 
@@ -414,18 +426,18 @@ describe("AgentDialog delegation state", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Subagents (1)")).toBeInTheDocument();
+      expect(screen.getByText('Subagents (1)')).toBeInTheDocument();
     });
   });
 });
 
-describe.skip("AgentDialog", () => {
+describe.skip('AgentDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useHasPermissionsMock.mockImplementation(() => ({ data: true }));
   });
 
-  it("does not eagerly enable agent-only queries for a closed MCP gateway dialog", () => {
+  it('does not eagerly enable agent-only queries for a closed MCP gateway dialog', () => {
     render(
       <AgentDialog
         open={false}
@@ -444,7 +456,7 @@ describe.skip("AgentDialog", () => {
     });
   });
 
-  it("disables Update immediately while save starts", async () => {
+  it('disables Update immediately while save starts', async () => {
     const user = userEvent.setup();
 
     render(
@@ -453,23 +465,23 @@ describe.skip("AgentDialog", () => {
         onOpenChange={vi.fn()}
         agentType="agent"
         agent={{
-          id: "agent-1",
-          organizationId: "org-1",
-          name: "Existing Agent",
+          id: 'agent-1',
+          organizationId: 'org-1',
+          name: 'Existing Agent',
           builtIn: false,
           icon: null,
           description: null,
           systemPrompt: null,
-          agentType: "agent",
-          toolExposureMode: "full",
-          scope: "personal",
+          agentType: 'agent',
+          toolExposureMode: 'full',
+          scope: 'personal',
           isDefault: false,
           isPersonalGateway: false,
           teams: [],
           tools: [],
           labels: [],
-          authorId: "user-1",
-          authorName: "Test User",
+          authorId: 'user-1',
+          authorName: 'Test User',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           knowledgeBaseIds: [],
@@ -482,30 +494,30 @@ describe.skip("AgentDialog", () => {
           identityProviderId: null,
           builtInAgentConfig: null,
           passthroughHeaders: null,
-          toolAssignmentMode: "manual",
+          toolAssignmentMode: 'manual',
           incomingEmailEnabled: false,
-          incomingEmailSecurityMode: "public",
+          incomingEmailSecurityMode: 'public',
           incomingEmailAllowedDomain: null,
           slug: null,
         }}
       />,
     );
 
-    const updateButton = screen.getByRole("button", { name: /update/i });
+    const updateButton = screen.getByRole('button', { name: /update/i });
     expect(updateButton).not.toBeDisabled();
 
     await user.click(updateButton);
 
     await waitFor(() => {
       expect(pendingSaveChanges).toHaveBeenCalledOnce();
-      expect(screen.getByRole("button", { name: /update/i })).toBeDisabled();
+      expect(screen.getByRole('button', { name: /update/i })).toBeDisabled();
     });
   });
 
-  it("does not enable LLM queries when the user lacks LLM read permissions", () => {
+  it('does not enable LLM queries when the user lacks LLM read permissions', () => {
     useHasPermissionsMock.mockImplementation((...args: unknown[]) => {
       const permissions = (args[0] ?? {}) as Record<string, unknown>;
-      if ("llmProviderApiKey" in permissions || "llmModel" in permissions) {
+      if ('llmProviderApiKey' in permissions || 'llmModel' in permissions) {
         return { data: false };
       }
       return { data: true };
@@ -524,10 +536,10 @@ describe.skip("AgentDialog", () => {
     });
   });
 
-  it("shows org default model message when the user cannot read keys or models", () => {
+  it('shows org default model message when the user cannot read keys or models', () => {
     useHasPermissionsMock.mockImplementation((...args: unknown[]) => {
       const permissions = (args[0] ?? {}) as Record<string, unknown>;
-      if ("llmProviderApiKey" in permissions || "llmModel" in permissions) {
+      if ('llmProviderApiKey' in permissions || 'llmModel' in permissions) {
         return { data: false };
       }
       return { data: true };

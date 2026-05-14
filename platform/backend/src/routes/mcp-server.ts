@@ -215,6 +215,38 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // preset installs at the deployment-name layer.
         serverData.name = catalogItem.name;
 
+        // Apply preset-scoped overlay from the catalog row onto the install
+        // inputs. Preset values have *lower* precedence than install-time
+        // inputs — if the user explicitly supplied the same key at install
+        // time, that wins.
+        // Secret-typed preset env values are also surfaced into
+        // environmentValues here. They reach the pod via the K8s Secret
+        // (built from the install secret bag) — the env builder only emits a
+        // secretKeyRef when it sees a non-empty entry for that key in
+        // environmentValues, so the merge must include secret keys too.
+        if (catalogItem.localConfig?.environment) {
+          const presetSecretBag = catalogItem.presetSecretId
+            ? ((await secretManager().getSecret(catalogItem.presetSecretId))
+                ?.secret as Record<string, unknown> | undefined)
+            : undefined;
+
+          const presetEnvDefaults: Record<string, string> = {};
+          for (const envDef of catalogItem.localConfig.environment) {
+            if (!envDef.promptOnPreset) continue;
+            const v =
+              envDef.type === "secret"
+                ? presetSecretBag?.[envDef.key]
+                : catalogItem.presetFieldValues?.[envDef.key];
+            if (v != null) presetEnvDefaults[envDef.key] = String(v);
+          }
+          if (Object.keys(presetEnvDefaults).length > 0) {
+            environmentValues = {
+              ...presetEnvDefaults,
+              ...(environmentValues ?? {}),
+            };
+          }
+        }
+
         // Scope-based authorization (personal / team / org).
         await validateScopeAndAuthorization({
           scope: serverData.scope,
@@ -577,7 +609,15 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           };
           let hasPromptedSecrets = false;
 
-          // Collect all secret-type env vars (both static and prompted).
+          // Resolve the preset secret bundle once if the catalog row carries
+          // one — preset-scoped secret env values live in this bag, keyed by
+          // env-var name.
+          const presetSecretBag = catalogItem.presetSecretId
+            ? ((await secretManager().getSecret(catalogItem.presetSecretId))
+                ?.secret as Record<string, unknown> | undefined)
+            : undefined;
+
+          // Collect all secret-type env vars (static, prompted, and preset).
           for (const envDef of catalogItem.localConfig?.environment ?? []) {
             if (envDef.type === "secret") {
               let value: string | undefined;
@@ -588,6 +628,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 if (value) {
                   hasPromptedSecrets = true;
                 }
+              } else if (envDef.promptOnPreset) {
+                // Preset-scoped — read from the resolved preset secret bag
+                const raw = presetSecretBag?.[envDef.key];
+                value = raw != null ? String(raw) : undefined;
               } else {
                 // Static value from catalog - get from envDef.value
                 value = envDef.value;

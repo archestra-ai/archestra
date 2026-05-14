@@ -39,7 +39,10 @@ export function PresetFallbackFields({
     (f) => f.scope === "preset",
   );
   const filled = selectedPreset.presetFieldValues ?? {};
-  const unfilled = presetFields.filter((f) => !(f.key in filled));
+  const hasStoredSecrets = selectedPreset.presetSecretId != null;
+  const unfilled = presetFields.filter(
+    (f) => !(f.key in filled) && !(f.secret && hasStoredSecrets),
+  );
 
   if (unfilled.length === 0) return null;
 

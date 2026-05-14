@@ -14648,10 +14648,9 @@ export type GetAuditLogsData = {
          * Case-insensitive search across actor email, actor name, HTTP path, and resource ID
          */
         search?: string;
+        sortDirection?: 'asc' | 'desc';
         limit?: number;
         offset?: number;
-        sortBy?: 'createdAt';
-        sortDirection?: 'asc' | 'desc';
     };
     url: '/api/audit-logs';
 };

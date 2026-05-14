@@ -558,6 +558,7 @@ export default function ApiKeysPage() {
         title="Edit API Key"
         description="Update the name, API key value, or scope"
         size="small"
+        className="sm:max-w-xl"
       >
         <DialogForm
           onSubmit={handleEdit}

@@ -125,6 +125,7 @@ export function CreateLlmProviderApiKeyDialog({
       title={title}
       description={description}
       size="small"
+      className="sm:max-w-xl"
     >
       <DialogForm
         onSubmit={handleCreate}

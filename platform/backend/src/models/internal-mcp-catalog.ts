@@ -468,7 +468,7 @@ class InternalMcpCatalogModel {
       .where(eq(schema.internalMcpCatalogTable.parentCatalogItemId, parentId))
       .orderBy(asc(schema.internalMcpCatalogTable.createdAt));
 
-    return InternalMcpCatalogModel.attachLabelsAndTeams(dbItems);
+    return InternalMcpCatalogModel.attachListMetadata(dbItems);
   }
 
   /**

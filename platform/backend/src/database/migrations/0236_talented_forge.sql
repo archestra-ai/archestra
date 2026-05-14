@@ -1,1 +1,0 @@
-ALTER TABLE "internal_mcp_catalog" ADD COLUMN "child_name" text;

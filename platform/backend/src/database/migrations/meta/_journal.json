@@ -1650,15 +1650,8 @@
     {
       "idx": 235,
       "version": "7",
-      "when": 1778584942298,
-      "tag": "0235_fine_gamma_corps",
-      "breakpoints": true
-    },
-    {
-      "idx": 236,
-      "version": "7",
-      "when": 1778686538517,
-      "tag": "0236_talented_forge",
+      "when": 1778761776594,
+      "tag": "0235_far_excalibur",
       "breakpoints": true
     }
   ]

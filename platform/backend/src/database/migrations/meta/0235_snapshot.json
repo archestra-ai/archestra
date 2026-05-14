@@ -1,6 +1,6 @@
 {
-  "id": "e7148ad9-672e-4578-afc4-04207e2af045",
-  "prevId": "dca86bad-d512-4458-8cf2-d423199d612b",
+  "id": "4bca52c7-4f4c-4cfd-ab21-0a16756928b1",
+  "prevId": "e7f03c26-ca30-41a7-a7d6-adcdf7ca55af",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2911,6 +2911,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "virtual_key_id": {
+          "name": "virtual_key_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "session_id": {
           "name": "session_id",
           "type": "varchar",
@@ -3211,6 +3217,19 @@
           ],
           "onDelete": "set null",
           "onUpdate": "no action"
+        },
+        "interactions_virtual_key_id_virtual_api_keys_id_fk": {
+          "name": "interactions_virtual_key_id_virtual_api_keys_id_fk",
+          "tableFrom": "interactions",
+          "tableTo": "virtual_api_keys",
+          "columnsFrom": [
+            "virtual_key_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3383,6 +3402,12 @@
         "parent_catalog_item_id": {
           "name": "parent_catalog_item_id",
           "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "child_name": {
+          "name": "child_name",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },

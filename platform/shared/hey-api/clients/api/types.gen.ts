@@ -32801,6 +32801,8 @@ export type GetLimitsResponses = {
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
+        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        isDefaultUserLimit: boolean;
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -32824,6 +32826,8 @@ export type CreateLimitData = {
         mcpServerName?: string | null;
         toolName?: string | null;
         model?: Array<string> | null;
+        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        isDefaultUserLimit?: boolean;
         lastCleanup?: unknown;
     };
     path?: never;
@@ -32909,6 +32913,8 @@ export type CreateLimitResponses = {
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
+        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        isDefaultUserLimit: boolean;
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -33089,6 +33095,8 @@ export type GetLimitResponses = {
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
+        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        isDefaultUserLimit: boolean;
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -33106,6 +33114,8 @@ export type UpdateLimitData = {
         mcpServerName?: string | null;
         toolName?: string | null;
         model?: Array<string> | null;
+        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        isDefaultUserLimit?: boolean;
         lastCleanup?: unknown;
     };
     path: {
@@ -33193,6 +33203,8 @@ export type UpdateLimitResponses = {
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
+        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        isDefaultUserLimit: boolean;
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -40917,6 +40929,9 @@ export type GetOrganizationResponses = {
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         defaultLlmApiKeyId: string | null;
+        defaultUserLimitValue: number | null;
+        defaultUserLimitModel: Array<string> | null;
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -41186,6 +41201,9 @@ export type UpdateAppearanceSettingsResponses = {
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         defaultLlmApiKeyId: string | null;
+        defaultUserLimitValue: number | null;
+        defaultUserLimitModel: Array<string> | null;
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -41328,6 +41346,9 @@ export type UpdateSecuritySettingsResponses = {
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         defaultLlmApiKeyId: string | null;
+        defaultUserLimitValue: number | null;
+        defaultUserLimitModel: Array<string> | null;
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -41372,6 +41393,9 @@ export type UpdateLlmSettingsData = {
         convertToolResultsToToon?: boolean;
         compressionScope?: 'organization' | 'team';
         limitCleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitValue?: number | null;
+        defaultUserLimitModel?: Array<string> | null;
+        defaultUserLimitCleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
     };
     path?: never;
     query?: never;
@@ -41471,6 +41495,9 @@ export type UpdateLlmSettingsResponses = {
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         defaultLlmApiKeyId: string | null;
+        defaultUserLimitValue: number | null;
+        defaultUserLimitModel: Array<string> | null;
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -41615,6 +41642,9 @@ export type UpdateAgentSettingsResponses = {
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         defaultLlmApiKeyId: string | null;
+        defaultUserLimitValue: number | null;
+        defaultUserLimitModel: Array<string> | null;
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -41766,6 +41796,9 @@ export type UpdateConnectionSettingsResponses = {
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         defaultLlmApiKeyId: string | null;
+        defaultUserLimitValue: number | null;
+        defaultUserLimitModel: Array<string> | null;
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -41908,6 +41941,9 @@ export type UpdateAuthSettingsResponses = {
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         defaultLlmApiKeyId: string | null;
+        defaultUserLimitValue: number | null;
+        defaultUserLimitModel: Array<string> | null;
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -42052,6 +42088,9 @@ export type UpdateKnowledgeSettingsResponses = {
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         defaultLlmApiKeyId: string | null;
+        defaultUserLimitValue: number | null;
+        defaultUserLimitModel: Array<string> | null;
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -42191,6 +42230,9 @@ export type DropEmbeddingConfigResponses = {
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         defaultLlmApiKeyId: string | null;
+        defaultUserLimitValue: number | null;
+        defaultUserLimitModel: Array<string> | null;
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -42419,6 +42461,9 @@ export type CompleteOnboardingResponses = {
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         defaultLlmApiKeyId: string | null;
+        defaultUserLimitValue: number | null;
+        defaultUserLimitModel: Array<string> | null;
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;

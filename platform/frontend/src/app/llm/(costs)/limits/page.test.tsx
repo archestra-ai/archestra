@@ -307,11 +307,9 @@ describe("LimitsPage", () => {
     render(<LimitsPage />);
 
     expect(
-      screen.getByText(
-        /expired or exceeded limits reset on the current cleanup schedule/i,
-      ),
+      screen.getByText(/new limits use the default cleanup schedule/i),
     ).toBeInTheDocument();
-    expect(screen.getByText("Every month")).toBeInTheDocument();
+    expect(screen.getAllByText("Every month").length).toBeGreaterThan(0);
 
     expect(
       screen.getByRole("link", { name: /change it in llm settings/i }),

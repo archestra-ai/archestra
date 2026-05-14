@@ -2,6 +2,8 @@ import { describe, expect, test } from "@/test";
 import { CreateLimitSchema } from "@/types";
 import AgentTeamModel from "./agent-team";
 import LimitModel, { LimitValidationService } from "./limit";
+import MemberModel from "./member";
+import OrganizationModel from "./organization";
 
 describe("CreateLimitSchema", () => {
   test("normalizes empty array to null for token_cost", () => {
@@ -1938,6 +1940,144 @@ describe("cleanupLimitsIfNeeded", () => {
     const modelUsage = await LimitModel.getRawModelUsage(limit.id);
     expect(modelUsage[0].currentUsageTokensIn).toBe(500);
     expect(modelUsage[0].currentUsageTokensOut).toBe(500);
+  });
+
+  test("uses each limit cleanup interval instead of only the organization default", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    await OrganizationModel.patch(org.id, { limitCleanupInterval: "1m" });
+
+    const hourlyLimit = await LimitModel.create({
+      entityType: "organization",
+      entityId: org.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+      cleanupInterval: "1h",
+    });
+    const monthlyLimit = await LimitModel.create({
+      entityType: "organization",
+      entityId: org.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+      cleanupInterval: "1m",
+    });
+
+    await LimitModel.updateTokenLimitUsage(
+      "organization",
+      org.id,
+      "gpt-4o",
+      500,
+      500,
+    );
+
+    const twoDaysAgo = new Date();
+    twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+    await LimitModel.patch(hourlyLimit.id, { lastCleanup: twoDaysAgo });
+    await LimitModel.patch(monthlyLimit.id, { lastCleanup: twoDaysAgo });
+
+    await LimitModel.cleanupLimitsIfNeeded({
+      allForOrganizationId: org.id,
+    });
+
+    const hourlyUsage = await LimitModel.getRawModelUsage(hourlyLimit.id);
+    const monthlyUsage = await LimitModel.getRawModelUsage(monthlyLimit.id);
+    expect(hourlyUsage[0].currentUsageTokensIn).toBe(0);
+    expect(monthlyUsage[0].currentUsageTokensIn).toBe(500);
+  });
+
+  test("syncs default user limits without replacing manual user limits", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const firstUser = await makeUser();
+    const secondUser = await makeUser();
+    await makeMember(firstUser.id, org.id);
+    await makeMember(secondUser.id, org.id);
+
+    const manualLimit = await LimitModel.create({
+      entityType: "user",
+      entityId: firstUser.id,
+      limitType: "token_cost",
+      limitValue: 25,
+      model: ["manual-model"],
+      cleanupInterval: "1m",
+    });
+
+    await OrganizationModel.patch(org.id, {
+      defaultUserLimitValue: 100,
+      defaultUserLimitModel: ["gpt-4o"],
+      defaultUserLimitCleanupInterval: "12h",
+    });
+    await LimitModel.syncDefaultUserLimits({ organizationId: org.id });
+
+    let firstUserLimits = await LimitModel.findAll("user", firstUser.id);
+    let secondUserLimits = await LimitModel.findAll("user", secondUser.id);
+    expect(firstUserLimits).toHaveLength(2);
+    expect(secondUserLimits).toHaveLength(1);
+    expect(
+      firstUserLimits.find((limit) => limit.id === manualLimit.id),
+    ).toBeDefined();
+    expect(
+      firstUserLimits.find((limit) => limit.isDefaultUserLimit),
+    ).toMatchObject({
+      limitValue: 100,
+      model: ["gpt-4o"],
+      cleanupInterval: "12h",
+    });
+
+    await OrganizationModel.patch(org.id, {
+      defaultUserLimitValue: 200,
+      defaultUserLimitModel: null,
+      defaultUserLimitCleanupInterval: "1w",
+    });
+    await LimitModel.syncDefaultUserLimits({ organizationId: org.id });
+
+    firstUserLimits = await LimitModel.findAll("user", firstUser.id);
+    secondUserLimits = await LimitModel.findAll("user", secondUser.id);
+    expect(firstUserLimits).toHaveLength(2);
+    expect(secondUserLimits).toHaveLength(1);
+    expect(
+      firstUserLimits.find((limit) => limit.id === manualLimit.id),
+    ).toBeDefined();
+    expect(
+      firstUserLimits.find((limit) => limit.isDefaultUserLimit),
+    ).toMatchObject({
+      limitValue: 200,
+      model: null,
+      cleanupInterval: "1w",
+    });
+  });
+
+  test("applies the default user limit when a new member is created", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    await OrganizationModel.patch(org.id, {
+      defaultUserLimitValue: 100,
+      defaultUserLimitModel: ["gpt-4o"],
+      defaultUserLimitCleanupInterval: "24h",
+    });
+    const user = await makeUser();
+
+    await MemberModel.create(user.id, org.id, "member");
+
+    const limits = await LimitModel.findAll("user", user.id);
+    expect(limits).toHaveLength(1);
+    expect(limits[0]).toMatchObject({
+      entityType: "user",
+      entityId: user.id,
+      limitType: "token_cost",
+      limitValue: 100,
+      model: ["gpt-4o"],
+      cleanupInterval: "24h",
+      isDefaultUserLimit: true,
+    });
   });
 
   test("cleans limits with null lastCleanup", async ({

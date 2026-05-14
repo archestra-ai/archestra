@@ -124145,6 +124145,20 @@
                           "type": "string"
                         }
                       },
+                      "cleanupInterval": {
+                        "nullable": true,
+                        "type": "string",
+                        "enum": [
+                          "1h",
+                          "12h",
+                          "24h",
+                          "1w",
+                          "1m"
+                        ]
+                      },
+                      "isDefaultUserLimit": {
+                        "type": "boolean"
+                      },
                       "lastCleanup": {
                         "nullable": true,
                         "type": "string",
@@ -124194,6 +124208,7 @@
                       "limitValue",
                       "mcpServerName",
                       "toolName",
+                      "isDefaultUserLimit",
                       "lastCleanup",
                       "createdAt",
                       "updatedAt"
@@ -124496,6 +124511,20 @@
                       "type": "string"
                     }
                   },
+                  "cleanupInterval": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "1h",
+                      "12h",
+                      "24h",
+                      "1w",
+                      "1m"
+                    ]
+                  },
+                  "isDefaultUserLimit": {
+                    "type": "boolean"
+                  },
                   "lastCleanup": {
                     "nullable": true
                   }
@@ -124566,6 +124595,20 @@
                         "type": "string"
                       }
                     },
+                    "cleanupInterval": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
+                    },
+                    "isDefaultUserLimit": {
+                      "type": "boolean"
+                    },
                     "lastCleanup": {
                       "nullable": true,
                       "type": "string",
@@ -124588,6 +124631,7 @@
                     "limitValue",
                     "mcpServerName",
                     "toolName",
+                    "isDefaultUserLimit",
                     "lastCleanup",
                     "createdAt",
                     "updatedAt"
@@ -124909,6 +124953,20 @@
                         "type": "string"
                       }
                     },
+                    "cleanupInterval": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
+                    },
+                    "isDefaultUserLimit": {
+                      "type": "boolean"
+                    },
                     "lastCleanup": {
                       "nullable": true,
                       "type": "string",
@@ -124931,6 +124989,7 @@
                     "limitValue",
                     "mcpServerName",
                     "toolName",
+                    "isDefaultUserLimit",
                     "lastCleanup",
                     "createdAt",
                     "updatedAt"
@@ -125232,6 +125291,20 @@
                       "type": "string"
                     }
                   },
+                  "cleanupInterval": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "1h",
+                      "12h",
+                      "24h",
+                      "1w",
+                      "1m"
+                    ]
+                  },
+                  "isDefaultUserLimit": {
+                    "type": "boolean"
+                  },
                   "lastCleanup": {
                     "nullable": true
                   }
@@ -125308,6 +125381,20 @@
                         "type": "string"
                       }
                     },
+                    "cleanupInterval": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
+                    },
+                    "isDefaultUserLimit": {
+                      "type": "boolean"
+                    },
                     "lastCleanup": {
                       "nullable": true,
                       "type": "string",
@@ -125330,6 +125417,7 @@
                     "limitValue",
                     "mcpServerName",
                     "toolName",
+                    "isDefaultUserLimit",
                     "lastCleanup",
                     "createdAt",
                     "updatedAt"
@@ -153636,6 +153724,30 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultUserLimitValue": {
+                      "nullable": true,
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    },
+                    "defaultUserLimitModel": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "defaultUserLimitCleanupInterval": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -153836,6 +153948,9 @@
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultLlmApiKeyId",
+                    "defaultUserLimitValue",
+                    "defaultUserLimitModel",
+                    "defaultUserLimitCleanupInterval",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -154434,6 +154549,30 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultUserLimitValue": {
+                      "nullable": true,
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    },
+                    "defaultUserLimitModel": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "defaultUserLimitCleanupInterval": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -154634,6 +154773,9 @@
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultLlmApiKeyId",
+                    "defaultUserLimitValue",
+                    "defaultUserLimitModel",
+                    "defaultUserLimitCleanupInterval",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -155503,6 +155645,30 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultUserLimitValue": {
+                      "nullable": true,
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    },
+                    "defaultUserLimitModel": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "defaultUserLimitCleanupInterval": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -155703,6 +155869,9 @@
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultLlmApiKeyId",
+                    "defaultUserLimitValue",
+                    "defaultUserLimitModel",
+                    "defaultUserLimitCleanupInterval",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -156000,6 +156169,30 @@
                       "1w",
                       "1m"
                     ]
+                  },
+                  "defaultUserLimitValue": {
+                    "nullable": true,
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
+                  "defaultUserLimitModel": {
+                    "nullable": true,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "defaultUserLimitCleanupInterval": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "1h",
+                      "12h",
+                      "24h",
+                      "1w",
+                      "1m"
+                    ]
                   }
                 }
               }
@@ -156173,6 +156366,30 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultUserLimitValue": {
+                      "nullable": true,
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    },
+                    "defaultUserLimitModel": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "defaultUserLimitCleanupInterval": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
                     },
                     "defaultAgentId": {
                       "nullable": true,
@@ -156374,6 +156591,9 @@
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultLlmApiKeyId",
+                    "defaultUserLimitValue",
+                    "defaultUserLimitModel",
+                    "defaultUserLimitCleanupInterval",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -156863,6 +157083,30 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultUserLimitValue": {
+                      "nullable": true,
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    },
+                    "defaultUserLimitModel": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "defaultUserLimitCleanupInterval": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -157063,6 +157307,9 @@
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultLlmApiKeyId",
+                    "defaultUserLimitValue",
+                    "defaultUserLimitModel",
+                    "defaultUserLimitCleanupInterval",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -157596,6 +157843,30 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultUserLimitValue": {
+                      "nullable": true,
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    },
+                    "defaultUserLimitModel": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "defaultUserLimitCleanupInterval": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -157796,6 +158067,9 @@
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultLlmApiKeyId",
+                    "defaultUserLimitValue",
+                    "defaultUserLimitModel",
+                    "defaultUserLimitCleanupInterval",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -158254,6 +158528,30 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultUserLimitValue": {
+                      "nullable": true,
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    },
+                    "defaultUserLimitModel": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "defaultUserLimitCleanupInterval": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -158454,6 +158752,9 @@
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultLlmApiKeyId",
+                    "defaultUserLimitValue",
+                    "defaultUserLimitModel",
+                    "defaultUserLimitCleanupInterval",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -158925,6 +159226,30 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultUserLimitValue": {
+                      "nullable": true,
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    },
+                    "defaultUserLimitModel": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "defaultUserLimitCleanupInterval": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -159125,6 +159450,9 @@
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultLlmApiKeyId",
+                    "defaultUserLimitValue",
+                    "defaultUserLimitModel",
+                    "defaultUserLimitCleanupInterval",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -159563,6 +159891,30 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultUserLimitValue": {
+                      "nullable": true,
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    },
+                    "defaultUserLimitModel": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "defaultUserLimitCleanupInterval": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -159763,6 +160115,9 @@
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultLlmApiKeyId",
+                    "defaultUserLimitValue",
+                    "defaultUserLimitModel",
+                    "defaultUserLimitCleanupInterval",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -160514,6 +160869,30 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultUserLimitValue": {
+                      "nullable": true,
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    },
+                    "defaultUserLimitModel": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "defaultUserLimitCleanupInterval": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -160714,6 +161093,9 @@
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultLlmApiKeyId",
+                    "defaultUserLimitValue",
+                    "defaultUserLimitModel",
+                    "defaultUserLimitCleanupInterval",
                     "defaultAgentId",
                     "favicon",
                     "appName",

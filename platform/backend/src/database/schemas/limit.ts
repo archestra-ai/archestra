@@ -1,4 +1,5 @@
 import {
+  boolean,
   index,
   integer,
   jsonb,
@@ -8,7 +9,11 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
-import type { LimitEntityType, LimitType } from "@/types";
+import type {
+  LimitEntityType,
+  LimitType,
+  OrganizationLimitCleanupInterval,
+} from "@/types";
 
 const limitsTable = pgTable(
   "limits",
@@ -26,6 +31,13 @@ const limitsTable = pgTable(
     // 2. Initialization: Create limit_model_usage records for each model on limit creation
     // 3. Validation: Check if incoming interaction's model is within limit scope
     model: jsonb("model").$type<string[] | null>(),
+    cleanupInterval:
+      varchar("cleanup_interval").$type<
+        Exclude<OrganizationLimitCleanupInterval, null>
+      >(),
+    isDefaultUserLimit: boolean("is_default_user_limit")
+      .notNull()
+      .default(false),
     lastCleanup: timestamp("last_cleanup", { mode: "date" }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })

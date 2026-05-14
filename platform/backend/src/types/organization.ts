@@ -228,6 +228,9 @@ const extendedFields = {
   embeddingDimensions: EmbeddingDimensionsSchema.nullable(),
   defaultLlmModel: z.string().nullable(),
   defaultLlmProvider: SupportedProvidersSchema.nullable(),
+  defaultUserLimitValue: z.number().int().positive().nullable(),
+  defaultUserLimitModel: z.array(z.string()).nullable(),
+  defaultUserLimitCleanupInterval: OrganizationLimitCleanupIntervalSchema,
   defaultAgentId: z.string().uuid().nullable(),
   favicon: z.string().nullable(),
   iconLogo: z.string().nullable(),
@@ -280,6 +283,10 @@ export const UpdateLlmSettingsSchema = z.object({
   convertToolResultsToToon: z.boolean().optional(),
   compressionScope: OrganizationCompressionScopeSchema.optional(),
   limitCleanupInterval: OrganizationLimitCleanupIntervalSchema.optional(),
+  defaultUserLimitValue: z.number().int().positive().nullable().optional(),
+  defaultUserLimitModel: z.array(z.string()).nullable().optional(),
+  defaultUserLimitCleanupInterval:
+    OrganizationLimitCleanupIntervalSchema.optional(),
 });
 
 export const UpdateAgentSettingsSchema = z.object({

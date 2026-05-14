@@ -10,6 +10,9 @@ import {
 describe("isRetryableEmbeddingError", () => {
   test("returns true for retryable provider status codes", () => {
     expect(
+      isRetryableEmbeddingError(new AzureEmbeddingError(429, "rate")),
+    ).toBe(true);
+    expect(
       isRetryableEmbeddingError(new GeminiEmbeddingError(429, "rate")),
     ).toBe(true);
     expect(
@@ -18,6 +21,9 @@ describe("isRetryableEmbeddingError", () => {
   });
 
   test("returns false for non-retryable provider status codes", () => {
+    expect(isRetryableEmbeddingError(new AzureEmbeddingError(400, "bad"))).toBe(
+      false,
+    );
     expect(
       isRetryableEmbeddingError(new GeminiEmbeddingError(400, "bad")),
     ).toBe(false);

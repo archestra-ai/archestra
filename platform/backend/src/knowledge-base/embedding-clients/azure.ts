@@ -152,11 +152,17 @@ function extractRetryAfterMs(
 }
 
 function getHeaderValue(
-  headers: Headers | Record<string, unknown> | undefined,
+  headers:
+    | Headers
+    | Record<string, unknown>
+    | { get(name: string): string | null | undefined }
+    | undefined,
   name: string,
 ): string | undefined {
   if (!headers) return undefined;
-  if (headers instanceof Headers) return headers.get(name) ?? undefined;
+  if ("get" in headers && typeof headers.get === "function") {
+    return headers.get(name) ?? undefined;
+  }
 
   const lowerName = name.toLowerCase();
   for (const [key, value] of Object.entries(headers)) {

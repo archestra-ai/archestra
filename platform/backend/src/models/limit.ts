@@ -905,6 +905,18 @@ ${contentMessage}`;
         return null;
       }
 
+      const customUserLimits = await LimitModel.findLimitsForValidation(
+        "user",
+        params.userId,
+        "token_cost",
+      );
+      if (customUserLimits.length > 0) {
+        logger.info(
+          `[LimitValidation] Skipping default user limit for ${params.userId}: custom user limit exists`,
+        );
+        return null;
+      }
+
       const usage = await getDefaultUserLimitUsage({
         organizationId: params.organizationId,
         userId: params.userId,

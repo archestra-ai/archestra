@@ -36,7 +36,7 @@ Limits are evaluated from recorded model usage, so pricing configuration affects
 
 Admins can configure a default user limit in LLM settings. It is inherited by every current and future member, but it is not shown as a separate row for each user on the limits page.
 
-Custom per-user limits are evaluated alongside the default user limit. A request is blocked when any applicable user limit is reached.
+A custom per-user limit overrides the default for that user. Use this when one member needs a different budget.
 
 ## Limit Cleanup
 

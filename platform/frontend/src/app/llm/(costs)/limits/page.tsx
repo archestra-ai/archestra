@@ -609,7 +609,7 @@ export default function LimitsPage() {
           noPermissionHandle="hide"
         >
           <Alert variant="info">
-            <AlertDescription>
+            <AlertDescription className="block">
               A default user limit applies to every member. Configure it in{" "}
               <Link
                 href="/settings/llm"

@@ -100,7 +100,9 @@ describe("Internal MCP Catalog - child delete secret cascade", () => {
 
     // Parent's local-config secret bag must still resolve — sibling presets
     // and the parent install both depend on it.
-    const parentBag = await secretManager().getSecret(parentLocalConfigSecretId);
+    const parentBag = await secretManager().getSecret(
+      parentLocalConfigSecretId,
+    );
     expect(parentBag).not.toBeNull();
     expect(parentBag?.secret).toEqual({ API_KEY: "parent-owned-secret" });
 
@@ -162,7 +164,9 @@ describe("Internal MCP Catalog - child delete secret cascade", () => {
     });
     expect(deleteResponse.statusCode).toBe(200);
 
-    expect(await secretManager().getSecret(parentLocalConfigSecretId)).toBeNull();
+    expect(
+      await secretManager().getSecret(parentLocalConfigSecretId),
+    ).toBeNull();
     expect(await secretManager().getSecret(childAPresetSecretId)).toBeNull();
     expect(await secretManager().getSecret(childBPresetSecretId)).toBeNull();
   });

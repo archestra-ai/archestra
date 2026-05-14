@@ -6,6 +6,9 @@ import { handleApiError, toApiError } from "@/lib/utils";
 type AllVirtualApiKeysQuery = NonNullable<
   archestraApiTypes.GetAllVirtualApiKeysData["query"]
 >;
+type AllVirtualApiKeysParams = Partial<AllVirtualApiKeysQuery> & {
+  enabled?: boolean;
+};
 
 const {
   getAllVirtualApiKeys,
@@ -122,7 +125,7 @@ export function useUpdateVirtualApiKey() {
   });
 }
 
-export function useAllVirtualApiKeys(params?: Partial<AllVirtualApiKeysQuery>) {
+export function useAllVirtualApiKeys(params?: AllVirtualApiKeysParams) {
   const limit = params?.limit ?? 20;
   const offset = params?.offset ?? 0;
   const search = params?.search;
@@ -166,5 +169,6 @@ export function useAllVirtualApiKeys(params?: Partial<AllVirtualApiKeysQuery>) {
         }
       );
     },
+    enabled: params?.enabled,
   });
 }

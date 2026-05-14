@@ -33614,7 +33614,10 @@ export type UpdateModelResponse = UpdateModelResponses[keyof UpdateModelResponse
 export type GetLlmOauthClientsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        search?: string;
+        providerApiKeyId?: string;
+    };
     url: '/api/llm-oauth-clients';
 };
 

@@ -247,8 +247,17 @@ jobs:
           echo "=== Kubernetes Services ==="
           kubectl get services || true
 
-          echo "=== Archestra Platform Logs ==="
-          kubectl logs -l app.kubernetes.io/name=archestra-platform --tail=200 || true
+          echo "=== Archestra Platform Logs (main container) ==="
+          kubectl logs -l app.kubernetes.io/name=archestra-platform -c archestra-platform --tail=200 2>/dev/null || true
+
+          echo "=== Platform Init Container: vault-secrets ==="
+          kubectl logs -l app.kubernetes.io/name=archestra-platform -c vault-secrets --tail=200 2>/dev/null || true
+
+          echo "=== Platform Init Container: setup-postgres-extensions ==="
+          kubectl logs -l app.kubernetes.io/name=archestra-platform -c setup-postgres-extensions --tail=200 2>/dev/null || true
+
+          echo "=== Platform Init Container: wait-for-postgres ==="
+          kubectl logs -l app.kubernetes.io/name=archestra-platform -c wait-for-postgres --tail=200 2>/dev/null || true
 
           echo "=== PostgreSQL Logs ==="
           kubectl logs -l app.kubernetes.io/name=postgresql --tail=200 || true
@@ -365,8 +374,17 @@ jobs:
           echo "=== Kubernetes Services ==="
           kubectl get services || true
 
-          echo "=== Archestra Platform Logs ==="
-          kubectl logs -l app.kubernetes.io/name=archestra-platform --tail=200 || true
+          echo "=== Archestra Platform Logs (main container) ==="
+          kubectl logs -l app.kubernetes.io/name=archestra-platform -c archestra-platform --tail=200 2>/dev/null || true
+
+          echo "=== Platform Init Container: vault-secrets ==="
+          kubectl logs -l app.kubernetes.io/name=archestra-platform -c vault-secrets --tail=200 2>/dev/null || true
+
+          echo "=== Platform Init Container: setup-postgres-extensions ==="
+          kubectl logs -l app.kubernetes.io/name=archestra-platform -c setup-postgres-extensions --tail=200 2>/dev/null || true
+
+          echo "=== Platform Init Container: wait-for-postgres ==="
+          kubectl logs -l app.kubernetes.io/name=archestra-platform -c wait-for-postgres --tail=200 2>/dev/null || true
 
           echo "=== PostgreSQL Logs ==="
           kubectl logs -l app.kubernetes.io/name=postgresql --tail=200 || true

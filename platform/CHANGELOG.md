@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.47](https://github.com/archestra-ai/archestra/compare/platform-v1.2.46...platform-v1.2.47) (2026-05-14)
+
+
+### Features
+
+* improve Azure Foundry deployment sync ([#4617](https://github.com/archestra-ai/archestra/issues/4617)) ([cb0fd9b](https://github.com/archestra-ai/archestra/commit/cb0fd9b2187a18cb5ff81b1b0bb025a63ec183b1))
+
+
+### Bug Fixes
+
+* support Azure knowledge embeddings ([#4646](https://github.com/archestra-ai/archestra/issues/4646)) ([4c3255f](https://github.com/archestra-ai/archestra/commit/4c3255f83303c930ba874aedf23c85692b1e974a))
+
 ## [1.2.46](https://github.com/archestra-ai/archestra/compare/platform-v1.2.45...platform-v1.2.46) (2026-05-13)
 
 

@@ -59,6 +59,21 @@ async function testApiKeyOrThrow(
   }
 }
 
+async function testKeylessAzureEntraOrThrow(
+  baseUrl?: string | null,
+  extraHeaders?: Record<string, string> | null,
+): Promise<void> {
+  try {
+    await testProviderApiKey("azure", "", baseUrl, extraHeaders);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new ApiError(
+      400,
+      `Azure Entra ID validation failed: Archestra could not discover any Azure model deployments. Confirm the Base URL points to an Azure OpenAI resource or Foundry v1 endpoint, and that the Azure identity has permission to read deployments on that resource. Provider error: ${errorMessage}`,
+    );
+  }
+}
+
 const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // List all visible LLM provider API keys for the user
   fastify.get(
@@ -317,6 +332,14 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             userId: user.id,
           }),
         );
+      }
+
+      if (
+        body.provider === "azure" &&
+        !actualApiKeyValue &&
+        isAzureOpenAiEntraIdEnabled()
+      ) {
+        await testKeylessAzureEntraOrThrow(body.baseUrl, body.extraHeaders);
       }
 
       if (

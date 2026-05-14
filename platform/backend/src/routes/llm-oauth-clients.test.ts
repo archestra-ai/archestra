@@ -126,6 +126,71 @@ describe("llmOauthClientsRoutes", () => {
     expect(deleteResponse.json()).toEqual({ success: true });
   });
 
+  test("filters LLM OAuth clients by search and provider API key", async ({
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      name: "Filter Proxy",
+      agentType: "llm_proxy",
+    });
+    const firstSecret = await makeSecret({ secret: { apiKey: "sk-first" } });
+    const secondSecret = await makeSecret({ secret: { apiKey: "sk-second" } });
+    const firstKey = await makeLlmProviderApiKey(
+      organizationId,
+      firstSecret.id,
+      { provider: "openai" },
+    );
+    const secondKey = await makeLlmProviderApiKey(
+      organizationId,
+      secondSecret.id,
+      { provider: "anthropic" },
+    );
+
+    await app.inject({
+      method: "POST",
+      url: "/api/llm-oauth-clients",
+      payload: {
+        name: "Searchable Service",
+        allowedLlmProxyIds: [agent.id],
+        providerApiKeys: [
+          { provider: "openai", providerApiKeyId: firstKey.id },
+        ],
+      },
+    });
+    await app.inject({
+      method: "POST",
+      url: "/api/llm-oauth-clients",
+      payload: {
+        name: "Other Client",
+        allowedLlmProxyIds: [agent.id],
+        providerApiKeys: [
+          { provider: "anthropic", providerApiKeyId: secondKey.id },
+        ],
+      },
+    });
+
+    const searchResponse = await app.inject({
+      method: "GET",
+      url: "/api/llm-oauth-clients?search=searchable",
+    });
+    expect(searchResponse.statusCode).toBe(200);
+    expect(
+      searchResponse.json().map((client: { name: string }) => client.name),
+    ).toEqual(["Searchable Service"]);
+
+    const providerKeyResponse = await app.inject({
+      method: "GET",
+      url: `/api/llm-oauth-clients?providerApiKeyId=${secondKey.id}`,
+    });
+    expect(providerKeyResponse.statusCode).toBe(200);
+    expect(
+      providerKeyResponse.json().map((client: { name: string }) => client.name),
+    ).toEqual(["Other Client"]);
+  });
+
   test("rejects duplicate provider mappings", async ({
     makeAgent,
     makeSecret,

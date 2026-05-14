@@ -1516,6 +1516,11 @@ export function mapProviderError(
 
   // Map to error code using provider-specific mapper
   let errorCode = mapError(statusCode, parsedError);
+  const isTerminatedStream = isStreamTerminatedError(error);
+
+  if (isTerminatedStream) {
+    errorCode = ChatErrorCode.NetworkError;
+  }
 
   // An Archestra-normalized `internal_code` emitted by the adapter's
   // extractInternalCode takes precedence over the per-provider mapper. This
@@ -1537,15 +1542,17 @@ export function mapProviderError(
     (error instanceof Error ? error.name : undefined);
   const rawErrorJson = stringifyRawError(error);
 
-  captureRawProviderErrorInSentry({
-    provider,
-    statusCode,
-    parsedError,
-    errorCode,
-    errorMessage,
-    errorType,
-    rawErrorJson,
-  });
+  if (!isTerminatedStream) {
+    captureRawProviderErrorInSentry({
+      provider,
+      statusCode,
+      parsedError,
+      errorCode,
+      errorMessage,
+      errorType,
+      rawErrorJson,
+    });
+  }
 
   logger.info(
     {
@@ -1563,7 +1570,9 @@ export function mapProviderError(
     errorCode,
     provider,
     statusCode,
-    errorMessage,
+    isTerminatedStream
+      ? "Upstream provider closed the connection unexpectedly"
+      : errorMessage,
     errorType,
     {
       url: APICallError.isInstance(error)
@@ -1576,6 +1585,12 @@ export function mapProviderError(
         : undefined,
     },
   );
+}
+
+function isStreamTerminatedError(error: unknown): boolean {
+  // Node.js/undici stream termination can surface as a bare Error("terminated")
+  // when an upstream streamed response closes before the AI SDK finishes reading it.
+  return error instanceof Error && error.message === "terminated";
 }
 
 /**

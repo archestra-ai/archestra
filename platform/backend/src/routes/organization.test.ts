@@ -414,27 +414,39 @@ describe("organization routes", () => {
       });
     });
 
-    test("persists limit cleanup interval across reads", async () => {
-      await app.inject({
+    test("allows clearing the default user limit", async () => {
+      const setResponse = await app.inject({
         method: "PATCH",
         url: "/api/organization/llm-settings",
         payload: {
-          compressionScope: "organization",
-          convertToolResultsToToon: false,
-          limitCleanupInterval: "12h",
+          defaultUserLimitValue: 100,
+          defaultUserLimitModel: ["gpt-4o"],
+          defaultUserLimitCleanupInterval: "12h",
         },
       });
 
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/organization",
+      expect(setResponse.statusCode).toBe(200);
+      expect(setResponse.json()).toMatchObject({
+        defaultUserLimitValue: 100,
+        defaultUserLimitModel: ["gpt-4o"],
+        defaultUserLimitCleanupInterval: "12h",
       });
 
-      expect(response.statusCode).toBe(200);
-      expect(response.json()).toMatchObject({
-        compressionScope: "organization",
-        convertToolResultsToToon: false,
-        limitCleanupInterval: "12h",
+      const clearResponse = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/llm-settings",
+        payload: {
+          defaultUserLimitValue: null,
+          defaultUserLimitModel: null,
+          defaultUserLimitCleanupInterval: null,
+        },
+      });
+
+      expect(clearResponse.statusCode).toBe(200);
+      expect(clearResponse.json()).toMatchObject({
+        defaultUserLimitValue: null,
+        defaultUserLimitModel: null,
+        defaultUserLimitCleanupInterval: null,
       });
     });
   });

@@ -17,6 +17,7 @@ import type {
   UpdateLlmProviderApiKey,
 } from "@/types";
 import { decryptSecretValue, isEncryptedSecret } from "@/utils/crypto";
+import { escapeLikePattern } from "@/utils/sql-search";
 import ConversationModel from "./conversation";
 
 class LlmProviderApiKeyModel {
@@ -165,6 +166,7 @@ class LlmProviderApiKeyModel {
         provider: schema.llmProviderApiKeysTable.provider,
         secretId: schema.llmProviderApiKeysTable.secretId,
         baseUrl: schema.llmProviderApiKeysTable.baseUrl,
+        inferenceBaseUrl: schema.llmProviderApiKeysTable.inferenceBaseUrl,
         extraHeaders: schema.llmProviderApiKeysTable.extraHeaders,
         scope: schema.llmProviderApiKeysTable.scope,
         userId: schema.llmProviderApiKeysTable.userId,
@@ -290,6 +292,7 @@ class LlmProviderApiKeyModel {
         provider: schema.llmProviderApiKeysTable.provider,
         secretId: schema.llmProviderApiKeysTable.secretId,
         baseUrl: schema.llmProviderApiKeysTable.baseUrl,
+        inferenceBaseUrl: schema.llmProviderApiKeysTable.inferenceBaseUrl,
         extraHeaders: schema.llmProviderApiKeysTable.extraHeaders,
         scope: schema.llmProviderApiKeysTable.scope,
         userId: schema.llmProviderApiKeysTable.userId,
@@ -707,10 +710,6 @@ class LlmProviderApiKeyModel {
       .from(schema.llmProviderApiKeysTable);
     return new Set(rows.map((r) => r.provider));
   }
-}
-
-function escapeLikePattern(value: string): string {
-  return value.replace(/[%_\\]/g, "\\$&");
 }
 
 /**

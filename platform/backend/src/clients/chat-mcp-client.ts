@@ -103,6 +103,7 @@ const clientCache = new LRUCacheManager<Client>({
         "Error closing evicted MCP client (non-fatal)",
       );
     }
+    clientLastValidatedAt.delete(key);
   },
 });
 
@@ -111,6 +112,7 @@ const clientCache = new LRUCacheManager<Client>({
  */
 const TOOL_CACHE_TTL_MS = 30 * TimeInMs.Second;
 const CLIENT_PING_TIMEOUT_MS = 5 * TimeInMs.Second;
+const CLIENT_PING_VALIDATION_INTERVAL_MS = 30 * TimeInMs.Second;
 
 function getChatExternalAgentId(): string {
   return `${archestraMcpBranding.catalogName} Chat`;
@@ -139,6 +141,8 @@ const toolCache = new LRUCacheManager<Record<string, Tool>>({
   maxSize: MAX_TOOL_CACHE_SIZE,
   defaultTtl: TOOL_CACHE_TTL_MS,
 });
+
+const clientLastValidatedAt = new Map<string, number>();
 
 /**
  * UI resource cache TTL — 60 seconds.
@@ -192,6 +196,10 @@ function getToolCacheKey(
 export const __test = {
   setCachedClient(cacheKey: string, client: Client, ttl?: number) {
     clientCache.set(cacheKey, client, ttl);
+    clientLastValidatedAt.set(cacheKey, 0);
+  },
+  setCachedClientLastValidatedAt(cacheKey: string, timestamp: number) {
+    clientLastValidatedAt.set(cacheKey, timestamp);
   },
   async clearToolCache(cacheKey?: string) {
     if (cacheKey) {
@@ -372,6 +380,7 @@ export function clearChatMcpClient(agentId: string): void {
         );
       }
       clientCache.delete(key);
+      clientLastValidatedAt.delete(key);
       clientClearedCount++;
     }
   }
@@ -431,6 +440,7 @@ export function closeChatMcpClient(
       );
     }
     clientCache.delete(cacheKey);
+    clientLastValidatedAt.delete(cacheKey);
   }
 
   // Also clear tool cache for this conversation
@@ -463,12 +473,16 @@ export async function getChatMcpClient(
   // Check cache first
   const cachedClient = clientCache.get(cacheKey);
   if (cachedClient) {
-    // Health check: ping the client to verify connection is still alive
+    // Health check idle clients to verify the connection is still alive.
+    // Recently-used clients skip the ping and recover on actual call failure.
     try {
-      await pingClientWithTimeout(cachedClient);
+      if (shouldValidateCachedClient(cacheKey)) {
+        await pingClientWithTimeout(cachedClient);
+        clientLastValidatedAt.set(cacheKey, Date.now());
+      }
       logger.info(
         { agentId, userId },
-        "Returning cached MCP client for agent/user (ping succeeded, session will be reused)",
+        "Returning cached MCP client for agent/user",
       );
       clientCache.set(cacheKey, cachedClient);
       return cachedClient;
@@ -492,6 +506,7 @@ export async function getChatMcpClient(
         );
       }
       clientCache.delete(cacheKey);
+      clientLastValidatedAt.delete(cacheKey);
       // Fall through to create new client
     }
   }
@@ -590,6 +605,7 @@ export async function getChatMcpClient(
     // Cache the client with idle expiration to prevent abandoned
     // conversation-scoped sessions from accumulating indefinitely.
     clientCache.set(cacheKey, client);
+    clientLastValidatedAt.set(cacheKey, Date.now());
 
     logger.info(
       {
@@ -622,6 +638,7 @@ export async function getChatMcpClient(
         );
 
         clientCache.set(cacheKey, client);
+        clientLastValidatedAt.set(cacheKey, Date.now());
 
         logger.info(
           {
@@ -663,6 +680,11 @@ async function pingClientWithTimeout(
       timeout.unref?.();
     }),
   ]);
+}
+
+function shouldValidateCachedClient(cacheKey: string): boolean {
+  const lastValidatedAt = clientLastValidatedAt.get(cacheKey) ?? 0;
+  return Date.now() - lastValidatedAt >= CLIENT_PING_VALIDATION_INTERVAL_MS;
 }
 
 /**
@@ -1077,6 +1099,7 @@ export async function getChatMcpTools({
           agent: { id: agentId, name: agentName },
           agentId,
           organizationId,
+          userId,
           conversationId,
           chatOpsBindingId,
           chatOpsThreadId,

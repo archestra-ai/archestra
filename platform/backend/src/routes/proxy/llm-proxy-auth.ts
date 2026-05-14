@@ -434,7 +434,7 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
   return resolveOAuthProviderApiKey({
     chatApiKeyId: providerApiKey.id,
     secretId: providerApiKey.secretId,
-    baseUrl: providerApiKey.baseUrl,
+    baseUrl: providerApiKey.inferenceBaseUrl ?? providerApiKey.baseUrl,
     actualProvider: providerApiKey.provider,
     expectedProvider: params.expectedProvider,
     authMethod: "oauth_client_credentials",

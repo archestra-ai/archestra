@@ -64,24 +64,24 @@ spec:
             httpGet:
               path: /health
               port: backend
-            initialDelaySeconds: 5
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 30
+            initialDelaySeconds: {{ .Values.archestra.probes.startup.initialDelaySeconds }}
+            periodSeconds: {{ .Values.archestra.probes.startup.periodSeconds }}
+            timeoutSeconds: {{ .Values.archestra.probes.startup.timeoutSeconds }}
+            failureThreshold: {{ .Values.archestra.probes.startup.failureThreshold }}
           livenessProbe:
             httpGet:
               path: /health
               port: backend
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 3
+            periodSeconds: {{ .Values.archestra.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.archestra.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.archestra.probes.liveness.failureThreshold }}
           readinessProbe:
             httpGet:
               path: /ready
               port: backend
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 3
+            periodSeconds: {{ .Values.archestra.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.archestra.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.archestra.probes.readiness.failureThreshold }}
           {{- include "archestra-platform.volumeMounts" . | nindent 10 }}
       {{- with (.Values.archestra.worker.nodeSelector | default .Values.archestra.nodeSelector) }}
       nodeSelector:

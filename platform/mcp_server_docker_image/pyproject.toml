@@ -9,4 +9,8 @@ dependencies = [
   "uvicorn",
   "requests>=2.31.0",
   "python-dotenv>=1.0.0",
+  # urllib3 < 2.7.0: CVE-2026-44432 (data amplification), CVE-2026-44431 (info disclosure)
+  "urllib3>=2.7.0",
+  # python-multipart < 0.0.27: CVE-2026-42561 (unthrottled resource allocation)
+  "python-multipart>=0.0.27",
 ]

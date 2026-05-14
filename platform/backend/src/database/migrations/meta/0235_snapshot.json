@@ -1,5 +1,5 @@
 {
-  "id": "2db6564b-6418-48ed-8496-43cb1565caf4",
+  "id": "4bca52c7-4f4c-4cfd-ab21-0a16756928b1",
   "prevId": "e7f03c26-ca30-41a7-a7d6-adcdf7ca55af",
   "version": "7",
   "dialect": "postgresql",
@@ -3399,6 +3399,31 @@
           "notNull": true,
           "default": "'org'"
         },
+        "parent_catalog_item_id": {
+          "name": "parent_catalog_item_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "child_name": {
+          "name": "child_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "preset_field_values": {
+          "name": "preset_field_values",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "preset_secret_id": {
+          "name": "preset_secret_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -3459,6 +3484,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "internal_mcp_catalog_parent_id_idx": {
+          "name": "internal_mcp_catalog_parent_id_idx",
+          "columns": [
+            {
+              "expression": "parent_catalog_item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -3500,10 +3540,45 @@
           ],
           "onDelete": "set null",
           "onUpdate": "no action"
+        },
+        "internal_mcp_catalog_parent_catalog_item_id_internal_mcp_catalog_id_fk": {
+          "name": "internal_mcp_catalog_parent_catalog_item_id_internal_mcp_catalog_id_fk",
+          "tableFrom": "internal_mcp_catalog",
+          "tableTo": "internal_mcp_catalog",
+          "columnsFrom": [
+            "parent_catalog_item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "internal_mcp_catalog_preset_secret_id_secret_id_fk": {
+          "name": "internal_mcp_catalog_preset_secret_id_secret_id_fk",
+          "tableFrom": "internal_mcp_catalog",
+          "tableTo": "secret",
+          "columnsFrom": [
+            "preset_secret_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "internal_mcp_catalog_parent_name_unique": {
+          "name": "internal_mcp_catalog_parent_name_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "parent_catalog_item_id",
+            "name"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -7694,78 +7769,6 @@
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.site_notification": {
-      "name": "site_notification",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "content": {
-          "name": "content",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "is_active": {
-          "name": "is_active",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "site_notification_organization_id_organization_id_fk": {
-          "name": "site_notification_organization_id_organization_id_fk",
-          "tableFrom": "site_notification",
-          "tableTo": "organization",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

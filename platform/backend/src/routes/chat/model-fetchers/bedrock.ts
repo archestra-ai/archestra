@@ -1,5 +1,6 @@
 import { AwsV4Signer } from "aws4fetch";
 import {
+  decodeBedrockSigV4Marker,
   getBedrockCredentialProvider,
   getBedrockRegion,
 } from "@/clients/bedrock-credentials";
@@ -19,6 +20,19 @@ export async function fetchBedrockModels(
   }
 
   const controlPlaneUrl = baseUrl.replace("-runtime", "");
+
+  // SigV4 path: apiKey is a marker carrying static AWS credentials.
+  const sigV4 = decodeBedrockSigV4Marker(apiKey);
+  if (sigV4) {
+    const region = getBedrockRegion(baseUrl);
+    const profiles = await fetchAllBedrockInferenceProfiles(
+      controlPlaneUrl,
+      extraHeaders ?? {},
+      { region, creds: sigV4 },
+    );
+    return mapInferenceProfilesToModels(profiles);
+  }
+
   const profiles = await fetchAllBedrockInferenceProfiles(controlPlaneUrl, {
     ...(extraHeaders ?? {}),
     Authorization: `Bearer ${apiKey}`,

@@ -886,7 +886,7 @@ async function convertToolResultsToToon(
                   },
                   "convertToolResultsToToon: compressed",
                 );
-                logger.debug(
+                logger.trace(
                   {
                     functionName:
                       "name" in functionResponse

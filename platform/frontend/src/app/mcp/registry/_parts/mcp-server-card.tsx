@@ -465,8 +465,14 @@ export function McpServerCard({
   );
   const toolsCount = item.toolCount ?? 0;
 
+  // TEMPORARY WORKAROUND: scope the Chat button strictly to the default
+  // preset (parent catalog item). Preset installs (catalogId pointing at a
+  // child preset) should not flip on Chat. Remove once preset-scoped chat is
+  // supported.
+  const isDefaultPresetInstall =
+    isBuiltinVariant || installedServer?.catalogId === item.id;
   const chatButton =
-    toolsCount > 0 ? (
+    isDefaultPresetInstall && toolsCount > 0 ? (
       <Button
         variant="outline"
         size="sm"

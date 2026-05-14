@@ -1,4 +1,8 @@
 import {
+  getAnthropicWorkloadIdentityBearerTokenProvider,
+  isAnthropicWorkloadIdentityEnabled,
+} from "@/clients/anthropic-workload-identity";
+import {
   getAzureAiFoundryBearerTokenProvider,
   isAnthropicAzureFoundryEntraIdEnabled,
 } from "@/clients/azure-openai-credentials";
@@ -52,7 +56,14 @@ async function getAnthropicAuthHeaders(
   }
 
   if (!isAnthropicAzureFoundryEntraIdEnabled()) {
-    return { "x-api-key": "" };
+    if (!isAnthropicWorkloadIdentityEnabled()) {
+      return { "x-api-key": "" };
+    }
+
+    const tokenProvider = getAnthropicWorkloadIdentityBearerTokenProvider(
+      config.llm.anthropic.baseUrl,
+    );
+    return { Authorization: `Bearer ${await tokenProvider()}` };
   }
 
   const tokenProvider = getAzureAiFoundryBearerTokenProvider();

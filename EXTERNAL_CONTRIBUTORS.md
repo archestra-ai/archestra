@@ -319,3 +319,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @harxhist
 - @artabr
 - @dball1126
+- @baibaozhuanyong

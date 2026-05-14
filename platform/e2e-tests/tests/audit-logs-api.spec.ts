@@ -280,9 +280,9 @@ test.describe("Audit log API", () => {
         { resourceType: "agent", limit: 100 },
       );
       expect(byResourceType.data.length).toBeGreaterThan(0);
-      expect(
-        byResourceType.data.every((r) => r.resourceType === "agent"),
-      ).toBe(true);
+      expect(byResourceType.data.every((r) => r.resourceType === "agent")).toBe(
+        true,
+      );
 
       const byAction = await fetchAuditLogs(makeApiRequest, adminRequest, {
         action: "create",

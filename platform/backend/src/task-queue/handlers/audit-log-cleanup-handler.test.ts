@@ -124,4 +124,16 @@ describe("handleAuditLogCleanup", () => {
     expect(cutoff).toBeGreaterThanOrEqual(expectedMin);
     expect(cutoff).toBeLessThanOrEqual(expectedMax);
   });
+
+  test("completion log uses the stable audit-log retention sweep message", async () => {
+    mockFindAllIds.mockResolvedValue(["org-1"]);
+    mockDeleteOlderThan.mockResolvedValue(0);
+
+    await handleAuditLogCleanup();
+
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      expect.objectContaining({ orgs: 1, deleted: 0, retentionDays: 180 }),
+      "audit-log retention sweep: complete",
+    );
+  });
 });

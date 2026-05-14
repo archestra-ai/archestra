@@ -6,6 +6,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuditLog } from "@/lib/audit-log/audit-log.query";
 import { AuditLogTable } from "./audit-log-table";
 
+/**
+ * Contract: AuditLogTable — columns (When / Actor / Action / Resource / Where),
+ * resource id hidden in grid, detail dialog on row click, URL-driven filters + clear resets page.
+ */
+
 global.ResizeObserver = class ResizeObserver {
   observe() {}
   unobserve() {}
@@ -205,6 +210,74 @@ describe("AuditLogTable", () => {
     ).toBeInTheDocument();
   });
 
+  it("does not render the resource_id in the table — only the resource-type badge", () => {
+    mockUseAuditLogs.mockReturnValue({
+      data: {
+        data: [
+          makeEvent({
+            resourceType: "agent",
+            resourceId: "very-distinctive-agent-id-12345",
+          }),
+        ],
+        pagination: {
+          currentPage: 1,
+          limit: 10,
+          total: 1,
+          totalPages: 1,
+          hasNext: false,
+          hasPrev: false,
+        },
+      },
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+
+    renderTable();
+
+    // Resource-type label should appear
+    expect(screen.getByText("Agent")).toBeInTheDocument();
+    // The id must NOT leak into the table; it only belongs in the detail dialog.
+    expect(
+      screen.queryByText("very-distinctive-agent-id-12345"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("passes the latest filter values into useAuditLogs", () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams(
+        "action=update&resourceType=role&search=alice",
+      ) as unknown as ReturnType<typeof useSearchParams>,
+    );
+
+    mockUseAuditLogs.mockReturnValue({
+      data: {
+        data: [],
+        pagination: {
+          currentPage: 1,
+          limit: 10,
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false,
+        },
+      },
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+
+    renderTable();
+
+    expect(mockUseAuditLogs).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "update",
+        resourceType: "role",
+        search: "alice",
+        offset: 0,
+        sortDirection: "desc",
+      }),
+    );
+  });
+
   it("renders the empty state when no rows and no filters are active", () => {
     mockUseAuditLogs.mockReturnValue({
       data: {
@@ -226,5 +299,73 @@ describe("AuditLogTable", () => {
     expect(
       screen.getByText(/No audit events recorded yet/i),
     ).toBeInTheDocument();
+  });
+
+  it("renders When / Where headers and surfaces the client IP in the grid", () => {
+    mockUseAuditLogs.mockReturnValue({
+      data: {
+        data: [
+          makeEvent({
+            ipAddress: "172.16.0.5",
+            userAgent: null,
+          }),
+        ],
+        pagination: {
+          currentPage: 1,
+          limit: 10,
+          total: 1,
+          totalPages: 1,
+          hasNext: false,
+          hasPrev: false,
+        },
+      },
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+
+    renderTable();
+
+    expect(screen.getByText("When")).toBeInTheDocument();
+    expect(screen.getByText("Where")).toBeInTheDocument();
+    expect(screen.getByText("172.16.0.5")).toBeInTheDocument();
+  });
+
+  it("Clear filters resets URL search params via router.push", async () => {
+    const push = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push,
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams(
+        "action=update&search=findme",
+      ) as unknown as ReturnType<typeof useSearchParams>,
+    );
+
+    mockUseAuditLogs.mockReturnValue({
+      data: {
+        data: [],
+        pagination: {
+          currentPage: 1,
+          limit: 10,
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false,
+        },
+      },
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+
+    renderTable();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /Clear filters/i }),
+    );
+
+    expect(push).toHaveBeenCalled();
+    const url = String(push.mock.calls[0][0]);
+    expect(url).not.toContain("action=update");
+    expect(url).not.toContain("search=findme");
   });
 });

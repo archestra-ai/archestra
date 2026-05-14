@@ -5,6 +5,11 @@ import {
   summarizeAuditDiffHints,
 } from "./audit-log-diff-view";
 
+/**
+ * Contract: AuditLogDiffView — JSON-shaped unified diff with quoted keys,
+ * full + / − blocks for creates/deletes, nested and array deltas, quoteKey escaping.
+ */
+
 describe("AuditLogDiffView", () => {
   it("renders the empty state when both snapshots are null", () => {
     render(<AuditLogDiffView prior={null} post={null} />);
@@ -32,8 +37,8 @@ describe("AuditLogDiffView", () => {
       expect(item).toHaveAttribute("data-diff-kind", "added");
     }
 
-    expect(added[0]).toHaveTextContent(`name: "Agent A"`);
-    expect(added[1]).toHaveTextContent(`id: "abc"`);
+    expect(added[0]).toHaveTextContent(`"name": "Agent A",`);
+    expect(added[1]).toHaveTextContent(`"id": "abc"`);
   });
 
   it("renders a full - block when post is null (delete event)", () => {
@@ -64,16 +69,16 @@ describe("AuditLogDiffView", () => {
     expect(items).toHaveLength(4);
 
     expect(items[0]).toHaveAttribute("data-diff-kind", "context");
-    expect(items[0]).toHaveTextContent(`id: "abc"`);
+    expect(items[0]).toHaveTextContent(`"id": "abc",`);
 
     expect(items[1]).toHaveAttribute("data-diff-kind", "removed");
-    expect(items[1]).toHaveTextContent(`name: "Engineering Team Agent"`);
+    expect(items[1]).toHaveTextContent(`"name": "Engineering Team Agent",`);
 
     expect(items[2]).toHaveAttribute("data-diff-kind", "added");
-    expect(items[2]).toHaveTextContent(`name: "My Agent"`);
+    expect(items[2]).toHaveTextContent(`"name": "My Agent",`);
 
     expect(items[3]).toHaveAttribute("data-diff-kind", "context");
-    expect(items[3]).toHaveTextContent(`description: "Same"`);
+    expect(items[3]).toHaveTextContent(`"description": "Same"`);
   });
 
   it("renders nothing when prior and post are deeply equal", () => {
@@ -102,10 +107,100 @@ describe("AuditLogDiffView", () => {
 
     const [removed, added] = items;
     expect(removed).toHaveAttribute("data-diff-kind", "removed");
-    expect(within(removed).getByText(/legacyFlag: true/)).toBeInTheDocument();
+    expect(within(removed).getByText(/"legacyFlag": true/)).toBeInTheDocument();
 
     expect(added).toHaveAttribute("data-diff-kind", "added");
-    expect(within(added).getByText(/newFlag: false/)).toBeInTheDocument();
+    expect(within(added).getByText(/"newFlag": false/)).toBeInTheDocument();
+  });
+
+  it("emits JSON-shaped output with quoted keys and trailing commas on create", () => {
+    render(
+      <AuditLogDiffView
+        prior={null}
+        post={{ name: "Agent A", id: "abc", enabled: true }}
+      />,
+    );
+
+    const items = screen.getAllByRole("listitem");
+    // opening `{`, three field lines, closing `}` (all `added`)
+    expect(items).toHaveLength(5);
+    expect(items[0]).toHaveTextContent(/^\{$/);
+    expect(items[items.length - 1]).toHaveTextContent(/^\}$/);
+
+    // Trailing commas after each field except the last
+    expect(items[1]).toHaveTextContent(`"name": "Agent A",`);
+    expect(items[2]).toHaveTextContent(`"id": "abc",`);
+    expect(items[3]).toHaveTextContent(`"enabled": true`);
+    expect(items[3].textContent).not.toMatch(/true,/);
+  });
+
+  it("JSON-escapes keys with special characters via quoteKey", () => {
+    render(
+      <AuditLogDiffView
+        prior={null}
+        post={{ 'weird "key" with spaces': "value" }}
+      />,
+    );
+
+    const items = screen.getAllByRole("listitem");
+    // The key must be JSON-quoted with embedded quotes escaped as `\"`.
+    const fieldLine = items[1];
+    expect(fieldLine.textContent).toContain(`"weird \\"key\\" with spaces"`);
+    expect(fieldLine.textContent).toContain(`: "value"`);
+  });
+
+  it("array diff: insertion at end renders only an added item at that index", () => {
+    render(
+      <AuditLogDiffView
+        prior={{ tags: ["a", "b"] }}
+        post={{ tags: ["a", "b", "c"] }}
+      />,
+    );
+
+    const items = screen.getAllByRole("listitem");
+    const kinds = items.map((el) => el.getAttribute("data-diff-kind"));
+    // Should contain exactly one added (the new tail) and no removed
+    expect(kinds.filter((k) => k === "added")).toHaveLength(1);
+    expect(kinds.filter((k) => k === "removed")).toHaveLength(0);
+    const addedLine = items.find(
+      (el) => el.getAttribute("data-diff-kind") === "added",
+    );
+    expect(addedLine?.textContent).toContain(`"c"`);
+  });
+
+  it("array diff: deletion at end renders only a removed item at that index", () => {
+    render(
+      <AuditLogDiffView
+        prior={{ tags: ["a", "b", "c"] }}
+        post={{ tags: ["a", "b"] }}
+      />,
+    );
+
+    const items = screen.getAllByRole("listitem");
+    const kinds = items.map((el) => el.getAttribute("data-diff-kind"));
+    expect(kinds.filter((k) => k === "removed")).toHaveLength(1);
+    expect(kinds.filter((k) => k === "added")).toHaveLength(0);
+  });
+
+  it("array diff: replacement at a given index renders removed + added on that index only", () => {
+    render(
+      <AuditLogDiffView
+        prior={{ tags: ["a", "X", "c"] }}
+        post={{ tags: ["a", "Y", "c"] }}
+      />,
+    );
+
+    const items = screen.getAllByRole("listitem");
+    const removed = items.filter(
+      (el) => el.getAttribute("data-diff-kind") === "removed",
+    );
+    const added = items.filter(
+      (el) => el.getAttribute("data-diff-kind") === "added",
+    );
+    expect(removed).toHaveLength(1);
+    expect(added).toHaveLength(1);
+    expect(removed[0].textContent).toContain(`"X"`);
+    expect(added[0].textContent).toContain(`"Y"`);
   });
 
   it("recurses into nested objects and only emits changed leaf keys", () => {
@@ -123,16 +218,17 @@ describe("AuditLogDiffView", () => {
     );
 
     const items = screen.getAllByRole("listitem");
-    // Expect: context "config: {", removed retries, added retries, context "}"
-    expect(items).toHaveLength(4);
+    expect(items).toHaveLength(5);
     expect(items[0]).toHaveAttribute("data-diff-kind", "context");
-    expect(items[0]).toHaveTextContent("config: {");
-    expect(items[1]).toHaveAttribute("data-diff-kind", "removed");
-    expect(items[1]).toHaveTextContent("retries: 3");
-    expect(items[2]).toHaveAttribute("data-diff-kind", "added");
-    expect(items[2]).toHaveTextContent("retries: 5");
-    expect(items[3]).toHaveAttribute("data-diff-kind", "context");
-    expect(items[3]).toHaveTextContent("}");
+    expect(items[0]).toHaveTextContent(`"config": {`);
+    expect(items[1]).toHaveAttribute("data-diff-kind", "context");
+    expect(items[1]).toHaveTextContent(`"region": "us-east-1",`);
+    expect(items[2]).toHaveAttribute("data-diff-kind", "removed");
+    expect(items[2].textContent).toMatch(/"retries": 3/);
+    expect(items[3]).toHaveAttribute("data-diff-kind", "added");
+    expect(items[3].textContent).toMatch(/"retries": 5/);
+    expect(items[4]).toHaveAttribute("data-diff-kind", "context");
+    expect(items[4]).toHaveTextContent("}");
   });
 });
 

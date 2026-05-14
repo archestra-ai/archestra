@@ -3,6 +3,22 @@ import { APIError } from "better-auth";
 import { vi } from "vitest";
 import { cacheManager } from "@/cache-manager";
 import type * as originalConfigModule from "@/config";
+
+// The logger is a Proxy at runtime — vi.spyOn can't intercept its properties.
+// Replace the module with a plain mock object so individual tests can assert on it.
+const logErrorFn = vi.hoisted(() => vi.fn());
+vi.mock("@/logging", () => ({
+  default: {
+    error: logErrorFn,
+    info: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
+    trace: vi.fn(),
+    fatal: vi.fn(),
+    child: vi.fn().mockReturnThis(),
+  },
+}));
+
 import {
   AccountModel,
   MemberModel,
@@ -11,6 +27,7 @@ import {
   UserModel,
 } from "@/models";
 import AuditLogModel from "@/models/audit-log";
+import InvitationModel from "@/models/invitation";
 import { beforeEach, describe, expect, test } from "@/test";
 
 vi.mock("@/websocket", () => ({
@@ -1976,7 +1993,8 @@ describe("auth event audit logging", () => {
     expect(auditRows[0].resourceType).toBe("auth");
     expect(auditRows[0].actorUserId).toBe(user.id);
     expect(auditRows[0].organizationId).toBe(org.id);
-    expect(auditRows[0].httpMethod).toBeNull();
+    expect(auditRows[0].httpMethod).toBe("POST");
+    expect(auditRows[0].actorEmail).toBe(user.email);
     expect(auditRows[0].postState).toMatchObject({
       sessionId: "sess-signin-audit",
     });
@@ -2017,6 +2035,7 @@ describe("auth event audit logging", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].resourceType).toBe("auth");
     expect(rows[0].actorUserId).toBe(user.id);
+    expect(rows[0].httpMethod).toBe("POST");
     expect(rows[0].postState).toMatchObject({
       sessionId: "sess-signout-audit",
       ended: true,
@@ -2119,6 +2138,7 @@ describe("auth event audit logging", () => {
     expect(auditRows[0].action).toBe("sso_callback");
     expect(auditRows[0].resourceType).toBe("auth");
     expect(auditRows[0].actorUserId).toBe(user.id);
+    expect(auditRows[0].httpMethod).toBe("POST");
     expect(auditRows[0].postState).toMatchObject({
       sessionId: "sess-sso-audit",
       providerId: "audit-idp",
@@ -2130,6 +2150,7 @@ describe("auth event audit logging", () => {
     makeOrganization,
     makeInvitation,
   }) => {
+    const acceptSpy = vi.spyOn(InvitationModel, "accept");
     const inviter = await makeUser({ email: "audit-inviter@example.com" });
     const newUser = await makeUser({ email: "audit-signup-user@example.com" });
     const org = await makeOrganization();
@@ -2155,6 +2176,9 @@ describe("auth event audit logging", () => {
     await handleAfterHook(ctx);
     await waitForAuditWrite();
 
+    expect(acceptSpy).toHaveBeenCalledTimes(1);
+    acceptSpy.mockRestore();
+
     const { data } = await AuditLogModel.findPaginated({
       organizationId: org.id,
       limit: 10,
@@ -2167,6 +2191,8 @@ describe("auth event audit logging", () => {
     expect(auditRows[0].resourceType).toBe("auth");
     expect(auditRows[0].actorUserId).toBe(newUser.id);
     expect(auditRows[0].organizationId).toBe(org.id);
+    expect(auditRows[0].httpMethod).toBe("POST");
+    expect(auditRows[0].actorEmail).toBe(newUser.email);
     expect(auditRows[0].postState).toBeNull();
     expect(auditRows[0].priorState).toBeNull();
   });
@@ -2273,7 +2299,164 @@ describe("auth event audit logging", () => {
     await expect(handleAfterHook(ctx)).resolves.not.toThrow();
 
     await waitForAuditWrite();
+    // logErrorFn is the module-level mock for logger.error — verify it was called.
+    expect(logErrorFn).toHaveBeenCalled();
     createSpy.mockRestore();
+  });
+
+  describe("resolveAuthClientIp — header priority", () => {
+    // Typed loosely on purpose — the fixture types are not exported and we
+    // only need their runtime contracts here.
+    async function captureIp(
+      // biome-ignore lint/suspicious/noExplicitAny: test helper uses fixture functions inferred at call site
+      makeUser: any,
+      // biome-ignore lint/suspicious/noExplicitAny: test helper uses fixture functions inferred at call site
+      makeOrganization: any,
+      // biome-ignore lint/suspicious/noExplicitAny: test helper uses fixture functions inferred at call site
+      makeMember: any,
+      headers: Record<string, string>,
+    ): Promise<string | null | undefined> {
+      const user = await makeUser({
+        email: `ip-${crypto.randomUUID()}@example.com`,
+      });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "member" });
+
+      const request = new Request("http://localhost/sign-in/email", {
+        method: "POST",
+        headers,
+      });
+
+      const ctx = createMockContext({
+        path: "/sign-in/email",
+        method: "POST",
+        body: {},
+        request,
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: {
+              id: `sess-${crypto.randomUUID()}`,
+              activeOrganizationId: org.id,
+            },
+          },
+        },
+      });
+
+      await handleAfterHook(ctx);
+      await new Promise((r) => setTimeout(r, 50));
+
+      const { data } = await AuditLogModel.findPaginated({
+        organizationId: org.id,
+        limit: 1,
+        offset: 0,
+      });
+      return data[0]?.ipAddress;
+    }
+
+    test("x-forwarded-for first hop wins over every other header", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const ip = await captureIp(makeUser, makeOrganization, makeMember, {
+        "x-forwarded-for": "203.0.113.10, 10.0.0.1, 10.0.0.2",
+        "x-real-ip": "198.51.100.5",
+        "cf-connecting-ip": "198.51.100.7",
+        "x-archestra-client-ip": "127.0.0.1",
+      });
+      expect(ip).toBe("203.0.113.10");
+    });
+
+    test("falls through to x-real-ip when x-forwarded-for is missing", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const ip = await captureIp(makeUser, makeOrganization, makeMember, {
+        "x-real-ip": "198.51.100.5",
+        "cf-connecting-ip": "198.51.100.7",
+        "x-archestra-client-ip": "127.0.0.1",
+      });
+      expect(ip).toBe("198.51.100.5");
+    });
+
+    test("falls through to cf-connecting-ip when XFF / x-real-ip are missing", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const ip = await captureIp(makeUser, makeOrganization, makeMember, {
+        "cf-connecting-ip": "198.51.100.7",
+        "x-archestra-client-ip": "127.0.0.1",
+      });
+      expect(ip).toBe("198.51.100.7");
+    });
+
+    test("uses x-archestra-client-ip as the final fallback (Fastify injection)", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const ip = await captureIp(makeUser, makeOrganization, makeMember, {
+        "x-archestra-client-ip": "127.0.0.1",
+      });
+      expect(ip).toBe("127.0.0.1");
+    });
+
+    test("returns null when no IP header is present", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const ip = await captureIp(makeUser, makeOrganization, makeMember, {});
+      expect(ip ?? null).toBeNull();
+    });
+  });
+
+  test("direct sign-up (no invitationId) still writes a sign_up audit row", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const acceptSpy = vi.spyOn(InvitationModel, "accept");
+    const user = await makeUser({ email: "audit-direct-signup@example.com" });
+    const org = await makeOrganization();
+    await makeMember(user.id, org.id, { role: "member" });
+
+    // Body has no invitationId — covers the "InvitationModel.accept gated by
+    // invitationId presence" branch added in the post-Phase-11 cleanup.
+    const ctx = createMockContext({
+      path: "/sign-up/email",
+      method: "POST",
+      body: {},
+      context: {
+        newSession: {
+          user: { id: user.id, email: user.email },
+          session: {
+            id: "sess-direct-signup",
+            activeOrganizationId: org.id,
+          },
+        },
+      },
+    });
+
+    await handleAfterHook(ctx);
+    await new Promise((r) => setTimeout(r, 50));
+
+    const { data } = await AuditLogModel.findPaginated({
+      organizationId: org.id,
+      limit: 10,
+      offset: 0,
+    });
+
+    const rows = data.filter((r) => r.action === "sign_up");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].actorUserId).toBe(user.id);
+    expect(rows[0].resourceType).toBe("auth");
+    expect(rows[0].httpMethod).toBe("POST");
+    expect(acceptSpy).not.toHaveBeenCalled();
+    acceptSpy.mockRestore();
   });
 
   test("sign-in for user with no membership falls back to primary org lookup", async ({

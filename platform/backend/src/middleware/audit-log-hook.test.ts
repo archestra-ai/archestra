@@ -1,9 +1,30 @@
 import { vi } from "vitest";
 
+/**
+ * Contract: registerAuditLogHook — mutating /api/* success path writes AuditLogModel rows;
+ * denylist, method filter, unauthenticated skip, 4xx/5xx skip; fetch/create failures log and never break responses.
+ */
+
 // vi.hoisted ensures this is available both in mock factories and in test code.
 const KNOWN_RESOURCE_ID = vi.hoisted(
   () => "00000000-0000-0000-0000-000000000001",
 );
+
+// The logger is a Proxy at runtime, so vi.spyOn can't intercept its properties.
+// Hoist a real mock fn and replace the module entirely.
+const logErrorFn = vi.hoisted(() => vi.fn());
+
+vi.mock("@/logging", () => ({
+  default: {
+    error: logErrorFn,
+    info: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
+    trace: vi.fn(),
+    fatal: vi.fn(),
+    child: vi.fn().mockReturnThis(),
+  },
+}));
 
 vi.mock("@/websocket", () => ({
   default: { broadcastAuditLog: vi.fn() },
@@ -60,9 +81,12 @@ describe("registerAuditLogHook", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
   let orgId: string;
+  let logErrorSpy: ReturnType<typeof vi.fn>;
 
   beforeEach(async ({ makeOrganization, makeUser }) => {
     vi.clearAllMocks();
+    // logErrorFn is already the hoisted mock — just alias it for test assertions.
+    logErrorSpy = logErrorFn;
 
     user = await makeUser();
     const org = await makeOrganization();
@@ -100,6 +124,31 @@ describe("registerAuditLogHook", () => {
     app.post("/api/no-fetch-things", async () => ({ id: KNOWN_RESOURCE_ID }));
     app.patch("/api/no-fetch-things/:id", async () => ({}));
     app.delete("/api/no-fetch-things/:id", async () => ({}));
+
+    // Route used to exercise 5xx skip path
+    app.post("/api/things/boom", async (_req, reply) => {
+      return reply.code(500).send({ error: { message: "boom" } });
+    });
+
+    // Denylisted path (must NOT be audited even with mutating verb)
+    app.post("/api/health", async () => ({ ok: true }));
+    app.post("/api/ready", async () => ({ ok: true }));
+
+    // Not in AUDITABLE_ROUTES — exercises registry gap row (resource_type null).
+    app.post("/api/orphan-events", async () => ({ ok: true }));
+
+    // HEAD / OPTIONS — non-mutating verbs (use distinct URLs to avoid
+    // conflict with the GET /api/things that Fastify auto-promotes to HEAD).
+    app.route({
+      method: "HEAD",
+      url: "/api/head-things",
+      handler: async () => ({}),
+    });
+    app.route({
+      method: "OPTIONS",
+      url: "/api/options-things",
+      handler: async () => ({}),
+    });
 
     await app.ready();
   });
@@ -168,6 +217,49 @@ describe("registerAuditLogHook", () => {
         name: "Existing Thing",
       });
       expect(data[0].resourceId).toBe(KNOWN_RESOURCE_ID);
+    });
+
+    test("persisted prior_state and post_state differ when fetchById returns different snapshots", async () => {
+      const registry = (await import(
+        "./audit-log-registry"
+      )) as typeof import("./audit-log-registry");
+      const routeCfg = registry.AUDITABLE_ROUTES["/api/things/:id"];
+      const origFetch = routeCfg.fetchById;
+      let call = 0;
+      routeCfg.fetchById = async (id: string, _organizationId: string) => {
+        call += 1;
+        if (call === 1) return { id, name: "Before patch", rev: 1 };
+        return { id, name: "After patch", rev: 2 };
+      };
+      try {
+        const res = await app.inject({
+          method: "PATCH",
+          url: `/api/things/${KNOWN_RESOURCE_ID}`,
+          payload: { name: "n/a" },
+        });
+        expect(res.statusCode).toBe(200);
+        await new Promise((r) => setTimeout(r, 50));
+
+        const { data } = await AuditLogModel.findPaginated({
+          organizationId: orgId,
+          limit: 10,
+          offset: 0,
+        });
+
+        expect(data).toHaveLength(1);
+        expect(data[0].priorState).toEqual({
+          id: KNOWN_RESOURCE_ID,
+          name: "Before patch",
+          rev: 1,
+        });
+        expect(data[0].postState).toEqual({
+          id: KNOWN_RESOURCE_ID,
+          name: "After patch",
+          rev: 2,
+        });
+      } finally {
+        routeCfg.fetchById = origFetch;
+      }
     });
   });
 
@@ -278,6 +370,138 @@ describe("registerAuditLogHook", () => {
     });
   });
 
+  describe("HEAD / OPTIONS — not audited", () => {
+    test("HEAD writes zero rows", async () => {
+      await app.inject({ method: "HEAD", url: "/api/head-things" });
+      await new Promise((r) => setTimeout(r, 50));
+
+      const { data } = await AuditLogModel.findPaginated({
+        organizationId: orgId,
+        limit: 10,
+        offset: 0,
+      });
+      expect(data).toHaveLength(0);
+    });
+
+    test("OPTIONS writes zero rows", async () => {
+      await app.inject({ method: "OPTIONS", url: "/api/options-things" });
+      await new Promise((r) => setTimeout(r, 50));
+
+      const { data } = await AuditLogModel.findPaginated({
+        organizationId: orgId,
+        limit: 10,
+        offset: 0,
+      });
+      expect(data).toHaveLength(0);
+    });
+  });
+
+  describe("5xx responses — not audited", () => {
+    test("POST returning 500 writes zero rows", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/things/boom",
+      });
+      expect(res.statusCode).toBe(500);
+      await new Promise((r) => setTimeout(r, 50));
+
+      const { data } = await AuditLogModel.findPaginated({
+        organizationId: orgId,
+        limit: 10,
+        offset: 0,
+      });
+      expect(data).toHaveLength(0);
+    });
+  });
+
+  describe("denylisted paths — not audited", () => {
+    test("POST /api/health writes zero rows", async () => {
+      const res = await app.inject({ method: "POST", url: "/api/health" });
+      expect(res.statusCode).toBe(200);
+      await new Promise((r) => setTimeout(r, 50));
+
+      const { data } = await AuditLogModel.findPaginated({
+        organizationId: orgId,
+        limit: 10,
+        offset: 0,
+      });
+      expect(data).toHaveLength(0);
+    });
+
+    test("POST /api/ready writes zero rows", async () => {
+      const res = await app.inject({ method: "POST", url: "/api/ready" });
+      expect(res.statusCode).toBe(200);
+      await new Promise((r) => setTimeout(r, 50));
+
+      const { data } = await AuditLogModel.findPaginated({
+        organizationId: orgId,
+        limit: 10,
+        offset: 0,
+      });
+      expect(data).toHaveLength(0);
+    });
+  });
+
+  describe("unregistered mutating route — gap row", () => {
+    test("POST /api/orphan-events writes a row with null resource_type and null states", async () => {
+      await app.inject({ method: "POST", url: "/api/orphan-events" });
+      await new Promise((r) => setTimeout(r, 50));
+
+      const { data } = await AuditLogModel.findPaginated({
+        organizationId: orgId,
+        limit: 10,
+        offset: 0,
+      });
+
+      expect(data).toHaveLength(1);
+      expect(data[0].action).toBe("create");
+      expect(data[0].resourceType).toBeNull();
+      expect(data[0].priorState).toBeNull();
+      expect(data[0].postState).toBeNull();
+    });
+  });
+
+  describe("fetchById throws — row still written with null state", () => {
+    test("PATCH with throwing fetchById produces a row with null states", async () => {
+      const registry = (await import(
+        "./audit-log-registry"
+      )) as typeof import("./audit-log-registry");
+      const throwing = vi
+        .spyOn(registry.AUDITABLE_ROUTES["/api/things/:id"], "fetchById")
+        .mockImplementation(async () => {
+          throw new Error("fetchById exploded");
+        });
+
+      const res = await app.inject({
+        method: "PATCH",
+        url: `/api/things/${KNOWN_RESOURCE_ID}`,
+      });
+      expect(res.statusCode).toBe(200);
+      await new Promise((r) => setTimeout(r, 50));
+
+      const { data } = await AuditLogModel.findPaginated({
+        organizationId: orgId,
+        limit: 10,
+        offset: 0,
+      });
+
+      expect(data).toHaveLength(1);
+      expect(data[0].action).toBe("update");
+      expect(data[0].priorState).toBeNull();
+      expect(data[0].postState).toBeNull();
+
+      expect(
+        logErrorSpy.mock.calls.some(
+          (call: readonly unknown[]) =>
+            typeof call[1] === "string" &&
+            (call[1] as string).includes("fetchById"),
+        ),
+      ).toBe(true);
+
+      throwing.mockRestore();
+    });
+  });
+
   describe("AuditLogModel.create rejects — request still completes", () => {
     test("create failure does not affect response and logs error", async () => {
       const createSpy = vi
@@ -289,6 +513,14 @@ describe("registerAuditLogHook", () => {
       expect(res.statusCode).toBe(200);
 
       await new Promise((r) => setTimeout(r, 50));
+
+      expect(
+        logErrorSpy.mock.calls.some(
+          (call: readonly unknown[]) =>
+            typeof call[1] === "string" &&
+            (call[1] as string).includes("failed to write audit log row"),
+        ),
+      ).toBe(true);
 
       createSpy.mockRestore();
     });

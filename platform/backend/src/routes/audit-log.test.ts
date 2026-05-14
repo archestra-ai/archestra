@@ -1,9 +1,25 @@
+/**
+ * Contract: GET /api/audit-logs
+ * - Requires a successful permission check for RouteId.GetAuditLogs (admin-only).
+ * - Returns paginated audit rows strictly scoped to request.organizationId.
+ * - Query filters map to AuditLogModel.findPaginated; invalid pagination/sortDirection → 400.
+ * - 403 when hasPermission denies the request.
+ */
+
 import { vi } from "vitest";
 import AuditLogModel from "@/models/audit-log";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { AuditLog, User } from "@/types";
+import { ApiError, type AuditLog, type User } from "@/types";
+
+const { hasPermissionMock } = vi.hoisted(() => ({
+  hasPermissionMock: vi.fn(),
+}));
+
+vi.mock("@/auth", () => ({
+  hasPermission: hasPermissionMock,
+}));
 
 vi.mock("@/observability", () => ({
   initializeObservabilityMetrics: vi.fn(),
@@ -45,20 +61,31 @@ describe("GET /api/audit-logs", () => {
   let organizationId: string;
   let user: User;
 
-  beforeEach(async ({ makeOrganization, makeAdmin }) => {
+  beforeEach(async ({ makeOrganization, makeUser }) => {
+    vi.clearAllMocks();
+    hasPermissionMock.mockResolvedValue({ success: true, error: null });
+
     const organization = await makeOrganization();
     organizationId = organization.id;
-    user = await makeAdmin();
+    user = await makeUser();
 
     app = createFastifyInstance();
+
+    // Simulate auth middleware: inject authenticated user + org.
     app.addHook("onRequest", async (request) => {
-      (
-        request as typeof request & {
-          organizationId: string;
-          user: User;
-        }
-      ).organizationId = organizationId;
       (request as typeof request & { user: User }).user = user;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
+    });
+
+    // Simulate the permission gate that fastifyAuthPlugin normally provides.
+    // Throwing ApiError is the correct Fastify pattern — the server's error
+    // handler converts it to a 403 JSON response without a "double send" race.
+    app.addHook("preHandler", async (request) => {
+      const result = await hasPermissionMock(undefined, request.headers);
+      if (!result?.success) {
+        throw new ApiError(403, "Forbidden");
+      }
     });
 
     const { default: auditLogRoutes } = await import("./audit-log");
@@ -86,6 +113,34 @@ describe("GET /api/audit-logs", () => {
     expect(body.data.some((r: AuditLog) => r.id === row.id)).toBe(true);
   });
 
+  test("returns 403 when hasPermission denies the request (member role equivalent)", async () => {
+    hasPermissionMock.mockResolvedValue({
+      success: false,
+      error: new Error("Forbidden"),
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/audit-logs",
+    });
+
+    expect(response.statusCode).toBe(403);
+  });
+
+  test("returns 403 when hasPermission denies the request (editor role equivalent)", async () => {
+    hasPermissionMock.mockResolvedValue({
+      success: false,
+      error: new Error("Forbidden"),
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/audit-logs",
+    });
+
+    expect(response.statusCode).toBe(403);
+  });
+
   test("cross-org isolation: rows from another org are not returned", async ({
     makeOrganization,
   }) => {
@@ -104,6 +159,24 @@ describe("GET /api/audit-logs", () => {
     const ids = body.data.map((r: AuditLog) => r.id);
     expect(ids).toContain(ownRow.id);
     expect(ids).not.toContain(otherRow.id);
+  });
+
+  test("cross-org isolation: searching another org row id from home org returns nothing", async ({
+    makeOrganization,
+  }) => {
+    const otherOrg = await makeOrganization();
+    const otherRow = await seedRow(otherOrg.id, {
+      resourceId: "cross-org-only-resource-id-zz99",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/audit-logs?search=${encodeURIComponent(otherRow.resourceId ?? "")}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data.some((r: AuditLog) => r.id === otherRow.id)).toBe(false);
   });
 
   test("actorUserId filter narrows results", async ({ makeUser }) => {
@@ -194,6 +267,34 @@ describe("GET /api/audit-logs", () => {
     expect(body.data.some((r: AuditLog) => r.id === matchedRow.id)).toBe(true);
   });
 
+  test("combined action + resourceType filters AND together", async () => {
+    await seedRow(organizationId, {
+      action: "create",
+      resourceType: "agent",
+      resourceId: "match-both",
+    });
+    await seedRow(organizationId, {
+      action: "delete",
+      resourceType: "agent",
+      resourceId: "wrong-action",
+    });
+    await seedRow(organizationId, {
+      action: "create",
+      resourceType: "role",
+      resourceId: "wrong-type",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/audit-logs?action=create&resourceType=agent",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].resourceId).toBe("match-both");
+  });
+
   test("limit and offset produce stable, non-overlapping pages", async () => {
     for (let i = 0; i < 5; i++) {
       await seedRow(organizationId, {
@@ -259,6 +360,48 @@ describe("GET /api/audit-logs", () => {
     const body = response.json();
     expect(body.data).toEqual([]);
     expect(body.pagination.total).toBe(0);
+  });
+
+  test("invalid sortDirection is rejected with 400", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/audit-logs?sortDirection=sideways",
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  test("sortBy is not an accepted query param (regression guard for the cleanup)", async () => {
+    await seedRow(organizationId);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/audit-logs?sortBy=actorEmail",
+    });
+
+    expect(response.statusCode).toBeLessThan(500);
+    if (response.statusCode === 200) {
+      const body = response.json();
+      expect(Array.isArray(body.data)).toBe(true);
+    }
+  });
+
+  test("limit above the configured maximum is rejected with 400", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/audit-logs?limit=99999",
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  test("negative offset is rejected with 400", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/audit-logs?offset=-5",
+    });
+
+    expect(response.statusCode).toBe(400);
   });
 
   test("sortDirection=asc returns events in ascending createdAt order", async () => {

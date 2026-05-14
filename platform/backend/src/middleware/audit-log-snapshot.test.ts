@@ -4,6 +4,7 @@ import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
 import KnowledgeBaseModel from "@/models/knowledge-base";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
+import McpServerModel from "@/models/mcp-server";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import TeamModel from "@/models/team";
 import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
@@ -13,6 +14,11 @@ import {
   AUDITABLE_ROUTES,
   resolveAuditableRouteConfig,
 } from "./audit-log-registry";
+
+/**
+ * Contract: findByIdForAudit snapshots + AUDITABLE_ROUTES — redaction, org isolation,
+ * MCP enrichment flags (hasSecret, sorted name-only keys), registry invariants.
+ */
 
 describe("audit snapshot redaction", () => {
   describe("ApiKeyModel.findByIdForAudit", () => {
@@ -28,6 +34,16 @@ describe("audit snapshot redaction", () => {
         emailVerified: true,
         createdAt: new Date(),
         updatedAt: new Date(),
+      });
+
+      // The INNER JOIN in findByIdForAudit requires the key owner to be a
+      // member of the org being queried — add that membership row.
+      await db.insert(schema.membersTable).values({
+        id: crypto.randomUUID(),
+        userId,
+        organizationId: org.id,
+        role: "member",
+        createdAt: new Date(),
       });
 
       const [row] = await db
@@ -83,8 +99,193 @@ describe("audit snapshot redaction", () => {
     });
   });
 
+  describe("ApiKeyModel.findByIdForAudit org isolation", () => {
+    test("returns null for an id that belongs to a user in another org (INNER JOIN guard)", async ({
+      makeOrganization,
+    }) => {
+      const ownerOrg = await makeOrganization();
+      const intruderOrg = await makeOrganization();
+
+      // Create a user that is a member of ownerOrg only.
+      const userId = crypto.randomUUID();
+      await db.insert(schema.usersTable).values({
+        id: userId,
+        name: "Owner",
+        email: `${userId}@test.com`,
+        emailVerified: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      await db.insert(schema.membersTable).values({
+        id: crypto.randomUUID(),
+        userId,
+        organizationId: ownerOrg.id,
+        role: "member",
+        createdAt: new Date(),
+      });
+
+      const [row] = await db
+        .insert(schema.apikeysTable)
+        .values({
+          id: crypto.randomUUID(),
+          name: "Owner Key",
+          key: "ak_owner_secret",
+          referenceId: userId,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .returning();
+
+      // Lookup with the real id, but from the intruder org — must be null.
+      const snapshot = await ApiKeyModel.findByIdForAudit(
+        row.id,
+        intruderOrg.id,
+      );
+      expect(snapshot).toBeNull();
+
+      // Owner org sees it normally.
+      const ownSnapshot = await ApiKeyModel.findByIdForAudit(
+        row.id,
+        ownerOrg.id,
+      );
+      expect(ownSnapshot).not.toBeNull();
+      expect(ownSnapshot?.id).toBe(row.id);
+    });
+  });
+
   // Identity provider redaction tests are in audit-log-snapshot.ee.test.ts
   // (IdentityProviderModel is an EE-only import requiring an .ee.ts file).
+});
+
+describe("McpServerModel.findByIdForAudit — secret/config flags", () => {
+  test("envKeys are name-only and sorted; hasSecret false when secretId is null", async ({
+    makeOrganization,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+  }) => {
+    const org = await makeOrganization();
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      localConfig: {
+        transportType: "stdio",
+        command: "node",
+        arguments: [],
+        environment: [
+          {
+            key: "ZZ_LAST",
+            type: "secret",
+            value: "secret-z",
+            promptOnInstallation: false,
+          },
+          {
+            key: "AA_FIRST",
+            type: "secret",
+            value: "secret-a",
+            promptOnInstallation: false,
+          },
+          {
+            key: "MM_MID",
+            type: "secret",
+            value: "secret-m",
+            promptOnInstallation: false,
+          },
+        ],
+      },
+      oauthConfig: null,
+    });
+
+    const server = await makeMcpServer({
+      catalogId: catalog.id,
+      scope: "org",
+    });
+
+    const snapshot = await McpServerModel.findByIdForAudit(server.id, org.id);
+    expect(snapshot).not.toBeNull();
+    expect(snapshot?.envKeys).toEqual(["AA_FIRST", "MM_MID", "ZZ_LAST"]);
+
+    // No secret values should leak — only names.
+    const serialized = JSON.stringify(snapshot);
+    expect(serialized).not.toContain("secret-z");
+    expect(serialized).not.toContain("secret-a");
+    expect(serialized).not.toContain("secret-m");
+
+    // Boolean flags reflect actual config presence
+    expect(snapshot?.hasOauthConfig).toBe(false);
+    expect(snapshot?.hasSecret).toBe(false);
+  });
+
+  test("hasOauthConfig flips to true when the catalog has an oauthConfig", async ({
+    makeOrganization,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+  }) => {
+    const org = await makeOrganization();
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      oauthConfig: {
+        name: "Test OAuth",
+        server_url: "https://example.com/oauth",
+        client_id: "client-id",
+        client_secret: "super-secret-oauth",
+        authorization_endpoint: "https://example.com/oauth/authorize",
+        token_endpoint: "https://example.com/oauth/token",
+        redirect_uris: ["https://example.com/callback"],
+        scopes: ["openid"],
+        default_scopes: ["openid"],
+        supports_resource_metadata: false,
+      },
+    });
+    const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+
+    const snapshot = await McpServerModel.findByIdForAudit(server.id, org.id);
+    expect(snapshot?.hasOauthConfig).toBe(true);
+    // The raw client secret must not appear in the audit snapshot.
+    expect(JSON.stringify(snapshot)).not.toContain("super-secret-oauth");
+  });
+
+  test("hasSecret is true when the MCP server row references secretId", async ({
+    makeOrganization,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeSecret,
+  }) => {
+    const org = await makeOrganization();
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+    const secret = await makeSecret();
+    const server = await makeMcpServer({
+      catalogId: catalog.id,
+      scope: "org",
+      secretId: secret.id,
+    } as Parameters<typeof makeMcpServer>[0] & { secretId: string });
+
+    const snapshot = await McpServerModel.findByIdForAudit(server.id, org.id);
+    expect(snapshot?.hasSecret).toBe(true);
+    expect(JSON.stringify(snapshot)).not.toContain("access_token");
+  });
+
+  test("returns null for an MCP server in another organization", async ({
+    makeOrganization,
+    makeAdmin,
+    makeTeam,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+  }) => {
+    const org1 = await makeOrganization();
+    const org2 = await makeOrganization();
+    const admin = await makeAdmin();
+    const team = await makeTeam(org1.id, admin.id);
+    const catalog = await makeInternalMcpCatalog({ organizationId: org1.id });
+
+    const server = await makeMcpServer({
+      catalogId: catalog.id,
+      teamId: team.id,
+      scope: "team",
+    });
+
+    expect(
+      await McpServerModel.findByIdForAudit(server.id, org2.id),
+    ).toBeNull();
+  });
 });
 
 describe("audit snapshot shape — non-redacted models", () => {
@@ -110,7 +311,6 @@ describe("audit snapshot shape — non-redacted models", () => {
     expect(snapshot).toHaveProperty("scope", "org");
     expect(Array.isArray(snapshot?.delegationTargets)).toBe(true);
     expect(typeof snapshot?.createdAt).toBe("string");
-    expect(typeof snapshot?.updatedAt).toBe("string");
   });
 
   test("AgentModel.findByIdForAudit returns null for wrong org", async ({

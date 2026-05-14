@@ -18,9 +18,7 @@ test.describe("Audit log UI", {
       adminPage.getByRole("link", { name: "Audit", exact: true }),
     ).toBeVisible({ timeout: 15_000 });
 
-    await adminPage
-      .getByRole("link", { name: "Audit", exact: true })
-      .click();
+    await adminPage.getByRole("link", { name: "Audit", exact: true }).click();
 
     await adminPage.waitForURL(`**${AUDIT_LOGS_PATH}**`, { timeout: 15_000 });
     expect(adminPage.url()).toContain(AUDIT_LOGS_PATH);
@@ -56,13 +54,11 @@ test.describe("Audit log UI", {
     // Wait for at least one row OR the empty-state to render so we know the
     // query settled.
     const firstRow = adminPage.locator("tbody tr").first();
-    await firstRow
-      .waitFor({ state: "visible", timeout: 15_000 })
-      .catch(() => {
-        /* empty state is acceptable; the next assertion handles it */
-      });
+    await firstRow.waitFor({ state: "visible", timeout: 15_000 }).catch(() => {
+      /* empty state is acceptable; the next assertion handles it */
+    });
 
-    const resourceCells = adminPage.locator('tbody tr td:nth-child(4)');
+    const resourceCells = adminPage.locator("tbody tr td:nth-child(4)");
     const count = await resourceCells.count();
     if (count === 0) return; // empty state, nothing to assert
 

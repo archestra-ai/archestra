@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, test } from "@/test";
 import AuditLogModel from "./audit-log";
 
+/**
+ * Contract: AuditLogModel
+ * - create: persists JSON snapshots, returns generated id/timestamps; invalid rows rejected by DB.
+ * - findPaginated: always scoped by organizationId; filters combine with AND; search is ILIKE on four fields.
+ * - deleteOlderThan: deletes only rows strictly older than `before` for the given org; returns deleted count.
+ */
+
 const BASE_PAYLOAD = {
   actorUserId: null,
   actorName: "Test User",
@@ -20,6 +27,15 @@ const BASE_PAYLOAD = {
 
 describe("AuditLogModel", () => {
   describe("create", () => {
+    test("rejects insert when organizationId is missing (database constraint)", async () => {
+      await expect(
+        AuditLogModel.create({
+          ...BASE_PAYLOAD,
+          organizationId: undefined as unknown as string,
+        }),
+      ).rejects.toThrow();
+    });
+
     test("inserts and returns row with id and createdAt populated", async ({
       makeOrganization,
     }) => {
@@ -58,6 +74,44 @@ describe("AuditLogModel", () => {
       expect(row.actorUserId).toBe(user.id);
       expect(row.actorName).toBe(user.name);
       expect(row.actorEmail).toBe(user.email);
+    });
+
+    test("round-trips nested JSONB priorState and postState exactly", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const prior = {
+        name: "Old",
+        config: { env: ["A", "B"], retries: 3 },
+        tags: ["x", "y"],
+        nullable: null,
+      };
+      const post = {
+        name: "New",
+        config: { env: ["A", "C"], retries: 5 },
+        tags: ["x", "z"],
+        nullable: null,
+        added: true,
+      };
+
+      const row = await AuditLogModel.create({
+        ...BASE_PAYLOAD,
+        organizationId: org.id,
+        action: "update",
+        priorState: prior,
+        postState: post,
+      });
+
+      // Read back via findPaginated so we exercise the SELECT path too.
+      const result = await AuditLogModel.findPaginated({
+        organizationId: org.id,
+        limit: 10,
+        offset: 0,
+      });
+      const fetched = result.data.find((r) => r.id === row.id);
+      expect(fetched).toBeDefined();
+      expect(fetched?.priorState).toEqual(prior);
+      expect(fetched?.postState).toEqual(post);
     });
 
     test("stores auth event with null http fields", async ({
@@ -581,6 +635,26 @@ describe("AuditLogModel", () => {
       });
 
       expect(deleted).toBe(3);
+    });
+
+    test("second deleteOlderThan with the same cutoff is idempotent (zero further deletes)", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      await AuditLogModel.create({ ...BASE_PAYLOAD, organizationId: org.id });
+      const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      const first = await AuditLogModel.deleteOlderThan({
+        organizationId: org.id,
+        before: tomorrow,
+      });
+      expect(first).toBeGreaterThanOrEqual(1);
+
+      const second = await AuditLogModel.deleteOlderThan({
+        organizationId: org.id,
+        before: tomorrow,
+      });
+      expect(second).toBe(0);
     });
   });
 });

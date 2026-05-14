@@ -242,10 +242,10 @@ Chart-managed diagnostics PVCs are validated conservatively. If more than one di
 - `archestra.nodeSelector` - Node selector for scheduling pods on specific nodes (e.g., specific node pools or instance types). These values are also inherited by MCP server pods as defaults.
 - `archestra.tolerations` - Tolerations for scheduling pods on nodes with specific taints (e.g., dedicated nodes, GPU nodes, spot instances). These values are also inherited by MCP server pods as defaults. See [Kubernetes docs](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
 - `archestra.deploymentStrategy` - Deployment strategy configuration (default: RollingUpdate with `maxUnavailable: 25%` and `maxSurge: 25%`)
-- `archestra.resources` - CPU and memory requests/limits for the container (default: 2 vCPU request, 2Gi memory request, 3Gi memory limit)
+- `archestra.resources` - CPU and memory requests/limits for the container (default: 2Gi request, 3Gi limit for memory)
 - `archestra.horizontalPodAutoscaler` - Optional HPA for the main `archestra-platform` Deployment. When enabled, the chart defaults to `minReplicas: 2`, `maxReplicas: 10`, a memory utilization target of 70%, immediate scale-up, and a 5-minute scale-down stabilization window.
 - `archestra.worker.replicaCount` - Manual replica count for the separate worker Deployment
-- `archestra.worker.resources` - Resource requests/limits for worker pods (default: 2 vCPU request, 1Gi memory request, 2Gi memory limit)
+- `archestra.worker.resources` - Resource requests/limits for worker pods (default: 1Gi request, 2Gi limit for memory)
 - `archestra.worker.deploymentStrategy` - Rolling update strategy for worker pods (default: `maxUnavailable: 25%`, `maxSurge: 25%`)
 
 #### HorizontalPodAutoscaler
@@ -256,11 +256,11 @@ Default behavior when enabled:
 
 - Maintains at least 2 web pods
 - Scales up to 10 web pods
-- Uses memory utilization as the default scaling signal
+- Uses memory utilization because the chart defines memory requests by default
 - Scales up aggressively (up to 100% or 2 pods per minute)
 - Scales down conservatively with a 5-minute stabilization window
 
-If you prefer CPU-driven scaling, override `archestra.horizontalPodAutoscaler.metrics` with a CPU target instead.
+If your cluster has reliable CPU requests for the platform pods and you prefer request-rate-driven scaling, override `archestra.horizontalPodAutoscaler.metrics` with a CPU target instead.
 
 #### Existing Scaling Controls
 
@@ -431,7 +431,7 @@ The Helm chart deploys a separate worker `Deployment` for processing background 
 
 - `archestra.worker.enabled` - Deploy a separate worker Deployment (default: true)
 - `archestra.worker.replicaCount` - Number of worker pod replicas (default: 1)
-- `archestra.worker.resources` - Resource requests/limits for worker pods (default: 2 vCPU request, 1Gi memory request, 2Gi memory limit)
+- `archestra.worker.resources` - Resource requests/limits for worker pods (default: 1Gi request, 2Gi limit)
 - `archestra.worker.deploymentStrategy` - Deployment strategy (default: RollingUpdate with `maxUnavailable: 25%` and `maxSurge: 25%`)
 - `archestra.worker.podAnnotations` - Pod annotations (inherits from `archestra.podAnnotations` if not set)
 - `archestra.worker.nodeSelector` - Node selector (inherits from `archestra.nodeSelector` if not set)
@@ -632,11 +632,6 @@ The following environment variables can be used to configure Archestra Platform.
   - Default: Internal PostgreSQL (Docker) or managed instance (Helm)
   - Required for production deployments with external database
 
-- **`ARCHESTRA_DATABASE_POOL_MAX`** - Maximum number of PostgreSQL connections per backend pod.
-  - Default: `50`
-  - Range: `1`–`500`
-  - Tune this when you have many concurrent users or long-running chat streams. The backend opens at most `ARCHESTRA_DATABASE_POOL_MAX` connections per pod, so coordinate with PostgreSQL `max_connections` to ensure `pods × ARCHESTRA_DATABASE_POOL_MAX < max_connections` with headroom for admin sessions. On managed Postgres (e.g. AWS RDS, Cloud SQL) the server limit is typically several thousand and rarely the binding constraint.
-
 - **`ARCHESTRA_API_BASE_URL`** - Archestra API Base URL(s) for connecting to Archestra's LLM Proxy, MCP Gateway and A2A Gateway.
 
   This URL is displayed in the UI connection instructions to help users configure their agents. It doesn\'t affect internal routing (Archestra frontend communicates with backend via `http://localhost:9000`).
@@ -726,33 +721,17 @@ The following environment variables can be used to configure Archestra Platform.
 
 - **`ARCHESTRA_SECRETS_MANAGER`** - Secrets storage backend for managing sensitive data (API keys, tokens, etc.)
   - Default: `DB` (database storage)
-  - Options: `DB`, `VAULT`, or `READONLY_VAULT`
-  - Note: When set to `VAULT` or `READONLY_VAULT`, requires `ARCHESTRA_HASHICORP_VAULT_ADDR` and the credentials for the selected auth method. See [Secrets Management](/docs/platform-secrets-management) for the full configuration reference (KV version, secret path prefix, auth methods).
+  - Options: `DB` or `Vault`
+  - Note: When set to `Vault`, requires `HASHICORP_VAULT_ADDR` and `HASHICORP_VAULT_TOKEN` to be configured
 
 - **`ARCHESTRA_HASHICORP_VAULT_ADDR`** - HashiCorp Vault server address
-  - Required when: `ARCHESTRA_SECRETS_MANAGER=VAULT` or `READONLY_VAULT`
+  - Required when: `ARCHESTRA_SECRETS_MANAGER=Vault`
   - Example: `http://localhost:8200`
   - Note: System falls back to database storage if Vault is configured but credentials are missing
 
-- **`ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD`** - Authentication method used to connect to Vault.
-  - Default: `TOKEN`
-  - Options: `TOKEN`, `K8S`, `AWS`
-  - See [Vault Authentication](/docs/platform-secrets-management#vault-authentication) for the per-method env vars (`ARCHESTRA_HASHICORP_VAULT_TOKEN`, `..._K8S_ROLE`, `..._AWS_ROLE`, etc.).
-
-- **`ARCHESTRA_HASHICORP_VAULT_KV_VERSION`** - Version of Vault's KV secrets engine.
-  - Default: `2`
-  - Options: `1` or `2`
-  - Applies to both `VAULT` and `READONLY_VAULT` modes. Changes the default secret path prefix and the API paths used for read/write/list/delete.
-
-- **`ARCHESTRA_HASHICORP_VAULT_SECRET_PATH`** - Path prefix for Archestra-managed secrets in Vault.
-  - Default: `secret/data/archestra` (KV v2) or `secret/archestra` (KV v1)
-  - Use it to store secrets under a custom path.
-  - KV v2 example: `kv/data/platform/archestra` (resolves to `kv/data/platform/archestra/{secretName}`)
-  - KV v1 example: `kv/platform/archestra` (resolves to `kv/platform/archestra/{secretName}`)
-
-- **`ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH`** - Override path prefix for KV v2 metadata operations (list, delete).
-  - Default: derived from `ARCHESTRA_HASHICORP_VAULT_SECRET_PATH` by replacing `/data/` with `/metadata/`.
-  - Only needed when your prefix doesn't follow the `/data/` ↔ `/metadata/` convention.
+- **`ARCHESTRA_HASHICORP_VAULT_TOKEN`** - HashiCorp Vault authentication token
+  - Required when: `ARCHESTRA_SECRETS_MANAGER=Vault`
+  - Note: System falls back to database storage if Vault is configured but credentials are missing
 
 - **`ARCHESTRA_DATABASE_URL_VAULT_REF`** - Read the database connection string from Vault instead of environment variables.
   - Optional: Only used when `ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT`
@@ -777,6 +756,29 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Set `ARCHESTRA_ANTHROPIC_BASE_URL=https://<resource-name>.services.ai.azure.com/anthropic`
   - Uses Azure Identity `DefaultAzureCredential` with token scope `https://ai.azure.com/.default`
   - Claude deployments must already exist in the Azure resource. Microsoft lists additional Claude prerequisites: paid eligible subscription, supported region, Azure Marketplace access for partner models, permission to subscribe to model offerings, and Contributor or Owner role on the resource group. Azure also requires Anthropic deployment metadata: `industry`, `organizationName`, and `countryCode`.
+
+- **`ARCHESTRA_ANTHROPIC_FEDERATION_RULE_ID`** - Anthropic Workload Identity Federation rule ID.
+  - Required when using Anthropic Workload Identity Federation
+  - Example: `fdrl_...`
+
+- **`ARCHESTRA_ANTHROPIC_ORGANIZATION_ID`** - Anthropic organization UUID for token exchange.
+  - Required when using Anthropic Workload Identity Federation
+
+- **`ARCHESTRA_ANTHROPIC_SERVICE_ACCOUNT_ID`** - Anthropic service account targeted by the federation rule.
+  - Required when using Anthropic Workload Identity Federation
+  - Example: `svac_...`
+
+- **`ARCHESTRA_ANTHROPIC_WORKSPACE_ID`** - Workspace to scope the minted Anthropic token to.
+  - Optional unless the federation rule can target multiple workspaces
+  - Example: `wrkspc_...`
+
+- **`ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE`** - Path to the OIDC JWT projected into the Archestra backend container.
+  - Required unless `ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN` is set
+  - Recommended for Kubernetes projected service account tokens because the file can rotate automatically
+
+- **`ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN`** - Inline OIDC JWT for token exchange.
+  - Required only when `ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE` is not set
+  - Prefer the file form for production deployments
 
 - **`ARCHESTRA_GEMINI_BASE_URL`** - Override the Google Gemini API base URL.
   - Default: `https://generativelanguage.googleapis.com`

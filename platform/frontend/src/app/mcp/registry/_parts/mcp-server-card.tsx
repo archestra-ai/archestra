@@ -59,10 +59,9 @@ import {
   type SettingsPage,
 } from "./mcp-server-settings-dialog";
 import {
-  UninstallPresetPickerDialog,
-  type UninstallPresetPickerInstall,
-} from "./uninstall-preset-picker-dialog";
-import { UninstallServerDialog } from "./uninstall-server-dialog";
+  UninstallServerDialog,
+  type UninstallServerInstall,
+} from "./uninstall-server-dialog";
 
 export type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
@@ -197,11 +196,7 @@ export function McpServerCard({
   const [logsInitialServerId, setLogsInitialServerId] = useState<string | null>(
     null,
   );
-  const [uninstallingServer, setUninstallingServer] = useState<{
-    id: string;
-    name: string;
-  } | null>(null);
-  const [uninstallPickerOpen, setUninstallPickerOpen] = useState(false);
+  const [uninstallDialogOpen, setUninstallDialogOpen] = useState(false);
 
   const openSettingsPage = (page: SettingsPage) => {
     setSettingsInitialPage(page);
@@ -281,29 +276,33 @@ export function McpServerCard({
     presetNameByCatalogId.set(p.id, p.name);
   }
 
-  const uninstallPickerInstalls: UninstallPresetPickerInstall[] =
-    personalServersAcrossPresets.map((s) => ({
-      server: { id: s.id, name: s.name },
-      presetName: presetNameByCatalogId.get(s.catalogId) ?? s.name,
-      isDefault: s.catalogId === item.id,
-    }));
+  // Iterate over presets (the parent catalog item + its child presets) and pick
+  // the most recent personal install per preset. The dropdown lists presets,
+  // not individual mcp_server rows.
+  const presetsForUninstall: { id: string; name: string }[] = [
+    { id: item.id, name: item.name },
+    ...presets.map((p) => ({ id: p.id, name: p.name })),
+  ];
+  const uninstallInstalls: UninstallServerInstall[] = presetsForUninstall
+    .map((preset) => {
+      const install = personalServersAcrossPresets
+        .filter((s) => s.catalogId === preset.id)
+        .sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        )[0];
+      if (!install) return null;
+      return {
+        server: { id: install.id, name: install.name },
+        presetName: preset.name,
+        isDefault: preset.id === item.id,
+      };
+    })
+    .filter((x): x is UninstallServerInstall => x !== null);
 
   const handleUninstallClick = () => {
-    if (personalServersAcrossPresets.length === 1) {
-      const s = personalServersAcrossPresets[0];
-      setUninstallingServer({ id: s.id, name: s.name });
-      return;
-    }
-    if (personalServersAcrossPresets.length > 1) {
-      setUninstallPickerOpen(true);
-      return;
-    }
-    // Fall back to the legacy single-server path (no preset installs visible)
-    if (personalServer) {
-      setUninstallingServer({
-        id: personalServer.id,
-        name: personalServer.name,
-      });
+    if (uninstallInstalls.length > 0) {
+      setUninstallDialogOpen(true);
     }
   };
 
@@ -878,20 +877,11 @@ export function McpServerCard({
       />
 
       <UninstallServerDialog
-        server={uninstallingServer}
-        onClose={() => setUninstallingServer(null)}
+        open={uninstallDialogOpen}
+        onClose={() => setUninstallDialogOpen(false)}
+        installs={uninstallInstalls}
         isCancelingInstallation={isInstalling}
         onCancelInstallation={onCancelInstallation}
-      />
-
-      <UninstallPresetPickerDialog
-        open={uninstallPickerOpen}
-        onOpenChange={setUninstallPickerOpen}
-        installs={uninstallPickerInstalls}
-        onPick={(server) => {
-          setUninstallPickerOpen(false);
-          setUninstallingServer(server);
-        }}
       />
     </>
   );

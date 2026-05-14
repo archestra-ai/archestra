@@ -132,7 +132,7 @@ describe("Internal MCP Catalog - Storage Routing", () => {
       });
 
       const child = await createChild(parent.id, {
-        name: "us-east",
+        childName: "us-east",
         presetFieldValues: { REGION: "us-east-1" },
       });
 
@@ -160,7 +160,7 @@ describe("Internal MCP Catalog - Storage Routing", () => {
       });
 
       const child = await createChild(parent.id, {
-        name: "prod",
+        childName: "prod",
         presetFieldValues: { DB_PASSWORD: "rotate-me-1" },
       });
 
@@ -307,7 +307,7 @@ describe("Internal MCP Catalog - Storage Routing", () => {
       });
 
       const child = await createChild(parent.id, {
-        name: "acme",
+        childName: "acme",
         presetFieldValues: { tenant_id: "acme-corp" },
       });
 
@@ -335,7 +335,7 @@ describe("Internal MCP Catalog - Storage Routing", () => {
       });
 
       const child = await createChild(parent.id, {
-        name: "acme",
+        childName: "acme",
         presetFieldValues: { api_key: "acme-key-1" },
       });
 
@@ -423,7 +423,7 @@ describe("Internal MCP Catalog - Storage Routing", () => {
 
   async function createChild(
     parentId: string,
-    body: { name: string; presetFieldValues: Record<string, unknown> },
+    body: { childName: string; presetFieldValues: Record<string, unknown> },
   ): Promise<{ id: string }> {
     const response = await app.inject({
       method: "POST",

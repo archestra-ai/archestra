@@ -1,6 +1,8 @@
 import { describe, expect, test } from "@/test";
 import {
+  AzureEmbeddingError,
   GeminiEmbeddingError,
+  getEmbeddingRetryDelayMs,
   isRetryableEmbeddingError,
   OpenAIEmbeddingError,
 } from "./index";
@@ -34,5 +36,22 @@ describe("isRetryableEmbeddingError", () => {
     expect(isRetryableEmbeddingError(timeout)).toBe(true);
     expect(isRetryableEmbeddingError(reset)).toBe(true);
     expect(isRetryableEmbeddingError(invalidArg)).toBe(false);
+  });
+});
+
+describe("getEmbeddingRetryDelayMs", () => {
+  test("honors Azure retry-after delays", () => {
+    expect(
+      getEmbeddingRetryDelayMs(
+        new AzureEmbeddingError(429, "rate limited", 60_000),
+        1_000,
+      ),
+    ).toBe(60_000);
+  });
+
+  test("falls back when provider error has no retry-after delay", () => {
+    expect(
+      getEmbeddingRetryDelayMs(new OpenAIEmbeddingError(429, "rate"), 2_000),
+    ).toBe(2_000);
   });
 });

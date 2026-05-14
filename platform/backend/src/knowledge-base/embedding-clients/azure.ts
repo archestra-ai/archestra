@@ -17,6 +17,7 @@ export class AzureEmbeddingError extends Error {
   constructor(
     public readonly status: number,
     message: string,
+    public readonly retryAfterMs?: number,
   ) {
     super(message);
     this.name = "AzureEmbeddingError";
@@ -88,7 +89,11 @@ export async function callAzureEmbedding(params: {
     };
   } catch (err: unknown) {
     if (err instanceof OpenAI.APIError) {
-      throw new AzureEmbeddingError(err.status ?? 500, err.message);
+      throw new AzureEmbeddingError(
+        err.status ?? 500,
+        err.message,
+        extractRetryAfterMs(err),
+      );
     }
     throw err;
   }
@@ -127,3 +132,36 @@ async function getAzureEmbeddingAuthHeaders(params: {
 }
 
 const KEYLESS_AZURE_API_KEY = "unused";
+
+function extractRetryAfterMs(
+  error: InstanceType<typeof OpenAI.APIError>,
+): number | undefined {
+  const retryAfterHeader = getHeaderValue(error.headers, "retry-after");
+  const retryAfterSeconds = Number.parseInt(retryAfterHeader ?? "", 10);
+  if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds >= 0) {
+    return retryAfterSeconds * 1000;
+  }
+
+  const retryAfterMatch = error.message.match(/retry after\s+(\d+)\s+seconds/i);
+  if (!retryAfterMatch) return undefined;
+
+  const retryAfterFromMessage = Number.parseInt(retryAfterMatch[1], 10);
+  return Number.isFinite(retryAfterFromMessage) && retryAfterFromMessage >= 0
+    ? retryAfterFromMessage * 1000
+    : undefined;
+}
+
+function getHeaderValue(
+  headers: Headers | Record<string, unknown> | undefined,
+  name: string,
+): string | undefined {
+  if (!headers) return undefined;
+  if (headers instanceof Headers) return headers.get(name) ?? undefined;
+
+  const lowerName = name.toLowerCase();
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() !== lowerName) continue;
+    return Array.isArray(value) ? String(value[0]) : String(value);
+  }
+  return undefined;
+}

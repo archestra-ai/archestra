@@ -80,3 +80,17 @@ export function isRetryableEmbeddingError(error: unknown): boolean {
   }
   return false;
 }
+
+export function getEmbeddingRetryDelayMs(
+  error: unknown,
+  fallbackDelayMs: number,
+): number {
+  if (
+    error instanceof AzureEmbeddingError &&
+    error.retryAfterMs !== undefined
+  ) {
+    return error.retryAfterMs;
+  }
+
+  return fallbackDelayMs;
+}

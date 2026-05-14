@@ -165,6 +165,58 @@ describe("callAzureEmbedding", () => {
     });
   });
 
+  test("preserves Azure retry-after from rate-limit errors", async () => {
+    mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(false);
+    const OpenAI = (await import("openai")).default;
+    const MockApiError = OpenAI.APIError as unknown as new (
+      status: number,
+      message: string,
+    ) => Error & { status: number };
+    const error = Object.assign(
+      new MockApiError(429, "Please retry after 60 seconds."),
+      {
+        headers: { "retry-after": "45" },
+      },
+    );
+    mockEmbeddingsCreate.mockRejectedValueOnce(error);
+
+    await expect(
+      callAzureEmbedding({
+        inputs: ["hello"],
+        model: "text-embedding-3-small",
+        apiKey: "azure-key",
+        baseUrl: "https://resource.openai.azure.com/openai",
+      }),
+    ).rejects.toMatchObject({
+      status: 429,
+      retryAfterMs: 45_000,
+    } satisfies Partial<AzureEmbeddingError>);
+  });
+
+  test("falls back to Azure retry-after message when header is missing", async () => {
+    mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(false);
+    const OpenAI = (await import("openai")).default;
+    const MockApiError = OpenAI.APIError as unknown as new (
+      status: number,
+      message: string,
+    ) => Error & { status: number };
+    mockEmbeddingsCreate.mockRejectedValueOnce(
+      new MockApiError(429, "Please retry after 60 seconds."),
+    );
+
+    await expect(
+      callAzureEmbedding({
+        inputs: ["hello"],
+        model: "text-embedding-3-small",
+        apiKey: "azure-key",
+        baseUrl: "https://resource.openai.azure.com/openai",
+      }),
+    ).rejects.toMatchObject({
+      status: 429,
+      retryAfterMs: 60_000,
+    } satisfies Partial<AzureEmbeddingError>);
+  });
+
   test("rejects image inputs", async () => {
     await expect(
       callAzureEmbedding({

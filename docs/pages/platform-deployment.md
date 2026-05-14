@@ -1101,6 +1101,13 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
   - Default: `true`
   - Set to `false` to use vector similarity search only.
 
+### Maintenance Mode
+
+- **`ARCHESTRA_MAINTENANCE_MODE_MESSAGE`** - Enables maintenance mode and displays a custom message to all users blocking access to the platform.
+  - Default: Not set (maintenance mode disabled)
+  - When set, all users are shown a full-screen maintenance overlay with the message instead of the normal application interface.
+  - Example: `ARCHESTRA_MAINTENANCE_MODE_MESSAGE="We are performing scheduled maintenance. Please check back in 30 minutes."`
+
 ### Enterprise Licensing
 
 To learn more about enterprise licensing, please reach out to [sales@archestra.ai](mailto:sales@archestra.ai).

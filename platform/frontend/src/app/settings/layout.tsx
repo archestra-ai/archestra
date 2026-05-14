@@ -53,6 +53,10 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
     title: "Secrets",
     description: "Manage organization secrets and secure configuration.",
   },
+  "/settings/notifications": {
+    title: "Notifications",
+    description: "Manage site-wide notification banners and announcements.",
+  },
   "/settings/teams": {
     title: "Teams",
     description:

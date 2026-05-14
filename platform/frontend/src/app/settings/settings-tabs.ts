@@ -40,6 +40,9 @@ export function useSettingsTabs() {
     ...(secretsType?.type === "Vault" && permissionMap?.["/settings/secrets"]
       ? [{ label: "Secrets", href: "/settings/secrets" }]
       : []),
+    ...(permissionMap?.["/settings/notifications"]
+      ? [{ label: "Notifications", href: "/settings/notifications" }]
+      : []),
     ...(permissionMap?.["/settings/organization"]
       ? [{ label: "Organization", href: "/settings/organization" }]
       : []),

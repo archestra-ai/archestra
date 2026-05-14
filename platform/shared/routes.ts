@@ -455,6 +455,12 @@ export const RouteId = {
 
   // Invitation Routes
   CheckInvitation: "checkInvitation",
+
+  // Site Notification Routes
+  GetSiteNotification: "getSiteNotification",
+  CreateSiteNotification: "createSiteNotification",
+  UpdateSiteNotification: "updateSiteNotification",
+  DeleteSiteNotification: "deleteSiteNotification",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

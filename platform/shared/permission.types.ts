@@ -71,6 +71,7 @@ export const resources = [
   "chatAgentPicker",
   "chatProviderSettings",
   "chatExpandToolCalls",
+  "siteNotification",
 ] as const;
 
 export const resourceLabels: Record<Resource, string> = {
@@ -109,6 +110,7 @@ export const resourceLabels: Record<Resource, string> = {
   chatAgentPicker: "Chat Agent Picker",
   chatProviderSettings: "Chat Provider Settings",
   chatExpandToolCalls: "Chat Expand Tool Calls",
+  siteNotification: "Site Notifications",
 };
 
 export const resourceDescriptions: Record<Resource, string> = {
@@ -153,6 +155,7 @@ export const resourceDescriptions: Record<Resource, string> = {
   chatExpandToolCalls:
     "Controls ability to expand and view tool call details in chat",
   organization: "Organization (internal, used by authentication system)",
+  siteNotification: "Site-wide notification banners and announcements",
 };
 
 /**
@@ -203,6 +206,7 @@ export const resourceCategories: Record<string, Resource[]> = {
     "secret",
     "apiKey",
     "organizationSettings",
+    "siteNotification",
   ],
 };
 

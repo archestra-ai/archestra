@@ -72,6 +72,9 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   chatProviderSettings: ["enable"],
   chatExpandToolCalls: ["enable"],
 
+  // Administration
+  siteNotification: ["read", "create", "update", "delete"],
+
   // better-auth internal resource — not exposed to users, kept for ACL compatibility
   organization: ["update", "delete"],
 };
@@ -118,6 +121,9 @@ export const editorPermissions: Record<Resource, Action[]> = {
   identityProvider: ["read"],
   secret: ["read"],
   organizationSettings: ["read", "update"],
+
+  // Administration
+  siteNotification: ["read", "create", "update", "delete"],
 
   // UI behavior resources
   simpleView: [],
@@ -171,6 +177,9 @@ export const memberPermissions: Record<Resource, Action[]> = {
   identityProvider: [],
   secret: [],
   organizationSettings: [],
+
+  // Administration
+  siteNotification: ["read", "create", "update", "delete"],
 
   // UI behavior resources
   simpleView: ["enable"],
@@ -350,6 +359,12 @@ export const permissionDescriptions: Record<string, string> = {
   "chatAgentPicker:enable": "Show agent picker in chat",
   "chatProviderSettings:enable": "Show model and API key selectors in chat",
   "chatExpandToolCalls:enable": "Allow expanding tool call details in chat",
+
+  // Administration
+  "siteNotification:read": "View site-wide notifications",
+  "siteNotification:create": "Create new site notifications",
+  "siteNotification:update": "Modify site notifications",
+  "siteNotification:delete": "Delete site notifications",
 };
 
 /**
@@ -1047,6 +1062,12 @@ export const requiredEndpointPermissionsMap: Partial<
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},
 
+  // Site Notification Routes
+  [RouteId.GetSiteNotification]: { siteNotification: ["read"] },
+  [RouteId.CreateSiteNotification]: { siteNotification: ["create"] },
+  [RouteId.UpdateSiteNotification]: { siteNotification: ["update"] },
+  [RouteId.DeleteSiteNotification]: { siteNotification: ["delete"] },
+
   // MCP Gateway Routes - available to all authenticated users
   [RouteId.McpGatewayGet]: {}, // Server discovery endpoint
   [RouteId.McpGatewayPost]: {}, // JSON-RPC endpoint for resources/read and tools/call
@@ -1113,4 +1134,5 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/secrets": { secret: ["read"] },
   "/settings/organization": { organizationSettings: ["read"] },
   "/settings/connection": { organizationSettings: ["read"] },
+  "/settings/notifications": { siteNotification: ["read"] },
 };

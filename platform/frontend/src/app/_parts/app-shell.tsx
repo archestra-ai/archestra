@@ -9,7 +9,10 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { Version } from "@/components/version";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useSiteNotification } from "@/lib/site-notification.query";
+import { MaintenanceModeOverlay } from "./maintenance-mode-overlay";
 import { AppSidebar } from "./sidebar";
+import { SiteNotificationBar } from "./site-notification-bar";
 
 const SIDEBAR_COLLAPSED_PERMISSION: Permissions = {
   simpleView: ["enable"],
@@ -25,6 +28,7 @@ export function AppShell({ children }: AppShellProps) {
   const isAuthPage = pathname.startsWith("/auth/");
   const { data: shouldCollapse, isSuccess: permissionLoaded } =
     useHasPermissions(SIDEBAR_COLLAPSED_PERMISSION);
+  const { data: notification } = useSiteNotification();
 
   // Browser preview mode: render children directly without sidebar/header/version
   if (isBrowserPreview) {
@@ -65,7 +69,9 @@ export function AppShell({ children }: AppShellProps) {
   return (
     <SidebarProvider defaultOpen={!shouldCollapse}>
       <AppSidebar />
+      <MaintenanceModeOverlay />
       <main className="h-screen w-full flex flex-col bg-background min-w-0 relative">
+        {notification && <SiteNotificationBar content={notification.content} />}
         <ImpersonationBanner />
         <header className="h-14 border-b border-border flex md:hidden items-center justify-between px-6 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">
           <SidebarTrigger className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2 -ml-2" />

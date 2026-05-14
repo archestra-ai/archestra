@@ -80,6 +80,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               ngrokDomain: z.string(),
               virtualKeyDefaultExpirationSeconds: z.number(),
               mcpSandboxDomain: z.string().nullable(),
+              maintenanceMode: z.string().nullable(),
             }),
             providerBaseUrls: z.record(
               SupportedProvidersSchema,
@@ -119,6 +120,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           virtualKeyDefaultExpirationSeconds:
             config.llmProxy.virtualKeyDefaultExpirationSeconds,
           mcpSandboxDomain: config.mcpSandbox.domain,
+          maintenanceMode: config.maintenanceMode,
         },
         providerBaseUrls: {
           openai: config.llm.openai.baseUrl || null,

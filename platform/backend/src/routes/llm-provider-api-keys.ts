@@ -74,6 +74,21 @@ async function testKeylessAzureEntraOrThrow(
   }
 }
 
+async function testKeylessAzureRuntimeOrThrow(
+  baseUrl?: string | null,
+  extraHeaders?: Record<string, string> | null,
+): Promise<void> {
+  try {
+    await testProviderApiKey("azure", "", baseUrl, extraHeaders);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new ApiError(
+      400,
+      `Azure Entra ID runtime validation failed: Archestra could not connect to the Azure inference endpoint. Confirm the Inference URL is reachable and the Azure identity can use models on that endpoint. Provider error: ${errorMessage}`,
+    );
+  }
+}
+
 const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // List all visible LLM provider API keys for the user
   fastify.get(
@@ -248,6 +263,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       let secret: SelectSecret | null = null;
       let actualApiKeyValue: string | null = null;
+      const runtimeTestBaseUrl = body.inferenceBaseUrl ?? body.baseUrl;
 
       // Bedrock SigV4: store credentials as JSON in the secret payload, then
       // test using the marker-encoded form.
@@ -267,7 +283,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await testApiKeyOrThrow(
           body.provider,
           actualApiKeyValue,
-          body.baseUrl,
+          runtimeTestBaseUrl,
           body.extraHeaders,
         );
         secret = await secretManager().createSecret(
@@ -302,7 +318,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await testApiKeyOrThrow(
           body.provider,
           actualApiKeyValue,
-          body.baseUrl,
+          runtimeTestBaseUrl,
           body.extraHeaders,
         );
         // then create the secret
@@ -321,7 +337,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await testApiKeyOrThrow(
           body.provider,
           actualApiKeyValue,
-          body.baseUrl,
+          runtimeTestBaseUrl,
           body.extraHeaders,
         );
 
@@ -341,6 +357,12 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         isAzureOpenAiEntraIdEnabled()
       ) {
         await testKeylessAzureEntraOrThrow(body.baseUrl, body.extraHeaders);
+        if (body.inferenceBaseUrl && body.inferenceBaseUrl !== body.baseUrl) {
+          await testKeylessAzureRuntimeOrThrow(
+            body.inferenceBaseUrl,
+            body.extraHeaders,
+          );
+        }
       }
 
       if (
@@ -615,7 +637,11 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Use user-provided baseUrl/extraHeaders if present, otherwise fall
         // back to what's stored on the API key record.
         const testBaseUrl =
-          body.baseUrl !== undefined ? body.baseUrl : apiKeyFromDB.baseUrl;
+          body.inferenceBaseUrl !== undefined
+            ? body.inferenceBaseUrl
+            : body.baseUrl !== undefined
+              ? body.baseUrl
+              : (apiKeyFromDB.inferenceBaseUrl ?? apiKeyFromDB.baseUrl);
         const testExtraHeaders =
           body.extraHeaders !== undefined
             ? body.extraHeaders

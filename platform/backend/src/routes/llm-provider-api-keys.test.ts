@@ -263,6 +263,29 @@ describe("LLM Provider API Keys CRUD", () => {
     expect(apiKey.secretId).toBeDefined();
   });
 
+  test("tests API key creation against inference URL when provided", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Inference URL Create Test",
+        provider: "openai",
+        apiKey: "sk-openai-inference-url-create-test",
+        scope: "personal",
+        baseUrl: "https://discovery.example.com/v1",
+        inferenceBaseUrl: "https://runtime.example.com/v1",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(mockTestProviderApiKey).toHaveBeenCalledWith(
+      "openai",
+      "sk-openai-inference-url-create-test",
+      "https://runtime.example.com/v1",
+      undefined,
+    );
+  });
+
   test("should create an org-wide LLM provider API key", async () => {
     const response = await app.inject({
       method: "POST",
@@ -499,6 +522,40 @@ describe("LLM Provider API Keys CRUD", () => {
     );
   });
 
+  test("tests new API key value against inference URL when both change", async () => {
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Inference URL Update With Key Test",
+        provider: "openai",
+        apiKey: "sk-openai-original-key",
+        scope: "personal",
+        baseUrl: "https://discovery.example.com/v1",
+      },
+    });
+    expect(createResponse.statusCode).toBe(200);
+    const createdKey = createResponse.json();
+    mockTestProviderApiKey.mockClear();
+
+    const updateResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${createdKey.id}`,
+      payload: {
+        apiKey: "sk-openai-updated-key",
+        inferenceBaseUrl: "https://runtime.example.com/v1",
+      },
+    });
+
+    expect(updateResponse.statusCode).toBe(200);
+    expect(mockTestProviderApiKey).toHaveBeenCalledWith(
+      "openai",
+      "sk-openai-updated-key",
+      "https://runtime.example.com/v1",
+      null,
+    );
+  });
+
   test("should allow to set base URL for providers with optional API key", async () => {
     const createResponse = await app.inject({
       method: "POST",
@@ -591,6 +648,36 @@ describe("LLM Provider API Keys CRUD", () => {
       "",
       "https://runtime.example.com/openai/v1",
       null,
+    );
+  });
+
+  test("tests keyless Azure Entra creation against discovery and inference URLs", async () => {
+    mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(true);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Azure Split Endpoint Create",
+        provider: "azure",
+        scope: "personal",
+        baseUrl: "https://discovery.example.com/openai",
+        inferenceBaseUrl: "https://runtime.example.com/openai/v1",
+      },
+    });
+
+    expect(createResponse.statusCode).toBe(200);
+    expect(mockTestProviderApiKey).toHaveBeenCalledWith(
+      "azure",
+      "",
+      "https://discovery.example.com/openai",
+      undefined,
+    );
+    expect(mockTestProviderApiKey).toHaveBeenCalledWith(
+      "azure",
+      "",
+      "https://runtime.example.com/openai/v1",
+      undefined,
     );
   });
 

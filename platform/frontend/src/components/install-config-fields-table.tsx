@@ -12,6 +12,10 @@ import type {
   UseFormSetValue,
   UseFormWatch,
 } from "react-hook-form";
+import {
+  FieldScopeSelect,
+  type FieldScopeValue,
+} from "@/components/field-scope-select";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -30,11 +34,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import {
   MCP_CONFIG_AUTOCOMPLETE,
   MCP_SECRET_AUTOCOMPLETE,
@@ -69,6 +68,7 @@ interface InstallConfigFieldsTableProps<TFieldValues extends FieldValues> {
   typeFieldName?: string | null;
   valueFieldName?: string;
   promptFieldName?: string;
+  presetFieldName?: string | null;
   requiredFieldName?: string;
   descriptionFieldName?: string;
   valuePlaceholder?: string;
@@ -98,6 +98,7 @@ export function InstallConfigFieldsTable<TFieldValues extends FieldValues>({
   typeFieldName = "type",
   valueFieldName = "value",
   promptFieldName = "promptOnInstallation",
+  presetFieldName = "promptOnPreset",
   requiredFieldName = "required",
   descriptionFieldName = "description",
   valuePlaceholder = "your-value",
@@ -109,13 +110,21 @@ export function InstallConfigFieldsTable<TFieldValues extends FieldValues>({
 }: InstallConfigFieldsTableProps<TFieldValues>) {
   const showTypeColumn = typeFieldName !== null;
   const showBearerColumn = bearerPrefixFieldName !== null;
-  const gridClass = showTypeColumn
-    ? showBearerColumn
-      ? "grid grid-cols-[1.5fr_1.2fr_0.7fr_0.7fr_0.6fr_1.5fr_2.5fr_auto] gap-2"
-      : "grid grid-cols-[1.5fr_1.2fr_0.7fr_0.7fr_1.5fr_2.5fr_auto] gap-2"
-    : showBearerColumn
-      ? "grid grid-cols-[1.5fr_0.7fr_0.7fr_0.6fr_1.5fr_2.5fr_auto] gap-2"
-      : "grid grid-cols-[1.5fr_0.7fr_0.7fr_1.5fr_2.5fr_auto] gap-2";
+  const allowPresetScope = presetFieldName !== null;
+  const gridTemplateColumns = [
+    "1.5fr", // key
+    showTypeColumn ? "1.2fr" : null,
+    "1.1fr", // scope
+    "0.7fr", // required
+    showBearerColumn ? "0.6fr" : null,
+    "1.5fr", // value
+    "2.5fr", // description
+    "auto", // delete
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const gridClass = "grid gap-2";
+  const gridStyle = { gridTemplateColumns };
   const indexes = rowIndexes ?? fields.map((_, index) => index);
 
   const [dialogOpenForIndex, setDialogOpenForIndex] = useState<number | null>(
@@ -149,10 +158,13 @@ export function InstallConfigFieldsTable<TFieldValues extends FieldValues>({
   return (
     <>
       <div className="border rounded-lg">
-        <div className={`${gridClass} p-3 bg-muted/50 border-b`}>
+        <div
+          className={`${gridClass} p-3 bg-muted/50 border-b`}
+          style={gridStyle}
+        >
           <div className="text-xs font-medium">{keyLabel}</div>
           {showTypeColumn && <div className="text-xs font-medium">Type</div>}
-          <div className="text-xs font-medium">Prompt user</div>
+          <div className="text-xs font-medium">Scope</div>
           <div className="text-xs font-medium">Required</div>
           {showBearerColumn && (
             <div className="text-xs font-medium">Bearer</div>
@@ -172,10 +184,48 @@ export function InstallConfigFieldsTable<TFieldValues extends FieldValues>({
               )
             : "plain_text";
 
+          const promptOnPreset = allowPresetScope
+            ? form.watch(
+                `${fieldNamePrefix}.${index}.${presetFieldName}` as FieldPath<TFieldValues>,
+              )
+            : false;
+          const scope: FieldScopeValue = promptOnInstallation
+            ? "installation"
+            : promptOnPreset
+              ? "preset"
+              : "static";
+          const setScope = (next: FieldScopeValue) => {
+            form.setValue(
+              `${fieldNamePrefix}.${index}.${promptFieldName}` as FieldPath<TFieldValues>,
+              (next === "installation") as PathValue<
+                TFieldValues,
+                FieldPath<TFieldValues>
+              >,
+              { shouldDirty: true },
+            );
+            if (allowPresetScope) {
+              form.setValue(
+                `${fieldNamePrefix}.${index}.${presetFieldName}` as FieldPath<TFieldValues>,
+                (next === "preset") as PathValue<
+                  TFieldValues,
+                  FieldPath<TFieldValues>
+                >,
+                { shouldDirty: true },
+              );
+            }
+            if (next !== "installation") {
+              form.setValue(
+                `${fieldNamePrefix}.${index}.${requiredFieldName}` as FieldPath<TFieldValues>,
+                false as PathValue<TFieldValues, FieldPath<TFieldValues>>,
+                { shouldDirty: true },
+              );
+            }
+          };
           return (
             <div
               key={field.id}
               className={`${gridClass} p-3 items-start border-b last:border-b-0`}
+              style={gridStyle}
             >
               <FormField
                 control={control}
@@ -240,62 +290,12 @@ export function InstallConfigFieldsTable<TFieldValues extends FieldValues>({
                 />
               )}
 
-              <FormField
-                control={control}
-                name={
-                  `${fieldNamePrefix}.${index}.${promptFieldName}` as FieldPath<TFieldValues>
-                }
-                render={({ field }) => {
-                  const checkbox = (
-                    <Checkbox
-                      data-testid={E2eTestId.PromptOnInstallationCheckbox}
-                      checked={field.value}
-                      disabled={disablePromptOnInstallation}
-                      onCheckedChange={(checked) => {
-                        field.onChange(checked);
-                        if (!checked) {
-                          form.setValue(
-                            `${fieldNamePrefix}.${index}.${requiredFieldName}` as FieldPath<TFieldValues>,
-                            false as PathValue<
-                              TFieldValues,
-                              FieldPath<TFieldValues>
-                            >,
-                          );
-                        }
-                      }}
-                    />
-                  );
-                  return (
-                    <FormItem>
-                      <FormControl>
-                        <div className="flex items-center h-10">
-                          {disablePromptOnInstallation &&
-                          disablePromptOnInstallationReason ? (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span
-                                  // biome-ignore lint/a11y/noNoninteractiveTabindex: tabIndex needed so tooltip trigger receives keyboard focus when wrapping a disabled control
-                                  tabIndex={0}
-                                  className="cursor-not-allowed"
-                                >
-                                  {checkbox}
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="max-w-xs">
-                                  {disablePromptOnInstallationReason}
-                                </p>
-                              </TooltipContent>
-                            </Tooltip>
-                          ) : (
-                            checkbox
-                          )}
-                        </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  );
-                }}
+              <FieldScopeSelect
+                value={scope}
+                onChange={setScope}
+                allowPresetScope={allowPresetScope}
+                disableInstallation={disablePromptOnInstallation}
+                disabledReason={disablePromptOnInstallationReason}
               />
 
               <FormField
@@ -344,11 +344,21 @@ export function InstallConfigFieldsTable<TFieldValues extends FieldValues>({
               )}
 
               {(() => {
-                if (promptOnInstallation) {
+                if (scope === "installation") {
                   return (
                     <div className="flex items-center h-10">
                       <p className="text-xs text-muted-foreground">
                         Prompted at installation
+                      </p>
+                    </div>
+                  );
+                }
+
+                if (scope === "preset") {
+                  return (
+                    <div className="flex items-center h-10">
+                      <p className="text-xs text-muted-foreground">
+                        Set per preset
                       </p>
                     </div>
                   );

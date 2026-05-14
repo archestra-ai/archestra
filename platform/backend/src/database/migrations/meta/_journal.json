@@ -1660,6 +1660,13 @@
       "when": 1778774649490,
       "tag": "0236_purple_red_ghost",
       "breakpoints": true
+    },
+    {
+      "idx": 237,
+      "version": "7",
+      "when": 1778786612751,
+      "tag": "0237_regular_goblin_queen",
+      "breakpoints": true
     }
   ]
 }

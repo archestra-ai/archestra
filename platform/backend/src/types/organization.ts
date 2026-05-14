@@ -280,7 +280,8 @@ export const UpdateLlmSettingsSchema = z.object({
   compressionScope: OrganizationCompressionScopeSchema.optional(),
   defaultUserLimitValue: z.number().int().positive().nullable().optional(),
   defaultUserLimitModel: z.array(z.string()).nullable().optional(),
-  defaultUserLimitCleanupInterval: LimitCleanupIntervalSchema.optional(),
+  defaultUserLimitCleanupInterval:
+    LimitCleanupIntervalSchema.nullable().optional(),
 });
 
 export const UpdateAgentSettingsSchema = z.object({

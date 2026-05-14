@@ -13,6 +13,7 @@ let mockTeams: Array<{
   description: string | null;
   convertToolResultsToToon: boolean;
 }> = [];
+const mockUpdateLlmSettingsMutateAsync = vi.fn();
 
 vi.mock("@/lib/organization.query", () => ({
   useOrganization: () => ({
@@ -20,7 +21,7 @@ vi.mock("@/lib/organization.query", () => ({
     isPending: false,
   }),
   useUpdateLlmSettings: () => ({
-    mutateAsync: vi.fn(),
+    mutateAsync: mockUpdateLlmSettingsMutateAsync,
     isPending: false,
   }),
 }));
@@ -53,6 +54,7 @@ function renderPage() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockUpdateLlmSettingsMutateAsync.mockResolvedValue({});
   mockOrganization = {
     compressionScope: "organization",
     convertToolResultsToToon: true,
@@ -91,6 +93,12 @@ describe("LlmSettingsPage", () => {
     await user.click(await screen.findByRole("button", { name: "Unset" }));
 
     expect(screen.getByPlaceholderText("Disabled")).toHaveValue("");
-    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(mockUpdateLlmSettingsMutateAsync).toHaveBeenCalledWith({
+      defaultUserLimitValue: null,
+      defaultUserLimitModel: null,
+      defaultUserLimitCleanupInterval: null,
+    });
   });
 });

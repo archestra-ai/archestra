@@ -997,10 +997,7 @@ function buildCleanupDueCondition(): SQL {
         schema.limitsTable.cleanupInterval,
         cleanupInterval as LimitCleanupInterval,
       ),
-      lt(
-        schema.limitsTable.lastCleanup,
-        sql`now() - interval ${sql.raw(`'${sqlLiteral}'`)}`,
-      ),
+      lt(schema.limitsTable.lastCleanup, sql`now() - ${sqlLiteral}::interval`),
     ),
   );
 
@@ -1016,7 +1013,7 @@ async function getDefaultUserLimitUsage(params: {
   const conditions: SQL[] = [
     eq(schema.interactionsTable.userId, params.userId),
     eq(schema.agentsTable.organizationId, params.organizationId),
-    sql`${schema.interactionsTable.createdAt} >= now() - interval ${sql.raw(`'${LimitModel.limitsCleanupIntervalSqlLiterals[params.cleanupInterval]}'`)}`,
+    sql`${schema.interactionsTable.createdAt} >= now() - ${LimitModel.limitsCleanupIntervalSqlLiterals[params.cleanupInterval]}::interval`,
   ];
 
   if (params.models && params.models.length > 0) {
@@ -1039,10 +1036,22 @@ async function getDefaultUserLimitUsage(params: {
     )
     .where(and(...conditions));
 
+  const modelsMissingCost = Array.from(
+    new Set(
+      interactions
+        .filter(
+          (interaction) =>
+            interaction.cost === null && interaction.model !== null,
+        )
+        .map((interaction) => interaction.model as string),
+    ),
+  );
+  const modelEntriesByModelId =
+    await ModelModel.findByModelIdsOnly(modelsMissingCost);
+
   let cost = 0;
   let tokensIn = 0;
   let tokensOut = 0;
-
   for (const interaction of interactions) {
     const inputTokens = interaction.inputTokens ?? 0;
     const outputTokens = interaction.outputTokens ?? 0;
@@ -1058,7 +1067,7 @@ async function getDefaultUserLimitUsage(params: {
       continue;
     }
 
-    const modelEntry = await ModelModel.findByModelIdOnly(interaction.model);
+    const modelEntry = modelEntriesByModelId.get(interaction.model) ?? null;
     const pricing = ModelModel.getEffectivePricing(
       modelEntry,
       interaction.model,

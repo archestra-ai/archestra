@@ -159339,6 +159339,7 @@
                     }
                   },
                   "defaultUserLimitCleanupInterval": {
+                    "nullable": true,
                     "type": "string",
                     "enum": [
                       "1h",

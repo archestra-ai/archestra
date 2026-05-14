@@ -43,6 +43,9 @@ type CompressionScope = NonNullable<
     archestraApiTypes.UpdateLlmSettingsData["body"]
   >["compressionScope"]
 >;
+type UpdateLlmSettingsBody = NonNullable<
+  archestraApiTypes.UpdateLlmSettingsData["body"]
+>;
 type CompressionMode = "disabled" | CompressionScope;
 
 const COMPRESSION_MODE_LABELS: Record<CompressionMode, string> = {
@@ -178,65 +181,73 @@ export default function LlmSettingsPage() {
 
   const handleSave = async () => {
     const mutations: Promise<unknown>[] = [];
+    const llmSettingsBody: UpdateLlmSettingsBody = {};
+    let shouldUpdateLlmSettings = false;
+    let shouldUpdateTeams = false;
 
-    // Collect compression settings mutation
     if (hasCompressionChanges) {
       if (compressionMode === "disabled") {
-        mutations.push(
-          updateLlmSettingsMutation.mutateAsync({
-            compressionScope: "organization",
-            convertToolResultsToToon: false,
-          }),
-        );
+        Object.assign(llmSettingsBody, {
+          compressionScope: "organization",
+          convertToolResultsToToon: false,
+        });
       } else if (compressionMode === "organization") {
-        mutations.push(
-          updateLlmSettingsMutation.mutateAsync({
-            compressionScope: "organization",
-            convertToolResultsToToon: true,
-          }),
-        );
+        Object.assign(llmSettingsBody, {
+          compressionScope: "organization",
+          convertToolResultsToToon: true,
+        });
       } else {
-        mutations.push(
-          updateLlmSettingsMutation
-            .mutateAsync({
-              compressionScope: "team",
-              convertToolResultsToToon: false,
-            })
-            .then(() =>
-              Promise.all(
-                loadedTeams.map((team) =>
-                  archestraApiSdk.updateTeam({
-                    path: { id: team.id },
-                    body: {
-                      name: team.name,
-                      description: team.description ?? undefined,
-                      convertToolResultsToToon: selectedTeamIds.includes(
-                        team.id,
-                      ),
-                    },
-                  }),
-                ),
-              ),
-            )
-            .then(() => queryClient.invalidateQueries({ queryKey: ["teams"] })),
-        );
+        Object.assign(llmSettingsBody, {
+          compressionScope: "team",
+          convertToolResultsToToon: false,
+        });
+        shouldUpdateTeams = true;
       }
+      shouldUpdateLlmSettings = true;
     }
 
     if (hasDefaultUserLimitChanges) {
-      mutations.push(
-        updateLlmSettingsMutation.mutateAsync({
-          defaultUserLimitValue: defaultUserLimitValue
-            ? Number(defaultUserLimitValue)
+      Object.assign(llmSettingsBody, {
+        defaultUserLimitValue: defaultUserLimitValue
+          ? Number(defaultUserLimitValue)
+          : null,
+        defaultUserLimitModel:
+          defaultUserLimitValue && !isDefaultUserLimitAllModels
+            ? defaultUserLimitModels
             : null,
-          defaultUserLimitModel:
-            defaultUserLimitValue && !isDefaultUserLimitAllModels
-              ? defaultUserLimitModels
-              : null,
-          defaultUserLimitCleanupInterval: defaultUserLimitValue
-            ? defaultUserLimitCleanupInterval
-            : undefined,
-        }),
+        defaultUserLimitCleanupInterval: defaultUserLimitValue
+          ? defaultUserLimitCleanupInterval
+          : null,
+      });
+      shouldUpdateLlmSettings = true;
+    }
+
+    if (shouldUpdateLlmSettings) {
+      const updateLlmSettings =
+        updateLlmSettingsMutation.mutateAsync(llmSettingsBody);
+      mutations.push(
+        shouldUpdateTeams
+          ? updateLlmSettings
+              .then(() =>
+                Promise.all(
+                  loadedTeams.map((team) =>
+                    archestraApiSdk.updateTeam({
+                      path: { id: team.id },
+                      body: {
+                        name: team.name,
+                        description: team.description ?? undefined,
+                        convertToolResultsToToon: selectedTeamIds.includes(
+                          team.id,
+                        ),
+                      },
+                    }),
+                  ),
+                ),
+              )
+              .then(() =>
+                queryClient.invalidateQueries({ queryKey: ["teams"] }),
+              )
+          : updateLlmSettings,
       );
     }
 

@@ -248,8 +248,7 @@ export default function LimitsPage() {
         entityId: limit.entityType === "organization" ? "" : limit.entityId,
         limitValue: String(limit.limitValue),
         cleanupInterval:
-          (limit.cleanupInterval as LimitCleanupInterval | null) ??
-          DEFAULT_LIMIT_CLEANUP_INTERVAL,
+          limit.cleanupInterval ?? DEFAULT_LIMIT_CLEANUP_INTERVAL,
         models: isAllModels ? [] : models,
         isAllModels,
       });

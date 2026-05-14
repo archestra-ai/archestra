@@ -1002,9 +1002,9 @@ describe("LimitModel", () => {
       expect(limit1AfterReset?.lastCleanup).toBeDefined();
       expect(limit1AfterReset?.lastCleanup).not.toBeNull();
 
-      const limit2AfterReset = await LimitModel.findById(limit1.id);
+      const limit2AfterReset = await LimitModel.findById(limit2.id);
       const modelUsage2AfterReset = await LimitModel.getRawModelUsage(
-        limit1.id,
+        limit2.id,
       );
 
       expect(limit2AfterReset).toBeDefined();

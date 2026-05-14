@@ -215,38 +215,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // preset installs at the deployment-name layer.
         serverData.name = catalogItem.name;
 
-        // Apply preset-scoped overlay from the catalog row onto the install
-        // inputs. Preset values have *lower* precedence than install-time
-        // inputs — if the user explicitly supplied the same key at install
-        // time, that wins.
-        // Secret-typed preset env values are also surfaced into
-        // environmentValues here. They reach the pod via the K8s Secret
-        // (built from the install secret bag) — the env builder only emits a
-        // secretKeyRef when it sees a non-empty entry for that key in
-        // environmentValues, so the merge must include secret keys too.
-        if (catalogItem.localConfig?.environment) {
-          const presetSecretBag = catalogItem.presetSecretId
-            ? ((await secretManager().getSecret(catalogItem.presetSecretId))
-                ?.secret as Record<string, unknown> | undefined)
-            : undefined;
-
-          const presetEnvDefaults: Record<string, string> = {};
-          for (const envDef of catalogItem.localConfig.environment) {
-            if (!envDef.promptOnPreset) continue;
-            const v =
-              envDef.type === "secret"
-                ? presetSecretBag?.[envDef.key]
-                : catalogItem.presetFieldValues?.[envDef.key];
-            if (v != null) presetEnvDefaults[envDef.key] = String(v);
-          }
-          if (Object.keys(presetEnvDefaults).length > 0) {
-            environmentValues = {
-              ...presetEnvDefaults,
-              ...(environmentValues ?? {}),
-            };
-          }
-        }
-
         // Scope-based authorization (personal / team / org).
         await validateScopeAndAuthorization({
           scope: serverData.scope,
@@ -395,6 +363,40 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // sees the just-persisted preset values.
           catalogItem.presetFieldValues = mergedPresetFieldValues;
           catalogItem.presetSecretId = presetSecretId;
+        }
+
+        // Apply preset-scoped overlay from the catalog row onto the install
+        // inputs. Preset values have *lower* precedence than install-time
+        // inputs — if the user explicitly supplied the same key at install
+        // time, that wins.
+        // Secret-typed preset env values are also surfaced into
+        // environmentValues here. They reach the pod via the K8s Secret
+        // (built from the install secret bag) — the env builder only emits a
+        // secretKeyRef when it sees a non-empty entry for that key in
+        // environmentValues, so the merge must include secret keys too.
+        // Runs *after* the persist step above so values freshly-supplied via
+        // this install request's `presetFieldValues` are included.
+        if (catalogItem.localConfig?.environment) {
+          const presetSecretBag = catalogItem.presetSecretId
+            ? ((await secretManager().getSecret(catalogItem.presetSecretId))
+                ?.secret as Record<string, unknown> | undefined)
+            : undefined;
+
+          const presetEnvDefaults: Record<string, string> = {};
+          for (const envDef of catalogItem.localConfig.environment) {
+            if (!envDef.promptOnPreset) continue;
+            const v =
+              envDef.type === "secret"
+                ? presetSecretBag?.[envDef.key]
+                : catalogItem.presetFieldValues?.[envDef.key];
+            if (v != null) presetEnvDefaults[envDef.key] = String(v);
+          }
+          if (Object.keys(presetEnvDefaults).length > 0) {
+            environmentValues = {
+              ...presetEnvDefaults,
+              ...(environmentValues ?? {}),
+            };
+          }
         }
       }
 

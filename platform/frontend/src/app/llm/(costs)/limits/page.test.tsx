@@ -5,6 +5,7 @@ import LimitsPage, { getLimitModels } from "./page";
 const mockSetCostsAction = vi.fn();
 const mockUseLimits = vi.fn();
 const mockUseAllVirtualApiKeys = vi.fn();
+const mockUseHasPermissions = vi.fn(() => ({ data: true, isPending: false }));
 
 vi.mock("next/link", () => ({
   default: ({
@@ -86,6 +87,11 @@ vi.mock("@/lib/hooks/use-data-table-query-params", () => ({
     searchParams: new URLSearchParams(),
     updateQueryParams: vi.fn(),
   }),
+}));
+
+vi.mock("@/lib/auth/auth.query", () => ({
+  useHasPermissions: () => mockUseHasPermissions(),
+  useMissingPermissions: () => [],
 }));
 
 vi.mock("@/components/loading", () => ({
@@ -297,19 +303,34 @@ vi.mock("@/components/searchable-multi-select", () => ({
 describe("LimitsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseHasPermissions.mockReturnValue({ data: true, isPending: false });
     mockUseLimits.mockReturnValue({ data: [], isPending: false });
     mockUseAllVirtualApiKeys.mockReturnValue({
       data: { data: [], pagination: { total: 0 } },
     });
   });
 
-  it("does not show the removed default cleanup schedule banner", () => {
+  it("shows a settings notice when a default user limit is configured", () => {
     render(<LimitsPage />);
 
+    expect(screen.getByText(/default user limit applies/i)).toBeInTheDocument();
     expect(
       screen.queryByText(/new limits use the default cleanup schedule/i),
     ).not.toBeInTheDocument();
-    expect(screen.getAllByText("Every week").length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: /llm settings/i })).toHaveAttribute(
+      "href",
+      "/settings/llm",
+    );
+  });
+
+  it("hides the default user limit settings notice without settings permission", () => {
+    mockUseHasPermissions.mockReturnValue({ data: false, isPending: false });
+
+    render(<LimitsPage />);
+
+    expect(
+      screen.queryByText(/default user limit applies/i),
+    ).not.toBeInTheDocument();
   });
 
   it("requests virtual keys with the API-supported page size", () => {

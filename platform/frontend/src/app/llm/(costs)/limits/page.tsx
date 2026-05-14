@@ -12,6 +12,7 @@ import {
   User,
   Users,
 } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSetCostsAction } from "@/app/llm/(costs)/layout";
 import { AgentIcon } from "@/components/agent-icon";
@@ -26,6 +27,7 @@ import {
 import { LlmModelPicker } from "@/components/llm-model-picker";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { WithPermissions } from "@/components/roles/with-permissions";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -601,6 +603,26 @@ export default function LimitsPage() {
 
   return (
     <div className="space-y-4">
+      {organization?.defaultUserLimitValue && (
+        <WithPermissions
+          permissions={{ llmSettings: ["read"] }}
+          noPermissionHandle="hide"
+        >
+          <Alert variant="info">
+            <AlertDescription>
+              A default user limit applies to every member. Configure it in{" "}
+              <Link
+                href="/settings/llm"
+                className="font-medium underline underline-offset-4"
+              >
+                LLM settings
+              </Link>
+              .
+            </AlertDescription>
+          </Alert>
+        </WithPermissions>
+      )}
+
       <div className="flex flex-wrap gap-3">
         <Select
           value={statusFilter}

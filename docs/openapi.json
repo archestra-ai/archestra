@@ -127329,9 +127329,6 @@
                           "1m"
                         ]
                       },
-                      "isDefaultUserLimit": {
-                        "type": "boolean"
-                      },
                       "lastCleanup": {
                         "nullable": true,
                         "type": "string",
@@ -127381,7 +127378,6 @@
                       "limitValue",
                       "mcpServerName",
                       "toolName",
-                      "isDefaultUserLimit",
                       "lastCleanup",
                       "createdAt",
                       "updatedAt"
@@ -127694,9 +127690,6 @@
                       "1m"
                     ]
                   },
-                  "isDefaultUserLimit": {
-                    "type": "boolean"
-                  },
                   "lastCleanup": {
                     "nullable": true
                   }
@@ -127777,9 +127770,6 @@
                         "1m"
                       ]
                     },
-                    "isDefaultUserLimit": {
-                      "type": "boolean"
-                    },
                     "lastCleanup": {
                       "nullable": true,
                       "type": "string",
@@ -127802,7 +127792,6 @@
                     "limitValue",
                     "mcpServerName",
                     "toolName",
-                    "isDefaultUserLimit",
                     "lastCleanup",
                     "createdAt",
                     "updatedAt"
@@ -128134,9 +128123,6 @@
                         "1m"
                       ]
                     },
-                    "isDefaultUserLimit": {
-                      "type": "boolean"
-                    },
                     "lastCleanup": {
                       "nullable": true,
                       "type": "string",
@@ -128159,7 +128145,6 @@
                     "limitValue",
                     "mcpServerName",
                     "toolName",
-                    "isDefaultUserLimit",
                     "lastCleanup",
                     "createdAt",
                     "updatedAt"
@@ -128471,9 +128456,6 @@
                       "1m"
                     ]
                   },
-                  "isDefaultUserLimit": {
-                    "type": "boolean"
-                  },
                   "lastCleanup": {
                     "nullable": true
                   }
@@ -128560,9 +128542,6 @@
                         "1m"
                       ]
                     },
-                    "isDefaultUserLimit": {
-                      "type": "boolean"
-                    },
                     "lastCleanup": {
                       "nullable": true,
                       "type": "string",
@@ -128585,7 +128564,6 @@
                     "limitValue",
                     "mcpServerName",
                     "toolName",
-                    "isDefaultUserLimit",
                     "lastCleanup",
                     "createdAt",
                     "updatedAt"

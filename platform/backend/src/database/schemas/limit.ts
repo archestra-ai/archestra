@@ -1,5 +1,4 @@
 import {
-  boolean,
   index,
   integer,
   jsonb,
@@ -31,9 +30,6 @@ const limitsTable = pgTable(
       .$type<LimitCleanupInterval>()
       .notNull()
       .default("1w"),
-    isDefaultUserLimit: boolean("is_default_user_limit")
-      .notNull()
-      .default(false),
     lastCleanup: timestamp("last_cleanup", { mode: "date" }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })

@@ -52,14 +52,12 @@ export const InsertLimitSchema = createInsertSchema(schema.limitsTable, {
   limitType: LimitTypeSchema,
   model: z.array(z.string()).nullable().optional(),
   cleanupInterval: LimitCleanupIntervalSchema.optional(),
-  isDefaultUserLimit: z.boolean().optional(),
 });
 export const UpdateLimitSchema = createUpdateSchema(schema.limitsTable, {
   entityType: LimitEntityTypeSchema,
   limitType: LimitTypeSchema,
   model: z.array(z.string()).nullable().optional(),
   cleanupInterval: LimitCleanupIntervalSchema.optional(),
-  isDefaultUserLimit: z.boolean().optional(),
 }).omit({
   id: true,
   createdAt: true,

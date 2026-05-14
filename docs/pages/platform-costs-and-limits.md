@@ -32,13 +32,17 @@ Use organization limits for a shared platform-wide budget. Use team limits when 
 
 Limits are evaluated from recorded model usage, so pricing configuration affects token-cost limits directly.
 
-Admins can also configure a default user limit in LLM settings. The default creates or updates a user-scoped token-cost limit for every current member and is applied automatically to future members. Manual user limits remain separate.
+## Default User Limits
+
+Admins can configure a default user limit in LLM settings. It is inherited by every current and future member, but it is not shown as a separate row for each user on the limits page.
+
+Custom per-user limits are evaluated alongside the default user limit. A request is blocked when any applicable user limit is reached.
 
 ## Limit Cleanup
 
-Limit usage is periodically reset according to each limit's cleanup interval. The organization-level cleanup interval in LLM settings is the default pre-selected when new limits are created. This is an operational setting, not a retention policy. It controls how often expired or completed limit windows are cleaned up so counters stay accurate and limit storage does not grow unnecessarily.
+Limit usage is reset according to each limit's cleanup interval. New limits default to weekly cleanup unless an admin chooses a different interval.
 
-Use shorter intervals if you rely on tighter reset windows and want counters refreshed more aggressively.
+Default user limits use their own cleanup interval from LLM settings. Since they are inherited rather than stored as per-user rows, they are evaluated against each user's usage during that interval.
 
 ## Model Pricing
 

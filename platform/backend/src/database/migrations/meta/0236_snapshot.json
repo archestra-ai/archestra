@@ -1,5 +1,5 @@
 {
-  "id": "6763db68-3c7f-40a2-a958-2d12c875d18d",
+  "id": "0ce2dfda-b806-4b4e-9a36-d3131eb189ed",
   "prevId": "4bca52c7-4f4c-4cfd-ab21-0a16756928b1",
   "version": "7",
   "dialect": "postgresql",
@@ -4706,13 +4706,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'1w'"
-        },
-        "is_default_user_limit": {
-          "name": "is_default_user_limit",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "last_cleanup": {
           "name": "last_cleanup",

@@ -33576,7 +33576,6 @@ export type GetLimitsResponses = {
         toolName: string | null;
         model?: Array<string> | null;
         cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
-        isDefaultUserLimit: boolean;
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -33601,7 +33600,6 @@ export type CreateLimitData = {
         toolName?: string | null;
         model?: Array<string> | null;
         cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
-        isDefaultUserLimit?: boolean;
         lastCleanup?: unknown;
     };
     path?: never;
@@ -33688,7 +33686,6 @@ export type CreateLimitResponses = {
         toolName: string | null;
         model?: Array<string> | null;
         cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
-        isDefaultUserLimit: boolean;
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -33870,7 +33867,6 @@ export type GetLimitResponses = {
         toolName: string | null;
         model?: Array<string> | null;
         cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
-        isDefaultUserLimit: boolean;
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -33889,7 +33885,6 @@ export type UpdateLimitData = {
         toolName?: string | null;
         model?: Array<string> | null;
         cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
-        isDefaultUserLimit?: boolean;
         lastCleanup?: unknown;
     };
     path: {
@@ -33978,7 +33973,6 @@ export type UpdateLimitResponses = {
         toolName: string | null;
         model?: Array<string> | null;
         cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
-        isDefaultUserLimit: boolean;
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;

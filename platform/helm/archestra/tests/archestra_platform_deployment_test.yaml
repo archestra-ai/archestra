@@ -354,6 +354,34 @@ tests:
           path: spec.template.spec.initContainers[1].command[2]
           pattern: ".*nc -z.*"
 
+  - it: should bound the wait-for-postgres loop with the default timeout
+    documentIndex: 1
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: "max_attempts=300"
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: "did not become reachable after .* - giving up"
+
+  - it: should honor a custom waitForPostgres timeout in both postgres init containers
+    documentIndex: 1
+    set:
+      archestra.initContainers.waitForPostgres.timeoutSeconds: 60
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: wait-for-postgres
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: "max_attempts=60"
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: setup-postgres-extensions
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "max_attempts=60"
+
   - it: should set ARCHESTRA_DATABASE_URL with postgres:// scheme
     documentIndex: 1
     set:

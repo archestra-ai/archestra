@@ -210,6 +210,12 @@ archestra:
     # or if you handle readiness checks in another way
     waitForPostgres:
       enabled: true
+      # Maximum seconds to wait for PostgreSQL to become reachable before the
+      # init container gives up and fails. Without a bound, a database that
+      # never comes up leaves the pod stuck in PodInitializing indefinitely
+      # (and any `helm install --atomic` hits its own timeout with no clear
+      # cause). The setup-postgres-extensions init container uses the same budget.
+      timeoutSeconds: 300
 
     # Vault secret injection init container
     # Similar to Vault Agent Injector (writes secrets to a shared volume) but:

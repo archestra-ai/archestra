@@ -320,3 +320,6 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @artabr
 - @dball1126
 - @baibaozhuanyong
+- @jasonkurniawantangguh-coder
+- @devroy10
+- @yqx07

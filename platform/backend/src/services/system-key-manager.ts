@@ -1,4 +1,5 @@
 import type { SupportedProvider } from "@shared";
+import { isAnthropicWorkloadIdentityEnabled } from "@/clients/anthropic-workload-identity";
 import {
   isAnthropicAzureFoundryEntraIdEnabled,
   isAzureOpenAiEntraIdEnabled,
@@ -35,9 +36,9 @@ interface KeylessProviderConfig {
 /**
  * Manages system API keys for truly keyless providers.
  *
- * Currently Vertex AI, Azure OpenAI (with Entra ID), and Bedrock (with IAM auth)
- * qualify as keyless because they use cloud provider credentials instead of API
- * keys.
+ * Currently Vertex AI, Azure OpenAI (with Entra ID), Anthropic WIF, and
+ * Bedrock (with IAM auth) qualify as keyless because they use cloud provider
+ * credentials instead of API keys.
  *
  * System keys are auto-created when a keyless provider is enabled via environment config,
  * and auto-deleted when the provider is disabled.
@@ -72,6 +73,20 @@ class SystemKeyManager {
       isEnabled: () =>
         isAnthropicAzureFoundryEntraIdEnabled() &&
         isAzureAiFoundryBaseUrl(config.llm.anthropic.baseUrl),
+      customFetch: async () => {
+        const models = await fetchAnthropicModels(
+          "",
+          config.llm.anthropic.baseUrl,
+        );
+        return models.map((m) => ({ id: m.id, displayName: m.displayName }));
+      },
+    },
+    {
+      provider: "anthropic",
+      name: "Anthropic Workload Identity Federation",
+      isEnabled: () =>
+        !isAnthropicAzureFoundryEntraIdEnabled() &&
+        isAnthropicWorkloadIdentityEnabled(),
       customFetch: async () => {
         const models = await fetchAnthropicModels(
           "",

@@ -454,6 +454,12 @@ class InternalMcpCatalogModel {
 
   /**
    * List child catalog items ("presets") for a given parent.
+   *
+   * Mirrors the catalog list endpoint: secrets are NOT expanded, so the
+   * preset secret bag's plaintext values never reach the wire. Callers that
+   * need to know whether secret-typed preset fields are filled use the
+   * `presetSecretId != null` heuristic (same pattern as the install dialog's
+   * preset-fallback-fields).
    */
   static async findChildren(parentId: string): Promise<InternalMcpCatalog[]> {
     const dbItems = await db
@@ -462,13 +468,7 @@ class InternalMcpCatalogModel {
       .where(eq(schema.internalMcpCatalogTable.parentCatalogItemId, parentId))
       .orderBy(asc(schema.internalMcpCatalogTable.createdAt));
 
-    const catalogItems =
-      await InternalMcpCatalogModel.attachLabelsAndTeams(dbItems);
-    // Same as findById/findAll: surface secret-typed preset values merged
-    // into presetFieldValues so callers (e.g. the install dialog's "preset
-    // fields not filled" section) see the full set of filled keys.
-    await InternalMcpCatalogModel.expandSecrets(catalogItems);
-    return catalogItems;
+    return InternalMcpCatalogModel.attachLabelsAndTeams(dbItems);
   }
 
   /**

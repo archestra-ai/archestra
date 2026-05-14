@@ -126,6 +126,7 @@ describe("MCP Server Install - Preset Values reach Deployment Env", () => {
           {
             key: "STAGE",
             type: "plain_text",
+            promptOnInstallation: false,
             promptOnPreset: true,
             required: false,
           },
@@ -179,6 +180,7 @@ describe("MCP Server Install - Preset Values reach Deployment Env", () => {
           {
             key: "INTERNAL_TOKEN",
             type: "secret",
+            promptOnInstallation: false,
             promptOnPreset: true,
             required: false,
           },
@@ -243,6 +245,7 @@ describe("MCP Server Install - Preset Values reach Deployment Env", () => {
           {
             key: "STAGE",
             type: "plain_text",
+            promptOnInstallation: false,
             promptOnPreset: true,
             required: false,
           },

@@ -11,7 +11,11 @@ import {
   useDeleteCatalogPreset,
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import { PresetEditorDialog } from "./preset-editor-dialog";
-import { type CatalogItem, presetFieldKeys } from "./preset-helpers";
+import {
+  type CatalogItem,
+  listCatalogFields,
+  presetFieldKeys,
+} from "./preset-helpers";
 
 type Preset = archestraApiTypes.GetCatalogChildrenResponses["200"][number];
 
@@ -27,6 +31,9 @@ export function PresetsSection({ cat }: PresetsSectionProps) {
   const [deleteTarget, setDeleteTarget] = useState<Preset | null>(null);
 
   const fieldKeys = presetFieldKeys(cat);
+  const presetFields = listCatalogFields(cat).filter(
+    (f) => f.scope === "preset",
+  );
 
   const rows: Array<{ entry: Preset; isDefault: boolean }> = [
     { entry: cat as Preset, isDefault: true },
@@ -83,11 +90,7 @@ export function PresetsSection({ cat }: PresetsSectionProps) {
                     )}
                   </td>
                   <td className="px-3 py-2 font-mono text-[11px] text-muted-foreground">
-                    {Object.keys(entry.presetFieldValues).length === 0
-                      ? "—"
-                      : Object.entries(entry.presetFieldValues)
-                          .map(([k, v]) => `${k}=${formatVal(v)}`)
-                          .join(", ")}
+                    {formatFieldValues(entry, presetFields)}
                   </td>
                   <td className="px-3 py-2 text-right">
                     <div className="flex justify-end gap-1">
@@ -160,4 +163,29 @@ export function PresetsSection({ cat }: PresetsSectionProps) {
 function formatVal(v: string | number | boolean | string[]): string {
   if (Array.isArray(v)) return v.join("|");
   return String(v);
+}
+
+/**
+ * Render the `Field values` column for a preset row. Iterates the parent's
+ * declared preset-scoped fields so the order is stable and secret values are
+ * never sourced from the wire payload — secret fields show "set" / "unset"
+ * based on the `presetSecretId != null` heuristic, matching how the install
+ * dialog's preset-fallback section decides whether to re-prompt.
+ */
+function formatFieldValues(
+  entry: Preset,
+  presetFields: ReturnType<typeof listCatalogFields>,
+): string {
+  if (presetFields.length === 0) return "—";
+  const filled = entry.presetFieldValues ?? {};
+  const hasStoredSecrets = entry.presetSecretId != null;
+  const parts: string[] = [];
+  for (const f of presetFields) {
+    if (f.secret) {
+      if (hasStoredSecrets) parts.push(`${f.key}=<set>`);
+    } else if (f.key in filled) {
+      parts.push(`${f.key}=${formatVal(filled[f.key])}`);
+    }
+  }
+  return parts.length === 0 ? "—" : parts.join(", ");
 }

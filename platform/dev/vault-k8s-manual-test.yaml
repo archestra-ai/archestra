@@ -1,0 +1,144 @@
+# ============================================================
+# Manual READONLY_VAULT (BYOS) end-to-end test setup
+#
+# Spins up a local Archestra in Kubernetes wired to a Vault running
+# in the same cluster, using K8s auth. No Tilt involved.
+#
+# Run all commands from `platform/`:
+#
+#   # 1. Build the image into Docker Desktop's daemon
+#   docker build -t archestra/platform:dev -f Dockerfile .
+#
+#   # 2. Namespace (idempotent)
+#   kubectl create namespace archestra-dev \
+#     --dry-run=client -o yaml | kubectl apply -f -
+#
+#   # 3. Run Vault. It's using our e2e vault chart with pre-configured K8s auth.
+#   helm upgrade --install vault-k8s ./helm/e2e-tests \
+#     --namespace archestra-dev \
+#     --values dev/vault-k8s-manual-test.yaml \
+#     --wait --timeout 5m
+#
+#   # 4. Run Archestra — pin to the image built in step 1
+#   #    (otherwise the OCI chart would pull its default published image).
+#   #    NOTE: no --wait here — the platform pod's `vault-secrets` init
+#   #    container will CrashLoopBackOff until step 5 seeds Vault, so we
+#   #    let the chart apply and continue.
+#   helm upgrade archestra-platform \
+#     oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
+#     --install \
+#     --namespace archestra-dev \
+#     --values dev/vault-k8s-manual-test.yaml \
+#     --set archestra.image=archestra/platform \
+#     --set archestra.imageTag=dev \
+#     --set archestra.imagePullPolicy=Never \
+#     --set archestra.env.HOSTNAME="0.0.0.0"
+#
+#   # 5. Seed Vault with the DB URL the init container expects.
+#   #    The bundled postgresql sub-chart auto-generates a random password
+#   #    on first install, so we read it from the K8s secret rather than
+#   #    pinning it. The init container reads kv/archestra/config/db_url
+#   #    with key `url` (see initContainers.vaultSecrets.secrets below).
+#   kubectl -n archestra-dev wait --for=condition=Ready \
+#     pod/archestra-platform-postgresql-0 --timeout=5m
+#
+#   DB_PW=$(kubectl -n archestra-dev get secret archestra-platform-postgresql \
+#     -o jsonpath='{.data.password}' | base64 -d)
+#
+#   kubectl -n archestra-dev exec vault -- vault kv put -mount=kv \
+#     archestra/config/db_url \
+#     url="postgresql://archestra:${DB_PW}@archestra-platform-postgresql:5432/archestra_dev"
+#
+#   # Kick the failing pods so the init container re-runs with the seeded secret.
+#   kubectl -n archestra-dev delete pod \
+#     -l app.kubernetes.io/instance=archestra-platform,app.kubernetes.io/part-of=archestra
+#
+#   kubectl -n archestra-dev rollout status deploy/archestra-platform        --timeout=6m
+#   kubectl -n archestra-dev rollout status deploy/archestra-platform-worker --timeout=6m
+#
+#   # 6. Verify and port-forward
+#   kubectl -n archestra-dev get pods,deploy,svc
+#
+#   # One-liner: forwards frontend (3000), backend (9000), and Vault (8200).
+#   # Ctrl-C cleans up all three.
+#   (trap 'kill 0' SIGINT; \
+#     kubectl -n archestra-dev port-forward svc/archestra-platform 9000:9000 3000:3000 & \
+#     kubectl -n archestra-dev port-forward svc/vault 8200:8200 & \
+#     wait)
+#
+# Tear down:
+#   helm uninstall archestra-platform -n archestra-dev
+#   helm uninstall vault-k8s         -n archestra-dev
+#   kubectl delete namespace archestra-dev
+# ============================================================
+
+# ============================================================
+# Consumed by ./helm/e2e-tests (vault-k8s release)
+# ============================================================
+vault:
+  service:
+    type: ClusterIP
+  k8sAuth:
+    enabled: true
+
+wiremock:
+  enabled: false
+keycloak:
+  enabled: false
+mcpExampleOAuth:
+  enabled: false
+mcpServerJwks:
+  enabled: false
+mcpServerIdJag:
+  enabled: false
+
+# ============================================================
+# Consumed by ./helm/archestra (archestra release)
+# ============================================================
+archestra:
+  # image / imageTag / imagePullPolicy are pinned to the locally-built
+  # image via `--set` flags on the helm command above (step 4), so they
+  # are intentionally not set here.
+  env:
+    ARCHESTRA_SECRETS_MANAGER: READONLY_VAULT
+    ARCHESTRA_HASHICORP_VAULT_ADDR: http://vault.archestra-dev.svc:8200
+    ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD: K8S
+    # these comes from the e2e-tests vault chart, vault is pre-configured with this role and to create the secret
+    ARCHESTRA_HASHICORP_VAULT_K8S_ROLE: archestra
+    ARCHESTRA_HASHICORP_VAULT_KV_VERSION: "1"
+    ARCHESTRA_HASHICORP_VAULT_SECRET_PATH: kv/archestra
+    ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
+    ARCHESTRA_ANALYTICS: "disabled"
+
+  orchestrator:
+    # The MCP base image tag is derived from `archestra.imageTag` by default
+    # (via the runtime's `ARCHESTRA_VERSION` env). Since we pin `imageTag=dev`
+    # to use the locally-built platform image, the auto-derived MCP tag
+    # `:dev` doesn't exist in the public registry. Pin to a real chart
+    # version explicitly here (match the chart version used in step 4).
+    baseImage: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:1.2.37
+    kubernetes:
+      serviceAccount:
+        # Must match Vault's k8s auth role binding
+        # (helm/e2e-tests/values.yaml:203-204):
+        #   bound_service_account_names=archestra-platform
+        #   bound_service_account_namespaces=archestra-dev
+        name: archestra-platform
+
+  # Pull ARCHESTRA_DATABASE_URL from Vault at pod startup via the
+  # vault-env-injector init container (writes /vault/secrets/env on tmpfs;
+  # main container sources it before exec'ing the backend).
+  initContainers:
+    vaultSecrets:
+      enabled: true
+      secrets:
+        - envVar: ARCHESTRA_DATABASE_URL
+          path: kv/archestra/config/db_url
+          key: url
+
+# Tell the chart NOT to construct ARCHESTRA_DATABASE_URL itself — the
+# init container above will provide it. `from_vault` is the sentinel
+# value the chart looks for (helm/archestra/templates/_helpers.tpl:72).
+# Keeping postgresql.enabled=true so the bundled DB is still deployed.
+postgresql:
+  external_database_url: from_vault

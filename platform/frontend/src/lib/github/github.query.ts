@@ -1,6 +1,21 @@
 import { useQuery } from "@tanstack/react-query";
+import { useDeferredEnabled } from "@/lib/hooks/use-deferred-enabled";
 
-export function useGithubStars() {
+/**
+ * Fetches GitHub stars for optional community chrome.
+ *
+ * Callers can disable or defer this because it is noncritical external data and
+ * should not compete with authenticated shell API calls during initial load.
+ */
+export function useGithubStars(params?: {
+  enabled?: boolean;
+  deferMs?: number;
+}) {
+  const enabled = useDeferredEnabled(
+    params?.enabled ?? true,
+    params?.deferMs ?? 0,
+  );
+
   return useQuery({
     queryKey: ["github", "stars"],
     queryFn: async () => {
@@ -28,6 +43,7 @@ export function useGithubStars() {
     retry: false, // Don't retry on failure
     staleTime: 60 * 60 * 1000, // 1 hour
     gcTime: 24 * 60 * 60 * 1000, // 24 hours (formerly cacheTime)
+    enabled,
   });
 }
 

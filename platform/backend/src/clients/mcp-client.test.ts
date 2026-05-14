@@ -549,6 +549,45 @@ describe("McpClient", () => {
       expect(mockConnect).toHaveBeenCalledTimes(1);
     });
 
+    test("skips ping for recently validated active connections", async () => {
+      const tool = await ToolModel.createToolIfNotExists({
+        name: "github-mcp-server__recent_reuse",
+        description: "Recent active connection reuse",
+        parameters: {},
+        catalogId,
+      });
+
+      await AgentToolModel.create(agentId, tool.id, {
+        mcpServerId,
+        credentialResolutionMode: "static",
+      });
+
+      mockConnect.mockResolvedValue(undefined);
+      mockPing.mockResolvedValue(undefined);
+      mockCallTool.mockResolvedValue({
+        content: [{ type: "text", text: "ok" }],
+        isError: false,
+      });
+
+      const toolCall = {
+        id: "call_recent_reuse",
+        name: tool.name,
+        arguments: {},
+      };
+
+      const firstResult = await mcpClient.executeToolCall(toolCall, agentId);
+      expect(firstResult.isError).toBe(false);
+      expect(mockConnect).toHaveBeenCalledTimes(1);
+      expect(mockPing).not.toHaveBeenCalled();
+
+      mockPing.mockClear();
+
+      const secondResult = await mcpClient.executeToolCall(toolCall, agentId);
+      expect(secondResult.isError).toBe(false);
+      expect(mockConnect).toHaveBeenCalledTimes(1);
+      expect(mockPing).not.toHaveBeenCalled();
+    });
+
     describe("Concurrency limiter", () => {
       test("limits HTTP concurrency to 4", async () => {
         const clientWithInternals = mcpClient as unknown as {

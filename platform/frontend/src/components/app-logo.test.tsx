@@ -7,9 +7,15 @@ const { mockUseOrgTheme, mockUseTheme } = vi.hoisted(() => ({
 }));
 
 vi.mock("next/image", () => ({
-  default: ({ alt, src }: { alt: string; src: string }) => (
-    <img alt={alt} src={src} />
-  ),
+  default: ({
+    alt,
+    src,
+    className,
+  }: {
+    alt: string;
+    src: string;
+    className?: string;
+  }) => <img alt={alt} src={src} className={className} />,
 }));
 
 vi.mock("next-themes", () => ({
@@ -52,5 +58,18 @@ describe("AppLogo", () => {
       "data:image/png;base64,custom",
     );
     expect(screen.queryByText("Archestra.AI")).not.toBeInTheDocument();
+  });
+
+  it("uses stable dimensions for the default logo", () => {
+    mockUseTheme.mockReturnValue({ resolvedTheme: "light" });
+    mockUseOrgTheme.mockReturnValue({
+      isLoadingAppearance: false,
+      logo: null,
+      logoDark: null,
+    });
+
+    render(<AppLogo />);
+
+    expect(screen.getByAltText("Logo")).toHaveClass("size-7", "shrink-0");
   });
 });

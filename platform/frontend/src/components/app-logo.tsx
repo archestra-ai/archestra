@@ -54,7 +54,7 @@ export function AppLogo({ centered = true }: AppLogoProps) {
         alt="Logo"
         width={28}
         height={28}
-        className="h-auto w-auto"
+        className="size-7 shrink-0"
       />
       <span className="text-base font-semibold">{DEFAULT_APP_NAME}</span>
     </div>

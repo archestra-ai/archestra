@@ -53,12 +53,13 @@ class MemberModel {
 
   /**
    * Get a member by user ID and organization ID.
+   *
+   * The member table has no unique constraint on (userId, organizationId).
+   * Order by createdAt so a stale duplicate row can't shadow the seeded one:
+   * the original membership is always older than any later duplicate created
+   * (e.g. by an auto-accepted invitation), so it wins.
    */
   static async getByUserId(userId: string, organizationId: string) {
-    // logger.debug(
-    //   { userId, organizationId },
-    //   "MemberModel.getByUserId: fetching member",
-    // );
     const [member] = await db
       .select()
       .from(schema.membersTable)
@@ -68,11 +69,8 @@ class MemberModel {
           eq(schema.membersTable.organizationId, organizationId),
         ),
       )
+      .orderBy(schema.membersTable.createdAt, schema.membersTable.id)
       .limit(1);
-    // logger.debug(
-    //   { userId, organizationId, found: !!member },
-    //   "MemberModel.getByUserId: completed",
-    // );
     return member;
   }
 
@@ -89,6 +87,7 @@ class MemberModel {
       .select()
       .from(schema.membersTable)
       .where(eq(schema.membersTable.userId, userId))
+      .orderBy(schema.membersTable.createdAt, schema.membersTable.id)
       .limit(1);
     logger.debug(
       { userId, found: !!member, organizationId: member?.organizationId },

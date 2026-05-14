@@ -99,8 +99,19 @@ class InvitationModel {
       const { organizationId, role: specifiedRole } = invitation;
       const role = specifiedRole || MEMBER_ROLE_NAME;
 
-      // Create member row linking user to organization
-      await MemberModel.create(user.id, organizationId, role);
+      // The member table has no unique constraint on (userId, organizationId),
+      // so a blind insert here would silently create a duplicate row when the
+      // user is already a member of this org. With duplicates, getByUserId's
+      // .limit(1) returns either row non-deterministically — an admin can
+      // appear as a member on the next sign-in, breaking permission checks.
+      const existingMember = await MemberModel.getByUserId(
+        user.id,
+        organizationId,
+      );
+
+      if (!existingMember) {
+        await MemberModel.create(user.id, organizationId, role);
+      }
 
       // Create personal token for the new member
       try {

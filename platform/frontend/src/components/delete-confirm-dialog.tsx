@@ -1,6 +1,10 @@
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
-import { DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
+import {
+  DialogBody,
+  DialogForm,
+  DialogStickyFooter,
+} from "@/components/ui/dialog";
 
 type DeleteConfirmDialogProps = {
   open: boolean;
@@ -11,6 +15,7 @@ type DeleteConfirmDialogProps = {
   onConfirm: () => void;
   confirmLabel?: string;
   pendingLabel?: string;
+  confirmDisabled?: boolean;
 };
 
 export function DeleteConfirmDialog({
@@ -22,13 +27,13 @@ export function DeleteConfirmDialog({
   onConfirm,
   confirmLabel = "Delete",
   pendingLabel = "Deleting...",
+  confirmDisabled = false,
 }: DeleteConfirmDialogProps) {
   return (
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
       title={title}
-      description={description}
       size="small"
     >
       <DialogForm
@@ -38,13 +43,20 @@ export function DeleteConfirmDialog({
             return;
           }
           e.preventDefault();
+          if (isPending || confirmDisabled) {
+            return;
+          }
           onConfirm();
         }}
         onSubmit={(e) => {
           e.preventDefault();
+          if (isPending || confirmDisabled) {
+            return;
+          }
           onConfirm();
         }}
       >
+        <DialogBody>{description}</DialogBody>
         <DialogStickyFooter className="mt-0 border-t-0 shadow-none">
           <Button
             type="button"
@@ -53,7 +65,11 @@ export function DeleteConfirmDialog({
           >
             Cancel
           </Button>
-          <Button type="submit" variant="destructive" disabled={isPending}>
+          <Button
+            type="submit"
+            variant="destructive"
+            disabled={isPending || confirmDisabled}
+          >
             {isPending ? pendingLabel : confirmLabel}
           </Button>
         </DialogStickyFooter>

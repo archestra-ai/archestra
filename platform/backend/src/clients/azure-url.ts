@@ -33,6 +33,27 @@ export function buildAzureOpenAiV1ModelsUrl(baseUrl: string): string | null {
   }
 }
 
+export function buildAzureModelsUrl(params: {
+  apiVersion: string;
+  baseUrl: string;
+}): string | null {
+  try {
+    const url = new URL(params.baseUrl);
+    if (isAzureOpenAiV1Url(url)) {
+      return null;
+    }
+
+    const pathname = getAzureOpenAiPathname(url);
+    if (!pathname) {
+      return null;
+    }
+
+    return `${url.origin}${pathname}/models?api-version=${params.apiVersion}`;
+  } catch {
+    return null;
+  }
+}
+
 export function buildAzureResponsesBaseUrl(baseUrl: string): string | null {
   try {
     const url = new URL(baseUrl);
@@ -83,8 +104,8 @@ export function buildAzureDeploymentBaseUrl(params: {
 export function extractAzureDeploymentName(baseUrl: string): string | null {
   try {
     const url = new URL(baseUrl);
-    const segments = url.pathname.split("/").filter(Boolean);
-    return segments.at(-1) ?? null;
+    const match = url.pathname.match(/\/openai\/deployments\/([^/]+)\/?$/);
+    return match ? decodeURIComponent(match[1]) : null;
   } catch {
     return null;
   }

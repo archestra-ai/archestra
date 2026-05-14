@@ -1402,7 +1402,7 @@ describe("handleAfterHook", () => {
       expect(member?.role).toBe("admin");
     });
 
-    test("should apply default role when role mapping has no rules", async ({
+    test("should leave existing role unchanged when role mapping has no rules", async ({
       makeUser,
       makeOrganization,
       makeMember,
@@ -1444,8 +1444,11 @@ describe("handleAfterHook", () => {
 
       await handleAfterHook(ctx);
 
+      // Default-role fallback must not silently overwrite an existing
+      // member's role — provisioning is handled elsewhere, and ongoing
+      // sync should only mutate when a rule explicitly matches.
       const member = await MemberModel.getByUserId(user.id, org.id);
-      expect(member?.role).toBe("member");
+      expect(member?.role).toBe("admin");
     });
 
     test("should not sync role for regular sign-in (non-SSO)", async ({
@@ -1657,26 +1660,25 @@ describe("handleAfterHook", () => {
       // Start with admin role
       await makeMember(user.id, org.id, { role: "admin" });
 
-      // Create SSO provider with role mapping that demotes non-admins
+      // Create SSO provider with a rule that explicitly resolves the
+      // user's groups to "member" — only an explicit rule match should
+      // mutate an existing membership's role.
       await makeIdentityProvider(org.id, {
         providerId: "keycloak-demote",
         roleMapping: {
-          defaultRole: "member", // Default to member if no rules match
           rules: [
             {
-              expression:
-                '{{#includes groups "super-admins"}}true{{/includes}}',
-              role: "admin",
+              expression: '{{#includes groups "users"}}true{{/includes}}',
+              role: "member",
             },
           ],
         } as unknown as Record<string, unknown>,
       });
 
-      // Create SSO account WITHOUT super-admins group
       const idToken = createMockIdToken({
         sub: user.id,
         email: user.email,
-        groups: ["users"], // Not in super-admins
+        groups: ["users"],
       });
       await makeAccount(user.id, {
         providerId: "keycloak-demote",

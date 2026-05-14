@@ -10,6 +10,10 @@ import { capitalize } from "lodash-es";
 import { z } from "zod";
 import { hasPermission, userHasPermission } from "@/auth";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
+import {
+  type BedrockSigV4Credentials,
+  encodeBedrockSigV4Marker,
+} from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import logger from "@/logging";
 import {
@@ -51,6 +55,21 @@ async function testApiKeyOrThrow(
     throw new ApiError(
       400,
       `Invalid API key: Failed to connect to ${capitalize(provider)}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+async function testKeylessAzureEntraOrThrow(
+  baseUrl?: string | null,
+  extraHeaders?: Record<string, string> | null,
+): Promise<void> {
+  try {
+    await testProviderApiKey("azure", "", baseUrl, extraHeaders);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new ApiError(
+      400,
+      `Azure Entra ID validation failed: Archestra could not discover any Azure model deployments. Confirm the Base URL points to an Azure OpenAI resource or Foundry v1 endpoint, and that the Azure identity has permission to read deployments on that resource. Provider error: ${errorMessage}`,
     );
   }
 }
@@ -184,18 +203,30 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             isPrimary: z.boolean().optional(),
             vaultSecretPath: z.string().min(1).optional(),
             vaultSecretKey: z.string().min(1).optional(),
+            /** Bedrock-only: AWS access key ID for SigV4 auth */
+            awsAccessKeyId: z.string().min(1).optional(),
+            /** Bedrock-only: AWS secret access key for SigV4 auth */
+            awsSecretAccessKey: z.string().min(1).optional(),
+            /** Bedrock-only: optional AWS session token for STS/temporary creds */
+            awsSessionToken: z.string().min(1).optional(),
           })
           .refine(
-            (data) =>
-              isByosEnabled()
-                ? data.vaultSecretPath && data.vaultSecretKey
-                : isProviderApiKeyOptional({
-                    provider: data.provider,
-                    azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
-                  }) || data.apiKey,
+            (data) => {
+              const hasSigV4 = data.awsAccessKeyId && data.awsSecretAccessKey;
+              if (hasSigV4) return data.provider === "bedrock";
+              if (isByosEnabled()) {
+                return data.vaultSecretPath && data.vaultSecretKey;
+              }
+              return (
+                isProviderApiKeyOptional({
+                  provider: data.provider,
+                  azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+                }) || data.apiKey
+              );
+            },
             {
               message:
-                "Either apiKey or both vaultSecretPath and vaultSecretKey must be provided",
+                "Either apiKey, both vaultSecretPath and vaultSecretKey, or AWS SigV4 credentials (Bedrock only) must be provided",
             },
           ),
         response: constructResponseSchema(SelectLlmProviderApiKeySchema),
@@ -217,8 +248,40 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let secret: SelectSecret | null = null;
       let actualApiKeyValue: string | null = null;
 
-      // If readonly_vault is enabled
-      if (isByosEnabled()) {
+      // Bedrock SigV4: store credentials as JSON in the secret payload, then
+      // test using the marker-encoded form.
+      if (body.awsAccessKeyId && body.awsSecretAccessKey) {
+        if (body.provider !== "bedrock") {
+          throw new ApiError(
+            400,
+            "AWS SigV4 credentials are only supported for the Bedrock provider",
+          );
+        }
+        const sigV4: BedrockSigV4Credentials = {
+          accessKeyId: body.awsAccessKeyId,
+          secretAccessKey: body.awsSecretAccessKey,
+          sessionToken: body.awsSessionToken,
+        };
+        actualApiKeyValue = encodeBedrockSigV4Marker(sigV4);
+        await testApiKeyOrThrow(
+          body.provider,
+          actualApiKeyValue,
+          body.baseUrl,
+          body.extraHeaders,
+        );
+        secret = await secretManager().createSecret(
+          {
+            accessKeyId: sigV4.accessKeyId,
+            secretAccessKey: sigV4.secretAccessKey,
+            ...(sigV4.sessionToken ? { sessionToken: sigV4.sessionToken } : {}),
+          },
+          getChatApiKeySecretName({
+            scope: body.scope,
+            teamId: body.teamId ?? null,
+            userId: user.id,
+          }),
+        );
+      } else if (isByosEnabled()) {
         if (!body.vaultSecretPath || !body.vaultSecretKey) {
           throw new ApiError(400, "Vault secret path and key are required");
         }
@@ -269,6 +332,14 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             userId: user.id,
           }),
         );
+      }
+
+      if (
+        body.provider === "azure" &&
+        !actualApiKeyValue &&
+        isAzureOpenAiEntraIdEnabled()
+      ) {
+        await testKeylessAzureEntraOrThrow(body.baseUrl, body.extraHeaders);
       }
 
       if (
@@ -406,9 +477,17 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             isPrimary: z.boolean().optional(),
             vaultSecretPath: z.string().min(1).optional(),
             vaultSecretKey: z.string().min(1).optional(),
+            /** Bedrock-only: AWS access key ID for SigV4 auth */
+            awsAccessKeyId: z.string().min(1).optional(),
+            /** Bedrock-only: AWS secret access key for SigV4 auth */
+            awsSecretAccessKey: z.string().min(1).optional(),
+            /** Bedrock-only: optional AWS session token for STS/temporary creds */
+            awsSessionToken: z.string().min(1).optional(),
           })
           .refine(
             (data) => {
+              const hasSigV4 = data.awsAccessKeyId && data.awsSecretAccessKey;
+              if (hasSigV4) return true;
               // If no key-related fields are provided, that's fine (updating other fields)
               if (
                 !data.apiKey &&
@@ -429,7 +508,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
             {
               message:
-                "Either apiKey or both vaultSecretPath and vaultSecretKey must be provided",
+                "Either apiKey, both vaultSecretPath and vaultSecretKey, or AWS SigV4 credentials must be provided",
             },
           ),
         response: constructResponseSchema(SelectLlmProviderApiKeySchema),
@@ -466,28 +545,63 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      // Update the secret if a new API key is provided (via direct value or vault reference)
-      if (body.apiKey || (body.vaultSecretPath && body.vaultSecretKey)) {
-        let apiKeyValue: string;
-        let vaultReference: string | undefined;
+      const sigV4FromBody =
+        body.awsAccessKeyId && body.awsSecretAccessKey
+          ? {
+              accessKeyId: body.awsAccessKeyId,
+              secretAccessKey: body.awsSecretAccessKey,
+              sessionToken: body.awsSessionToken,
+            }
+          : null;
+      const hasSigV4Update = sigV4FromBody !== null;
+      if (hasSigV4Update && apiKeyFromDB.provider !== "bedrock") {
+        throw new ApiError(
+          400,
+          "AWS SigV4 credentials are only supported for the Bedrock provider",
+        );
+      }
 
-        if (isByosEnabled() && body.vaultSecretPath && body.vaultSecretKey) {
+      // Update the secret if a new API key is provided (via direct value, vault reference, or SigV4 credentials)
+      if (
+        body.apiKey ||
+        (body.vaultSecretPath && body.vaultSecretKey) ||
+        hasSigV4Update
+      ) {
+        let secretPayload: Record<string, string>;
+        let testValue: string;
+
+        if (sigV4FromBody) {
+          const sigV4: BedrockSigV4Credentials = sigV4FromBody;
+          secretPayload = {
+            accessKeyId: sigV4.accessKeyId,
+            secretAccessKey: sigV4.secretAccessKey,
+            ...(sigV4.sessionToken ? { sessionToken: sigV4.sessionToken } : {}),
+          };
+          testValue = encodeBedrockSigV4Marker(sigV4);
+        } else if (
+          isByosEnabled() &&
+          body.vaultSecretPath &&
+          body.vaultSecretKey
+        ) {
           // Get secret from vault
           const manager = assertByosEnabled();
           const vaultData = await manager.getSecretFromPath(
             body.vaultSecretPath,
           );
-          apiKeyValue = vaultData[body.vaultSecretKey];
+          const apiKeyValue = vaultData[body.vaultSecretKey];
           if (!apiKeyValue) {
             throw new ApiError(
               400,
               `API key not found in Vault secret at path "${body.vaultSecretPath}" with key "${body.vaultSecretKey}"`,
             );
           }
-          vaultReference = `${body.vaultSecretPath}#${body.vaultSecretKey}`;
+          const vaultReference = `${body.vaultSecretPath}#${body.vaultSecretKey}`;
+          secretPayload = { apiKey: vaultReference };
+          testValue = apiKeyValue;
         } else if (body.apiKey) {
           // Use direct API key value
-          apiKeyValue = body.apiKey;
+          secretPayload = { apiKey: body.apiKey };
+          testValue = body.apiKey;
         } else {
           // This shouldn't happen due to refine, but TypeScript needs this
           throw new ApiError(400, "API key or vault reference is required");
@@ -504,21 +618,20 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             : apiKeyFromDB.extraHeaders;
         await testApiKeyOrThrow(
           apiKeyFromDB.provider,
-          apiKeyValue,
+          testValue,
           testBaseUrl,
           testExtraHeaders,
         );
 
         // Update or create the secret
         if (apiKeyFromDB.secretId) {
-          // Update with vault reference
-          await secretManager().updateSecret(apiKeyFromDB.secretId, {
-            apiKey: vaultReference ?? apiKeyValue,
-          });
+          await secretManager().updateSecret(
+            apiKeyFromDB.secretId,
+            secretPayload,
+          );
         } else {
-          // Create new secret
           const secret = await secretManager().createSecret(
-            { apiKey: vaultReference ?? apiKeyValue },
+            secretPayload,
             getChatApiKeySecretName({
               scope: newScope,
               teamId: newTeamId,

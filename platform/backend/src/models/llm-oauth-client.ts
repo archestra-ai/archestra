@@ -1,22 +1,38 @@
 import { randomBytes } from "node:crypto";
 import { LLM_PROXY_OAUTH_SCOPE } from "@shared";
 import { hashPassword, verifyPassword } from "better-auth/crypto";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, ilike, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import {
   LLM_OAUTH_CLIENT_METADATA_TYPE,
   LlmOauthClientMetadataSchema,
   type LlmOauthClientProviderKey,
 } from "@/types/llm-oauth-client";
+import { escapeLikePattern } from "@/utils/sql-search";
 
 class LlmOauthClientModel {
-  static async findAllByOrganization(organizationId: string) {
+  static async findAllByOrganization(params: {
+    organizationId: string;
+    search?: string;
+    providerApiKeyId?: string;
+  }) {
     const rows = await db
       .select()
       .from(schema.oauthClientsTable)
       .where(
-        sql`${schema.oauthClientsTable.metadata}->>'type' = ${LLM_OAUTH_CLIENT_METADATA_TYPE}
-          AND ${schema.oauthClientsTable.metadata}->>'organizationId' = ${organizationId}`,
+        and(
+          sql`${schema.oauthClientsTable.metadata}->>'type' = ${LLM_OAUTH_CLIENT_METADATA_TYPE}`,
+          sql`${schema.oauthClientsTable.metadata}->>'organizationId' = ${params.organizationId}`,
+          params.search
+            ? ilike(
+                schema.oauthClientsTable.name,
+                `%${escapeLikePattern(params.search.trim())}%`,
+              )
+            : undefined,
+          params.providerApiKeyId
+            ? sql`${schema.oauthClientsTable.metadata}->'providerApiKeys' @> ${JSON.stringify([{ providerApiKeyId: params.providerApiKeyId }])}::jsonb`
+            : undefined,
+        ),
       )
       .orderBy(schema.oauthClientsTable.createdAt);
 
@@ -99,14 +115,10 @@ class LlmOauthClientModel {
     providerApiKeyId: string;
     organizationId: string;
   }) {
-    const clients = await LlmOauthClientModel.findAllByOrganization(
-      params.organizationId,
-    );
-    return clients.filter((client) =>
-      client.providerApiKeys.some(
-        (mapping) => mapping.providerApiKeyId === params.providerApiKeyId,
-      ),
-    );
+    return LlmOauthClientModel.findAllByOrganization({
+      organizationId: params.organizationId,
+      providerApiKeyId: params.providerApiKeyId,
+    });
   }
 
   static async findClientForCredentials(params: {

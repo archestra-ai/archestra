@@ -4,6 +4,18 @@ templates:
 values:
   - ../ci/test-values.yaml
 tests:
+  - it: worker deployment has default resources configured
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: "2"
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: "1Gi"
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: "2Gi"
+
   - it: worker deployment uses percentage-based rolling update defaults
     asserts:
       - equal:

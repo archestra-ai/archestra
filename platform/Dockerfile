@@ -1,7 +1,7 @@
 # Build KinD and Docker CLI from source with a patched Go toolchain.
 # The Alpine packages/binaries have historically lagged on Go patch releases, so
 # we compile these tools ourselves to pick up upstream fixes without local vendoring hacks.
-ARG GOLANG_IMAGE=golang:1.25.9-alpine@sha256:5caaf1cca9dc351e13deafbc3879fd4754801acba8653fa9540cea125d01a71f
+ARG GOLANG_IMAGE=golang:1.25.10-alpine@sha256:8d22e29d960bc50cd025d93d5b7c7d220b1ee9aa7a239b3c8f55a57e987e8d45
 ARG NODE_IMAGE=node:24-alpine3.23@sha256:7fddd9ddeae8196abf4a3ef2de34e11f7b1a722119f91f28ddf1e99dcafdf114
 ARG KIND_VERSION=v0.31.0
 ARG KIND_COMMIT=a323333ff9efd8099f95a8a6b5c86c75a210d00f
@@ -22,23 +22,28 @@ RUN apk add --no-cache git
 RUN git clone --depth 1 --branch "${KIND_VERSION}" https://github.com/kubernetes-sigs/kind.git /kind && \
     test "$(git -C /kind rev-parse HEAD)" = "${KIND_COMMIT}" && \
     cd /kind && \
-    go mod edit -go=1.25.9 && \
-    # CVE-2026-27141: golang.org/x/net fixed in >= 0.51.0
-    go get golang.org/x/net@v0.51.0 && \
+    go mod edit -go=1.25.10 && \
+    # golang.org/x/net <0.53.0: multiple HIGH CVEs (Scout-flagged at 0.51.0); fixed in >= 0.53.0
+    go get golang.org/x/net@v0.53.0 && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /kind-binary .
 RUN git clone --depth 1 --branch "${DOCKER_CLI_VERSION}" https://github.com/docker/cli.git /docker-cli && \
     test "$(git -C /docker-cli rev-parse HEAD)" = "${DOCKER_CLI_COMMIT}" && \
     cd /docker-cli && \
     cp vendor.mod go.mod && cp vendor.sum go.sum && \
-    go mod edit -go=1.25.9 && \
+    go mod edit -go=1.25.10 && \
     # CVE-2026-33186: grpc Improper Authorization fixed in >= 1.79.3
     go get google.golang.org/grpc@v1.79.3 && \
-    # CVE-2026-27141: golang.org/x/net fixed in >= 0.51.0
-    go get golang.org/x/net@v0.51.0 && \
     # CVE-2026-39883: OTel SDK untrusted search path fixed in >= 1.43.0
     go get go.opentelemetry.io/otel/sdk@v1.43.0 && \
     # CVE-2026-34986: go-jose uncaught exception fixed in >= 4.1.4
     go get github.com/go-jose/go-jose/v4@v4.1.4 && \
+    # x/sys/x/term must be pinned for `go mod vendor` to find windows/registry and plan9 sub-pkgs.
+    go get golang.org/x/sys@v0.42.0 && \
+    go get golang.org/x/term@v0.42.0 && \
+    # golang.org/x/net <0.53.0: multiple HIGH CVEs (Scout-flagged at 0.51.0); fixed in >= 0.53.0.
+    # Must be the LAST `go get` before `go mod vendor` — earlier `go get`s for grpc/otel/x/sys
+    # transitively pull x/net@v0.52.0 and would otherwise override our explicit requirement.
+    go get golang.org/x/net@v0.53.0 && \
     go mod vendor && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor \
     -ldflags "-X github.com/docker/cli/cli/version.Version=${DOCKER_CLI_VERSION#v}" \
@@ -185,11 +190,12 @@ RUN apk --no-cache upgrade && \
     rm -rf /tmp/*
 
 # Install KinD (Kubernetes in Docker) and docker-cli for embedded K8s cluster support
-# Both binaries are built from source in go-builder with Go 1.25.9 to fix CVE-2025-68121
+# Both binaries are built from source in go-builder with Go 1.25.10 to fix CVE-2025-68121
+# and the Go stdlib HIGH CVEs fixed in 1.25.10 (CVE-2026-42499/39836/39820/33814/33811).
 COPY --from=go-builder /docker-binary /usr/local/bin/docker
 COPY --from=go-builder /kind-binary /usr/local/bin/kind
 RUN chmod +x /usr/local/bin/kind /usr/local/bin/docker
-# TODO: Once KinD releases a version compiled with Go >= 1.25.9, remove the kind-builder stage
+# TODO: Once KinD releases a version compiled with Go >= 1.25.10, remove the kind-builder stage
 # at the top of this file and restore the pre-built binary download below for faster builds.
 # Track releases at: https://github.com/kubernetes-sigs/kind/releases
 # RUN ARCH=$(uname -m) && \

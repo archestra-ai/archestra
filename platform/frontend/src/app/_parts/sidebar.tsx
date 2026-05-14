@@ -306,11 +306,14 @@ const NavPrimary = ({
 };
 
 // Matches sidebar-10 NavSecondary: SidebarGroup with mt-auto
+// Community links are optional chrome; gate them so white-labeled shells do not
+// render the links or trigger their noncritical GitHub metadata queries.
 const NavSecondary = ({
   items,
   pathname,
   searchParams,
   permissionMap,
+  showCommunityLinks,
   starCount,
   className,
 }: {
@@ -318,6 +321,7 @@ const NavSecondary = ({
   pathname: string;
   searchParams: URLSearchParams;
   permissionMap: Record<string, boolean>;
+  showCommunityLinks: boolean;
   starCount: string;
   className?: string;
 }) => {
@@ -346,7 +350,7 @@ const NavSecondary = ({
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}
-          {!config.enterpriseFeatures.fullWhiteLabeling && (
+          {showCommunityLinks && (
             <>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild tooltip="Star us on GitHub">
@@ -414,7 +418,13 @@ export function AppSidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const isAuthenticated = useIsAuthenticated();
-  const { data: starCount } = useGithubStars();
+  const showCommunityLinks = !config.enterpriseFeatures.fullWhiteLabeling;
+  // GitHub stars are cosmetic and external, so defer them until after the
+  // authenticated shell data has had a chance to load.
+  const { data: starCount } = useGithubStars({
+    enabled: showCommunityLinks && isAuthenticated,
+    deferMs: 5000,
+  });
   const formattedStarCount = starCount ?? "";
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
   const appIconLogo = useAppIconLogo();
@@ -490,17 +500,19 @@ export function AppSidebar() {
               pathname={pathname}
               searchParams={searchParams}
               permissionMap={permissionMap}
+              showCommunityLinks={showCommunityLinks}
               starCount={formattedStarCount}
               className="mt-auto"
             />
           </>
         )}
-        {!isAuthenticated && !config.enterpriseFeatures.fullWhiteLabeling && (
+        {!isAuthenticated && showCommunityLinks && (
           <NavSecondary
             items={[]}
             pathname={pathname}
             searchParams={searchParams}
             permissionMap={{}}
+            showCommunityLinks={showCommunityLinks}
             starCount={formattedStarCount}
           />
         )}

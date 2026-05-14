@@ -5,7 +5,7 @@ import {
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@shared";
 import { vi } from "vitest";
-import { ToolModel } from "@/models";
+import { AgentToolModel, ToolModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -199,6 +199,52 @@ describe("agent routes", () => {
       const agent = response.json();
       expect(agent).toHaveProperty("id");
       expect(agent.name).toBe(updatedName);
+    });
+
+    test("should preserve subagent delegations when updating agent fields", async ({
+      makeAgent,
+    }) => {
+      const sourceAgent = await makeAgent({
+        name: `Source Agent ${crypto.randomUUID().slice(0, 8)}`,
+        organizationId,
+        scope: "personal",
+        authorId: user.id,
+        agentType: "agent",
+      });
+      const targetAgent = await makeAgent({
+        name: `Target Agent ${crypto.randomUUID().slice(0, 8)}`,
+        organizationId,
+        scope: "personal",
+        authorId: user.id,
+        agentType: "agent",
+      });
+      await AgentToolModel.assignDelegation(sourceAgent.id, targetAgent.id);
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/agents/${sourceAgent.id}`,
+        payload: {
+          description: "Updated description",
+          labels: [],
+          teams: [],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const agent = response.json();
+      expect(
+        agent.tools.some(
+          (tool: { delegateToAgentId: string | null }) =>
+            tool.delegateToAgentId === targetAgent.id,
+        ),
+      ).toBe(true);
+
+      const delegations = await AgentToolModel.getDelegationTargets(
+        sourceAgent.id,
+      );
+      expect(delegations.map((delegation) => delegation.id)).toContain(
+        targetAgent.id,
+      );
     });
 
     test("should update systemPrompt and suggestedPrompts", async ({

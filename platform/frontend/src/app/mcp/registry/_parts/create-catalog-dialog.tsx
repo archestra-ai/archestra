@@ -49,7 +49,7 @@ export function CreateCatalogDialog({
     const createdItem = await createMutation.mutateAsync(apiData);
     handleClose();
     if (createdItem) {
-      onSuccess?.(createdItem);
+      onSuccess?.({ ...createdItem, toolCount: 0 });
     }
   };
 

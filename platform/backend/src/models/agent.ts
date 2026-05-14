@@ -26,8 +26,8 @@ import {
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import db, { schema, type Transaction } from "@/database";
 import { notDeleted } from "@/database/schemas/_soft-delete";
-import { softDelete } from "@/database/soft-delete";
 import { SoftDeletableModel } from "@/database/soft-deletable-model";
+import { softDelete } from "@/database/soft-delete";
 import {
   createPaginatedResult,
   type PaginatedResult,

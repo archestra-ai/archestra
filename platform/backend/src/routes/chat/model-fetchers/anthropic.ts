@@ -2,6 +2,10 @@ import {
   getAzureAiFoundryBearerTokenProvider,
   isAnthropicAzureFoundryEntraIdEnabled,
 } from "@/clients/azure-openai-credentials";
+import {
+  getAnthropicWifAccessToken,
+  isAnthropicWifEnabled,
+} from "@/clients/anthropic-wif-credentials";
 import config from "@/config";
 import logger from "@/logging";
 import type { Anthropic } from "@/types";
@@ -51,10 +55,15 @@ async function getAnthropicAuthHeaders(
     return { "x-api-key": apiKey };
   }
 
-  if (!isAnthropicAzureFoundryEntraIdEnabled()) {
-    return { "x-api-key": "" };
+  if (isAnthropicAzureFoundryEntraIdEnabled()) {
+    const tokenProvider = getAzureAiFoundryBearerTokenProvider();
+    return { Authorization: `Bearer ${await tokenProvider()}` };
   }
 
-  const tokenProvider = getAzureAiFoundryBearerTokenProvider();
-  return { Authorization: `Bearer ${await tokenProvider()}` };
+  if (isAnthropicWifEnabled()) {
+    const token = await getAnthropicWifAccessToken();
+    return { Authorization: `Bearer ${token}` };
+  }
+
+  return { "x-api-key": "" };
 }

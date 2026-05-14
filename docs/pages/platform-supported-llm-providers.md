@@ -82,6 +82,25 @@ Claude Foundry deployments must exist in Azure before requests will work. Use th
 
 Azure requires Anthropic deployment metadata when creating Claude deployments: `industry`, `organizationName`, and `countryCode`. In Azure CLI this may require an ARM REST deployment call with `properties.modelProviderData`.
 
+### Anthropic Workload Identity Federation
+
+[Workload Identity Federation (WIF)](https://platform.claude.com/docs/en/manage-claude/workload-identity-federation) lets your workloads authenticate to the Anthropic API using short-lived OIDC tokens from your identity provider (AWS IAM, Google Cloud, GitHub Actions, Kubernetes, etc.) instead of static API keys.
+
+To enable WIF, set the following environment variables:
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `ARCHESTRA_ANTHROPIC_WIF_ENABLED` | Yes | Set to `true` to enable WIF |
+| `ARCHESTRA_ANTHROPIC_WIF_FEDERATION_RULE_ID` | Yes | Federation rule ID (`fdrl_...`) from Claude Console |
+| `ARCHESTRA_ANTHROPIC_WIF_ORGANIZATION_ID` | Yes | Your Anthropic organization ID |
+| `ARCHESTRA_ANTHROPIC_WIF_SERVICE_ACCOUNT_ID` | No | Service account ID (`svac_...`) for target verification |
+| `ARCHESTRA_ANTHROPIC_WIF_WORKSPACE_ID` | No | Workspace ID to scope the token |
+| `ARCHESTRA_ANTHROPIC_WIF_IDENTITY_TOKEN_FILE` | No | Path to the file containing the OIDC identity token (JWT). Falls back to `ANTHROPIC_IDENTITY_TOKEN_FILE` or `ANTHROPIC_IDENTITY_TOKEN` env var |
+
+WIF is used when no API key is provided on the request. Archestra exchanges the identity token for a short-lived Anthropic access token via the RFC 7523 jwt-bearer grant, caching the token until 60 seconds before expiry.
+
+For more details on setting up federation issuers, service accounts, and rules, see the [Anthropic WIF documentation](https://platform.claude.com/docs/en/manage-claude/workload-identity-federation).
+
 See Microsoft's [Claude on Foundry guide](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-claude) for the Azure endpoint and authentication details.
 
 ## Google Gemini

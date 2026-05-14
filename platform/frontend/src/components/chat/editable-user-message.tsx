@@ -262,7 +262,7 @@ export function EditableUserMessage({
                 "shrink-0 transition-opacity",
                 isRegenerateConfirming
                   ? "opacity-100"
-                  : "opacity-0 group-hover/message:opacity-100",
+                  : "opacity-0 group-hover/message:opacity-100 group-focus-within/message:opacity-100",
               )}
             />
             <MessageContent className="max-w-none">

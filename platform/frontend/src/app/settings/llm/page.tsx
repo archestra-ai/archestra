@@ -11,12 +11,14 @@ import {
   LimitCleanupIntervalSelect,
 } from "@/components/limit-cleanup-interval-select";
 import { LlmModelPicker } from "@/components/llm-model-picker";
+import { LoadingSpinner } from "@/components/loading";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsBlock,
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
+import { Button } from "@/components/ui/button";
 import { CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -64,6 +66,8 @@ export default function LlmSettingsPage() {
   const [compressionMode, setCompressionMode] =
     useState<CompressionMode>("disabled");
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
+  const [hasSyncedInitialSettings, setHasSyncedInitialSettings] =
+    useState(false);
   const [defaultUserLimitValue, setDefaultUserLimitValue] = useState("");
   const [defaultUserLimitModels, setDefaultUserLimitModels] = useState<
     string[]
@@ -121,6 +125,7 @@ export default function LlmSettingsPage() {
       .filter((team) => team.convertToolResultsToToon)
       .map((team) => team.id);
     setSelectedTeamIds(enabledTeams);
+    setHasSyncedInitialSettings(true);
   }, [organization, teams]);
 
   const loadedTeams = teams ?? [];
@@ -166,7 +171,8 @@ export default function LlmSettingsPage() {
       JSON.stringify(serverDefaultUserLimitModels) ||
     defaultUserLimitCleanupInterval !== serverDefaultUserLimitCleanupInterval;
 
-  const isInitialLoading = isOrganizationPending || areTeamsPending;
+  const isInitialLoading =
+    isOrganizationPending || areTeamsPending || !hasSyncedInitialSettings;
   const hasChanges =
     !isInitialLoading && (hasCompressionChanges || hasDefaultUserLimitChanges);
 
@@ -256,6 +262,17 @@ export default function LlmSettingsPage() {
     );
   };
 
+  const handleUnsetDefaultUserLimit = () => {
+    setDefaultUserLimitValue("");
+    setDefaultUserLimitModels([]);
+    setIsDefaultUserLimitAllModels(true);
+    setDefaultUserLimitCleanupInterval(DEFAULT_LIMIT_CLEANUP_INTERVAL);
+  };
+
+  if (isInitialLoading) {
+    return <LoadingSpinner className="my-8" />;
+  }
+
   return (
     <SettingsSectionStack>
       <SettingsBlock
@@ -335,8 +352,27 @@ export default function LlmSettingsPage() {
       </SettingsBlock>
       <SettingsBlock
         title="Default user limit"
-        description="Apply the same token-cost limit to every existing and future organization member."
-        control={null}
+        description="Apply the same token-cost limit to every existing and future user."
+        control={
+          serverDefaultUserLimitValue ? (
+            <WithPermissions
+              permissions={{ llmSettings: ["update"] }}
+              noPermissionHandle="tooltip"
+            >
+              {({ hasPermission }) => (
+                <Button
+                  variant="outline"
+                  onClick={handleUnsetDefaultUserLimit}
+                  disabled={
+                    updateLlmSettingsMutation.isPending || !hasPermission
+                  }
+                >
+                  Unset
+                </Button>
+              )}
+            </WithPermissions>
+          ) : null
+        }
       >
         <WithPermissions
           permissions={{ llmSettings: ["update"] }}

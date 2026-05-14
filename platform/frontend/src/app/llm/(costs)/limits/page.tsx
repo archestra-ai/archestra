@@ -610,7 +610,8 @@ export default function LimitsPage() {
         >
           <Alert variant="info">
             <AlertDescription className="block">
-              A default user limit applies to every member. Configure it in{" "}
+              A default user limit applies to every user. Custom per-user limits
+              override it. Configure it in{" "}
               <Link
                 href="/settings/llm"
                 className="font-medium underline underline-offset-4"
@@ -709,8 +710,8 @@ export default function LimitsPage() {
             {shouldShowDefaultUserLimitNotice && (
               <Alert variant="info">
                 <AlertDescription>
-                  This user already has the default user limit. Both limits
-                  apply; requests stop at whichever limit is reached first.
+                  This custom user limit will override the default user limit
+                  for the selected user.
                 </AlertDescription>
               </Alert>
             )}

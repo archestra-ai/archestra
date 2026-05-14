@@ -315,6 +315,9 @@ describe("LimitsPage", () => {
 
     expect(screen.getByText(/default user limit applies/i)).toBeInTheDocument();
     expect(
+      screen.getByText(/custom per-user limits override it/i),
+    ).toBeInTheDocument();
+    expect(
       screen.queryByText(/new limits use the default cleanup schedule/i),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /llm settings/i })).toHaveAttribute(

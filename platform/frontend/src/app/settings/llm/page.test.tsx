@@ -3,6 +3,7 @@
 import { DocsPage, getDocsUrl } from "@shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 let mockOrganization: Record<string, unknown> | null = null;
@@ -60,10 +61,10 @@ beforeEach(() => {
 });
 
 describe("LlmSettingsPage", () => {
-  it("links TOON compression help text to the costs and limits docs section", () => {
+  it("links TOON compression help text to the costs and limits docs section", async () => {
     renderPage();
 
-    const link = screen.getByRole("link", {
+    const link = await screen.findByRole("link", {
       name: /learn how toon compression works/i,
     });
 
@@ -73,5 +74,23 @@ describe("LlmSettingsPage", () => {
     );
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  });
+
+  it("lets admins unset the default user limit", async () => {
+    mockOrganization = {
+      compressionScope: "organization",
+      convertToolResultsToToon: true,
+      defaultUserLimitValue: 500,
+      defaultUserLimitModel: null,
+      defaultUserLimitCleanupInterval: "1w",
+    };
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "Unset" }));
+
+    expect(screen.getByPlaceholderText("Disabled")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
   });
 });

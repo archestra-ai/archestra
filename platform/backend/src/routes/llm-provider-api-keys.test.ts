@@ -466,6 +466,39 @@ describe("LLM Provider API Keys CRUD", () => {
     );
   });
 
+  test("re-tests existing API key when inference URL changes", async () => {
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Inference URL Update Test",
+        provider: "openai",
+        apiKey: "sk-openai-inference-url-update-test",
+        scope: "personal",
+        baseUrl: "https://discovery.example.com/v1",
+      },
+    });
+    expect(createResponse.statusCode).toBe(200);
+    const createdKey = createResponse.json();
+    mockTestProviderApiKey.mockClear();
+
+    const updateResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${createdKey.id}`,
+      payload: {
+        inferenceBaseUrl: "https://runtime.example.com/v1",
+      },
+    });
+
+    expect(updateResponse.statusCode).toBe(200);
+    expect(mockTestProviderApiKey).toHaveBeenCalledWith(
+      "openai",
+      "sk-openai-inference-url-update-test",
+      "https://runtime.example.com/v1",
+      null,
+    );
+  });
+
   test("should allow to set base URL for providers with optional API key", async () => {
     const createResponse = await app.inject({
       method: "POST",
@@ -524,6 +557,40 @@ describe("LLM Provider API Keys CRUD", () => {
       "",
       "https://my-resource.openai.azure.com/openai",
       undefined,
+    );
+  });
+
+  test("re-tests keyless Azure Entra provider key when inference URL changes", async () => {
+    mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(true);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Azure Split Endpoint",
+        provider: "azure",
+        scope: "personal",
+        baseUrl: "https://discovery.example.com/openai",
+      },
+    });
+    expect(createResponse.statusCode).toBe(200);
+    const createdKey = createResponse.json();
+    mockTestProviderApiKey.mockClear();
+
+    const updateResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${createdKey.id}`,
+      payload: {
+        inferenceBaseUrl: "https://runtime.example.com/openai/v1",
+      },
+    });
+
+    expect(updateResponse.statusCode).toBe(200);
+    expect(mockTestProviderApiKey).toHaveBeenCalledWith(
+      "azure",
+      "",
+      "https://runtime.example.com/openai/v1",
+      null,
     );
   });
 

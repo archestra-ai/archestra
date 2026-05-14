@@ -386,6 +386,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             apiKeyId: createdApiKey.id,
             provider: body.provider,
             apiKeyValue: actualApiKeyValue ?? "",
+            // Model sync uses the discovery endpoint; runtime calls use inferenceBaseUrl.
             baseUrl: body.baseUrl,
             extraHeaders: body.extraHeaders ?? null,
           });
@@ -645,10 +646,11 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       } else if (
         body.baseUrl !== undefined ||
+        body.inferenceBaseUrl !== undefined ||
         body.extraHeaders !== undefined
       ) {
-        // If baseUrl/extraHeaders are being updated without a new API key,
-        // we need to re-test using the existing API key.
+        // If runtime connection settings are being updated without a new API key,
+        // re-test using the existing API key.
         let apiKeyValue: string | undefined;
 
         if (apiKeyFromDB.secretId) {
@@ -657,7 +659,11 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         }
         const testBaseUrl =
-          body.baseUrl !== undefined ? body.baseUrl : apiKeyFromDB.baseUrl;
+          body.inferenceBaseUrl !== undefined
+            ? body.inferenceBaseUrl
+            : body.baseUrl !== undefined
+              ? body.baseUrl
+              : (apiKeyFromDB.inferenceBaseUrl ?? apiKeyFromDB.baseUrl);
         const testExtraHeaders =
           body.extraHeaders !== undefined
             ? body.extraHeaders
@@ -670,6 +676,11 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             testExtraHeaders,
           );
         } else if (
+          apiKeyFromDB.provider === "azure" &&
+          isAzureOpenAiEntraIdEnabled()
+        ) {
+          await testKeylessAzureEntraOrThrow(testBaseUrl, testExtraHeaders);
+        } else if (
           !isProviderApiKeyOptional({
             provider: apiKeyFromDB.provider,
             azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
@@ -677,7 +688,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ) {
           throw new ApiError(
             400,
-            "Cannot update Base URL or extra headers without existing API key",
+            "Cannot update Base URL, Inference URL, or extra headers without existing API key",
           );
         }
       }

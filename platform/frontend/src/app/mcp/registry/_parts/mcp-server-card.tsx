@@ -918,10 +918,10 @@ export function McpServerCard({
           allServersAcrossPresets
             .filter((s) => s.localInstallationStatus === "error")
             .map((failed) => {
-              const presetLabel =
-                failed.catalogId === item.id
-                  ? "default"
-                  : (presetNameByCatalogId.get(failed.catalogId) ?? failed.name);
+              const isDefaultPreset = failed.catalogId === item.id;
+              const presetLabel = isDefaultPreset
+                ? "default"
+                : (presetNameByCatalogId.get(failed.catalogId) ?? failed.name);
               const errorMsg =
                 failed.localInstallationError ?? "Installation failed";
               return (
@@ -935,9 +935,11 @@ export function McpServerCard({
                     <div className="min-w-0 flex-1">
                       <p className="font-medium">
                         Installation failed
-                        <span className="ml-1 font-normal opacity-80">
-                          — preset “{presetLabel}”
-                        </span>
+                        {!isDefaultPreset && (
+                          <span className="ml-1 font-normal opacity-80">
+                            — preset “{presetLabel}”
+                          </span>
+                        )}
                       </p>
                       <p className="truncate text-xs" title={errorMsg}>
                         {errorMsg}

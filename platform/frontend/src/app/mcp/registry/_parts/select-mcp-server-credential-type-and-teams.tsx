@@ -14,12 +14,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
   type VisibilityOption,
   VisibilitySelector,
 } from "@/components/visibility-selector";
@@ -364,65 +358,14 @@ export function SelectMcpServerCredentialTypeAndTeams({
       className="space-y-4"
       data-testid={E2eTestId.SelectCredentialTypeTeamDropdown}
     >
-      {hasPresets ? (
-        (!hideSelector || presetPicker) && (
-          <div
-            className={
-              !hideSelector && presetPicker ? "grid grid-cols-2 gap-3" : ""
-            }
-          >
-            {presetPicker}
-            {!hideSelector && (
-              <div className="space-y-1.5">
-                <Label htmlFor="install-for-scope">Install for</Label>
-                <Select value={scope} onValueChange={handleScopeChange}>
-                  <SelectTrigger id="install-for-scope" className="w-full">
-                    <SelectValue>
-                      {visibilityOptions.find((o) => o.value === scope)?.label}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {visibilityOptions.map((option) => {
-                      const item = (
-                        <SelectItem
-                          key={option.value}
-                          value={option.value}
-                          disabled={option.disabled}
-                        >
-                          {option.label}
-                        </SelectItem>
-                      );
-                      if (option.disabled && option.disabledReason) {
-                        return (
-                          <TooltipProvider key={option.value}>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <div>{item}</div>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                {option.disabledReason}
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        );
-                      }
-                      return item;
-                    })}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </div>
-        )
-      ) : (
-        !hideSelector && (
-          <VisibilitySelector
-            label="Install for"
-            value={scope}
-            options={visibilityOptions}
-            onValueChange={handleScopeChange}
-          />
-        )
+      {hasPresets && presetPicker}
+      {!hideSelector && (
+        <VisibilitySelector
+          label="Install for"
+          value={scope}
+          options={visibilityOptions}
+          onValueChange={handleScopeChange}
+        />
       )}
 
       {scope === "team" && (

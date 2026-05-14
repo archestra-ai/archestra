@@ -34,7 +34,7 @@ Limits are evaluated from recorded model usage, so pricing configuration affects
 
 ## Default User Limits
 
-Admins can configure a default user limit in LLM settings. It is inherited by every current and future member, but it is not shown as a separate row for each user on the limits page.
+Admins can configure a default user limit in LLM settings. It applies to every current and future user.
 
 A custom per-user limit overrides the default for that user. Use this when one member needs a different budget.
 
@@ -42,7 +42,7 @@ A custom per-user limit overrides the default for that user. Use this when one m
 
 Limit usage is reset according to each limit's cleanup interval. New limits default to weekly cleanup unless an admin chooses a different interval.
 
-Default user limits use their own cleanup interval from LLM settings. Since they are inherited rather than stored as per-user rows, they are evaluated against each user's usage during that interval.
+Default user limits use their own cleanup interval from LLM settings.
 
 ## Model Pricing
 

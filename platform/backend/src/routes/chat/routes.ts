@@ -1,7 +1,9 @@
 import {
   buildUserSystemPromptContext,
   type ChatErrorResponse,
+  createPaginatedResponseSchema,
   isSupportedProvider,
+  PaginationQuerySchema,
   RouteId,
   type SupportedProvider,
   TimeInMs,
@@ -116,6 +118,12 @@ function getMinimalFrontendError(errorForFrontend: ChatErrorResponse) {
     ...(errorForFrontend.spanId ? { spanId: errorForFrontend.spanId } : {}),
   };
 }
+
+const BooleanQuerySchema = z.preprocess((value) => {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return value;
+}, z.boolean());
 
 const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
@@ -876,20 +884,30 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "List all conversations for current user with agent details. Optionally filter by search query.",
         tags: ["Chat"],
-        querystring: z.object({
-          search: z.string().optional(),
-        }),
-        response: constructResponseSchema(z.array(SelectConversationSchema)),
+        querystring: z
+          .object({
+            search: z.string().optional(),
+            includePreviewMessages: BooleanQuerySchema.default(false),
+            pinned: BooleanQuerySchema.optional(),
+          })
+          .merge(PaginationQuerySchema),
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(SelectConversationSchema),
+        ),
       },
     },
     async (request, reply) => {
-      const { search } = request.query;
+      const { search, includePreviewMessages, pinned, limit, offset } =
+        request.query;
       return reply.send(
-        await ConversationModel.findAll(
-          request.user.id,
-          request.organizationId,
-          search,
-        ),
+        await ConversationModel.findAllPaginated({
+          userId: request.user.id,
+          organizationId: request.organizationId,
+          pagination: { limit, offset },
+          searchQuery: search,
+          includePreviewMessages,
+          pinned,
+        }),
       );
     },
   );

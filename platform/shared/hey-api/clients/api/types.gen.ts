@@ -18821,6 +18821,10 @@ export type GetChatConversationsData = {
     path?: never;
     query?: {
         search?: string;
+        includePreviewMessages?: boolean;
+        pinned?: boolean;
+        limit?: number;
+        offset?: number;
     };
     url: '/api/chat/conversations';
 };
@@ -18894,56 +18898,66 @@ export type GetChatConversationsResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        id: string;
-        userId: string;
-        organizationId: string;
-        agentId: string | null;
-        chatApiKeyId: string | null;
-        title: string | null;
-        selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
-        hasCustomToolSelection: boolean;
-        todoList: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
-        artifact: string | null;
-        pinnedAt: string | null;
-        createdAt: string;
-        updatedAt: string;
-        agent: {
+    200: {
+        data: Array<{
             id: string;
-            name: string;
-            systemPrompt: string | null;
-            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
-            llmApiKeyId: string | null;
-        } | null;
-        share: {
-            id: string;
-            visibility: 'organization' | 'team' | 'user';
-        } | null;
-        messages: Array<unknown>;
-        chatErrors: Array<{
-            id: string;
-            conversationId: string;
-            error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
-                message: string;
-                isRetryable: boolean;
-                sessionId?: string;
-                traceId?: string;
-                spanId?: string;
-                originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
-                    status?: number;
-                    message?: string;
-                    type?: string;
-                    raw?: unknown;
-                };
-            };
+            userId: string;
+            organizationId: string;
+            agentId: string | null;
+            chatApiKeyId: string | null;
+            title: string | null;
+            selectedModel: string;
+            selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+            hasCustomToolSelection: boolean;
+            todoList: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
+            artifact: string | null;
+            pinnedAt: string | null;
             createdAt: string;
+            updatedAt: string;
+            agent: {
+                id: string;
+                name: string;
+                systemPrompt: string | null;
+                agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+                llmApiKeyId: string | null;
+            } | null;
+            share: {
+                id: string;
+                visibility: 'organization' | 'team' | 'user';
+            } | null;
+            messages: Array<unknown>;
+            chatErrors: Array<{
+                id: string;
+                conversationId: string;
+                error: {
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    message: string;
+                    isRetryable: boolean;
+                    sessionId?: string;
+                    traceId?: string;
+                    spanId?: string;
+                    originalError?: {
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+                        status?: number;
+                        message?: string;
+                        type?: string;
+                        raw?: unknown;
+                    };
+                };
+                createdAt: string;
+            }>;
         }>;
-    }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
 };
 
 export type GetChatConversationsResponse = GetChatConversationsResponses[keyof GetChatConversationsResponses];

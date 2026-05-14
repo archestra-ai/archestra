@@ -164,6 +164,136 @@ describe("ConversationModel", () => {
     expect(conversations.every((c) => Array.isArray(c.messages))).toBe(true);
   });
 
+  test("findAllPaginated returns pagination metadata", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Paginated Agent", teams: [] });
+
+    await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "First",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+    await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Second",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    const result = await ConversationModel.findAllPaginated({
+      userId: user.id,
+      organizationId: org.id,
+      pagination: { limit: 1, offset: 0 },
+    });
+
+    expect(result.data).toHaveLength(1);
+    expect(result.pagination).toEqual({
+      currentPage: 1,
+      limit: 1,
+      total: 2,
+      totalPages: 2,
+      hasNext: true,
+      hasPrev: false,
+    });
+  });
+
+  test("findAllPaginated filters pinned conversations", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Pinned Filter Agent", teams: [] });
+
+    const pinned = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Pinned",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+    const unpinned = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Unpinned",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    await ConversationModel.update(pinned.id, user.id, org.id, {
+      pinnedAt: new Date("2026-01-01T00:00:00Z"),
+    });
+
+    const pinnedResult = await ConversationModel.findAllPaginated({
+      userId: user.id,
+      organizationId: org.id,
+      pagination: { limit: 10, offset: 0 },
+      pinned: true,
+    });
+    const unpinnedResult = await ConversationModel.findAllPaginated({
+      userId: user.id,
+      organizationId: org.id,
+      pagination: { limit: 10, offset: 0 },
+      pinned: false,
+    });
+
+    expect(pinnedResult.data.map((conversation) => conversation.id)).toEqual([
+      pinned.id,
+    ]);
+    expect(unpinnedResult.data.map((conversation) => conversation.id)).toEqual([
+      unpinned.id,
+    ]);
+  });
+
+  test("findAllPaginated sorts pinned conversations first when pinned filter is omitted", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Pinned Sort Agent", teams: [] });
+
+    const pinned = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Older Pinned",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+    const recent = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Newer Unpinned",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    await ConversationModel.update(pinned.id, user.id, org.id, {
+      pinnedAt: new Date("2026-01-01T00:00:00Z"),
+    });
+
+    const result = await ConversationModel.findAllPaginated({
+      userId: user.id,
+      organizationId: org.id,
+      pagination: { limit: 2, offset: 0 },
+    });
+
+    expect(result.data.map((conversation) => conversation.id)).toEqual([
+      pinned.id,
+      recent.id,
+    ]);
+  });
+
   test("can update a conversation", async ({
     makeUser,
     makeOrganization,
@@ -1231,6 +1361,58 @@ describe("ConversationModel", () => {
     expect(Array.isArray(results[0].messages)).toBe(true);
     expect(results[0].messages.length).toBeGreaterThan(0);
     expect(results[0].messages[0].parts[0].text).toBe("Python tutorial");
+  });
+
+  test("findAllPaginated only includes preview messages when requested", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      name: "Preview Toggle Agent",
+      teams: [],
+    });
+
+    const conversation = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Preview Test Conversation",
+      selectedModel: "claude-3-haiku-20240307",
+    });
+
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "user",
+      content: {
+        id: "temp-preview",
+        role: "user",
+        parts: [{ type: "text", text: "Python preview content" }],
+      },
+    });
+
+    const withoutPreview = await ConversationModel.findAllPaginated({
+      userId: user.id,
+      organizationId: org.id,
+      pagination: { limit: 10, offset: 0 },
+      searchQuery: "Python",
+      includePreviewMessages: false,
+    });
+    const withPreview = await ConversationModel.findAllPaginated({
+      userId: user.id,
+      organizationId: org.id,
+      pagination: { limit: 10, offset: 0 },
+      searchQuery: "Python",
+      includePreviewMessages: true,
+    });
+
+    expect(withoutPreview.data[0].messages).toEqual([]);
+    expect(withPreview.data[0].messages).toHaveLength(1);
+    expect(withPreview.data[0].messages[0].parts[0].text).toBe(
+      "Python preview content",
+    );
   });
 
   test("findAll without search query returns empty messages arrays", async ({

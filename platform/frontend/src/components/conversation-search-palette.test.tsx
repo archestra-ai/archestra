@@ -12,12 +12,14 @@ const {
   mockRouterPush,
   mockUsePathname,
   mockDeleteMutate,
-  mockUseConversations,
+  mockUseConversationsInfinite,
+  mockFetchNextPage,
 } = vi.hoisted(() => ({
   mockRouterPush: vi.fn(),
   mockUsePathname: vi.fn(),
   mockDeleteMutate: vi.fn(),
-  mockUseConversations: vi.fn(),
+  mockUseConversationsInfinite: vi.fn(),
+  mockFetchNextPage: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -51,7 +53,7 @@ vi.mock("@/lib/chat/chat-utils", () => ({
 }));
 
 vi.mock("@/lib/chat/chat.query", () => ({
-  useConversations: mockUseConversations,
+  useConversationsInfinite: mockUseConversationsInfinite,
   useDeleteConversation: () => ({
     mutate: mockDeleteMutate,
   }),
@@ -93,8 +95,16 @@ vi.mock("@/components/ui/command", () => ({
       onChange={(e) => onValueChange(e.target.value)}
     />
   ),
-  CommandList: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
+  CommandList: ({
+    children,
+    onScroll,
+  }: {
+    children: React.ReactNode;
+    onScroll?: React.UIEventHandler<HTMLDivElement>;
+  }) => (
+    <div data-testid="command-list" onScroll={onScroll}>
+      {children}
+    </div>
   ),
   CommandEmpty: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
@@ -146,23 +156,40 @@ describe("ConversationSearchPalette", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUsePathname.mockReturnValue("/chat");
-    mockUseConversations.mockReturnValue({
-      data: [
-        {
-          id: "conv-1",
-          title: "First conversation",
-          updatedAt: new Date().toISOString(),
-          messages: [],
-        },
-        {
-          id: "conv-2",
-          title: "Second conversation",
-          updatedAt: new Date().toISOString(),
-          messages: [],
-        },
-      ],
+    mockUseConversationsInfinite.mockReturnValue({
+      data: {
+        pages: [
+          {
+            data: [
+              {
+                id: "conv-1",
+                title: "First conversation",
+                updatedAt: new Date().toISOString(),
+                messages: [],
+              },
+              {
+                id: "conv-2",
+                title: "Second conversation",
+                updatedAt: new Date().toISOString(),
+                messages: [],
+              },
+            ],
+            pagination: {
+              currentPage: 1,
+              limit: 20,
+              total: 2,
+              totalPages: 1,
+              hasNext: false,
+              hasPrev: false,
+            },
+          },
+        ],
+      },
       isLoading: false,
       isFetching: false,
+      hasNextPage: false,
+      fetchNextPage: mockFetchNextPage,
+      isFetchingNextPage: false,
     });
     capturedOnValueChange = null;
   });
@@ -172,13 +199,13 @@ describe("ConversationSearchPalette", () => {
       <ConversationSearchPalette {...defaultProps} open={false} />,
     );
 
-    expect(mockUseConversations).toHaveBeenLastCalledWith(
+    expect(mockUseConversationsInfinite).toHaveBeenLastCalledWith(
       expect.objectContaining({ enabled: false }),
     );
 
     rerender(<ConversationSearchPalette {...defaultProps} open={true} />);
 
-    expect(mockUseConversations).toHaveBeenLastCalledWith(
+    expect(mockUseConversationsInfinite).toHaveBeenLastCalledWith(
       expect.objectContaining({ enabled: true }),
     );
   });
@@ -188,6 +215,80 @@ describe("ConversationSearchPalette", () => {
 
     expect(screen.getByText("First conversation")).toBeInTheDocument();
     expect(screen.getByText("Second conversation")).toBeInTheDocument();
+  });
+
+  it("enables preview messages only for searched conversations", () => {
+    render(<ConversationSearchPalette {...defaultProps} />);
+
+    expect(mockUseConversationsInfinite).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        search: "",
+        includePreviewMessages: false,
+      }),
+    );
+
+    fireEvent.change(screen.getByTestId("command-input"), {
+      target: { value: "first" },
+    });
+
+    expect(mockUseConversationsInfinite).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        search: "first",
+        includePreviewMessages: true,
+      }),
+    );
+  });
+
+  it("fetches the next page when scrolling near the bottom", () => {
+    mockUseConversationsInfinite.mockReturnValue({
+      data: {
+        pages: [
+          {
+            data: [
+              {
+                id: "conv-1",
+                title: "First conversation",
+                updatedAt: new Date().toISOString(),
+                messages: [],
+              },
+            ],
+            pagination: {
+              currentPage: 1,
+              limit: 20,
+              total: 30,
+              totalPages: 2,
+              hasNext: true,
+              hasPrev: false,
+            },
+          },
+        ],
+      },
+      isLoading: false,
+      isFetching: false,
+      hasNextPage: true,
+      fetchNextPage: mockFetchNextPage,
+      isFetchingNextPage: false,
+    });
+
+    render(<ConversationSearchPalette {...defaultProps} />);
+
+    const commandList = screen.getByTestId("command-list");
+    Object.defineProperty(commandList, "scrollHeight", {
+      configurable: true,
+      value: 100,
+    });
+    Object.defineProperty(commandList, "scrollTop", {
+      configurable: true,
+      value: 50,
+    });
+    Object.defineProperty(commandList, "clientHeight", {
+      configurable: true,
+      value: 50,
+    });
+
+    fireEvent.scroll(commandList);
+
+    expect(mockFetchNextPage).toHaveBeenCalled();
   });
 
   it("redirects to /chat when deleting the currently viewed conversation", () => {

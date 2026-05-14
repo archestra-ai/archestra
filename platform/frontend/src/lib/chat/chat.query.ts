@@ -5,7 +5,9 @@ import {
   PLAYWRIGHT_MCP_SERVER_NAME,
 } from "@shared";
 import {
+  type InfiniteData,
   keepPreviousData,
+  useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
@@ -37,6 +39,75 @@ const {
   bulkAssignTools,
   stopChatStream,
 } = archestraApiSdk;
+
+type ConversationListResponse =
+  archestraApiTypes.GetChatConversationsResponses["200"];
+type ConversationListQuery = NonNullable<
+  archestraApiTypes.GetChatConversationsData["query"]
+>;
+
+function emptyConversationsResponse(limit: number): ConversationListResponse {
+  return {
+    data: [],
+    pagination: {
+      currentPage: 1,
+      limit,
+      total: 0,
+      totalPages: 0,
+      hasNext: false,
+      hasPrev: false,
+    },
+  };
+}
+
+function removeConversationFromCachedData<T>(
+  cachedData: T,
+  deletedId: string,
+): T {
+  if (!cachedData) {
+    return cachedData;
+  }
+
+  if (Array.isArray(cachedData)) {
+    return cachedData.filter(
+      (conversation) => conversation.id !== deletedId,
+    ) as T;
+  }
+
+  if (
+    typeof cachedData === "object" &&
+    "data" in cachedData &&
+    Array.isArray(cachedData.data)
+  ) {
+    return {
+      ...cachedData,
+      data: cachedData.data.filter(
+        (conversation) => conversation.id !== deletedId,
+      ),
+    };
+  }
+
+  if (
+    typeof cachedData === "object" &&
+    "pages" in cachedData &&
+    Array.isArray(cachedData.pages)
+  ) {
+    const infiniteData = cachedData as unknown as InfiniteData<
+      ConversationListResponse,
+      number
+    >;
+
+    return {
+      ...infiniteData,
+      pages: infiniteData.pages.map((page) => ({
+        ...page,
+        data: page.data.filter((conversation) => conversation.id !== deletedId),
+      })),
+    } as T;
+  }
+
+  return cachedData;
+}
 
 export function mergeUpdatedConversationIntoCache(
   oldConversation:
@@ -112,29 +183,98 @@ export function useConversation(conversationId?: string) {
 export function useConversations({
   enabled = true,
   search,
+  includePreviewMessages = false,
+  pinned,
+  limit = 20,
+  offset = 0,
 }: {
   enabled?: boolean;
   search?: string;
+  includePreviewMessages?: boolean;
+  pinned?: boolean;
+  limit?: number;
+  offset?: number;
 }) {
   return useQuery({
-    queryKey: ["conversations", search],
+    queryKey: [
+      "conversations",
+      { search, includePreviewMessages, pinned, limit, offset },
+    ],
     queryFn: async () => {
-      if (!enabled) return [];
       const trimmedSearch = search?.trim();
 
-      const { data, error } = await getChatConversations({
-        query: trimmedSearch ? { search: trimmedSearch } : undefined,
-      });
+      const query: ConversationListQuery = {
+        limit,
+        offset,
+        includePreviewMessages,
+        ...(trimmedSearch ? { search: trimmedSearch } : {}),
+        ...(pinned !== undefined ? { pinned } : {}),
+      };
+
+      const { data, error } = await getChatConversations({ query });
 
       if (error) {
         handleApiError(error);
-        return [];
+        return emptyConversationsResponse(limit);
       }
-      return data;
+      return (data ??
+        emptyConversationsResponse(limit)) as ConversationListResponse;
     },
     staleTime: search ? 0 : 2_000, // No stale time for searches, 2 seconds otherwise
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
+    enabled,
+  });
+}
+
+export function useConversationsInfinite({
+  enabled = true,
+  search,
+  includePreviewMessages = false,
+  pinned,
+  limit = 20,
+}: {
+  enabled?: boolean;
+  search?: string;
+  includePreviewMessages?: boolean;
+  pinned?: boolean;
+  limit?: number;
+}) {
+  return useInfiniteQuery({
+    queryKey: [
+      "conversations",
+      "infinite",
+      { search, includePreviewMessages, pinned, limit },
+    ],
+    queryFn: async ({ pageParam = 0 }) => {
+      const trimmedSearch = search?.trim();
+      const query: ConversationListQuery = {
+        limit,
+        offset: pageParam,
+        includePreviewMessages,
+        ...(trimmedSearch ? { search: trimmedSearch } : {}),
+        ...(pinned !== undefined ? { pinned } : {}),
+      };
+
+      const { data, error } = await getChatConversations({ query });
+
+      if (error) {
+        handleApiError(error);
+        return emptyConversationsResponse(limit);
+      }
+
+      return (data ??
+        emptyConversationsResponse(limit)) as ConversationListResponse;
+    },
+    getNextPageParam: (lastPage) =>
+      lastPage.pagination.hasNext
+        ? lastPage.pagination.currentPage * lastPage.pagination.limit
+        : undefined,
+    initialPageParam: 0,
+    staleTime: search ? 0 : 2_000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    enabled,
   });
 }
 
@@ -266,14 +406,13 @@ export function useDeleteConversation() {
       await queryClient.cancelQueries({ queryKey: ["conversations"] });
 
       // Snapshot all conversation list caches (one per search query) for rollback
-      const previousQueries = queryClient.getQueriesData<{ id: string }[]>({
+      const previousQueries = queryClient.getQueriesData({
         queryKey: ["conversations"],
       });
 
       // Optimistically remove the conversation from every cached list
-      queryClient.setQueriesData<{ id: string }[]>(
-        { queryKey: ["conversations"] },
-        (old) => (old ? old.filter((c) => c.id !== deletedId) : old),
+      queryClient.setQueriesData({ queryKey: ["conversations"] }, (old) =>
+        removeConversationFromCachedData(old, deletedId),
       );
 
       return { previousQueries };

@@ -64847,6 +64847,44 @@
             "in": "query",
             "name": "search",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "includePreviewMessages",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "pinned",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 0,
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "in": "query",
+            "name": "offset",
+            "required": false
           }
         ],
         "responses": {
@@ -64855,155 +64893,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "userId": {
-                        "type": "string"
-                      },
-                      "organizationId": {
-                        "type": "string"
-                      },
-                      "agentId": {
-                        "nullable": true,
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "chatApiKeyId": {
-                        "nullable": true,
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "title": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "selectedModel": {
-                        "type": "string"
-                      },
-                      "selectedProvider": {
-                        "nullable": true,
-                        "type": "string",
-                        "enum": [
-                          "openai",
-                          "gemini",
-                          "anthropic",
-                          "bedrock",
-                          "cohere",
-                          "cerebras",
-                          "mistral",
-                          "perplexity",
-                          "groq",
-                          "xai",
-                          "openrouter",
-                          "vllm",
-                          "ollama",
-                          "zhipuai",
-                          "deepseek",
-                          "minimax",
-                          "azure"
-                        ]
-                      },
-                      "hasCustomToolSelection": {
-                        "type": "boolean"
-                      },
-                      "todoList": {
-                        "nullable": true,
-                        "anyOf": [
-                          {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "boolean"
-                              },
-                              {
-                                "type": "string",
-                                "nullable": true,
-                                "enum": [
-                                  null
-                                ]
-                              }
-                            ]
-                          },
-                          {
-                            "type": "object",
-                            "additionalProperties": {}
-                          },
-                          {
-                            "type": "array",
-                            "items": {}
-                          }
-                        ]
-                      },
-                      "artifact": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "pinnedAt": {
-                        "nullable": true,
-                        "type": "string",
-                        "format": "date-time"
-                      },
-                      "createdAt": {
-                        "type": "string",
-                        "format": "date-time"
-                      },
-                      "updatedAt": {
-                        "type": "string",
-                        "format": "date-time"
-                      },
-                      "agent": {
-                        "nullable": true,
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          },
-                          "systemPrompt": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "agentType": {
-                            "type": "string",
-                            "enum": [
-                              "profile",
-                              "mcp_gateway",
-                              "llm_proxy",
-                              "agent"
-                            ]
-                          },
-                          "llmApiKeyId": {
-                            "nullable": true,
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "name",
-                          "systemPrompt",
-                          "agentType",
-                          "llmApiKeyId"
-                        ],
-                        "additionalProperties": false
-                      },
-                      "share": {
-                        "nullable": true,
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
                         "type": "object",
                         "properties": {
                           "id": {
@@ -65011,156 +64905,350 @@
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
-                          "visibility": {
+                          "userId": {
+                            "type": "string"
+                          },
+                          "organizationId": {
+                            "type": "string"
+                          },
+                          "agentId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "chatApiKeyId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "title": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "selectedModel": {
+                            "type": "string"
+                          },
+                          "selectedProvider": {
+                            "nullable": true,
                             "type": "string",
                             "enum": [
-                              "organization",
-                              "team",
-                              "user"
+                              "openai",
+                              "gemini",
+                              "anthropic",
+                              "bedrock",
+                              "cohere",
+                              "cerebras",
+                              "mistral",
+                              "perplexity",
+                              "groq",
+                              "xai",
+                              "openrouter",
+                              "vllm",
+                              "ollama",
+                              "zhipuai",
+                              "deepseek",
+                              "minimax",
+                              "azure"
                             ]
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "visibility"
-                        ],
-                        "additionalProperties": false
-                      },
-                      "messages": {
-                        "type": "array",
-                        "items": {}
-                      },
-                      "chatErrors": {
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "id": {
-                              "type": "string",
-                              "format": "uuid",
-                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "hasCustomToolSelection": {
+                            "type": "boolean"
+                          },
+                          "todoList": {
+                            "nullable": true,
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      null
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": {}
+                              },
+                              {
+                                "type": "array",
+                                "items": {}
+                              }
+                            ]
+                          },
+                          "artifact": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "pinnedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "agent": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "systemPrompt": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "agentType": {
+                                "type": "string",
+                                "enum": [
+                                  "profile",
+                                  "mcp_gateway",
+                                  "llm_proxy",
+                                  "agent"
+                                ]
+                              },
+                              "llmApiKeyId": {
+                                "nullable": true,
+                                "type": "string"
+                              }
                             },
-                            "conversationId": {
-                              "type": "string",
-                              "format": "uuid",
-                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            "required": [
+                              "id",
+                              "name",
+                              "systemPrompt",
+                              "agentType",
+                              "llmApiKeyId"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "share": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "visibility": {
+                                "type": "string",
+                                "enum": [
+                                  "organization",
+                                  "team",
+                                  "user"
+                                ]
+                              }
                             },
-                            "error": {
+                            "required": [
+                              "id",
+                              "visibility"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "messages": {
+                            "type": "array",
+                            "items": {}
+                          },
+                          "chatErrors": {
+                            "type": "array",
+                            "items": {
                               "type": "object",
                               "properties": {
-                                "code": {
+                                "id": {
                                   "type": "string",
-                                  "enum": [
-                                    "rate_limit",
-                                    "authentication",
-                                    "permission_denied",
-                                    "invalid_request",
-                                    "not_found",
-                                    "context_too_long",
-                                    "content_filtered",
-                                    "server_error",
-                                    "network_error",
-                                    "unknown"
-                                  ]
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                                 },
-                                "message": {
-                                  "type": "string"
+                                "conversationId": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                                 },
-                                "isRetryable": {
-                                  "type": "boolean"
-                                },
-                                "sessionId": {
-                                  "type": "string"
-                                },
-                                "traceId": {
-                                  "type": "string"
-                                },
-                                "spanId": {
-                                  "type": "string"
-                                },
-                                "originalError": {
+                                "error": {
                                   "type": "object",
                                   "properties": {
-                                    "provider": {
+                                    "code": {
                                       "type": "string",
                                       "enum": [
-                                        "openai",
-                                        "gemini",
-                                        "anthropic",
-                                        "bedrock",
-                                        "cohere",
-                                        "cerebras",
-                                        "mistral",
-                                        "perplexity",
-                                        "groq",
-                                        "xai",
-                                        "openrouter",
-                                        "vllm",
-                                        "ollama",
-                                        "zhipuai",
-                                        "deepseek",
-                                        "minimax",
-                                        "azure"
+                                        "rate_limit",
+                                        "authentication",
+                                        "permission_denied",
+                                        "invalid_request",
+                                        "not_found",
+                                        "context_too_long",
+                                        "content_filtered",
+                                        "server_error",
+                                        "network_error",
+                                        "unknown"
                                       ]
-                                    },
-                                    "status": {
-                                      "type": "number"
                                     },
                                     "message": {
                                       "type": "string"
                                     },
-                                    "type": {
+                                    "isRetryable": {
+                                      "type": "boolean"
+                                    },
+                                    "sessionId": {
                                       "type": "string"
                                     },
-                                    "raw": {}
+                                    "traceId": {
+                                      "type": "string"
+                                    },
+                                    "spanId": {
+                                      "type": "string"
+                                    },
+                                    "originalError": {
+                                      "type": "object",
+                                      "properties": {
+                                        "provider": {
+                                          "type": "string",
+                                          "enum": [
+                                            "openai",
+                                            "gemini",
+                                            "anthropic",
+                                            "bedrock",
+                                            "cohere",
+                                            "cerebras",
+                                            "mistral",
+                                            "perplexity",
+                                            "groq",
+                                            "xai",
+                                            "openrouter",
+                                            "vllm",
+                                            "ollama",
+                                            "zhipuai",
+                                            "deepseek",
+                                            "minimax",
+                                            "azure"
+                                          ]
+                                        },
+                                        "status": {
+                                          "type": "number"
+                                        },
+                                        "message": {
+                                          "type": "string"
+                                        },
+                                        "type": {
+                                          "type": "string"
+                                        },
+                                        "raw": {}
+                                      },
+                                      "additionalProperties": false
+                                    }
                                   },
+                                  "required": [
+                                    "code",
+                                    "message",
+                                    "isRetryable"
+                                  ],
                                   "additionalProperties": false
+                                },
+                                "createdAt": {
+                                  "type": "string",
+                                  "format": "date-time"
                                 }
                               },
                               "required": [
-                                "code",
-                                "message",
-                                "isRetryable"
+                                "id",
+                                "conversationId",
+                                "error",
+                                "createdAt"
                               ],
                               "additionalProperties": false
-                            },
-                            "createdAt": {
-                              "type": "string",
-                              "format": "date-time"
                             }
-                          },
-                          "required": [
-                            "id",
-                            "conversationId",
-                            "error",
-                            "createdAt"
-                          ],
-                          "additionalProperties": false
-                        }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "userId",
+                          "organizationId",
+                          "agentId",
+                          "chatApiKeyId",
+                          "title",
+                          "selectedModel",
+                          "selectedProvider",
+                          "hasCustomToolSelection",
+                          "todoList",
+                          "artifact",
+                          "pinnedAt",
+                          "createdAt",
+                          "updatedAt",
+                          "agent",
+                          "share",
+                          "messages",
+                          "chatErrors"
+                        ],
+                        "additionalProperties": false
                       }
                     },
-                    "required": [
-                      "id",
-                      "userId",
-                      "organizationId",
-                      "agentId",
-                      "chatApiKeyId",
-                      "title",
-                      "selectedModel",
-                      "selectedProvider",
-                      "hasCustomToolSelection",
-                      "todoList",
-                      "artifact",
-                      "pinnedAt",
-                      "createdAt",
-                      "updatedAt",
-                      "agent",
-                      "share",
-                      "messages",
-                      "chatErrors"
-                    ],
-                    "additionalProperties": false
-                  }
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "currentPage": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "limit": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "total": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "totalPages": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "hasNext": {
+                          "type": "boolean"
+                        },
+                        "hasPrev": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "currentPage",
+                        "limit",
+                        "total",
+                        "totalPages",
+                        "hasNext",
+                        "hasPrev"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "pagination"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }

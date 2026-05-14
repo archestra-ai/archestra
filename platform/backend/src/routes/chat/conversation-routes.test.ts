@@ -64,6 +64,53 @@ describe("chat conversation and message routes", () => {
     });
   });
 
+  test("lists conversations with pagination and pinned filtering", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const pinned = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+      title: "Pinned chat",
+      selectedModel: "gpt-4o",
+      selectedProvider: "openai",
+    });
+    await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+      title: "Recent chat",
+      selectedModel: "gpt-4o",
+      selectedProvider: "openai",
+    });
+    await ConversationModel.update(pinned.id, currentUser.id, organizationId, {
+      pinnedAt: new Date("2026-01-01T00:00:00Z"),
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/chat/conversations?limit=10&offset=0&pinned=false",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      data: [{ title: "Recent chat", pinnedAt: null, messages: [] }],
+      pagination: {
+        currentPage: 1,
+        limit: 10,
+        total: 1,
+        totalPages: 1,
+        hasNext: false,
+        hasPrev: false,
+      },
+    });
+  });
+
   test("pins and unpins a conversation", async ({ makeAgent }) => {
     const agent = await makeAgent({
       organizationId,

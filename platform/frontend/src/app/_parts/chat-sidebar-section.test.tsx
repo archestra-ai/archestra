@@ -8,7 +8,10 @@ global.ResizeObserver = vi.fn().mockImplementation(() => ({
   disconnect: vi.fn(),
 }));
 
-const mockRouterPush = vi.fn();
+const { mockRouterPush, mockUseConversations } = vi.hoisted(() => ({
+  mockRouterPush: vi.fn(),
+  mockUseConversations: vi.fn(),
+}));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockRouterPush }),
@@ -50,10 +53,7 @@ let mockConversations: Array<{
 }> = [];
 
 vi.mock("@/lib/chat/chat.query", () => ({
-  useConversations: () => ({
-    data: mockConversations,
-    isLoading: false,
-  }),
+  useConversations: mockUseConversations,
   useUpdateConversation: () => ({ mutateAsync: vi.fn() }),
   useDeleteConversation: () => ({
     mutateAsync: vi.fn(),
@@ -175,10 +175,49 @@ function makeConv(
   };
 }
 
+function makeConversationsResponse(
+  conversations: typeof mockConversations,
+  limit: number,
+  total = conversations.length,
+) {
+  return {
+    data: conversations,
+    pagination: {
+      currentPage: 1,
+      limit,
+      total,
+      totalPages: total > 0 ? Math.ceil(total / limit) : 0,
+      hasNext: conversations.length < total,
+      hasPrev: false,
+    },
+  };
+}
+
 describe("ChatSidebarSection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockConversations = [];
+    mockUseConversations.mockImplementation(
+      ({ pinned, limit }: { pinned?: boolean; limit: number }) => {
+        const filteredConversations =
+          pinned === true
+            ? mockConversations.filter((conversation) => conversation.pinnedAt)
+            : pinned === false
+              ? mockConversations.filter(
+                  (conversation) => !conversation.pinnedAt,
+                )
+              : mockConversations;
+
+        return {
+          data: makeConversationsResponse(
+            filteredConversations.slice(0, limit),
+            limit,
+            filteredConversations.length,
+          ),
+          isLoading: false,
+        };
+      },
+    );
   });
 
   it("does not render when no conversations exist", () => {
@@ -207,11 +246,38 @@ describe("ChatSidebarSection", () => {
     expect(screen.queryByText("Chat Four")).not.toBeInTheDocument();
     expect(screen.queryByText("Chat Five")).not.toBeInTheDocument();
 
-    // Should show "More" to open search
     expect(screen.getByText("More")).toBeInTheDocument();
   });
 
-  it("shows only pinned chats when 3 are pinned (no recent unpinned)", () => {
+  it("loads pinned and recent chats with separate optimized queries", () => {
+    mockConversations = [
+      makeConv("c1", "Pinned One", {
+        pinnedAt: "2026-01-05T00:00:00Z",
+      }),
+      makeConv("c2", "Recent One"),
+    ];
+
+    render(<ChatSidebarSection />);
+
+    expect(mockUseConversations).toHaveBeenCalledWith(
+      expect.objectContaining({
+        limit: 100,
+        offset: 0,
+        pinned: true,
+        includePreviewMessages: false,
+      }),
+    );
+    expect(mockUseConversations).toHaveBeenCalledWith(
+      expect.objectContaining({
+        limit: 3,
+        offset: 0,
+        pinned: false,
+        includePreviewMessages: false,
+      }),
+    );
+  });
+
+  it("shows pinned chats plus recent unpinned chats", () => {
     mockConversations = [
       makeConv("c1", "Pinned One", {
         pinnedAt: "2026-01-05T00:00:00Z",
@@ -235,14 +301,12 @@ describe("ChatSidebarSection", () => {
     expect(screen.getByText("Pinned Two")).toBeInTheDocument();
     expect(screen.getByText("Pinned Three")).toBeInTheDocument();
 
-    // Unpinned should NOT show (all 3 slots taken by pinned)
-    expect(screen.queryByText("Unpinned One")).not.toBeInTheDocument();
+    expect(screen.getByText("Unpinned One")).toBeInTheDocument();
 
-    // Should show "More" to open search
-    expect(screen.getByText("More")).toBeInTheDocument();
+    expect(screen.queryByText("More")).not.toBeInTheDocument();
   });
 
-  it("fills remaining slots with recent chats when fewer than 3 are pinned", () => {
+  it("shows up to 3 recent chats in addition to pinned chats", () => {
     mockConversations = [
       makeConv("c1", "Pinned Chat", {
         pinnedAt: "2026-01-05T00:00:00Z",
@@ -255,19 +319,15 @@ describe("ChatSidebarSection", () => {
 
     render(<ChatSidebarSection />);
 
-    // 1 pinned + 2 recent = 3 total
     expect(screen.getByText("Pinned Chat")).toBeInTheDocument();
     expect(screen.getByText("Recent One")).toBeInTheDocument();
     expect(screen.getByText("Recent Two")).toBeInTheDocument();
+    expect(screen.getByText("Recent Three")).toBeInTheDocument();
 
-    // 3rd recent should NOT show (only 2 remaining slots)
-    expect(screen.queryByText("Recent Three")).not.toBeInTheDocument();
-
-    // Should show "More" to open search
-    expect(screen.getByText("More")).toBeInTheDocument();
+    expect(screen.queryByText("More")).not.toBeInTheDocument();
   });
 
-  it("shows 2 pinned + 1 recent when 2 are pinned", () => {
+  it("shows 2 pinned + up to 3 recent", () => {
     mockConversations = [
       makeConv("c1", "Pinned A", {
         pinnedAt: "2026-01-05T00:00:00Z",
@@ -283,13 +343,10 @@ describe("ChatSidebarSection", () => {
 
     render(<ChatSidebarSection />);
 
-    // 2 pinned + 1 recent = 3 total
     expect(screen.getByText("Pinned A")).toBeInTheDocument();
     expect(screen.getByText("Pinned B")).toBeInTheDocument();
     expect(screen.getByText("Recent A")).toBeInTheDocument();
-
-    // 2nd recent should not show
-    expect(screen.queryByText("Recent B")).not.toBeInTheDocument();
+    expect(screen.getByText("Recent B")).toBeInTheDocument();
   });
 
   it("does not show 'More' when total conversations fit in slots", () => {

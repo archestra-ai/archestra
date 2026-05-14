@@ -52,7 +52,8 @@ import {
 import { useStableConversations } from "@/lib/hooks/use-stable-conversations";
 import { cn } from "@/lib/utils";
 
-const SIDEBAR_CHAT_SLOTS = 3;
+const SIDEBAR_PINNED_LIMIT = 100;
+const SIDEBAR_RECENT_LIMIT = 3;
 const MAX_TITLE_LENGTH = 100;
 
 function AISparkleIcon({ isAnimating = false }: { isAnimating?: boolean }) {
@@ -71,9 +72,43 @@ export function ChatSidebarSection() {
   const { data: canReadConversation } = useHasPermissions({
     chat: ["read"],
   });
-  const { data: conversations = [], isLoading } = useConversations({
-    enabled: isAuthenticated && canReadConversation === true,
-  });
+  const conversationsQueryEnabled =
+    isAuthenticated && canReadConversation === true;
+  const { data: pinnedConversationsResponse, isLoading: isLoadingPinned } =
+    useConversations({
+      enabled: conversationsQueryEnabled,
+      limit: SIDEBAR_PINNED_LIMIT,
+      offset: 0,
+      pinned: true,
+      includePreviewMessages: false,
+    });
+  const { data: recentConversationsResponse, isLoading: isLoadingRecent } =
+    useConversations({
+      enabled: conversationsQueryEnabled,
+      limit: SIDEBAR_RECENT_LIMIT,
+      offset: 0,
+      pinned: false,
+      includePreviewMessages: false,
+    });
+  const pinnedConversations = pinnedConversationsResponse?.data ?? [];
+  const recentConversations = recentConversationsResponse?.data ?? [];
+  const isLoading = isLoadingPinned || isLoadingRecent;
+  const conversations = useMemo(() => {
+    const seenIds = new Set<string>();
+    return [...pinnedConversations, ...recentConversations].filter(
+      (conversation) => {
+        if (seenIds.has(conversation.id)) {
+          return false;
+        }
+        seenIds.add(conversation.id);
+        return true;
+      },
+    );
+  }, [pinnedConversations, recentConversations]);
+  const hasMoreConversations =
+    !!pinnedConversationsResponse?.pagination.hasNext ||
+    (recentConversationsResponse?.pagination.total ?? 0) >
+      recentConversations.length;
   const updateConversationMutation = useUpdateConversation();
   const deleteConversationMutation = useDeleteConversation();
   const generateTitleMutation = useGenerateConversationTitle();
@@ -106,23 +141,16 @@ export function ChatSidebarSection() {
   // re-fetches after mutations that bump updatedAt. Order resets on page refresh.
   const stableConversations = useStableConversations(conversations);
 
-  // Split conversations into pinned and unpinned.
-  // Default view shows exactly SIDEBAR_CHAT_SLOTS items:
-  // pinned chats first, then recent unpinned to fill remaining slots.
-  // No re-sorting here — stable order from useStableConversations is preserved
-  // for both pinned and unpinned groups to prevent jumping.
+  // Split conversations into pinned and recent unpinned groups while preserving
+  // the stable order from useStableConversations to prevent sidebar jumping.
   const { pinnedChats, recentUnpinnedChats } = useMemo(() => {
-    const pinned = stableConversations
-      .filter((c) => c.pinnedAt)
-      .slice(0, SIDEBAR_CHAT_SLOTS);
-
+    const pinned = stableConversations.filter((c) => c.pinnedAt);
     const pinnedIds = new Set(pinned.map((c) => c.id));
     const unpinned = stableConversations.filter((c) => !pinnedIds.has(c.id));
-    const remainingSlots = Math.max(0, SIDEBAR_CHAT_SLOTS - pinned.length);
 
     return {
       pinnedChats: pinned,
-      recentUnpinnedChats: unpinned.slice(0, remainingSlots),
+      recentUnpinnedChats: unpinned,
     };
   }, [stableConversations]);
 
@@ -415,8 +443,7 @@ export function ChatSidebarSection() {
           <>
             {pinnedChats.map((conv) => renderConversationItem(conv, true))}
             {recentUnpinnedChats.map((conv) => renderConversationItem(conv))}
-            {conversations.length >
-              pinnedChats.length + recentUnpinnedChats.length && (
+            {hasMoreConversations && (
               <SidebarMenuSubItem>
                 <SidebarMenuSubButton
                   className="cursor-pointer text-sidebar-foreground/70"

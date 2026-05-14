@@ -46,7 +46,7 @@ import {
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
-  useConversations,
+  useConversationsInfinite,
   useDeleteConversation,
   usePinConversation,
 } from "@/lib/chat/chat.query";
@@ -236,13 +236,22 @@ export function ConversationSearchPalette({
 
   // Fetch conversations with backend search
   const {
-    data: conversations = [],
+    data: conversationsPages,
     isLoading,
     isFetching,
-  } = useConversations({
+    hasNextPage,
+    fetchNextPage,
+    isFetchingNextPage,
+  } = useConversationsInfinite({
     enabled: open && isAuthenticated && canReadConversation === true,
     search: debouncedSearch,
+    includePreviewMessages: debouncedSearch.trim().length > 0,
+    limit: 20,
   });
+  const conversations = useMemo(
+    () => conversationsPages?.pages.flatMap((page) => page.data) ?? [],
+    [conversationsPages],
+  );
 
   // Show skeleton during typing or initial fetch
   const isSearching = searchQuery.trim().length > 0;
@@ -320,6 +329,19 @@ export function ConversationSearchPalette({
       pinMutation.mutate({ id: conversationId, pinned: !conv.pinnedAt });
     },
     [pinMutation, conversations],
+  );
+
+  const handleListScroll = useCallback(
+    (event: React.UIEvent<HTMLDivElement>) => {
+      const target = event.currentTarget;
+      const remainingScroll =
+        target.scrollHeight - target.scrollTop - target.clientHeight;
+
+      if (remainingScroll < 80 && hasNextPage && !isFetchingNextPage) {
+        fetchNextPage();
+      }
+    },
+    [fetchNextPage, hasNextPage, isFetchingNextPage],
   );
 
   // Keyboard shortcuts for search palette
@@ -511,7 +533,7 @@ export function ConversationSearchPalette({
         value={searchQuery}
         onValueChange={setSearchQuery}
       />
-      <CommandList className="max-h-[500px]">
+      <CommandList className="max-h-[500px]" onScroll={handleListScroll}>
         {isLoading && !isSearching ? (
           <div className="py-6 text-center text-sm text-muted-foreground">
             Loading conversations...
@@ -587,9 +609,16 @@ export function ConversationSearchPalette({
               conversations.length === 0 ? (
                 <CommandEmpty>No conversations found.</CommandEmpty>
               ) : (
-                <CommandGroup heading="Search Results">
-                  {conversations.map((conv) => renderConversationItem(conv))}
-                </CommandGroup>
+                <>
+                  <CommandGroup heading="Search Results">
+                    {conversations.map((conv) => renderConversationItem(conv))}
+                  </CommandGroup>
+                  {isFetchingNextPage && (
+                    <div className="py-3 text-center text-xs text-muted-foreground">
+                      Loading more chats...
+                    </div>
+                  )}
+                </>
               )
             ) : groupedConversations ? (
               <>
@@ -631,6 +660,11 @@ export function ConversationSearchPalette({
                 {conversations.length === 0 && (
                   <div className="py-4 text-center text-sm text-muted-foreground">
                     No recent chats
+                  </div>
+                )}
+                {isFetchingNextPage && (
+                  <div className="py-3 text-center text-xs text-muted-foreground">
+                    Loading more chats...
                   </div>
                 )}
               </>

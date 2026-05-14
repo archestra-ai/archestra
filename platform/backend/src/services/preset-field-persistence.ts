@@ -1,34 +1,13 @@
 import { secretManager } from "@/secrets-manager";
 import type { InternalMcpCatalog, PresetFieldValues } from "@/types";
 
-/**
- * Identify which preset-scoped fields on a parent catalog are secret-typed
- * (userConfig.sensitive=true OR localConfig env type=secret).
- */
-export function collectSecretPresetKeys(
-  parent: InternalMcpCatalog,
-): Set<string> {
+function collectSecretPresetKeys(parent: InternalMcpCatalog): Set<string> {
   const keys = new Set<string>();
   for (const [key, field] of Object.entries(parent.userConfig ?? {})) {
     if (field.promptOnPreset && field.sensitive) keys.add(key);
   }
   for (const env of parent.localConfig?.environment ?? []) {
     if (env.promptOnPreset && env.type === "secret") keys.add(env.key);
-  }
-  return keys;
-}
-
-/**
- * Identify the full set of preset-scoped field keys on a parent catalog,
- * regardless of secret/non-secret.
- */
-export function collectPresetKeys(parent: InternalMcpCatalog): Set<string> {
-  const keys = new Set<string>();
-  for (const [key, field] of Object.entries(parent.userConfig ?? {})) {
-    if (field.promptOnPreset) keys.add(key);
-  }
-  for (const env of parent.localConfig?.environment ?? []) {
-    if (env.promptOnPreset) keys.add(env.key);
   }
   return keys;
 }

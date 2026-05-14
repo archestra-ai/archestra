@@ -277,6 +277,15 @@ jobs:
           echo "=== Describe Platform Pod ==="
           kubectl describe pod -l app.kubernetes.io/name=archestra-platform || true
 
+          echo "=== Describe PostgreSQL Pod ==="
+          kubectl describe pod -l app.kubernetes.io/name=postgresql || true
+
+          echo "=== PostgreSQL StatefulSet & PVCs ==="
+          kubectl get statefulset,pvc -l app.kubernetes.io/name=postgresql -o wide || true
+
+          echo "=== Recent Cluster Events ==="
+          kubectl get events --sort-by=.lastTimestamp -A 2>/dev/null | tail -60 || true
+
       - name: Cleanup Kind cluster
         if: always()
         run: kind delete cluster --name archestra-ci-cluster || true
@@ -403,6 +412,15 @@ jobs:
 
           echo "=== Describe Platform Pod ==="
           kubectl describe pod -l app.kubernetes.io/name=archestra-platform || true
+
+          echo "=== Describe PostgreSQL Pod ==="
+          kubectl describe pod -l app.kubernetes.io/name=postgresql || true
+
+          echo "=== PostgreSQL StatefulSet & PVCs ==="
+          kubectl get statefulset,pvc -l app.kubernetes.io/name=postgresql -o wide || true
+
+          echo "=== Recent Cluster Events ==="
+          kubectl get events --sort-by=.lastTimestamp -A 2>/dev/null | tail -60 || true
 
       - name: Cleanup Kind cluster
         if: always()

@@ -62,6 +62,7 @@ export type AuditableRouteConfig = {
  * - `resolveAuditableRouteConfig` walks up path segments so nested routes
  *   (e.g. `/api/mcp_server/:id/reinstall`) reuse the parent snapshot fetcher.
  * - EE-only routes are added at startup via `initAuditRegistry()`.
+ * @public — consumed by audit-log-snapshot.test.ts to verify registry invariants
  */
 export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   // Agents

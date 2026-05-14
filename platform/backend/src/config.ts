@@ -537,6 +537,7 @@ export const parseAuditLogRetentionDays = (
   return parsed;
 };
 
+/** @public — consumed by config.test.ts */
 export function parseCommaSeparatedList(value: string): string[] {
   return value
     .split(",")

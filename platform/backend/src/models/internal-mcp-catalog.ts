@@ -658,7 +658,8 @@ class InternalMcpCatalogModel {
 
     if (!row) return null;
 
-    const toolCount = await InternalMcpCatalogModel.getToolCount(id);
+    const toolCount =
+      (await InternalMcpCatalogModel.getToolCounts([id])).get(id) ?? 0;
 
     const transportType = row.localConfig?.transportType ?? "stdio";
     const envKeys = Array.isArray(row.localConfig?.environment)

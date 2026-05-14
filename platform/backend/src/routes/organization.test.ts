@@ -413,7 +413,6 @@ describe("organization routes", () => {
         convertToolResultsToToon: true,
       });
     });
-
   });
 
   describe("PATCH /api/organization/knowledge-settings", () => {

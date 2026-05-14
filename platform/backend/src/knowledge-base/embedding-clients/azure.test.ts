@@ -149,6 +149,22 @@ describe("callAzureEmbedding", () => {
     });
   });
 
+  test("throws on invalid Azure base URL", async () => {
+    mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(false);
+
+    await expect(
+      callAzureEmbedding({
+        inputs: ["hello"],
+        model: "text-embedding-3-small",
+        apiKey: "azure-key",
+        baseUrl: "https://not-azure.example.com/something",
+      }),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: expect.stringContaining("Azure embedding base URL"),
+    });
+  });
+
   test("rejects image inputs", async () => {
     await expect(
       callAzureEmbedding({

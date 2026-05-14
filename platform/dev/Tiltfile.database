@@ -66,6 +66,16 @@ local_resource(
 )
 
 local_resource(
+  'db-seed-chat-scenarios',
+  cmd='pnpm db:seed:chat-scenarios',
+  dir='../backend',
+  resource_deps=['pnpm-install', 'postgresql', 'db-migrate'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
+  labels=['database']
+)
+
+local_resource(
   'db-migrate',
   # NOTE: we need to cd into the backend directory to run the migrate command
   # because otherwise if we run the command from this directory, it is run via turbo, which does not properly

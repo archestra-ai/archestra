@@ -26,6 +26,7 @@
     "db:studio": "drizzle-kit studio",
     "db:clean": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/clean-db-on-dev.ts",
     "db:seed:mock-data": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/seed-mock-data.ts",
+    "db:seed:chat-scenarios": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/seed-chat-scenarios.ts",
     "codegen:access-control-docs": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/codegen-access-control-docs.ts",
     "codegen:archestra-mcp-server-docs": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/codegen-archestra-mcp-server-docs.ts",
     "codegen:openapi": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/codegen-openapi.ts",

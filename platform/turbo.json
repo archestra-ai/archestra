@@ -73,6 +73,9 @@
     },
     "db:seed:mock-data": {
       "cache": false
+    },
+    "db:seed:chat-scenarios": {
+      "cache": false
     }
   }
 }

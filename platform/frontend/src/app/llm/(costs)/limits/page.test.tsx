@@ -39,7 +39,7 @@ vi.mock("@/lib/teams/team.query", () => ({
 
 vi.mock("@/lib/organization.query", () => ({
   useOrganization: () => ({
-    data: { id: "org-1", limitCleanupInterval: "1m" },
+    data: { id: "org-1", defaultUserLimitValue: 100 },
   }),
   useOrganizationMembers: () => ({ data: [] }),
 }));

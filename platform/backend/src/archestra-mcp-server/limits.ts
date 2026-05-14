@@ -33,11 +33,9 @@ const LimitOutputItemSchema = z.object({
   entityId: z.string().describe("The limited entity ID."),
   limitType: LimitTypeSchema.describe("The kind of limit."),
   limitValue: z.number().describe("The configured limit value."),
-  cleanupInterval: LimitCleanupIntervalSchema.nullable()
-    .optional()
-    .describe(
-      "How often this limit resets. Null uses the organization default.",
-    ),
+  cleanupInterval: LimitCleanupIntervalSchema.describe(
+    "How often this limit resets.",
+  ),
   model: z
     .array(z.string())
     .nullable()
@@ -75,7 +73,7 @@ const CreateLimitToolArgsSchema = z
       .optional()
       .describe("Array of model names. Omit for all models."),
     cleanup_interval: LimitCleanupIntervalSchema.optional().describe(
-      "Optional cleanup interval for this limit. Omit to use the organization default.",
+      "Optional cleanup interval for this limit. Omit to use the weekly default.",
     ),
     mcp_server_name: z
       .string()

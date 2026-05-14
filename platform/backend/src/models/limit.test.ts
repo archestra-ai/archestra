@@ -1942,11 +1942,10 @@ describe("cleanupLimitsIfNeeded", () => {
     expect(modelUsage[0].currentUsageTokensOut).toBe(500);
   });
 
-  test("uses each limit cleanup interval instead of only the organization default", async ({
+  test("uses each limit cleanup interval", async ({
     makeOrganization,
   }) => {
     const org = await makeOrganization();
-    await OrganizationModel.patch(org.id, { limitCleanupInterval: "1m" });
 
     const hourlyLimit = await LimitModel.create({
       entityType: "organization",

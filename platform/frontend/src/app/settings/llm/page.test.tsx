@@ -55,7 +55,6 @@ beforeEach(() => {
   mockOrganization = {
     compressionScope: "organization",
     convertToolResultsToToon: true,
-    limitCleanupInterval: "1h",
   };
   mockTeams = [];
 });

@@ -45,20 +45,20 @@ export const SelectLimitSchema = createSelectSchema(schema.limitsTable, {
   entityType: LimitEntityTypeSchema,
   limitType: LimitTypeSchema,
   model: z.array(z.string()).nullable().optional(),
-  cleanupInterval: LimitCleanupIntervalSchema.nullable().optional(),
+  cleanupInterval: LimitCleanupIntervalSchema.optional(),
 });
 export const InsertLimitSchema = createInsertSchema(schema.limitsTable, {
   entityType: LimitEntityTypeSchema,
   limitType: LimitTypeSchema,
   model: z.array(z.string()).nullable().optional(),
-  cleanupInterval: LimitCleanupIntervalSchema.nullable().optional(),
+  cleanupInterval: LimitCleanupIntervalSchema.optional(),
   isDefaultUserLimit: z.boolean().optional(),
 });
 export const UpdateLimitSchema = createUpdateSchema(schema.limitsTable, {
   entityType: LimitEntityTypeSchema,
   limitType: LimitTypeSchema,
   model: z.array(z.string()).nullable().optional(),
-  cleanupInterval: LimitCleanupIntervalSchema.nullable().optional(),
+  cleanupInterval: LimitCleanupIntervalSchema.optional(),
   isDefaultUserLimit: z.boolean().optional(),
 }).omit({
   id: true,

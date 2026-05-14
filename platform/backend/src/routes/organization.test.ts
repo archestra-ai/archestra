@@ -414,29 +414,6 @@ describe("organization routes", () => {
       });
     });
 
-    test("persists limit cleanup interval across reads", async () => {
-      await app.inject({
-        method: "PATCH",
-        url: "/api/organization/llm-settings",
-        payload: {
-          compressionScope: "organization",
-          convertToolResultsToToon: false,
-          limitCleanupInterval: "12h",
-        },
-      });
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/organization",
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json()).toMatchObject({
-        compressionScope: "organization",
-        convertToolResultsToToon: false,
-        limitCleanupInterval: "12h",
-      });
-    });
   });
 
   describe("PATCH /api/organization/knowledge-settings", () => {

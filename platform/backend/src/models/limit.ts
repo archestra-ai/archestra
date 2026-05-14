@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, lt, or, type SQL, sql } from "drizzle-orm";
+import { and, eq, inArray, lt, or, type SQL, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type {
@@ -7,7 +7,6 @@ import type {
   LimitCleanupInterval,
   LimitEntityType,
   LimitType,
-  OrganizationLimitCleanupInterval,
   UpdateLimit,
 } from "@/types";
 import AgentTeamModel from "./agent-team";
@@ -37,7 +36,7 @@ type LimitsCleanupIntervalSqlLiteral =
 class LimitModel {
   // limitsCleanupIntervalSqlLiterals exists basically to compile-time check set of literals
   static readonly limitsCleanupIntervalSqlLiterals: Record<
-    Exclude<OrganizationLimitCleanupInterval, null>,
+    LimitCleanupInterval,
     LimitsCleanupIntervalSqlLiteral
   > = {
     "1h": "1 hour",
@@ -361,15 +360,7 @@ class LimitModel {
     try {
       logger.info({ options }, `[LimitsCleanup] Starting cleanup check`);
 
-      const organizationId =
-        options.entities?.organization ?? options.allForOrganizationId;
-      const defaultLimitsResetInterval =
-        await LimitModel.resolveLimitsCleanupIntervalSqlLiteral(organizationId);
-
-      const limitIdsToReset = await LimitModel.findLimitIdsToReset(
-        defaultLimitsResetInterval,
-        options,
-      );
+      const limitIdsToReset = await LimitModel.findLimitIdsToReset(options);
       await LimitModel.resetLimitsUsage(limitIdsToReset);
 
       if (limitIdsToReset.length > 0) {
@@ -389,52 +380,7 @@ class LimitModel {
     }
   }
 
-  static async resolveLimitsCleanupIntervalSqlLiteral(
-    organizationId?: string,
-  ): Promise<LimitsCleanupIntervalSqlLiteral> {
-    // Use default cleanup interval if not set
-    let cleanupInterval: LimitsCleanupIntervalSqlLiteral = "1 hour";
-
-    if (!organizationId) {
-      logger.warn(
-        `[LimitsCleanup] No organization ID provided: using default interval: ${cleanupInterval}`,
-      );
-      return cleanupInterval;
-    }
-
-    // Get the organization's cleanup interval
-    const [organization] = await db
-      .select()
-      .from(schema.organizationsTable)
-      .where(eq(schema.organizationsTable.id, organizationId));
-
-    if (!organization) {
-      logger.warn(
-        `[LimitsCleanup] Organization not found: ${organizationId}, using default interval: ${cleanupInterval}`,
-      );
-      return cleanupInterval;
-    }
-
-    if (!organization.limitCleanupInterval) {
-      logger.info(
-        `[LimitsCleanup] No cleanup interval set for organization: ${organizationId}, using default: ${cleanupInterval}`,
-      );
-      return cleanupInterval;
-    }
-
-    cleanupInterval =
-      LimitModel.limitsCleanupIntervalSqlLiterals[
-        organization.limitCleanupInterval
-      ];
-    logger.info(
-      `[LimitsCleanup] Using cleanup interval: ${cleanupInterval} for organization: ${organizationId}`,
-    );
-
-    return cleanupInterval;
-  }
-
   static async findLimitIdsToReset(
-    defaultLimitsResetInterval: LimitsCleanupIntervalSqlLiteral,
     options: LimitsCleanupOptions,
   ): Promise<string[]> {
     const filterConditions: SQL[] = [];
@@ -505,8 +451,8 @@ class LimitModel {
         and(
           ...scopeConditions,
           or(
-            isNull(schema.limitsTable.lastCleanup),
-            buildCleanupDueCondition(defaultLimitsResetInterval),
+            sql`${schema.limitsTable.lastCleanup} IS NULL`,
+            buildCleanupDueCondition(),
           ),
         ),
       );
@@ -590,7 +536,6 @@ class LimitModel {
         defaultUserLimitModel: schema.organizationsTable.defaultUserLimitModel,
         defaultUserLimitCleanupInterval:
           schema.organizationsTable.defaultUserLimitCleanupInterval,
-        limitCleanupInterval: schema.organizationsTable.limitCleanupInterval,
       })
       .from(schema.organizationsTable)
       .where(eq(schema.organizationsTable.id, params.organizationId));
@@ -612,10 +557,7 @@ class LimitModel {
       userIds,
       limitValue: organization.defaultUserLimitValue,
       model: normalizeLimitModels(organization.defaultUserLimitModel),
-      cleanupInterval:
-        organization.defaultUserLimitCleanupInterval ??
-        organization.limitCleanupInterval ??
-        "1h",
+      cleanupInterval: organization.defaultUserLimitCleanupInterval ?? "1w",
     });
   }
 
@@ -629,7 +571,6 @@ class LimitModel {
         defaultUserLimitModel: schema.organizationsTable.defaultUserLimitModel,
         defaultUserLimitCleanupInterval:
           schema.organizationsTable.defaultUserLimitCleanupInterval,
-        limitCleanupInterval: schema.organizationsTable.limitCleanupInterval,
       })
       .from(schema.organizationsTable)
       .where(eq(schema.organizationsTable.id, params.organizationId));
@@ -643,10 +584,7 @@ class LimitModel {
       userIds: [params.userId],
       limitValue: organization.defaultUserLimitValue,
       model: normalizeLimitModels(organization.defaultUserLimitModel),
-      cleanupInterval:
-        organization.defaultUserLimitCleanupInterval ??
-        organization.limitCleanupInterval ??
-        "1h",
+      cleanupInterval: organization.defaultUserLimitCleanupInterval ?? "1w",
     });
   }
 
@@ -1119,9 +1057,7 @@ function buildOrganizationLimitScopeCondition(organizationId: string): SQL {
   ) as SQL;
 }
 
-function buildCleanupDueCondition(
-  defaultLimitsResetInterval: LimitsCleanupIntervalSqlLiteral,
-): SQL {
+function buildCleanupDueCondition(): SQL {
   const intervalConditions = Object.entries(
     LimitModel.limitsCleanupIntervalSqlLiterals,
   ).map(([cleanupInterval, sqlLiteral]) =>
@@ -1137,16 +1073,7 @@ function buildCleanupDueCondition(
     ),
   );
 
-  return or(
-    ...intervalConditions,
-    and(
-      isNull(schema.limitsTable.cleanupInterval),
-      lt(
-        schema.limitsTable.lastCleanup,
-        sql`now() - interval ${sql.raw(`'${defaultLimitsResetInterval}'`)}`,
-      ),
-    ),
-  ) as SQL;
+  return or(...intervalConditions) as SQL;
 }
 
 function normalizeLimitModels(models: string[] | null | undefined) {

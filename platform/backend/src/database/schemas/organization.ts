@@ -17,10 +17,10 @@ import {
 import type {
   ConnectionBaseUrl,
   GlobalToolPolicy,
+  LimitCleanupInterval,
   OnboardingWizard,
   OrganizationChatLink,
   OrganizationCompressionScope,
-  OrganizationLimitCleanupInterval,
 } from "@/types";
 
 const organizationsTable = pgTable("organization", {
@@ -31,9 +31,6 @@ const organizationsTable = pgTable("organization", {
   logoDark: text("logo_dark"),
   createdAt: timestamp("created_at").notNull(),
   metadata: text("metadata"),
-  limitCleanupInterval: varchar("limit_cleanup_interval")
-    .$type<OrganizationLimitCleanupInterval>()
-    .default("1h"),
   onboardingComplete: boolean("onboarding_complete").notNull().default(false),
   theme: text("theme")
     .$type<OrganizationTheme>()
@@ -109,10 +106,10 @@ const organizationsTable = pgTable("organization", {
     string[] | null
   >(),
 
-  /** Cleanup interval used by default user limits. Null falls back to limitCleanupInterval. */
+  /** Cleanup interval used by default user limits. Null falls back to weekly. */
   defaultUserLimitCleanupInterval: varchar(
     "default_user_limit_cleanup_interval",
-  ).$type<OrganizationLimitCleanupInterval>(),
+  ).$type<LimitCleanupInterval>(),
 
   /**
    * Organization-wide default agent ID (fallback when member has no personal default).

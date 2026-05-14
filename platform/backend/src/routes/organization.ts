@@ -139,7 +139,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateLlmSettings,
         description:
-          "Update LLM settings (TOON compression, compression scope, limit cleanup interval)",
+          "Update LLM settings (TOON compression, compression scope, default user limit)",
         tags: ["Organization"],
         body: UpdateLlmSettingsSchema,
         response: constructResponseSchema(SelectOrganizationSchema),
@@ -149,8 +149,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const shouldSyncDefaultUserLimits =
         body.defaultUserLimitValue !== undefined ||
         body.defaultUserLimitModel !== undefined ||
-        body.defaultUserLimitCleanupInterval !== undefined ||
-        body.limitCleanupInterval !== undefined;
+        body.defaultUserLimitCleanupInterval !== undefined;
       const normalizedBody =
         body.defaultUserLimitValue === null
           ? {

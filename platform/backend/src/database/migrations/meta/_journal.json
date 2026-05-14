@@ -1653,6 +1653,13 @@
       "when": 1778764582062,
       "tag": "0235_wealthy_ogun",
       "breakpoints": true
+    },
+    {
+      "idx": 236,
+      "version": "7",
+      "when": 1778770035875,
+      "tag": "0236_daily_guardsmen",
+      "breakpoints": true
     }
   ]
 }

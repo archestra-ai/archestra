@@ -378,7 +378,7 @@ export function McpServerCard({
     ? deploymentStatuses[installedServer.id]
     : null;
   const isDeploymentFailed = installedDeploymentStatus?.state === "failed";
-  const installationError =
+  const _installationError =
     installationStatus === "error"
       ? (installedServer?.localInstallationError ?? "Installation failed")
       : null;

@@ -211,8 +211,9 @@ describe("MCP Server Install - Preset Values reach Deployment Env", () => {
       .from(schema.mcpServersTable)
       .where(eq(schema.mcpServersTable.catalogId, catalog.id));
 
-    expect(server?.secretId).toBeTruthy();
-    const installBag = await secretManager().getSecret(server!.secretId!);
+    const secretId = server?.secretId;
+    if (!secretId) throw new Error("expected server.secretId");
+    const installBag = await secretManager().getSecret(secretId);
     expect(installBag?.secret).toMatchObject({
       INTERNAL_TOKEN: "preset-secret-val",
     });

@@ -140,14 +140,14 @@ describe("GET /api/internal_mcp_catalog/:catalogId/children — secret values ar
 
     // Heuristic-only: presetSecretId surfaces existence of the bag without
     // exposing its contents.
-    expect(childRow!.presetSecretId).toBe(presetSecretBag.id);
+    expect(childRow?.presetSecretId).toBe(presetSecretBag.id);
 
     // The wire shape carries only the non-secret preset overrides — secret
     // keys must not appear here, and certainly not their plaintext values.
-    expect(childRow!.presetFieldValues).toEqual({
+    expect(childRow?.presetFieldValues).toEqual({
       preset_env: "ildar_preset_env",
     });
-    expect(childRow!.presetFieldValues).not.toHaveProperty("preset_sec");
+    expect(childRow?.presetFieldValues).not.toHaveProperty("preset_sec");
 
     // Defense in depth: the plaintext must not appear anywhere in the
     // serialized response payload.

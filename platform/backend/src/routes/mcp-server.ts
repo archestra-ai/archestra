@@ -314,10 +314,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // row's `preset_secret_id` bundle via the partitioner. We merge on
         // top of any existing values because the install dialog only sends
         // the subset of preset fields the user actually filled in.
-        if (
-          presetFieldValues &&
-          Object.keys(presetFieldValues).length > 0
-        ) {
+        if (presetFieldValues && Object.keys(presetFieldValues).length > 0) {
           const parent = catalogItem.parentCatalogItemId
             ? await InternalMcpCatalogModel.findById(
                 catalogItem.parentCatalogItemId,

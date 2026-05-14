@@ -146,12 +146,14 @@ describe("MCP Server Install - Preset Field Values Persistence", () => {
           {
             key: "STAGE",
             type: "plain_text",
+            promptOnInstallation: false,
             promptOnPreset: true,
             required: false,
           },
           {
             key: "INTERNAL_TOKEN",
             type: "secret",
+            promptOnInstallation: false,
             promptOnPreset: true,
             required: false,
           },
@@ -191,8 +193,9 @@ describe("MCP Server Install - Preset Field Values Persistence", () => {
     });
 
     // Secret-flagged preset values are partitioned into the preset secret bag.
-    expect(row?.presetSecretId).toBeTruthy();
-    const bag = await secretManager().getSecret(row!.presetSecretId!);
+    const presetSecretId = row?.presetSecretId;
+    if (!presetSecretId) throw new Error("expected row.presetSecretId");
+    const bag = await secretManager().getSecret(presetSecretId);
     expect(bag?.secret).toEqual({
       INTERNAL_TOKEN: "secret-env-value",
       api_key: "header-secret-value",
@@ -228,6 +231,7 @@ describe("MCP Server Install - Preset Field Values Persistence", () => {
           {
             key: "STAGE",
             type: "plain_text",
+            promptOnInstallation: false,
             promptOnPreset: true,
             required: false,
           },

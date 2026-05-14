@@ -348,7 +348,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
   // entirely — scope is fixed. Still render the preset picker (if provided)
   // so the install dialog can pick a preset.
   if (personalOnly || orgOnly || preselectedTeamId) {
-    return presetPicker ? <>{presetPicker}</> : null;
+    return presetPicker ? presetPicker : null;
   }
 
   const hideSelector = isReinstall || visibilityOptions.length <= 1;

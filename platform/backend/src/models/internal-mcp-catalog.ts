@@ -43,7 +43,9 @@ class InternalMcpCatalogModel {
       const [parent] = await db
         .select({ name: schema.internalMcpCatalogTable.name })
         .from(schema.internalMcpCatalogTable)
-        .where(eq(schema.internalMcpCatalogTable.id, dbValues.parentCatalogItemId));
+        .where(
+          eq(schema.internalMcpCatalogTable.id, dbValues.parentCatalogItemId),
+        );
       if (!parent) {
         throw new Error(
           `Parent catalog item ${dbValues.parentCatalogItemId} not found`,

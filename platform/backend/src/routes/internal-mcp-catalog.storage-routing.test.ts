@@ -106,10 +106,11 @@ describe("Internal MCP Catalog - Storage Routing", () => {
       });
 
       const row = await loadRaw(created.id);
-      expect(row.localConfigSecretId).toBeTruthy();
+      const { localConfigSecretId } = row;
+      if (!localConfigSecretId) throw new Error("expected localConfigSecretId");
       expect(row.localConfig?.environment?.[0].value).toBeUndefined();
 
-      const bag = await secretManager().getSecret(row.localConfigSecretId!);
+      const bag = await secretManager().getSecret(localConfigSecretId);
       expect(bag?.secret).toEqual({ API_KEY: "super-secret-value" });
     });
 
@@ -165,10 +166,11 @@ describe("Internal MCP Catalog - Storage Routing", () => {
       });
 
       const row = await loadRaw(child.id);
-      expect(row.presetSecretId).toBeTruthy();
+      const { presetSecretId } = row;
+      if (!presetSecretId) throw new Error("expected presetSecretId");
       expect(row.presetFieldValues).toEqual({});
 
-      const bag = await secretManager().getSecret(row.presetSecretId!);
+      const bag = await secretManager().getSecret(presetSecretId);
       expect(bag?.secret).toEqual({ DB_PASSWORD: "rotate-me-1" });
     });
 
@@ -340,10 +342,11 @@ describe("Internal MCP Catalog - Storage Routing", () => {
       });
 
       const row = await loadRaw(child.id);
-      expect(row.presetSecretId).toBeTruthy();
+      const { presetSecretId } = row;
+      if (!presetSecretId) throw new Error("expected presetSecretId");
       expect(row.presetFieldValues).toEqual({});
 
-      const bag = await secretManager().getSecret(row.presetSecretId!);
+      const bag = await secretManager().getSecret(presetSecretId);
       expect(bag?.secret).toEqual({ api_key: "acme-key-1" });
     });
 

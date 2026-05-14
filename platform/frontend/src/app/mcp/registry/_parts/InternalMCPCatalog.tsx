@@ -1021,8 +1021,7 @@ export function InternalMCPCatalog({
                       server.ownerId === currentUserId,
                   )
                 : installedServers?.find(
-                    (server) =>
-                      server.catalogId === catalogItemForReinstall.id,
+                    (server) => server.catalogId === catalogItemForReinstall.id,
                   );
             return fallback ? [fallback] : [];
           })();

@@ -32,10 +32,7 @@ import {
 import { EditCatalogContent } from "./edit-catalog-dialog";
 import { ManageUsersContent } from "./manage-users-dialog";
 import { McpLogsContent, type McpLogsTab } from "./mcp-logs-dialog";
-import type {
-  CatalogItem,
-  CatalogItemWithOptionalLabel,
-} from "./mcp-server-card";
+import type { CatalogItem } from "./mcp-server-card";
 import { PresetsSection } from "./presets-section";
 import { YamlConfigContent } from "./yaml-config-dialog";
 

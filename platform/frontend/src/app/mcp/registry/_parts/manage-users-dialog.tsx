@@ -830,166 +830,166 @@ function UnifiedConnectionsTable({
 
   return (
     <Table data-testid={E2eTestId.ManageCredentialsDialogTable}>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[220px]">Owner</TableHead>
-              {hasDeploymentStatuses && (
-                <TableHead className="w-[260px]">Pod</TableHead>
-              )}
-              <TableHead>Secret Storage</TableHead>
-              <TableHead>Created At</TableHead>
-              <TableHead>Action</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map(({ server, isYou }) => (
-              <TableRow
-                key={server.id}
-                data-testid={E2eTestId.CredentialRow}
-                data-server-id={server.id}
-              >
-                <TableCell className="font-medium max-w-[220px]">
-                  <div className="flex items-center gap-2">
-                    {isOAuthServer && server.oauthRefreshError && (
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger>
-                            <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            Authentication failed. Please re-authenticate.
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    )}
-                    <span
-                      className="truncate"
-                      data-testid={E2eTestId.CredentialOwner}
-                    >
-                      {getCredentialOwnerName(server)}
-                    </span>
-                    {isYou && (
-                      <Badge variant="secondary" className="text-[10px]">
-                        You
-                      </Badge>
-                    )}
-                  </div>
-                  {(server.teamId || server.scope === "org") && (
-                    <span className="text-muted-foreground text-xs block">
-                      Created by: {server.ownerEmail}
-                    </span>
-                  )}
-                </TableCell>
-                {hasDeploymentStatuses && (
-                  <TableCell className="max-w-[260px]">
-                    {(() => {
-                      const status = deploymentStatuses[server.id];
-                      if (!status) {
-                        return <span className="text-muted-foreground">—</span>;
-                      }
-                      const podName = status.podName;
-                      const effectiveState =
-                        (podName && canonicalStateByPod.get(podName)) ||
-                        status.state;
-                      const dot = (
-                        <DeploymentStatusDot
-                          state={
-                            (effectiveState === "not_created" ||
-                            effectiveState === "succeeded"
-                              ? "running"
-                              : effectiveState) as DeploymentState
-                          }
-                        />
-                      );
-                      if (!podName) {
-                        return (
-                          <div className="flex items-center gap-1.5 text-sm text-muted-foreground italic">
-                            {dot}
-                            <span>Pod not reported yet</span>
-                          </div>
-                        );
-                      }
-                      return (
-                        <button
-                          type="button"
-                          onClick={() => onOpenPodLogs?.(server.id)}
-                          className="flex w-full items-center gap-1.5 text-sm hover:underline cursor-pointer font-mono min-w-0"
-                        >
-                          {dot}
-                          <span className="truncate min-w-0 flex-1 text-left">
-                            {podName}
-                          </span>
-                        </button>
-                      );
-                    })()}
-                  </TableCell>
+      <TableHeader>
+        <TableRow>
+          <TableHead className="w-[220px]">Owner</TableHead>
+          {hasDeploymentStatuses && (
+            <TableHead className="w-[260px]">Pod</TableHead>
+          )}
+          <TableHead>Secret Storage</TableHead>
+          <TableHead>Created At</TableHead>
+          <TableHead>Action</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map(({ server, isYou }) => (
+          <TableRow
+            key={server.id}
+            data-testid={E2eTestId.CredentialRow}
+            data-server-id={server.id}
+          >
+            <TableCell className="font-medium max-w-[220px]">
+              <div className="flex items-center gap-2">
+                {isOAuthServer && server.oauthRefreshError && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        Authentication failed. Please re-authenticate.
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 )}
-                <TableCell className="text-muted-foreground">
-                  {formatSecretStorageType(server.secretStorageType)}
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {format(new Date(server.createdAt), "PPp")}
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-col gap-1">
-                    {isOAuthServer && server.oauthRefreshError && (
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="w-full">
-                              <Button
-                                onClick={() => handleReauthenticate(server)}
-                                disabled={!canReauthenticate(server)}
-                                size="sm"
-                                variant="outline"
-                                className="h-7 w-full text-xs"
-                              >
-                                <RefreshCw className="mr-1 h-3 w-3" />
-                                Re-authenticate
-                              </Button>
-                            </span>
-                          </TooltipTrigger>
-                          {!canReauthenticate(server) && (
-                            <TooltipContent>
-                              {getReauthTooltip(server)}
-                            </TooltipContent>
-                          )}
-                        </Tooltip>
-                      </TooltipProvider>
+                <span
+                  className="truncate"
+                  data-testid={E2eTestId.CredentialOwner}
+                >
+                  {getCredentialOwnerName(server)}
+                </span>
+                {isYou && (
+                  <Badge variant="secondary" className="text-[10px]">
+                    You
+                  </Badge>
+                )}
+              </div>
+              {(server.teamId || server.scope === "org") && (
+                <span className="text-muted-foreground text-xs block">
+                  Created by: {server.ownerEmail}
+                </span>
+              )}
+            </TableCell>
+            {hasDeploymentStatuses && (
+              <TableCell className="max-w-[260px]">
+                {(() => {
+                  const status = deploymentStatuses[server.id];
+                  if (!status) {
+                    return <span className="text-muted-foreground">—</span>;
+                  }
+                  const podName = status.podName;
+                  const effectiveState =
+                    (podName && canonicalStateByPod.get(podName)) ||
+                    status.state;
+                  const dot = (
+                    <DeploymentStatusDot
+                      state={
+                        (effectiveState === "not_created" ||
+                        effectiveState === "succeeded"
+                          ? "running"
+                          : effectiveState) as DeploymentState
+                      }
+                    />
+                  );
+                  if (!podName) {
+                    return (
+                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground italic">
+                        {dot}
+                        <span>Pod not reported yet</span>
+                      </div>
+                    );
+                  }
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => onOpenPodLogs?.(server.id)}
+                      className="flex w-full items-center gap-1.5 text-sm hover:underline cursor-pointer font-mono min-w-0"
+                    >
+                      {dot}
+                      <span className="truncate min-w-0 flex-1 text-left">
+                        {podName}
+                      </span>
+                    </button>
+                  );
+                })()}
+              </TableCell>
+            )}
+            <TableCell className="text-muted-foreground">
+              {formatSecretStorageType(server.secretStorageType)}
+            </TableCell>
+            <TableCell className="text-muted-foreground">
+              {format(new Date(server.createdAt), "PPp")}
+            </TableCell>
+            <TableCell>
+              <div className="flex flex-col gap-1">
+                {isOAuthServer && server.oauthRefreshError && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="w-full">
+                          <Button
+                            onClick={() => handleReauthenticate(server)}
+                            disabled={!canReauthenticate(server)}
+                            size="sm"
+                            variant="outline"
+                            className="h-7 w-full text-xs"
+                          >
+                            <RefreshCw className="mr-1 h-3 w-3" />
+                            Re-authenticate
+                          </Button>
+                        </span>
+                      </TooltipTrigger>
+                      {!canReauthenticate(server) && (
+                        <TooltipContent>
+                          {getReauthTooltip(server)}
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="w-full">
+                        <Button
+                          onClick={() => handleRevoke(server)}
+                          disabled={isDeleting || !canRevoke(server)}
+                          size="sm"
+                          variant="outline"
+                          className="h-7 w-full text-xs"
+                          data-testid={
+                            isYou
+                              ? `${E2eTestId.RevokeCredentialButton}-personal`
+                              : `${E2eTestId.RevokeCredentialButton}-${getCredentialOwnerName(server)}`
+                          }
+                        >
+                          <Trash className="mr-1 h-3 w-3" />
+                          Revoke
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    {!canRevoke(server) && (
+                      <TooltipContent>
+                        {getRevokeTooltip(server)}
+                      </TooltipContent>
                     )}
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="w-full">
-                            <Button
-                              onClick={() => handleRevoke(server)}
-                              disabled={isDeleting || !canRevoke(server)}
-                              size="sm"
-                              variant="outline"
-                              className="h-7 w-full text-xs"
-                              data-testid={
-                                isYou
-                                  ? `${E2eTestId.RevokeCredentialButton}-personal`
-                                  : `${E2eTestId.RevokeCredentialButton}-${getCredentialOwnerName(server)}`
-                              }
-                            >
-                              <Trash className="mr-1 h-3 w-3" />
-                              Revoke
-                            </Button>
-                          </span>
-                        </TooltipTrigger>
-                        {!canRevoke(server) && (
-                          <TooltipContent>
-                            {getRevokeTooltip(server)}
-                          </TooltipContent>
-                        )}
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   );
 }

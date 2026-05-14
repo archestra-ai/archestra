@@ -1373,7 +1373,7 @@ export type AnthropicMessagesRequestInput = {
         user_id: string | null;
     };
     output_config?: {
-        effort?: 'low' | 'medium' | 'high' | 'max';
+        effort?: string | null;
         format?: {
             type: 'json_schema';
             schema: {
@@ -6651,7 +6651,7 @@ export type AnthropicMessagesRequest = {
         user_id: string | null;
     };
     output_config?: {
-        effort?: 'low' | 'medium' | 'high' | 'max';
+        effort?: string | null;
         format?: {
             type: 'json_schema';
             schema: {

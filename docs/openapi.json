@@ -3599,13 +3599,7 @@
             "properties": {
               "effort": {
                 "nullable": true,
-                "type": "string",
-                "enum": [
-                  "low",
-                  "medium",
-                  "high",
-                  "max"
-                ]
+                "type": "string"
               },
               "format": {
                 "nullable": true,
@@ -20699,13 +20693,7 @@
             "properties": {
               "effort": {
                 "nullable": true,
-                "type": "string",
-                "enum": [
-                  "low",
-                  "medium",
-                  "high",
-                  "max"
-                ]
+                "type": "string"
               },
               "format": {
                 "nullable": true,

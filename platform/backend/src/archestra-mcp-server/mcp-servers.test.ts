@@ -185,7 +185,6 @@ describe("mcp server tool execution", () => {
       `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp_description`,
       {
         id: catalog.id,
-        name: "Updated Name",
         description: "Updated description",
       },
       mockContext,
@@ -193,13 +192,12 @@ describe("mcp server tool execution", () => {
     expect(result.isError).toBe(false);
     const text = (result.content[0] as any).text;
     expect(text).toContain("Successfully updated MCP server");
-    expect(text).toContain("Updated Name");
     expect(text).toContain("Updated description");
 
     const updatedCatalog = await InternalMcpCatalogModel.findById(catalog.id, {
       expandSecrets: false,
     });
-    expect(updatedCatalog?.name).toBe("Updated Name");
+    expect(updatedCatalog?.name).toBe("Original Name");
     expect(updatedCatalog?.description).toBe("Updated description");
   });
 

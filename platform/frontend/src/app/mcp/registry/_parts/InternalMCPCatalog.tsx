@@ -166,6 +166,14 @@ export function InternalMCPCatalog({
     useState<CatalogItem | null>(null);
   const [catalogItemForReinstall, setCatalogItemForReinstall] =
     useState<CatalogItem | null>(null);
+  // When reinstalling via the parent's card, this holds every install (parent +
+  // child preset) that's flagged for reinstall — so handleReinstallConfirm can
+  // fan out instead of only reinstalling the parent install. Each entry also
+  // carries the preset label so the confirm dialog can list what will be
+  // reinstalled.
+  const [reinstallFlaggedTargets, setReinstallFlaggedTargets] = useState<
+    Array<{ id: string; name: string; presetLabel: string | null }>
+  >([]);
   const [noAuthCatalogItem, setNoAuthCatalogItem] =
     useState<CatalogItem | null>(null);
   const [localServerCatalogItem, setLocalServerCatalogItem] =
@@ -610,7 +618,7 @@ export function InternalMCPCatalog({
     setInstallingItemId(catalogItem.id);
     await installMutation.mutateAsync({
       name: catalogItem.name,
-      catalogId: catalogItem.id,
+      catalogId: result.catalogId,
       scope: result.scope,
       teamId:
         result.scope === "team" ? (result.teamId ?? undefined) : undefined,
@@ -690,33 +698,52 @@ export function InternalMCPCatalog({
 
     // Check if this is a reinstall (updating existing server) vs new installation
     if (reinstallServerId) {
-      // Reinstall mode - call reinstall endpoint with new environment values
+      // Reinstall mode - apply the submitted values to every flagged install
+      // in the preset family (or just the single one if the card didn't pass a
+      // list). Same env/userConfig bag is applied to each — operators can edit
+      // per-install secrets afterwards from Manage credentials.
+      const targetIds =
+        reinstallFlaggedTargets.length > 0
+          ? reinstallFlaggedTargets.map((t) => t.id)
+          : [reinstallServerId];
+      const targets = (installedServers ?? []).filter((s) =>
+        targetIds.includes(s.id),
+      );
+
       setInstallingItemId(localServerCatalogItem.id);
-      setInstallingServerIds((prev) => new Set(prev).add(reinstallServerId));
+      setInstallingServerIds((prev) => {
+        const next = new Set(prev);
+        for (const t of targets) next.add(t.id);
+        return next;
+      });
       closeDialog("local-install");
+      const catalogItemName = localServerCatalogItem.name;
       setLocalServerCatalogItem(null);
       setReinstallServerId(null);
       setReinstallServerTeamId(null);
       setReinstallServerScope(undefined);
 
-      const serverIdToReinstall = reinstallServerId;
       try {
-        await reinstallMutation.mutateAsync({
-          id: serverIdToReinstall,
-          name: localServerCatalogItem.name,
-          environmentValues: installResult.environmentValues,
-          userConfigValues: installResult.userConfigValues,
-          isByosVault: installResult.isByosVault,
-          serviceAccount: installResult.serviceAccount,
-        });
+        await Promise.all(
+          targets.map((t) =>
+            reinstallMutation.mutateAsync({
+              id: t.id,
+              name: catalogItemName,
+              environmentValues: installResult.environmentValues,
+              userConfigValues: installResult.userConfigValues,
+              isByosVault: installResult.isByosVault,
+              serviceAccount: installResult.serviceAccount,
+            }),
+          ),
+        );
       } finally {
-        // Clear installing state whether success or error
         setInstallingItemId(null);
         setInstallingServerIds((prev) => {
-          const newSet = new Set(prev);
-          newSet.delete(serverIdToReinstall);
-          return newSet;
+          const next = new Set(prev);
+          for (const t of targets) next.delete(t.id);
+          return next;
         });
+        setReinstallFlaggedTargets([]);
       }
       return;
     }
@@ -730,9 +757,10 @@ export function InternalMCPCatalog({
     setInstallingItemId(localServerCatalogItem.id);
     const result = await installMutation.mutateAsync({
       name: localServerCatalogItem.name,
-      catalogId: localServerCatalogItem.id,
+      catalogId: installResult.catalogId,
       environmentValues: installResult.environmentValues,
       userConfigValues: installResult.userConfigValues,
+      presetFieldValues: installResult.presetFieldValues,
       isByosVault: installResult.isByosVault,
       scope: installResult.scope,
       teamId:
@@ -784,8 +812,9 @@ export function InternalMCPCatalog({
 
     await installMutation.mutateAsync({
       name: catalogItem.name,
-      catalogId: catalogItem.id,
+      catalogId: result.catalogId,
       ...credentialPayload,
+      presetFieldValues: result.presetFieldValues,
       scope: result.scope,
       teamId:
         result.scope === "team" ? (result.teamId ?? undefined) : undefined,
@@ -890,26 +919,57 @@ export function InternalMCPCatalog({
     return aggregated;
   };
 
-  const handleReinstall = async (catalogItem: CatalogItem) => {
-    // For local servers, find the current user's specific installation
-    // For remote servers, find any installation (there should be only one per catalog)
-    let installedServer: InstalledServer | undefined;
-    if (catalogItem.serverType === "local" && currentUserId) {
-      installedServer = installedServers?.find(
-        (server) =>
-          server.catalogId === catalogItem.id &&
-          server.ownerId === currentUserId,
-      );
-    } else {
-      installedServer = installedServers?.find(
-        (server) => server.catalogId === catalogItem.id,
-      );
+  const handleReinstall = async (
+    catalogItem: CatalogItem,
+    flaggedInstalls?: Array<{
+      id: string;
+      name: string;
+      presetLabel: string | null;
+    }>,
+  ) => {
+    // Preset-aware: the card passes every flagged install (parent + presets)
+    // so the confirm step can fan out. If the caller didn't supply any (e.g.
+    // legacy callers), fall back to the parent install.
+    const flagged =
+      flaggedInstalls && flaggedInstalls.length > 0
+        ? (installedServers ?? []).filter((s) =>
+            flaggedInstalls.some((f) => f.id === s.id),
+          )
+        : [];
+
+    let installedServer: InstalledServer | undefined =
+      flagged.find((s) => s.catalogId === catalogItem.id) ?? flagged[0];
+
+    if (!installedServer) {
+      if (catalogItem.serverType === "local" && currentUserId) {
+        installedServer = installedServers?.find(
+          (server) =>
+            server.catalogId === catalogItem.id &&
+            server.ownerId === currentUserId,
+        );
+      } else {
+        installedServer = installedServers?.find(
+          (server) => server.catalogId === catalogItem.id,
+        );
+      }
     }
 
     if (!installedServer) {
       toast.error("Server not found, cannot reinstall");
       return;
     }
+
+    setReinstallFlaggedTargets(
+      flaggedInstalls && flaggedInstalls.length > 0
+        ? flaggedInstalls
+        : [
+            {
+              id: installedServer.id,
+              name: installedServer.name,
+              presetLabel: "default",
+            },
+          ],
+    );
 
     // For local servers: check if there are prompted env vars that require user input
     // If so, open the install dialog directly in reinstall mode
@@ -945,45 +1005,64 @@ export function InternalMCPCatalog({
   const handleReinstallConfirm = async () => {
     if (!catalogItemForReinstall) return;
 
-    const installedServer =
-      catalogItemForReinstall.serverType === "local" && currentUserId
-        ? installedServers?.find(
-            (server) =>
-              server.catalogId === catalogItemForReinstall.id &&
-              server.ownerId === currentUserId,
+    // Resolve targets. If the card passed flagged ids, reinstall every one of
+    // them; otherwise fall back to the parent install only.
+    const targets =
+      reinstallFlaggedTargets.length > 0
+        ? (installedServers ?? []).filter((s) =>
+            reinstallFlaggedTargets.some((t) => t.id === s.id),
           )
-        : installedServers?.find(
-            (server) => server.catalogId === catalogItemForReinstall.id,
-          );
+        : (() => {
+            const fallback =
+              catalogItemForReinstall.serverType === "local" && currentUserId
+                ? installedServers?.find(
+                    (server) =>
+                      server.catalogId === catalogItemForReinstall.id &&
+                      server.ownerId === currentUserId,
+                  )
+                : installedServers?.find(
+                    (server) => server.catalogId === catalogItemForReinstall.id,
+                  );
+            return fallback ? [fallback] : [];
+          })();
 
-    if (!installedServer) {
+    if (targets.length === 0) {
       toast.error("Server not found, cannot reinstall");
       closeDialog("reinstall");
       setCatalogItemForReinstall(null);
+      setReinstallFlaggedTargets([]);
       return;
     }
 
     closeDialog("reinstall");
 
-    // Reinstall directly after explicit confirmation
     setInstallingItemId(catalogItemForReinstall.id);
-    setInstallingServerIds((prev) => new Set(prev).add(installedServer.id));
+    setInstallingServerIds((prev) => {
+      const next = new Set(prev);
+      for (const t of targets) next.add(t.id);
+      return next;
+    });
+
     try {
-      await reinstallMutation.mutateAsync({
-        id: installedServer.id,
-        name: catalogItemForReinstall.name,
-      });
+      await Promise.all(
+        targets.map((t) =>
+          reinstallMutation.mutateAsync({
+            id: t.id,
+            name: t.name,
+          }),
+        ),
+      );
     } finally {
-      // Clear installing state whether success or error
       setInstallingItemId(null);
       setInstallingServerIds((prev) => {
-        const newSet = new Set(prev);
-        newSet.delete(installedServer.id);
-        return newSet;
+        const next = new Set(prev);
+        for (const t of targets) next.delete(t.id);
+        return next;
       });
     }
 
     setCatalogItemForReinstall(null);
+    setReinstallFlaggedTargets([]);
   };
 
   const handleCancelInstallation = (serverId: string) => {
@@ -1179,7 +1258,7 @@ export function InternalMCPCatalog({
                         ? handleInstallPlaywright(item)
                         : handleInstallLocalServer(item)
                     }
-                    onReinstall={() => handleReinstall(item)}
+                    onReinstall={(flagged) => handleReinstall(item, flagged)}
                     onEdit={() => setEditingItem(item)}
                     onDetails={() => {
                       setDetailsServerName(item.name);
@@ -1237,7 +1316,7 @@ export function InternalMCPCatalog({
                         ? handleInstallPlaywright(item)
                         : handleInstallLocalServer(item)
                     }
-                    onReinstall={() => handleReinstall(item)}
+                    onReinstall={(flagged) => handleReinstall(item, flagged)}
                     onEdit={() => setEditingItem(item)}
                     onDetails={() => {
                       setDetailsServerName(item.name);
@@ -1390,10 +1469,12 @@ export function InternalMCPCatalog({
         onClose={() => {
           closeDialog("reinstall");
           setCatalogItemForReinstall(null);
+          setReinstallFlaggedTargets([]);
         }}
         onConfirm={handleReinstallConfirm}
         serverName={catalogItemForReinstall?.name || ""}
         isReinstalling={reinstallMutation.isPending}
+        targets={reinstallFlaggedTargets}
       />
 
       <NoAuthInstallDialog

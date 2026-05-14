@@ -36,20 +36,38 @@ export const UserConfigFieldDefaultSchema = z.union([
   z.array(z.string()),
 ]);
 
-export const UserConfigFieldSchema = z.object({
-  type: z.enum(["string", "number", "boolean", "directory", "file"]),
-  title: z.string(),
-  description: z.string(),
-  promptOnInstallation: z.boolean().optional(),
-  required: z.boolean().optional(),
-  default: UserConfigFieldDefaultSchema.optional(),
-  multiple: z.boolean().optional(),
-  sensitive: z.boolean().optional(),
-  min: z.number().optional(),
-  max: z.number().optional(),
-  headerName: z.string().optional(),
-  valuePrefix: z.string().optional(),
-});
+export const UserConfigFieldSchema = z
+  .object({
+    type: z.enum(["string", "number", "boolean", "directory", "file"]),
+    title: z.string(),
+    description: z.string(),
+    promptOnInstallation: z.boolean().optional(),
+    /**
+     * When true, the value is set per preset (catalog row's
+     * preset_field_values: parent row carries default-preset values, child
+     * rows carry their own overlay). Mutually exclusive with
+     * promptOnInstallation.
+     */
+    promptOnPreset: z.boolean().optional(),
+    required: z.boolean().optional(),
+    default: UserConfigFieldDefaultSchema.optional(),
+    multiple: z.boolean().optional(),
+    sensitive: z.boolean().optional(),
+    min: z.number().optional(),
+    max: z.number().optional(),
+    headerName: z.string().optional(),
+    valuePrefix: z.string().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.promptOnInstallation && value.promptOnPreset) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["promptOnPreset"],
+        message:
+          "promptOnInstallation and promptOnPreset are mutually exclusive",
+      });
+    }
+  });
 
 // Define a version of LocalConfigSchema for SELECT operations
 // where required and description fields are optional (database may not have them)
@@ -64,6 +82,7 @@ const LocalConfigSelectSchema = z.object({
         type: z.enum(["plain_text", "secret", "boolean", "number"]),
         value: z.string().optional(),
         promptOnInstallation: z.boolean(),
+        promptOnPreset: z.boolean().optional(),
         required: z.boolean().optional(), // Optional in database
         description: z.string().optional(), // Optional in database
         default: LocalConfigEnvironmentDefaultSchema.optional(), // Default value for installation dialog
@@ -99,6 +118,11 @@ const CatalogLabelSchema = z.object({
   value: z.string().min(1),
 });
 
+export const PresetFieldValuesSchema = z.record(
+  z.string(),
+  UserConfigFieldDefaultSchema,
+);
+
 export const SelectInternalMcpCatalogSchema = createSelectSchema(
   schema.internalMcpCatalogTable,
 ).extend({
@@ -108,6 +132,8 @@ export const SelectInternalMcpCatalogSchema = createSelectSchema(
   oauthConfig: OAuthConfigSchema.nullable(),
   enterpriseManagedConfig: EnterpriseManagedCredentialConfigSchema.nullable(),
   localConfig: LocalConfigSelectSchema.nullable(),
+  parentCatalogItemId: z.string().uuid().nullable(),
+  presetFieldValues: PresetFieldValuesSchema.default({}),
   // Labels are loaded from the junction table, not from the DB row
   labels: z.array(CatalogLabelSchema).default([]),
   // Teams are loaded from the junction table, not from the DB row
@@ -137,6 +163,8 @@ const InsertInternalMcpCatalogSchemaBase = createInsertSchema(
     enterpriseManagedConfig:
       EnterpriseManagedCredentialConfigSchema.nullable().optional(),
     localConfig: LocalConfigSchema.nullable().optional(),
+    presetFieldValues: PresetFieldValuesSchema.optional(),
+    parentCatalogItemId: z.string().uuid().nullable().optional(),
     // Labels are synced separately via McpCatalogLabelModel
     labels: z.array(CatalogLabelSchema).optional(),
     // Team IDs for team scope (synced separately)
@@ -167,6 +195,7 @@ const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
     enterpriseManagedConfig:
       EnterpriseManagedCredentialConfigSchema.nullable().optional(),
     localConfig: LocalConfigSchema.nullable().optional(),
+    presetFieldValues: PresetFieldValuesSchema.optional(),
     // Labels are synced separately via McpCatalogLabelModel
     labels: z.array(CatalogLabelSchema).optional(),
     // Team IDs for team scope (synced separately)
@@ -180,6 +209,8 @@ const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
     authorId: true,
     // Tenancy is locked after creation
     multitenant: true,
+    // Parent link is locked after creation
+    parentCatalogItemId: true,
   });
 
 export const UpdateInternalMcpCatalogSchema =
@@ -190,12 +221,33 @@ export const PartialUpdateInternalMcpCatalogSchema =
     validateInternalMcpCatalog,
   );
 
+const CHILD_CATALOG_NAME = z
+  .string()
+  .min(1, "Name is required")
+  .max(63, "Name must be 63 characters or fewer")
+  .regex(
+    /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/,
+    "Name must be a DNS-1123 label: lowercase alphanumeric and hyphens, starting and ending with alphanumeric",
+  );
+
+export const CreateChildCatalogSchema = z.object({
+  childName: CHILD_CATALOG_NAME,
+  presetFieldValues: PresetFieldValuesSchema.optional(),
+});
+
+export const UpdateChildCatalogSchema = z.object({
+  presetFieldValues: PresetFieldValuesSchema.optional(),
+});
+
 export type InternalMcpCatalogServerType = z.infer<
   typeof InternalMcpCatalogServerTypeSchema
 >;
 
 export type AuthField = z.infer<typeof AuthFieldSchema>;
 export type UserConfigField = z.infer<typeof UserConfigFieldSchema>;
+export type UserConfigFieldDefault = z.infer<
+  typeof UserConfigFieldDefaultSchema
+>;
 export type UserConfig = Record<string, UserConfigField>;
 export type OAuthConfig = z.infer<typeof OAuthConfigSchema>;
 
@@ -212,6 +264,9 @@ export type InsertInternalMcpCatalog = z.infer<
 export type UpdateInternalMcpCatalog = z.infer<
   typeof UpdateInternalMcpCatalogSchema
 >;
+export type PresetFieldValues = z.infer<typeof PresetFieldValuesSchema>;
+export type CreateChildCatalog = z.infer<typeof CreateChildCatalogSchema>;
+export type UpdateChildCatalog = z.infer<typeof UpdateChildCatalogSchema>;
 
 function validateEnterpriseManagedTransportConfig(
   value: {
@@ -241,7 +296,10 @@ function validateInternalMcpCatalog(
   value: {
     serverType?: InternalMcpCatalogServerType;
     enterpriseManagedConfig?: unknown;
-    localConfig?: { transportType?: "stdio" | "streamable-http" } | null;
+    localConfig?: {
+      transportType?: "stdio" | "streamable-http";
+      environment?: Array<{ key: string }>;
+    } | null;
     userConfig?: Record<string, UserConfigField> | null;
   },
   ctx: z.RefinementCtx,

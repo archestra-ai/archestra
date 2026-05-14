@@ -5,12 +5,15 @@ import { useDeleteInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.
 interface DeleteCatalogDialogProps {
   item: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] | null;
   onClose: () => void;
+  /** Called only after a successful deletion (before onClose). */
+  onDeleted?: () => void;
   installationCount: number;
 }
 
 export function DeleteCatalogDialog({
   item,
   onClose,
+  onDeleted,
   installationCount,
 }: DeleteCatalogDialogProps) {
   const deleteMutation = useDeleteInternalMcpCatalogItem();
@@ -18,6 +21,7 @@ export function DeleteCatalogDialog({
   const handleConfirm = async () => {
     if (!item) return;
     await deleteMutation.mutateAsync(item.id);
+    onDeleted?.();
     onClose();
   };
 

@@ -530,6 +530,7 @@ async function makeInternalMcpCatalog(
       | "authDescription"
       | "authFields"
       | "localConfig"
+      | "localConfigSecretId"
       | "userConfig"
       | "oauthConfig"
       | "enterpriseManagedConfig"

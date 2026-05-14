@@ -354,6 +354,34 @@ tests:
           path: spec.template.spec.initContainers[1].command[2]
           pattern: ".*nc -z.*"
 
+  - it: should bound the wait-for-postgres loop with the default timeout
+    documentIndex: 1
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: "max_attempts=300"
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: "did not become reachable after .* - giving up"
+
+  - it: should honor a custom waitForPostgres timeout in both postgres init containers
+    documentIndex: 1
+    set:
+      archestra.initContainers.waitForPostgres.timeoutSeconds: 60
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: wait-for-postgres
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: "max_attempts=60"
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: setup-postgres-extensions
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "max_attempts=60"
+
   - it: should set ARCHESTRA_DATABASE_URL with postgres:// scheme
     documentIndex: 1
     set:
@@ -1387,7 +1415,7 @@ tests:
           value: 10
       - equal:
           path: spec.template.spec.containers[0].startupProbe.timeoutSeconds
-          value: 5
+          value: 45
       - equal:
           path: spec.template.spec.containers[0].startupProbe.failureThreshold
           value: 30
@@ -1408,10 +1436,10 @@ tests:
           value: 10
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.timeoutSeconds
-          value: 5
+          value: 45
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.failureThreshold
-          value: 3
+          value: 5
 
   - it: should have readiness probe configured
     documentIndex: 1
@@ -1429,15 +1457,18 @@ tests:
           value: 10
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
-          value: 5
+          value: 45
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.failureThreshold
           value: 3
 
   # Resource requests and limits tests
-  - it: should have default memory resources configured
+  - it: should have default resources configured
     documentIndex: 1
     asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: "2"
       - equal:
           path: spec.template.spec.containers[0].resources.requests.memory
           value: "2Gi"

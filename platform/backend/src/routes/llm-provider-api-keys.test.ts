@@ -64,12 +64,14 @@ vi.mock("@/services/model-sync", () => ({
 import { hasPermission, userHasPermission } from "@/auth";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { testProviderApiKey } from "@/routes/chat/model-fetchers/registry";
 import { validateProviderAllowed } from "./llm-provider-api-keys";
 
 const mockIsAzureOpenAiEntraIdEnabled = vi.mocked(isAzureOpenAiEntraIdEnabled);
 const mockIsVertexAiEnabled = vi.mocked(isVertexAiEnabled);
 const mockHasPermission = vi.mocked(hasPermission);
 const mockUserHasPermission = vi.mocked(userHasPermission);
+const mockTestProviderApiKey = vi.mocked(testProviderApiKey);
 
 describe("validateProviderAllowed", () => {
   beforeEach(() => {
@@ -517,6 +519,45 @@ describe("LLM Provider API Keys CRUD", () => {
       secretId: null,
       baseUrl: "https://my-resource.openai.azure.com/openai",
     });
+    expect(mockTestProviderApiKey).toHaveBeenCalledWith(
+      "azure",
+      "",
+      "https://my-resource.openai.azure.com/openai",
+      undefined,
+    );
+  });
+
+  test("rejects keyless Azure provider keys when Entra ID validation cannot discover models", async () => {
+    mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(true);
+    mockTestProviderApiKey.mockRejectedValueOnce(
+      new Error("Models list is empty"),
+    );
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Azure Resource",
+        provider: "azure",
+        scope: "personal",
+        baseUrl: "https://my-resource.openai.azure.com/openai",
+      },
+    });
+
+    expect(createResponse.statusCode).toBe(400);
+    expect(createResponse.json().error.message).toContain(
+      "Azure Entra ID validation failed: Archestra could not discover any Azure model deployments.",
+    );
+    expect(createResponse.json().error.message).toContain(
+      "Provider error: Models list is empty",
+    );
+
+    const listResponse = await app.inject({
+      method: "GET",
+      url: "/api/llm-provider-api-keys",
+    });
+    expect(listResponse.statusCode).toBe(200);
+    expect(listResponse.json()).toEqual([]);
   });
 
   test("rejects Azure provider keys without API key when Entra ID is disabled", async () => {

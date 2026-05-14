@@ -781,6 +781,22 @@ function KnowledgeSettingsContent() {
                       }
                     />
                   </CardRow>
+                  {(rerankerChatApiKeyId || rerankerModel) && (
+                    <div className="sm:pl-28">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={!hasPermission}
+                        onClick={() => {
+                          setRerankerChatApiKeyId(null);
+                          setRerankerModel(null);
+                        }}
+                      >
+                        Clear reranking configuration
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </WithPermissions>

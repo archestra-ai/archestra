@@ -68,6 +68,13 @@ vi.mock("@/components/chat/knowledge-graph-citations", () => ({
   KnowledgeGraphCitations: () => null,
 }));
 
+vi.mock("@/components/chat/inline-chat-error", () => ({
+  InlineChatError: ({ error }: { error: Error }) => {
+    const parsed = JSON.parse(error.message);
+    return <div data-testid="inline-chat-error">{parsed.message}</div>;
+  },
+}));
+
 vi.mock("@/components/chat/message-actions", () => ({
   MessageActions: () => null,
 }));
@@ -78,6 +85,10 @@ vi.mock("@/components/chat/policy-denied-tool", () => ({
 
 vi.mock("@/components/divider", () => ({
   default: () => null,
+}));
+
+vi.mock("@/lib/organization.query", () => ({
+  useOrganization: () => ({ data: null }),
 }));
 
 describe("MessageThread", () => {
@@ -102,6 +113,56 @@ describe("MessageThread", () => {
 
     expect(screen.getByText("Switched to child agent")).toBeInTheDocument();
     expect(screen.queryByText("tool-spark_swap_agent")).not.toBeInTheDocument();
+  });
+
+  it("renders persisted chat errors between messages by timestamp", () => {
+    const messages: PartialUIMessage[] = [
+      {
+        id: "user-1",
+        role: "user",
+        metadata: {
+          createdAt: "2026-04-22T12:00:00.000Z",
+        } as PartialUIMessage["metadata"],
+        parts: [{ type: "text", text: "first try" }],
+      },
+      {
+        id: "user-2",
+        role: "user",
+        metadata: {
+          createdAt: "2026-04-22T12:02:00.000Z",
+        } as PartialUIMessage["metadata"],
+        parts: [{ type: "text", text: "try again" }],
+      },
+    ];
+
+    render(
+      <MessageThread
+        messages={messages}
+        chatErrors={[
+          {
+            id: "error-1",
+            conversationId: "conv-1",
+            createdAt: "2026-04-22T12:01:00.000Z",
+            error: {
+              code: "server_error",
+              message: "Provider failed",
+              isRetryable: true,
+            },
+          },
+        ]}
+      />,
+    );
+
+    const firstTry = screen.getByText("first try");
+    const error = screen.getByTestId("inline-chat-error");
+    const retry = screen.getByText("try again");
+
+    expect(firstTry.compareDocumentPosition(error)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(error.compareDocumentPosition(retry)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
   });
 
   it("renders the unsafe-context divider after the boundary tool result", () => {

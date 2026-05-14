@@ -1,6 +1,7 @@
 import type { SupportedProvider } from "@shared";
 import { and, asc, eq, getTableColumns, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
 import logger from "@/logging";
 import type {
   InsertOptimizationRule,
@@ -179,6 +180,7 @@ class OptimizationRuleModel {
         and(
           eq(schema.agentsTable.id, entityId),
           eq(schema.agentsTable.organizationId, organizationId),
+          notDeleted(schema.agentsTable),
         ),
       )
       .limit(1);

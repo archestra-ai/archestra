@@ -1,5 +1,6 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
 import logger from "@/logging";
 import type { AgentAccessContext } from "@/types";
 import { findAgentAccessContextById } from "./agent-access-context";
@@ -24,7 +25,8 @@ class AgentTeamModel {
     if (isAgentAdmin) {
       const allAgents = await db
         .select({ id: schema.agentsTable.id })
-        .from(schema.agentsTable);
+        .from(schema.agentsTable)
+        .where(notDeleted(schema.agentsTable));
 
       logger.debug(
         { userId, count: allAgents.length },
@@ -35,15 +37,20 @@ class AgentTeamModel {
 
     // Single query: UNION of org-scoped, author's own, and team-scoped agents
     const result = await db.execute<{ id: string }>(sql`
-      SELECT id FROM agents WHERE scope = 'org'
+      SELECT id FROM agents WHERE scope = 'org' AND deleted_at IS NULL
       UNION
-      SELECT id FROM agents WHERE author_id = ${userId} AND scope = 'personal'
+      SELECT id FROM agents
+        WHERE author_id = ${userId}
+          AND scope = 'personal'
+          AND deleted_at IS NULL
       UNION
       SELECT at.agent_id AS id
         FROM agent_team at
         INNER JOIN agents a ON at.agent_id = a.id
         INNER JOIN team_member tm ON at.team_id = tm.team_id
-        WHERE tm.user_id = ${userId} AND a.scope = 'team'
+        WHERE tm.user_id = ${userId}
+          AND a.scope = 'team'
+          AND a.deleted_at IS NULL
     `);
 
     const accessibleAgentIds = result.rows.map((r) => r.id);

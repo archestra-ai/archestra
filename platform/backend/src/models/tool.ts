@@ -37,6 +37,7 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata";
 import config from "@/config";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
 import {
   createPaginatedResult,
   type PaginatedResult,
@@ -1705,7 +1706,12 @@ class ToolModel {
     const [targetAgent] = await db
       .select({ id: schema.agentsTable.id, name: schema.agentsTable.name })
       .from(schema.agentsTable)
-      .where(eq(schema.agentsTable.id, targetAgentId))
+      .where(
+        and(
+          eq(schema.agentsTable.id, targetAgentId),
+          notDeleted(schema.agentsTable),
+        ),
+      )
       .limit(1);
 
     if (!targetAgent) {

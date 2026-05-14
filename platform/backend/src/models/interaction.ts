@@ -160,6 +160,7 @@ async function getAgentNamesById(
 ): Promise<Map<string, string>> {
   if (agentIds.length === 0) return new Map();
 
+  // soft-delete: audit log resolves historic agent names, include deleted.
   const agents = await db
     .select({ id: schema.agentsTable.id, name: schema.agentsTable.name })
     .from(schema.agentsTable)

@@ -280,15 +280,7 @@ export default class K8sDeployment {
         253,
       );
     }
-    // WHY: include the preset name when this install targets a child preset
-    // catalog row. mcp_server.name is derived from the parent catalog, so
-    // without the preset suffix the same user's parent and preset installs
-    // would collide on the same deployment name.
     const slugified = ensureStringIsRfc1123Compliant(mcpServer.name);
-    if (catalogItem?.parentCatalogItemId) {
-      const presetSlug = ensureStringIsRfc1123Compliant(catalogItem.name);
-      return `mcp-${slugified}-${presetSlug}`.substring(0, 253);
-    }
     return `mcp-${slugified}`.substring(0, 253);
   }
 

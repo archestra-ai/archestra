@@ -209,6 +209,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Set serverType from catalog item
         serverData.serverType = catalogItem.serverType;
 
+        // The catalog row is the source of truth for the install name. For
+        // preset (child) installs the row's `name` is the composed
+        // `{parent.name}-{childName}`, so this also disambiguates parent vs.
+        // preset installs at the deployment-name layer.
+        serverData.name = catalogItem.name;
+
         // Scope-based authorization (personal / team / org).
         await validateScopeAndAuthorization({
           scope: serverData.scope,

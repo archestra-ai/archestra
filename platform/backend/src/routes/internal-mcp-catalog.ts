@@ -1138,7 +1138,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { catalogId } = request.params;
-      const { name, presetFieldValues } = request.body;
+      const { childName, presetFieldValues } = request.body;
 
       const parent = await InternalMcpCatalogModel.findById(catalogId, {
         expandSecrets: false,
@@ -1162,16 +1162,21 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, (e as Error).message);
       }
 
+      const composedName = `${parent.name}-${childName}`;
       const { nonSecretFieldValues, presetSecretId } =
         await partitionPresetFieldValuesAndUpsertSecrets({
           parent,
-          catalogRow: { name, presetSecretId: null },
+          catalogRow: { name: composedName, presetSecretId: null },
           incoming: presetFieldValues ?? {},
         });
 
       const childInsert = {
         ...pickSyncableFields(parent),
-        name,
+        // Model.create will overwrite `name` with the composed value; we set it
+        // here only so the InsertInternalMcpCatalog schema's notNull constraint
+        // is satisfied at the type level.
+        name: composedName,
+        childName,
         presetFieldValues: nonSecretFieldValues,
         presetSecretId,
         parentCatalogItemId: parent.id,
@@ -1193,8 +1198,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateCatalogChild,
         description:
-          'Update a child catalog item ("preset" in UI). Only `name` and ' +
-          "`presetFieldValues` may be edited; template fields cascade from parent.",
+          'Update a child catalog item ("preset" in UI). Only ' +
+          "`presetFieldValues` may be edited; template fields cascade from parent " +
+          "and the name is immutable after creation.",
         tags: ["MCP Catalog"],
         params: z.object({
           catalogId: UuidIdSchema,
@@ -1206,7 +1212,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { catalogId, childId } = request.params;
-      const { name, presetFieldValues } = request.body;
+      const { presetFieldValues } = request.body;
 
       const parent = await InternalMcpCatalogModel.findById(catalogId, {
         expandSecrets: false,
@@ -1232,13 +1238,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const updates: Record<string, unknown> = {};
-      if (name !== undefined) updates.name = name;
       if (presetFieldValues !== undefined) {
         const { nonSecretFieldValues, presetSecretId } =
           await partitionPresetFieldValuesAndUpsertSecrets({
             parent,
             catalogRow: {
-              name: name ?? originalChild.name,
+              name: originalChild.name,
               presetSecretId: originalChild.presetSecretId,
             },
             incoming: presetFieldValues,
@@ -1257,8 +1262,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Child catalog item not found");
       }
 
-      // Reinstall installs that point at this child if its name changed
-      // (other fields cannot change here, so cascade is a no-op for them).
+      // Reinstall installs that point at this child if preset values changed.
       await cascadeReinstallForCatalog(originalChild, updatedChild);
 
       return reply.send(updatedChild);

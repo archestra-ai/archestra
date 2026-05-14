@@ -231,12 +231,11 @@ const CHILD_CATALOG_NAME = z
   );
 
 export const CreateChildCatalogSchema = z.object({
-  name: CHILD_CATALOG_NAME,
+  childName: CHILD_CATALOG_NAME,
   presetFieldValues: PresetFieldValuesSchema.optional(),
 });
 
 export const UpdateChildCatalogSchema = z.object({
-  name: CHILD_CATALOG_NAME.optional(),
   presetFieldValues: PresetFieldValuesSchema.optional(),
 });
 

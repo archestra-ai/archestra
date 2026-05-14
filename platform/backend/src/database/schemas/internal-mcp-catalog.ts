@@ -89,6 +89,12 @@ const internalMcpCatalogTable = pgTable(
       { onDelete: "cascade" },
     ),
     /**
+     * For child catalog items (presets): the bare submitted name before
+     * composition. The `name` column on a child stores `${parent.name}-${childName}`.
+     * NULL for root catalog items.
+     */
+    childName: text("child_name"),
+    /**
      * Values for fields the parent declared with promptOnPreset: true.
      * Meaningful on parent (= default preset values) AND child (= preset overlay).
      * Stores only non-secret values; secret-typed preset values live in the

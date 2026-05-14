@@ -96,7 +96,7 @@ export function PresetEditorDialog({
         return;
       }
       await create.mutateAsync({
-        name: trimmed,
+        childName: trimmed,
         presetFieldValues: fieldValues,
       });
     }

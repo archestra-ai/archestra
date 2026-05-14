@@ -32,6 +32,29 @@ class InternalMcpCatalogModel {
   ): Promise<InternalMcpCatalog> {
     const { labels, teams, ...dbValues } = catalogItem;
 
+    // Child catalog items ("presets") store the composed name
+    // `${parent.name}-${childName}`; root items store name as submitted.
+    if (dbValues.parentCatalogItemId) {
+      if (!dbValues.childName) {
+        throw new Error(
+          "childName is required when parentCatalogItemId is set",
+        );
+      }
+      const [parent] = await db
+        .select({ name: schema.internalMcpCatalogTable.name })
+        .from(schema.internalMcpCatalogTable)
+        .where(eq(schema.internalMcpCatalogTable.id, dbValues.parentCatalogItemId));
+      if (!parent) {
+        throw new Error(
+          `Parent catalog item ${dbValues.parentCatalogItemId} not found`,
+        );
+      }
+      dbValues.name = `${parent.name}-${dbValues.childName}`;
+    } else {
+      // Root rows never carry a childName.
+      dbValues.childName = null;
+    }
+
     const insertValues = {
       ...dbValues,
       ...(context?.organizationId
@@ -362,6 +385,31 @@ class InternalMcpCatalogModel {
     catalogItem: Partial<UpdateInternalMcpCatalog>,
   ): Promise<InternalMcpCatalog | null> {
     const { labels, teams, ...dbValues } = catalogItem;
+
+    // Name immutability: matches the existing UI-enforced posture and avoids
+    // cascading rename to k8s deployment names and pre-slugified tool rows.
+    if (dbValues.name !== undefined || dbValues.childName !== undefined) {
+      const [existing] = await db
+        .select({
+          name: schema.internalMcpCatalogTable.name,
+          childName: schema.internalMcpCatalogTable.childName,
+        })
+        .from(schema.internalMcpCatalogTable)
+        .where(eq(schema.internalMcpCatalogTable.id, id));
+      if (existing) {
+        if (dbValues.name !== undefined && dbValues.name !== existing.name) {
+          throw new Error("Catalog item name cannot be changed after creation");
+        }
+        if (
+          dbValues.childName !== undefined &&
+          dbValues.childName !== existing.childName
+        ) {
+          throw new Error("Preset childName cannot be changed after creation");
+        }
+      }
+      delete dbValues.name;
+      delete dbValues.childName;
+    }
 
     let dbItem: typeof schema.internalMcpCatalogTable.$inferSelect | undefined;
 

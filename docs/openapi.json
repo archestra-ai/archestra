@@ -105315,6 +105315,10 @@
                         "format": "uuid",
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       },
+                      "childName": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "presetFieldValues": {
                         "default": {},
                         "type": "object",
@@ -105416,6 +105420,7 @@
                       "authorId",
                       "scope",
                       "parentCatalogItemId",
+                      "childName",
                       "presetFieldValues",
                       "presetSecretId",
                       "createdAt",
@@ -106165,6 +106170,10 @@
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
+                  "childName": {
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "presetFieldValues": {
                     "type": "object",
                     "additionalProperties": {
@@ -106737,6 +106746,10 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "childName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "presetFieldValues": {
                       "default": {},
                       "type": "object",
@@ -106832,6 +106845,7 @@
                     "authorId",
                     "scope",
                     "parentCatalogItemId",
+                    "childName",
                     "presetFieldValues",
                     "presetSecretId",
                     "createdAt",
@@ -107613,6 +107627,10 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "childName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "presetFieldValues": {
                       "default": {},
                       "type": "object",
@@ -107708,6 +107726,7 @@
                     "authorId",
                     "scope",
                     "parentCatalogItemId",
+                    "childName",
                     "presetFieldValues",
                     "presetSecretId",
                     "createdAt",
@@ -108441,6 +108460,10 @@
                       "org"
                     ]
                   },
+                  "childName": {
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "presetFieldValues": {
                     "type": "object",
                     "additionalProperties": {
@@ -109021,6 +109044,10 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "childName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "presetFieldValues": {
                       "default": {},
                       "type": "object",
@@ -109116,6 +109143,7 @@
                     "authorId",
                     "scope",
                     "parentCatalogItemId",
+                    "childName",
                     "presetFieldValues",
                     "presetSecretId",
                     "createdAt",
@@ -112144,6 +112172,10 @@
                         "format": "uuid",
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       },
+                      "childName": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "presetFieldValues": {
                         "default": {},
                         "type": "object",
@@ -112239,6 +112271,7 @@
                       "authorId",
                       "scope",
                       "parentCatalogItemId",
+                      "childName",
                       "presetFieldValues",
                       "presetSecretId",
                       "createdAt",
@@ -112501,7 +112534,7 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "name": {
+                  "childName": {
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 63,
@@ -112515,7 +112548,7 @@
                   }
                 },
                 "required": [
-                  "name"
+                  "childName"
                 ]
               }
             }
@@ -113046,6 +113079,10 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "childName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "presetFieldValues": {
                       "default": {},
                       "type": "object",
@@ -113141,6 +113178,7 @@
                     "authorId",
                     "scope",
                     "parentCatalogItemId",
+                    "childName",
                     "presetFieldValues",
                     "presetSecretId",
                     "createdAt",
@@ -113396,7 +113434,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Update a child catalog item (\"preset\" in UI). Only `name` and `presetFieldValues` may be edited; template fields cascade from parent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:update`: Modify MCP registry entries",
+        "description": "Update a child catalog item (\"preset\" in UI). Only `presetFieldValues` may be edited; template fields cascade from parent and the name is immutable after creation.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:update`: Modify MCP registry entries",
         "requestBody": {
           "required": true,
           "content": {
@@ -113404,12 +113442,6 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "name": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 63,
-                    "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
-                  },
                   "presetFieldValues": {
                     "type": "object",
                     "additionalProperties": {
@@ -113956,6 +113988,10 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "childName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "presetFieldValues": {
                       "default": {},
                       "type": "object",
@@ -114051,6 +114087,7 @@
                     "authorId",
                     "scope",
                     "parentCatalogItemId",
+                    "childName",
                     "presetFieldValues",
                     "presetSecretId",
                     "createdAt",

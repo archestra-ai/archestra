@@ -1653,6 +1653,13 @@
       "when": 1778584942298,
       "tag": "0235_fine_gamma_corps",
       "breakpoints": true
+    },
+    {
+      "idx": 236,
+      "version": "7",
+      "when": 1778686538517,
+      "tag": "0236_talented_forge",
+      "breakpoints": true
     }
   ]
 }

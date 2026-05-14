@@ -2136,7 +2136,7 @@ export const createCatalogChild = <ThrowOnError extends boolean = false>(options
 export const deleteCatalogChild = <ThrowOnError extends boolean = false>(options: Options<DeleteCatalogChildData, ThrowOnError>) => (options.client ?? client).delete<DeleteCatalogChildResponses, DeleteCatalogChildErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/{catalogId}/children/{childId}', ...options });
 
 /**
- * Update a child catalog item ("preset" in UI). Only `name` and `presetFieldValues` may be edited; template fields cascade from parent.
+ * Update a child catalog item ("preset" in UI). Only `presetFieldValues` may be edited; template fields cascade from parent and the name is immutable after creation.
  *
  * Authentication:
  *

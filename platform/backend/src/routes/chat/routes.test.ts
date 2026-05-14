@@ -1,3 +1,4 @@
+import { convertToModelMessages } from "ai";
 import { describe, expect, it, vi } from "vitest";
 
 // Mock the ai module before importing chat routes
@@ -266,6 +267,53 @@ describe("prepareMessagesForProvider", () => {
     });
 
     expect(messages[0].parts).toContainEqual(
+      expect.objectContaining({
+        type: "text",
+        text: expect.stringMatching(/\S/),
+      }),
+    );
+  });
+
+  it("pads empty bedrock assistant step blocks before later tool calls", async () => {
+    const messages = __test.prepareMessagesForProvider({
+      provider: "bedrock",
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            { type: "text", text: "" },
+            { type: "step-start" },
+            {
+              type: "tool-search",
+              toolCallId: "call_123",
+              toolName: "search",
+              state: "input-available",
+              input: { q: "query" },
+            },
+          ],
+        },
+      ],
+    });
+
+    const stepStartIndex = messages[0].parts?.findIndex(
+      (part) => part.type === "step-start",
+    );
+    expect(stepStartIndex).toBeGreaterThan(0);
+    expect(messages[0].parts?.[stepStartIndex! - 1]).toEqual(
+      expect.objectContaining({
+        type: "text",
+        text: expect.stringMatching(/\S/),
+      }),
+    );
+
+    const modelMessages = await convertToModelMessages(
+      messages as Parameters<typeof convertToModelMessages>[0],
+    );
+    const assistantMessages = modelMessages.filter(
+      (message) => message.role === "assistant",
+    );
+    expect(assistantMessages).toHaveLength(2);
+    expect(assistantMessages[0]?.content).toContainEqual(
       expect.objectContaining({
         type: "text",
         text: expect.stringMatching(/\S/),

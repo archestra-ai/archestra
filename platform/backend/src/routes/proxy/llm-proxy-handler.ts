@@ -1545,7 +1545,23 @@ function shouldUseKeylessProviderApiKey(params: {
   providerName: string;
 }): boolean {
   const { row, providerName } = params;
-  if (!row || row.provider !== providerName || row.secretId) {
+  if (!row) {
+    return false;
+  }
+
+  if (row.provider !== providerName) {
+    logger.warn(
+      {
+        providerApiKeyId: row.id,
+        providerApiKeyProvider: row.provider,
+        requestedProvider: providerName,
+      },
+      "Loopback provider API key provider mismatch",
+    );
+    return false;
+  }
+
+  if (row.secretId) {
     return false;
   }
 

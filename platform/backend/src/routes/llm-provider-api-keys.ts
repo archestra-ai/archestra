@@ -36,6 +36,7 @@ import { modelSyncService } from "@/services/model-sync";
 import {
   ApiError,
   constructResponseSchema,
+  type LlmProviderApiKey,
   LlmProviderApiKeyWithScopeInfoSchema,
   type ResourceVisibilityScope,
   ResourceVisibilityScopeSchema,
@@ -60,6 +61,7 @@ async function testApiKeyOrThrow(
 }
 
 async function testKeylessAzureEntraOrThrow(
+  context: "discovery" | "runtime",
   baseUrl?: string | null,
   extraHeaders?: Record<string, string> | null,
 ): Promise<void> {
@@ -67,26 +69,36 @@ async function testKeylessAzureEntraOrThrow(
     await testProviderApiKey("azure", "", baseUrl, extraHeaders);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
+    const contextMessage =
+      context === "discovery"
+        ? "Archestra could not discover any Azure model deployments. Confirm the Base URL points to an Azure OpenAI resource or Foundry v1 endpoint, and that the Azure identity has permission to read deployments on that resource."
+        : "Archestra could not connect to the Azure inference endpoint. Confirm the Inference URL is reachable and the Azure identity can use models on that endpoint.";
+    const validationLabel =
+      context === "discovery"
+        ? "Azure Entra ID validation"
+        : "Azure Entra ID runtime validation";
     throw new ApiError(
       400,
-      `Azure Entra ID validation failed: Archestra could not discover any Azure model deployments. Confirm the Base URL points to an Azure OpenAI resource or Foundry v1 endpoint, and that the Azure identity has permission to read deployments on that resource. Provider error: ${errorMessage}`,
+      `${validationLabel} failed: ${contextMessage} Provider error: ${errorMessage}`,
     );
   }
 }
 
-async function testKeylessAzureRuntimeOrThrow(
-  baseUrl?: string | null,
-  extraHeaders?: Record<string, string> | null,
-): Promise<void> {
-  try {
-    await testProviderApiKey("azure", "", baseUrl, extraHeaders);
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    throw new ApiError(
-      400,
-      `Azure Entra ID runtime validation failed: Archestra could not connect to the Azure inference endpoint. Confirm the Inference URL is reachable and the Azure identity can use models on that endpoint. Provider error: ${errorMessage}`,
-    );
+function resolveRuntimeTestBaseUrl(params: {
+  body: {
+    baseUrl?: string | null;
+    inferenceBaseUrl?: string | null;
+  };
+  apiKey: Pick<LlmProviderApiKey, "baseUrl" | "inferenceBaseUrl">;
+}): string | null {
+  const { body, apiKey } = params;
+  if (body.inferenceBaseUrl !== undefined) {
+    return body.inferenceBaseUrl;
   }
+  if (body.baseUrl !== undefined) {
+    return body.baseUrl;
+  }
+  return apiKey.inferenceBaseUrl ?? apiKey.baseUrl;
 }
 
 const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -356,9 +368,14 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         !actualApiKeyValue &&
         isAzureOpenAiEntraIdEnabled()
       ) {
-        await testKeylessAzureEntraOrThrow(body.baseUrl, body.extraHeaders);
+        await testKeylessAzureEntraOrThrow(
+          "discovery",
+          body.baseUrl,
+          body.extraHeaders,
+        );
         if (body.inferenceBaseUrl && body.inferenceBaseUrl !== body.baseUrl) {
-          await testKeylessAzureRuntimeOrThrow(
+          await testKeylessAzureEntraOrThrow(
+            "runtime",
             body.inferenceBaseUrl,
             body.extraHeaders,
           );
@@ -636,12 +653,10 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Test the API key before saving
         // Use user-provided baseUrl/extraHeaders if present, otherwise fall
         // back to what's stored on the API key record.
-        const testBaseUrl =
-          body.inferenceBaseUrl !== undefined
-            ? body.inferenceBaseUrl
-            : body.baseUrl !== undefined
-              ? body.baseUrl
-              : (apiKeyFromDB.inferenceBaseUrl ?? apiKeyFromDB.baseUrl);
+        const testBaseUrl = resolveRuntimeTestBaseUrl({
+          body,
+          apiKey: apiKeyFromDB,
+        });
         const testExtraHeaders =
           body.extraHeaders !== undefined
             ? body.extraHeaders
@@ -684,12 +699,10 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             apiKeyFromDB.secretId,
           );
         }
-        const testBaseUrl =
-          body.inferenceBaseUrl !== undefined
-            ? body.inferenceBaseUrl
-            : body.baseUrl !== undefined
-              ? body.baseUrl
-              : (apiKeyFromDB.inferenceBaseUrl ?? apiKeyFromDB.baseUrl);
+        const testBaseUrl = resolveRuntimeTestBaseUrl({
+          body,
+          apiKey: apiKeyFromDB,
+        });
         const testExtraHeaders =
           body.extraHeaders !== undefined
             ? body.extraHeaders
@@ -705,7 +718,11 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           apiKeyFromDB.provider === "azure" &&
           isAzureOpenAiEntraIdEnabled()
         ) {
-          await testKeylessAzureEntraOrThrow(testBaseUrl, testExtraHeaders);
+          await testKeylessAzureEntraOrThrow(
+            "runtime",
+            testBaseUrl,
+            testExtraHeaders,
+          );
         } else if (
           !isProviderApiKeyOptional({
             provider: apiKeyFromDB.provider,

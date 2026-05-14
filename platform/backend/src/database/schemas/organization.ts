@@ -34,6 +34,8 @@ const organizationsTable = pgTable("organization", {
   limitCleanupInterval: varchar("limit_cleanup_interval")
     .$type<OrganizationLimitCleanupInterval>()
     .default("1h"),
+  defaultUserLimitType: varchar("default_user_limit_type").$type<LimitType>(),
+  defaultUserLimitValue: integer("default_user_limit_value"),
   onboardingComplete: boolean("onboarding_complete").notNull().default(false),
   theme: text("theme")
     .$type<OrganizationTheme>()

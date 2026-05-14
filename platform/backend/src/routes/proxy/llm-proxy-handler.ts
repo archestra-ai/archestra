@@ -47,6 +47,7 @@ import {
   type Agent,
   ApiError,
   type DualLlmAnalysis,
+  type InteractionAuthMethod,
   type InteractionRequest,
   type InteractionResponse,
   type LLMProvider,
@@ -61,6 +62,7 @@ import {
   assertAuthenticatedForKeylessProvider,
   attemptJwksAuth,
   resolveAgent,
+  validateLlmOAuthAccessToken,
   validateVirtualApiKey,
   virtualKeyRateLimiter,
 } from "./llm-proxy-auth";
@@ -110,8 +112,15 @@ export interface LLMProxyContext<TRequest> {
   dualLlmAnalyses: DualLlmAnalysis[];
   unsafeContextBoundary?: UnsafeContextBoundary;
   externalAgentId?: string;
+  authMethod?: InteractionAuthMethod;
+  authenticatedApp?: {
+    id: string;
+    name: string;
+    clientId: string;
+  };
   userId?: string;
   resolvedUser?: { id: string; email: string; name: string } | null;
+  virtualKeyId?: string;
   sessionId?: string | null;
   sessionSource?: SessionSource;
   source: InteractionSource;
@@ -127,6 +136,13 @@ export type LLMProxyAuthOverride = {
   chatApiKeyId?: string;
   authenticated: boolean;
   source?: InteractionSource;
+  authMethod?: InteractionAuthMethod;
+  authenticatedApp?: {
+    id: string;
+    name: string;
+    clientId: string;
+  };
+  userId?: string;
 };
 
 function getProviderMessagesCount(messages: unknown): number | null {
@@ -178,6 +194,7 @@ export async function handleLLMProxy<
   let userId = (await utils.headers.userId.getUser(headersForExtraction))
     ?.userId;
   let resolvedUser = userId ? await UserModel.getById(userId) : null;
+  let virtualKeyId: string | undefined;
 
   const { sessionId, sessionSource } =
     utils.headers.sessionId.extractSessionInfo(
@@ -274,6 +291,13 @@ export async function handleLLMProxy<
   let perKeyChatApiKeyId: string | undefined;
   let wasJwksAuthenticated = false;
   let wasVirtualKeyResolved = false;
+  let wasOAuthAuthenticated = false;
+  let authMethod = authOverride?.authMethod;
+  let authenticatedApp = authOverride?.authenticatedApp;
+  if (authOverride?.userId) {
+    userId = authOverride.userId;
+    resolvedUser = await UserModel.getById(userId);
+  }
   // 1. Try JWKS auth if the agent has an external identity provider configured
   if (authOverride) {
     apiKey = authOverride.apiKey;
@@ -288,6 +312,7 @@ export async function handleLLMProxy<
     );
     if (jwksResult) {
       wasJwksAuthenticated = true;
+      authMethod = "jwks";
       apiKey = jwksResult.apiKey;
       perKeyBaseUrl = jwksResult.baseUrl;
       perKeyChatApiKeyId = jwksResult.chatApiKeyId;
@@ -312,6 +337,30 @@ export async function handleLLMProxy<
     !wasJwksAuthenticated &&
     !authOverride &&
     rawApiKey &&
+    !hasArchestraTokenPrefix(rawApiKey)
+  ) {
+    const oauthResult = await validateLlmOAuthAccessToken({
+      tokenValue: rawApiKey,
+      expectedProvider: providerName,
+      agent: resolvedAgent,
+    });
+    if (oauthResult) {
+      apiKey = oauthResult.apiKey;
+      perKeyBaseUrl = oauthResult.baseUrl;
+      perKeyChatApiKeyId = oauthResult.chatApiKeyId;
+      wasOAuthAuthenticated = true;
+      authMethod = oauthResult.authMethod;
+      authenticatedApp = oauthResult.authenticatedApp;
+      if (oauthResult.userId) {
+        userId = oauthResult.userId;
+        resolvedUser = await UserModel.getById(userId);
+      }
+    }
+  }
+  if (
+    !wasJwksAuthenticated &&
+    !authOverride &&
+    rawApiKey &&
     hasArchestraTokenPrefix(rawApiKey)
   ) {
     await virtualKeyRateLimiter.check(request.ip);
@@ -324,6 +373,8 @@ export async function handleLLMProxy<
       perKeyBaseUrl = virtualResult.baseUrl;
       perKeyChatApiKeyId = virtualResult.chatApiKeyId;
       wasVirtualKeyResolved = true;
+      virtualKeyId = virtualResult.virtualKeyId;
+      authMethod = "virtual_key";
     } catch (error) {
       if (error instanceof ApiError && error.statusCode === 401) {
         await virtualKeyRateLimiter.recordFailure(request.ip);
@@ -361,10 +412,14 @@ export async function handleLLMProxy<
   // 5. Enforce authentication for keyless providers on external requests
   assertAuthenticatedForKeylessProvider(
     apiKey,
-    wasVirtualKeyResolved,
+    wasVirtualKeyResolved || wasOAuthAuthenticated,
     wasJwksAuthenticated,
     request.ip,
   );
+
+  if (!authMethod) {
+    authMethod = isLoopbackAddress(request.ip) ? "internal" : "provider_key";
+  }
 
   // Check usage limits
   try {
@@ -373,7 +428,11 @@ export async function handleLLMProxy<
       `[${providerName}Proxy] Checking usage limits`,
     );
     const limitViolation =
-      await LimitValidationService.checkLimitsBeforeRequest(resolvedAgentId);
+      await LimitValidationService.checkLimitsBeforeRequest({
+        agentId: resolvedAgentId,
+        userId,
+        virtualKeyId,
+      });
 
     if (limitViolation) {
       const [_refusalMessage, contentMessage] = limitViolation;
@@ -693,8 +752,11 @@ export async function handleLLMProxy<
       dualLlmAnalyses,
       unsafeContextBoundary,
       externalAgentId,
+      authMethod,
+      authenticatedApp,
       userId,
       resolvedUser,
+      virtualKeyId,
       sessionId,
       sessionSource,
       source,
@@ -729,9 +791,13 @@ export async function handleLLMProxy<
         externalAgentId,
         executionId,
         userId,
+        virtualKeyId,
         sessionId,
         sessionSource,
         source,
+        authMethod,
+        authenticatedAppId: authenticatedApp?.id,
+        authenticatedAppName: authenticatedApp?.name,
         type: provider.interactionType,
         request: requestAdapter.getOriginalRequest() as InteractionRequest,
         processedRequest: null,
@@ -790,7 +856,10 @@ async function handleStreaming<
     dualLlmAnalyses,
     unsafeContextBoundary,
     externalAgentId,
+    authMethod,
+    authenticatedApp,
     userId,
+    virtualKeyId,
     resolvedUser,
     sessionId,
     sessionSource,
@@ -826,6 +895,8 @@ async function handleStreaming<
       sessionId,
       executionId,
       externalAgentId,
+      authMethod,
+      authenticatedApp,
       source,
       serverAddress: provider.getBaseUrl(),
       promptMessages: provider
@@ -1113,8 +1184,11 @@ async function handleStreaming<
           buildInteractionRecord({
             agent,
             externalAgentId,
+            authMethod,
+            authenticatedApp,
             executionId,
             userId,
+            virtualKeyId,
             sessionId,
             sessionSource,
             source,
@@ -1172,7 +1246,10 @@ async function handleNonStreaming<
     dualLlmAnalyses,
     unsafeContextBoundary,
     externalAgentId,
+    authMethod,
+    authenticatedApp,
     userId,
+    virtualKeyId,
     resolvedUser,
     sessionId,
     sessionSource,
@@ -1199,6 +1276,8 @@ async function handleNonStreaming<
     sessionId,
     executionId,
     externalAgentId,
+    authMethod,
+    authenticatedApp,
     source,
     serverAddress: provider.getBaseUrl(),
     promptMessages: provider
@@ -1318,8 +1397,11 @@ async function handleNonStreaming<
         buildInteractionRecord({
           agent,
           externalAgentId,
+          authMethod,
+          authenticatedApp,
           executionId,
           userId,
+          virtualKeyId,
           sessionId,
           sessionSource,
           source,
@@ -1381,8 +1463,11 @@ async function handleNonStreaming<
       buildInteractionRecord({
         agent,
         externalAgentId,
+        authMethod,
+        authenticatedApp,
         executionId,
         userId,
+        virtualKeyId,
         sessionId,
         sessionSource,
         source,

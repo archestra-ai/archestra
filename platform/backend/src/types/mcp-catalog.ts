@@ -1,6 +1,7 @@
 import {
   EnvFromSchema,
   ImagePullSecretConfigSchema,
+  LocalConfigEnvironmentDefaultSchema,
   LocalConfigSchema,
   OAuthConfigSchema,
 } from "@shared";
@@ -65,7 +66,7 @@ const LocalConfigSelectSchema = z.object({
         promptOnInstallation: z.boolean(),
         required: z.boolean().optional(), // Optional in database
         description: z.string().optional(), // Optional in database
-        default: z.union([z.string(), z.number(), z.boolean()]).optional(), // Default value for installation dialog
+        default: LocalConfigEnvironmentDefaultSchema.optional(), // Default value for installation dialog
         mounted: z.boolean().optional(), // When true for secret type, mount as file at /secrets/<key>
       }),
     )
@@ -113,6 +114,11 @@ export const SelectInternalMcpCatalogSchema = createSelectSchema(
   teams: z.array(z.object({ id: z.string(), name: z.string() })).default([]),
   authorName: z.string().nullable().optional(),
 });
+
+export const ListInternalMcpCatalogSchema =
+  SelectInternalMcpCatalogSchema.extend({
+    toolCount: z.number().int().default(0),
+  });
 
 const InsertInternalMcpCatalogSchemaBase = createInsertSchema(
   schema.internalMcpCatalogTable,
@@ -172,6 +178,8 @@ const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
     updatedAt: true,
     organizationId: true,
     authorId: true,
+    // Tenancy is locked after creation
+    multitenant: true,
   });
 
 export const UpdateInternalMcpCatalogSchema =
@@ -195,6 +203,9 @@ export type OAuthConfig = z.infer<typeof OAuthConfigSchema>;
 export type LocalConfig = z.infer<typeof LocalConfigSelectSchema>;
 
 export type InternalMcpCatalog = z.infer<typeof SelectInternalMcpCatalogSchema>;
+export type ListInternalMcpCatalog = z.infer<
+  typeof ListInternalMcpCatalogSchema
+>;
 export type InsertInternalMcpCatalog = z.infer<
   typeof InsertInternalMcpCatalogSchema
 >;

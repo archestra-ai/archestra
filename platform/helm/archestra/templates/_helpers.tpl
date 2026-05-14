@@ -256,8 +256,15 @@ Handles Vault secret injection, pgvector extension setup, and PostgreSQL readine
     - sh
     - -c
     - |
+      max_attempts={{ .Values.archestra.initContainers.waitForPostgres.timeoutSeconds | default 300 }}
+      attempt=0
       until pg_isready -h {{ include "archestra-platform.fullname" . }}-postgresql -U postgres; do
-        echo "Waiting for PostgreSQL..."
+        attempt=$((attempt + 1))
+        if [ "$attempt" -ge "$max_attempts" ]; then
+          echo "PostgreSQL did not become ready after ${max_attempts}s - giving up" >&2
+          exit 1
+        fi
+        echo "Waiting for PostgreSQL... (${attempt}/${max_attempts})"
         sleep 1
       done
       psql -h {{ include "archestra-platform.fullname" . }}-postgresql -U postgres -d {{ .Values.postgresql.auth.database }} -c "CREATE EXTENSION IF NOT EXISTS vector;"
@@ -300,8 +307,15 @@ Handles Vault secret injection, pgvector extension setup, and PostgreSQL readine
       esac
 
       echo "Waiting for PostgreSQL at ${HOST}:${PORT}..."
+      max_attempts={{ .Values.archestra.initContainers.waitForPostgres.timeoutSeconds | default 300 }}
+      attempt=0
       until nc -z "${HOST}" "${PORT}"; do
-        echo "PostgreSQL is unavailable - sleeping"
+        attempt=$((attempt + 1))
+        if [ "$attempt" -ge "$max_attempts" ]; then
+          echo "PostgreSQL at ${HOST}:${PORT} did not become reachable after ${max_attempts}s - giving up" >&2
+          exit 1
+        fi
+        echo "PostgreSQL is unavailable - sleeping (${attempt}/${max_attempts})"
         sleep 1
       done
       echo "PostgreSQL is up - continuing"

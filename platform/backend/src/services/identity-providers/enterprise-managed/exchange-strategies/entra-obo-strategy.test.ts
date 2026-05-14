@@ -1,4 +1,5 @@
 import { generateKeyPairSync } from "node:crypto";
+import { OAUTH_CLIENT_ASSERTION_TYPE, OAUTH_TOKEN_TYPE } from "@shared";
 import { vi } from "vitest";
 import type { ExternalIdentityProviderConfig } from "@/services/identity-providers/oidc";
 import { describe, expect, test } from "@/test";
@@ -19,7 +20,7 @@ describe("entraOboStrategy", () => {
           tokenEndpoint:
             "https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token",
           tokenEndpointAuthentication: "client_secret_post",
-          subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
         },
       },
     });
@@ -49,7 +50,7 @@ describe("entraOboStrategy", () => {
       credentialType: "bearer_token",
       expiresInSeconds: 3599,
       value: "downstream-graph-access-token",
-      issuedTokenType: "urn:ietf:params:oauth:token-type:access_token",
+      issuedTokenType: OAUTH_TOKEN_TYPE.AccessToken,
     });
 
     const [, requestInit] = fetchMock.mock.calls[0] ?? [];
@@ -84,7 +85,7 @@ describe("entraOboStrategy", () => {
           tokenEndpoint:
             "https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token",
           tokenEndpointAuthentication: "client_secret_post",
-          subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
         },
       },
     });
@@ -136,7 +137,7 @@ describe("entraOboStrategy", () => {
           tokenEndpoint:
             "https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token",
           tokenEndpointAuthentication: "private_key_jwt",
-          subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
         },
       },
     });
@@ -166,7 +167,7 @@ describe("entraOboStrategy", () => {
     const requestBody = new URLSearchParams(String(requestInit?.body));
     expect(requestBody.get("client_secret")).toBeNull();
     expect(requestBody.get("client_assertion_type")).toBe(
-      "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+      OAUTH_CLIENT_ASSERTION_TYPE.JwtBearer,
     );
 
     const clientAssertion = requestBody.get("client_assertion");

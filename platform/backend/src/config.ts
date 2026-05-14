@@ -264,6 +264,9 @@ export const parseBodyLimit = (
 
 const DEFAULT_BODY_LIMIT = 50 * 1024 * 1024; // 50MB
 
+const DEFAULT_DATABASE_POOL_MAX = 50;
+const MAX_DATABASE_POOL_MAX = 500;
+
 // Default OTEL OTLP endpoint for HTTP/Protobuf (4318). For gRPC, the typical port is 4317.
 const DEFAULT_OTEL_ENDPOINT = "http://localhost:4318";
 const DEFAULT_OTEL_CONTENT_MAX_LENGTH = 10_000; // 10KB
@@ -362,6 +365,24 @@ export const parseContentMaxLength = (
       `Invalid ARCHESTRA_OTEL_CONTENT_MAX_LENGTH value "${value}", using default ${DEFAULT_OTEL_CONTENT_MAX_LENGTH}`,
     );
     return DEFAULT_OTEL_CONTENT_MAX_LENGTH;
+  }
+
+  return parsed;
+};
+
+/** @public — exported for testability */
+export const parseDatabasePoolMax = (envValue?: string | undefined): number => {
+  const value = envValue?.trim();
+  if (!value) {
+    return DEFAULT_DATABASE_POOL_MAX;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed < 1 || parsed > MAX_DATABASE_POOL_MAX) {
+    logger.warn(
+      `Invalid ARCHESTRA_DATABASE_POOL_MAX value "${value}", using default ${DEFAULT_DATABASE_POOL_MAX}`,
+    );
+    return DEFAULT_DATABASE_POOL_MAX;
   }
 
   return parsed;
@@ -521,6 +542,9 @@ const config = {
   a2aGateway: {
     endpoint: "/v1/a2a",
   },
+  a2aV2Gateway: {
+    endpoint: "/v2/a2a",
+  },
   agents: {
     advancedToolFeaturesEnabled:
       process.env.ARCHESTRA_AGENTS_ADVANCED_TOOL_FEATURES_ENABLED === "true",
@@ -562,6 +586,7 @@ const config = {
   analytics: getAnalyticsConfig(),
   database: {
     url: getDatabaseUrl(),
+    poolMax: parseDatabasePoolMax(process.env.ARCHESTRA_DATABASE_POOL_MAX),
   },
   llm: {
     openai: {
@@ -581,6 +606,9 @@ const config = {
     anthropic: {
       baseUrl:
         process.env.ARCHESTRA_ANTHROPIC_BASE_URL || "https://api.anthropic.com",
+      azureFoundryEntraIdEnabled:
+        process.env.ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED ===
+        "true",
     },
     gemini: {
       baseUrl:
@@ -668,6 +696,8 @@ const config = {
       responsesApiVersion:
         process.env.ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION ||
         "2025-04-01-preview",
+      entraIdEnabled:
+        process.env.ARCHESTRA_AZURE_OPENAI_ENTRA_ID_ENABLED === "true",
     },
   },
   chat: {

@@ -7,7 +7,7 @@ import { useSettingsTabs } from "./settings-tabs";
 
 vi.mock("@/lib/clients/auth/auth-client", () => ({
   authClient: {
-    useSession: vi.fn(),
+    getSession: vi.fn(),
   },
 }));
 
@@ -59,12 +59,12 @@ beforeEach(() => {
   mockSecretsType = "DB";
   mockEnterpriseFeatures = false;
 
-  vi.mocked(authClient.useSession).mockReturnValue({
+  vi.mocked(authClient.getSession).mockResolvedValue({
     data: {
       user: { id: "test-user", email: "test@example.com" },
       session: { id: "test-session" },
     },
-  } as ReturnType<typeof authClient.useSession>);
+  } as Awaited<ReturnType<typeof authClient.getSession>>);
 });
 
 function getTabLabels(tabs: Array<{ label: string }>) {
@@ -103,7 +103,6 @@ describe("useSettingsTabs", () => {
       const labels = getTabLabels(result.current);
       expect(labels).toContain("API Keys");
       expect(labels).toContain("Agents");
-      expect(labels).toContain("MCP");
       expect(labels).toContain("LLM");
       expect(labels).toContain("Users");
       expect(labels).toContain("Teams");
@@ -265,7 +264,6 @@ describe("useSettingsTabs", () => {
         "Your Account",
         "API Keys",
         "Agents",
-        "MCP",
         "LLM",
         "Connect page",
         "Users",

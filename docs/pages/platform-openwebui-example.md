@@ -1,7 +1,7 @@
 ---
 title: Secure Agent with OpenWebUI
 category: Examples
-order: 4
+order: 5
 ---
 
 <!--

@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  archestraApiSdk,
   type archestraApiTypes,
   E2eTestId,
   getManageCredentialsButtonTestId,
@@ -40,13 +39,12 @@ import {
 } from "@/components/ui/tooltip";
 import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
-import { useCreateProfile } from "@/lib/agent.query";
+import { fetchInternalAgents, useCreateProfile } from "@/lib/agent.query";
 import { useBulkAssignTools } from "@/lib/agent-tools.query";
-import { useHasPermissions } from "@/lib/auth/auth.query";
-import { authClient } from "@/lib/clients/auth/auth-client";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
-import { useCatalogTools } from "@/lib/mcp/internal-mcp-catalog.query";
-import { useMcpServers, useMcpServerTools } from "@/lib/mcp/mcp-server.query";
+import { fetchCatalogTools } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useTeams } from "@/lib/teams/team.query";
 import {
   computeDeploymentStatusSummary,
@@ -62,15 +60,11 @@ import { UninstallServerDialog } from "./uninstall-server-dialog";
 export type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
 
-export type CatalogItemWithOptionalLabel = CatalogItem & {
-  label?: string | null;
-};
-
 export type InstalledServer =
   archestraApiTypes.GetMcpServersResponses["200"][number];
 
 export type McpServerCardProps = {
-  item: CatalogItemWithOptionalLabel;
+  item: CatalogItem;
   installedServer?: InstalledServer | null;
   installingItemId: string | null;
   installationStatus?:
@@ -123,25 +117,15 @@ export function McpServerCard({
   onAddOrgConnection,
   isBuiltInPlaywright = false,
 }: McpServerCardBaseProps) {
-  const isBuiltin = variant === "builtin";
   const isPlaywrightVariant = isBuiltInPlaywright;
-
-  // For builtin servers, fetch tools by catalog ID
-  // For regular MCP servers, fetch by server ID
-  const { data: mcpServerTools } = useMcpServerTools(
-    !isBuiltin ? (installedServer?.id ?? null) : null,
-  );
-  const { data: catalogTools } = useCatalogTools(isBuiltin ? item.id : null);
-
-  const tools = isBuiltin ? catalogTools : mcpServerTools;
 
   const createAgent = useCreateProfile();
   const bulkAssignTools = useBulkAssignTools();
   const [isChatCreating, setIsChatCreating] = useState(false);
 
   const isByosEnabled = useFeature("byosEnabled");
-  const session = authClient.useSession();
-  const currentUserId = session.data?.user?.id;
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
   const { data: userIsMcpServerAdmin } = useHasPermissions({
     mcpServerInstallation: ["admin"],
   });
@@ -202,12 +186,10 @@ export function McpServerCard({
 
   const handleChatWithMcpServer = async () => {
     setIsChatCreating(true);
-    const agentName = item.label || item.name;
+    const agentName = item.name;
     try {
       // Get or create: check if a personal agent with this name already exists for the current user
-      const { data: existingAgents } = await archestraApiSdk.getAllAgents({
-        query: { agentType: "agent" },
-      });
+      const existingAgents = await fetchInternalAgents();
       const existing = existingAgents?.find(
         (a) => a.name === agentName && a.authorId === currentUserId,
       );
@@ -221,6 +203,8 @@ export function McpServerCard({
           teams: [],
           icon: item.icon ?? undefined,
         }));
+
+      const tools = await fetchCatalogTools(item.id);
 
       if (agent && tools && tools.length > 0) {
         const assignments = tools.map((tool) => ({
@@ -289,6 +273,10 @@ export function McpServerCard({
     ? deploymentStatuses[installedServer.id]
     : null;
   const isDeploymentFailed = installedDeploymentStatus?.state === "failed";
+  const installationError =
+    installationStatus === "error"
+      ? (installedServer?.localInstallationError ?? "Installation failed")
+      : null;
 
   const _mcpServersCount = mcpServerOfCurrentCatalogItem?.length ?? 0;
 
@@ -365,9 +353,10 @@ export function McpServerCard({
     deploymentServerIds,
     effectiveDeploymentStatuses,
   );
+  const toolsCount = item.toolCount ?? 0;
 
   const chatButton =
-    tools && tools.length > 0 ? (
+    toolsCount > 0 ? (
       <Button
         variant="outline"
         size="sm"
@@ -437,8 +426,6 @@ export function McpServerCard({
     }
   }
   const extraCount = connectionAvatars.length - MAX_AVATARS;
-
-  const toolsCount = tools?.length ?? 0;
 
   const showAuthorAvatar =
     item.scope === "personal" && Boolean(item.authorName);
@@ -867,6 +854,49 @@ export function McpServerCard({
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 flex-grow">
+        {variant === "local" && installationError && installedServer && (
+          <div
+            className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            data-testid={`${E2eTestId.McpServerError}-${item.name}`}
+          >
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <p className="font-medium">Installation failed</p>
+                <p className="truncate text-xs" title={installationError}>
+                  {installationError}
+                </p>
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-destructive"
+                  data-testid={`${E2eTestId.McpLogsViewButton}-${item.name}`}
+                  onClick={() => {
+                    setSettingsInitialPage("debug-logs");
+                    setLogsInitialServerId(installedServer.id);
+                    setSettingsDialogOpen(true);
+                  }}
+                >
+                  View logs
+                </Button>
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-destructive"
+                  data-testid={`${E2eTestId.McpLogsEditConfigButton}-${item.name}`}
+                  onClick={() => {
+                    setSettingsInitialPage("configuration");
+                    setSettingsDialogOpen(true);
+                  }}
+                >
+                  Edit config
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
         {variant === "local" && isInstalling && (
           <div className="bg-muted/50 rounded-md overflow-hidden">
             <div className="px-3 py-2">

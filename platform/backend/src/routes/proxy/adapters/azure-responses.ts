@@ -12,8 +12,13 @@ import type {
   ResponseStreamEvent,
 } from "openai/resources/responses/responses";
 import {
+  getAzureOpenAiBearerTokenProvider,
+  isAzureOpenAiEntraIdEnabled,
+} from "@/clients/azure-openai-credentials";
+import {
   buildAzureResponsesBaseUrl,
   normalizeAzureApiKey,
+  shouldUseAzureOpenAiApiVersion,
 } from "@/clients/azure-url";
 import config from "@/config";
 import { metrics } from "@/observability";
@@ -89,10 +94,6 @@ export const azureResponsesAdapterFactory: LLMProvider<
     apiKey: string | undefined,
     options: CreateClientOptions,
   ): OpenAIProvider {
-    if (!apiKey) {
-      throw new ApiError(401, "API key required for Azure AI Foundry");
-    }
-
     const resolvedBaseUrl = options.baseUrl
       ? buildAzureResponsesBaseUrl(options.baseUrl)
       : null;
@@ -100,7 +101,7 @@ export const azureResponsesAdapterFactory: LLMProvider<
     if (!resolvedBaseUrl) {
       throw new ApiError(
         500,
-        "Azure AI Foundry base URL must include /openai/deployments/<deployment>",
+        "Azure AI Foundry base URL must include /openai or /openai/v1",
       );
     }
 
@@ -112,14 +113,27 @@ export const azureResponsesAdapterFactory: LLMProvider<
           options.externalAgentId,
         )
       : undefined;
+
+    if (!apiKey && isAzureOpenAiEntraIdEnabled()) {
+      return new OpenAIProvider({
+        apiKey: getAzureOpenAiBearerTokenProvider(options.baseUrl),
+        baseURL: resolvedBaseUrl,
+        defaultQuery: getAzureResponsesDefaultQuery(options.baseUrl),
+        fetch: customFetch,
+        defaultHeaders: options.defaultHeaders,
+      });
+    }
+
+    if (!apiKey) {
+      throw new ApiError(401, "API key required for Azure AI Foundry");
+    }
+
     const normalizedApiKey = normalizeAzureApiKey(apiKey);
 
     return new OpenAIProvider({
       apiKey: normalizedApiKey,
       baseURL: resolvedBaseUrl,
-      defaultQuery: {
-        "api-version": config.llm.azure.responsesApiVersion,
-      },
+      defaultQuery: getAzureResponsesDefaultQuery(options.baseUrl),
       fetch: customFetch,
       defaultHeaders: {
         ...options.defaultHeaders,
@@ -166,6 +180,14 @@ export const azureResponsesAdapterFactory: LLMProvider<
     );
   },
 };
+
+function getAzureResponsesDefaultQuery(
+  baseUrl: string | undefined,
+): Record<string, string> | undefined {
+  return shouldUseAzureOpenAiApiVersion(baseUrl)
+    ? { "api-version": config.llm.azure.responsesApiVersion }
+    : undefined;
+}
 
 class AzureResponsesRequestAdapter
   implements LLMRequestAdapter<AzureResponsesRequest, AzureResponseInput>

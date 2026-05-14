@@ -1,3 +1,4 @@
+import { convertToModelMessages } from "ai";
 import { describe, expect, it, vi } from "vitest";
 
 // Mock the ai module before importing chat routes
@@ -193,6 +194,133 @@ describe("prepareMessagesForProvider", () => {
     );
   });
 
+  it("pads bedrock messages that only contain ignored UI data parts", () => {
+    const messages = __test.prepareMessagesForProvider({
+      provider: "bedrock",
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            {
+              type: "data-token-usage",
+              data: {
+                inputTokens: 10,
+                outputTokens: 5,
+                totalTokens: 15,
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(messages[0].parts).toContainEqual(
+      expect.objectContaining({
+        type: "text",
+        text: expect.stringMatching(/\S/),
+      }),
+    );
+  });
+
+  it("pads bedrock messages that only contain step markers and ignored data parts", () => {
+    const messages = __test.prepareMessagesForProvider({
+      provider: "bedrock",
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            { type: "step-start" },
+            {
+              type: "data-heartbeat",
+              data: { timestamp: 1778603432000 },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(messages[0].parts).toContainEqual(
+      expect.objectContaining({
+        type: "text",
+        text: expect.stringMatching(/\S/),
+      }),
+    );
+  });
+
+  it("pads bedrock messages that only contain streaming tool input", () => {
+    const messages = __test.prepareMessagesForProvider({
+      provider: "bedrock",
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-search",
+              toolCallId: "call_123",
+              toolName: "search",
+              state: "input-streaming",
+              input: { q: "partial" },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(messages[0].parts).toContainEqual(
+      expect.objectContaining({
+        type: "text",
+        text: expect.stringMatching(/\S/),
+      }),
+    );
+  });
+
+  it("pads empty bedrock assistant step blocks before later tool calls", async () => {
+    const messages = __test.prepareMessagesForProvider({
+      provider: "bedrock",
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            { type: "text", text: "" },
+            { type: "step-start" },
+            {
+              type: "tool-search",
+              toolCallId: "call_123",
+              toolName: "search",
+              state: "input-available",
+              input: { q: "query" },
+            },
+          ],
+        },
+      ],
+    });
+
+    const stepStartIndex = messages[0].parts?.findIndex(
+      (part) => part.type === "step-start",
+    );
+    expect(stepStartIndex).toBeGreaterThan(0);
+    expect(messages[0].parts?.[stepStartIndex! - 1]).toEqual(
+      expect.objectContaining({
+        type: "text",
+        text: expect.stringMatching(/\S/),
+      }),
+    );
+
+    const modelMessages = await convertToModelMessages(
+      messages as Parameters<typeof convertToModelMessages>[0],
+    );
+    const assistantMessages = modelMessages.filter(
+      (message) => message.role === "assistant",
+    );
+    expect(assistantMessages).toHaveLength(2);
+    expect(assistantMessages[0]?.content).toContainEqual(
+      expect.objectContaining({
+        type: "text",
+        text: expect.stringMatching(/\S/),
+      }),
+    );
+  });
+
   it("leaves bedrock assistant messages with a tool-call part untouched", () => {
     const message = {
       role: "assistant" as const,
@@ -222,6 +350,26 @@ describe("prepareMessagesForProvider", () => {
           type: "reasoning",
           text: "thinking...",
           providerOptions: { bedrock: { signature: "sig-abc" } },
+        },
+      ],
+    };
+
+    const messages = __test.prepareMessagesForProvider({
+      provider: "bedrock",
+      messages: [message],
+    });
+
+    expect(messages[0]).toBe(message);
+  });
+
+  it("leaves bedrock messages with reasoning that carries provider metadata", () => {
+    const message = {
+      role: "assistant" as const,
+      parts: [
+        {
+          type: "reasoning",
+          text: "thinking...",
+          providerMetadata: { bedrock: { signature: "sig-abc" } },
         },
       ],
     };

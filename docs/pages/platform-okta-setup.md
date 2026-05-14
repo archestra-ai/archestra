@@ -4,7 +4,7 @@ category: Administration
 subcategory: Identity Providers
 description: "End-to-end setup for Okta — SSO sign-in plus Okta-managed token exchange for downstream MCP tool calls"
 order: 8
-lastUpdated: 2026-04-30
+lastUpdated: 2026-05-07
 ---
 
 <!--
@@ -26,8 +26,6 @@ docs_writer_prompt.md.
 This guide configures Okta with Archestra end-to-end. After you finish, your users will sign in once with their Okta account and the agents and MCP servers they use will act on their own behalf — calling downstream APIs as them, not as a shared service account.
 
 <!-- video-placeholder: full-walkthrough screencast. Replace with <video> tag or YouTube/Loom embed once recorded. Suggested filename: /docs/assets/videos/platform-okta-setup_full-walkthrough.mp4 -->
-
-> 📹 **Video walkthrough coming soon.** A full screencast of the configuration below — Okta Admin Console through to a working tool call with token exchange — will be embedded here.
 
 ## What is Okta-managed token exchange and why does it matter?
 
@@ -68,7 +66,6 @@ The first three sections get sign-in working. If that is all you need today, you
 
 ## 1. Register Okta App for SSO
 
-[screenshot: platform-okta-setup_oin-tile.webp — Archestra app tile in the Okta Integration Network]
 
 ### Prerequisites
 
@@ -112,12 +109,15 @@ If your tenant does not have access to the OIN tile, create the app manually:
 2. Select **OIDC - OpenID Connect** and **Web Application**
 3. Set **Sign-in redirect URIs** to `https://your-archestra-domain.com/api/auth/sso/callback/Okta` (the `Okta` segment is case-sensitive)
 4. Set **Sign-out redirect URIs** to `https://your-archestra-domain.com/auth/sign-in`
-5. Assign the users or groups that should access Archestra
-6. Save the integration and copy the Client ID and Client Secret from the **Sign On** tab
+5. For Okta dashboard launch, set **Login initiated by** to **Either Okta or App**
+6. Set **Login flow** to **Redirect to app to initiate login (OIDC Compliant)**
+7. Set **Initiate login URI** to `https://your-archestra-domain.com/auth/sso/Okta`
+8. Keep **Send ID Token directly to app (Okta Simplified)** disabled
+9. Assign the users or groups that should access Archestra
+10. Save the integration and copy the Client ID and Client Secret from the **Sign On** tab
 
 ## 2. Configure SSO in Archestra
 
-[screenshot: platform-okta-setup_sso-card.webp — Okta provider card on Settings > Identity Providers]
 
 Go to **Settings > Identity Providers** and click **Enable** on the **Okta** card.
 
@@ -130,10 +130,19 @@ Fill in:
 
 Click **Create Provider**. Users can now sign in:
 
-- **From the Archestra sign-in page** by clicking **Sign in with Okta**
-- **From the Archestra tile on their Okta End-User Dashboard** (OIN install only) — Okta redirects to Archestra and Archestra completes the SSO flow
+- **From the Archestra sign-in page** by entering their email address and clicking **Log in**. Archestra matches the email domain to the Okta provider, redirects the user to Okta, then completes the OIDC callback after Okta authentication.
+- **From the Archestra tile on their Okta End-User Dashboard** — Okta redirects to `https://your-archestra-domain.com/auth/sso/Okta`, Archestra starts the OIDC flow, then Okta returns the user through the callback URL
 
 Test in a private browser window with a user who is assigned to the Okta app.
+
+### Supported SSO features
+
+| Feature | Supported | Notes |
+| --- | --- | --- |
+| **IdP-initiated SSO** | Yes | Users can start from the Archestra tile in the Okta End-User Dashboard. For manual integrations, use the OIDC-compliant **Redirect to app to initiate login** flow and set the initiate login URI to `https://your-archestra-domain.com/auth/sso/Okta`. |
+| **SP-initiated SSO** | Yes | Users open the Archestra login page, enter their email address, and click **Log in**. Archestra redirects them to Okta, then Okta returns them to Archestra through the OIDC callback URL after authentication. |
+| **SP-initiated SLO** | Yes | When users sign out of Archestra, Archestra can redirect them to Okta's OIDC logout endpoint. Keep **Enable RP-Initiated Logout** on unless your Okta app rejects the `post_logout_redirect_uri` parameter. |
+| **JIT provisioning** | Yes | First-time SSO users are created during login, then role mapping and team sync are applied from Okta claims. |
 
 At this point SSO is working. If you also want token exchange for downstream MCP tool calls, continue with Section 4.
 
@@ -144,7 +153,11 @@ Role mapping and team sync are provider-agnostic and fully documented on dedicat
 - [Role Mapping](/docs/platform-sso-role-mapping)
 - [Team Sync](/docs/platform-sso-team-sync)
 
-For Okta, the most common pattern is mapping the `groups` claim to Archestra teams. Make sure the **Groups claim** is enabled in your Okta authorization server (or for the app integration). Then in Archestra, leave the default group extraction or use:
+For Okta, the most common pattern is mapping the `groups` claim to Archestra teams. Make sure the **Groups claim** is enabled in your Okta authorization server or app integration, and that the SSO provider scopes include `groups`. Okta's guide covers both pieces: [Customize tokens returned from Okta with a groups claim](https://developer.okta.com/docs/guides/customize-tokens-groups-claim/main/).
+
+When using the Archestra OIN app, Okta only includes groups whose names start with `Archestra_` in the `groups` claim. For example, map Okta groups like `Archestra_Admin` or `Archestra_Engineering` to the matching Archestra role rules or team links. Okta can include up to 100 groups in the claim.
+
+Then in Archestra, leave the default group extraction or use:
 
 ```handlebars
 {{#each groups}}{{this}},{{/each}}
@@ -154,7 +167,6 @@ If your Okta tenant ships roles as a JSON-string claim instead of a native array
 
 ## 4. Additional Okta App Settings for Token Exchange
 
-[screenshot: platform-okta-setup_token-exchange-settings.webp — Okta authorization server token exchange configuration]
 
 Token exchange uses the same Okta application as SSO, but adds two pieces:
 
@@ -171,7 +183,6 @@ Follow Okta's official guide for the up-to-date Admin Console steps: [AI agent t
 
 ## 5. Configure Token Exchange in Archestra
 
-[screenshot: platform-okta-setup_enterprise-managed-credentials.webp — Enterprise-Managed Credentials section of the Okta provider form]
 
 Reopen the Okta provider in **Settings > Identity Providers** and expand **Enterprise-Managed Credentials**.
 
@@ -189,7 +200,6 @@ Save the provider. Archestra will use the matching private key (configured via d
 
 ## 6. Connect MCP Server
 
-[screenshot: platform-okta-setup_multitenant-auth.webp — MCP catalog item Multitenant Authorization with Identity Provider Token Exchange selected]
 
 Open the catalog entry for the MCP server that should call your downstream API and scroll to **Multitenant Authorization**. Select **Identity Provider Token Exchange**, pick the Okta provider you just configured, then fill in:
 
@@ -204,6 +214,7 @@ Save the catalog item. When you assign tools from this server to an Agent or Gat
 ## Troubleshooting
 
 - **App tile opens the wrong place** (OIN install). The Archestra hostname in Okta must not include `https://` or a path — only the bare hostname.
+- **Manual Okta tile does not start SSO.** Set **Login initiated by** to **Either Okta or App**, **Login flow** to **Redirect to app to initiate login (OIDC Compliant)**, and **Initiate login URI** to `https://your-archestra-domain.com/auth/sso/Okta`. Do not use **Send ID Token directly to app (Okta Simplified)**.
 - **User cannot sign in.** Verify the user is assigned to the Archestra app integration in Okta.
 - **User denied after successful Okta authentication.** Verify the user matches any configured Archestra role mapping rules.
 - **Issuer mismatch on setup.** Verify that **Issuer** and **Discovery Endpoint** point to the same Okta org. Do not leave sample values such as `your-domain.okta.com` in either field.

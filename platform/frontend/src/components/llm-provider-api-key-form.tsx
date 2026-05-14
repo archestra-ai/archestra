@@ -4,7 +4,7 @@ import {
   type archestraApiTypes,
   DEFAULT_PROVIDER_BASE_URLS,
   E2eTestId,
-  PROVIDERS_WITH_OPTIONAL_API_KEY,
+  isProviderApiKeyOptional,
 } from "@shared";
 import { Building2, CheckCircle2, Trash2, User, Users } from "lucide-react";
 import Link from "next/link";
@@ -31,6 +31,7 @@ import {
   SelectValue,
 } from "./ui/select";
 import { Switch } from "./ui/switch";
+import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
 
 const ExternalSecretSelector = lazy(
   () =>
@@ -58,6 +59,16 @@ export type LlmProviderApiKeyFormValues = {
   vaultSecretPath: string | null;
   vaultSecretKey: string | null;
   isPrimary: boolean;
+  /**
+   * Bedrock auth method selector:
+   * - "api-key": Bearer API key (bedrock-api-key-... / ABSK...)
+   * - "sigv4": static AWS access keys (Access Key ID + Secret + optional Session Token)
+   * - "iam": IAM role via service account / instance profile (server-configured via ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED)
+   */
+  bedrockAuthMethod: "api-key" | "sigv4" | "iam";
+  awsAccessKeyId: string | null;
+  awsSecretAccessKey: string | null;
+  awsSessionToken: string | null;
 };
 
 /** Convert the form's array shape to the API's Record shape, dropping empty-name rows. */
@@ -238,7 +249,7 @@ const PROVIDER_CONFIG: Record<
       "https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/OpenAI",
     consoleName: "Azure Portal",
     description:
-      "Set Base URL to: https://<resource>.openai.azure.com/openai/deployments/<deployment>",
+      "Use your Azure OpenAI resource URL, such as https://<resource>.openai.azure.com/openai. Archestra will discover deployments and route by model name.",
   },
 } as const;
 
@@ -286,6 +297,7 @@ export function LlmProviderApiKeyForm({
 }: LlmProviderApiKeyFormProps) {
   const authDocsUrl = getFrontendDocsUrl("platform-llm-proxy-authentication");
   const byosEnabled = useFeature("byosEnabled");
+  const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
   const { data: providerBaseUrls } = useProviderBaseUrls();
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: isLlmProviderApiKeyAdmin } = useHasPermissions({
@@ -298,6 +310,9 @@ export function LlmProviderApiKeyForm({
   const apiKey = form.watch("apiKey");
   const scope = form.watch("scope");
   const teamId = form.watch("teamId");
+  const bedrockAuthMethod = form.watch("bedrockAuthMethod");
+  const isBedrockSigV4 =
+    provider === "bedrock" && bedrockAuthMethod === "sigv4";
 
   const extraHeadersFieldArray = useFieldArray({
     control: form.control,
@@ -521,52 +536,195 @@ export function LlmProviderApiKeyForm({
           </Suspense>
         ) : (
           <div className="space-y-2">
-            <Label htmlFor="llm-provider-api-key-value">
-              API Key{" "}
-              {PROVIDERS_WITH_OPTIONAL_API_KEY.has(provider) ? (
-                <span className="font-normal text-muted-foreground">
-                  (optional)
-                </span>
-              ) : (
-                isEditMode && (
-                  <span className="font-normal text-muted-foreground">
-                    (leave blank to keep current)
-                  </span>
-                )
-              )}
-            </Label>
-            {providerConfig.description && (
-              <p className="text-xs text-muted-foreground">
-                {providerConfig.description}
-              </p>
-            )}
-            <div className="relative">
-              <Input
-                id="llm-provider-api-key-value"
-                type="password"
-                placeholder={providerConfig.placeholder}
-                disabled={isPending}
-                className={
-                  showConfiguredStyling ? "border-green-500 pr-10" : ""
+            {provider === "bedrock" && (
+              <Tabs
+                value={bedrockAuthMethod}
+                onValueChange={(value) =>
+                  form.setValue(
+                    "bedrockAuthMethod",
+                    value as "api-key" | "sigv4" | "iam",
+                  )
                 }
-                {...form.register("apiKey")}
-              />
-              {showConfiguredStyling && (
-                <CheckCircle2 className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-green-500" />
-              )}
-            </div>
-            {showConsoleLink && (
-              <p className="text-xs text-muted-foreground">
-                Get your API key from{" "}
-                <Link
-                  href={providerConfig.consoleUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline hover:text-foreground"
-                >
-                  {providerConfig.consoleName}
-                </Link>
-              </p>
+              >
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="api-key" disabled={isPending}>
+                    API Key
+                  </TabsTrigger>
+                  <TabsTrigger value="sigv4" disabled={isPending}>
+                    AWS SigV4
+                  </TabsTrigger>
+                  <TabsTrigger value="iam" disabled={isPending}>
+                    Service Account
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            )}
+
+            {provider === "bedrock" && bedrockAuthMethod === "iam" && (
+              <div className="space-y-3 text-sm">
+                <p className="text-muted-foreground">
+                  Authenticate Bedrock requests using IAM credentials picked up
+                  from the server's environment. Uses the AWS SDK credential
+                  chain — IRSA (IAM Roles for Service Accounts), EC2/ECS
+                  instance profiles, or environment variables — so no static
+                  keys are stored in Archestra.
+                </p>
+                {bedrockIamAuthEnabled ? (
+                  <div className="rounded-md border border-green-500/40 bg-green-500/10 p-3 text-sm">
+                    <p className="font-medium text-green-600 dark:text-green-400">
+                      Enabled on this server
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Bedrock requests will be signed automatically; you don't
+                      need to create an API key.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm">
+                    <p className="font-semibold text-amber-700 dark:text-amber-400">
+                      Not enabled on this server
+                    </p>
+                    <p className="mt-2 text-foreground">
+                      An admin must enable IAM auth on the backend before this
+                      option can be used:
+                    </p>
+                    <ol className="mt-2 list-decimal space-y-1 pl-5 text-foreground">
+                      <li>
+                        Set the env var{" "}
+                        <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+                          ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED=true
+                        </code>{" "}
+                        on the Archestra backend.
+                      </li>
+                      <li>
+                        Grant the pod's service account (IRSA) or instance
+                        profile permission to call Bedrock (e.g.{" "}
+                        <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+                          bedrock:InvokeModel
+                        </code>
+                        ).
+                      </li>
+                      <li>Restart the backend to pick up the change.</li>
+                    </ol>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!isBedrockSigV4 && bedrockAuthMethod !== "iam" && (
+              <>
+                <Label htmlFor="llm-provider-api-key-value">
+                  API Key{" "}
+                  {isProviderApiKeyOptional({
+                    provider,
+                    azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
+                  }) ? (
+                    <span className="font-normal text-muted-foreground">
+                      (optional)
+                    </span>
+                  ) : (
+                    isEditMode && (
+                      <span className="font-normal text-muted-foreground">
+                        (leave blank to keep current)
+                      </span>
+                    )
+                  )}
+                </Label>
+                {providerConfig.description && (
+                  <p className="text-xs text-muted-foreground">
+                    {providerConfig.description}
+                  </p>
+                )}
+                <div className="relative">
+                  <Input
+                    id="llm-provider-api-key-value"
+                    type="password"
+                    placeholder={providerConfig.placeholder}
+                    disabled={isPending}
+                    className={
+                      showConfiguredStyling ? "border-green-500 pr-10" : ""
+                    }
+                    {...form.register("apiKey")}
+                  />
+                  {showConfiguredStyling && (
+                    <CheckCircle2 className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-green-500" />
+                  )}
+                </div>
+                {showConsoleLink && (
+                  <p className="text-xs text-muted-foreground">
+                    Get your API key from{" "}
+                    <Link
+                      href={providerConfig.consoleUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline hover:text-foreground"
+                    >
+                      {providerConfig.consoleName}
+                    </Link>
+                  </p>
+                )}
+              </>
+            )}
+
+            {isBedrockSigV4 && (
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor="llm-provider-aws-access-key-id">
+                    Access Key ID
+                  </Label>
+                  <Input
+                    id="llm-provider-aws-access-key-id"
+                    type="password"
+                    placeholder="AKIA..."
+                    autoComplete="off"
+                    disabled={isPending}
+                    {...form.register("awsAccessKeyId")}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="llm-provider-aws-secret-access-key">
+                    Secret Access Key
+                  </Label>
+                  <Input
+                    id="llm-provider-aws-secret-access-key"
+                    type="password"
+                    placeholder="••••••••"
+                    autoComplete="off"
+                    disabled={isPending}
+                    {...form.register("awsSecretAccessKey")}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="llm-provider-aws-session-token">
+                    Session Token{" "}
+                    <span className="font-normal text-muted-foreground">
+                      (optional)
+                    </span>
+                  </Label>
+                  <Input
+                    id="llm-provider-aws-session-token"
+                    type="password"
+                    placeholder="Required for temporary credentials (STS / AssumeRole)"
+                    autoComplete="off"
+                    disabled={isPending}
+                    {...form.register("awsSessionToken")}
+                  />
+                </div>
+                {showConsoleLink && (
+                  <p className="text-xs text-muted-foreground">
+                    Manage IAM credentials in the{" "}
+                    <Link
+                      href="https://console.aws.amazon.com/iam/home#/users"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline hover:text-foreground"
+                    >
+                      AWS IAM Console
+                    </Link>
+                    .
+                  </p>
+                )}
+              </div>
             )}
           </div>
         )}

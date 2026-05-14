@@ -33,6 +33,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   llmProxy: ["read", "create", "update", "delete", "team-admin", "admin"],
   llmProviderApiKey: ["read", "create", "update", "delete", "admin"],
   llmVirtualKey: ["read", "create", "update", "delete", "admin"],
+  llmOauthClient: ["read", "create", "update", "delete", "admin"],
   llmModel: ["read", "update"],
   llmLimit: ["read", "create", "update", "delete"],
   optimizationRule: ["read", "create", "update", "delete"],
@@ -85,6 +86,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   llmProxy: ["read", "create", "update", "delete", "team-admin"],
   llmProviderApiKey: ["read", "create", "update", "delete"],
   llmVirtualKey: ["read", "create", "update", "delete"],
+  llmOauthClient: ["read", "create", "update", "delete"],
   llmModel: ["read", "update"],
   llmLimit: ["read", "create", "update", "delete"],
   optimizationRule: ["read", "create", "update", "delete"],
@@ -137,6 +139,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   llmProxy: ["read", "create", "update", "delete"],
   llmProviderApiKey: ["read"],
   llmVirtualKey: ["read"],
+  llmOauthClient: ["read"],
   llmModel: ["read"],
   llmLimit: [],
   optimizationRule: [],
@@ -271,6 +274,11 @@ export const permissionDescriptions: Record<string, string> = {
   "llmVirtualKey:update": "Modify LLM virtual keys and their visibility",
   "llmVirtualKey:delete": "Delete LLM virtual keys",
   "llmVirtualKey:admin": "Manage all LLM virtual keys and view every scope",
+  "llmOauthClient:read": "View LLM OAuth client registrations",
+  "llmOauthClient:create": "Create LLM OAuth client registrations",
+  "llmOauthClient:update": "Modify LLM OAuth client registrations",
+  "llmOauthClient:delete": "Delete LLM OAuth client registrations",
+  "llmOauthClient:admin": "Manage all LLM OAuth client registrations",
   "llmModel:read": "View synced LLM models and capabilities",
   "llmModel:update": "Modify LLM model pricing and modality settings",
   "llmLimit:read": "View token usage limits",
@@ -370,6 +378,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CloneAgent]: {},
   [RouteId.UpdateAgent]: {},
   [RouteId.DeleteAgent]: {},
+  // Export/Import: agent-type permission checked dynamically in handler
+  [RouteId.ExportAgent]: {},
+  [RouteId.ImportAgent]: {},
   [RouteId.GetDefaultMcpGateway]: {
     mcpGateway: ["read"],
   },
@@ -662,6 +673,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateChatConversation]: {
     chat: ["create"],
   },
+  [RouteId.ForkChatConversation]: {
+    chat: ["create"],
+  },
   [RouteId.UpdateChatConversation]: {
     chat: ["update"],
   },
@@ -749,6 +763,21 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteVirtualApiKey]: {
     llmVirtualKey: ["delete"],
   },
+  [RouteId.GetLlmOauthClients]: {
+    llmOauthClient: ["read"],
+  },
+  [RouteId.CreateLlmOauthClient]: {
+    llmOauthClient: ["create"],
+  },
+  [RouteId.UpdateLlmOauthClient]: {
+    llmOauthClient: ["update"],
+  },
+  [RouteId.RotateLlmOauthClientSecret]: {
+    llmOauthClient: ["update"],
+  },
+  [RouteId.DeleteLlmOauthClient]: {
+    llmOauthClient: ["delete"],
+  },
   [RouteId.GetModelsWithApiKeys]: {
     llmModel: ["read"],
   },
@@ -778,6 +807,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOptimizationRules]: {
     optimizationRule: ["read"],
   },
+  [RouteId.GetOptimizationRule]: {
+    optimizationRule: ["read"],
+  },
   [RouteId.CreateOptimizationRule]: {
     optimizationRule: ["create"],
   },
@@ -799,7 +831,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateAgentSettings]: {
     agentSettings: ["update"],
   },
-  [RouteId.UpdateMcpSettings]: {
+  [RouteId.UpdateAuthSettings]: {
     organizationSettings: ["update"],
   },
   [RouteId.UpdateConnectionSettings]: {
@@ -841,6 +873,9 @@ export const requiredEndpointPermissionsMap: Partial<
     identityProvider: ["read"],
   },
   [RouteId.GetIdentityProvider]: {
+    identityProvider: ["read"],
+  },
+  [RouteId.GetIdentityProviderLatestIdTokenClaims]: {
     identityProvider: ["read"],
   },
   [RouteId.CreateIdentityProvider]: {
@@ -1003,6 +1038,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetConnectorRuns]: { knowledgeSource: ["read"] },
   [RouteId.GetConnectorRun]: { knowledgeSource: ["read"] },
 
+  // Connector File Upload Routes
+  [RouteId.UploadConnectorFiles]: { knowledgeSource: ["update"] },
+  [RouteId.GetConnectorFiles]: { knowledgeSource: ["read"] },
+  [RouteId.GetConnectorFile]: { knowledgeSource: ["read"] },
+  [RouteId.DeleteConnectorFile]: { knowledgeSource: ["delete"] },
+
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},
 
@@ -1031,12 +1072,13 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   // LLM
   "/llm/proxies": { llmProxy: ["read"] },
-  "/llm/providers/api-keys": { llmProviderApiKey: ["read"] },
-  "/llm/providers/virtual-keys": {
+  "/llm/model-providers/api-keys": { llmProviderApiKey: ["read"] },
+  "/llm/model-providers/models": { llmModel: ["read"] },
+  "/llm/credentials/virtual-keys": {
     llmVirtualKey: ["read"],
     llmProviderApiKey: ["read"],
   },
-  "/llm/providers/models": { llmModel: ["read"] },
+  "/llm/credentials/oauth-clients": { llmOauthClient: ["read"] },
   "/llm/limits": { llmLimit: ["read"] },
   "/llm/costs": { llmCost: ["read"] },
   "/llm/optimization-rules": { optimizationRule: ["read"] },
@@ -1068,7 +1110,6 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/teams": { team: ["read"] },
   "/settings/roles": { ac: ["read"] },
   "/settings/identity-providers": { identityProvider: ["read"] },
-  "/settings/mcp": { organizationSettings: ["read"] },
   "/settings/secrets": { secret: ["read"] },
   "/settings/organization": { organizationSettings: ["read"] },
   "/settings/connection": { organizationSettings: ["read"] },

@@ -1,7 +1,7 @@
 ---
 title: Performance & Latency
 category: Archestra Platform
-order: 6
+order: 5
 description: Performance metrics and benchmarks for Archestra Platform's security features
 lastUpdated: 2025-10-15
 ---

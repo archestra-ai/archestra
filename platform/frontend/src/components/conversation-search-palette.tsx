@@ -144,10 +144,17 @@ const navigationItems = [
   },
   {
     icon: Key,
-    label: "Provider Settings",
-    value: "provider-settings",
-    keywords: "provider settings api keys virtual keys models llm",
-    href: "/llm/providers/api-keys",
+    label: "Model Providers",
+    value: "model-providers",
+    keywords: "provider settings api keys models llm",
+    href: "/llm/model-providers/api-keys",
+  },
+  {
+    icon: Key,
+    label: "Credentials",
+    value: "credentials",
+    keywords: "virtual keys oauth clients client credentials llm",
+    href: "/llm/credentials/virtual-keys",
   },
   {
     icon: MessagesSquare,
@@ -233,7 +240,7 @@ export function ConversationSearchPalette({
     isLoading,
     isFetching,
   } = useConversations({
-    enabled: isAuthenticated && canReadConversation === true,
+    enabled: open && isAuthenticated && canReadConversation === true,
     search: debouncedSearch,
   });
 

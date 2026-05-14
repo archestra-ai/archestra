@@ -1,4 +1,7 @@
 import {
+  extractSsoGroupsFromRenderedTemplate,
+  isTruthyTemplateOutput,
+  registerSsoTemplateHelpers,
   SYSTEM_PROMPT_HELPER_NAMES,
   type UserSystemPromptContext,
 } from "@shared";
@@ -8,18 +11,10 @@ import logger from "@/logging";
 /**
  * Register custom Handlebars helpers for template rendering
  */
-Handlebars.registerHelper("json", (context) => {
-  // If context is a string, try to parse it as JSON
-  if (typeof context === "string") {
-    try {
-      return JSON.parse(context);
-    } catch {
-      // If not valid JSON, return the string as-is
-      return context;
-    }
-  }
-  // If context is an object, stringify it
-  return JSON.stringify(context);
+registerSsoTemplateHelpers({
+  registerHelper: (name, helper) => {
+    Handlebars.registerHelper(name, helper);
+  },
 });
 
 // Helper to escape strings for use in JSON
@@ -31,114 +26,6 @@ Handlebars.registerHelper("escapeJson", (str) => {
     .replace(/\n/g, "\\n")
     .replace(/\r/g, "\\r")
     .replace(/\t/g, "\\t");
-});
-
-/**
- * SSO-specific Handlebars helpers
- */
-
-// Check if an array includes a value (case-insensitive for strings)
-Handlebars.registerHelper(
-  "includes",
-  function (
-    this: unknown,
-    array: unknown,
-    value: unknown,
-    options: Handlebars.HelperOptions,
-  ) {
-    if (!Array.isArray(array)) return options.inverse(this);
-    const found = array.some((item) => {
-      if (typeof item === "string" && typeof value === "string") {
-        return item.toLowerCase() === value.toLowerCase();
-      }
-      return item === value;
-    });
-    return found ? options.fn(this) : options.inverse(this);
-  },
-);
-
-// Check if a string contains a substring (case-insensitive)
-Handlebars.registerHelper(
-  "contains",
-  function (
-    this: unknown,
-    str: unknown,
-    substring: unknown,
-    options: Handlebars.HelperOptions,
-  ) {
-    if (typeof str !== "string" || typeof substring !== "string") {
-      return options.inverse(this);
-    }
-    return str.toLowerCase().includes(substring.toLowerCase())
-      ? options.fn(this)
-      : options.inverse(this);
-  },
-);
-
-// Check equality
-Handlebars.registerHelper(
-  "equals",
-  function (
-    this: unknown,
-    a: unknown,
-    b: unknown,
-    options: Handlebars.HelperOptions,
-  ) {
-    if (typeof a === "string" && typeof b === "string") {
-      return a.toLowerCase() === b.toLowerCase()
-        ? options.fn(this)
-        : options.inverse(this);
-    }
-    return a === b ? options.fn(this) : options.inverse(this);
-  },
-);
-
-// Logical AND
-Handlebars.registerHelper("and", function (this: unknown, ...args: unknown[]) {
-  const options = args.pop() as Handlebars.HelperOptions;
-  return args.every(Boolean) ? options.fn(this) : options.inverse(this);
-});
-
-// Logical OR
-Handlebars.registerHelper("or", function (this: unknown, ...args: unknown[]) {
-  const options = args.pop() as Handlebars.HelperOptions;
-  return args.some(Boolean) ? options.fn(this) : options.inverse(this);
-});
-
-// Not equal
-Handlebars.registerHelper(
-  "notEquals",
-  function (
-    this: unknown,
-    a: unknown,
-    b: unknown,
-    options: Handlebars.HelperOptions,
-  ) {
-    if (typeof a === "string" && typeof b === "string") {
-      return a.toLowerCase() !== b.toLowerCase()
-        ? options.fn(this)
-        : options.inverse(this);
-    }
-    return a !== b ? options.fn(this) : options.inverse(this);
-  },
-);
-
-// Check if value exists (not null/undefined)
-Handlebars.registerHelper(
-  "exists",
-  function (this: unknown, value: unknown, options: Handlebars.HelperOptions) {
-    return value !== null && value !== undefined
-      ? options.fn(this)
-      : options.inverse(this);
-  },
-);
-
-// Extract a property from each item in an array
-Handlebars.registerHelper("pluck", (array, property) => {
-  if (!Array.isArray(array)) return [];
-  return array
-    .map((item) => (typeof item === "object" && item ? item[property] : null))
-    .filter((v) => v !== null && v !== undefined);
 });
 
 /**
@@ -213,8 +100,7 @@ export function evaluateRoleMappingTemplate(
   try {
     const template = Handlebars.compile(templateString, { noEscape: true });
     const result = template(context).trim();
-    // Consider any non-empty string as truthy
-    return result.length > 0 && result !== "false" && result !== "0";
+    return isTruthyTemplateOutput(result);
   } catch {
     return false;
   }
@@ -238,26 +124,7 @@ export function extractGroupsWithTemplate(
 
   try {
     const result = template(context).trim();
-
-    if (!result) return [];
-
-    // Try to parse as JSON array first
-    try {
-      const parsed = JSON.parse(result);
-      if (Array.isArray(parsed)) {
-        return parsed
-          .filter((v) => typeof v === "string" && v.trim())
-          .map((v) => v.trim());
-      }
-    } catch {
-      // Not JSON, treat as comma-separated
-    }
-
-    // Split by comma and clean up
-    return result
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
+    return extractSsoGroupsFromRenderedTemplate(result);
   } catch {
     // Runtime error during template execution
     return [];

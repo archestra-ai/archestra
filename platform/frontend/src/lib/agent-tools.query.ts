@@ -368,7 +368,10 @@ export const agentDelegationsQueryKeys = {
 /**
  * Get all delegation targets for an internal agent.
  */
-export function useAgentDelegations(agentId: string | undefined) {
+export function useAgentDelegations(
+  agentId: string | undefined,
+  params?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: agentDelegationsQueryKeys.byAgent(agentId ?? ""),
     queryFn: async () => {
@@ -379,8 +382,8 @@ export function useAgentDelegations(agentId: string | undefined) {
       }
       return response.data ?? [];
     },
-    enabled: !!agentId,
-    staleTime: 0, // Always refetch to ensure fresh data
+    enabled: !!agentId && (params?.enabled ?? true),
+    staleTime: 30 * 1000,
     placeholderData: keepPreviousData,
   });
 }

@@ -1,5 +1,6 @@
 export { default as browserStreamRoutes } from "@/features/browser-stream/routes/browser-stream.routes";
 export { default as a2aRoutes } from "./a2a";
+export { default as a2aV2Routes } from "./a2a-v2";
 export { default as agentRoutes } from "./agent";
 export { default as agentToolRoutes } from "./agent-tool";
 export { default as apiKeyRoutes } from "./api-key";
@@ -15,6 +16,7 @@ export { default as internalMcpCatalogRoutes } from "./internal-mcp-catalog";
 export { default as invitationRoutes } from "./invitation";
 export { default as knowledgeBaseRoutes } from "./knowledge-base";
 export { default as limitsRoutes } from "./limits";
+export { default as llmOauthClientsRoutes } from "./llm-oauth-clients";
 export { default as llmProviderApiKeyRoutes } from "./llm-provider-api-keys";
 export { default as llmModelsRoutes } from "./llm-provider-models";
 export { default as mcpGatewayRoutes } from "./mcp-gateway";

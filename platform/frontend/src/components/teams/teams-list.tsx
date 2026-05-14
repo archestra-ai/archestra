@@ -1,6 +1,6 @@
 "use client";
 import { archestraApiSdk, type archestraApiTypes, E2eTestId } from "@shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Key, Link2, Plus, Trash2, Users, Vault } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
@@ -23,6 +23,7 @@ import { Textarea } from "@/components/ui/textarea";
 import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useTeams } from "@/lib/teams/team.query";
 import { type TeamToken, useTokens } from "@/lib/teams/team-token.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { TeamMembersDialog } from "./team-members-dialog";
@@ -71,15 +72,7 @@ export function TeamsList() {
   const { data: tokensData, isLoading: tokensLoading } = useTokens();
   const tokens = tokensData?.tokens;
 
-  const { data: teams, isLoading } = useQuery({
-    queryKey: ["teams"],
-    queryFn: async () => {
-      const { data } = await archestraApiSdk.getTeams({
-        query: { limit: 100, offset: 0 },
-      });
-      return data?.data ?? [];
-    },
-  });
+  const { data: teams, isLoading } = useTeams();
 
   const createMutation = useMutation({
     mutationFn: async (data: { name: string; description?: string }) => {

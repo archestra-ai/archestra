@@ -4,7 +4,7 @@ category: Administration
 subcategory: Identity Providers
 description: "Sign users in with their existing identity provider via OIDC or SAML"
 order: 3
-lastUpdated: 2026-04-30
+lastUpdated: 2026-05-06
 ---
 
 <!--
@@ -113,6 +113,12 @@ If a user already has an Archestra account (for example created via email/passwo
 
 - The email addresses match
 - The SSO provider is trusted for account linking — Archestra trusts the built-in providers (Okta, Google, GitHub, GitLab, Entra ID) plus any custom Generic OIDC or Generic SAML provider configured in Identity Providers
+
+## Downstream providers
+
+An identity provider can be configured without showing it on the sign-in page. Disable **Show on sign-in page** when the provider is only used to link delegated tokens for downstream MCP tool calls.
+
+This is useful when one provider is the primary Archestra login provider, but a specific MCP tool needs a token from another provider. See [Enterprise-Managed Auth — Linked downstream IdPs](/docs/platform-enterprise-managed-auth#linked-downstream-idps).
 
 ## Disabling Basic Authentication
 

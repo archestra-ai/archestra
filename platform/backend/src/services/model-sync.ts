@@ -1,4 +1,8 @@
-import type { SupportedEmbeddingDimension, SupportedProvider } from "@shared";
+import {
+  MODELS_DEV_PROVIDER_MAP,
+  type SupportedEmbeddingDimension,
+  type SupportedProvider,
+} from "@shared";
 import {
   type ModelsDevApiResponse,
   modelsDevClient,
@@ -232,12 +236,25 @@ function inferEmbeddingDimensions(
   provider: SupportedProvider,
 ): SupportedEmbeddingDimension | null {
   const id = modelId.toLowerCase();
-  if (provider === "openai" && id === "text-embedding-3-small") {
+  if (
+    (provider === "openai" || provider === "azure") &&
+    id === "text-embedding-3-small"
+  ) {
     return 1536;
   }
-  if (provider === "openai" && id === "text-embedding-3-large") {
+  if (
+    (provider === "openai" || provider === "azure") &&
+    id === "text-embedding-3-large"
+  ) {
     // Default to 1536 for backwards compatibility with existing OpenAI KB
     // embeddings; admins can opt into 3072 manually in the model editor.
+    return 1536;
+  }
+  if (
+    provider === "openrouter" &&
+    (id === "openai/text-embedding-3-small" ||
+      id === "openai/text-embedding-3-large")
+  ) {
     return 1536;
   }
   if (provider === "gemini" && id === "gemini-embedding-001") {
@@ -246,7 +263,7 @@ function inferEmbeddingDimensions(
   if (provider === "gemini" && id === "gemini-embedding-2-preview") {
     return 3072;
   }
-  if (id === "nomic-embed-text") {
+  if (id === "nomic-embed-text" || id.endsWith("/nomic-embed-text")) {
     return 768;
   }
   return null;
@@ -283,30 +300,6 @@ export function resolveModelCapabilities(params: {
     },
   });
 }
-
-/**
- * Maps models.dev provider IDs to Archestra provider names.
- */
-const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
-  openai: "openai",
-  openrouter: "openrouter",
-  anthropic: "anthropic",
-  google: "gemini",
-  "google-vertex": "gemini",
-  cohere: "cohere",
-  cerebras: "cerebras",
-  mistral: "mistral",
-  llama: "openai",
-  deepseek: "openai",
-  groq: "groq",
-  "fireworks-ai": "openai",
-  togetherai: "openai",
-  perplexity: null,
-  xai: "xai",
-  nvidia: null,
-  "amazon-bedrock": "bedrock",
-  azure: null,
-};
 
 /**
  * Build a map of modelId -> capabilities from models.dev data for a specific provider.
@@ -389,11 +382,28 @@ function inferModelCapabilities(params: {
 }): ProviderModelCapabilities {
   const { provider, modelId } = params;
 
+  if (provider === "azure") {
+    return inferAzureCapabilities(modelId);
+  }
+
   if (provider === "gemini") {
     return inferGeminiCapabilities(modelId);
   }
 
   return emptyCapabilities();
+}
+
+function inferAzureCapabilities(modelId: string): ProviderModelCapabilities {
+  if (!modelId.toLowerCase().includes("embedding")) {
+    return emptyCapabilities();
+  }
+
+  return {
+    ...emptyCapabilities(),
+    inputModalities: ["text"],
+    outputModalities: [],
+    supportsToolCalling: false,
+  };
 }
 
 function inferGeminiCapabilities(modelId: string): ProviderModelCapabilities {

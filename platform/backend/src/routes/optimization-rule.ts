@@ -46,18 +46,48 @@ const optimizationRuleRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      // Validate that entityId matches organization context
-      if (request.body.entityType === "organization") {
-        // Ensure entityId is the current organization
-        if (request.body.entityId !== request.organizationId) {
-          throw new ApiError(
-            403,
-            "Cannot create rule for different organization",
-          );
-        }
+      const entityBelongsToOrganization =
+        await OptimizationRuleModel.entityBelongsToOrganization(
+          request.body.entityType,
+          request.body.entityId,
+          request.organizationId,
+        );
+
+      if (!entityBelongsToOrganization) {
+        throw new ApiError(
+          403,
+          "Cannot create rule for different organization",
+        );
       }
 
       const rule = await OptimizationRuleModel.create(request.body);
+
+      return reply.send(rule);
+    },
+  );
+
+  fastify.get(
+    "/api/optimization-rules/:id",
+    {
+      schema: {
+        operationId: RouteId.GetOptimizationRule,
+        description: "Get an optimization rule by ID",
+        tags: ["Optimization Rules"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(SelectOptimizationRuleSchema),
+      },
+    },
+    async ({ params: { id }, organizationId }, reply) => {
+      const rule = await OptimizationRuleModel.findByIdForOrganization(
+        id,
+        organizationId,
+      );
+
+      if (!rule) {
+        throw new ApiError(404, "Optimization rule not found");
+      }
 
       return reply.send(rule);
     },
@@ -77,7 +107,32 @@ const optimizationRuleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectOptimizationRuleSchema),
       },
     },
-    async ({ params: { id }, body }, reply) => {
+    async ({ params: { id }, body, organizationId }, reply) => {
+      const existingRule = await OptimizationRuleModel.findByIdForOrganization(
+        id,
+        organizationId,
+      );
+
+      if (!existingRule) {
+        throw new ApiError(404, "Optimization rule not found");
+      }
+
+      const entityType = body.entityType ?? existingRule.entityType;
+      const entityId = body.entityId ?? existingRule.entityId;
+      const entityBelongsToOrganization =
+        await OptimizationRuleModel.entityBelongsToOrganization(
+          entityType,
+          entityId,
+          organizationId,
+        );
+
+      if (!entityBelongsToOrganization) {
+        throw new ApiError(
+          403,
+          "Cannot update rule for different organization",
+        );
+      }
+
       const rule = await OptimizationRuleModel.update(id, body);
 
       if (!rule) {
@@ -101,7 +156,16 @@ const optimizationRuleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { id } }, reply) => {
+    async ({ params: { id }, organizationId }, reply) => {
+      const existingRule = await OptimizationRuleModel.findByIdForOrganization(
+        id,
+        organizationId,
+      );
+
+      if (!existingRule) {
+        throw new ApiError(404, "Optimization rule not found");
+      }
+
       const deleted = await OptimizationRuleModel.delete(id);
 
       if (!deleted) {

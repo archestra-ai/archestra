@@ -14,6 +14,7 @@ import {
   type AssignedCredentialUnavailableMcpToolError,
   type AuthExpiredMcpToolError,
   type AuthRequiredMcpToolError,
+  LINKED_IDP_SSO_MODE,
   MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
   MCP_CATALOG_INSTALL_PATH,
   MCP_CATALOG_INSTALL_QUERY_PARAM,
@@ -44,6 +45,7 @@ import {
   type ResolvedEnterpriseTransportCredential,
   resolveEnterpriseTransportCredential,
 } from "@/services/identity-providers/enterprise-managed/broker";
+import { findExternalIdentityProviderById } from "@/services/identity-providers/oidc";
 import type {
   CommonMcpToolDefinition,
   CommonToolCall,
@@ -185,6 +187,7 @@ const CLIENT_CREDENTIALS_FALLBACK_TTL_MS = 5 * TimeInMs.Minute;
 // reclaiming abandoned connections on a reasonable operational timescale.
 const ACTIVE_CONNECTION_CACHE_TTL_MS = 15 * TimeInMs.Minute;
 const ACTIVE_CONNECTION_CACHE_MAX_SIZE = 500;
+const ACTIVE_CONNECTION_PING_VALIDATION_INTERVAL_MS = 30 * TimeInMs.Second;
 
 const RESOURCE_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 1 day
 const RESOURCE_CACHE_MAX_SIZE = 1000;
@@ -222,9 +225,11 @@ class McpClient {
       this.activeConnectionServerState.delete(key);
       this.toolNameCache.delete(key);
       this.pendingHttpSessionMetadata.delete(key);
+      this.activeConnectionLastValidatedAt.delete(key);
     },
   });
   private activeConnectionServerState = new Map<string, CachedServerState>();
+  private activeConnectionLastValidatedAt = new Map<string, number>();
   private connectionLimiter = new ConnectionLimiter();
   // Cache of actual tool names per connection key: lowercased name -> original cased name
   private toolNameCache = new LRUCacheManager<Map<string, string>>({
@@ -296,10 +301,7 @@ class McpClient {
           "Error closing MCP session (non-fatal)",
         );
       }
-      this.activeConnections.delete(connectionKey);
-      this.activeConnectionServerState.delete(connectionKey);
-      this.toolNameCache.delete(connectionKey);
-      this.pendingHttpSessionMetadata.delete(connectionKey);
+      this.clearConnectionState(connectionKey);
       logger.info({ connectionKey }, "Closed cached MCP session");
     }
 
@@ -319,7 +321,10 @@ class McpClient {
     toolCall: CommonToolCall,
     agentId: string,
     tokenAuth?: TokenAuthContext,
-    options?: { conversationId?: string },
+    options?: {
+      conversationId?: string;
+      identityProviderRedirectPath?: string;
+    },
   ): Promise<CommonToolResult> {
     // Derive auth info for logging
     const authInfo =
@@ -379,13 +384,14 @@ class McpClient {
       tool.credentialResolutionMode === "enterprise_managed" &&
       !enterpriseTransportCredential
     ) {
-      const authError = this.buildExpiredAuthMessage(
-        catalogItem.name,
-        catalogItem.id,
-        targetMcpServerId,
-        tokenAuth,
-        "Archestra could not resolve a usable identity-provider token for your current session. Re-authenticate to continue using this tool.",
-      );
+      const authError =
+        await this.buildEnterpriseManagedIdentityProviderAuthMessage(
+          catalogItem.name,
+          catalogItem.id,
+          effectiveEnterpriseManagedConfig?.identityProviderId ?? null,
+          tokenAuth,
+          options,
+        );
       return this.createErrorResult(
         toolCall,
         agentId,
@@ -491,6 +497,28 @@ class McpClient {
           // Neither prefix matched (e.g. server name contains MCP_SERVER_TOOL_NAME_SEPARATOR separator).
           // Fall back to parseFullToolName which uses lastIndexOf to split correctly.
           targetToolName = parseFullToolName(toolCall.name).toolName;
+        }
+
+        const resourceUri = getSyntheticResourceToolUri(tool.meta);
+        if (resourceUri) {
+          const result = await client.readResource({ uri: resourceUri });
+          return await this.createSuccessResult({
+            toolCall,
+            agentId,
+            mcpServerName,
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(result.contents),
+              },
+            ],
+            isError: false,
+            _meta: { resourceUri },
+            authInfo,
+            structuredContent: {
+              contents: result.contents as unknown,
+            },
+          });
         }
 
         // Resolve the actual tool name from the server (preserving original casing).
@@ -628,10 +656,7 @@ class McpClient {
                 );
               }
             }
-            this.activeConnections.delete(connectionKey);
-            this.activeConnectionServerState.delete(connectionKey);
-            this.toolNameCache.delete(connectionKey);
-            this.pendingHttpSessionMetadata.delete(connectionKey);
+            this.clearConnectionState(connectionKey);
             return await executeToolCall(getTransport, currentSecrets, true);
           } finally {
             resolveRecovery();
@@ -717,10 +742,7 @@ class McpClient {
             secrets: resetSecrets,
             secretId,
           });
-          this.activeConnections.delete(connectionKey);
-          this.activeConnectionServerState.delete(connectionKey);
-          this.toolNameCache.delete(connectionKey);
-          this.pendingHttpSessionMetadata.delete(connectionKey);
+          this.clearConnectionState(connectionKey);
 
           return await executeToolCall(
             () =>
@@ -892,22 +914,20 @@ class McpClient {
             "Error closing stale cached MCP client after credential change",
           );
         }
-        this.activeConnections.delete(connectionKey);
-        this.activeConnectionServerState.delete(connectionKey);
-        this.toolNameCache.delete(connectionKey);
-        this.pendingHttpSessionMetadata.delete(connectionKey);
+        this.clearConnectionState(connectionKey);
       }
     }
 
     const reusableClient = this.activeConnections.get(connectionKey);
     if (reusableClient) {
-      // Health check: ping the client to verify connection is still alive
+      // Health check idle clients to verify the connection is still alive.
+      // Recently-used clients skip the ping and recover on actual call failure.
       try {
-        await reusableClient.ping();
-        logger.debug(
-          { connectionKey },
-          "Client ping successful, reusing cached client",
-        );
+        if (this.shouldValidateActiveConnection(connectionKey)) {
+          await reusableClient.ping();
+          this.activeConnectionLastValidatedAt.set(connectionKey, Date.now());
+        }
+        logger.debug({ connectionKey }, "Reusing cached MCP client");
         this.activeConnections.set(connectionKey, reusableClient);
         this.activeConnectionServerState.set(connectionKey, currentServerState);
         return reusableClient;
@@ -920,10 +940,7 @@ class McpClient {
           },
           "Client ping failed, creating fresh client",
         );
-        this.activeConnections.delete(connectionKey);
-        this.activeConnectionServerState.delete(connectionKey);
-        this.toolNameCache.delete(connectionKey);
-        this.pendingHttpSessionMetadata.delete(connectionKey);
+        this.clearConnectionState(connectionKey);
         // If the transport carries a stored session ID the session is likely
         // stale (e.g. Playwright pod restarted).  Delete it from the DB so
         // the retry path creates a truly fresh connection instead of reading
@@ -1002,6 +1019,7 @@ class McpClient {
     // while the upsert is in flight.
     this.activeConnections.set(connectionKey, client);
     this.activeConnectionServerState.set(connectionKey, currentServerState);
+    this.activeConnectionLastValidatedAt.set(connectionKey, Date.now());
 
     // Persist the MCP session ID so other backend pods can reuse it.
     // With --isolated, each Mcp-Session-Id maps to a separate browser context;
@@ -1031,6 +1049,31 @@ class McpClient {
     }
 
     return client;
+  }
+
+  private shouldValidateActiveConnection(connectionKey: string): boolean {
+    const lastValidatedAt =
+      this.activeConnectionLastValidatedAt.get(connectionKey) ?? 0;
+    return (
+      Date.now() - lastValidatedAt >=
+      ACTIVE_CONNECTION_PING_VALIDATION_INTERVAL_MS
+    );
+  }
+
+  private clearConnectionState(connectionKey: string): void {
+    this.activeConnections.delete(connectionKey);
+    this.activeConnectionServerState.delete(connectionKey);
+    this.toolNameCache.delete(connectionKey);
+    this.pendingHttpSessionMetadata.delete(connectionKey);
+    this.activeConnectionLastValidatedAt.delete(connectionKey);
+  }
+
+  private clearAllConnectionState(): void {
+    this.activeConnections.clear();
+    this.activeConnectionServerState.clear();
+    this.toolNameCache.clear();
+    this.pendingHttpSessionMetadata.clear();
+    this.activeConnectionLastValidatedAt.clear();
   }
 
   /**
@@ -2124,9 +2167,7 @@ class McpClient {
         } catch {
           // Ignore close errors during refresh teardown.
         }
-        this.activeConnections.delete(connectionKey);
-        this.activeConnectionServerState.delete(connectionKey);
-        this.pendingHttpSessionMetadata.delete(connectionKey);
+        this.clearConnectionState(connectionKey);
       }
 
       const refreshed = await refreshOAuthToken(secretId, catalogId);
@@ -2188,7 +2229,8 @@ class McpClient {
       }),
       catalogId,
       catalogName: catalogDisplayName,
-      installUrl,
+      action: "install_mcp_credentials",
+      actionUrl: installUrl,
     };
   }
 
@@ -2237,6 +2279,82 @@ class McpClient {
       catalogId,
       catalogName: catalogDisplayName,
     };
+  }
+
+  private async buildEnterpriseManagedIdentityProviderAuthMessage(
+    catalogDisplayName: string,
+    catalogId: string,
+    identityProviderId: string | null,
+    tokenAuth?: TokenAuthContext,
+    options?: {
+      conversationId?: string;
+      identityProviderRedirectPath?: string;
+    },
+  ): Promise<AuthRequiredMcpToolError> {
+    const identityProvider = identityProviderId
+      ? await findExternalIdentityProviderById(identityProviderId)
+      : null;
+    if (!identityProvider) {
+      return this.buildAuthRequiredMessage(
+        catalogDisplayName,
+        catalogId,
+        tokenAuth,
+      );
+    }
+
+    const connectUrl = this.buildIdentityProviderConnectUrl(
+      identityProvider.providerId,
+      options,
+    );
+    return {
+      type: "auth_required",
+      message: formatActionableAuthError({
+        title: `Authentication required for "${catalogDisplayName}"`,
+        detail: `This tool needs a current ${identityProvider.providerId} session for your account before this deployment can request the downstream credential.`,
+        actionLabel: `connect ${identityProvider.providerId}`,
+        url: connectUrl,
+        postAction:
+          "Once you have completed authentication, retry this tool call.",
+      }),
+      catalogId,
+      catalogName: catalogDisplayName,
+      action: "connect_identity_provider",
+      actionUrl: connectUrl,
+      providerId: identityProvider.providerId,
+    };
+  }
+
+  private buildIdentityProviderConnectUrl(
+    providerId: string,
+    options?: {
+      conversationId?: string;
+      identityProviderRedirectPath?: string;
+    },
+  ): string {
+    const redirectTo = this.getIdentityProviderRedirectPath(options);
+    const searchParams = new URLSearchParams({
+      redirectTo,
+      mode: LINKED_IDP_SSO_MODE,
+    });
+    return `${config.frontendBaseUrl}/auth/sso/${encodeURIComponent(providerId)}?${searchParams.toString()}`;
+  }
+
+  private getIdentityProviderRedirectPath(options?: {
+    conversationId?: string;
+    identityProviderRedirectPath?: string;
+  }): string {
+    if (
+      options?.identityProviderRedirectPath?.startsWith("/") &&
+      !options.identityProviderRedirectPath.startsWith("//")
+    ) {
+      return options.identityProviderRedirectPath;
+    }
+
+    if (options?.conversationId) {
+      return `/chat/${options.conversationId}`;
+    }
+
+    return "/chat";
   }
 
   private formatAuthContext(tokenAuth?: TokenAuthContext): string {
@@ -2340,9 +2458,9 @@ class McpClient {
   }): Promise<CommonMcpToolDefinition[]> {
     const { catalogItem, mcpServerId, secrets, secretId } = params;
 
-    // For local servers, retry connection a few times since the MCP server process
-    // may need time to initialize even after the pod is ready
-    const maxRetries = catalogItem.serverType === "local" ? 3 : 1;
+    // Local stdio servers can report a ready pod before the MCP process accepts
+    // JSON-RPC, especially while the runtime is still pulling or starting Node.
+    const maxRetries = catalogItem.serverType === "local" ? 6 : 1;
     const retryDelayMs = 5000; // 5 seconds between retries
 
     let lastError: Error | undefined;
@@ -2374,18 +2492,16 @@ class McpClient {
           "Connection timeout after 30 seconds",
         );
 
-        // List tools with timeout
-        const toolsResult = await this.raceWithTimeout(
-          client.listTools(),
-          30000,
-          "List tools timeout after 30 seconds",
-        );
+        // List tools with timeout. Some MCP servers expose only resources; for
+        // those, synthesize read-resource tools so agents can still exercise the
+        // server through the normal tool-assignment path.
+        const tools = await this.discoverToolsOrResourceTools(client);
 
         // Close connection (we just needed the tools)
         await client.close();
 
         // Transform tools to our format
-        return toolsResult.tools.map((tool: Tool) => ({
+        return tools.map((tool: Tool) => ({
           name: tool.name,
           description: tool.description || `Tool: ${tool.name}`,
           inputSchema: tool.inputSchema as Record<string, unknown>,
@@ -2418,6 +2534,45 @@ class McpClient {
         lastError?.message || "Unknown error"
       }`,
     );
+  }
+
+  private async discoverToolsOrResourceTools(client: Client): Promise<Tool[]> {
+    try {
+      const toolsResult = await this.raceWithTimeout(
+        client.listTools(),
+        30000,
+        "List tools timeout after 30 seconds",
+      );
+      return toolsResult.tools;
+    } catch (error) {
+      if (!isMethodNotFoundError(error)) {
+        throw error;
+      }
+
+      const resourcesResult = await this.raceWithTimeout(
+        client.listResources(),
+        30000,
+        "List resources timeout after 30 seconds",
+      );
+
+      return resourcesResult.resources.map((resource) => {
+        const uri = resource.uri;
+        const displayName = resource.name ?? resource.uri;
+        return {
+          name: makeSyntheticResourceToolName(uri),
+          description:
+            resource.description ?? `Read MCP resource ${displayName}`,
+          inputSchema: {
+            type: "object",
+            properties: {},
+            additionalProperties: false,
+          },
+          _meta: {
+            archestraResourceUri: uri,
+          },
+        };
+      }) as Tool[];
+    }
   }
 
   /**
@@ -2515,9 +2670,7 @@ class McpClient {
     });
 
     await Promise.all([...disconnectPromises, ...activeDisconnectPromises]);
-    this.activeConnections.clear();
-    this.activeConnectionServerState.clear();
-    this.pendingHttpSessionMetadata.clear();
+    this.clearAllConnectionState();
   }
 
   async invalidateConnectionsForServer(
@@ -2544,10 +2697,7 @@ class McpClient {
           }
         }
 
-        this.activeConnections.delete(connectionKey);
-        this.activeConnectionServerState.delete(connectionKey);
-        this.toolNameCache.delete(connectionKey);
-        this.pendingHttpSessionMetadata.delete(connectionKey);
+        this.clearConnectionState(connectionKey);
         await McpHttpSessionModel.deleteStaleSession(connectionKey).catch(
           (error) => {
             logger.warn(
@@ -3082,6 +3232,43 @@ function isHighFrequencyBrowserTool(toolName: string): boolean {
     name.includes("browser_screenshot") ||
     name.includes("browser_tabs") ||
     name.includes("browser_resize")
+  );
+}
+
+function getSyntheticResourceToolUri(
+  meta: Record<string, unknown> | null | undefined,
+): string | null {
+  const nestedMeta = meta?._meta;
+  if (!nestedMeta || typeof nestedMeta !== "object") {
+    return null;
+  }
+
+  const resourceUri = (nestedMeta as Record<string, unknown>)
+    .archestraResourceUri;
+  return typeof resourceUri === "string" && resourceUri.length > 0
+    ? resourceUri
+    : null;
+}
+
+function makeSyntheticResourceToolName(uri: string): string {
+  const slug = uri
+    .replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//, "")
+    .replace(/[^a-zA-Z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toLowerCase();
+  return `read_resource_${slug || "resource"}`.slice(0, 128);
+}
+
+function isMethodNotFoundError(error: unknown): boolean {
+  if (error instanceof Error && error.message.includes("Method not found")) {
+    return true;
+  }
+
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === -32601
   );
 }
 

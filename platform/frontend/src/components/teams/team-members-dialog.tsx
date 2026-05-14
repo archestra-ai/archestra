@@ -1,6 +1,6 @@
 "use client";
 
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import { archestraApiSdk } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDebounce } from "@uidotdev/usehooks";
 import { Trash2 } from "lucide-react";
@@ -10,7 +10,7 @@ import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { DialogStickyFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { SearchableSelect } from "@/components/ui/searchable-select";
+import { UserSearchableSelect } from "@/components/user-searchable-select";
 import { useMembersPaginated } from "@/lib/member.query";
 import { useActiveOrganization } from "@/lib/organization.query";
 
@@ -26,32 +26,11 @@ interface TeamMembersDialogProps {
   team: Team;
 }
 
-type PaginatedMember =
-  archestraApiTypes.GetMembersResponses["200"]["data"][number];
-type TeamMember = archestraApiTypes.GetTeamMembersResponses["200"][number];
 type ActiveOrganizationMember = {
   userId: string;
   name?: string | null;
   email?: string | null;
 };
-
-function getMemberDisplayName(
-  member: Pick<
-    PaginatedMember | TeamMember | ActiveOrganizationMember,
-    "userId" | "name" | "email"
-  >,
-): string {
-  return member.name || member.email || member.userId;
-}
-
-function getMemberEmail(
-  member: Pick<
-    PaginatedMember | TeamMember | ActiveOrganizationMember,
-    "email"
-  >,
-): string | null {
-  return member.email || null;
-}
 
 export function TeamMembersDialog({
   open,
@@ -83,22 +62,14 @@ export function TeamMembersDialog({
 
   const orgMembers = (activeOrg?.members ?? []) as ActiveOrganizationMember[];
   const memberUserIds = new Set(teamMembers?.map((m) => m.userId) || []);
-  const memberOptions = (membersResponse?.data ?? []).map(
-    (member: PaginatedMember) => {
-      const isAlreadyAdded = memberUserIds.has(member.userId);
-
-      return {
-        value: member.userId,
-        label: getMemberDisplayName(member),
-        description: isAlreadyAdded
-          ? `${getMemberEmail(member) || "No email"} • Already in team`
-          : (getMemberEmail(member) ?? undefined),
-        disabled: isAlreadyAdded,
-        checked: isAlreadyAdded,
-      };
-    },
+  const userOptions = (membersResponse?.data ?? []).map((member) => ({
+    userId: member.userId,
+    name: member.name,
+    email: member.email,
+  }));
+  const canAddAnyMember = userOptions.some(
+    (user) => !memberUserIds.has(user.userId),
   );
-  const canAddAnyMember = memberOptions.some((member) => !member.disabled);
 
   const addMutation = useMutation({
     mutationFn: async (userId: string) => {
@@ -156,9 +127,11 @@ export function TeamMembersDialog({
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 space-y-4">
         <div className="space-y-2">
           <Label>Add User</Label>
-          <SearchableSelect
+          <UserSearchableSelect
             value=""
             onValueChange={handleAddMember}
+            users={userOptions}
+            disabledUserIds={memberUserIds}
             placeholder={
               canAddAnyMember
                 ? "Select a user"
@@ -167,7 +140,6 @@ export function TeamMembersDialog({
             searchPlaceholder="Search users by name or email"
             className="w-full"
             onSearchQueryChange={setMemberSearch}
-            items={memberOptions}
             emptyMessage="No matching users found."
             hint={
               canAddAnyMember || isMembersPending
@@ -200,7 +172,8 @@ export function TeamMembersDialog({
                       <p className="text-sm font-medium">
                         {member.email ||
                           orgMember?.email ||
-                          getMemberDisplayName(member)}
+                          member.name ||
+                          member.userId}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         Role: {member.role}

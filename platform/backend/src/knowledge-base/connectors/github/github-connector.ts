@@ -23,23 +23,17 @@ export class GithubConnector extends BaseConnector {
   async validateConfig(
     config: Record<string, unknown>,
   ): Promise<{ valid: boolean; error?: string }> {
-    const parsed = parseGithubConfig(config);
-    if (!parsed) {
-      return {
-        valid: false,
-        error:
-          "Invalid GitHub configuration: githubUrl (string) and owner (string) are required",
-      };
-    }
-
-    if (!/^https?:\/\/.+/.test(parsed.githubUrl)) {
-      return {
-        valid: false,
-        error: "githubUrl must be a valid HTTP(S) URL",
-      };
-    }
-
-    return { valid: true };
+    return this.validateConfigWithSchema({
+      config,
+      parser: parseGithubConfig,
+      label: "GitHub",
+      invalidConfigError:
+        "Invalid GitHub configuration: githubUrl (string) and owner (string) are required",
+      extraChecks: (parsed) =>
+        /^https?:\/\/.+/.test(parsed.githubUrl)
+          ? null
+          : "githubUrl must be a valid HTTP(S) URL",
+    });
   }
 
   async testConnection(params: {
@@ -51,21 +45,13 @@ export class GithubConnector extends BaseConnector {
       return { success: false, error: "Invalid GitHub configuration" };
     }
 
-    this.log.debug(
-      { baseUrl: parsed.githubUrl, owner: parsed.owner },
-      "Testing connection",
-    );
-
-    try {
-      const octokit = createOctokit(parsed, params.credentials, this.log);
-      await octokit.rest.users.getAuthenticated();
-      this.log.debug("Connection test successful");
-      return { success: true };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.log.error({ error: message }, "Connection test failed");
-      return { success: false, error: `Connection failed: ${message}` };
-    }
+    return this.runConnectionTest({
+      label: "GitHub",
+      probe: async () => {
+        const octokit = createOctokit(parsed, params.credentials, this.log);
+        await octokit.rest.users.getAuthenticated();
+      },
+    });
   }
 
   async estimateTotalItems(params: {

@@ -1373,7 +1373,7 @@ export type AnthropicMessagesRequestInput = {
         user_id: string | null;
     };
     output_config?: {
-        effort?: 'low' | 'medium' | 'high' | 'max';
+        effort?: string | null;
         format?: {
             type: 'json_schema';
             schema: {
@@ -6651,7 +6651,7 @@ export type AnthropicMessagesRequest = {
         user_id: string | null;
     };
     output_config?: {
-        effort?: 'low' | 'medium' | 'high' | 'max';
+        effort?: string | null;
         format?: {
             type: 'json_schema';
             schema: {
@@ -34968,6 +34968,7 @@ export type GetLlmProviderApiKeysResponses = {
         userId: string | null;
         teamId: string | null;
         baseUrl: string | null;
+        inferenceBaseUrl: string | null;
         extraHeaders: {
             [key: string]: string;
         } | null;
@@ -34993,6 +34994,7 @@ export type CreateLlmProviderApiKeyData = {
         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         apiKey?: string;
         baseUrl?: string | null;
+        inferenceBaseUrl?: string | null;
         extraHeaders?: {
             [key: string]: string;
         } | null;
@@ -35089,6 +35091,7 @@ export type CreateLlmProviderApiKeyResponses = {
         userId: string | null;
         teamId: string | null;
         baseUrl: string | null;
+        inferenceBaseUrl: string | null;
         extraHeaders: {
             [key: string]: string;
         } | null;
@@ -35190,6 +35193,7 @@ export type GetAvailableLlmProviderApiKeysResponses = {
         userId: string | null;
         teamId: string | null;
         baseUrl: string | null;
+        inferenceBaseUrl: string | null;
         extraHeaders: {
             [key: string]: string;
         } | null;
@@ -35382,6 +35386,7 @@ export type GetLlmProviderApiKeyResponses = {
         userId: string | null;
         teamId: string | null;
         baseUrl: string | null;
+        inferenceBaseUrl: string | null;
         extraHeaders: {
             [key: string]: string;
         } | null;
@@ -35406,6 +35411,7 @@ export type UpdateLlmProviderApiKeyData = {
         name?: string;
         apiKey?: string;
         baseUrl?: string | null;
+        inferenceBaseUrl?: string | null;
         extraHeaders?: {
             [key: string]: string;
         } | null;
@@ -35504,6 +35510,7 @@ export type UpdateLlmProviderApiKeyResponses = {
         userId: string | null;
         teamId: string | null;
         baseUrl: string | null;
+        inferenceBaseUrl: string | null;
         extraHeaders: {
             [key: string]: string;
         } | null;

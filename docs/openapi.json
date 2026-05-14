@@ -3599,13 +3599,7 @@
             "properties": {
               "effort": {
                 "nullable": true,
-                "type": "string",
-                "enum": [
-                  "low",
-                  "medium",
-                  "high",
-                  "max"
-                ]
+                "type": "string"
               },
               "format": {
                 "nullable": true,
@@ -20699,13 +20693,7 @@
             "properties": {
               "effort": {
                 "nullable": true,
-                "type": "string",
-                "enum": [
-                  "low",
-                  "medium",
-                  "high",
-                  "max"
-                ]
+                "type": "string"
               },
               "format": {
                 "nullable": true,
@@ -132649,6 +132637,10 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "inferenceBaseUrl": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "extraHeaders": {
                         "nullable": true,
                         "type": "object",
@@ -132713,6 +132705,7 @@
                       "userId",
                       "teamId",
                       "baseUrl",
+                      "inferenceBaseUrl",
                       "extraHeaders",
                       "isSystem",
                       "isPrimary",
@@ -133009,6 +133002,11 @@
                     "type": "string",
                     "format": "uri"
                   },
+                  "inferenceBaseUrl": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uri"
+                  },
                   "extraHeaders": {
                     "nullable": true,
                     "type": "object",
@@ -133127,6 +133125,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "inferenceBaseUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "extraHeaders": {
                       "nullable": true,
                       "type": "object",
@@ -133159,6 +133161,7 @@
                     "userId",
                     "teamId",
                     "baseUrl",
+                    "inferenceBaseUrl",
                     "extraHeaders",
                     "isSystem",
                     "isPrimary",
@@ -133522,6 +133525,10 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "inferenceBaseUrl": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "extraHeaders": {
                         "nullable": true,
                         "type": "object",
@@ -133586,6 +133593,7 @@
                       "userId",
                       "teamId",
                       "baseUrl",
+                      "inferenceBaseUrl",
                       "extraHeaders",
                       "isSystem",
                       "isPrimary",
@@ -133921,6 +133929,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "inferenceBaseUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "extraHeaders": {
                       "nullable": true,
                       "type": "object",
@@ -133985,6 +133997,7 @@
                     "userId",
                     "teamId",
                     "baseUrl",
+                    "inferenceBaseUrl",
                     "extraHeaders",
                     "isSystem",
                     "isPrimary",
@@ -134258,6 +134271,11 @@
                     "type": "string",
                     "format": "uri"
                   },
+                  "inferenceBaseUrl": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uri"
+                  },
                   "extraHeaders": {
                     "nullable": true,
                     "type": "object",
@@ -134386,6 +134404,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "inferenceBaseUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "extraHeaders": {
                       "nullable": true,
                       "type": "object",
@@ -134418,6 +134440,7 @@
                     "userId",
                     "teamId",
                     "baseUrl",
+                    "inferenceBaseUrl",
                     "extraHeaders",
                     "isSystem",
                     "isPrimary",

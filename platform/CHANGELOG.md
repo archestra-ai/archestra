@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.49](https://github.com/archestra-ai/archestra/compare/platform-v1.2.48...platform-v1.2.49) (2026-05-14)
+
+
+### Bug Fixes
+
+* bump fast-xml-parser to 5.7.2 ([#4675](https://github.com/archestra-ai/archestra/issues/4675)) ([e4b0e60](https://github.com/archestra-ai/archestra/commit/e4b0e604e832c9d23a7c1af03eec3aeb9f28c288))
+
 ## [1.2.48](https://github.com/archestra-ai/archestra/compare/platform-v1.2.47...platform-v1.2.48) (2026-05-14)
 
 

@@ -41699,7 +41699,6 @@ export type GetOrganizationResponses = {
         logoDark: string | null;
         createdAt: string;
         metadata: string | null;
-        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
         onboardingComplete: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
@@ -41971,7 +41970,6 @@ export type UpdateAppearanceSettingsResponses = {
         logoDark: string | null;
         createdAt: string;
         metadata: string | null;
-        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
         onboardingComplete: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
@@ -42116,7 +42114,6 @@ export type UpdateSecuritySettingsResponses = {
         logoDark: string | null;
         createdAt: string;
         metadata: string | null;
-        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
         onboardingComplete: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
@@ -42178,7 +42175,6 @@ export type UpdateLlmSettingsData = {
     body: {
         convertToolResultsToToon?: boolean;
         compressionScope?: 'organization' | 'team';
-        limitCleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
         defaultUserLimitValue?: number | null;
         defaultUserLimitModel?: Array<string> | null;
         defaultUserLimitCleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
@@ -42265,7 +42261,6 @@ export type UpdateLlmSettingsResponses = {
         logoDark: string | null;
         createdAt: string;
         metadata: string | null;
-        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
         onboardingComplete: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
@@ -42412,7 +42407,6 @@ export type UpdateAgentSettingsResponses = {
         logoDark: string | null;
         createdAt: string;
         metadata: string | null;
-        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
         onboardingComplete: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
@@ -42566,7 +42560,6 @@ export type UpdateConnectionSettingsResponses = {
         logoDark: string | null;
         createdAt: string;
         metadata: string | null;
-        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
         onboardingComplete: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
@@ -42711,7 +42704,6 @@ export type UpdateAuthSettingsResponses = {
         logoDark: string | null;
         createdAt: string;
         metadata: string | null;
-        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
         onboardingComplete: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
@@ -42858,7 +42850,6 @@ export type UpdateKnowledgeSettingsResponses = {
         logoDark: string | null;
         createdAt: string;
         metadata: string | null;
-        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
         onboardingComplete: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
@@ -43000,7 +42991,6 @@ export type DropEmbeddingConfigResponses = {
         logoDark: string | null;
         createdAt: string;
         metadata: string | null;
-        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
         onboardingComplete: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
@@ -43231,7 +43221,6 @@ export type CompleteOnboardingResponses = {
         logoDark: string | null;
         createdAt: string;
         metadata: string | null;
-        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
         onboardingComplete: boolean;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';

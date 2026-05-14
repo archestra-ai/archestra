@@ -127320,7 +127320,6 @@
                         }
                       },
                       "cleanupInterval": {
-                        "nullable": true,
                         "type": "string",
                         "enum": [
                           "1h",
@@ -127686,7 +127685,6 @@
                     }
                   },
                   "cleanupInterval": {
-                    "nullable": true,
                     "type": "string",
                     "enum": [
                       "1h",
@@ -127770,7 +127768,6 @@
                       }
                     },
                     "cleanupInterval": {
-                      "nullable": true,
                       "type": "string",
                       "enum": [
                         "1h",
@@ -128128,7 +128125,6 @@
                       }
                     },
                     "cleanupInterval": {
-                      "nullable": true,
                       "type": "string",
                       "enum": [
                         "1h",
@@ -128466,7 +128462,6 @@
                     }
                   },
                   "cleanupInterval": {
-                    "nullable": true,
                     "type": "string",
                     "enum": [
                       "1h",
@@ -128556,7 +128551,6 @@
                       }
                     },
                     "cleanupInterval": {
-                      "nullable": true,
                       "type": "string",
                       "enum": [
                         "1h",
@@ -156796,17 +156790,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "limitCleanupInterval": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "1h",
-                        "12h",
-                        "24h",
-                        "1w",
-                        "1m"
-                      ]
-                    },
                     "onboardingComplete": {
                       "type": "boolean"
                     },
@@ -157139,7 +157122,6 @@
                     "logoDark",
                     "createdAt",
                     "metadata",
-                    "limitCleanupInterval",
                     "onboardingComplete",
                     "theme",
                     "customFont",
@@ -157621,17 +157603,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "limitCleanupInterval": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "1h",
-                        "12h",
-                        "24h",
-                        "1w",
-                        "1m"
-                      ]
-                    },
                     "onboardingComplete": {
                       "type": "boolean"
                     },
@@ -157964,7 +157935,6 @@
                     "logoDark",
                     "createdAt",
                     "metadata",
-                    "limitCleanupInterval",
                     "onboardingComplete",
                     "theme",
                     "customFont",
@@ -158717,17 +158687,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "limitCleanupInterval": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "1h",
-                        "12h",
-                        "24h",
-                        "1w",
-                        "1m"
-                      ]
-                    },
                     "onboardingComplete": {
                       "type": "boolean"
                     },
@@ -159060,7 +159019,6 @@
                     "logoDark",
                     "createdAt",
                     "metadata",
-                    "limitCleanupInterval",
                     "onboardingComplete",
                     "theme",
                     "customFont",
@@ -159348,7 +159306,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update LLM settings (TOON compression, compression scope, limit cleanup interval)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmSettings:update`: Modify LLM settings",
+        "description": "Update LLM settings (TOON compression, compression scope, default user limit)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmSettings:update`: Modify LLM settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -159366,17 +159324,6 @@
                       "team"
                     ]
                   },
-                  "limitCleanupInterval": {
-                    "nullable": true,
-                    "type": "string",
-                    "enum": [
-                      "1h",
-                      "12h",
-                      "24h",
-                      "1w",
-                      "1m"
-                    ]
-                  },
                   "defaultUserLimitValue": {
                     "nullable": true,
                     "type": "integer",
@@ -159391,7 +159338,6 @@
                     }
                   },
                   "defaultUserLimitCleanupInterval": {
-                    "nullable": true,
                     "type": "string",
                     "enum": [
                       "1h",
@@ -159438,17 +159384,6 @@
                     "metadata": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "limitCleanupInterval": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "1h",
-                        "12h",
-                        "24h",
-                        "1w",
-                        "1m"
-                      ]
                     },
                     "onboardingComplete": {
                       "type": "boolean"
@@ -159782,7 +159717,6 @@
                     "logoDark",
                     "createdAt",
                     "metadata",
-                    "limitCleanupInterval",
                     "onboardingComplete",
                     "theme",
                     "customFont",
@@ -160155,17 +160089,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "limitCleanupInterval": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "1h",
-                        "12h",
-                        "24h",
-                        "1w",
-                        "1m"
-                      ]
-                    },
                     "onboardingComplete": {
                       "type": "boolean"
                     },
@@ -160498,7 +160421,6 @@
                     "logoDark",
                     "createdAt",
                     "metadata",
-                    "limitCleanupInterval",
                     "onboardingComplete",
                     "theme",
                     "customFont",
@@ -160915,17 +160837,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "limitCleanupInterval": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "1h",
-                        "12h",
-                        "24h",
-                        "1w",
-                        "1m"
-                      ]
-                    },
                     "onboardingComplete": {
                       "type": "boolean"
                     },
@@ -161258,7 +161169,6 @@
                     "logoDark",
                     "createdAt",
                     "metadata",
-                    "limitCleanupInterval",
                     "onboardingComplete",
                     "theme",
                     "customFont",
@@ -161600,17 +161510,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "limitCleanupInterval": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "1h",
-                        "12h",
-                        "24h",
-                        "1w",
-                        "1m"
-                      ]
-                    },
                     "onboardingComplete": {
                       "type": "boolean"
                     },
@@ -161943,7 +161842,6 @@
                     "logoDark",
                     "createdAt",
                     "metadata",
-                    "limitCleanupInterval",
                     "onboardingComplete",
                     "theme",
                     "customFont",
@@ -162298,17 +162196,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "limitCleanupInterval": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "1h",
-                        "12h",
-                        "24h",
-                        "1w",
-                        "1m"
-                      ]
-                    },
                     "onboardingComplete": {
                       "type": "boolean"
                     },
@@ -162641,7 +162528,6 @@
                     "logoDark",
                     "createdAt",
                     "metadata",
-                    "limitCleanupInterval",
                     "onboardingComplete",
                     "theme",
                     "customFont",
@@ -162963,17 +162849,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "limitCleanupInterval": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "1h",
-                        "12h",
-                        "24h",
-                        "1w",
-                        "1m"
-                      ]
-                    },
                     "onboardingComplete": {
                       "type": "boolean"
                     },
@@ -163306,7 +163181,6 @@
                     "logoDark",
                     "createdAt",
                     "metadata",
-                    "limitCleanupInterval",
                     "onboardingComplete",
                     "theme",
                     "customFont",
@@ -163941,17 +163815,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "limitCleanupInterval": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "1h",
-                        "12h",
-                        "24h",
-                        "1w",
-                        "1m"
-                      ]
-                    },
                     "onboardingComplete": {
                       "type": "boolean"
                     },
@@ -164284,7 +164147,6 @@
                     "logoDark",
                     "createdAt",
                     "metadata",
-                    "limitCleanupInterval",
                     "onboardingComplete",
                     "theme",
                     "customFont",

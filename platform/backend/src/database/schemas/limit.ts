@@ -9,11 +9,7 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
-import type {
-  LimitCleanupInterval,
-  LimitEntityType,
-  LimitType,
-} from "@/types";
+import type { LimitCleanupInterval, LimitEntityType, LimitType } from "@/types";
 
 const limitsTable = pgTable(
   "limits",

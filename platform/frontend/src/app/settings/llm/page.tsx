@@ -7,8 +7,8 @@ import { toast } from "sonner";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
   DEFAULT_LIMIT_CLEANUP_INTERVAL,
-  LimitCleanupIntervalSelect,
   type LimitCleanupInterval,
+  LimitCleanupIntervalSelect,
 } from "@/components/limit-cleanup-interval-select";
 import { LlmModelPicker } from "@/components/llm-model-picker";
 import { WithPermissions } from "@/components/roles/with-permissions";
@@ -168,8 +168,7 @@ export default function LlmSettingsPage() {
 
   const isInitialLoading = isOrganizationPending || areTeamsPending;
   const hasChanges =
-    !isInitialLoading &&
-    (hasCompressionChanges || hasDefaultUserLimitChanges);
+    !isInitialLoading && (hasCompressionChanges || hasDefaultUserLimitChanges);
 
   const handleSave = async () => {
     const mutations: Promise<unknown>[] = [];

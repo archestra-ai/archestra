@@ -20,8 +20,8 @@ import { FormDialog } from "@/components/form-dialog";
 import {
   CLEANUP_INTERVAL_LABELS,
   DEFAULT_LIMIT_CLEANUP_INTERVAL,
-  LimitCleanupIntervalSelect,
   type LimitCleanupInterval,
+  LimitCleanupIntervalSelect,
 } from "@/components/limit-cleanup-interval-select";
 import { LlmModelPicker } from "@/components/llm-model-picker";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
@@ -545,12 +545,7 @@ export default function LimitsPage() {
         ),
       },
     ],
-    [
-      getEntityIcon,
-      getEntityLabel,
-      getUsageStatus,
-      handleEditOpen,
-    ],
+    [getEntityIcon, getEntityLabel, getUsageStatus, handleEditOpen],
   );
 
   const hasActiveFilters =

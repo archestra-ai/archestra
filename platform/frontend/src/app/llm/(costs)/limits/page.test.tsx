@@ -303,17 +303,13 @@ describe("LimitsPage", () => {
     });
   });
 
-  it("shows the active cleanup interval and links to LLM settings", () => {
+  it("does not show the removed default cleanup schedule banner", () => {
     render(<LimitsPage />);
 
     expect(
-      screen.getByText(/new limits use the default cleanup schedule/i),
-    ).toBeInTheDocument();
-    expect(screen.getAllByText("Every month").length).toBeGreaterThan(0);
-
-    expect(
-      screen.getByRole("link", { name: /change it in llm settings/i }),
-    ).toHaveAttribute("href", "/settings/llm");
+      screen.queryByText(/new limits use the default cleanup schedule/i),
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByText("Every week").length).toBeGreaterThan(0);
   });
 
   it("requests virtual keys with the API-supported page size", () => {

@@ -1653,6 +1653,13 @@
       "when": 1778761776594,
       "tag": "0235_far_excalibur",
       "breakpoints": true
+    },
+    {
+      "idx": 236,
+      "version": "7",
+      "when": 1778774093662,
+      "tag": "0236_certain_champions",
+      "breakpoints": true
     }
   ]
 }

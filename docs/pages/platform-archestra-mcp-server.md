@@ -640,7 +640,7 @@ Required RBAC permission: `llmLimit:create`
 | `limit_type` | `"token_cost" \| "mcp_server_calls" \| "tool_calls"` | Yes | The type of limit to apply. |
 | `limit_value` | `number` | Yes | The limit value (tokens or count depending on limit type). |
 | `model` | `string[] \| null` | No | Array of model names. Omit for all models. |
-| `cleanup_interval` | `"1h" \| "12h" \| "24h" \| "1w" \| "1m"` | No | Optional cleanup interval for this limit. Omit to use the organization default. |
+| `cleanup_interval` | `"1h" \| "12h" \| "24h" \| "1w" \| "1m"` | No | Optional cleanup interval for this limit. Omit to use the weekly default. |
 | `mcp_server_name` | `string` | No | MCP server name. Required for mcp_server_calls and tool_calls limits. |
 | `tool_name` | `string` | No | Tool name. Required for tool_calls limits. |
 
@@ -654,7 +654,7 @@ Required RBAC permission: `llmLimit:create`
 | `limit.entityId` | `string` | Yes | The limited entity ID. |
 | `limit.limitType` | `"token_cost" \| "mcp_server_calls" \| "tool_calls"` | Yes | The kind of limit. |
 | `limit.limitValue` | `number` | Yes | The configured limit value. |
-| `limit.cleanupInterval` | `"1h" \| "12h" \| "24h" \| "1w" \| "1m" \| null` | No | How often this limit resets. Null uses the organization default. |
+| `limit.cleanupInterval` | `"1h" \| "12h" \| "24h" \| "1w" \| "1m"` | Yes | How often this limit resets. |
 | `limit.model` | `string[] \| null` | No | Models targeted by a token_cost limit. Null or empty array means all models. |
 | `limit.mcpServerName` | `string \| null` | No | MCP server name for MCP-specific limits, if any. |
 | `limit.toolName` | `string \| null` | No | Tool name for tool-specific limits, if any. |
@@ -680,7 +680,7 @@ Required RBAC permission: `llmLimit:read`
 | `limits[].entityId` | `string` | Yes | The limited entity ID. |
 | `limits[].limitType` | `"token_cost" \| "mcp_server_calls" \| "tool_calls"` | Yes | The kind of limit. |
 | `limits[].limitValue` | `number` | Yes | The configured limit value. |
-| `limits[].cleanupInterval` | `"1h" \| "12h" \| "24h" \| "1w" \| "1m" \| null` | No | How often this limit resets. Null uses the organization default. |
+| `limits[].cleanupInterval` | `"1h" \| "12h" \| "24h" \| "1w" \| "1m"` | Yes | How often this limit resets. |
 | `limits[].model` | `string[] \| null` | No | Models targeted by a token_cost limit. Null or empty array means all models. |
 | `limits[].mcpServerName` | `string \| null` | No | MCP server name for MCP-specific limits, if any. |
 | `limits[].toolName` | `string \| null` | No | Tool name for tool-specific limits, if any. |
@@ -707,7 +707,7 @@ Required RBAC permission: `llmLimit:update`
 | `limit.entityId` | `string` | Yes | The limited entity ID. |
 | `limit.limitType` | `"token_cost" \| "mcp_server_calls" \| "tool_calls"` | Yes | The kind of limit. |
 | `limit.limitValue` | `number` | Yes | The configured limit value. |
-| `limit.cleanupInterval` | `"1h" \| "12h" \| "24h" \| "1w" \| "1m" \| null` | No | How often this limit resets. Null uses the organization default. |
+| `limit.cleanupInterval` | `"1h" \| "12h" \| "24h" \| "1w" \| "1m"` | Yes | How often this limit resets. |
 | `limit.model` | `string[] \| null` | No | Models targeted by a token_cost limit. Null or empty array means all models. |
 | `limit.mcpServerName` | `string \| null` | No | MCP server name for MCP-specific limits, if any. |
 | `limit.toolName` | `string \| null` | No | Tool name for tool-specific limits, if any. |

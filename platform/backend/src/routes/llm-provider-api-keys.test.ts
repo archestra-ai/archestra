@@ -522,6 +522,75 @@ describe("LLM Provider API Keys CRUD", () => {
     );
   });
 
+  test("re-tests existing API key against stored inference URL when only base URL changes", async () => {
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Base URL Update With Stored Inference URL Test",
+        provider: "openai",
+        apiKey: "sk-openai-base-url-update-test",
+        scope: "personal",
+        baseUrl: "https://discovery.example.com/v1",
+        inferenceBaseUrl: "https://runtime.example.com/v1",
+      },
+    });
+    expect(createResponse.statusCode).toBe(200);
+    const createdKey = createResponse.json();
+    mockTestProviderApiKey.mockClear();
+
+    const updateResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${createdKey.id}`,
+      payload: {
+        baseUrl: "https://new-discovery.example.com/v1",
+      },
+    });
+
+    expect(updateResponse.statusCode).toBe(200);
+    expect(mockTestProviderApiKey).toHaveBeenCalledWith(
+      "openai",
+      "sk-openai-base-url-update-test",
+      "https://runtime.example.com/v1",
+      null,
+    );
+  });
+
+  test("re-tests existing API key against updated base URL when inference URL is cleared", async () => {
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Inference URL Clear Test",
+        provider: "openai",
+        apiKey: "sk-openai-inference-url-clear-test",
+        scope: "personal",
+        baseUrl: "https://discovery.example.com/v1",
+        inferenceBaseUrl: "https://runtime.example.com/v1",
+      },
+    });
+    expect(createResponse.statusCode).toBe(200);
+    const createdKey = createResponse.json();
+    mockTestProviderApiKey.mockClear();
+
+    const updateResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${createdKey.id}`,
+      payload: {
+        baseUrl: "https://new-runtime.example.com/v1",
+        inferenceBaseUrl: null,
+      },
+    });
+
+    expect(updateResponse.statusCode).toBe(200);
+    expect(mockTestProviderApiKey).toHaveBeenCalledWith(
+      "openai",
+      "sk-openai-inference-url-clear-test",
+      "https://new-runtime.example.com/v1",
+      null,
+    );
+  });
+
   test("tests new API key value against inference URL when both change", async () => {
     const createResponse = await app.inject({
       method: "POST",

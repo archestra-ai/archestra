@@ -92,13 +92,13 @@ function resolveRuntimeTestBaseUrl(params: {
   apiKey: Pick<LlmProviderApiKey, "baseUrl" | "inferenceBaseUrl">;
 }): string | null {
   const { body, apiKey } = params;
-  if (body.inferenceBaseUrl !== undefined) {
-    return body.inferenceBaseUrl;
-  }
-  if (body.baseUrl !== undefined) {
-    return body.baseUrl;
-  }
-  return apiKey.inferenceBaseUrl ?? apiKey.baseUrl;
+  const effectiveInferenceBaseUrl =
+    body.inferenceBaseUrl !== undefined
+      ? body.inferenceBaseUrl
+      : apiKey.inferenceBaseUrl;
+  const effectiveBaseUrl =
+    body.baseUrl !== undefined ? body.baseUrl : apiKey.baseUrl;
+  return effectiveInferenceBaseUrl ?? effectiveBaseUrl;
 }
 
 const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {

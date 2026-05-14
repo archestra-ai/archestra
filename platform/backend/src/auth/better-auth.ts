@@ -417,6 +417,23 @@ type SignOutAuditStash = {
 
 const signOutAuditSessionByRequest = new WeakMap<Request, SignOutAuditStash>();
 
+type MemberRoleUpdateStash = {
+  memberId: string;
+  priorRole: string;
+};
+
+const memberRoleUpdateByRequest = new WeakMap<Request, MemberRoleUpdateStash>();
+
+type MemberRemoveStash = {
+  memberId: string;
+  organizationId: string;
+  role: string;
+  email: string;
+  name: string | null;
+};
+
+const memberRemoveByRequest = new WeakMap<Request, MemberRemoveStash>();
+
 function isAuthSignOutPath(path: string | undefined): boolean {
   if (!path) return false;
   const p = path.split("?")[0] ?? path;
@@ -574,6 +591,7 @@ function shouldTrustAllOriginsForIdentityProviderRegistration(
  */
 export async function handleBeforeHook(ctx: HookEndpointContext) {
   const { path, method, body } = ctx;
+  const beforeRequest = ctx.request as Request | undefined;
 
   if (!path) {
     return ctx;
@@ -583,6 +601,65 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
 
   if (isAuthSignOutPath(path)) {
     await stashSignOutSessionForAudit(ctx);
+  }
+
+  if (
+    path === "/organization/update-member" &&
+    method === "POST" &&
+    beforeRequest
+  ) {
+    const memberId = body.memberId as string | undefined;
+    if (memberId) {
+      const [existing] = await db
+        .select({ id: schema.membersTable.id, role: schema.membersTable.role })
+        .from(schema.membersTable)
+        .where(eq(schema.membersTable.id, memberId))
+        .limit(1);
+      if (existing) {
+        memberRoleUpdateByRequest.set(beforeRequest, {
+          memberId,
+          priorRole: existing.role,
+        });
+      }
+    }
+  }
+
+  if (
+    path === "/organization/remove-member" &&
+    method === "POST" &&
+    beforeRequest
+  ) {
+    const memberIdOrEmail = body.memberIdOrEmail as string | undefined;
+    if (memberIdOrEmail) {
+      const [existing] = await db
+        .select({
+          id: schema.membersTable.id,
+          organizationId: schema.membersTable.organizationId,
+          role: schema.membersTable.role,
+          email: schema.usersTable.email,
+          name: schema.usersTable.name,
+        })
+        .from(schema.membersTable)
+        .innerJoin(
+          schema.usersTable,
+          eq(schema.membersTable.userId, schema.usersTable.id),
+        )
+        .where(
+          memberIdOrEmail.includes("@")
+            ? eq(schema.usersTable.email, memberIdOrEmail)
+            : eq(schema.membersTable.id, memberIdOrEmail),
+        )
+        .limit(1);
+      if (existing) {
+        memberRemoveByRequest.set(beforeRequest, {
+          memberId: existing.id,
+          organizationId: existing.organizationId,
+          role: existing.role,
+          email: existing.email,
+          name: existing.name ?? null,
+        });
+      }
+    }
   }
 
   // Block invitation creation when invitations are disabled
@@ -803,11 +880,241 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         { invitationId },
         "[auth:afterHook] Deleting canceled invitation",
       );
+      // Capture invitation data before deleting so we can audit it
+      let canceledInvitation:
+        | Awaited<ReturnType<typeof InvitationModel.getById>>
+        | undefined;
+      try {
+        canceledInvitation = await InvitationModel.getById(invitationId);
+      } catch (err) {
+        logger.debug(
+          { err },
+          "[auth:audit] cancel-invitation: failed to fetch invitation for audit",
+        );
+      }
       try {
         await InvitationModel.delete(invitationId);
         logger.info(`✅ Invitation ${invitationId} deleted from database`);
       } catch (error) {
         logger.error({ err: error }, "❌ Failed to delete invitation:");
+      }
+      if (canceledInvitation && request) {
+        try {
+          const headers = new Headers(request.headers as HeadersInit);
+          const resolved = await auth.api.getSession({ headers });
+          if (resolved?.user && resolved?.session) {
+            const row = await AuditLogModel.create({
+              organizationId: canceledInvitation.organizationId,
+              actorUserId: resolved.user.id,
+              actorName: resolved.user.name ?? null,
+              actorEmail: resolved.user.email,
+              action: "delete",
+              resourceType: "invitation",
+              resourceId: canceledInvitation.id,
+              priorState: {
+                email: canceledInvitation.email,
+                role: canceledInvitation.role ?? null,
+                status: canceledInvitation.status,
+              },
+              postState: null,
+              httpMethod: "POST",
+              httpPath: path,
+              httpRoute: null,
+              httpStatus: null,
+              ipAddress: resolveAuthClientIp(request),
+              userAgent: request.headers.get("user-agent") ?? null,
+            });
+            const { default: ws } = await import("@/websocket");
+            void ws.broadcastAuditLog(row as Record<string, unknown>);
+          }
+        } catch (err) {
+          logger.error(
+            { err },
+            "[auth:audit] failed to write cancel-invitation audit row",
+          );
+        }
+      }
+    }
+  }
+
+  // Audit invitation sent
+  if (path === "/organization/invite-member" && method === "POST" && request) {
+    const email = body.email as string | undefined;
+    const role = body.role as string | undefined;
+    const orgId = body.organizationId as string | undefined;
+    if (email && orgId) {
+      try {
+        const headers = new Headers(request.headers as HeadersInit);
+        const resolved = await auth.api.getSession({ headers });
+        if (resolved?.user && resolved?.session) {
+          // Find the invitation that was just created so we have its id
+          const invitation = await InvitationModel.findByEmail(email).then(
+            (rows) => rows.find((r) => r.organizationId === orgId) ?? null,
+          );
+          const row = await AuditLogModel.create({
+            organizationId: orgId,
+            actorUserId: resolved.user.id,
+            actorName: resolved.user.name ?? null,
+            actorEmail: resolved.user.email,
+            action: "create",
+            resourceType: "invitation",
+            resourceId: invitation?.id ?? null,
+            priorState: null,
+            postState: { email, role: role ?? null },
+            httpMethod: "POST",
+            httpPath: path,
+            httpRoute: null,
+            httpStatus: null,
+            ipAddress: resolveAuthClientIp(request),
+            userAgent: request.headers.get("user-agent") ?? null,
+          });
+          const { default: ws } = await import("@/websocket");
+          void ws.broadcastAuditLog(row as Record<string, unknown>);
+        }
+      } catch (err) {
+        logger.error(
+          { err },
+          "[auth:audit] failed to write invite-member audit row",
+        );
+      }
+    }
+  }
+
+  // Audit invitation accepted by an already-authenticated user
+  if (
+    path === "/organization/accept-invitation" &&
+    method === "POST" &&
+    request
+  ) {
+    const invitationId = body.invitationId as string | undefined;
+    if (invitationId) {
+      try {
+        const headers = new Headers(request.headers as HeadersInit);
+        const resolved = await auth.api.getSession({ headers });
+        if (resolved?.user && resolved?.session) {
+          const invitation = await InvitationModel.getById(invitationId);
+          if (invitation) {
+            const row = await AuditLogModel.create({
+              organizationId: invitation.organizationId,
+              actorUserId: resolved.user.id,
+              actorName: resolved.user.name ?? null,
+              actorEmail: resolved.user.email,
+              action: "create",
+              resourceType: "member",
+              resourceId: invitationId,
+              priorState: null,
+              postState: {
+                email: invitation.email,
+                role: invitation.role ?? null,
+                invitationId,
+              },
+              httpMethod: "POST",
+              httpPath: path,
+              httpRoute: null,
+              httpStatus: null,
+              ipAddress: resolveAuthClientIp(request),
+              userAgent: request.headers.get("user-agent") ?? null,
+            });
+            const { default: ws } = await import("@/websocket");
+            void ws.broadcastAuditLog(row as Record<string, unknown>);
+          }
+        }
+      } catch (err) {
+        logger.error(
+          { err },
+          "[auth:audit] failed to write accept-invitation audit row",
+        );
+      }
+    }
+  }
+
+  // Audit member role changes
+  if (path === "/organization/update-member" && method === "POST" && request) {
+    const stash = memberRoleUpdateByRequest.get(request);
+    memberRoleUpdateByRequest.delete(request);
+    const newRole = body.role as string | undefined;
+    if (stash && newRole && stash.priorRole !== newRole) {
+      try {
+        const headers = new Headers(request.headers as HeadersInit);
+        const resolved = await auth.api.getSession({ headers });
+        if (resolved?.user && resolved?.session) {
+          const [member] = await db
+            .select({
+              userId: schema.membersTable.userId,
+              organizationId: schema.membersTable.organizationId,
+            })
+            .from(schema.membersTable)
+            .where(eq(schema.membersTable.id, stash.memberId))
+            .limit(1);
+          if (member) {
+            const row = await AuditLogModel.create({
+              organizationId: member.organizationId,
+              actorUserId: resolved.user.id,
+              actorName: resolved.user.name ?? null,
+              actorEmail: resolved.user.email,
+              action: "update",
+              resourceType: "member",
+              resourceId: stash.memberId,
+              priorState: { role: stash.priorRole },
+              postState: { role: newRole },
+              httpMethod: "POST",
+              httpPath: path,
+              httpRoute: null,
+              httpStatus: null,
+              ipAddress: resolveAuthClientIp(request),
+              userAgent: request.headers.get("user-agent") ?? null,
+            });
+            const { default: ws } = await import("@/websocket");
+            void ws.broadcastAuditLog(row as Record<string, unknown>);
+          }
+        }
+      } catch (err) {
+        logger.error(
+          { err },
+          "[auth:audit] failed to write member role update audit row",
+        );
+      }
+    }
+  }
+
+  // Audit member removal
+  if (path === "/organization/remove-member" && method === "POST" && request) {
+    const stash = memberRemoveByRequest.get(request);
+    memberRemoveByRequest.delete(request);
+    if (stash) {
+      try {
+        const headers = new Headers(request.headers as HeadersInit);
+        const resolved = await auth.api.getSession({ headers });
+        if (resolved?.user && resolved?.session) {
+          const row = await AuditLogModel.create({
+            organizationId: stash.organizationId,
+            actorUserId: resolved.user.id,
+            actorName: resolved.user.name ?? null,
+            actorEmail: resolved.user.email,
+            action: "delete",
+            resourceType: "member",
+            resourceId: stash.memberId,
+            priorState: {
+              email: stash.email,
+              name: stash.name,
+              role: stash.role,
+            },
+            postState: null,
+            httpMethod: "POST",
+            httpPath: path,
+            httpRoute: null,
+            httpStatus: null,
+            ipAddress: resolveAuthClientIp(request),
+            userAgent: request.headers.get("user-agent") ?? null,
+          });
+          const { default: ws } = await import("@/websocket");
+          void ws.broadcastAuditLog(row as Record<string, unknown>);
+        }
+      } catch (err) {
+        logger.error(
+          { err },
+          "[auth:audit] failed to write remove-member audit row",
+        );
       }
     }
   }

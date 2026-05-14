@@ -2461,6 +2461,432 @@ describe("auth event audit logging", () => {
     acceptSpy.mockRestore();
   });
 
+  test("invite-member produces audit row with action=create on invitation", async ({
+    makeUser,
+    makeOrganization,
+    makeInvitation,
+  }) => {
+    const admin = await makeUser({ email: "invite-audit-admin@example.com" });
+    const org = await makeOrganization();
+    const invitation = await makeInvitation(org.id, admin.id, {
+      email: "invite-audit-new@example.com",
+      status: "pending",
+      role: "member",
+    });
+
+    // Mock getSession so the afterHook can resolve the actor
+    const getSessionSpy = vi
+      .spyOn(auth.api, "getSession")
+      .mockResolvedValueOnce({
+        user: { id: admin.id, email: admin.email, name: admin.name },
+        session: { id: "sess-invite-audit", activeOrganizationId: org.id },
+      } as unknown as NonNullable<
+        Awaited<ReturnType<typeof auth.api.getSession>>
+      >);
+
+    const ctx = createMockContext({
+      path: "/organization/invite-member",
+      method: "POST",
+      body: {
+        email: "invite-audit-new@example.com",
+        role: "member",
+        organizationId: org.id,
+      },
+      request: new Request(
+        "http://localhost/api/auth/organization/invite-member",
+        {
+          method: "POST",
+        },
+      ),
+    });
+
+    await handleAfterHook(ctx);
+    await waitForAuditWrite();
+    getSessionSpy.mockRestore();
+
+    const { data } = await AuditLogModel.findPaginated({
+      organizationId: org.id,
+      limit: 10,
+      offset: 0,
+    });
+
+    const rows = data.filter(
+      (r) => r.resourceType === "invitation" && r.action === "create",
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].actorUserId).toBe(admin.id);
+    expect(rows[0].resourceId).toBe(invitation.id);
+    expect(rows[0].postState).toMatchObject({
+      email: "invite-audit-new@example.com",
+      role: "member",
+    });
+    expect(rows[0].priorState).toBeNull();
+  });
+
+  test("cancel-invitation produces audit row with action=delete on invitation", async ({
+    makeUser,
+    makeOrganization,
+    makeInvitation,
+  }) => {
+    const admin = await makeUser({ email: "cancel-audit-admin@example.com" });
+    const org = await makeOrganization();
+    const invitation = await makeInvitation(org.id, admin.id, {
+      email: "cancel-audit-user@example.com",
+      status: "pending",
+      role: "editor",
+    });
+
+    const getSessionSpy = vi
+      .spyOn(auth.api, "getSession")
+      .mockResolvedValueOnce({
+        user: { id: admin.id, email: admin.email, name: admin.name },
+        session: { id: "sess-cancel-audit", activeOrganizationId: org.id },
+      } as unknown as NonNullable<
+        Awaited<ReturnType<typeof auth.api.getSession>>
+      >);
+
+    const ctx = createMockContext({
+      path: "/organization/cancel-invitation",
+      method: "POST",
+      body: { invitationId: invitation.id },
+      request: new Request(
+        "http://localhost/api/auth/organization/cancel-invitation",
+        {
+          method: "POST",
+        },
+      ),
+    });
+
+    await handleAfterHook(ctx);
+    await waitForAuditWrite();
+    getSessionSpy.mockRestore();
+
+    const { data } = await AuditLogModel.findPaginated({
+      organizationId: org.id,
+      limit: 10,
+      offset: 0,
+    });
+
+    const rows = data.filter(
+      (r) => r.resourceType === "invitation" && r.action === "delete",
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].actorUserId).toBe(admin.id);
+    expect(rows[0].resourceId).toBe(invitation.id);
+    expect(rows[0].priorState).toMatchObject({
+      email: "cancel-audit-user@example.com",
+      role: "editor",
+      status: "pending",
+    });
+    expect(rows[0].postState).toBeNull();
+  });
+
+  test("accept-invitation produces audit row with action=create on member", async ({
+    makeUser,
+    makeOrganization,
+    makeInvitation,
+  }) => {
+    const inviter = await makeUser({
+      email: "accept-audit-inviter@example.com",
+    });
+    const joiner = await makeUser({ email: "accept-audit-joiner@example.com" });
+    const org = await makeOrganization();
+    const invitation = await makeInvitation(org.id, inviter.id, {
+      email: "accept-audit-joiner@example.com",
+      status: "pending",
+      role: "editor",
+    });
+
+    const getSessionSpy = vi
+      .spyOn(auth.api, "getSession")
+      .mockResolvedValueOnce({
+        user: { id: joiner.id, email: joiner.email, name: joiner.name },
+        session: { id: "sess-accept-audit", activeOrganizationId: org.id },
+      } as unknown as NonNullable<
+        Awaited<ReturnType<typeof auth.api.getSession>>
+      >);
+
+    const ctx = createMockContext({
+      path: "/organization/accept-invitation",
+      method: "POST",
+      body: { invitationId: invitation.id },
+      request: new Request(
+        "http://localhost/api/auth/organization/accept-invitation",
+        {
+          method: "POST",
+        },
+      ),
+    });
+
+    await handleAfterHook(ctx);
+    await waitForAuditWrite();
+    getSessionSpy.mockRestore();
+
+    const { data } = await AuditLogModel.findPaginated({
+      organizationId: org.id,
+      limit: 10,
+      offset: 0,
+    });
+
+    const rows = data.filter(
+      (r) => r.resourceType === "member" && r.action === "create",
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].actorUserId).toBe(joiner.id);
+    expect(rows[0].resourceId).toBe(invitation.id);
+    expect(rows[0].postState).toMatchObject({
+      email: "accept-audit-joiner@example.com",
+      role: "editor",
+      invitationId: invitation.id,
+    });
+    expect(rows[0].priorState).toBeNull();
+  });
+
+  test("update-member role produces audit row with priorState and postState", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const admin = await makeUser({ email: "role-audit-admin@example.com" });
+    const target = await makeUser({ email: "role-audit-target@example.com" });
+    const org = await makeOrganization();
+    await makeMember(admin.id, org.id, { role: "admin" });
+    const member = await makeMember(target.id, org.id, { role: "member" });
+
+    // Stash prior role in the WeakMap via beforeHook
+    const beforeRequest = new Request(
+      "http://localhost/api/auth/organization/update-member",
+      { method: "POST" },
+    );
+    await handleBeforeHook(
+      createMockContext({
+        path: "/organization/update-member",
+        method: "POST",
+        body: { memberId: member.id, role: "editor" },
+        request: beforeRequest,
+      }),
+    );
+
+    const getSessionSpy = vi
+      .spyOn(auth.api, "getSession")
+      .mockResolvedValueOnce({
+        user: { id: admin.id, email: admin.email, name: admin.name },
+        session: { id: "sess-role-audit", activeOrganizationId: org.id },
+      } as unknown as NonNullable<
+        Awaited<ReturnType<typeof auth.api.getSession>>
+      >);
+
+    const afterCtx = createMockContext({
+      path: "/organization/update-member",
+      method: "POST",
+      body: { memberId: member.id, role: "editor" },
+      request: beforeRequest,
+    });
+
+    await handleAfterHook(afterCtx);
+    await waitForAuditWrite();
+    getSessionSpy.mockRestore();
+
+    const { data } = await AuditLogModel.findPaginated({
+      organizationId: org.id,
+      limit: 10,
+      offset: 0,
+    });
+
+    const rows = data.filter(
+      (r) => r.resourceType === "member" && r.action === "update",
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].actorUserId).toBe(admin.id);
+    expect(rows[0].resourceId).toBe(member.id);
+    expect(rows[0].priorState).toMatchObject({ role: "member" });
+    expect(rows[0].postState).toMatchObject({ role: "editor" });
+  });
+
+  test("update-member with unchanged role produces no audit row", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const admin = await makeUser({ email: "role-noop-admin@example.com" });
+    const target = await makeUser({ email: "role-noop-target@example.com" });
+    const org = await makeOrganization();
+    const member = await makeMember(target.id, org.id, { role: "member" });
+
+    const beforeRequest = new Request(
+      "http://localhost/api/auth/organization/update-member",
+      { method: "POST" },
+    );
+    await handleBeforeHook(
+      createMockContext({
+        path: "/organization/update-member",
+        method: "POST",
+        body: { memberId: member.id, role: "member" },
+        request: beforeRequest,
+      }),
+    );
+
+    const getSessionSpy = vi
+      .spyOn(auth.api, "getSession")
+      .mockResolvedValueOnce({
+        user: { id: admin.id, email: admin.email, name: admin.name },
+        session: { id: "sess-role-noop", activeOrganizationId: org.id },
+      } as unknown as NonNullable<
+        Awaited<ReturnType<typeof auth.api.getSession>>
+      >);
+
+    await handleAfterHook(
+      createMockContext({
+        path: "/organization/update-member",
+        method: "POST",
+        body: { memberId: member.id, role: "member" },
+        request: beforeRequest,
+      }),
+    );
+    await waitForAuditWrite();
+    getSessionSpy.mockRestore();
+
+    const { data } = await AuditLogModel.findPaginated({
+      organizationId: org.id,
+      limit: 10,
+      offset: 0,
+    });
+    expect(
+      data.filter((r) => r.resourceType === "member" && r.action === "update"),
+    ).toHaveLength(0);
+  });
+
+  test("remove-member produces audit row with email/name/role in priorState", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const admin = await makeUser({ email: "remove-audit-admin@example.com" });
+    const target = await makeUser({
+      email: "remove-audit-target@example.com",
+      name: "Target User",
+    });
+    const org = await makeOrganization();
+    await makeMember(admin.id, org.id, { role: "admin" });
+    const member = await makeMember(target.id, org.id, { role: "editor" });
+
+    const beforeRequest = new Request(
+      "http://localhost/api/auth/organization/remove-member",
+      { method: "POST" },
+    );
+
+    await handleBeforeHook(
+      createMockContext({
+        path: "/organization/remove-member",
+        method: "POST",
+        body: { memberIdOrEmail: member.id },
+        request: beforeRequest,
+      }),
+    );
+
+    const getSessionSpy = vi
+      .spyOn(auth.api, "getSession")
+      .mockResolvedValueOnce({
+        user: { id: admin.id, email: admin.email, name: admin.name },
+        session: { id: "sess-remove-audit", activeOrganizationId: org.id },
+      } as unknown as NonNullable<
+        Awaited<ReturnType<typeof auth.api.getSession>>
+      >);
+
+    await handleAfterHook(
+      createMockContext({
+        path: "/organization/remove-member",
+        method: "POST",
+        body: { memberIdOrEmail: member.id },
+        request: beforeRequest,
+      }),
+    );
+    await waitForAuditWrite();
+    getSessionSpy.mockRestore();
+
+    const { data } = await AuditLogModel.findPaginated({
+      organizationId: org.id,
+      limit: 10,
+      offset: 0,
+    });
+
+    const rows = data.filter(
+      (r) => r.resourceType === "member" && r.action === "delete",
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].actorUserId).toBe(admin.id);
+    expect(rows[0].resourceId).toBe(member.id);
+    expect(rows[0].priorState).toMatchObject({
+      email: target.email,
+      name: target.name,
+      role: "editor",
+    });
+    expect(rows[0].postState).toBeNull();
+  });
+
+  test("remove-member by email address produces audit row", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const admin = await makeUser({ email: "remove-email-admin@example.com" });
+    const target = await makeUser({ email: "remove-email-target@example.com" });
+    const org = await makeOrganization();
+    await makeMember(admin.id, org.id, { role: "admin" });
+    const member = await makeMember(target.id, org.id, { role: "member" });
+
+    const beforeRequest = new Request(
+      "http://localhost/api/auth/organization/remove-member",
+      { method: "POST" },
+    );
+
+    // Pass email instead of member ID — same code path as ID-based lookup
+    await handleBeforeHook(
+      createMockContext({
+        path: "/organization/remove-member",
+        method: "POST",
+        body: { memberIdOrEmail: target.email },
+        request: beforeRequest,
+      }),
+    );
+
+    const getSessionSpy = vi
+      .spyOn(auth.api, "getSession")
+      .mockResolvedValueOnce({
+        user: { id: admin.id, email: admin.email, name: admin.name },
+        session: { id: "sess-remove-email", activeOrganizationId: org.id },
+      } as unknown as NonNullable<
+        Awaited<ReturnType<typeof auth.api.getSession>>
+      >);
+
+    await handleAfterHook(
+      createMockContext({
+        path: "/organization/remove-member",
+        method: "POST",
+        body: { memberIdOrEmail: target.email },
+        request: beforeRequest,
+      }),
+    );
+    await waitForAuditWrite();
+    getSessionSpy.mockRestore();
+
+    const { data } = await AuditLogModel.findPaginated({
+      organizationId: org.id,
+      limit: 10,
+      offset: 0,
+    });
+
+    const rows = data.filter(
+      (r) => r.resourceType === "member" && r.action === "delete",
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].resourceId).toBe(member.id);
+    expect(rows[0].priorState).toMatchObject({
+      email: target.email,
+      role: "member",
+    });
+  });
+
   test("sign-in for user with no membership falls back to primary org lookup", async ({
     makeUser,
     makeOrganization,

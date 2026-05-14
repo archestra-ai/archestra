@@ -117,23 +117,24 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         (body.organizationId as string) || (body.orgId as string);
 
       let userId: string | undefined;
+      let resolvedOrganizationId: string | undefined;
 
-      // Capture userId before better-auth deletes the member
+      // Capture userId before better-auth deletes the member (needed for
+      // token/user cleanup below). Audit is handled in the better-auth afterHook.
       if (memberIdOrEmail) {
-        // First try to find by member ID
         const memberToDelete = await MemberModel.getById(memberIdOrEmail);
 
         if (memberToDelete) {
           userId = memberToDelete.userId;
-        } else {
-          // Maybe it's an email - try finding by userId + orgId
+          resolvedOrganizationId = memberToDelete.organizationId;
+        } else if (organizationId) {
           const memberByUserId = await MemberModel.getByUserId(
             memberIdOrEmail,
             organizationId,
           );
-
           if (memberByUserId) {
             userId = memberByUserId.userId;
+            resolvedOrganizationId = memberByUserId.organizationId;
           }
         }
       }
@@ -155,11 +156,14 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const response = await betterAuth.handler(req);
 
       // After successful member removal, delete user's personal token for this org
-      if (response.ok && userId && organizationId) {
+      if (response.ok && userId && resolvedOrganizationId) {
         try {
-          await UserTokenModel.deleteByUserAndOrg(userId, organizationId);
+          await UserTokenModel.deleteByUserAndOrg(
+            userId,
+            resolvedOrganizationId,
+          );
           logger.info(
-            `🔑 Personal token deleted for user ${userId} in org ${organizationId}`,
+            `🔑 Personal token deleted for user ${userId} in org ${resolvedOrganizationId}`,
           );
         } catch (tokenDeleteError) {
           logger.error(

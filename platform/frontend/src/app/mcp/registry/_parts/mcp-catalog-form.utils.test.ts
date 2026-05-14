@@ -453,6 +453,7 @@ describe("transformFormToApiData", () => {
         fieldName: "header_x_tenant_id",
         headerName: "x-tenant-id",
         promptOnInstallation: false,
+        promptOnPreset: false,
         required: false,
         value: "tenant-42",
         description: "Tenant ID",

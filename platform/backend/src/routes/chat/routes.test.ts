@@ -295,11 +295,10 @@ describe("prepareMessagesForProvider", () => {
       ],
     });
 
-    const stepStartIndex = messages[0].parts?.findIndex(
-      (part) => part.type === "step-start",
-    );
+    const stepStartIndex =
+      messages[0].parts?.findIndex((part) => part.type === "step-start") ?? -1;
     expect(stepStartIndex).toBeGreaterThan(0);
-    expect(messages[0].parts?.[stepStartIndex! - 1]).toEqual(
+    expect(messages[0].parts?.[stepStartIndex - 1]).toEqual(
       expect.objectContaining({
         type: "text",
         text: expect.stringMatching(/\S/),

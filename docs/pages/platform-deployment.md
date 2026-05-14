@@ -778,6 +778,33 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Uses Azure Identity `DefaultAzureCredential` with token scope `https://ai.azure.com/.default`
   - Claude deployments must already exist in the Azure resource. Microsoft lists additional Claude prerequisites: paid eligible subscription, supported region, Azure Marketplace access for partner models, permission to subscribe to model offerings, and Contributor or Owner role on the resource group. Azure also requires Anthropic deployment metadata: `industry`, `organizationName`, and `countryCode`.
 
+- **`ARCHESTRA_ANTHROPIC_WORKLOAD_IDENTITY_ENABLED`** - Enable Anthropic Workload Identity Federation for keyless Anthropic API authentication.
+  - Default: `false`
+  - Use with `ARCHESTRA_ANTHROPIC_BASE_URL=https://api.anthropic.com`
+  - When enabled and a request does not include an Anthropic API key, Archestra exchanges the configured identity-provider JWT for a short-lived Anthropic access token at `/v1/oauth/token` and forwards requests with `Authorization: Bearer <token>`.
+  - Requires `ARCHESTRA_ANTHROPIC_FEDERATION_RULE_ID`, `ARCHESTRA_ANTHROPIC_ORGANIZATION_ID`, `ARCHESTRA_ANTHROPIC_SERVICE_ACCOUNT_ID`, and one of `ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE` or `ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN`.
+  - `ARCHESTRA_ANTHROPIC_WORKSPACE_ID` is optional unless the Anthropic federation rule is enabled for more than one workspace.
+
+- **`ARCHESTRA_ANTHROPIC_FEDERATION_RULE_ID`** - Anthropic federation rule ID (`fdrl_...`) used for Workload Identity Federation token exchange.
+  - Required when `ARCHESTRA_ANTHROPIC_WORKLOAD_IDENTITY_ENABLED=true`
+
+- **`ARCHESTRA_ANTHROPIC_ORGANIZATION_ID`** - Anthropic organization UUID used for Workload Identity Federation token exchange.
+  - Required when `ARCHESTRA_ANTHROPIC_WORKLOAD_IDENTITY_ENABLED=true`
+
+- **`ARCHESTRA_ANTHROPIC_SERVICE_ACCOUNT_ID`** - Anthropic service account ID (`svac_...`) that the federated access token acts as.
+  - Required when `ARCHESTRA_ANTHROPIC_WORKLOAD_IDENTITY_ENABLED=true`
+
+- **`ARCHESTRA_ANTHROPIC_WORKSPACE_ID`** - Anthropic workspace ID (`wrkspc_...`) or `default` for the federated token.
+  - Required only when the federation rule is enabled for more than one workspace
+
+- **`ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE`** - Filesystem path to the OIDC JWT issued by your identity provider.
+  - Preferred for Kubernetes projected service-account tokens and other rotating token files because Archestra re-reads the file whenever it refreshes the Anthropic access token.
+  - One of `ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE` or `ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN` is required when `ARCHESTRA_ANTHROPIC_WORKLOAD_IDENTITY_ENABLED=true`
+
+- **`ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN`** - Literal OIDC JWT issued by your identity provider.
+  - Use only when your platform injects the JWT directly as an environment variable. Prefer `ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE` when available.
+  - Stored as a Helm Secret value when supplied through `archestra.env`.
+
 - **`ARCHESTRA_GEMINI_BASE_URL`** - Override the Google Gemini API base URL.
   - Default: `https://generativelanguage.googleapis.com`
   - Use this to point to your own proxy or other custom endpoints

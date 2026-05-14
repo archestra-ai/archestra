@@ -3,6 +3,10 @@ import { ArchestraInternalErrorCode } from "@shared";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import {
+  getAnthropicWorkloadIdentityBearerTokenProvider,
+  isAnthropicWorkloadIdentityEnabled,
+} from "@/clients/anthropic-workload-identity";
+import {
   getAzureAiFoundryBearerTokenProvider,
   isAnthropicAzureFoundryEntraIdEnabled,
 } from "@/clients/azure-openai-credentials";
@@ -1172,6 +1176,23 @@ export const anthropicAdapterFactory: LLMProvider<
       });
     }
 
+    if (!apiKey && isAnthropicWorkloadIdentityEnabled()) {
+      return new AnthropicProvider({
+        apiKey: null,
+        authToken: null,
+        baseURL: options.baseUrl,
+        fetch: createAnthropicWorkloadIdentityFetch(
+          options.baseUrl,
+          customFetch,
+        ),
+        defaultHeaders: {
+          ...options.defaultHeaders,
+          // The fetch wrapper replaces this sentinel with a fresh Anthropic WIF token on every request.
+          Authorization: "Bearer <anthropic-wif-managed>",
+        },
+      });
+    }
+
     return new AnthropicProvider({
       apiKey: regularApiKey,
       authToken: token,
@@ -1248,6 +1269,27 @@ function createAnthropicAzureFoundryFetch(
   return async (input, init) => {
     const tokenProvider = getAzureAiFoundryBearerTokenProvider();
     const headers = new Headers(init?.headers);
+    headers.set("Authorization", `Bearer ${await tokenProvider()}`);
+
+    const fetchFn = baseFetch ?? globalThis.fetch;
+    return fetchFn(input, {
+      ...init,
+      headers,
+    });
+  };
+}
+
+function createAnthropicWorkloadIdentityFetch(
+  baseUrl: string | undefined,
+  baseFetch: typeof globalThis.fetch | undefined,
+): typeof globalThis.fetch {
+  return async (input, init) => {
+    const tokenProvider = getAnthropicWorkloadIdentityBearerTokenProvider(
+      baseUrl,
+      baseFetch,
+    );
+    const headers = new Headers(init?.headers);
+    headers.delete("x-api-key");
     headers.set("Authorization", `Bearer ${await tokenProvider()}`);
 
     const fetchFn = baseFetch ?? globalThis.fetch;

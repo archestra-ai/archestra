@@ -68,6 +68,7 @@ Additionally, any env var matching ARCHESTRA_CHAT_*_API_KEY is treated as sensit
   "ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER"
   "ARCHESTRA_METRICS_SECRET"
   "ARCHESTRA_HASHICORP_VAULT_TOKEN"
+  "ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN"
 }}
 {{- if eq (toString .Values.postgresql.external_database_url) "from_vault" }}
 {{/* Database URL provided by vault-secrets init container — no env var generated */}}

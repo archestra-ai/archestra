@@ -84,6 +84,26 @@ Azure requires Anthropic deployment metadata when creating Claude deployments: `
 
 See Microsoft's [Claude on Foundry guide](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-claude) for the Azure endpoint and authentication details.
 
+### Anthropic Workload Identity Federation
+
+Anthropic Workload Identity Federation lets Archestra call the Anthropic API without a long-lived `x-api-key`. Your workload presents a short-lived OIDC JWT from an identity provider such as Kubernetes, GitHub Actions, AWS, Google Cloud, Microsoft Entra ID, SPIFFE, or Okta; Archestra exchanges it for a short-lived Anthropic access token and sends that token as bearer auth.
+
+Enable this mode only for the official Anthropic API endpoint:
+
+```bash
+ARCHESTRA_ANTHROPIC_BASE_URL=https://api.anthropic.com
+ARCHESTRA_ANTHROPIC_WORKLOAD_IDENTITY_ENABLED=true
+ARCHESTRA_ANTHROPIC_FEDERATION_RULE_ID=fdrl_...
+ARCHESTRA_ANTHROPIC_ORGANIZATION_ID=00000000-0000-0000-0000-000000000000
+ARCHESTRA_ANTHROPIC_SERVICE_ACCOUNT_ID=svac_...
+ARCHESTRA_ANTHROPIC_WORKSPACE_ID=wrkspc_...
+ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE=/var/run/secrets/anthropic.com/token
+```
+
+Use `ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN` instead of `ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE` only when your platform injects the JWT directly as an environment variable. `ARCHESTRA_ANTHROPIC_WORKSPACE_ID` may be omitted when the Anthropic federation rule is scoped to a single workspace.
+
+See the [deployment environment variables](/docs/platform-deployment#llm-provider-configuration) and Anthropic's [Workload Identity Federation guide](https://platform.claude.com/docs/en/manage-claude/workload-identity-federation) and [WIF reference](https://platform.claude.com/docs/en/manage-claude/wif-reference) for setup details.
+
 ## Google Gemini
 
 Archestra supports both the [Google AI Studio](https://ai.google.dev/) (Gemini Developer API) and [Vertex AI](https://cloud.google.com/vertex-ai) implementations of the Gemini API.

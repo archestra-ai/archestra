@@ -1,6 +1,12 @@
 import type AnthropicProvider from "@anthropic-ai/sdk";
 import { describe, expect, test, vi } from "vitest";
 
+vi.hoisted(() => {
+  process.env.ARCHESTRA_DATABASE_URL =
+    process.env.ARCHESTRA_DATABASE_URL ??
+    "postgres://postgres:postgres@localhost:5432/archestra_test";
+});
+
 vi.mock("@/observability", () => ({
   metrics: { llm: { getObservableFetch: vi.fn() } },
 }));
@@ -10,6 +16,11 @@ vi.mock("@/clients/azure-openai-credentials", () => ({
     () => async () => "azure-foundry-token",
   ),
   isAnthropicAzureFoundryEntraIdEnabled: vi.fn(() => true),
+}));
+
+vi.mock("@/clients/anthropic-workload-identity", () => ({
+  getAnthropicWorkloadIdentityBearerTokenProvider: vi.fn(),
+  isAnthropicWorkloadIdentityEnabled: vi.fn(() => false),
 }));
 
 import { anthropicAdapterFactory } from "./anthropic";

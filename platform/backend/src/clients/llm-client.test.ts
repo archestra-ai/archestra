@@ -7,6 +7,7 @@ import {
   UNTRUSTED_CONTEXT_HEADER,
   USER_ID_HEADER,
 } from "@shared";
+import { streamText } from "ai";
 import { vi } from "vitest";
 import { ConversationModel, LlmProviderApiKeyModel } from "@/models";
 import { describe, expect, it, test } from "@/test";
@@ -506,7 +507,7 @@ describe("createLLMModel", () => {
     });
 
     expect(result.apiKeySource).toBe("org");
-    expect(capturedCreateOpenAIOptions.apiKey).toBeUndefined();
+    expect(capturedCreateOpenAIOptions.apiKey).toBe("EMPTY");
     expect(capturedCreateOpenAIOptions.headers).toEqual(
       expect.objectContaining({
         [CHAT_API_KEY_ID_HEADER]: selectedKey.id,
@@ -519,6 +520,43 @@ describe("createLLMModel", () => {
         [PROVIDER_BASE_URL_HEADER]:
           "https://fallback-runtime.example.com/openai",
       }),
+    );
+
+    const originalFetch = globalThis.fetch;
+    const fetchMock = vi.fn(async () => {
+      return new Response(
+        [
+          'data: {"id":"chatcmpl-test","object":"chat.completion.chunk","created":0,"model":"gpt-4o","choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":null}]}',
+          'data: {"id":"chatcmpl-test","object":"chat.completion.chunk","created":0,"model":"gpt-4o","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}',
+          "data: [DONE]",
+          "",
+        ].join("\n\n"),
+        {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        },
+      );
+    });
+    globalThis.fetch = fetchMock as typeof globalThis.fetch;
+
+    try {
+      const streamResult = streamText({
+        model: result.model,
+        prompt: "hello",
+      });
+
+      await expect(streamResult.text).resolves.toBe("ok");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(fetchMock).toHaveBeenCalled();
+    const firstFetchCall = fetchMock.mock.calls[0] as unknown as Parameters<
+      typeof globalThis.fetch
+    >;
+    const [, fetchInit] = firstFetchCall;
+    expect(new Headers(fetchInit?.headers).get("authorization")).toBe(
+      "Bearer EMPTY",
     );
   });
 

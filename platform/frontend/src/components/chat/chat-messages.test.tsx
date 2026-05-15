@@ -196,6 +196,91 @@ describe("ChatMessages", () => {
     vi.clearAllMocks();
   });
 
+  it("renders URL and document source parts for assistant messages", () => {
+    const messages = [
+      {
+        id: "assistant-sources",
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: "The incident report matches the deployment window.",
+          },
+          {
+            type: "source-url",
+            sourceId: "source-runbook",
+            url: "https://example.test/runbooks/deployments",
+            title: "Deployment Runbook",
+          },
+          {
+            type: "source-document",
+            sourceId: "source-pdf",
+            mediaType: "application/pdf",
+            title: "Incident Review Packet",
+            filename: "incident-review.pdf",
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(screen.getByText("Sources")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Deployment Runbook/i }),
+    ).toHaveAttribute("href", "https://example.test/runbooks/deployments");
+    expect(screen.getByText("Incident Review Packet")).toBeInTheDocument();
+    expect(screen.getByText("incident-review.pdf")).toBeInTheDocument();
+  });
+
+  it("deduplicates repeated source parts by source id", () => {
+    const messages = [
+      {
+        id: "assistant-duplicate-sources",
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: "I found one authoritative source.",
+          },
+          {
+            type: "source-url",
+            sourceId: "source-release-notes",
+            url: "https://example.test/releases/2026-04",
+            title: "April Release Notes",
+          },
+          {
+            type: "source-url",
+            sourceId: "source-release-notes",
+            url: "https://example.test/releases/2026-04?duplicate=true",
+            title: "April Release Notes Duplicate",
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(
+      screen.getAllByRole("link", { name: /April Release Notes/i }),
+    ).toHaveLength(1);
+    expect(
+      screen.queryByText("April Release Notes Duplicate"),
+    ).not.toBeInTheDocument();
+  });
+
   it("renders the swap divider for branded built-in swap tools", () => {
     const messages = [
       {

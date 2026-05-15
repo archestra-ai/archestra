@@ -72,18 +72,28 @@ describe("seed chat scenarios", () => {
     });
 
     expect(conversation).toMatchObject({
-      title: `${DEBUG_CHAT_TITLE_PREFIX} Timeline errors`,
+      title: `${DEBUG_CHAT_TITLE_PREFIX} Retry after provider error`,
       messages: [
         expect.objectContaining({
           id: expect.any(String),
           role: "user",
-          parts: [{ type: "text", text: "first try" }],
+          parts: [
+            {
+              type: "text",
+              text: "Can you summarize the last deployment health check?",
+            },
+          ],
           metadata: { createdAt: "2026-04-23T10:00:00.000Z" },
         }),
         expect.objectContaining({
           id: expect.any(String),
           role: "user",
-          parts: [{ type: "text", text: "try again" }],
+          parts: [
+            {
+              type: "text",
+              text: "The previous response failed. Please try the deployment summary again.",
+            },
+          ],
           metadata: { createdAt: "2026-04-23T10:02:00.000Z" },
         }),
       ],
@@ -98,12 +108,46 @@ describe("seed chat scenarios", () => {
       conversationId: result.conversationId,
       error: {
         code: "server_error",
-        message: "Provider failed",
+        message: "The model provider returned a temporary error.",
         isRetryable: true,
       },
     });
     expect(chatErrors[0].createdAt.toISOString()).toBe(
       "2026-04-23T10:01:00.000Z",
+    );
+  });
+
+  test("persists source URL and source document UI message parts", async () => {
+    const [result] = await seedChatScenarios({
+      scenarioId: "sdk-message-parts",
+    });
+    const [organization] = await db.select().from(schema.organizationsTable);
+    const [user] = await db.select().from(schema.usersTable);
+
+    const conversation = await ConversationModel.findById({
+      id: result.conversationId,
+      userId: user.id,
+      organizationId: organization.id,
+    });
+
+    const parts = conversation?.messages[0]?.parts ?? [];
+
+    expect(parts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "source-url",
+          sourceId: "release-notes-2026-04",
+          url: "https://example.test/releases/2026-04-checkout",
+          title: "Checkout release notes",
+        }),
+        expect.objectContaining({
+          type: "source-document",
+          sourceId: "rollout-runbook-v3",
+          mediaType: "application/pdf",
+          title: "Rollout recovery runbook",
+          filename: "rollout-recovery-runbook.pdf",
+        }),
+      ]),
     );
   });
 

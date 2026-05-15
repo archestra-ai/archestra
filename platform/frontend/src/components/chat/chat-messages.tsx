@@ -14,8 +14,20 @@ import {
   TOOL_TODO_WRITE_FULL_NAME,
   TOOL_TODO_WRITE_SHORT_NAME,
 } from "@shared";
-import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
-import { BotIcon, CheckCircleIcon, ClockIcon } from "lucide-react";
+import type {
+  ChatStatus,
+  DynamicToolUIPart,
+  SourceDocumentUIPart,
+  SourceUrlUIPart,
+  ToolUIPart,
+} from "ai";
+import {
+  BotIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  ExternalLinkIcon,
+  FileTextIcon,
+} from "lucide-react";
 import Link from "next/link";
 import {
   Fragment,
@@ -154,6 +166,8 @@ type TimelineItem =
   | { kind: "message"; message: UIMessage; messageIndex: number }
   | { kind: "chat-error"; chatError: PersistedChatError };
 
+type SourceUIPart = SourceUrlUIPart | SourceDocumentUIPart;
+
 // Type guards for tool parts
 // biome-ignore lint/suspicious/noExplicitAny: AI SDK message parts have dynamic structure
 function isToolPart(part: any): part is {
@@ -174,6 +188,10 @@ function isToolPart(part: any): part is {
       part.type?.startsWith("data-tool-ui-start") ||
       part.type === "dynamic-tool")
   );
+}
+
+function isSourcePart(part: UIMessage["parts"][number]): part is SourceUIPart {
+  return part.type === "source-url" || part.type === "source-document";
 }
 
 export function ChatMessages({
@@ -567,6 +585,26 @@ export function ChatMessages({
                     }
 
                     switch (part.type) {
+                      case "source-url":
+                      case "source-document": {
+                        if (message.role !== "assistant") {
+                          return null;
+                        }
+
+                        const firstSourcePartIndex =
+                          message.parts?.findIndex(isSourcePart) ?? -1;
+                        if (i !== firstSourcePartIndex) {
+                          return null;
+                        }
+
+                        return (
+                          <MessageSources
+                            key={partKey}
+                            parts={getDedupedSourceParts(message.parts ?? [])}
+                          />
+                        );
+                      }
+
                       case "text": {
                         // Skip empty text parts from assistant messages.
                         // OpenAI-compatible providers (Ollama, vLLM, etc.) may send empty content
@@ -1293,11 +1331,77 @@ function getMessagePartSignature(part: UIMessage["parts"][number]): string {
       return "text";
     case "reasoning":
       return "reasoning";
+    case "source-url":
+      return `source-url:${part.sourceId}`;
+    case "source-document":
+      return `source-document:${part.sourceId}`;
     case "file":
       return `file:${part.url}:${part.mediaType}:${part.filename ?? ""}`;
     default:
       return `part:${JSON.stringify(part)}`;
   }
+}
+
+function MessageSources({ parts }: { parts: SourceUIPart[] }) {
+  if (parts.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+      <span className="font-medium uppercase tracking-wide">Sources</span>
+      {parts.map((part) => {
+        if (part.type === "source-url") {
+          return (
+            <Link
+              key={part.sourceId}
+              href={part.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex max-w-[260px] items-center gap-1.5 rounded-md border bg-card px-2 py-1.5 text-foreground transition-colors hover:bg-accent"
+            >
+              <ExternalLinkIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className="truncate">{part.title || part.url}</span>
+            </Link>
+          );
+        }
+
+        return (
+          <div
+            key={part.sourceId}
+            className="inline-flex max-w-[300px] items-center gap-1.5 rounded-md border bg-card px-2 py-1.5 text-foreground"
+          >
+            <FileTextIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <span className="truncate">{part.title}</span>
+            {part.filename && (
+              <span className="truncate text-muted-foreground">
+                {part.filename}
+              </span>
+            )}
+            <span className="shrink-0 text-muted-foreground">
+              {part.mediaType}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function getDedupedSourceParts(
+  parts: UIMessage["parts"] | undefined,
+): SourceUIPart[] {
+  const sourceParts: SourceUIPart[] = [];
+  const seenSourceIds = new Set<string>();
+
+  for (const part of parts ?? []) {
+    if (!isSourcePart(part) || seenSourceIds.has(part.sourceId)) {
+      continue;
+    }
+
+    sourceParts.push(part);
+    seenSourceIds.add(part.sourceId);
+  }
+
+  return sourceParts;
 }
 
 // Custom hook to detect when streaming has stalled (>500ms without updates)

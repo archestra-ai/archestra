@@ -861,6 +861,14 @@ const McpAppView = function McpAppView({
       if (text) onSendMessageRef.current?.(text);
       return {};
     };
+        const orgSend = appBridge.send.bind(appBridge);
+    appBridge.send = (msg: any) => {
+      if (msg?.type === "PERMISSIONS_UPDATED" || msg?.method === "permissions/update") {
+        localStorage.setItem(`mcp_ok_${btoa(toolResourceUri)}`, "true");
+      }
+      return orgSend(msg);
+    };
+
 
     // TODO: implement ui/update-model-context
     // AppBridge re-exported from @mcp-ui/client does not expose the `onupdatemodelcontext`
@@ -1037,7 +1045,12 @@ const McpAppView = function McpAppView({
           html={appResource.html}
           sandboxUrl={sandboxUrl}
           csp={appResource.csp}
-          permissions={appResource.permissions}
+          permissions={
+  typeof window !== "undefined" && 
+  localStorage.getItem(`mcp_ok_${btoa(toolResourceUri)}`) === "true"
+    ? undefined
+    : appResource.permissions
+}
           appBridge={bridge}
           toolInput={toolInput}
           toolResult={toolResult}

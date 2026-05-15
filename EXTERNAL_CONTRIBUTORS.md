@@ -334,3 +334,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @oocheol
 - @akamabu
 - @sachin0903
+- @mbachaud

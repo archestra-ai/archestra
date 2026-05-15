@@ -21,6 +21,9 @@
 #
 #   # 4. Run Archestra — pin to the image built in step 1
 #   #    (otherwise the OCI chart would pull its default published image).
+#   #    NOTE: no --wait here — the platform pod's `vault-secrets` init
+#   #    container will CrashLoopBackOff until step 5 seeds Vault, so we
+#   #    let the chart apply and continue.
 #   helm upgrade archestra-platform \
 #     oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
 #     --install \
@@ -29,10 +32,31 @@
 #     --set archestra.image=archestra/platform \
 #     --set archestra.imageTag=dev \
 #     --set archestra.imagePullPolicy=Never \
-#     --set archestra.env.HOSTNAME="0.0.0.0" \
-#     --wait --timeout 10m
+#     --set archestra.env.HOSTNAME="0.0.0.0"
 #
-#   # 5. Verify and port-forward
+#   # 5. Seed Vault with the DB URL the init container expects.
+#   #    The bundled postgresql sub-chart auto-generates a random password
+#   #    on first install, so we read it from the K8s secret rather than
+#   #    pinning it. The init container reads kv/archestra/config/db_url
+#   #    with key `url` (see initContainers.vaultSecrets.secrets below).
+#   kubectl -n archestra-dev wait --for=condition=Ready \
+#     pod/archestra-platform-postgresql-0 --timeout=5m
+#
+#   DB_PW=$(kubectl -n archestra-dev get secret archestra-platform-postgresql \
+#     -o jsonpath='{.data.password}' | base64 -d)
+#
+#   kubectl -n archestra-dev exec vault -- vault kv put -mount=kv \
+#     archestra/config/db_url \
+#     url="postgresql://archestra:${DB_PW}@archestra-platform-postgresql:5432/archestra_dev"
+#
+#   # Kick the failing pods so the init container re-runs with the seeded secret.
+#   kubectl -n archestra-dev delete pod \
+#     -l app.kubernetes.io/instance=archestra-platform,app.kubernetes.io/part-of=archestra
+#
+#   kubectl -n archestra-dev rollout status deploy/archestra-platform        --timeout=6m
+#   kubectl -n archestra-dev rollout status deploy/archestra-platform-worker --timeout=6m
+#
+#   # 6. Verify and port-forward
 #   kubectl -n archestra-dev get pods,deploy,svc
 #
 #   # One-liner: forwards frontend (3000), backend (9000), and Vault (8200).

@@ -87,6 +87,7 @@ export function CreateLlmProviderApiKeyDialog({
         provider: values.provider,
         apiKey: isBedrockSigV4 ? undefined : values.apiKey || undefined,
         baseUrl: values.baseUrl || undefined,
+        inferenceBaseUrl: values.inferenceBaseUrl || undefined,
         extraHeaders: serializeExtraHeaders(values.extraHeaders) ?? undefined,
         scope: values.scope,
         teamId:
@@ -124,6 +125,7 @@ export function CreateLlmProviderApiKeyDialog({
       title={title}
       description={description}
       size="small"
+      className="sm:max-w-xl"
     >
       <DialogForm
         onSubmit={handleCreate}
@@ -170,6 +172,7 @@ function getDefaultFormValues(params: {
     provider: "anthropic",
     apiKey: null,
     baseUrl: null,
+    inferenceBaseUrl: null,
     extraHeaders: [],
     scope: canCreateOrgScopedKey ? "org" : "personal",
     teamId: null,

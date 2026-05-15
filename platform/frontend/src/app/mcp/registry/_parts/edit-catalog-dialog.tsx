@@ -1,4 +1,5 @@
 import type { archestraApiTypes } from "@shared";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -6,7 +7,12 @@ import {
   DialogFooter,
   DialogStickyFooter,
 } from "@/components/ui/dialog";
-import { useUpdateInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
+import {
+  useCatalogPresets,
+  useUpdateInternalMcpCatalogItem,
+} from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpServers } from "@/lib/mcp/mcp-server.query";
+import { CascadeReinstallConfirmDialog } from "./cascade-reinstall-confirm-dialog";
 import { McpCatalogForm } from "./mcp-catalog-form";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import { transformFormToApiData } from "./mcp-catalog-form.utils";
@@ -44,11 +50,19 @@ export function EditCatalogContent({
   onDirtyChange,
   submitRef,
 }: EditCatalogContentProps) {
+  const [pendingValues, setPendingValues] =
+    useState<McpCatalogFormValues | null>(null);
   const updateMutation = useUpdateInternalMcpCatalogItem();
 
-  const onSubmit = async (values: McpCatalogFormValues) => {
+  const { data: presets = [] } = useCatalogPresets(item.id);
+  const { data: servers = [] } = useMcpServers();
+  const affectedCatalogIds = new Set([item.id, ...presets.map((p) => p.id)]);
+  const affectedServerCount = servers.filter((s) =>
+    s.catalogId ? affectedCatalogIds.has(s.catalogId) : false,
+  ).length;
+
+  const performSave = async (values: McpCatalogFormValues) => {
     const apiData = transformFormToApiData(values);
-    // Tenancy is locked after creation — drop it from the update payload
     const { multitenant: _multitenant, ...updateData } = apiData;
 
     await updateMutation.mutateAsync({
@@ -61,38 +75,62 @@ export function EditCatalogContent({
     }
   };
 
+  const onSubmit = async (values: McpCatalogFormValues) => {
+    if (affectedServerCount > 0) {
+      setPendingValues(values);
+      return;
+    }
+    await performSave(values);
+  };
+
   return (
-    <McpCatalogForm
-      mode="edit"
-      initialValues={item}
-      onSubmit={onSubmit}
-      embedded={keepOpenOnSave}
-      nameDisabled
-      onDirtyChange={onDirtyChange}
-      submitRef={submitRef}
-      footer={({ isDirty, onReset }) => {
-        if (keepOpenOnSave && !isDirty) return null;
-        const Footer = keepOpenOnSave ? DialogStickyFooter : DialogFooter;
-        return (
-          <Footer className={keepOpenOnSave ? "mt-0" : undefined}>
-            {keepOpenOnSave ? (
-              <Button variant="outline" onClick={onReset} type="button">
-                Discard changes
+    <>
+      <McpCatalogForm
+        mode="edit"
+        initialValues={item}
+        onSubmit={onSubmit}
+        embedded={keepOpenOnSave}
+        nameDisabled
+        onDirtyChange={onDirtyChange}
+        submitRef={submitRef}
+        footer={({ isDirty, onReset }) => {
+          if (keepOpenOnSave && !isDirty) return null;
+          const Footer = keepOpenOnSave ? DialogStickyFooter : DialogFooter;
+          return (
+            <Footer className={keepOpenOnSave ? "mt-0" : undefined}>
+              {keepOpenOnSave ? (
+                <Button variant="outline" onClick={onReset} type="button">
+                  Discard changes
+                </Button>
+              ) : (
+                <Button variant="outline" onClick={onClose} type="button">
+                  Cancel
+                </Button>
+              )}
+              <Button
+                type="submit"
+                disabled={updateMutation.isPending || !isDirty}
+              >
+                {updateMutation.isPending ? "Saving..." : "Save Changes"}
               </Button>
-            ) : (
-              <Button variant="outline" onClick={onClose} type="button">
-                Cancel
-              </Button>
-            )}
-            <Button
-              type="submit"
-              disabled={updateMutation.isPending || !isDirty}
-            >
-              {updateMutation.isPending ? "Saving..." : "Save Changes"}
-            </Button>
-          </Footer>
-        );
-      }}
-    />
+            </Footer>
+          );
+        }}
+      />
+
+      <CascadeReinstallConfirmDialog
+        open={pendingValues !== null}
+        onOpenChange={(v) => !v && setPendingValues(null)}
+        onConfirm={async () => {
+          if (!pendingValues) return;
+          const values = pendingValues;
+          setPendingValues(null);
+          await performSave(values);
+        }}
+        isPending={updateMutation.isPending}
+        serverCount={affectedServerCount}
+        presetCount={presets.length}
+      />
+    </>
   );
 }

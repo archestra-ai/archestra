@@ -174,7 +174,7 @@ COPY docker/certs/gcloud-sql-global.pem /tmp/gcloud-sql-ca.pem
 
 RUN apk --no-cache upgrade && \
     # Install PostgreSQL 17, pgvector, and supervisord
-    apk add --no-cache postgresql17=17.9-r0 postgresql17-contrib=17.9-r0 postgresql-pgvector su-exec && \
+    apk add --no-cache postgresql17 postgresql17-contrib postgresql-pgvector su-exec && \
     # Combine all CA bundles
     cat /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem > /etc/ssl/certs/cloud-database-ca-bundle.pem && \
     rm -f /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem && \

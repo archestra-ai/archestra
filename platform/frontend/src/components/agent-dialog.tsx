@@ -541,9 +541,8 @@ export function AgentDialog({
   const deleteAgent = useDeleteProfile();
   const updateAgent = useUpdateProfile();
   const syncDelegations = useSyncAgentDelegations();
-  const { data: currentDelegations = [] } = useAgentDelegations(
-    agentType !== "llm_proxy" ? agent?.id : undefined,
-  );
+  const { data: currentDelegations = [], isFetched: delegationsFetched } =
+    useAgentDelegations(agentType !== "llm_proxy" ? agent?.id : undefined);
   const { data: canReadIdentityProviders } = useHasPermissions({
     identityProvider: ["read"],
   });
@@ -695,8 +694,6 @@ export function AgentDialog({
         setSuggestedPromptsOpen(false);
         setLlmApiKeyId(agentData.llmApiKeyId);
         setLlmModel(agentData.llmModel);
-        // Reset delegation targets - will be populated by the next useEffect when data loads
-        setSelectedDelegationTargetIds([]);
         setAssignedTeamIds(agentData.teams.map((t) => t.id));
         setLabels(agentData.labels);
         setConsiderContextUntrusted(agentData.considerContextUntrusted);
@@ -749,17 +746,19 @@ export function AgentDialog({
     }
   }, [open, agent, freshAgent, refetchAgent]);
 
-  // Sync selectedDelegationTargetIds with currentDelegations when data loads
+  // Sync selectedDelegationTargetIds with currentDelegations when data loads.
+  // Agent refetches can update freshAgent after delegations have loaded; keeping
+  // delegations out of the agent reset path avoids clearing them on save.
   const currentDelegationIds = currentDelegations.map((a) => a.id).join(",");
   const agentId = agent?.id;
 
   useEffect(() => {
-    if (open && agentId && currentDelegationIds) {
+    if (open && agentId && delegationsFetched) {
       setSelectedDelegationTargetIds(
         currentDelegationIds.split(",").filter(Boolean),
       );
     }
-  }, [open, agentId, currentDelegationIds]);
+  }, [open, agentId, currentDelegationIds, delegationsFetched]);
 
   // LLM Configuration: computed values and bidirectional auto-linking
   // (same reactive pattern as prompt input: LlmProviderApiKeySelector + onProviderChange)

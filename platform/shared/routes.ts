@@ -65,6 +65,11 @@ export const RouteId = {
   ValidateDeploymentYaml: "validateDeploymentYaml",
   ResetDeploymentYaml: "resetDeploymentYaml",
   GetK8sImagePullSecrets: "getK8sImagePullSecrets",
+  // MCP Catalog Children (UI-named "presets") Routes
+  GetCatalogChildren: "getCatalogChildren",
+  CreateCatalogChild: "createCatalogChild",
+  UpdateCatalogChild: "updateCatalogChild",
+  DeleteCatalogChild: "deleteCatalogChild",
 
   // MCP Server Routes
   GetMcpServers: "getMcpServers",

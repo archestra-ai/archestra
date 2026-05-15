@@ -30,7 +30,13 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { useFeature } from "@/lib/config/config.query";
+import { useCatalogPresets } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useTeamsWithVaultFolders } from "@/lib/teams/team.query";
+import { InstallPresetPicker } from "./install-preset-picker";
+import {
+  collectPresetFallbackValues,
+  PresetFallbackFields,
+} from "./preset-fallback-fields";
 import {
   type McpServerInstallScope,
   SelectMcpServerCredentialTypeAndTeams,
@@ -72,8 +78,15 @@ const markdownComponents: Components = {
 };
 
 export interface LocalServerInstallResult {
+  /** Catalog id to install from — parent or selected preset. */
+  catalogId: string;
   environmentValues: Record<string, string>;
   userConfigValues?: Record<string, string>;
+  /**
+   * Values entered for preset-scoped fields the selected preset doesn't fill.
+   * Persisted onto the targeted preset row (same path as the preset editor).
+   */
+  presetFieldValues?: Record<string, string>;
   /** Installation scope (personal, team, org) */
   scope: McpServerInstallScope;
   /** Team ID to assign the MCP server to (only when scope is "team") */
@@ -134,20 +147,39 @@ export function LocalServerInstallDialog({
   const [serviceAccount, setServiceAccount] = useState<string | undefined>(
     catalogItem?.localConfig?.serviceAccount,
   );
+  const [selectedCatalogId, setSelectedCatalogId] = useState<string>(
+    catalogItem?.id ?? "",
+  );
+  const [presetFallbackValues, setPresetFallbackValues] = useState<
+    Record<string, string>
+  >({});
+  const { data: presets = [] } = useCatalogPresets(catalogItem?.id ?? null);
+  const hasPresets = presets.length > 0;
+
+  useEffect(() => {
+    if (isOpen && catalogItem) {
+      setSelectedCatalogId(catalogItem.id);
+      setPresetFallbackValues({});
+    }
+  }, [isOpen, catalogItem]);
   const userConfig =
     (catalogItem?.userConfig as UserConfigType | null | undefined) || {};
   const promptableUserConfig = Object.fromEntries(
     Object.entries(userConfig).filter(([_fieldName, fieldConfig]) => {
-      return fieldConfig.promptOnInstallation !== false;
+      return (
+        fieldConfig.promptOnInstallation !== false &&
+        !fieldConfig.promptOnPreset
+      );
     }),
   );
   // Extract environment variables that need prompting during installation.
   // Multi-tenant catalogs share one deployment, so env vars are catalog-level
   // (set once by an admin). Per-caller install never prompts for env values.
+  // Preset-scoped env vars are admin-set per preset and never prompted.
   const promptedEnvVars = catalogItem?.multitenant
     ? []
     : catalogItem?.localConfig?.environment?.filter(
-        (env) => env.promptOnInstallation !== false,
+        (env) => env.promptOnInstallation !== false && !env.promptOnPreset,
       ) || [];
 
   // Separate secret vs non-secret env vars
@@ -326,9 +358,23 @@ export function LocalServerInstallDialog({
       }
     }
 
+    // Preset-scoped fallback values are persisted on the targeted preset row
+    // by the backend (same path as the preset editor) — keep them separate
+    // from per-install env/userConfig values.
+    const presetFieldValuesForRequest = (() => {
+      if (!catalogItem) return undefined;
+      const collected = collectPresetFallbackValues(
+        catalogItem,
+        presetFallbackValues,
+      );
+      return Object.keys(collected).length > 0 ? collected : undefined;
+    })();
+
     await onConfirm({
+      catalogId: selectedCatalogId || catalogItem?.id || "",
       environmentValues: finalEnvironmentValues,
       userConfigValues: finalUserConfigValues,
+      presetFieldValues: presetFieldValuesForRequest,
       scope,
       teamId: selectedTeamId,
       isByosVault:
@@ -513,7 +559,9 @@ export function LocalServerInstallDialog({
 
       <SelectMcpServerCredentialTypeAndTeams
         onTeamChange={setSelectedTeamId}
-        catalogId={isReinstall ? undefined : catalogItem?.id}
+        catalogId={
+          isReinstall ? undefined : selectedCatalogId || catalogItem?.id
+        }
         onScopeChange={setScope}
         onCanInstallChange={setCanInstall}
         isReinstall={isReinstall}
@@ -525,7 +573,28 @@ export function LocalServerInstallDialog({
         }
         orgOnly={orgOnly}
         preselectedTeamId={preselectedTeamId}
+        hasPresets={hasPresets && !isReinstall && !isReauth}
+        presetPicker={
+          !isReinstall && !isReauth && catalogItem && hasPresets ? (
+            <InstallPresetPicker
+              parent={catalogItem}
+              value={selectedCatalogId}
+              onChange={setSelectedCatalogId}
+            />
+          ) : null
+        }
       />
+
+      {!isReinstall && !isReauth && catalogItem && (
+        <PresetFallbackFields
+          catalog={catalogItem}
+          selectedPresetId={selectedCatalogId}
+          values={presetFallbackValues}
+          onChange={(key, value) =>
+            setPresetFallbackValues((prev) => ({ ...prev, [key]: value }))
+          }
+        />
+      )}
 
       {useVaultSecrets && scope !== "team" && (
         <div className="space-y-2">

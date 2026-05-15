@@ -385,6 +385,23 @@ describe("InternalMcpCatalogModel", () => {
       expect(found?.toolCount).toBe(2);
     });
 
+    test("findById omits list-only tool count metadata", async ({
+      makeTool,
+    }) => {
+      const catalog = await InternalMcpCatalogModel.create({
+        name: "catalog-find-by-id-without-tool-count",
+        serverType: "remote",
+      });
+      await makeTool({ catalogId: catalog.id, name: "catalog-detail-tool" });
+
+      const found = await InternalMcpCatalogModel.findById(catalog.id, {
+        expandSecrets: false,
+      });
+
+      expect(found).not.toBeNull();
+      expect(found).not.toHaveProperty("toolCount");
+    });
+
     test("searchByQuery returns labels", async () => {
       const catalog = await InternalMcpCatalogModel.create({
         name: "unique-searchable-catalog-xyz",
@@ -449,11 +466,11 @@ describe("InternalMcpCatalogModel", () => {
       });
 
       const updated = await InternalMcpCatalogModel.update(catalog.id, {
-        name: "catalog-update-no-labels-renamed",
+        description: "edited description",
       });
 
       expect(updated).not.toBeNull();
-      expect(updated?.name).toBe("catalog-update-no-labels-renamed");
+      expect(updated?.description).toBe("edited description");
       expect(updated?.labels).toHaveLength(1);
       expect(updated?.labels[0].key).toBe("keep");
       expect(updated?.labels[0].value).toBe("me");

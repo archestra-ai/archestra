@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "@/test";
 import {
   buildAzureDeploymentBaseUrl,
   buildAzureDeploymentsUrl,
+  buildAzureModelsUrl,
   buildAzureOpenAiV1ModelsUrl,
   buildAzureResponsesBaseUrl,
   createAzureFetchWithApiVersion,
@@ -105,6 +106,40 @@ describe("buildAzureOpenAiV1ModelsUrl", () => {
 
   it("returns null for invalid URLs", () => {
     expect(buildAzureOpenAiV1ModelsUrl("not-a-valid-url")).toBeNull();
+  });
+});
+
+describe("buildAzureModelsUrl", () => {
+  it("builds a models URL from a resource-level Azure OpenAI base URL", () => {
+    expect(
+      buildAzureModelsUrl({
+        apiVersion: "2024-02-01",
+        baseUrl: "https://my-resource.openai.azure.com/openai",
+      }),
+    ).toBe(
+      "https://my-resource.openai.azure.com/openai/models?api-version=2024-02-01",
+    );
+  });
+
+  it("builds a models URL from a deployment-scoped Azure OpenAI base URL", () => {
+    expect(
+      buildAzureModelsUrl({
+        apiVersion: "2024-02-01",
+        baseUrl:
+          "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
+      }),
+    ).toBe(
+      "https://my-resource.openai.azure.com/openai/models?api-version=2024-02-01",
+    );
+  });
+
+  it("returns null for Foundry v1 base URLs", () => {
+    expect(
+      buildAzureModelsUrl({
+        apiVersion: "2024-02-01",
+        baseUrl: "https://my-resource.services.ai.azure.com/openai/v1",
+      }),
+    ).toBeNull();
   });
 });
 
@@ -322,5 +357,11 @@ describe("extractAzureDeploymentName", () => {
 
   it("returns null for an invalid URL", () => {
     expect(extractAzureDeploymentName("not-a-valid-url")).toBeNull();
+  });
+
+  it("returns null for a resource-level Azure OpenAI base URL", () => {
+    expect(
+      extractAzureDeploymentName("https://my-resource.openai.azure.com/openai"),
+    ).toBeNull();
   });
 });

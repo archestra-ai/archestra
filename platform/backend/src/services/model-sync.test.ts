@@ -15,11 +15,13 @@ vi.mock("@/clients/models-dev-client", () => ({
 
 describe("ModelSyncService", () => {
   const originalOpenAiFetcher = modelFetchers.openai;
+  const originalAzureFetcher = modelFetchers.azure;
   const originalGeminiFetcher = modelFetchers.gemini;
   const originalOpenrouterFetcher = modelFetchers.openrouter;
 
   afterEach(() => {
     modelFetchers.openai = originalOpenAiFetcher;
+    modelFetchers.azure = originalAzureFetcher;
     modelFetchers.gemini = originalGeminiFetcher;
     modelFetchers.openrouter = originalOpenrouterFetcher;
   });
@@ -296,6 +298,54 @@ describe("ModelSyncService", () => {
     expect(capabilities.inputModalities).toEqual(["text", "image"]);
     expect(capabilities.outputModalities).toEqual([]);
     expect(capabilities.supportsToolCalling).toBe(false);
+  });
+
+  test("infers dimensions for Azure OpenAI embedding deployments", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "azure-key" } });
+    const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "azure",
+    });
+
+    modelFetchers.azure = async () => [
+      {
+        id: "gpt-5.4-mini",
+        displayName: "GPT 5.4 Mini",
+        provider: "azure" as SupportedProvider,
+      },
+      {
+        id: "text-embedding-3-large",
+        displayName: "Text Embedding 3 Large",
+        provider: "azure" as SupportedProvider,
+      },
+    ];
+
+    const count = await modelSyncService.syncModelsForApiKey({
+      apiKeyId: apiKey.id,
+      provider: "azure",
+      apiKeyValue: "azure-key",
+    });
+
+    expect(count).toBe(2);
+
+    const embedding = await ModelModel.findByProviderAndModelId(
+      "azure",
+      "text-embedding-3-large",
+    );
+    expect(embedding).toEqual(
+      expect.objectContaining({
+        provider: "azure",
+        modelId: "text-embedding-3-large",
+        embeddingDimensions: 1536,
+        inputModalities: ["text"],
+        outputModalities: [],
+        supportsToolCalling: false,
+      }),
+    );
   });
 
   test("infers dimensions for known OpenRouter embedding models", async ({

@@ -2185,41 +2185,107 @@ function ensureBedrockUserMessageHasTextPart(
   };
 }
 
-// Bedrock also rejects messages whose content array is empty after the AI SDK
-// drops empty text blocks and reasoning blocks without a signature ("The
-// content field in the Message object at messages.N is empty"). Pad with
-// placeholder text so turn alternation is preserved.
+/**
+ * Workaround for AI SDK Bedrock conversion sending empty assistant content.
+ *
+ * The AI SDK can split assistant UI messages at `step-start` boundaries, then
+ * drop provider-invisible parts during Bedrock conversion and send
+ * `content: []`. Keep this until the upstream provider fix is released:
+ * https://github.com/vercel/ai/issues/15248
+ * https://github.com/vercel/ai/pull/15250
+ */
 function ensureBedrockMessageHasContent(message: ChatMessage): ChatMessage {
   if (message.role === "system" || message.role === "tool") {
     return message;
+  }
+  if (message.role === "assistant") {
+    return ensureBedrockAssistantMessageHasContent(message);
   }
   if (message.parts?.some(producesBedrockContentBlock)) {
     return message;
   }
 
-  const placeholder = {
-    type: "text",
-    text: BEDROCK_EMPTY_CONTENT_PLACEHOLDER_TEXT,
-  };
   return {
     ...message,
-    parts: message.parts ? [...message.parts, placeholder] : [placeholder],
+    parts: message.parts
+      ? [...message.parts, createBedrockEmptyContentPlaceholder()]
+      : [createBedrockEmptyContentPlaceholder()],
   };
 }
 
-// Mirrors the AI SDK's bedrock converter: text/reasoning blocks without usable
-// payload are silently dropped; everything else (tool-call, tool-result, file,
-// image) always produces a content block.
+function ensureBedrockAssistantMessageHasContent(
+  message: ChatMessage,
+): ChatMessage {
+  if (!message.parts?.length) {
+    return {
+      ...message,
+      parts: [createBedrockEmptyContentPlaceholder()],
+    };
+  }
+
+  let changed = false;
+  let blockHasAnyPart = false;
+  let blockHasContent = false;
+  const parts: ChatMessagePart[] = [];
+
+  const padCurrentBlockIfEmpty = () => {
+    if (blockHasAnyPart && !blockHasContent) {
+      parts.push(createBedrockEmptyContentPlaceholder());
+      changed = true;
+    }
+    blockHasAnyPart = false;
+    blockHasContent = false;
+  };
+
+  for (const part of message.parts) {
+    if (part.type === "step-start") {
+      padCurrentBlockIfEmpty();
+      parts.push(part);
+      continue;
+    }
+
+    parts.push(part);
+    blockHasAnyPart = true;
+    if (producesBedrockContentBlock(part)) {
+      blockHasContent = true;
+    }
+  }
+
+  padCurrentBlockIfEmpty();
+
+  return changed ? { ...message, parts } : message;
+}
+
+function createBedrockEmptyContentPlaceholder(): ChatMessagePart {
+  return {
+    type: "text",
+    text: BEDROCK_EMPTY_CONTENT_PLACEHOLDER_TEXT,
+  };
+}
+
+// Mirrors the AI SDK's UI-to-model conversion plus Bedrock's converter:
+// data/control parts are ignored without a converter, streaming tool inputs are
+// dropped, and empty text/reasoning blocks are not provider-visible content.
 function producesBedrockContentBlock(part: ChatMessagePart): boolean {
   if (part.type === "text") {
     return typeof part.text === "string" && part.text.trim().length > 0;
   }
+  if (part.type === "file") {
+    return true;
+  }
   if (part.type === "reasoning") {
-    const bedrock = (part.providerOptions as { bedrock?: unknown } | undefined)
-      ?.bedrock as { signature?: unknown; redactedData?: unknown } | undefined;
+    const providerMetadata =
+      (part.providerMetadata as { bedrock?: unknown } | undefined) ??
+      (part.providerOptions as { bedrock?: unknown } | undefined);
+    const bedrock = providerMetadata?.bedrock as
+      | { signature?: unknown; redactedData?: unknown }
+      | undefined;
     return Boolean(bedrock?.signature || bedrock?.redactedData);
   }
-  return true;
+  if (part.type.startsWith("tool-")) {
+    return part.state !== "input-streaming";
+  }
+  return false;
 }
 
 const BEDROCK_DOCUMENT_PLACEHOLDER_TEXT =

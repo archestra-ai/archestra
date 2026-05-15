@@ -1,11 +1,24 @@
-import { and, count, desc, eq, ilike, inArray, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNull,
+  or,
+} from "drizzle-orm";
 import db, { schema } from "@/database";
 import { secretManager } from "@/secrets-manager";
 import {
   ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
   type InsertInternalMcpCatalog,
   type InternalMcpCatalog,
+  type ListInternalMcpCatalog,
+  type PresetFieldValues,
   type UpdateInternalMcpCatalog,
+  type UserConfigFieldDefault,
 } from "@/types";
 import McpCatalogLabelModel from "./mcp-catalog-label";
 import McpCatalogTeamModel from "./mcp-catalog-team";
@@ -18,6 +31,31 @@ class InternalMcpCatalogModel {
     context?: { organizationId: string; authorId?: string },
   ): Promise<InternalMcpCatalog> {
     const { labels, teams, ...dbValues } = catalogItem;
+
+    // Child catalog items ("presets") store the composed name
+    // `${parent.name}-${childName}`; root items store name as submitted.
+    if (dbValues.parentCatalogItemId) {
+      if (!dbValues.childName) {
+        throw new Error(
+          "childName is required when parentCatalogItemId is set",
+        );
+      }
+      const [parent] = await db
+        .select({ name: schema.internalMcpCatalogTable.name })
+        .from(schema.internalMcpCatalogTable)
+        .where(
+          eq(schema.internalMcpCatalogTable.id, dbValues.parentCatalogItemId),
+        );
+      if (!parent) {
+        throw new Error(
+          `Parent catalog item ${dbValues.parentCatalogItemId} not found`,
+        );
+      }
+      dbValues.name = `${parent.name}-${dbValues.childName}`;
+    } else {
+      // Root rows never carry a childName.
+      dbValues.childName = null;
+    }
 
     const insertValues = {
       ...dbValues,
@@ -54,7 +92,6 @@ class InternalMcpCatalogModel {
       ...createdItem,
       labels: itemLabels,
       teams: itemTeams,
-      toolCount: 0,
     };
     await InternalMcpCatalogModel.populateAuthorNames([result]);
     return result;
@@ -65,15 +102,21 @@ class InternalMcpCatalogModel {
     userId?: string;
     isAdmin?: boolean;
     organizationId?: string;
-  }): Promise<InternalMcpCatalog[]> {
+    includeChildren?: boolean;
+  }): Promise<ListInternalMcpCatalog[]> {
     const {
       expandSecrets = true,
       userId,
       isAdmin,
       organizationId,
+      includeChildren = false,
     } = options ?? {};
 
     let dbItems: Array<typeof schema.internalMcpCatalogTable.$inferSelect>;
+
+    const parentOnlyCondition = includeChildren
+      ? undefined
+      : isNull(schema.internalMcpCatalogTable.parentCatalogItemId);
 
     if (userId && !isAdmin && !organizationId) {
       return [];
@@ -87,16 +130,23 @@ class InternalMcpCatalogModel {
           organizationId,
         );
       if (accessibleIds.length === 0) return [];
+      const where = parentOnlyCondition
+        ? and(
+            inArray(schema.internalMcpCatalogTable.id, accessibleIds),
+            parentOnlyCondition,
+          )
+        : inArray(schema.internalMcpCatalogTable.id, accessibleIds);
       dbItems = await db
         .select()
         .from(schema.internalMcpCatalogTable)
-        .where(inArray(schema.internalMcpCatalogTable.id, accessibleIds))
+        .where(where)
         .orderBy(desc(schema.internalMcpCatalogTable.createdAt));
     } else {
-      dbItems = await db
-        .select()
-        .from(schema.internalMcpCatalogTable)
-        .orderBy(desc(schema.internalMcpCatalogTable.createdAt));
+      const baseQuery = db.select().from(schema.internalMcpCatalogTable);
+      dbItems = await (parentOnlyCondition
+        ? baseQuery.where(parentOnlyCondition)
+        : baseQuery
+      ).orderBy(desc(schema.internalMcpCatalogTable.createdAt));
     }
 
     const catalogItems =
@@ -118,21 +168,30 @@ class InternalMcpCatalogModel {
       userId?: string;
       isAdmin?: boolean;
       organizationId?: string;
+      includeChildren?: boolean;
     },
-  ): Promise<InternalMcpCatalog[]> {
+  ): Promise<ListInternalMcpCatalog[]> {
     const {
       expandSecrets = true,
       userId,
       isAdmin,
       organizationId,
+      includeChildren = false,
     } = options ?? {};
 
     let dbItems: Array<typeof schema.internalMcpCatalogTable.$inferSelect>;
 
-    const searchCondition = or(
+    const baseSearchCondition = or(
       ilike(schema.internalMcpCatalogTable.name, `%${query}%`),
       ilike(schema.internalMcpCatalogTable.description, `%${query}%`),
     );
+
+    const searchCondition = includeChildren
+      ? baseSearchCondition
+      : and(
+          baseSearchCondition,
+          isNull(schema.internalMcpCatalogTable.parentCatalogItemId),
+        );
 
     if (userId && !isAdmin && !organizationId) {
       return [];
@@ -174,6 +233,11 @@ class InternalMcpCatalogModel {
     return catalogItems;
   }
 
+  /**
+   * Return the singular catalog shape. Do not add toolCount here: it is list
+   * metadata used by registry/card UIs and would require an otherwise-unused
+   * COUNT(*) on runtime paths that fetch one catalog item by id.
+   */
   static async findById(
     id: string,
     options?: {
@@ -215,12 +279,10 @@ class InternalMcpCatalogModel {
 
     const labels = await McpCatalogLabelModel.getLabelsForCatalogItem(id);
     const teams = await McpCatalogTeamModel.getTeamDetailsForCatalog(id);
-    const toolCount = await InternalMcpCatalogModel.getToolCount(id);
     const catalogItem: InternalMcpCatalog = {
       ...dbItem,
       labels,
       teams,
-      toolCount,
     };
 
     if (expandSecrets) {
@@ -250,12 +312,10 @@ class InternalMcpCatalogModel {
 
     const labels = await McpCatalogLabelModel.getLabelsForCatalogItem(id);
     const teams = await McpCatalogTeamModel.getTeamDetailsForCatalog(id);
-    const toolCount = await InternalMcpCatalogModel.getToolCount(id);
     const catalogItem: InternalMcpCatalog = {
       ...dbItem,
       labels,
       teams,
-      toolCount,
     };
 
     await InternalMcpCatalogModel.expandSecretsAndAlwaysResolveValues([
@@ -271,7 +331,7 @@ class InternalMcpCatalogModel {
    */
   static async getByIds(
     ids: string[],
-  ): Promise<Map<string, InternalMcpCatalog>> {
+  ): Promise<Map<string, ListInternalMcpCatalog>> {
     if (ids.length === 0) {
       return new Map();
     }
@@ -284,7 +344,7 @@ class InternalMcpCatalogModel {
     const catalogItems =
       await InternalMcpCatalogModel.attachListMetadata(dbItems);
 
-    const result = new Map<string, InternalMcpCatalog>();
+    const result = new Map<string, ListInternalMcpCatalog>();
     for (const item of catalogItems) {
       result.set(item.id, item);
     }
@@ -319,8 +379,7 @@ class InternalMcpCatalogModel {
       dbItem.id,
     );
     const teams = await McpCatalogTeamModel.getTeamDetailsForCatalog(dbItem.id);
-    const toolCount = await InternalMcpCatalogModel.getToolCount(dbItem.id);
-    return { ...dbItem, labels, teams, toolCount };
+    return { ...dbItem, labels, teams };
   }
 
   static async update(
@@ -328,6 +387,31 @@ class InternalMcpCatalogModel {
     catalogItem: Partial<UpdateInternalMcpCatalog>,
   ): Promise<InternalMcpCatalog | null> {
     const { labels, teams, ...dbValues } = catalogItem;
+
+    // Name immutability: matches the existing UI-enforced posture and avoids
+    // cascading rename to k8s deployment names and pre-slugified tool rows.
+    if (dbValues.name !== undefined || dbValues.childName !== undefined) {
+      const [existing] = await db
+        .select({
+          name: schema.internalMcpCatalogTable.name,
+          childName: schema.internalMcpCatalogTable.childName,
+        })
+        .from(schema.internalMcpCatalogTable)
+        .where(eq(schema.internalMcpCatalogTable.id, id));
+      if (existing) {
+        if (dbValues.name !== undefined && dbValues.name !== existing.name) {
+          throw new Error("Catalog item name cannot be changed after creation");
+        }
+        if (
+          dbValues.childName !== undefined &&
+          dbValues.childName !== existing.childName
+        ) {
+          throw new Error("Preset childName cannot be changed after creation");
+        }
+      }
+      delete dbValues.name;
+      delete dbValues.childName;
+    }
 
     let dbItem: typeof schema.internalMcpCatalogTable.$inferSelect | undefined;
 
@@ -361,15 +445,61 @@ class InternalMcpCatalogModel {
 
     const itemLabels = await McpCatalogLabelModel.getLabelsForCatalogItem(id);
     const itemTeams = await McpCatalogTeamModel.getTeamDetailsForCatalog(id);
-    const toolCount = await InternalMcpCatalogModel.getToolCount(id);
     const result: InternalMcpCatalog = {
       ...dbItem,
       labels: itemLabels,
       teams: itemTeams,
-      toolCount,
     };
     await InternalMcpCatalogModel.populateAuthorNames([result]);
     return result;
+  }
+
+  /**
+   * List child catalog items ("presets") for a given parent.
+   *
+   * Mirrors the catalog list endpoint: secrets are NOT expanded, so the
+   * preset secret bag's plaintext values never reach the wire. Callers that
+   * need to know whether secret-typed preset fields are filled use the
+   * `presetSecretId != null` heuristic (same pattern as the install dialog's
+   * preset-fallback-fields).
+   */
+  static async findChildren(parentId: string): Promise<InternalMcpCatalog[]> {
+    const dbItems = await db
+      .select()
+      .from(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.parentCatalogItemId, parentId))
+      .orderBy(asc(schema.internalMcpCatalogTable.createdAt));
+
+    return InternalMcpCatalogModel.attachListMetadata(dbItems);
+  }
+
+  /**
+   * Validate a `presetFieldValues` payload against a parent's userConfig and
+   * localConfig.environment field-scope flags. Only fields flagged
+   * `promptOnPreset: true` are allowed; throws an Error listing offenders
+   * when any other key is present.
+   */
+  static validateFieldValuesAgainstCatalog(
+    parent: InternalMcpCatalog,
+    fieldValues: PresetFieldValues | undefined,
+  ): void {
+    if (!fieldValues) return;
+    const presetKeys = new Set<string>();
+    for (const [key, field] of Object.entries(parent.userConfig ?? {})) {
+      if (field.promptOnPreset) presetKeys.add(key);
+    }
+    for (const env of parent.localConfig?.environment ?? []) {
+      if (env.promptOnPreset) presetKeys.add(env.key);
+    }
+
+    const offenders = Object.keys(fieldValues).filter(
+      (key) => !presetKeys.has(key),
+    );
+    if (offenders.length > 0) {
+      throw new Error(
+        `Fields not configured for preset overrides: ${offenders.join(", ")}`,
+      );
+    }
   }
 
   static async delete(id: string): Promise<boolean> {
@@ -405,6 +535,7 @@ class InternalMcpCatalogModel {
     for (const item of catalogItems) {
       if (item.clientSecretId) secretIds.add(item.clientSecretId);
       if (item.localConfigSecretId) secretIds.add(item.localConfigSecretId);
+      if (item.presetSecretId) secretIds.add(item.presetSecretId);
     }
 
     if (secretIds.size === 0) return;
@@ -491,6 +622,22 @@ class InternalMcpCatalogModel {
           }
         }
       }
+
+      // Enrich preset secret values (merge into presetFieldValues)
+      if (catalogItem.presetSecretId) {
+        const unresolvedSecret = unresolvedSecretMap.get(
+          catalogItem.presetSecretId,
+        );
+        const secret = unresolvedSecret?.isByosVault
+          ? unresolvedSecret
+          : resolvedSecretMap.get(catalogItem.presetSecretId);
+        if (secret) {
+          catalogItem.presetFieldValues = {
+            ...catalogItem.presetFieldValues,
+            ...(secret.secret as Record<string, UserConfigFieldDefault>),
+          };
+        }
+      }
     }
   }
 
@@ -505,6 +652,7 @@ class InternalMcpCatalogModel {
     for (const item of catalogItems) {
       if (item.clientSecretId) secretIds.add(item.clientSecretId);
       if (item.localConfigSecretId) secretIds.add(item.localConfigSecretId);
+      if (item.presetSecretId) secretIds.add(item.presetSecretId);
     }
 
     if (secretIds.size === 0) return;
@@ -556,6 +704,17 @@ class InternalMcpCatalogModel {
           }
         }
       }
+
+      // Preset secret values
+      if (catalogItem.presetSecretId) {
+        const secret = secretMap.get(catalogItem.presetSecretId);
+        if (secret) {
+          catalogItem.presetFieldValues = {
+            ...catalogItem.presetFieldValues,
+            ...(secret.secret as Record<string, UserConfigFieldDefault>),
+          };
+        }
+      }
     }
   }
 
@@ -564,7 +723,7 @@ class InternalMcpCatalogModel {
    */
   private static async attachListMetadata(
     dbItems: Array<typeof schema.internalMcpCatalogTable.$inferSelect>,
-  ): Promise<InternalMcpCatalog[]> {
+  ): Promise<ListInternalMcpCatalog[]> {
     if (dbItems.length === 0) {
       return [];
     }
@@ -607,14 +766,6 @@ class InternalMcpCatalogModel {
             row.catalogId !== null,
         )
         .map((row) => [row.catalogId, row.toolCount]),
-    );
-  }
-
-  private static async getToolCount(catalogId: string): Promise<number> {
-    return (
-      (await InternalMcpCatalogModel.getToolCounts([catalogId])).get(
-        catalogId,
-      ) ?? 0
     );
   }
 

@@ -10,7 +10,12 @@ import {
 import { z } from "zod";
 import logger from "@/logging";
 import { LimitModel } from "@/models";
-import { LimitEntityTypeSchema, LimitTypeSchema, UuidIdSchema } from "@/types";
+import {
+  LimitCleanupIntervalSchema,
+  LimitEntityTypeSchema,
+  LimitTypeSchema,
+  UuidIdSchema,
+} from "@/types";
 import {
   catchError,
   defineArchestraTool,
@@ -28,6 +33,9 @@ const LimitOutputItemSchema = z.object({
   entityId: z.string().describe("The limited entity ID."),
   limitType: LimitTypeSchema.describe("The kind of limit."),
   limitValue: z.number().describe("The configured limit value."),
+  cleanupInterval: LimitCleanupIntervalSchema.describe(
+    "How often this limit resets.",
+  ),
   model: z
     .array(z.string())
     .nullable()
@@ -64,6 +72,9 @@ const CreateLimitToolArgsSchema = z
       .nullable()
       .optional()
       .describe("Array of model names. Omit for all models."),
+    cleanup_interval: LimitCleanupIntervalSchema.optional().describe(
+      "Optional cleanup interval for this limit. Omit to use the weekly default.",
+    ),
     mcp_server_name: z
       .string()
       .optional()
@@ -126,6 +137,7 @@ const registry = defineArchestraTools([
             args.model && Array.isArray(args.model) && args.model.length > 0
               ? args.model
               : null,
+          cleanupInterval: args.cleanup_interval,
           mcpServerName: args.mcp_server_name,
           toolName: args.tool_name,
         });
@@ -136,8 +148,10 @@ const registry = defineArchestraTools([
             limit.id
           }\nEntity Type: ${limit.entityType}\nEntity ID: ${
             limit.entityId
-          }\nLimit Type: ${limit.limitType}\nLimit Value: ${
-            limit.limitValue
+          }\nLimit Type: ${limit.limitType}\nLimit Value: ${limit.limitValue}${
+            limit.cleanupInterval
+              ? `\nCleanup Interval: ${limit.cleanupInterval}`
+              : ""
           }${limit.model ? `\nModel: ${limit.model}` : "\nModel: All models"}${
             limit.mcpServerName ? `\nMCP Server: ${limit.mcpServerName}` : ""
           }${limit.toolName ? `\nTool: ${limit.toolName}` : ""}`,
@@ -199,6 +213,8 @@ const registry = defineArchestraTools([
             result += `\n  Entity ID: ${limit.entityId}`;
             result += `\n  Limit Type: ${limit.limitType}`;
             result += `\n  Limit Value: ${limit.limitValue}`;
+            if (limit.cleanupInterval)
+              result += `\n  Cleanup Interval: ${limit.cleanupInterval}`;
             if (limit.model) result += `\n  Model: ${limit.model}`;
             else if (limit.limitType === "token_cost")
               result += `\n  Model: All models`;
@@ -232,6 +248,9 @@ const registry = defineArchestraTools([
           .number()
           .optional()
           .describe("Optional new limit value."),
+        cleanup_interval: LimitCleanupIntervalSchema.optional().describe(
+          "Optional new cleanup interval for this limit.",
+        ),
       })
       .strict(),
     outputSchema: z.object({
@@ -250,6 +269,9 @@ const registry = defineArchestraTools([
         if (args.limit_value !== undefined) {
           updateData.limitValue = args.limit_value;
         }
+        if (args.cleanup_interval !== undefined) {
+          updateData.cleanupInterval = args.cleanup_interval;
+        }
 
         if (Object.keys(updateData).length === 0) {
           return errorResult("No fields provided to update.");
@@ -263,7 +285,11 @@ const registry = defineArchestraTools([
 
         return structuredSuccessResult(
           { limit },
-          `Successfully updated limit.\n\nLimit ID: ${limit.id}\nEntity Type: ${limit.entityType}\nEntity ID: ${limit.entityId}\nLimit Type: ${limit.limitType}\nLimit Value: ${limit.limitValue}`,
+          `Successfully updated limit.\n\nLimit ID: ${limit.id}\nEntity Type: ${limit.entityType}\nEntity ID: ${limit.entityId}\nLimit Type: ${limit.limitType}\nLimit Value: ${limit.limitValue}${
+            limit.cleanupInterval
+              ? `\nCleanup Interval: ${limit.cleanupInterval}`
+              : ""
+          }`,
         );
       } catch (error) {
         return catchError(error, "updating limit");

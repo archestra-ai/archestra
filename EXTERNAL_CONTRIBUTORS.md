@@ -330,3 +330,8 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @XXXBusy
 - @stvnzhou86
 - @Desaon-CUST
+- @douglaswangome
+- @oocheol
+- @akamabu
+- @sachin0903
+- @mbachaud

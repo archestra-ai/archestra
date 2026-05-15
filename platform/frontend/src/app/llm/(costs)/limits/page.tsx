@@ -4,7 +4,6 @@ import type { archestraApiTypes } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   Building2,
-  CircleHelp,
   Edit,
   Key,
   Network,
@@ -19,9 +18,16 @@ import { useSetCostsAction } from "@/app/llm/(costs)/layout";
 import { AgentIcon } from "@/components/agent-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
+import {
+  CLEANUP_INTERVAL_LABELS,
+  DEFAULT_LIMIT_CLEANUP_INTERVAL,
+  type LimitCleanupInterval,
+  LimitCleanupIntervalSelect,
+} from "@/components/limit-cleanup-interval-select";
 import { LlmModelPicker } from "@/components/llm-model-picker";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { WithPermissions } from "@/components/roles/with-permissions";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -70,11 +76,6 @@ import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
 type LimitData = archestraApiTypes.GetLimitsResponses["200"][number];
 type LimitEntityType = archestraApiTypes.CreateLimitData["body"]["entityType"];
 type UsageStatus = "safe" | "warning" | "danger";
-type LimitCleanupInterval = NonNullable<
-  NonNullable<
-    archestraApiTypes.UpdateLlmSettingsData["body"]
-  >["limitCleanupInterval"]
->;
 
 // llm_proxy is a type of agent
 // It is more convenient and clear to handle it as a separate entity on the frontend
@@ -84,6 +85,7 @@ type LimitFormState = {
   entityType: LimitFormEntityType;
   entityId: string;
   limitValue: string;
+  cleanupInterval: LimitCleanupInterval;
   models: string[];
   isAllModels: boolean;
 };
@@ -92,16 +94,9 @@ const DEFAULT_FORM_STATE: LimitFormState = {
   entityType: "organization",
   entityId: "",
   limitValue: "",
+  cleanupInterval: DEFAULT_LIMIT_CLEANUP_INTERVAL,
   models: [],
   isAllModels: true,
-};
-
-const CLEANUP_INTERVAL_LABELS: Record<LimitCleanupInterval, string> = {
-  "1h": "Every hour",
-  "12h": "Every 12 hours",
-  "24h": "Every 24 hours",
-  "1w": "Every week",
-  "1m": "Every month",
 };
 
 const LIMITS_ENTITY_SELECTOR_PAGE_SIZE = 100;
@@ -252,6 +247,8 @@ export default function LimitsPage() {
         entityType,
         entityId: limit.entityType === "organization" ? "" : limit.entityId,
         limitValue: String(limit.limitValue),
+        cleanupInterval:
+          limit.cleanupInterval ?? DEFAULT_LIMIT_CLEANUP_INTERVAL,
         models: isAllModels ? [] : models,
         isAllModels,
       });
@@ -488,6 +485,18 @@ export default function LimitsPage() {
         },
       },
       {
+        accessorKey: "cleanupInterval",
+        header: "Cleanup",
+        size: 140,
+        minSize: 120,
+        cell: ({ row }) => {
+          const cleanupInterval =
+            (row.original.cleanupInterval as LimitCleanupInterval | null) ??
+            DEFAULT_LIMIT_CLEANUP_INTERVAL;
+          return CLEANUP_INTERVAL_LABELS[cleanupInterval];
+        },
+      },
+      {
         accessorKey: "usage",
         header: "Usage",
         size: 200,
@@ -544,10 +553,8 @@ export default function LimitsPage() {
     statusFilter !== "all" ||
     appliedToFilter !== "all" ||
     modelFilter !== "all";
-  const cleanupIntervalLabel =
-    CLEANUP_INTERVAL_LABELS[
-      (organization?.limitCleanupInterval as LimitCleanupInterval) ?? "1h"
-    ];
+  const shouldShowDefaultUserLimitNotice =
+    formState.entityType === "user" && !!organization?.defaultUserLimitValue;
 
   async function handleSubmit() {
     const entityType =
@@ -560,6 +567,7 @@ export default function LimitsPage() {
           : formState.entityId,
       limitType: "token_cost" as const,
       limitValue: Number(formState.limitValue),
+      cleanupInterval: formState.cleanupInterval,
       model: formState.isAllModels ? null : formState.models,
     };
 
@@ -594,23 +602,26 @@ export default function LimitsPage() {
 
   return (
     <div className="space-y-4">
-      <Alert variant="info">
-        <CircleHelp />
-        <AlertDescription className="sm:flex sm:flex-wrap sm:items-center sm:gap-1">
-          <span>
-            Expired or exceeded limits reset on the current cleanup schedule:
-          </span>
-          <span className="font-medium text-foreground">
-            {cleanupIntervalLabel}
-          </span>
-          <Link
-            href="/settings/llm"
-            className="font-medium underline underline-offset-4"
-          >
-            Change it in LLM settings
-          </Link>
-        </AlertDescription>
-      </Alert>
+      {organization?.defaultUserLimitValue && (
+        <WithPermissions
+          permissions={{ llmSettings: ["read"] }}
+          noPermissionHandle="hide"
+        >
+          <Alert variant="info">
+            <AlertDescription className="block">
+              A default user limit applies to every user. Custom per-user limits
+              override it. Configure it in{" "}
+              <Link
+                href="/settings/llm"
+                className="font-medium underline underline-offset-4"
+              >
+                LLM settings
+              </Link>
+              .
+            </AlertDescription>
+          </Alert>
+        </WithPermissions>
+      )}
 
       <div className="flex flex-wrap gap-3">
         <Select
@@ -695,6 +706,15 @@ export default function LimitsPage() {
           }}
         >
           <DialogBody className="space-y-4">
+            {shouldShowDefaultUserLimitNotice && (
+              <Alert variant="info">
+                <AlertDescription>
+                  This custom user limit will override the default user limit
+                  for the selected user.
+                </AlertDescription>
+              </Alert>
+            )}
+
             <div className="space-y-2">
               <Label>Apply to</Label>
               <div className="flex flex-col gap-2 sm:flex-row">
@@ -853,6 +873,19 @@ export default function LimitsPage() {
                 }
                 placeholder="1,000"
                 inputMode="numeric"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Cleanup interval</Label>
+              <LimitCleanupIntervalSelect
+                value={formState.cleanupInterval}
+                onValueChange={(value) =>
+                  setFormState((current) => ({
+                    ...current,
+                    cleanupInterval: value,
+                  }))
+                }
               />
             </div>
           </DialogBody>

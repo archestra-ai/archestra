@@ -80,8 +80,10 @@ describe("Internal MCP Catalog - child delete secret cascade", () => {
     });
 
     const parentRaw = await loadRaw(parent.id);
-    expect(parentRaw.localConfigSecretId).toBeTruthy();
-    const parentLocalConfigSecretId = parentRaw.localConfigSecretId!;
+    const parentLocalConfigSecretId = requireSecretId(
+      parentRaw.localConfigSecretId,
+      "parent local-config secret",
+    );
 
     const child = await createChild(parent.id, {
       childName: "prod",
@@ -108,7 +110,7 @@ describe("Internal MCP Catalog - child delete secret cascade", () => {
 
     // Child's own preset secret bag is gone.
     const childPresetBag = await secretManager().getSecret(
-      childRaw.presetSecretId!,
+      requireSecretId(childRaw.presetSecretId, "child preset secret"),
     );
     expect(childPresetBag).toBeNull();
   });
@@ -150,13 +152,18 @@ describe("Internal MCP Catalog - child delete secret cascade", () => {
     const childARaw = await loadRaw(childA.id);
     const childBRaw = await loadRaw(childB.id);
 
-    const parentLocalConfigSecretId = parentRaw.localConfigSecretId!;
-    const childAPresetSecretId = childARaw.presetSecretId!;
-    const childBPresetSecretId = childBRaw.presetSecretId!;
-
-    expect(parentLocalConfigSecretId).toBeTruthy();
-    expect(childAPresetSecretId).toBeTruthy();
-    expect(childBPresetSecretId).toBeTruthy();
+    const parentLocalConfigSecretId = requireSecretId(
+      parentRaw.localConfigSecretId,
+      "parent local-config secret",
+    );
+    const childAPresetSecretId = requireSecretId(
+      childARaw.presetSecretId,
+      "child A preset secret",
+    );
+    const childBPresetSecretId = requireSecretId(
+      childBRaw.presetSecretId,
+      "child B preset secret",
+    );
 
     const deleteResponse = await app.inject({
       method: "DELETE",
@@ -217,5 +224,15 @@ describe("Internal MCP Catalog - child delete secret cascade", () => {
     });
     if (!row) throw new Error(`row ${id} not found`);
     return row;
+  }
+
+  function requireSecretId(
+    value: string | null | undefined,
+    label: string,
+  ): string {
+    if (!value) {
+      throw new Error(`Expected ${label} to be present`);
+    }
+    return value;
   }
 });

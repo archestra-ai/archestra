@@ -223,7 +223,7 @@ describe("limits routes", () => {
       expect(body.length).toBe(0);
     });
 
-    test("cleanup with allForOrganizationId respects limitCleanupInterval", async ({
+    test("cleanup with allForOrganizationId respects per-limit cleanup intervals", async ({
       makeAgent,
     }) => {
       const agent = await makeAgent({

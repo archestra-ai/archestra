@@ -83,6 +83,7 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   provider: "anthropic",
   apiKey: null,
   baseUrl: null,
+  inferenceBaseUrl: null,
   extraHeaders: [],
   scope: "personal",
   teamId: null,
@@ -169,6 +170,7 @@ export default function ApiKeysPage() {
         provider: selectedApiKey.provider,
         apiKey: selectedApiKey.secretId ? LLM_PROVIDER_API_KEY_PLACEHOLDER : "",
         baseUrl: selectedApiKey.baseUrl ?? null,
+        inferenceBaseUrl: selectedApiKey.inferenceBaseUrl ?? null,
         extraHeaders: deserializeExtraHeaders(selectedApiKey.extraHeaders),
         scope: selectedApiKey.scope,
         teamId: selectedApiKey.teamId ?? "",
@@ -210,6 +212,7 @@ export default function ApiKeysPage() {
               ? (values.apiKey ?? undefined)
               : undefined,
           baseUrl: values.baseUrl || null,
+          inferenceBaseUrl: values.inferenceBaseUrl || null,
           extraHeaders: serializeExtraHeaders(values.extraHeaders),
           scope: scopeChanged ? values.scope : undefined,
           teamId:
@@ -555,6 +558,7 @@ export default function ApiKeysPage() {
         title="Edit API Key"
         description="Update the name, API key value, or scope"
         size="small"
+        className="sm:max-w-xl"
       >
         <DialogForm
           onSubmit={handleEdit}

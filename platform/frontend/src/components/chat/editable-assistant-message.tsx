@@ -120,45 +120,43 @@ export function EditableAssistantMessage({
       <Message from="assistant" className="relative pt-0">
         <MessageContent
           aria-label="Message content"
-          className="max-w-[70%] min-w-[50%] px-3 py-0 pt-3 ring-2 !bg-secondary/50 ring-primary/50"
+          className="max-w-[70%] min-w-[50%] px-4! py-3! rounded-lg! pt-3 ring-2 !bg-secondary/50 ring-primary/50"
         >
-          <div>
-            <Textarea
-              ref={textareaRef}
-              value={editedText}
-              onChange={(e) => setEditedText(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onCompositionStart={() => setIsComposing(true)}
-              onCompositionEnd={() => setIsComposing(false)}
-              className="max-h-[240px] resize-none border-0 focus-visible:ring-0 shadow-none text-sm !bg-secondary"
-              disabled={isSaving}
-              placeholder="Edit this response..."
-            />
-            <div className="flex gap-2 py-3 justify-between items-start">
-              <div className="flex gap-2 items-start">
-                <Info className="h-3 w-3 text-muted-foreground shrink-0 mt-0.5" />
-                <span className="text-xs text-muted-foreground">
-                  Edit to correct errors or refine the context. This won't
-                  regenerate the conversation.
-                </span>
-              </div>
-              <div className="flex gap-2 shrink-0">
-                <Button
-                  size="sm"
-                  variant="outline-transparent"
-                  onClick={handleCancelEdit}
-                  disabled={isSaving}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={handleSaveEdit}
-                  disabled={isSaving || editedText.trim() === ""}
-                >
-                  Save
-                </Button>
-              </div>
+          <Textarea
+            ref={textareaRef}
+            value={editedText}
+            onChange={(e) => setEditedText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onCompositionStart={() => setIsComposing(true)}
+            onCompositionEnd={() => setIsComposing(false)}
+            className="max-h-[240px] resize-none border-0 focus-visible:ring-0 shadow-none text-sm !bg-secondary"
+            disabled={isSaving}
+            placeholder="Edit this response..."
+          />
+          <div className="flex gap-2 py-3 justify-between items-start">
+            <div className="flex gap-2 items-start">
+              <Info className="h-3 w-3 text-muted-foreground shrink-0 mt-0.5" />
+              <span className="text-xs text-muted-foreground">
+                Edit to correct errors or refine the context. This won't
+                regenerate the conversation.
+              </span>
+            </div>
+            <div className="flex gap-2 shrink-0">
+              <Button
+                size="sm"
+                variant="outline-transparent"
+                onClick={handleCancelEdit}
+                disabled={isSaving}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleSaveEdit}
+                disabled={isSaving || editedText.trim() === ""}
+              >
+                Save
+              </Button>
             </div>
           </div>
         </MessageContent>

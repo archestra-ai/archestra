@@ -92,7 +92,7 @@ export const seededChatPreviewScenarios: SeededChatPreviewScenario[] = [
           },
           {
             type: "file",
-            url: "https://example.test/incident-report.png",
+            url: "https://placehold.co/600x400",
             mediaType: "image/png",
             filename: "incident-report.png",
           },

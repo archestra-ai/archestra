@@ -446,7 +446,7 @@ export function ChatMessages({
     >
       <ScrollToBottomOnSubmit status={status} />
       <ConversationContent>
-        <div className="max-w-4xl mx-auto relative pb-8">
+        <div className="max-w-4xl mx-auto relative pb-8 flex flex-col gap-2">
           <SensitiveContextStickyIndicator
             visible={showStickyUnsafeIndicator}
           />
@@ -488,7 +488,10 @@ export function ChatMessages({
             return (
               <div
                 key={message.id || idx}
-                className={cn(isDimmed && "opacity-40 transition-opacity")}
+                className={cn(
+                  isDimmed && "opacity-40 transition-opacity",
+                  "flex flex-col gap-2",
+                )}
               >
                 {(() => {
                   const { groupMap, consumedIndices } =
@@ -712,6 +715,11 @@ export function ChatMessages({
                                       <Reasoning
                                         key={parsedKey}
                                         className="w-full"
+                                        isStreaming={
+                                          status === "streaming" &&
+                                          i === message.parts.length - 1 &&
+                                          message.id === messages.at(-1)?.id
+                                        }
                                       >
                                         <ReasoningTrigger />
                                         <ReasoningContent>
@@ -825,7 +833,11 @@ export function ChatMessages({
 
                       case "reasoning":
                         return (
-                          <Reasoning key={partKey} className="w-full">
+                          <Reasoning
+                            key={partKey}
+                            className="w-full"
+                            isStreaming={part.state === "streaming"}
+                          >
                             <ReasoningTrigger />
                             <ReasoningContent>{part.text}</ReasoningContent>
                           </Reasoning>
@@ -886,10 +898,7 @@ export function ChatMessages({
                         const isPdf = filePart.mediaType === "application/pdf";
 
                         return (
-                          <div
-                            key={partKey}
-                            className="py-1 -mt-2 flex justify-start"
-                          >
+                          <div key={partKey} className="flex justify-start">
                             <div className="max-w-sm">
                               {isImage && (
                                 <img
@@ -913,10 +922,10 @@ export function ChatMessages({
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   download={filePart.filename}
-                                  className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2 hover:bg-muted transition-colors"
+                                  className="flex items-center gap-1 text-sm rounded-lg border bg-muted/50 p-2 hover:bg-muted transition-colors"
                                 >
                                   <svg
-                                    className="h-6 w-6 text-red-500"
+                                    className="h-4 w-4 text-red-500"
                                     fill="currentColor"
                                     viewBox="0 0 24 24"
                                   >
@@ -934,10 +943,10 @@ export function ChatMessages({
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   download={filePart.filename}
-                                  className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2 hover:bg-muted transition-colors"
+                                  className="flex items-center gap-1 text-sm rounded-lg border bg-muted/50 p-2 hover:bg-muted transition-colors"
                                 >
                                   <svg
-                                    className="h-5 w-5 text-muted-foreground"
+                                    className="h-4 w-4 text-muted-foreground"
                                     fill="none"
                                     stroke="currentColor"
                                     viewBox="0 0 24 24"
@@ -950,7 +959,7 @@ export function ChatMessages({
                                       d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
                                     />
                                   </svg>
-                                  <span className="truncate">
+                                  <span className="font-medium truncate">
                                     {filePart.filename || "Attached file"}
                                   </span>
                                 </a>

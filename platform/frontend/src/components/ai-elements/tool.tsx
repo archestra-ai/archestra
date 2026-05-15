@@ -47,7 +47,7 @@ export const Tool = ({
       <Collapsible
         defaultOpen={false}
         open={open}
-        className={cn("not-prose mb-4 w-full rounded-md border", className)}
+        className={cn("not-prose w-full rounded-md border", className)}
         onOpenChange={handleOpenChange}
         {...props}
       >
@@ -163,7 +163,7 @@ export const ToolContent = ({
   const { hasOpened } = useContext(ToolContext);
 
   const resolvedClassName = cn(
-    "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
+    "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in p-4 pt-0 flex flex-col gap-1",
     forceMount &&
       "overflow-hidden data-[state=closed]:max-h-0 data-[state=open]:max-h-[5000px]",
     className,
@@ -194,11 +194,11 @@ export const ToolInput = ({ className, input, ...props }: ToolInputProps) => {
   return (
     <Collapsible
       defaultOpen={false}
-      className={cn("space-y-2 overflow-hidden p-4", className)}
+      className={cn("space-y-2 overflow-hidden", className)}
       {...props}
     >
       <div className="space-y-2">
-        <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 cursor-pointer">
+        <CollapsibleTrigger className="group flex w-full items-center gap-2 cursor-pointer">
           <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
             Parameters
           </h4>
@@ -265,7 +265,7 @@ export const ToolOutput = ({
   // Note: In Dual LLM context, "user" = Main Profile (questions), "assistant" = Quarantined Profile (answers)
   if (conversations && conversations.length > 0) {
     return (
-      <div className={cn("space-y-2 p-4", className)} {...props}>
+      <div className={cn("space-y-2", className)} {...props}>
         <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
           {label ?? "Conversation"}
         </h4>
@@ -380,11 +380,7 @@ export const ToolOutput = ({
   }
 
   return (
-    <div
-      ref={containerRef}
-      className={cn("space-y-2 p-4", className)}
-      {...props}
-    >
+    <div ref={containerRef} className={cn("space-y-2", className)} {...props}>
       <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
         {labelText}
       </h4>

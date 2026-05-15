@@ -89,144 +89,142 @@ export function InlineChatError({
 
   if (slimChatErrorUi) {
     return (
-      <Message from="assistant">
-        <MessageContent className="bg-destructive/10 border border-destructive/20 rounded-lg">
-          <div className="flex items-start gap-2 text-destructive">
-            <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-            <div className="flex-1 space-y-2">
-              <p className="text-sm text-foreground">
-                {supportMessage ? supportMessage : chatError.message}
-              </p>
+      // <Message from="assistant">
+      //   <MessageContent className="bg-destructive/10 border border-destructive/20 rounded-lg">
+      <div className="flex items-start gap-2 text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-4 py-3">
+        <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+        <div className="flex-1 space-y-2">
+          <p className="text-sm text-foreground">
+            {supportMessage ? supportMessage : chatError.message}
+          </p>
 
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {refEntries.map((entry) => (
-                  <span
-                    key={entry.label}
-                    className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono"
-                  >
-                    <span className="opacity-60">{entry.label}</span>
-                    <span>{entry.value}</span>
-                  </span>
-                ))}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-5 w-5 p-0 text-muted-foreground hover:text-foreground"
-                  onClick={copyDebugInfo}
-                  aria-label="Copy error details"
-                  title="Copy error details"
-                >
-                  <Copy className="h-3 w-3" />
-                </Button>
-              </div>
-            </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {refEntries.map((entry) => (
+              <span
+                key={entry.label}
+                className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono"
+              >
+                <span className="opacity-60">{entry.label}</span>
+                <span>{entry.value}</span>
+              </span>
+            ))}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-5 w-5 p-0 text-muted-foreground hover:text-foreground"
+              onClick={copyDebugInfo}
+              aria-label="Copy error details"
+              title="Copy error details"
+            >
+              <Copy className="h-3 w-3" />
+            </Button>
           </div>
-        </MessageContent>
-      </Message>
+        </div>
+      </div>
+      //   </MessageContent>
+      // </Message>
     );
   }
 
   return (
-    <Message from="assistant">
-      <MessageContent className="bg-destructive/10 border border-destructive/20 rounded-lg">
-        <div className="flex items-start gap-2 text-destructive">
-          <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-          <div className="flex-1 space-y-2">
-            {supportMessage ? (
-              <p className="text-sm text-foreground">{supportMessage}</p>
-            ) : (
-              <p className="text-sm text-foreground">{chatError.message}</p>
-            )}
+    // <Message from="assistant">
+    //   <MessageContent className="bg-destructive/10 border border-destructive/20 rounded-lg">
+    <div className="flex items-start gap-2 text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-4 py-3">
+      <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+      <div className="flex-1 space-y-2">
+        {supportMessage ? (
+          <p className="text-sm text-foreground">{supportMessage}</p>
+        ) : (
+          <p className="text-sm text-foreground">{chatError.message}</p>
+        )}
 
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {agentName && (
-                <span className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono">
-                  <span className="opacity-60">Agent</span>
-                  <span>{agentName}</span>
-                </span>
-              )}
-              {selectedModel && (
-                <span className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono">
-                  <span className="opacity-60">Model</span>
-                  <span>{selectedModel}</span>
-                </span>
-              )}
-              {chatError.originalError?.provider && (
-                <span className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono">
-                  <span className="opacity-60">Provider</span>
-                  <span>{chatError.originalError.provider}</span>
-                </span>
-              )}
-              <span className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono">
-                <span className="opacity-60">Model source</span>
-                <span>{formatModelSource(modelSource)}</span>
-              </span>
-              {refEntries.map((entry) => (
-                <span
-                  key={entry.label}
-                  className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono"
-                >
-                  <span className="opacity-60">{entry.label}</span>
-                  <span>{entry.value}</span>
-                </span>
-              ))}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {agentName && (
+            <span className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono">
+              <span className="opacity-60">Agent</span>
+              <span>{agentName}</span>
+            </span>
+          )}
+          {selectedModel && (
+            <span className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono">
+              <span className="opacity-60">Model</span>
+              <span>{selectedModel}</span>
+            </span>
+          )}
+          {chatError.originalError?.provider && (
+            <span className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono">
+              <span className="opacity-60">Provider</span>
+              <span>{chatError.originalError.provider}</span>
+            </span>
+          )}
+          <span className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono">
+            <span className="opacity-60">Model source</span>
+            <span>{formatModelSource(modelSource)}</span>
+          </span>
+          {refEntries.map((entry) => (
+            <span
+              key={entry.label}
+              className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono"
+            >
+              <span className="opacity-60">{entry.label}</span>
+              <span>{entry.value}</span>
+            </span>
+          ))}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-5 w-5 p-0 text-muted-foreground hover:text-foreground"
+            onClick={copyDebugInfo}
+            aria-label="Copy debug info"
+            title="Copy debug info"
+          >
+            <Copy className="h-3 w-3" />
+          </Button>
+        </div>
+
+        {isAdmin && (
+          <Collapsible open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
+            <CollapsibleTrigger asChild>
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-5 w-5 p-0 text-muted-foreground hover:text-foreground"
-                onClick={copyDebugInfo}
-                aria-label="Copy debug info"
-                title="Copy debug info"
+                className="h-auto p-0 text-xs text-muted-foreground hover:text-foreground"
               >
-                <Copy className="h-3 w-3" />
+                {isDetailsOpen ? (
+                  <ChevronDown className="h-3 w-3 mr-1" />
+                ) : (
+                  <ChevronRight className="h-3 w-3 mr-1" />
+                )}
+                Error Details
               </Button>
-            </div>
-
-            {isAdmin && (
-              <Collapsible open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
-                <CollapsibleTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-auto p-0 text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    {isDetailsOpen ? (
-                      <ChevronDown className="h-3 w-3 mr-1" />
-                    ) : (
-                      <ChevronRight className="h-3 w-3 mr-1" />
-                    )}
-                    Error Details
-                  </Button>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="space-y-2 mt-1">
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-muted text-muted-foreground">
-                      {chatError.code}
-                    </span>
-                    {chatError.isRetryable && (
-                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                        <RefreshCw className="h-3 w-3" />
-                        Retryable
-                      </span>
-                    )}
-                  </div>
-                  {supportMessage && (
-                    <p className="text-sm text-foreground">
-                      {chatError.message}
-                    </p>
-                  )}
-                  {chatError.originalError && (
-                    <pre className="max-h-48 overflow-auto rounded-md bg-muted/50 p-3 text-xs font-mono whitespace-pre-wrap break-words text-foreground">
-                      {formatOriginalError(chatError.originalError)}
-                    </pre>
-                  )}
-                </CollapsibleContent>
-              </Collapsible>
-            )}
-          </div>
-        </div>
-      </MessageContent>
-    </Message>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-2 mt-1">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-muted text-muted-foreground">
+                  {chatError.code}
+                </span>
+                {chatError.isRetryable && (
+                  <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                    <RefreshCw className="h-3 w-3" />
+                    Retryable
+                  </span>
+                )}
+              </div>
+              {supportMessage && (
+                <p className="text-sm text-foreground">{chatError.message}</p>
+              )}
+              {chatError.originalError && (
+                <pre className="max-h-48 overflow-auto rounded-md bg-muted/50 p-3 text-xs font-mono whitespace-pre-wrap break-words text-foreground">
+                  {formatOriginalError(chatError.originalError)}
+                </pre>
+              )}
+            </CollapsibleContent>
+          </Collapsible>
+        )}
+      </div>
+    </div>
+    //   </MessageContent>
+    // </Message>
   );
 }
 

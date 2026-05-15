@@ -45,7 +45,7 @@ export const Reasoning = memo(
     className,
     isStreaming = false,
     open,
-    defaultOpen = true,
+    defaultOpen,
     onOpenChange,
     duration: durationProp,
     children,
@@ -53,7 +53,7 @@ export const Reasoning = memo(
   }: ReasoningProps) => {
     const [isOpen, setIsOpen] = useControllableState({
       prop: open,
-      defaultProp: defaultOpen,
+      defaultProp: defaultOpen ?? isStreaming,
       onChange: onOpenChange,
     });
     const [duration, setDuration] = useControllableState({
@@ -98,7 +98,7 @@ export const Reasoning = memo(
         value={{ isStreaming, isOpen, setIsOpen, duration }}
       >
         <Collapsible
-          className={cn("not-prose mb-4", className)}
+          className={cn("not-prose", className)}
           onOpenChange={handleOpenChange}
           open={isOpen}
           {...props}
@@ -113,13 +113,12 @@ export const Reasoning = memo(
 export type ReasoningTriggerProps = ComponentProps<typeof CollapsibleTrigger>;
 
 const getThinkingMessage = (isStreaming: boolean, duration?: number) => {
-  if (isStreaming || duration === 0) {
-    return <p>Thinking...</p>;
-  }
-  if (duration === undefined) {
-    return <p>Thought for a few seconds</p>;
-  }
-  return <p>Thought for {duration} seconds</p>;
+  return (
+    <p>
+      {isStreaming ? "Thinking" : "Thought"} for{" "}
+      {(duration ?? 0 > 1) ? duration : "a few"} seconds
+    </p>
+  );
 };
 
 export const ReasoningTrigger = memo(
@@ -161,7 +160,7 @@ export const ReasoningContent = memo(
   ({ className, children, ...props }: ReasoningContentProps) => (
     <CollapsibleContent
       className={cn(
-        "mt-4 text-sm",
+        "text-sm px-6",
         "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-muted-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
         className,
       )}

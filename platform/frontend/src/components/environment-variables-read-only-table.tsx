@@ -21,6 +21,9 @@ interface EnvironmentVariablesReadOnlyTableProps<
   fieldNamePrefix: string;
   useExternalSecretsManager?: boolean;
   secretKeysWithStoredValue?: Set<string>;
+  showType?: boolean;
+  keyLabel?: string;
+  removeAriaLabel?: string;
   onEdit: (index: number) => void;
   onDelete: (index: number) => void;
 }
@@ -32,8 +35,10 @@ const TYPE_LABEL: Record<string, string> = {
   number: "Number",
 };
 
-const GRID_CLASS =
+const GRID_WITH_TYPE =
   "grid grid-cols-[1.4fr_0.8fr_0.6fr_2fr_2.5fr_auto] gap-3 px-4";
+const GRID_WITHOUT_TYPE =
+  "grid grid-cols-[1.4fr_0.6fr_2fr_2.5fr_auto] gap-3 px-4";
 
 export function EnvironmentVariablesReadOnlyTable<
   TFieldValues extends FieldValues,
@@ -44,16 +49,20 @@ export function EnvironmentVariablesReadOnlyTable<
   fieldNamePrefix,
   useExternalSecretsManager = false,
   secretKeysWithStoredValue,
+  showType = true,
+  keyLabel = "Key",
+  removeAriaLabel = "Remove variable",
   onEdit,
   onDelete,
 }: EnvironmentVariablesReadOnlyTableProps<TFieldValues>) {
+  const gridClass = showType ? GRID_WITH_TYPE : GRID_WITHOUT_TYPE;
   return (
     <div>
       <div
-        className={`${GRID_CLASS} border-b py-2.5 text-xs font-medium text-foreground`}
+        className={`${gridClass} border-b py-2.5 text-xs font-medium text-foreground`}
       >
-        <div>Key</div>
-        <div>Type</div>
+        <div>{keyLabel}</div>
+        {showType && <div>Type</div>}
         <div>Required</div>
         <div>Value</div>
         <div>Description</div>
@@ -111,16 +120,18 @@ export function EnvironmentVariablesReadOnlyTable<
                 onEdit(index);
               }
             }}
-            className={`${GRID_CLASS} group items-center border-b py-3 text-xs last:border-b-0 cursor-pointer hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
+            className={`${gridClass} group items-center border-b py-3 text-xs last:border-b-0 cursor-pointer hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
           >
             <div className="font-mono">
               {key || (
                 <span className="text-muted-foreground italic">unnamed</span>
               )}
             </div>
-            <div className="text-muted-foreground">
-              {TYPE_LABEL[type] ?? type}
-            </div>
+            {showType && (
+              <div className="text-muted-foreground">
+                {TYPE_LABEL[type] ?? type}
+              </div>
+            )}
             <div>
               {scope === "installation" && required ? (
                 <Check className="h-3.5 w-3.5 text-foreground" />
@@ -149,7 +160,7 @@ export function EnvironmentVariablesReadOnlyTable<
                 e.stopPropagation();
                 onDelete(index);
               }}
-              aria-label="Remove variable"
+              aria-label={removeAriaLabel}
             >
               <Trash2 className="h-4 w-4" />
             </Button>

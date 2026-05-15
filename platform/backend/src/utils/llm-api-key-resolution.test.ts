@@ -1,7 +1,24 @@
-import { describe, expect, test } from "@/test";
+import { vi } from "vitest";
+import { LlmProviderApiKeyModel } from "@/models";
+import { beforeEach, describe, expect, test } from "@/test";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 
+const mockIsAzureOpenAiEntraIdEnabled = vi.hoisted(() => vi.fn(() => false));
+
+vi.mock("@/clients/azure-openai-credentials", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/clients/azure-openai-credentials")>();
+  return {
+    ...actual,
+    isAzureOpenAiEntraIdEnabled: mockIsAzureOpenAiEntraIdEnabled,
+  };
+});
+
 describe("resolveProviderApiKey", () => {
+  beforeEach(() => {
+    mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(false);
+  });
+
   test("resolves personal key for user", async ({
     makeOrganization,
     makeUser,
@@ -109,6 +126,102 @@ describe("resolveProviderApiKey", () => {
     });
 
     expect(result.apiKey).toBe("sk-runtime-base");
+    expect(result.baseUrl).toBe("https://runtime.example.com/openai");
+  });
+
+  test("resolves an explicit keyless Azure conversation key", async ({
+    makeOrganization,
+    makeUser,
+    makeSecret,
+    makeAgent,
+    makeConversation,
+  }) => {
+    mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(true);
+
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ name: "Azure Chat Agent", teams: [] });
+    const fallbackSecret = await makeSecret({
+      secret: { apiKey: "sk-fallback" },
+    });
+
+    await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      secretId: fallbackSecret.id,
+      name: "Fallback Azure Key",
+      provider: "azure",
+      scope: "org",
+      baseUrl: "https://fallback.example.com/openai",
+      inferenceBaseUrl: "https://fallback-runtime.example.com/openai",
+    });
+    const selectedKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      secretId: null,
+      name: "Selected Keyless Azure Key",
+      provider: "azure",
+      scope: "org",
+      baseUrl: "https://discovery.example.com/openai",
+      inferenceBaseUrl: "https://runtime.example.com/openai",
+    });
+    const conversation = await makeConversation(agent.id, {
+      userId: user.id,
+      organizationId: org.id,
+      chatApiKeyId: selectedKey.id,
+    });
+
+    const result = await resolveProviderApiKey({
+      organizationId: org.id,
+      userId: user.id,
+      provider: "azure",
+      conversationId: conversation.id,
+    });
+
+    expect(result.apiKey).toBeUndefined();
+    expect(result.chatApiKeyId).toBe(selectedKey.id);
+    expect(result.baseUrl).toBe("https://runtime.example.com/openai");
+  });
+
+  test("resolves an explicit keyless Azure agent key", async ({
+    makeOrganization,
+    makeUser,
+    makeSecret,
+  }) => {
+    mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(true);
+
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const fallbackSecret = await makeSecret({
+      secret: { apiKey: "sk-fallback" },
+    });
+
+    await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      secretId: fallbackSecret.id,
+      name: "Fallback Azure Key",
+      provider: "azure",
+      scope: "org",
+      baseUrl: "https://fallback.example.com/openai",
+      inferenceBaseUrl: "https://fallback-runtime.example.com/openai",
+    });
+    const agentKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      secretId: null,
+      name: "Agent Keyless Azure Key",
+      provider: "azure",
+      scope: "org",
+      baseUrl: "https://discovery.example.com/openai",
+      inferenceBaseUrl: "https://runtime.example.com/openai",
+    });
+
+    const result = await resolveProviderApiKey({
+      organizationId: org.id,
+      userId: user.id,
+      provider: "azure",
+      agentLlmApiKeyId: agentKey.id,
+    });
+
+    expect(result.apiKey).toBeUndefined();
+    expect(result.chatApiKeyId).toBe(agentKey.id);
     expect(result.baseUrl).toBe("https://runtime.example.com/openai");
   });
 

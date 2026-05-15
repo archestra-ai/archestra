@@ -2,8 +2,7 @@ import * as Sentry from "@sentry/nextjs";
 import { render, screen } from "@testing-library/react";
 import { usePathname, useRouter } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useHasPermissions } from "@/lib/auth/auth.query";
-import { authClient } from "@/lib/clients/auth/auth-client";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { WithAuthCheck } from "./with-auth-check";
 
 // Mock Sentry
@@ -17,16 +16,10 @@ vi.mock("next/navigation", () => ({
   usePathname: vi.fn(),
 }));
 
-// Mock auth client
-vi.mock("@/lib/clients/auth/auth-client", () => ({
-  authClient: {
-    useSession: vi.fn(),
-  },
-}));
-
 // Mock auth query
 vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: vi.fn(),
+  useSession: vi.fn(),
 }));
 
 // Mock shared module
@@ -71,10 +64,10 @@ describe("WithAuthCheck", () => {
 
   describe("when user is not authenticated", () => {
     beforeEach(() => {
-      vi.mocked(authClient.useSession).mockReturnValue({
+      vi.mocked(useSession).mockReturnValue({
         data: null,
         isPending: false,
-      } as ReturnType<typeof authClient.useSession>);
+      } as unknown as ReturnType<typeof useSession>);
     });
 
     it("should redirect to sign-in with redirectTo param when accessing protected page", () => {
@@ -178,13 +171,13 @@ describe("WithAuthCheck", () => {
 
   describe("when user is authenticated", () => {
     beforeEach(() => {
-      vi.mocked(authClient.useSession).mockReturnValue({
+      vi.mocked(useSession).mockReturnValue({
         data: {
           user: { id: "user123", email: "test@example.com" },
           session: { id: "session123" },
         },
         isPending: false,
-      } as ReturnType<typeof authClient.useSession>);
+      } as unknown as ReturnType<typeof useSession>);
     });
 
     it("should redirect to home when accessing auth pages without redirectTo", () => {
@@ -288,10 +281,10 @@ describe("WithAuthCheck", () => {
 
   describe("when auth check is pending", () => {
     beforeEach(() => {
-      vi.mocked(authClient.useSession).mockReturnValue({
+      vi.mocked(useSession).mockReturnValue({
         data: null,
         isPending: true,
-      } as ReturnType<typeof authClient.useSession>);
+      } as unknown as ReturnType<typeof useSession>);
     });
 
     it("should render nothing while checking auth", () => {
@@ -310,10 +303,10 @@ describe("WithAuthCheck", () => {
 
   describe("special auth pages (/auth/two-factor)", () => {
     it("should allow access to /auth/two-factor when not authenticated (2FA verification during login)", () => {
-      vi.mocked(authClient.useSession).mockReturnValue({
+      vi.mocked(useSession).mockReturnValue({
         data: null,
         isPending: false,
-      } as ReturnType<typeof authClient.useSession>);
+      } as unknown as ReturnType<typeof useSession>);
       vi.mocked(usePathname).mockReturnValue("/auth/two-factor");
 
       render(
@@ -327,13 +320,13 @@ describe("WithAuthCheck", () => {
     });
 
     it("should allow access to /auth/two-factor when authenticated (2FA setup)", () => {
-      vi.mocked(authClient.useSession).mockReturnValue({
+      vi.mocked(useSession).mockReturnValue({
         data: {
           user: { id: "user123", email: "test@example.com" },
           session: { id: "session123" },
         },
         isPending: false,
-      } as ReturnType<typeof authClient.useSession>);
+      } as unknown as ReturnType<typeof useSession>);
       vi.mocked(usePathname).mockReturnValue("/auth/two-factor");
 
       render(
@@ -347,10 +340,10 @@ describe("WithAuthCheck", () => {
     });
 
     it("should allow access to /auth/two-factor sub-paths", () => {
-      vi.mocked(authClient.useSession).mockReturnValue({
+      vi.mocked(useSession).mockReturnValue({
         data: null,
         isPending: false,
-      } as ReturnType<typeof authClient.useSession>);
+      } as unknown as ReturnType<typeof useSession>);
       vi.mocked(usePathname).mockReturnValue("/auth/two-factor/setup");
 
       render(
@@ -372,13 +365,13 @@ describe("WithAuthCheck", () => {
         name: "Test User",
       };
 
-      vi.mocked(authClient.useSession).mockReturnValue({
+      vi.mocked(useSession).mockReturnValue({
         data: {
           user: mockUser,
           session: { id: "session123" },
         },
         isPending: false,
-      } as ReturnType<typeof authClient.useSession>);
+      } as unknown as ReturnType<typeof useSession>);
 
       vi.mocked(usePathname).mockReturnValue("/dashboard");
 
@@ -401,13 +394,13 @@ describe("WithAuthCheck", () => {
         email: "another@example.com",
       };
 
-      vi.mocked(authClient.useSession).mockReturnValue({
+      vi.mocked(useSession).mockReturnValue({
         data: {
           user: mockUser,
           session: { id: "session456" },
         },
         isPending: false,
-      } as ReturnType<typeof authClient.useSession>);
+      } as unknown as ReturnType<typeof useSession>);
 
       vi.mocked(usePathname).mockReturnValue("/dashboard");
 
@@ -425,10 +418,10 @@ describe("WithAuthCheck", () => {
     });
 
     it("should clear Sentry user context when user is not authenticated", () => {
-      vi.mocked(authClient.useSession).mockReturnValue({
+      vi.mocked(useSession).mockReturnValue({
         data: null,
         isPending: false,
-      } as ReturnType<typeof authClient.useSession>);
+      } as unknown as ReturnType<typeof useSession>);
 
       vi.mocked(usePathname).mockReturnValue("/auth/sign-in");
 
@@ -446,13 +439,13 @@ describe("WithAuthCheck", () => {
         throw new Error("Sentry error");
       });
 
-      vi.mocked(authClient.useSession).mockReturnValue({
+      vi.mocked(useSession).mockReturnValue({
         data: {
           user: { id: "user789", email: "error@example.com" },
           session: { id: "session789" },
         },
         isPending: false,
-      } as ReturnType<typeof authClient.useSession>);
+      } as unknown as ReturnType<typeof useSession>);
 
       vi.mocked(usePathname).mockReturnValue("/dashboard");
 

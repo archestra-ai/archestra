@@ -22,6 +22,7 @@ import {
   EmptyMedia,
 } from "@/components/ui/empty";
 import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
+import { useCatalogPresets } from "@/lib/mcp/internal-mcp-catalog.query";
 import { cn } from "@/lib/utils";
 import {
   computeDeploymentStatusSummary,
@@ -31,12 +32,14 @@ import {
 import { EditCatalogContent } from "./edit-catalog-dialog";
 import { ManageUsersContent } from "./manage-users-dialog";
 import { McpLogsContent, type McpLogsTab } from "./mcp-logs-dialog";
-import type { CatalogItemWithOptionalLabel } from "./mcp-server-card";
+import type { CatalogItem } from "./mcp-server-card";
+import { PresetsSection } from "./presets-section";
 import { YamlConfigContent } from "./yaml-config-dialog";
 
 type SettingsPage =
   | "configuration"
   | "connections"
+  | "presets"
   | "debug-logs"
   | "debug-inspector"
   | "debug-shell"
@@ -52,7 +55,7 @@ interface McpServerSettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialPage?: SettingsPage;
-  item: CatalogItemWithOptionalLabel;
+  item: CatalogItem;
   variant: "remote" | "local" | "builtin";
   showConnections: boolean;
   connectionCount?: number;
@@ -69,6 +72,7 @@ interface McpServerSettingsDialogProps {
     name: string;
     ownerEmail?: string | null;
     teamDetails?: { teamId: string; name: string } | null;
+    presetLabel?: string | null;
   }[];
   deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
   deploymentServerIds: string[];
@@ -94,6 +98,7 @@ const DEBUG_TAB_MAP: Record<string, McpLogsTab> = {
 const PAGE_TITLES: Record<SettingsPage, string> = {
   configuration: "Configuration",
   connections: "Credentials",
+  presets: "Presets",
   "debug-logs": "Logs",
   "debug-inspector": "Inspector",
   "debug-shell": "Shell",
@@ -135,10 +140,19 @@ export function McpServerSettingsDialog({
   onDelete,
 }: McpServerSettingsDialogProps) {
   const isBuiltin = variant === "builtin";
+  const { data: presets = [] } = useCatalogPresets(isBuiltin ? null : item.id);
+  const showPresets = !isBuiltin;
 
   const navItems: NavItemDef[] = [];
   if (!isBuiltin) {
     navItems.push({ id: "configuration", label: "Configuration" });
+  }
+  if (showPresets) {
+    navItems.push({
+      id: "presets",
+      label: "Presets",
+      badge: presets.length + 1,
+    });
   }
   if (showConnections) {
     navItems.push({
@@ -216,9 +230,7 @@ export function McpServerSettingsDialog({
           className="max-w-6xl h-[85vh] flex flex-row p-0 gap-0 overflow-hidden"
           showCloseButton={false}
         >
-          <DialogTitle className="sr-only">
-            {item.label || item.name} Settings
-          </DialogTitle>
+          <DialogTitle className="sr-only">{item.name} Settings</DialogTitle>
           <DialogDescription className="sr-only">
             Server settings and configuration
           </DialogDescription>
@@ -229,9 +241,9 @@ export function McpServerSettingsDialog({
               <div className="flex min-w-0 items-center gap-2.5">
                 <SidebarIcon icon={item.icon} catalogId={item.id} />
                 <div className="min-w-0 flex-1">
-                  <TruncatedTooltip content={item.label || item.name}>
+                  <TruncatedTooltip content={item.name}>
                     <div className="font-semibold text-sm truncate">
-                      {item.label || item.name}
+                      {item.name}
                     </div>
                   </TruncatedTooltip>
                   {summary && (
@@ -355,11 +367,17 @@ export function McpServerSettingsDialog({
                 />
               )}
 
+              {validPage === "presets" && showPresets && (
+                <div className="flex-1 overflow-y-auto p-6">
+                  <PresetsSection cat={item} />
+                </div>
+              )}
+
               {validPage === "connections" && showConnections && (
                 <ManageUsersContent
                   isActive={open && validPage === "connections"}
                   onClose={handleClose}
-                  label={item.label || item.name}
+                  label={item.name}
                   catalogId={item.id}
                   onAddPersonalConnection={onAddPersonalConnection}
                   onAddSharedConnection={onAddSharedConnection}
@@ -383,7 +401,7 @@ export function McpServerSettingsDialog({
                   <div className="flex flex-col flex-1 min-h-0">
                     <McpLogsContent
                       isActive={open && isDebugPage}
-                      serverName={item.label || item.name}
+                      serverName={item.name}
                       installs={
                         item.multitenant
                           ? // Multi-tenant catalogs alias one pod; pick the
@@ -397,7 +415,7 @@ export function McpServerSettingsDialog({
                               return [
                                 {
                                   ...reporting,
-                                  name: item.label || item.name,
+                                  name: item.name,
                                   ownerEmail: null,
                                   teamDetails: null,
                                   scope: null,

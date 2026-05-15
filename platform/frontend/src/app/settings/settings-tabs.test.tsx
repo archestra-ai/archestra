@@ -7,7 +7,7 @@ import { useSettingsTabs } from "./settings-tabs";
 
 vi.mock("@/lib/clients/auth/auth-client", () => ({
   authClient: {
-    useSession: vi.fn(),
+    getSession: vi.fn(),
   },
 }));
 
@@ -59,12 +59,12 @@ beforeEach(() => {
   mockSecretsType = "DB";
   mockEnterpriseFeatures = false;
 
-  vi.mocked(authClient.useSession).mockReturnValue({
+  vi.mocked(authClient.getSession).mockResolvedValue({
     data: {
       user: { id: "test-user", email: "test@example.com" },
       session: { id: "test-session" },
     },
-  } as ReturnType<typeof authClient.useSession>);
+  } as Awaited<ReturnType<typeof authClient.getSession>>);
 });
 
 function getTabLabels(tabs: Array<{ label: string }>) {

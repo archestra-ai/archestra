@@ -2,13 +2,14 @@ import type {
   SupportedProvider,
   SupportedProviderDiscriminator,
 } from "@shared";
+import { AzureEmbeddingError, callAzureEmbedding } from "./azure";
 import { callGeminiEmbedding, GeminiEmbeddingError } from "./gemini";
 import { callOpenAIEmbedding, OpenAIEmbeddingError } from "./openai";
 import type { EmbeddingApiResponse, EmbeddingInput } from "./types";
 
 export type { EmbeddingApiResponse, EmbeddingInput };
 /** @public — re-exported for testability */
-export { GeminiEmbeddingError, OpenAIEmbeddingError };
+export { AzureEmbeddingError, GeminiEmbeddingError, OpenAIEmbeddingError };
 
 const RETRYABLE_NETWORK_ERROR_CODES = new Set([
   "ECONNABORTED",
@@ -44,6 +45,10 @@ export async function callEmbedding(params: {
     return callGeminiEmbedding(rest);
   }
 
+  if (provider === "azure") {
+    return callAzureEmbedding(rest);
+  }
+
   return callOpenAIEmbedding(rest);
 }
 
@@ -62,6 +67,7 @@ export function getEmbeddingDiscriminator(
  */
 export function isRetryableEmbeddingError(error: unknown): boolean {
   if (
+    error instanceof AzureEmbeddingError ||
     error instanceof GeminiEmbeddingError ||
     error instanceof OpenAIEmbeddingError
   ) {
@@ -73,4 +79,18 @@ export function isRetryableEmbeddingError(error: unknown): boolean {
     return typeof code === "string" && RETRYABLE_NETWORK_ERROR_CODES.has(code);
   }
   return false;
+}
+
+export function getEmbeddingRetryDelayMs(
+  error: unknown,
+  fallbackDelayMs: number,
+): number {
+  if (
+    error instanceof AzureEmbeddingError &&
+    error.retryAfterMs !== undefined
+  ) {
+    return error.retryAfterMs;
+  }
+
+  return fallbackDelayMs;
 }

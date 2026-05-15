@@ -28,6 +28,7 @@ import {
   findExternalIdentityProviderByProviderId,
 } from "@/services/identity-providers/oidc";
 import { autoReinstallServer } from "@/services/mcp-reinstall";
+import { partitionPresetFieldValuesAndUpsertSecrets } from "@/services/preset-field-persistence";
 import {
   AgentScopeSchema,
   ApiError,
@@ -36,6 +37,7 @@ import {
   InsertMcpServerSchema,
   type InternalMcpCatalogServerType,
   LocalMcpServerInstallationStatusSchema,
+  PresetFieldValuesSchema,
   type ResourceVisibilityScope,
   ResourceVisibilityScopeSchema,
   SelectMcpServerSchema,
@@ -147,6 +149,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           isByosVault: z.boolean().optional(),
           // Kubernetes service account override for local MCP servers
           serviceAccount: z.string().optional(),
+          // Values for preset-scoped fields the targeted preset doesn't yet
+          // fill. Persisted onto the catalog row's preset_field_values (and
+          // preset_secret_id for secret-typed fields), mirroring the preset
+          // editor route.
+          presetFieldValues: PresetFieldValuesSchema.optional(),
         }),
         response: constructResponseSchema(SelectMcpServerSchema),
       },
@@ -160,6 +167,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userConfigValues,
         environmentValues,
         serviceAccount,
+        presetFieldValues,
         ...restDataFromRequestBody
       } = body;
       const serverData: typeof restDataFromRequestBody & {
@@ -200,6 +208,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Set serverType from catalog item
         serverData.serverType = catalogItem.serverType;
+
+        // The catalog row is the source of truth for the install name. For
+        // preset (child) installs the row's `name` is the composed
+        // `{parent.name}-{childName}`, so this also disambiguates parent vs.
+        // preset installs at the deployment-name layer.
+        serverData.name = catalogItem.name;
 
         // Scope-based authorization (personal / team / org).
         await validateScopeAndAuthorization({
@@ -291,6 +305,94 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Update local reference for deployment
           if (catalogItem.localConfig) {
             catalogItem.localConfig.serviceAccount = normalizedServiceAccount;
+          }
+        }
+
+        // Persist incoming preset-scoped field values onto the targeted
+        // catalog row, mirroring the preset editor route. Non-secret values
+        // land on `preset_field_values`; secret-flagged values flow into the
+        // row's `preset_secret_id` bundle via the partitioner. We merge on
+        // top of any existing values because the install dialog only sends
+        // the subset of preset fields the user actually filled in.
+        if (presetFieldValues && Object.keys(presetFieldValues).length > 0) {
+          const parent = catalogItem.parentCatalogItemId
+            ? await InternalMcpCatalogModel.findById(
+                catalogItem.parentCatalogItemId,
+              )
+            : catalogItem;
+          if (!parent) {
+            throw new ApiError(
+              400,
+              "Parent catalog item not found for preset field values",
+            );
+          }
+          try {
+            InternalMcpCatalogModel.validateFieldValuesAgainstCatalog(
+              parent,
+              presetFieldValues,
+            );
+          } catch (e) {
+            throw new ApiError(400, (e as Error).message);
+          }
+
+          const { nonSecretFieldValues, presetSecretId } =
+            await partitionPresetFieldValuesAndUpsertSecrets({
+              parent,
+              catalogRow: {
+                name: catalogItem.name,
+                presetSecretId: catalogItem.presetSecretId,
+              },
+              incoming: presetFieldValues,
+            });
+
+          const mergedPresetFieldValues = {
+            ...(catalogItem.presetFieldValues ?? {}),
+            ...nonSecretFieldValues,
+          };
+          const catalogUpdates: Record<string, unknown> = {
+            presetFieldValues: mergedPresetFieldValues,
+          };
+          if (presetSecretId !== catalogItem.presetSecretId) {
+            catalogUpdates.presetSecretId = presetSecretId;
+          }
+          await InternalMcpCatalogModel.update(catalogItem.id, catalogUpdates);
+          // Refresh the in-memory catalogItem so downstream deployment logic
+          // sees the just-persisted preset values.
+          catalogItem.presetFieldValues = mergedPresetFieldValues;
+          catalogItem.presetSecretId = presetSecretId;
+        }
+
+        // Apply preset-scoped overlay from the catalog row onto the install
+        // inputs. Preset values have *lower* precedence than install-time
+        // inputs — if the user explicitly supplied the same key at install
+        // time, that wins.
+        // Secret-typed preset env values are also surfaced into
+        // environmentValues here. They reach the pod via the K8s Secret
+        // (built from the install secret bag) — the env builder only emits a
+        // secretKeyRef when it sees a non-empty entry for that key in
+        // environmentValues, so the merge must include secret keys too.
+        // Runs *after* the persist step above so values freshly-supplied via
+        // this install request's `presetFieldValues` are included.
+        if (catalogItem.localConfig?.environment) {
+          const presetSecretBag = catalogItem.presetSecretId
+            ? ((await secretManager().getSecret(catalogItem.presetSecretId))
+                ?.secret as Record<string, unknown> | undefined)
+            : undefined;
+
+          const presetEnvDefaults: Record<string, string> = {};
+          for (const envDef of catalogItem.localConfig.environment) {
+            if (!envDef.promptOnPreset) continue;
+            const v =
+              envDef.type === "secret"
+                ? presetSecretBag?.[envDef.key]
+                : catalogItem.presetFieldValues?.[envDef.key];
+            if (v != null) presetEnvDefaults[envDef.key] = String(v);
+          }
+          if (Object.keys(presetEnvDefaults).length > 0) {
+            environmentValues = {
+              ...presetEnvDefaults,
+              ...(environmentValues ?? {}),
+            };
           }
         }
       }
@@ -506,7 +608,15 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           };
           let hasPromptedSecrets = false;
 
-          // Collect all secret-type env vars (both static and prompted).
+          // Resolve the preset secret bundle once if the catalog row carries
+          // one — preset-scoped secret env values live in this bag, keyed by
+          // env-var name.
+          const presetSecretBag = catalogItem.presetSecretId
+            ? ((await secretManager().getSecret(catalogItem.presetSecretId))
+                ?.secret as Record<string, unknown> | undefined)
+            : undefined;
+
+          // Collect all secret-type env vars (static, prompted, and preset).
           for (const envDef of catalogItem.localConfig?.environment ?? []) {
             if (envDef.type === "secret") {
               let value: string | undefined;
@@ -517,6 +627,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 if (value) {
                   hasPromptedSecrets = true;
                 }
+              } else if (envDef.promptOnPreset) {
+                // Preset-scoped — read from the resolved preset secret bag
+                const raw = presetSecretBag?.[envDef.key];
+                value = raw != null ? String(raw) : undefined;
               } else {
                 // Static value from catalog - get from envDef.value
                 value = envDef.value;

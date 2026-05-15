@@ -1,5 +1,122 @@
 # Changelog
 
+## [1.2.48](https://github.com/archestra-ai/archestra/compare/platform-v1.2.47...platform-v1.2.48) (2026-05-14)
+
+
+### Features
+
+* **frontend:** enable version skew protection via deploymentId ([#4629](https://github.com/archestra-ai/archestra/issues/4629)) ([f6c00ad](https://github.com/archestra-ai/archestra/commit/f6c00ada4f1fe8382cdea08183e770902d631463))
+
+
+### Bug Fixes
+
+* **auth:** don't downgrade existing member role via SSO default-role … ([#4580](https://github.com/archestra-ai/archestra/issues/4580)) ([3b02507](https://github.com/archestra-ai/archestra/commit/3b025070ae364a98c435ef5e2296e3d2147bebec))
+* **helm:** bound the postgres-wait init container loops ([#4657](https://github.com/archestra-ai/archestra/issues/4657)) ([03c9d88](https://github.com/archestra-ai/archestra/commit/03c9d88843cb9e544bbe5cbb660186feb694a99f))
+
+## [1.2.47](https://github.com/archestra-ai/archestra/compare/platform-v1.2.46...platform-v1.2.47) (2026-05-14)
+
+
+### Features
+
+* improve Azure Foundry deployment sync ([#4617](https://github.com/archestra-ai/archestra/issues/4617)) ([cb0fd9b](https://github.com/archestra-ai/archestra/commit/cb0fd9b2187a18cb5ff81b1b0bb025a63ec183b1))
+
+
+### Bug Fixes
+
+* support Azure knowledge embeddings ([#4646](https://github.com/archestra-ai/archestra/issues/4646)) ([4c3255f](https://github.com/archestra-ai/archestra/commit/4c3255f83303c930ba874aedf23c85692b1e974a))
+
+## [1.2.46](https://github.com/archestra-ai/archestra/compare/platform-v1.2.45...platform-v1.2.46) (2026-05-13)
+
+
+### Bug Fixes
+
+* Bedrock empty assistant step messages ([#4630](https://github.com/archestra-ai/archestra/issues/4630)) ([d03c216](https://github.com/archestra-ai/archestra/commit/d03c216f7cc7223a6ce26ec244a623d61c7c5c48))
+* bump deps ([#4621](https://github.com/archestra-ai/archestra/issues/4621)) ([b055573](https://github.com/archestra-ai/archestra/commit/b0555737aaa980f31919e2e4b2327824240b1d30))
+* handle terminated chat streams as network errors ([#4638](https://github.com/archestra-ai/archestra/issues/4638)) ([80540b4](https://github.com/archestra-ai/archestra/commit/80540b485484c15a68cc099b370dbd3377de0efc))
+* subagent artifact user context ([#4637](https://github.com/archestra-ai/archestra/issues/4637)) ([44c7d03](https://github.com/archestra-ai/archestra/commit/44c7d03a0961d05ae5313d3091137b16c3af9498))
+* subagent save persistence ([#4631](https://github.com/archestra-ai/archestra/issues/4631)) ([278e44a](https://github.com/archestra-ai/archestra/commit/278e44a895892c8457be5736d76586aa9f3ee0eb))
+
+
+### Performance Improvements
+
+* reduce MCP client ping hot path ([#4609](https://github.com/archestra-ai/archestra/issues/4609)) ([393b5ac](https://github.com/archestra-ai/archestra/commit/393b5ac8f9823a207627b729debaad659b2f307c))
+
+
+### Miscellaneous Chores
+
+* interlace chat errors in read-only views ([#4612](https://github.com/archestra-ai/archestra/issues/4612)) ([139331c](https://github.com/archestra-ai/archestra/commit/139331cc3cb723275adfed52a2edfc4f5cfa4815))
+
+## [1.2.45](https://github.com/archestra-ai/archestra/compare/platform-v1.2.44...platform-v1.2.45) (2026-05-12)
+
+
+### Bug Fixes
+
+* Bedrock empty chat content ([#4598](https://github.com/archestra-ai/archestra/issues/4598)) ([e39d9d4](https://github.com/archestra-ai/archestra/commit/e39d9d4b9ac18995630f5b6ba992b53916d52930))
+* stop computing toolCount on singular find/update paths ([#4603](https://github.com/archestra-ai/archestra/issues/4603)) ([f8a926e](https://github.com/archestra-ai/archestra/commit/f8a926ed2dc41bdccfd3252e924e5789a01b1df0))
+
+
+### Performance Improvements
+
+* **logging:** async stdout in prod, gate pino-pretty to dev ([#4602](https://github.com/archestra-ai/archestra/issues/4602)) ([46b1756](https://github.com/archestra-ai/archestra/commit/46b175624a27483f019636db1a8afa853fdb6974))
+
+
+### Miscellaneous Chores
+
+* add default Helm CPU requests ([#4605](https://github.com/archestra-ai/archestra/issues/4605)) ([8b8851c](https://github.com/archestra-ai/archestra/commit/8b8851cb2d8d1cb23233b87f42b6c4bf27d8b793))
+
+## [1.2.44](https://github.com/archestra-ai/archestra/compare/platform-v1.2.43...platform-v1.2.44) (2026-05-12)
+
+
+### Bug Fixes
+
+* relax probe timeouts and make them configurable ([#4595](https://github.com/archestra-ai/archestra/issues/4595)) ([58568bc](https://github.com/archestra-ai/archestra/commit/58568bcbb9656881d9a2fea9f9bbad23432040f7))
+
+## [1.2.43](https://github.com/archestra-ai/archestra/compare/platform-v1.2.42...platform-v1.2.43) (2026-05-12)
+
+
+### Bug Fixes
+
+* **security:** clear Docker Scout HIGH CVEs ([#4578](https://github.com/archestra-ai/archestra/issues/4578)) ([5d6b758](https://github.com/archestra-ai/archestra/commit/5d6b7587dd7e541ff71f958460197e0b58ab0586))
+
+
+### Miscellaneous Chores
+
+* add separate --check mode for the vault migrate script ([#4588](https://github.com/archestra-ai/archestra/issues/4588)) ([04323e0](https://github.com/archestra-ai/archestra/commit/04323e0497126d73c89217507045320a14a6f31e))
+* reduce shell noncritical startup requests ([#4585](https://github.com/archestra-ai/archestra/issues/4585)) ([fae7a67](https://github.com/archestra-ai/archestra/commit/fae7a674f516cbf7f53c93982c35d438ec48991d))
+
+## [1.2.42](https://github.com/archestra-ai/archestra/compare/platform-v1.2.41...platform-v1.2.42) (2026-05-12)
+
+
+### Bug Fixes
+
+* **dev:** stop vault-k8s release from claiming e2e-tests NodePorts ([#4571](https://github.com/archestra-ai/archestra/issues/4571)) ([953a696](https://github.com/archestra-ai/archestra/commit/953a6964a068ba08ac711f62fdbd9863c9df43fe))
+
+
+### Miscellaneous Chores
+
+* vault readonly migration ([#4528](https://github.com/archestra-ai/archestra/issues/4528)) ([8df421b](https://github.com/archestra-ai/archestra/commit/8df421b2b67dbd6e5087d63fe6c4a11a57a9c3c6))
+
+## [1.2.41](https://github.com/archestra-ai/archestra/compare/platform-v1.2.40...platform-v1.2.41) (2026-05-12)
+
+
+### Features
+
+* new bedrock auth ([#4562](https://github.com/archestra-ai/archestra/issues/4562)) ([51a017b](https://github.com/archestra-ai/archestra/commit/51a017b8a9895673af9275226b530a129fa0fdf6))
+
+## [1.2.40](https://github.com/archestra-ai/archestra/compare/platform-v1.2.39...platform-v1.2.40) (2026-05-12)
+
+
+### Miscellaneous Chores
+
+* reduce MCP registry request churn ([#4548](https://github.com/archestra-ai/archestra/issues/4548)) ([efba119](https://github.com/archestra-ai/archestra/commit/efba119aad8325e74430d2d6bab0595df5a754aa))
+
+## [1.2.39](https://github.com/archestra-ai/archestra/compare/platform-v1.2.38...platform-v1.2.39) (2026-05-11)
+
+
+### Miscellaneous Chores
+
+* reduce frontend request churn ([#4538](https://github.com/archestra-ai/archestra/issues/4538)) ([173056a](https://github.com/archestra-ai/archestra/commit/173056a6fba80a2346af258977de4d4716204978))
+
 ## [1.2.38](https://github.com/archestra-ai/archestra/compare/platform-v1.2.37...platform-v1.2.38) (2026-05-11)
 
 

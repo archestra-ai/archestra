@@ -31,7 +31,7 @@ export type PrefetchedMcpServer = {
 type AgentToolAssignmentPrefetchedData = {
   existingAgentIds: Set<string>;
   toolsMap: Map<string, Tool>;
-  catalogItemsMap: Map<string, InternalMcpCatalog>;
+  catalogItemsMap: ReadonlyMap<string, InternalMcpCatalog>;
   mcpServersBasicMap: Map<string, PrefetchedMcpServer>;
 };
 

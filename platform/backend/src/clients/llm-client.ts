@@ -21,11 +21,13 @@ import {
   USER_ID_HEADER,
 } from "@shared";
 import type { streamText } from "ai";
+import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import {
   createAzureFetchWithApiVersion,
   normalizeAzureApiKey,
 } from "@/clients/azure-url";
 import {
+  decodeBedrockSigV4Marker,
   getBedrockCredentialProvider,
   getBedrockRegion,
   isBedrockIamAuthEnabled,
@@ -289,6 +291,8 @@ export async function createLLMModelForAgent(params: {
   // vLLM and Ollama typically don't require API keys
   const isVllm = provider === "vllm";
   const isOllama = provider === "ollama";
+  const isAzureWithEntra =
+    provider === "azure" && isAzureOpenAiEntraIdEnabled();
 
   logger.info(
     {
@@ -298,6 +302,7 @@ export async function createLLMModelForAgent(params: {
       isBedrockWithIamAuth,
       isVllm,
       isOllama,
+      isAzureWithEntra,
     },
     "Using LLM provider API key",
   );
@@ -307,7 +312,8 @@ export async function createLLMModelForAgent(params: {
     !isGeminiWithVertexAi &&
     !isBedrockWithIamAuth &&
     !isVllm &&
-    !isOllama
+    !isOllama &&
+    !isAzureWithEntra
   ) {
     throw new ApiError(
       400,
@@ -482,8 +488,13 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
         fetch: providedFetch,
       });
       const normalizedApiKey = normalizeAzureApiKey(apiKey);
+      const sdkApiKey =
+        normalizedApiKey ??
+        (isAzureOpenAiEntraIdEnabled()
+          ? KEYLESS_PROVIDER_API_KEY_PLACEHOLDER
+          : undefined);
       return createOpenAI({
-        apiKey: normalizedApiKey,
+        apiKey: sdkApiKey,
         baseURL,
         headers: normalizedApiKey
           ? { ...headers, "api-key": normalizedApiKey }
@@ -572,6 +583,19 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
           region,
           baseURL,
           credentialProvider: getBedrockCredentialProvider(),
+          headers,
+          fetch,
+        })(modelName);
+      }
+
+      const sigV4 = decodeBedrockSigV4Marker(apiKey);
+      if (sigV4) {
+        return createAmazonBedrock({
+          region,
+          baseURL,
+          accessKeyId: sigV4.accessKeyId,
+          secretAccessKey: sigV4.secretAccessKey,
+          sessionToken: sigV4.sessionToken,
           headers,
           fetch,
         })(modelName);

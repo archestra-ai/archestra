@@ -588,6 +588,7 @@ export function ScheduleTriggerRunPage({
                     isLoadingConversation={conversationLoading}
                     onMessagesUpdate={setMessages}
                     error={error}
+                    chatErrors={conversation?.chatErrors ?? []}
                     agentName={activeAgentName}
                     selectedModel={conversation?.selectedModel ?? ""}
                     onToolApprovalResponse={

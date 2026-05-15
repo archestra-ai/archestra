@@ -119,6 +119,71 @@ describe("delegation tool execution", () => {
     );
   });
 
+  test("uses the caller user when the gateway token is not user-scoped", async ({
+    makeAgent,
+    makeAgentTool,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, organization.id, { role: "admin" });
+    testAgent = await makeAgent({
+      name: "Parent Agent",
+      agentType: "agent",
+      organizationId: organization.id,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const targetAgent = await makeAgent({
+      name: "Delegated Agent",
+      agentType: "agent",
+      organizationId: organization.id,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const delegationTool = await ToolModel.findOrCreateDelegationTool(
+      targetAgent.id,
+    );
+    await makeAgentTool(testAgent.id, delegationTool.id);
+
+    mockExecuteA2AMessage.mockResolvedValue({
+      messageId: "subagent-message-user-context",
+      text: "Handled by subagent",
+      finishReason: "stop",
+    });
+
+    const result = await executeArchestraTool(
+      `${AGENT_TOOL_PREFIX}${slugify(targetAgent.name)}`,
+      { message: "Write the requested artifact." },
+      {
+        agent: { id: testAgent.id, name: testAgent.name },
+        agentId: testAgent.id,
+        organizationId: organization.id,
+        userId: user.id,
+        conversationId: crypto.randomUUID(),
+        tokenAuth: {
+          tokenId: crypto.randomUUID(),
+          teamId: null,
+          isOrganizationToken: true,
+          organizationId: organization.id,
+          isUserToken: false,
+        },
+      },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: targetAgent.id,
+        message: "Write the requested artifact.",
+        organizationId: organization.id,
+        userId: user.id,
+      }),
+    );
+  });
+
   test("leaves trust propagation unset when the parent context was never evaluated", async ({
     makeAgent,
     makeAgentTool,

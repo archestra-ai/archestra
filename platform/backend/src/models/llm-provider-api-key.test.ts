@@ -142,7 +142,7 @@ describe("LlmProviderApiKeyModel", () => {
       expect(openaiKey.provider).toBe("openai");
     });
 
-    test("baseUrl is nullable and defaults to null", async ({
+    test("baseUrl and inferenceBaseUrl are nullable and round-trip", async ({
       makeOrganization,
       makeUser,
     }) => {
@@ -158,6 +158,7 @@ describe("LlmProviderApiKeyModel", () => {
         userId: user.id,
       });
       expect(keyWithoutBaseUrl.baseUrl).toBeNull();
+      expect(keyWithoutBaseUrl.inferenceBaseUrl).toBeNull();
 
       // Key with baseUrl should store it
       const keyWithBaseUrl = await LlmProviderApiKeyModel.create({
@@ -167,12 +168,17 @@ describe("LlmProviderApiKeyModel", () => {
         scope: "personal",
         userId: user.id,
         baseUrl: "https://custom-api.example.com",
+        inferenceBaseUrl: "https://runtime-api.example.com",
       });
       expect(keyWithBaseUrl.baseUrl).toBe("https://custom-api.example.com");
+      expect(keyWithBaseUrl.inferenceBaseUrl).toBe(
+        "https://runtime-api.example.com",
+      );
 
       // Verify via findById that nullable baseUrl round-trips correctly
       const found = await LlmProviderApiKeyModel.findById(keyWithoutBaseUrl.id);
       expect(found?.baseUrl).toBeNull();
+      expect(found?.inferenceBaseUrl).toBeNull();
     });
   });
 

@@ -170620,6 +170620,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "nullable": true,
                   "type": "object",
                   "properties": {
                     "id": {

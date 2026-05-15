@@ -45131,7 +45131,7 @@ export type GetSiteNotificationResponses = {
         content: string;
         expiresAt: string | null;
         createdAt: string;
-    };
+    } | null;
 };
 
 export type GetSiteNotificationResponse = GetSiteNotificationResponses[keyof GetSiteNotificationResponses];

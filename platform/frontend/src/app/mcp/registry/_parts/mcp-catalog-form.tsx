@@ -20,7 +20,7 @@ import {
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { lazy, useEffect, useMemo, useRef, useState } from "react";
-import { useFieldArray, useForm } from "react-hook-form";
+import { type UseFormReturn, useFieldArray, useForm } from "react-hook-form";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
 import {
   type ProfileLabel,
@@ -33,7 +33,8 @@ import {
 } from "@/components/enterprise-managed-credential-fields";
 import { EnvironmentVariablesFormField } from "@/components/environment-variables-form-field";
 import { ExternalDocsLink } from "@/components/external-docs-link";
-import { InstallConfigFieldsTable } from "@/components/install-config-fields-table";
+import { HeaderDialog, type HeaderDraft } from "@/components/header-dialog";
+import { HeadersReadOnlyTable } from "@/components/headers-read-only-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -585,6 +586,10 @@ export function McpCatalogForm({
     control: form.control,
     name: "additionalHeaders",
   });
+
+  const [headerDialog, setHeaderDialog] = useState<
+    { mode: "add" } | { mode: "edit"; index: number } | null
+  >(null);
 
   // Fetch available k8s docker-registry secrets for the "existing" dropdown
   const { data: k8sSecrets = [] } = useK8sImagePullSecrets();
@@ -2044,18 +2049,7 @@ export function McpCatalogForm({
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() =>
-                      appendAdditionalHeader({
-                        fieldName: undefined,
-                        headerName: "",
-                        promptOnInstallation: true,
-                        promptOnPreset: false,
-                        required: false,
-                        value: "",
-                        description: "",
-                        includeBearerPrefix: false,
-                      })
-                    }
+                    onClick={() => setHeaderDialog({ mode: "add" })}
                   >
                     <Plus className="h-4 w-4 mr-1" />
                     Add Header
@@ -2067,20 +2061,41 @@ export function McpCatalogForm({
                     No headers configured.
                   </div>
                 ) : (
-                  <InstallConfigFieldsTable
-                    control={form.control}
+                  // TODO(e2e): tests under platform/e2e-tests previously drove
+                  // the inline header inputs; after this refactor those
+                  // interactions live in HeaderDialog (click "Add Header" /
+                  // click a row first, then operate inside the modal).
+                  <HeadersReadOnlyTable
                     form={form}
                     fields={additionalHeaderFields}
-                    remove={removeAdditionalHeader}
                     fieldNamePrefix="additionalHeaders"
-                    keyFieldName="headerName"
-                    keyLabel="Header Name"
-                    keyPlaceholder="x-api-key"
-                    typeFieldName={null}
-                    valuePlaceholder="header value"
-                    bearerPrefixFieldName="includeBearerPrefix"
+                    onEdit={(index) => setHeaderDialog({ mode: "edit", index })}
+                    onDelete={(index) => removeAdditionalHeader(index)}
                   />
                 )}
+                <HeaderDialog
+                  open={headerDialog !== null}
+                  mode={headerDialog?.mode === "edit" ? "edit" : "add"}
+                  initial={
+                    headerDialog?.mode === "edit"
+                      ? readHeaderRowAsDraft(form, headerDialog.index)
+                      : null
+                  }
+                  existingHeaderNames={readOtherHeaderNames(
+                    form,
+                    additionalHeaderFields.length,
+                    headerDialog?.mode === "edit" ? headerDialog.index : null,
+                  )}
+                  onClose={() => setHeaderDialog(null)}
+                  onConfirm={(draft) => {
+                    if (headerDialog?.mode === "add") {
+                      appendAdditionalHeader(headerDraftToRow(draft));
+                    } else if (headerDialog?.mode === "edit") {
+                      applyHeaderDraftToRow(form, headerDialog.index, draft);
+                    }
+                    setHeaderDialog(null);
+                  }}
+                />
               </div>
             )}
 
@@ -2310,4 +2325,73 @@ function AuthMethodCard(params: {
       </div>
     </button>
   );
+}
+
+function readHeaderRowAsDraft(
+  form: UseFormReturn<McpCatalogFormValues>,
+  index: number,
+): HeaderDraft {
+  const row = form.getValues(`additionalHeaders.${index}`);
+  const promptOnInstallation = Boolean(row?.promptOnInstallation);
+  const promptOnPreset = Boolean(row?.promptOnPreset);
+  return {
+    headerName: row?.headerName ?? "",
+    scope: promptOnInstallation
+      ? "installation"
+      : promptOnPreset
+        ? "preset"
+        : "static",
+    required: Boolean(row?.required),
+    value: row?.value ?? "",
+    description: row?.description ?? "",
+    includeBearerPrefix: Boolean(row?.includeBearerPrefix),
+  };
+}
+
+function readOtherHeaderNames(
+  form: UseFormReturn<McpCatalogFormValues>,
+  length: number,
+  excludeIndex: number | null,
+): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < length; i++) {
+    if (i === excludeIndex) continue;
+    const name = form.getValues(`additionalHeaders.${i}.headerName`);
+    if (name?.trim()) out.push(name.trim());
+  }
+  return out;
+}
+
+function headerDraftToRow(draft: HeaderDraft) {
+  return {
+    fieldName: undefined,
+    headerName: draft.headerName,
+    promptOnInstallation: draft.scope === "installation",
+    promptOnPreset: draft.scope === "preset",
+    required: draft.scope === "installation" ? draft.required : false,
+    value: draft.scope === "static" ? draft.value : "",
+    description: draft.description,
+    includeBearerPrefix: draft.includeBearerPrefix,
+  };
+}
+
+function applyHeaderDraftToRow(
+  form: UseFormReturn<McpCatalogFormValues>,
+  index: number,
+  draft: HeaderDraft,
+) {
+  const set = (name: string, value: unknown) =>
+    form.setValue(
+      // biome-ignore lint/suspicious/noExplicitAny: dynamic field path
+      `additionalHeaders.${index}.${name}` as any,
+      value,
+      { shouldDirty: true },
+    );
+  set("headerName", draft.headerName);
+  set("promptOnInstallation", draft.scope === "installation");
+  set("promptOnPreset", draft.scope === "preset");
+  set("required", draft.scope === "installation" ? draft.required : false);
+  set("value", draft.scope === "static" ? draft.value : "");
+  set("description", draft.description);
+  set("includeBearerPrefix", draft.includeBearerPrefix);
 }

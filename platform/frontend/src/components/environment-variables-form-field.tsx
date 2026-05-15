@@ -23,10 +23,14 @@ import type {
   UseFormWatch,
 } from "react-hook-form";
 import {
+  EnvironmentVariableDialog,
+  type EnvVarDraft,
+} from "@/components/environment-variable-dialog";
+import { EnvironmentVariablesReadOnlyTable } from "@/components/environment-variables-read-only-table";
+import {
   FieldScopeSelect,
   type FieldScopeValue,
 } from "@/components/field-scope-select";
-import { InstallConfigFieldsTable } from "@/components/install-config-fields-table";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -136,6 +140,9 @@ export function EnvironmentVariablesFormField<
   const [dialogOpenForEnvIndex, setDialogOpenForEnvIndex] = useState<
     number | null
   >(null);
+  const [envVarDialog, setEnvVarDialog] = useState<
+    { mode: "add" } | { mode: "edit"; index: number } | null
+  >(null);
 
   const handleSecretConfirm = (index: number, value: ExternalSecretValue) => {
     if (value.secretPath && value.secretKey) {
@@ -170,17 +177,7 @@ export function EnvironmentVariablesFormField<
           type="button"
           variant="outline"
           size="sm"
-          onClick={() =>
-            (append as (value: unknown) => void)({
-              key: "",
-              type: "plain_text",
-              value: "",
-              promptOnInstallation: false,
-              promptOnPreset: false,
-              required: false,
-              description: "",
-            })
-          }
+          onClick={() => setEnvVarDialog({ mode: "add" })}
         >
           <Plus className="h-4 w-4" />
           Add Variable
@@ -188,13 +185,15 @@ export function EnvironmentVariablesFormField<
       </div>
       {/* Filter out mounted secrets - they go in the Secret Files section */}
       {(() => {
-        const envVarFields = fields.filter((_, index) => {
-          const mounted = form.watch(
-            `${fieldNamePrefix}.${index}.mounted` as FieldPath<TFieldValues>,
-          );
-          return !mounted;
-        });
-        const envVarCount = envVarFields.length;
+        const envVarIndexes = fields
+          .map((_, index) => index)
+          .filter((index) => {
+            const mounted = form.watch(
+              `${fieldNamePrefix}.${index}.mounted` as FieldPath<TFieldValues>,
+            );
+            return !mounted;
+          });
+        const envVarCount = envVarIndexes.length;
 
         if (envVarCount === 0) {
           return (
@@ -207,35 +206,58 @@ export function EnvironmentVariablesFormField<
         return (
           <>
             {showDescription && (
-              <FormDescription className="text-xs">
+              <FormDescription className="mb-4 text-xs">
                 Configure environment variables for the MCP server. Use "Secret"
                 type for sensitive values.
               </FormDescription>
             )}
-            <InstallConfigFieldsTable
-              control={control}
+            {/* TODO(e2e): existing tests in platform/e2e-tests drive the inline
+                inputs (placeholder "API_KEY", inline Type Select, inline scope
+                checkbox). After this refactor those interactions live in
+                EnvironmentVariableDialog — tests must click "Add Variable"
+                first, then operate inside the modal. */}
+            <EnvironmentVariablesReadOnlyTable
               form={form}
               fields={fields}
-              rowIndexes={fields
-                .map((_, index) => index)
-                .filter((index) => {
-                  const mounted = form.watch(
-                    `${fieldNamePrefix}.${index}.mounted` as FieldPath<TFieldValues>,
-                  );
-                  return !mounted;
-                })}
-              remove={remove}
+              rowIndexes={envVarIndexes}
               fieldNamePrefix={fieldNamePrefix}
               useExternalSecretsManager={useExternalSecretsManager}
               secretKeysWithStoredValue={secretKeysWithStoredValue}
-              disablePromptOnInstallation={disablePromptOnInstallation}
-              disablePromptOnInstallationReason={
-                disablePromptOnInstallationReason
-              }
+              onEdit={(index) => setEnvVarDialog({ mode: "edit", index })}
+              onDelete={(index) => remove(index)}
             />
           </>
         );
       })()}
+
+      <EnvironmentVariableDialog
+        open={envVarDialog !== null}
+        mode={envVarDialog?.mode === "edit" ? "edit" : "add"}
+        initial={
+          envVarDialog?.mode === "edit"
+            ? readRowAsDraft(form, fieldNamePrefix, envVarDialog.index)
+            : null
+        }
+        existingKeys={readOtherKeys(
+          form,
+          fieldNamePrefix,
+          fields,
+          envVarDialog?.mode === "edit" ? envVarDialog.index : null,
+        )}
+        secretKeysWithStoredValue={secretKeysWithStoredValue}
+        useExternalSecretsManager={useExternalSecretsManager}
+        disableInstallation={disablePromptOnInstallation}
+        disableInstallationReason={disablePromptOnInstallationReason}
+        onClose={() => setEnvVarDialog(null)}
+        onConfirm={(draft) => {
+          if (envVarDialog?.mode === "add") {
+            (append as (value: unknown) => void)(draftToRow(draft));
+          } else if (envVarDialog?.mode === "edit") {
+            applyDraftToRow(form, fieldNamePrefix, envVarDialog.index, draft);
+          }
+          setEnvVarDialog(null);
+        }}
+      />
 
       {/* Environment From k8s Secrets / ConfigMaps Section */}
       {envFrom && (
@@ -626,6 +648,84 @@ export function EnvironmentVariablesFormField<
       />
     </div>
   );
+}
+
+function readRowAsDraft<TFieldValues extends FieldValues>(
+  form: { watch: UseFormWatch<TFieldValues> },
+  prefix: string,
+  index: number,
+): EnvVarDraft {
+  const get = <T,>(name: string): T =>
+    form.watch(`${prefix}.${index}.${name}` as FieldPath<TFieldValues>) as T;
+  const promptOnInstallation = Boolean(get<boolean>("promptOnInstallation"));
+  const promptOnPreset = Boolean(get<boolean>("promptOnPreset"));
+  return {
+    key: get<string>("key") ?? "",
+    type: (get<string>("type") ?? "plain_text") as EnvVarDraft["type"],
+    scope: promptOnInstallation
+      ? "installation"
+      : promptOnPreset
+        ? "preset"
+        : "static",
+    required: Boolean(get<boolean>("required")),
+    description: get<string>("description") ?? "",
+    value: get<string>("value") ?? "",
+  };
+}
+
+function readOtherKeys<TFieldValues extends FieldValues>(
+  form: { watch: UseFormWatch<TFieldValues> },
+  prefix: string,
+  // biome-ignore lint/suspicious/noExplicitAny: field arrays require generic any
+  fields: FieldArrayWithId<TFieldValues, any, "id">[],
+  excludeIndex: number | null,
+): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < fields.length; i++) {
+    if (i === excludeIndex) continue;
+    const mounted = form.watch(
+      `${prefix}.${i}.mounted` as FieldPath<TFieldValues>,
+    );
+    if (mounted) continue;
+    const k = form.watch(`${prefix}.${i}.key` as FieldPath<TFieldValues>) as
+      | string
+      | undefined;
+    if (k?.trim()) out.push(k.trim());
+  }
+  return out;
+}
+
+function draftToRow(draft: EnvVarDraft) {
+  return {
+    key: draft.key,
+    type: draft.type,
+    value: draft.scope === "static" ? draft.value : "",
+    promptOnInstallation: draft.scope === "installation",
+    promptOnPreset: draft.scope === "preset",
+    required: draft.scope === "installation" ? draft.required : false,
+    description: draft.description,
+  };
+}
+
+function applyDraftToRow<TFieldValues extends FieldValues>(
+  form: { setValue: UseFormSetValue<TFieldValues> },
+  prefix: string,
+  index: number,
+  draft: EnvVarDraft,
+) {
+  const set = (name: string, value: unknown) =>
+    form.setValue(
+      `${prefix}.${index}.${name}` as FieldPath<TFieldValues>,
+      value as PathValue<TFieldValues, FieldPath<TFieldValues>>,
+      { shouldDirty: true },
+    );
+  set("key", draft.key);
+  set("type", draft.type);
+  set("value", draft.scope === "static" ? draft.value : "");
+  set("promptOnInstallation", draft.scope === "installation");
+  set("promptOnPreset", draft.scope === "preset");
+  set("required", draft.scope === "installation" ? draft.required : false);
+  set("description", draft.description);
 }
 
 const MAX_TEXTAREA_HEIGHT = 128;

@@ -1,8 +1,12 @@
 import type { UIMessage } from "@ai-sdk/react";
-import type { ArchestraToolShortName } from "@shared";
+import {
+  type ArchestraToolShortName,
+  TOOL_TODO_WRITE_SHORT_NAME,
+} from "@shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import {
   getToolErrorText,
+  getToolNameFromPart,
   isCompactEligible,
 } from "@/lib/chat/chat-tools-display.utils";
 import type { FileAttachment } from "./editable-user-message";
@@ -22,6 +26,12 @@ export type CompactToolGroup = {
     toolResultPart: DynamicToolUIPart | ToolUIPart | null;
     errorText: string | undefined;
   }>;
+};
+
+export type LatestTodoWriteToolState = {
+  part: DynamicToolUIPart | ToolUIPart;
+  toolResultPart: DynamicToolUIPart | ToolUIPart | null;
+  errorText: string | undefined;
 };
 
 /**
@@ -193,6 +203,63 @@ export function identifyCompactToolGroups(
   return { groupMap, consumedIndices };
 }
 
+export function getLatestTodoWriteToolState(
+  messages: UIMessage[],
+): LatestTodoWriteToolState | null {
+  for (
+    let messageIndex = messages.length - 1;
+    messageIndex >= 0;
+    messageIndex--
+  ) {
+    const parts = messages[messageIndex].parts ?? [];
+
+    for (let partIndex = parts.length - 1; partIndex >= 0; partIndex--) {
+      const part = parts[partIndex];
+      if (!isToolPart(part) || !isTodoWriteToolPart(part)) {
+        continue;
+      }
+
+      const pairedPart = findPairedToolPart({
+        parts,
+        part,
+        partIndex,
+      });
+      const invocationPart =
+        isToolResultOnlyPart(part) && pairedPart ? pairedPart : part;
+      const toolResultPart =
+        invocationPart === part && pairedPart ? pairedPart : part;
+      const normalizedToolResultPart =
+        toolResultPart === invocationPart ? null : toolResultPart;
+
+      return {
+        part: invocationPart,
+        toolResultPart: normalizedToolResultPart,
+        errorText: getToolErrorText({
+          part: invocationPart,
+          toolResultPart: normalizedToolResultPart,
+        }),
+      };
+    }
+  }
+
+  return null;
+}
+
+export function isTodoWriteToolPart(part: {
+  type?: string;
+  toolName?: string;
+}): boolean {
+  const toolName = getToolNameFromPart(part);
+  if (!toolName) {
+    return false;
+  }
+
+  return (
+    toolName === TOOL_TODO_WRITE_SHORT_NAME ||
+    toolName.endsWith(`__${TOOL_TODO_WRITE_SHORT_NAME}`)
+  );
+}
+
 function isToolPart(part: unknown): part is DynamicToolUIPart | ToolUIPart {
   return (
     typeof part === "object" &&
@@ -213,6 +280,39 @@ function getToolName(part: DynamicToolUIPart | ToolUIPart): string | null {
   }
 
   return null;
+}
+
+function findPairedToolPart(params: {
+  parts: UIMessage["parts"];
+  part: DynamicToolUIPart | ToolUIPart;
+  partIndex: number;
+}): DynamicToolUIPart | ToolUIPart | null {
+  const { parts, part, partIndex } = params;
+  if (!part.toolCallId) {
+    return null;
+  }
+
+  const direction = isToolResultOnlyPart(part) ? -1 : 1;
+  for (
+    let index = partIndex + direction;
+    index >= 0 && index < parts.length;
+    index += direction
+  ) {
+    const candidate = parts[index];
+    if (!isToolPart(candidate)) {
+      continue;
+    }
+
+    if (candidate.toolCallId === part.toolCallId) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+function isToolResultOnlyPart(part: DynamicToolUIPart | ToolUIPart): boolean {
+  return part.state === "output-available" && part.input === undefined;
 }
 
 function finalizeCurrentGroup(params: {

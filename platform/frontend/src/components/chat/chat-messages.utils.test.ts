@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   extractFileAttachments,
   filterOptimisticToolCalls,
+  getLatestTodoWriteToolState,
   hasTextPart,
   identifyCompactToolGroups,
 } from "./chat-messages.utils";
@@ -183,6 +184,114 @@ describe("filterOptimisticToolCalls", () => {
     expect(filterOptimisticToolCalls(messages, optimisticToolCalls)).toEqual([
       optimisticToolCalls[1],
     ]);
+  });
+});
+
+describe("getLatestTodoWriteToolState", () => {
+  it("returns null when no todo_write call exists", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-google__search",
+            toolCallId: "call_1",
+            state: "input-available",
+            input: { q: "weather" },
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    expect(getLatestTodoWriteToolState(messages)).toBeNull();
+  });
+
+  it("returns the newest todo_write call", () => {
+    const olderTodo = {
+      type: "tool-archestra__todo_write",
+      toolCallId: "call_1",
+      state: "output-available",
+      input: {
+        todos: [{ id: 1, content: "Older task", status: "completed" }],
+      },
+      output: { ok: true },
+    };
+    const newerTodo = {
+      type: "tool-archestra__todo_write",
+      toolCallId: "call_2",
+      state: "output-available",
+      input: {
+        todos: [{ id: 2, content: "Newer task", status: "in_progress" }],
+      },
+      output: { ok: true },
+    };
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [olderTodo],
+      },
+      {
+        id: "assistant-2",
+        role: "assistant",
+        parts: [newerTodo],
+      },
+    ] as UIMessage[];
+
+    expect(getLatestTodoWriteToolState(messages)?.part).toBe(newerTodo);
+  });
+
+  it("recognizes branded built-in todo_write names", () => {
+    const todoPart = {
+      type: "tool-sparky__todo_write",
+      toolCallId: "call_1",
+      state: "output-available",
+      input: {
+        todos: [{ id: 1, content: "Branded task", status: "pending" }],
+      },
+      output: { ok: true },
+    };
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [todoPart],
+      },
+    ] as UIMessage[];
+
+    expect(getLatestTodoWriteToolState(messages)?.part).toBe(todoPart);
+  });
+
+  it("preserves paired output and error text", () => {
+    const inputPart = {
+      type: "tool-archestra__todo_write",
+      toolCallId: "call_1",
+      state: "input-available",
+      input: {
+        todos: [{ id: 1, content: "Pair task", status: "pending" }],
+      },
+    };
+    const outputPart = {
+      type: "tool-archestra__todo_write",
+      toolCallId: "call_1",
+      state: "output-available",
+      output: { ok: false },
+      errorText: "Todo write failed",
+    };
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [inputPart, outputPart],
+      },
+    ] as UIMessage[];
+
+    const latestTodoState = getLatestTodoWriteToolState(messages);
+
+    expect(latestTodoState?.part).toBe(inputPart);
+    expect(latestTodoState?.toolResultPart).toBe(outputPart);
+    expect(latestTodoState?.errorText).toBe("Todo write failed");
   });
 });
 

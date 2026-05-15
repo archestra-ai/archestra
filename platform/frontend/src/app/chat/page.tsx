@@ -39,6 +39,7 @@ import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ChatLinkButton } from "@/components/chat/chat-help-link";
 import { ChatMessages } from "@/components/chat/chat-messages";
+import { getLatestTodoWriteToolState } from "@/components/chat/chat-messages.utils";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { OnboardingWizardButton } from "@/components/chat/onboarding-wizard-button";
@@ -49,6 +50,7 @@ import {
 import { RightSidePanel } from "@/components/chat/right-side-panel";
 import { ShareConversationDialog } from "@/components/chat/share-conversation-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
+import { TodoWriteTool } from "@/components/chat/todo-write-tool";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import type { LlmProviderApiKeyFormValues } from "@/components/llm-provider-api-key-form";
 import { LoadingSpinner } from "@/components/loading";
@@ -859,6 +861,10 @@ export function ChatPageContent({
           })
         : persistedConversationMessages,
     [chatSession?.messages, persistedConversationMessages],
+  );
+  const latestTodoWriteToolState = useMemo(
+    () => getLatestTodoWriteToolState(messages),
+    [messages],
   );
   const sendMessage = chatSession?.sendMessage;
   const status = chatSession?.status ?? "ready";
@@ -1923,6 +1929,26 @@ export function ChatPageContent({
                 activeAgentId && (
                   <div className="sticky bottom-0 bg-background border-t p-4">
                     <div className="max-w-4xl mx-auto space-y-3">
+                      {latestTodoWriteToolState && (
+                        <TodoWriteTool
+                          part={latestTodoWriteToolState.part}
+                          toolResultPart={
+                            latestTodoWriteToolState.toolResultPart
+                          }
+                          errorText={latestTodoWriteToolState.errorText}
+                          onToolApprovalResponse={
+                            addToolApprovalResponse
+                              ? ({ id, approved, reason }) => {
+                                  addToolApprovalResponse({
+                                    id,
+                                    approved,
+                                    reason,
+                                  });
+                                }
+                              : undefined
+                          }
+                        />
+                      )}
                       <ArchestraPromptInput
                         onSubmit={handleSubmit}
                         status={status}

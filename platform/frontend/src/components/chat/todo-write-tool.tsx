@@ -8,7 +8,7 @@ import {
   Clock,
   ListTodo,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +22,7 @@ interface TodoWriteToolProps {
   part: ToolUIPart | DynamicToolUIPart;
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
   errorText?: string;
+  className?: string;
   onToolApprovalResponse?: (params: {
     id: string;
     approved: boolean;
@@ -33,19 +34,49 @@ export function TodoWriteTool({
   part,
   toolResultPart,
   errorText,
+  className,
   onToolApprovalResponse,
 }: TodoWriteToolProps) {
-  const [isOpen, setIsOpen] = useState(true);
+  const contentId = useId();
 
-  // Extract todos from input
-  let todos: Todo[] = [];
-  try {
-    if (part.input && typeof part.input === "object" && "todos" in part.input) {
-      todos = part.input.todos as Todo[];
+  const todos = useMemo(() => {
+    try {
+      if (
+        part.input &&
+        typeof part.input === "object" &&
+        "todos" in part.input &&
+        Array.isArray(part.input.todos)
+      ) {
+        return part.input.todos as Todo[];
+      }
+    } catch (error) {
+      console.error("Failed to parse todos", error);
     }
-  } catch (error) {
-    console.error("Failed to parse todos", error);
-  }
+
+    return [];
+  }, [part.input]);
+
+  const defaultIsOpen =
+    todos.length === 0 || todos.some((todo) => todo.status !== "completed");
+  const todoStateKey = useMemo(
+    () =>
+      JSON.stringify({
+        toolCallId: part.toolCallId,
+        todos,
+        errorText,
+        state: part.state,
+      }),
+    [errorText, part.state, part.toolCallId, todos],
+  );
+  const [isOpen, setIsOpen] = useState(defaultIsOpen);
+
+  useEffect(() => {
+    if (!todoStateKey) {
+      return;
+    }
+
+    setIsOpen(defaultIsOpen);
+  }, [defaultIsOpen, todoStateKey]);
 
   // Count todos by status
   const completedCount = todos.filter((t) => t.status === "completed").length;
@@ -83,13 +114,13 @@ export function TodoWriteTool({
   }
 
   return (
-    <div className="mb-3 rounded-md border bg-card/50">
+    <div className={cn("rounded-md border bg-card/50", className)}>
       <button
         type="button"
         className="w-full px-3 py-2 border-b bg-muted/20 cursor-pointer hover:bg-muted/30 transition-colors text-left"
         onClick={() => setIsOpen(!isOpen)}
         aria-expanded={isOpen}
-        aria-controls="todo-list-content"
+        aria-controls={contentId}
       >
         <div className="flex items-center gap-2">
           <ListTodo className="w-3.5 h-3.5 text-muted-foreground" />
@@ -110,7 +141,7 @@ export function TodoWriteTool({
         </div>
       </button>
       {isOpen && (
-        <div id="todo-list-content" className="px-3 py-2">
+        <div id={contentId} className="px-3 py-2">
           {todos.length > 0 ? (
             <div className="space-y-0.5">
               {todos.map((todo) => (

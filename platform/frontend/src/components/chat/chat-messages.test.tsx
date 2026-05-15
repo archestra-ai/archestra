@@ -753,7 +753,7 @@ describe("ChatMessages", () => {
     expect(screen.getByText('{"issue":1}')).toBeInTheDocument();
   });
 
-  it("renders branded built-in todo_write with the specialized todo tool UI", () => {
+  it("does not render branded built-in todo_write in the message timeline", () => {
     const messages = [
       {
         id: "assistant-1",
@@ -780,7 +780,7 @@ describe("ChatMessages", () => {
       />,
     );
 
-    expect(screen.getByText("todo-write-tool")).toBeInTheDocument();
+    expect(screen.queryByText("todo-write-tool")).not.toBeInTheDocument();
     expect(
       screen.queryByText("tool-sparky__todo_write"),
     ).not.toBeInTheDocument();

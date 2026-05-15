@@ -91,6 +91,7 @@ import {
   filterOptimisticToolCalls,
   hasTextPart,
   identifyCompactToolGroups,
+  isTodoWriteToolPart,
 } from "./chat-messages.utils";
 import { CompactToolGroup, type ToolIconMap } from "./compact-tool-call";
 import { EditableAssistantMessage } from "./editable-assistant-message";
@@ -112,7 +113,6 @@ import {
   getSwapAgentBoundaryLabel,
   SwapAgentBoundaryDivider,
 } from "./swap-agent-boundary";
-import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
 import { ToolStatusRow } from "./tool-status-row";
 
@@ -1527,15 +1527,8 @@ const MessageTool = memo(
       ) : null;
     }
 
-    if (getToolShortName(toolName) === TOOL_TODO_WRITE_SHORT_NAME) {
-      return (
-        <TodoWriteTool
-          part={part}
-          toolResultPart={toolResultPart}
-          errorText={errorText}
-          onToolApprovalResponse={onToolApprovalResponse}
-        />
-      );
+    if (isTodoWriteToolPart(part)) {
+      return null;
     }
 
     if (authToolBody) {

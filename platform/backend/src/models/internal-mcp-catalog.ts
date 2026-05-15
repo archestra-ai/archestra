@@ -509,7 +509,7 @@ class InternalMcpCatalogModel {
     fieldValues: PresetFieldValues | undefined,
   ): void {
     if (!fieldValues) return;
-    const presetKeys = this.getPresetScopedKeys(parent);
+    const presetKeys = InternalMcpCatalogModel.getPresetScopedKeys(parent);
     const offenders = Object.keys(fieldValues).filter(
       (key) => !presetKeys.has(key),
     );
@@ -541,7 +541,7 @@ class InternalMcpCatalogModel {
     fieldValues: PresetFieldValues | undefined,
   ): PresetFieldValues {
     if (!fieldValues) return {};
-    const presetKeys = this.getPresetScopedKeys(parent);
+    const presetKeys = InternalMcpCatalogModel.getPresetScopedKeys(parent);
     const filtered: PresetFieldValues = {};
     const dropped: string[] = [];
     for (const [key, value] of Object.entries(fieldValues)) {

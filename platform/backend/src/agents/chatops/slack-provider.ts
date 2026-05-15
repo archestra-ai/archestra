@@ -1150,27 +1150,75 @@ class SlackProvider implements ChatOpsProvider {
     body: unknown,
     ack: (response?: Record<string, unknown>) => Promise<void>,
   ): Promise<void> {
+    const cmd = body as {
+      command?: string;
+      text?: string;
+      user_id?: string;
+      user_name?: string;
+      channel_id?: string;
+      channel_name?: string;
+      team_id?: string;
+      response_url?: string;
+      trigger_id?: string;
+    };
+
+    // Deliver the response body to the user. Prefer ack() over the socket;
+    // if the socket is mid-rotation the ack rejects, so fall back to
+    // response_url (HTTP POST) which Slack guarantees is valid for ~30 min.
+    const deliver = async (response: Record<string, unknown>) => {
+      try {
+        await ack(response);
+        return;
+      } catch (error) {
+        logger.warn(
+          { error: errorMessage(error), command: cmd.command },
+          "[SlackProvider] Slash command ack failed; falling back to response_url",
+        );
+      }
+      if (!cmd.response_url) {
+        logger.error(
+          { command: cmd.command },
+          "[SlackProvider] No response_url for slash command; user will see no reply",
+        );
+        return;
+      }
+      try {
+        await fetch(cmd.response_url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(response),
+        });
+      } catch (error) {
+        logger.error(
+          { error: errorMessage(error), command: cmd.command },
+          "[SlackProvider] Slash command response_url fallback failed",
+        );
+      }
+    };
+
     try {
-      const cmd = body as {
-        command?: string;
-        text?: string;
-        user_id?: string;
-        user_name?: string;
-        channel_id?: string;
-        channel_name?: string;
-        team_id?: string;
-        response_url?: string;
-        trigger_id?: string;
-      };
       const response = await this.handleSlashCommand(cmd);
-      // Acknowledge with the response body — SocketModeClient sends it back via the socket
-      await ack(response ? (response as Record<string, unknown>) : undefined);
+      if (response) {
+        await deliver(response as Record<string, unknown>);
+      } else {
+        // No body to deliver — just close Slack's spinner. If this ack
+        // fails the user briefly sees a timeout; the side effect (e.g.
+        // modal opened via trigger_id) already happened.
+        try {
+          await ack();
+        } catch (error) {
+          logger.warn(
+            { error: errorMessage(error), command: cmd.command },
+            "[SlackProvider] Empty slash command ack failed",
+          );
+        }
+      }
     } catch (error) {
       logger.error(
-        { error: errorMessage(error) },
+        { error: errorMessage(error), command: cmd.command },
         "[SlackProvider] Slash command failed",
       );
-      await ack({
+      await deliver({
         response_type: "ephemeral",
         text: "Something went wrong. Please try again.",
       });
@@ -1210,9 +1258,25 @@ class SlackProvider implements ChatOpsProvider {
         body: unknown;
         retry_num?: number;
       }) => {
+        // Slack rotates Socket Mode WebSockets on its own schedule. If the
+        // socket goes non-ready between event receipt and our ack, the ack
+        // promise rejects. Since this listener is async and EventEmitter does
+        // not await it, an unguarded rejection becomes an unhandledRejection
+        // and Node kills the process. Slack redelivers unacked events, so
+        // swallowing the failure is safe.
+        const safeAck = async (response?: Record<string, unknown>) => {
+          try {
+            await ack(response);
+          } catch (error) {
+            logger.warn(
+              { error: errorMessage(error), type },
+              "[SlackProvider] Failed to ack Socket Mode event (socket likely rotated); Slack will redeliver",
+            );
+          }
+        };
         switch (type) {
           case "events_api": {
-            await ack();
+            await safeAck();
             const eventBody = body as { event?: { ts?: string } };
             const eventTs = eventBody?.event?.ts;
             if (eventTs && this.socketDedup.mark(eventTs)) {
@@ -1229,7 +1293,7 @@ class SlackProvider implements ChatOpsProvider {
             break;
           }
           case "interactive":
-            await ack();
+            await safeAck();
             this.handleInteractivePayload(body).catch((error) => {
               logger.error(
                 { error: errorMessage(error) },
@@ -1238,7 +1302,9 @@ class SlackProvider implements ChatOpsProvider {
             });
             break;
           case "slash_commands":
-            // ack() for slash commands can include a response body
+            // Pass the raw ack (not safeAck): handleSlashCommandSocket has its
+            // own delivery helper that falls back to response_url when the ack
+            // rejects, and it already returns a promise that is .catch()'d here.
             this.handleSlashCommandSocket(body, ack).catch((error) => {
               logger.error(
                 { error: errorMessage(error) },
@@ -1247,7 +1313,7 @@ class SlackProvider implements ChatOpsProvider {
             });
             break;
           default:
-            await ack();
+            await safeAck();
             break;
         }
       },

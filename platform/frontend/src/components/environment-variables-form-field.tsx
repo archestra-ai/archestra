@@ -1,18 +1,9 @@
 "use client";
 
 import { parseVaultReference } from "@shared";
-import { CheckCircle2, Key, Loader2, Plus, Trash2 } from "lucide-react";
-import {
-  lazy,
-  Suspense,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { Key, Loader2, Plus, Trash2 } from "lucide-react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import type {
-  Control,
-  ControllerRenderProps,
   FieldArrayWithId,
   FieldPath,
   FieldValues,
@@ -23,32 +14,22 @@ import type {
   UseFormWatch,
 } from "react-hook-form";
 import {
-  FieldScopeSelect,
-  type FieldScopeValue,
-} from "@/components/field-scope-select";
-import { InstallConfigFieldsTable } from "@/components/install-config-fields-table";
+  EnvFromDialog,
+  type EnvFromDraft,
+  type EnvFromType,
+} from "@/components/env-from-dialog";
+import {
+  EnvironmentVariableDialog,
+  type EnvVarDraft,
+} from "@/components/environment-variable-dialog";
+import { EnvironmentVariablesReadOnlyTable } from "@/components/environment-variables-read-only-table";
+import {
+  SecretFileDialog,
+  type SecretFileDraft,
+} from "@/components/secret-file-dialog";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { MCP_SECRET_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
+import { FormDescription, FormLabel } from "@/components/ui/form";
 
 const ExternalSecretSelector = lazy(
   () =>
@@ -63,7 +44,6 @@ interface ExternalSecretValue {
 }
 
 interface EnvironmentVariablesFormFieldProps<TFieldValues extends FieldValues> {
-  control: Control<TFieldValues>;
   // biome-ignore lint/suspicious/noExplicitAny: Generic field array types require any for flexibility
   fields: FieldArrayWithId<TFieldValues, any, "id">[];
   // biome-ignore lint/suspicious/noExplicitAny: Generic field array types require any for flexibility
@@ -118,7 +98,6 @@ interface EnvironmentVariablesFormFieldProps<TFieldValues extends FieldValues> {
 export function EnvironmentVariablesFormField<
   TFieldValues extends FieldValues,
 >({
-  control,
   fields,
   append,
   remove,
@@ -135,6 +114,15 @@ export function EnvironmentVariablesFormField<
 }: EnvironmentVariablesFormFieldProps<TFieldValues>) {
   const [dialogOpenForEnvIndex, setDialogOpenForEnvIndex] = useState<
     number | null
+  >(null);
+  const [envVarDialog, setEnvVarDialog] = useState<
+    { mode: "add" } | { mode: "edit"; index: number } | null
+  >(null);
+  const [envFromDialog, setEnvFromDialog] = useState<
+    { mode: "add" } | { mode: "edit"; index: number } | null
+  >(null);
+  const [secretFileDialog, setSecretFileDialog] = useState<
+    { mode: "add" } | { mode: "edit"; index: number } | null
   >(null);
 
   const handleSecretConfirm = (index: number, value: ExternalSecretValue) => {
@@ -170,17 +158,7 @@ export function EnvironmentVariablesFormField<
           type="button"
           variant="outline"
           size="sm"
-          onClick={() =>
-            (append as (value: unknown) => void)({
-              key: "",
-              type: "plain_text",
-              value: "",
-              promptOnInstallation: false,
-              promptOnPreset: false,
-              required: false,
-              description: "",
-            })
-          }
+          onClick={() => setEnvVarDialog({ mode: "add" })}
         >
           <Plus className="h-4 w-4" />
           Add Variable
@@ -188,13 +166,15 @@ export function EnvironmentVariablesFormField<
       </div>
       {/* Filter out mounted secrets - they go in the Secret Files section */}
       {(() => {
-        const envVarFields = fields.filter((_, index) => {
-          const mounted = form.watch(
-            `${fieldNamePrefix}.${index}.mounted` as FieldPath<TFieldValues>,
-          );
-          return !mounted;
-        });
-        const envVarCount = envVarFields.length;
+        const envVarIndexes = fields
+          .map((_, index) => index)
+          .filter((index) => {
+            const mounted = form.watch(
+              `${fieldNamePrefix}.${index}.mounted` as FieldPath<TFieldValues>,
+            );
+            return !mounted;
+          });
+        const envVarCount = envVarIndexes.length;
 
         if (envVarCount === 0) {
           return (
@@ -207,35 +187,58 @@ export function EnvironmentVariablesFormField<
         return (
           <>
             {showDescription && (
-              <FormDescription className="text-xs">
+              <FormDescription className="mb-4 text-xs">
                 Configure environment variables for the MCP server. Use "Secret"
                 type for sensitive values.
               </FormDescription>
             )}
-            <InstallConfigFieldsTable
-              control={control}
+            {/* TODO(e2e): existing tests in platform/e2e-tests drive the inline
+                inputs (placeholder "API_KEY", inline Type Select, inline scope
+                checkbox). After this refactor those interactions live in
+                EnvironmentVariableDialog — tests must click "Add Variable"
+                first, then operate inside the modal. */}
+            <EnvironmentVariablesReadOnlyTable
               form={form}
               fields={fields}
-              rowIndexes={fields
-                .map((_, index) => index)
-                .filter((index) => {
-                  const mounted = form.watch(
-                    `${fieldNamePrefix}.${index}.mounted` as FieldPath<TFieldValues>,
-                  );
-                  return !mounted;
-                })}
-              remove={remove}
+              rowIndexes={envVarIndexes}
               fieldNamePrefix={fieldNamePrefix}
               useExternalSecretsManager={useExternalSecretsManager}
               secretKeysWithStoredValue={secretKeysWithStoredValue}
-              disablePromptOnInstallation={disablePromptOnInstallation}
-              disablePromptOnInstallationReason={
-                disablePromptOnInstallationReason
-              }
+              onEdit={(index) => setEnvVarDialog({ mode: "edit", index })}
+              onDelete={(index) => remove(index)}
             />
           </>
         );
       })()}
+
+      <EnvironmentVariableDialog
+        open={envVarDialog !== null}
+        mode={envVarDialog?.mode === "edit" ? "edit" : "add"}
+        initial={
+          envVarDialog?.mode === "edit"
+            ? readRowAsDraft(form, fieldNamePrefix, envVarDialog.index)
+            : null
+        }
+        existingKeys={readOtherKeys(
+          form,
+          fieldNamePrefix,
+          fields,
+          envVarDialog?.mode === "edit" ? envVarDialog.index : null,
+        )}
+        secretKeysWithStoredValue={secretKeysWithStoredValue}
+        useExternalSecretsManager={useExternalSecretsManager}
+        disableInstallation={disablePromptOnInstallation}
+        disableInstallationReason={disablePromptOnInstallationReason}
+        onClose={() => setEnvVarDialog(null)}
+        onConfirm={(draft) => {
+          if (envVarDialog?.mode === "add") {
+            (append as (value: unknown) => void)(draftToRow(draft));
+          } else if (envVarDialog?.mode === "edit") {
+            applyDraftToRow(form, fieldNamePrefix, envVarDialog.index, draft);
+          }
+          setEnvVarDialog(null);
+        }}
+      />
 
       {/* Environment From k8s Secrets / ConfigMaps Section */}
       {envFrom && (
@@ -248,9 +251,7 @@ export function EnvironmentVariablesFormField<
               type="button"
               variant="outline"
               size="sm"
-              onClick={() =>
-                envFrom.append({ type: "secret", name: "", prefix: "" })
-              }
+              onClick={() => setEnvFromDialog({ mode: "add" })}
             >
               <Plus className="h-4 w-4" />
               Add Source
@@ -262,70 +263,94 @@ export function EnvironmentVariablesFormField<
               No sources configured.
             </div>
           ) : (
-            <FormDescription className="text-xs">
-              Inject all keys from existing k8s Secrets or ConfigMaps as
-              environment variables.
-            </FormDescription>
+            <>
+              <FormDescription className="mb-4 text-xs">
+                Inject all keys from existing k8s Secrets or ConfigMaps as
+                environment variables.
+              </FormDescription>
+              <div>
+                <div className="grid grid-cols-[160px_1fr_1fr_auto] gap-3 border-b py-2.5 px-4 text-xs font-medium text-foreground">
+                  <div>Type</div>
+                  <div>Name</div>
+                  <div>Prefix</div>
+                  <div className="w-9" />
+                </div>
+                {envFrom.fields.map((field, index) => {
+                  const type = envFrom.watch(
+                    `${envFrom.fieldNamePrefix}.${index}.type`,
+                  ) as EnvFromType | undefined;
+                  const name = envFrom.watch(
+                    `${envFrom.fieldNamePrefix}.${index}.name`,
+                  ) as string | undefined;
+                  const prefix = envFrom.watch(
+                    `${envFrom.fieldNamePrefix}.${index}.prefix`,
+                  ) as string | undefined;
+                  return (
+                    // biome-ignore lint/a11y/useSemanticElements: row contains a nested delete <button>
+                    <div
+                      key={field.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setEnvFromDialog({ mode: "edit", index })}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setEnvFromDialog({ mode: "edit", index });
+                        }
+                      }}
+                      className="group grid grid-cols-[160px_1fr_1fr_auto] gap-3 items-center border-b py-3 px-4 text-xs last:border-b-0 cursor-pointer hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <div className="text-muted-foreground">
+                        {type === "configMap" ? "ConfigMap" : "Secret"}
+                      </div>
+                      <div className="font-mono">
+                        {name || (
+                          <span className="text-muted-foreground italic">
+                            unnamed
+                          </span>
+                        )}
+                      </div>
+                      <div className="font-mono text-muted-foreground">
+                        {prefix || <span className="italic">—</span>}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="opacity-60 group-hover:opacity-100"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          envFrom.remove(index);
+                        }}
+                        aria-label="Remove source"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
 
-          {envFrom.fields.map((field, index) => (
-            <div key={field.id} className="border rounded-lg p-3 space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <Select
-                  value={envFrom.watch(
-                    `${envFrom.fieldNamePrefix}.${index}.type`,
-                  )}
-                  onValueChange={(val) =>
-                    envFrom.setValue(
-                      `${envFrom.fieldNamePrefix}.${index}.type`,
-                      val,
-                      { shouldDirty: true },
-                    )
-                  }
-                >
-                  <SelectTrigger className="w-[200px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="secret">Secret</SelectItem>
-                    <SelectItem value="configMap">ConfigMap</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => envFrom.remove(index)}
-                >
-                  <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
-                </Button>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs">
-                    Name <span className="text-destructive">*</span>
-                  </Label>
-                  <Input
-                    placeholder="my-k8s-secret"
-                    className="font-mono"
-                    {...envFrom.register(
-                      `${envFrom.fieldNamePrefix}.${index}.name`,
-                    )}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Prefix (optional)</Label>
-                  <Input
-                    placeholder="e.g. MY_PREFIX_"
-                    className="font-mono"
-                    {...envFrom.register(
-                      `${envFrom.fieldNamePrefix}.${index}.prefix`,
-                    )}
-                  />
-                </div>
-              </div>
-            </div>
-          ))}
+          <EnvFromDialog
+            open={envFromDialog !== null}
+            mode={envFromDialog?.mode === "edit" ? "edit" : "add"}
+            initial={
+              envFromDialog?.mode === "edit"
+                ? readEnvFromRowAsDraft(envFrom, envFromDialog.index)
+                : null
+            }
+            onClose={() => setEnvFromDialog(null)}
+            onConfirm={(draft) => {
+              if (envFromDialog?.mode === "add") {
+                envFrom.append(draft);
+              } else if (envFromDialog?.mode === "edit") {
+                applyEnvFromDraftToRow(envFrom, envFromDialog.index, draft);
+              }
+              setEnvFromDialog(null);
+            }}
+          />
         </div>
       )}
 
@@ -337,18 +362,7 @@ export function EnvironmentVariablesFormField<
             type="button"
             variant="outline"
             size="sm"
-            onClick={() =>
-              (append as (value: unknown) => void)({
-                key: "",
-                type: "secret",
-                value: "",
-                promptOnInstallation: true,
-                promptOnPreset: false,
-                required: false,
-                description: "",
-                mounted: true,
-              })
-            }
+            onClick={() => setSecretFileDialog({ mode: "add" })}
           >
             <Plus className="h-4 w-4" />
             Add Secret File
@@ -374,226 +388,63 @@ export function EnvironmentVariablesFormField<
 
           return (
             <>
-              <FormDescription>
+              <FormDescription className="mb-4 text-xs">
                 Secrets mounted as files at /secrets/&lt;key&gt;.
               </FormDescription>
-              <div className="border rounded-lg">
-                <div className="grid grid-cols-[1.5fr_1.1fr_0.7fr_2fr_2.5fr_auto] gap-2 p-3 bg-muted/50 border-b">
-                  <div className="text-xs font-medium">Key</div>
-                  <div className="text-xs font-medium">Scope</div>
-                  <div className="text-xs font-medium">Required</div>
-                  <div className="text-xs font-medium">Value</div>
-                  <div className="text-xs font-medium">Description</div>
-                  <div className="w-9" />
-                </div>
-                {secretFileIndices.map((index) => {
-                  const field = fields[index];
-                  const promptOnInstallation = form.watch(
-                    `${fieldNamePrefix}.${index}.promptOnInstallation` as FieldPath<TFieldValues>,
-                  );
-                  const promptOnPreset = form.watch(
-                    `${fieldNamePrefix}.${index}.promptOnPreset` as FieldPath<TFieldValues>,
-                  );
-                  const scope: FieldScopeValue = promptOnInstallation
-                    ? "installation"
-                    : promptOnPreset
-                      ? "preset"
-                      : "static";
-                  const setScope = (next: FieldScopeValue) => {
-                    form.setValue(
-                      `${fieldNamePrefix}.${index}.promptOnInstallation` as FieldPath<TFieldValues>,
-                      (next === "installation") as PathValue<
-                        TFieldValues,
-                        FieldPath<TFieldValues>
-                      >,
-                      { shouldDirty: true },
-                    );
-                    form.setValue(
-                      `${fieldNamePrefix}.${index}.promptOnPreset` as FieldPath<TFieldValues>,
-                      (next === "preset") as PathValue<
-                        TFieldValues,
-                        FieldPath<TFieldValues>
-                      >,
-                      { shouldDirty: true },
-                    );
-                    if (next !== "installation") {
-                      form.setValue(
-                        `${fieldNamePrefix}.${index}.required` as FieldPath<TFieldValues>,
-                        false as PathValue<
-                          TFieldValues,
-                          FieldPath<TFieldValues>
-                        >,
-                        { shouldDirty: true },
-                      );
-                    }
-                  };
-                  return (
-                    <div
-                      key={field.id}
-                      className="grid grid-cols-[1.5fr_1.1fr_0.7fr_2fr_2.5fr_auto] gap-2 p-3 items-start border-b last:border-b-0"
-                    >
-                      <FormField
-                        control={control}
-                        name={
-                          `${fieldNamePrefix}.${index}.key` as FieldPath<TFieldValues>
-                        }
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormControl>
-                              <Input
-                                placeholder="TLS_CERT"
-                                className="font-mono"
-                                {...field}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FieldScopeSelect
-                        value={scope}
-                        onChange={setScope}
-                        disableInstallation={disablePromptOnInstallation}
-                        disabledReason={disablePromptOnInstallationReason}
-                      />
-                      <FormField
-                        control={control}
-                        name={
-                          `${fieldNamePrefix}.${index}.required` as FieldPath<TFieldValues>
-                        }
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormControl>
-                              <div className="flex items-center h-10">
-                                <Checkbox
-                                  checked={field.value}
-                                  onCheckedChange={field.onChange}
-                                  disabled={scope !== "installation"}
-                                />
-                              </div>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      {(() => {
-                        if (scope === "installation") {
-                          return (
-                            <div className="flex items-center h-10">
-                              <p className="text-xs text-muted-foreground">
-                                Prompted at installation
-                              </p>
-                            </div>
-                          );
-                        }
-
-                        if (scope === "preset") {
-                          return (
-                            <div className="flex items-center h-10">
-                              <p className="text-xs text-muted-foreground">
-                                Set per preset
-                              </p>
-                            </div>
-                          );
-                        }
-
-                        if (useExternalSecretsManager) {
-                          const formValue = form.watch(
-                            `${fieldNamePrefix}.${index}.value` as FieldPath<TFieldValues>,
-                          ) as string | undefined;
-
-                          return (
-                            <div className="flex items-center h-10">
-                              {formValue ? (
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-8 px-2 text-xs font-mono text-green-600 hover:text-green-700"
-                                  onClick={() =>
-                                    setDialogOpenForEnvIndex(index)
-                                  }
-                                >
-                                  <CheckCircle2 className="h-3 w-3 mr-1" />
-                                  <span className="truncate max-w-[120px]">
-                                    {parseVaultReference(formValue).key}
-                                  </span>
-                                </Button>
-                              ) : (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-8 text-xs"
-                                  onClick={() =>
-                                    setDialogOpenForEnvIndex(index)
-                                  }
-                                >
-                                  <Key className="h-3 w-3 mr-1" />
-                                  Set secret
-                                </Button>
-                              )}
-                            </div>
-                          );
-                        }
-
-                        const rowKey = form.watch(
-                          `${fieldNamePrefix}.${index}.key` as FieldPath<TFieldValues>,
-                        ) as string | undefined;
-                        const hasStoredSecret =
-                          !!rowKey &&
-                          secretKeysWithStoredValue?.has(rowKey) === true;
-
-                        return (
-                          <FormField
-                            control={control}
-                            name={
-                              `${fieldNamePrefix}.${index}.value` as FieldPath<TFieldValues>
-                            }
-                            render={({ field }) => (
-                              <AutoResizeSecretTextarea
-                                field={field}
-                                placeholder={
-                                  hasStoredSecret ? "••••••••" : undefined
-                                }
-                              />
-                            )}
-                          />
-                        );
-                      })()}
-                      <FormField
-                        control={control}
-                        name={
-                          `${fieldNamePrefix}.${index}.description` as FieldPath<TFieldValues>
-                        }
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormControl>
-                              <Textarea
-                                placeholder="Optional description"
-                                className="text-xs resize-y min-h-10"
-                                {...field}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => remove(index)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  );
-                })}
-              </div>
+              <EnvironmentVariablesReadOnlyTable
+                form={form}
+                fields={fields}
+                rowIndexes={secretFileIndices}
+                fieldNamePrefix={fieldNamePrefix}
+                useExternalSecretsManager={useExternalSecretsManager}
+                secretKeysWithStoredValue={secretKeysWithStoredValue}
+                showType={false}
+                keyLabel="File"
+                removeAriaLabel="Remove secret file"
+                onEdit={(index) => setSecretFileDialog({ mode: "edit", index })}
+                onDelete={(index) => remove(index)}
+              />
             </>
           );
         })()}
+
+        <SecretFileDialog
+          open={secretFileDialog !== null}
+          mode={secretFileDialog?.mode === "edit" ? "edit" : "add"}
+          initial={
+            secretFileDialog?.mode === "edit"
+              ? readSecretFileRowAsDraft(
+                  form,
+                  fieldNamePrefix,
+                  secretFileDialog.index,
+                )
+              : null
+          }
+          existingKeys={readOtherSecretFileKeys(
+            form,
+            fieldNamePrefix,
+            fields,
+            secretFileDialog?.mode === "edit" ? secretFileDialog.index : null,
+          )}
+          secretKeysWithStoredValue={secretKeysWithStoredValue}
+          useExternalSecretsManager={useExternalSecretsManager}
+          disableInstallation={disablePromptOnInstallation}
+          disableInstallationReason={disablePromptOnInstallationReason}
+          onClose={() => setSecretFileDialog(null)}
+          onConfirm={(draft) => {
+            if (secretFileDialog?.mode === "add") {
+              (append as (value: unknown) => void)(secretFileDraftToRow(draft));
+            } else if (secretFileDialog?.mode === "edit") {
+              applySecretFileDraftToRow(
+                form,
+                fieldNamePrefix,
+                secretFileDialog.index,
+                draft,
+              );
+            }
+            setSecretFileDialog(null);
+          }}
+        />
       </div>
 
       {/* External Secret Selection Dialog */}
@@ -628,51 +479,190 @@ export function EnvironmentVariablesFormField<
   );
 }
 
-const MAX_TEXTAREA_HEIGHT = 128;
+function readRowAsDraft<TFieldValues extends FieldValues>(
+  form: { watch: UseFormWatch<TFieldValues> },
+  prefix: string,
+  index: number,
+): EnvVarDraft {
+  const get = <T,>(name: string): T =>
+    form.watch(`${prefix}.${index}.${name}` as FieldPath<TFieldValues>) as T;
+  const promptOnInstallation = Boolean(get<boolean>("promptOnInstallation"));
+  const promptOnPreset = Boolean(get<boolean>("promptOnPreset"));
+  return {
+    key: get<string>("key") ?? "",
+    type: (get<string>("type") ?? "plain_text") as EnvVarDraft["type"],
+    scope: promptOnInstallation
+      ? "installation"
+      : promptOnPreset
+        ? "preset"
+        : "static",
+    required: Boolean(get<boolean>("required")),
+    description: get<string>("description") ?? "",
+    value: get<string>("value") ?? "",
+  };
+}
 
-function AutoResizeSecretTextarea({
-  field,
-  placeholder,
-}: {
-  // biome-ignore lint/suspicious/noExplicitAny: Generic field types
-  field: ControllerRenderProps<any, any>;
-  placeholder?: string;
-}) {
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+function readOtherKeys<TFieldValues extends FieldValues>(
+  form: { watch: UseFormWatch<TFieldValues> },
+  prefix: string,
+  // biome-ignore lint/suspicious/noExplicitAny: field arrays require generic any
+  fields: FieldArrayWithId<TFieldValues, any, "id">[],
+  excludeIndex: number | null,
+): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < fields.length; i++) {
+    if (i === excludeIndex) continue;
+    const mounted = form.watch(
+      `${prefix}.${i}.mounted` as FieldPath<TFieldValues>,
+    );
+    if (mounted) continue;
+    const k = form.watch(`${prefix}.${i}.key` as FieldPath<TFieldValues>) as
+      | string
+      | undefined;
+    if (k?.trim()) out.push(k.trim());
+  }
+  return out;
+}
 
-  const adjustHeight = useCallback(() => {
-    const textarea = textareaRef.current;
-    if (textarea) {
-      textarea.style.height = "auto";
-      textarea.style.height = `${Math.min(textarea.scrollHeight, MAX_TEXTAREA_HEIGHT)}px`;
-    }
-  }, []);
+function draftToRow(draft: EnvVarDraft) {
+  return {
+    key: draft.key,
+    type: draft.type,
+    value: draft.scope === "static" ? draft.value : "",
+    promptOnInstallation: draft.scope === "installation",
+    promptOnPreset: draft.scope === "preset",
+    required: draft.scope === "installation" ? draft.required : false,
+    description: draft.description,
+  };
+}
 
-  useEffect(() => {
-    adjustHeight();
-  }, [adjustHeight]);
+function applyDraftToRow<TFieldValues extends FieldValues>(
+  form: { setValue: UseFormSetValue<TFieldValues> },
+  prefix: string,
+  index: number,
+  draft: EnvVarDraft,
+) {
+  const set = (name: string, value: unknown) =>
+    form.setValue(
+      `${prefix}.${index}.${name}` as FieldPath<TFieldValues>,
+      value as PathValue<TFieldValues, FieldPath<TFieldValues>>,
+      { shouldDirty: true },
+    );
+  set("key", draft.key);
+  set("type", draft.type);
+  set("value", draft.scope === "static" ? draft.value : "");
+  set("promptOnInstallation", draft.scope === "installation");
+  set("promptOnPreset", draft.scope === "preset");
+  set("required", draft.scope === "installation" ? draft.required : false);
+  set("description", draft.description);
+}
 
-  return (
-    <FormItem>
-      <FormControl>
-        <Textarea
-          className="font-mono text-xs resize-none min-h-10 max-h-32 overflow-y-auto"
-          rows={1}
-          autoComplete={MCP_SECRET_AUTOCOMPLETE}
-          placeholder={placeholder}
-          {...field}
-          ref={(el) => {
-            textareaRef.current = el;
-            if (typeof field.ref === "function") {
-              field.ref(el);
-            }
-          }}
-          onInput={adjustHeight}
-        />
-      </FormControl>
-      <FormMessage />
-    </FormItem>
-  );
+type EnvFromApi = NonNullable<
+  EnvironmentVariablesFormFieldProps<FieldValues>["envFrom"]
+>;
+
+function readEnvFromRowAsDraft(
+  envFrom: EnvFromApi,
+  index: number,
+): EnvFromDraft {
+  const prefix = envFrom.fieldNamePrefix;
+  return {
+    type: (envFrom.watch(`${prefix}.${index}.type`) as EnvFromType) ?? "secret",
+    name: (envFrom.watch(`${prefix}.${index}.name`) as string) ?? "",
+    prefix: (envFrom.watch(`${prefix}.${index}.prefix`) as string) ?? "",
+  };
+}
+
+function applyEnvFromDraftToRow(
+  envFrom: EnvFromApi,
+  index: number,
+  draft: EnvFromDraft,
+) {
+  const p = envFrom.fieldNamePrefix;
+  envFrom.setValue(`${p}.${index}.type`, draft.type, { shouldDirty: true });
+  envFrom.setValue(`${p}.${index}.name`, draft.name, { shouldDirty: true });
+  envFrom.setValue(`${p}.${index}.prefix`, draft.prefix, {
+    shouldDirty: true,
+  });
+}
+
+function readSecretFileRowAsDraft<TFieldValues extends FieldValues>(
+  form: { watch: UseFormWatch<TFieldValues> },
+  prefix: string,
+  index: number,
+): SecretFileDraft {
+  const get = <T,>(name: string): T =>
+    form.watch(`${prefix}.${index}.${name}` as FieldPath<TFieldValues>) as T;
+  const promptOnInstallation = Boolean(get<boolean>("promptOnInstallation"));
+  const promptOnPreset = Boolean(get<boolean>("promptOnPreset"));
+  return {
+    key: get<string>("key") ?? "",
+    scope: promptOnInstallation
+      ? "installation"
+      : promptOnPreset
+        ? "preset"
+        : "static",
+    required: Boolean(get<boolean>("required")),
+    value: get<string>("value") ?? "",
+    description: get<string>("description") ?? "",
+  };
+}
+
+function readOtherSecretFileKeys<TFieldValues extends FieldValues>(
+  form: { watch: UseFormWatch<TFieldValues> },
+  prefix: string,
+  // biome-ignore lint/suspicious/noExplicitAny: field arrays require generic any
+  fields: FieldArrayWithId<TFieldValues, any, "id">[],
+  excludeIndex: number | null,
+): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < fields.length; i++) {
+    if (i === excludeIndex) continue;
+    const mounted = form.watch(
+      `${prefix}.${i}.mounted` as FieldPath<TFieldValues>,
+    );
+    if (!mounted) continue;
+    const k = form.watch(`${prefix}.${i}.key` as FieldPath<TFieldValues>) as
+      | string
+      | undefined;
+    if (k?.trim()) out.push(k.trim());
+  }
+  return out;
+}
+
+function secretFileDraftToRow(draft: SecretFileDraft) {
+  return {
+    key: draft.key,
+    type: "secret" as const,
+    value: draft.scope === "static" ? draft.value : "",
+    promptOnInstallation: draft.scope === "installation",
+    promptOnPreset: draft.scope === "preset",
+    required: draft.scope === "installation" ? draft.required : false,
+    description: draft.description,
+    mounted: true,
+  };
+}
+
+function applySecretFileDraftToRow<TFieldValues extends FieldValues>(
+  form: { setValue: UseFormSetValue<TFieldValues> },
+  prefix: string,
+  index: number,
+  draft: SecretFileDraft,
+) {
+  const set = (name: string, value: unknown) =>
+    form.setValue(
+      `${prefix}.${index}.${name}` as FieldPath<TFieldValues>,
+      value as PathValue<TFieldValues, FieldPath<TFieldValues>>,
+      { shouldDirty: true },
+    );
+  set("key", draft.key);
+  set("type", "secret");
+  set("value", draft.scope === "static" ? draft.value : "");
+  set("promptOnInstallation", draft.scope === "installation");
+  set("promptOnPreset", draft.scope === "preset");
+  set("required", draft.scope === "installation" ? draft.required : false);
+  set("description", draft.description);
+  set("mounted", true);
 }
 
 interface ExternalSecretDialogProps {

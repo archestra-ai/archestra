@@ -1527,3 +1527,87 @@ describe("SlackProvider.notifyMissingScopes", () => {
     expect(callArgs.text).not.toContain("A12345");
   });
 });
+
+// =============================================================================
+// handleSlashCommandSocket — ack failure handling
+// =============================================================================
+
+describe("SlackProvider.handleSlashCommandSocket", () => {
+  const slashBody = {
+    command: "/test",
+    text: "",
+    user_id: "U_SENDER",
+    user_name: "tester",
+    channel_id: "C12345",
+    team_id: "T12345",
+    response_url: "https://hooks.slack.com/commands/T12345/123/abc",
+    trigger_id: "trigger-1",
+  };
+
+  function setup() {
+    const provider = createProvider();
+    const response = { response_type: "ephemeral", text: "ok" };
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — stub method
+    vi.spyOn(provider as any, "handleSlashCommand").mockResolvedValue(response);
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    return { provider, response, fetchSpy };
+  }
+
+  test("ack succeeds → no response_url fallback POST", async () => {
+    const { provider, response, fetchSpy } = setup();
+    const ack = vi.fn().mockResolvedValue(undefined);
+
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — call private
+    await (provider as any).handleSlashCommandSocket(slashBody, ack);
+
+    expect(ack).toHaveBeenCalledWith(response);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  test("ack rejects → falls back to response_url POST without throwing", async () => {
+    const { provider, response, fetchSpy } = setup();
+    const ack = vi.fn().mockRejectedValue(new Error("socket not ready"));
+
+    await expect(
+      // biome-ignore lint/suspicious/noExplicitAny: test-only — call private
+      (provider as any).handleSlashCommandSocket(slashBody, ack),
+    ).resolves.toBeUndefined();
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toBe(slashBody.response_url);
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(init?.body as string)).toEqual(response);
+  });
+
+  test("ack rejects with no response_url → swallowed (no throw, no fetch)", async () => {
+    const { provider, fetchSpy } = setup();
+    const ack = vi.fn().mockRejectedValue(new Error("socket not ready"));
+    const bodyWithoutUrl = { ...slashBody, response_url: undefined };
+
+    await expect(
+      // biome-ignore lint/suspicious/noExplicitAny: test-only — call private
+      (provider as any).handleSlashCommandSocket(bodyWithoutUrl, ack),
+    ).resolves.toBeUndefined();
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  test("handleSlashCommand throws → error response delivered", async () => {
+    const provider = createProvider();
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — stub method
+    vi.spyOn(provider as any, "handleSlashCommand").mockRejectedValue(
+      new Error("boom"),
+    );
+    const ack = vi.fn().mockResolvedValue(undefined);
+
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — call private
+    await (provider as any).handleSlashCommandSocket(slashBody, ack);
+
+    expect(ack).toHaveBeenCalledWith(
+      expect.objectContaining({ response_type: "ephemeral" }),
+    );
+  });
+});

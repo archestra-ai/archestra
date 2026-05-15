@@ -1226,19 +1226,28 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Child catalog item not found");
       }
 
+      const updates: Record<string, unknown> = {};
       if (presetFieldValues !== undefined) {
-        try {
-          InternalMcpCatalogModel.validateFieldValuesAgainstCatalog(
+        // Lenient filter (not the strict validator used on create / install):
+        // when a parent edit flips a field's scope from `promptOnPreset:
+        // true` to non-preset, the cascade syncs the parent's localConfig
+        // template down to children but does NOT scrub their existing
+        // `preset_field_values` jsonb. The frontend's preset editor copies
+        // the row's full presetFieldValues into local state and re-sends
+        // them on save, so without this filter every PATCH after a parent
+        // scope flip would 400 ("Fields not configured for preset
+        // overrides: …") and silently drop the user's new value.
+        //
+        // As a beneficial side effect, every successful PATCH garbage-
+        // collects the orphan keys from the row's jsonb (see Model.update
+        // call below — `presetFieldValues` is replaced wholesale with the
+        // filtered set).
+        const sanitized =
+          InternalMcpCatalogModel.filterFieldValuesToPresetScope(
             parent,
             presetFieldValues,
           );
-        } catch (e) {
-          throw new ApiError(400, (e as Error).message);
-        }
-      }
 
-      const updates: Record<string, unknown> = {};
-      if (presetFieldValues !== undefined) {
         const { nonSecretFieldValues, presetSecretId } =
           await partitionPresetFieldValuesAndUpsertSecrets({
             parent,
@@ -1246,7 +1255,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
               name: originalChild.name,
               presetSecretId: originalChild.presetSecretId,
             },
-            incoming: presetFieldValues,
+            incoming: sanitized,
           });
         updates.presetFieldValues = nonSecretFieldValues;
         if (presetSecretId !== originalChild.presetSecretId) {

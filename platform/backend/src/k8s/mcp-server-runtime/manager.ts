@@ -276,6 +276,38 @@ export class McpServerRuntimeManager {
         }
       }
 
+      // Plain (non-secret) preset env values live on the catalog row's
+      // `presetFieldValues` jsonb — they have no per-install persistence
+      // layer because they're authoritative on the catalog itself. The
+      // install route reads them at install time and merges into
+      // `environmentValues`, but on restart that map is undefined; without
+      // overlaying them here the deployment env builder would emit no value
+      // for these env vars (only the secret-typed ones survive via the
+      // install Secret bag). Result: every cascade reinstall (admin edit
+      // OR child preset PATCH) silently drops plain preset env values
+      // from the rebuilt pod spec.
+      //
+      // Re-overlaying from the catalog row on every restart also means
+      // edits to the preset (or admin edits to default-preset values on
+      // the parent) propagate naturally on the next restart — no manual
+      // reinstall needed.
+      if (
+        catalogItem?.localConfig?.environment &&
+        catalogItem.presetFieldValues
+      ) {
+        for (const envDef of catalogItem.localConfig.environment) {
+          if (envDef.promptOnPreset && envDef.type !== "secret") {
+            const presetValue = catalogItem.presetFieldValues[envDef.key];
+            if (presetValue != null) {
+              if (!effectiveEnvironmentValues) {
+                effectiveEnvironmentValues = {};
+              }
+              effectiveEnvironmentValues[envDef.key] = String(presetValue);
+            }
+          }
+        }
+      }
+
       const k8sDeployment = new K8sDeployment({
         mcpServer,
         k8sApi: this.k8sApi,

@@ -488,8 +488,13 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
         fetch: providedFetch,
       });
       const normalizedApiKey = normalizeAzureApiKey(apiKey);
+      const sdkApiKey =
+        normalizedApiKey ??
+        (isAzureOpenAiEntraIdEnabled()
+          ? KEYLESS_PROVIDER_API_KEY_PLACEHOLDER
+          : undefined);
       return createOpenAI({
-        apiKey: normalizedApiKey,
+        apiKey: sdkApiKey,
         baseURL,
         headers: normalizedApiKey
           ? { ...headers, "api-key": normalizedApiKey }

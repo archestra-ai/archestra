@@ -522,7 +522,9 @@ class VirtualApiKeyModel {
           schema.virtualApiKeyProviderApiKeysTable.providerApiKeyId,
         providerApiKeyName: schema.llmProviderApiKeysTable.name,
         secretId: schema.llmProviderApiKeysTable.secretId,
-        baseUrl: schema.llmProviderApiKeysTable.baseUrl,
+        baseUrl: sql<
+          string | null
+        >`coalesce(${schema.llmProviderApiKeysTable.inferenceBaseUrl}, ${schema.llmProviderApiKeysTable.baseUrl})`,
       })
       .from(schema.virtualApiKeyProviderApiKeysTable)
       .innerJoin(

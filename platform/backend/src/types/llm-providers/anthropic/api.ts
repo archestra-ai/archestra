@@ -32,7 +32,7 @@ const ToolChoiceSchema = z.union([
 // Mirrors @anthropic-ai/sdk BetaJSONOutputFormat / BetaOutputConfig.
 // Sent by the Vercel AI SDK to enable native structured output on opus-4-6.
 const OutputConfigSchema = z.object({
-  effort: z.enum(["low", "medium", "high", "max"]).nullable().optional(),
+  effort: z.string().nullable().optional(),
   format: z
     .object({
       type: z.literal("json_schema"),

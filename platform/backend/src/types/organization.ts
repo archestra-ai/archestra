@@ -9,6 +9,7 @@ import {
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { LimitCleanupIntervalSchema } from "./limit";
 
 const DATA_URI_PREFIX = "data:image/png;base64,";
 const GIF_DATA_URI_PREFIX = "data:image/gif;base64,";
@@ -202,10 +203,6 @@ export const AppearanceSettingsSchema = z.object({
   animateChatPlaceholders: z.boolean(),
 });
 
-export const OrganizationLimitCleanupIntervalSchema = z
-  .enum(["1h", "12h", "24h", "1w", "1m"])
-  .nullable();
-
 export const OrganizationCompressionScopeSchema = z.enum([
   "organization",
   "team",
@@ -221,13 +218,15 @@ export const OAuthAccessTokenLifetimeSecondsSchema = z
 const extendedFields = {
   theme: OrganizationThemeSchema,
   customFont: OrganizationCustomFontSchema,
-  limitCleanupInterval: OrganizationLimitCleanupIntervalSchema,
   compressionScope: OrganizationCompressionScopeSchema,
   globalToolPolicy: GlobalToolPolicySchema,
   embeddingModel: z.string().nullable(),
   embeddingDimensions: EmbeddingDimensionsSchema.nullable(),
   defaultLlmModel: z.string().nullable(),
   defaultLlmProvider: SupportedProvidersSchema.nullable(),
+  defaultUserLimitValue: z.number().int().positive().nullable(),
+  defaultUserLimitModel: z.array(z.string()).nullable(),
+  defaultUserLimitCleanupInterval: LimitCleanupIntervalSchema.nullable(),
   defaultAgentId: z.string().uuid().nullable(),
   favicon: z.string().nullable(),
   iconLogo: z.string().nullable(),
@@ -279,7 +278,10 @@ export const UpdateSecuritySettingsSchema = z.object({
 export const UpdateLlmSettingsSchema = z.object({
   convertToolResultsToToon: z.boolean().optional(),
   compressionScope: OrganizationCompressionScopeSchema.optional(),
-  limitCleanupInterval: OrganizationLimitCleanupIntervalSchema.optional(),
+  defaultUserLimitValue: z.number().int().positive().nullable().optional(),
+  defaultUserLimitModel: z.array(z.string()).nullable().optional(),
+  defaultUserLimitCleanupInterval:
+    LimitCleanupIntervalSchema.nullable().optional(),
 });
 
 export const UpdateAgentSettingsSchema = z.object({
@@ -347,9 +349,6 @@ export const CompleteOnboardingSchema = z.object({
   onboardingComplete: z.literal(true),
 });
 
-export type OrganizationLimitCleanupInterval = z.infer<
-  typeof OrganizationLimitCleanupIntervalSchema
->;
 export type OrganizationCompressionScope = z.infer<
   typeof OrganizationCompressionScopeSchema
 >;

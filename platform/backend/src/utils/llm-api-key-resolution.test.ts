@@ -81,6 +81,37 @@ describe("resolveProviderApiKey", () => {
     expect(result.baseUrl).toBe("https://my-proxy.example.com/v1");
   });
 
+  test("prefers inferenceBaseUrl over discovery baseUrl for runtime calls", async ({
+    makeOrganization,
+    makeUser,
+    makeSecret,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const secret = await makeSecret({ secret: { apiKey: "sk-runtime-base" } });
+
+    const { LlmProviderApiKeyModel } = await import("@/models");
+    await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      secretId: secret.id,
+      name: "Azure Runtime URL Key",
+      provider: "azure",
+      scope: "personal",
+      userId: user.id,
+      baseUrl: "https://discovery.example.com/openai",
+      inferenceBaseUrl: "https://runtime.example.com/openai",
+    });
+
+    const result = await resolveProviderApiKey({
+      organizationId: org.id,
+      userId: user.id,
+      provider: "azure",
+    });
+
+    expect(result.apiKey).toBe("sk-runtime-base");
+    expect(result.baseUrl).toBe("https://runtime.example.com/openai");
+  });
+
   test("returns undefined apiKey when no key configured and no env var", async ({
     makeOrganization,
     makeUser,

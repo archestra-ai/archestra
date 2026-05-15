@@ -3599,13 +3599,7 @@
             "properties": {
               "effort": {
                 "nullable": true,
-                "type": "string",
-                "enum": [
-                  "low",
-                  "medium",
-                  "high",
-                  "max"
-                ]
+                "type": "string"
               },
               "format": {
                 "nullable": true,
@@ -20699,13 +20693,7 @@
             "properties": {
               "effort": {
                 "nullable": true,
-                "type": "string",
-                "enum": [
-                  "low",
-                  "medium",
-                  "high",
-                  "max"
-                ]
+                "type": "string"
               },
               "format": {
                 "nullable": true,
@@ -127833,6 +127821,16 @@
                           "type": "string"
                         }
                       },
+                      "cleanupInterval": {
+                        "type": "string",
+                        "enum": [
+                          "1h",
+                          "12h",
+                          "24h",
+                          "1w",
+                          "1m"
+                        ]
+                      },
                       "lastCleanup": {
                         "nullable": true,
                         "type": "string",
@@ -128184,6 +128182,16 @@
                       "type": "string"
                     }
                   },
+                  "cleanupInterval": {
+                    "type": "string",
+                    "enum": [
+                      "1h",
+                      "12h",
+                      "24h",
+                      "1w",
+                      "1m"
+                    ]
+                  },
                   "lastCleanup": {
                     "nullable": true
                   }
@@ -128253,6 +128261,16 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "cleanupInterval": {
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
                     },
                     "lastCleanup": {
                       "nullable": true,
@@ -128597,6 +128615,16 @@
                         "type": "string"
                       }
                     },
+                    "cleanupInterval": {
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
+                    },
                     "lastCleanup": {
                       "nullable": true,
                       "type": "string",
@@ -128920,6 +128948,16 @@
                       "type": "string"
                     }
                   },
+                  "cleanupInterval": {
+                    "type": "string",
+                    "enum": [
+                      "1h",
+                      "12h",
+                      "24h",
+                      "1w",
+                      "1m"
+                    ]
+                  },
                   "lastCleanup": {
                     "nullable": true
                   }
@@ -128995,6 +129033,16 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "cleanupInterval": {
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
                     },
                     "lastCleanup": {
                       "nullable": true,
@@ -133103,6 +133151,10 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "inferenceBaseUrl": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "extraHeaders": {
                         "nullable": true,
                         "type": "object",
@@ -133167,6 +133219,7 @@
                       "userId",
                       "teamId",
                       "baseUrl",
+                      "inferenceBaseUrl",
                       "extraHeaders",
                       "isSystem",
                       "isPrimary",
@@ -133463,6 +133516,11 @@
                     "type": "string",
                     "format": "uri"
                   },
+                  "inferenceBaseUrl": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uri"
+                  },
                   "extraHeaders": {
                     "nullable": true,
                     "type": "object",
@@ -133581,6 +133639,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "inferenceBaseUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "extraHeaders": {
                       "nullable": true,
                       "type": "object",
@@ -133613,6 +133675,7 @@
                     "userId",
                     "teamId",
                     "baseUrl",
+                    "inferenceBaseUrl",
                     "extraHeaders",
                     "isSystem",
                     "isPrimary",
@@ -133976,6 +134039,10 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "inferenceBaseUrl": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "extraHeaders": {
                         "nullable": true,
                         "type": "object",
@@ -134040,6 +134107,7 @@
                       "userId",
                       "teamId",
                       "baseUrl",
+                      "inferenceBaseUrl",
                       "extraHeaders",
                       "isSystem",
                       "isPrimary",
@@ -134375,6 +134443,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "inferenceBaseUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "extraHeaders": {
                       "nullable": true,
                       "type": "object",
@@ -134439,6 +134511,7 @@
                     "userId",
                     "teamId",
                     "baseUrl",
+                    "inferenceBaseUrl",
                     "extraHeaders",
                     "isSystem",
                     "isPrimary",
@@ -134712,6 +134785,11 @@
                     "type": "string",
                     "format": "uri"
                   },
+                  "inferenceBaseUrl": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uri"
+                  },
                   "extraHeaders": {
                     "nullable": true,
                     "type": "object",
@@ -134840,6 +134918,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "inferenceBaseUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "extraHeaders": {
                       "nullable": true,
                       "type": "object",
@@ -134872,6 +134954,7 @@
                     "userId",
                     "teamId",
                     "baseUrl",
+                    "inferenceBaseUrl",
                     "extraHeaders",
                     "isSystem",
                     "isPrimary",
@@ -157222,17 +157305,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "limitCleanupInterval": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "1h",
-                        "12h",
-                        "24h",
-                        "1w",
-                        "1m"
-                      ]
-                    },
                     "onboardingComplete": {
                       "type": "boolean"
                     },
@@ -157356,6 +157428,30 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultUserLimitValue": {
+                      "nullable": true,
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    },
+                    "defaultUserLimitModel": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "defaultUserLimitCleanupInterval": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
                     },
                     "defaultAgentId": {
                       "nullable": true,
@@ -157541,7 +157637,6 @@
                     "logoDark",
                     "createdAt",
                     "metadata",
-                    "limitCleanupInterval",
                     "onboardingComplete",
                     "theme",
                     "customFont",
@@ -157557,6 +157652,9 @@
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultLlmApiKeyId",
+                    "defaultUserLimitValue",
+                    "defaultUserLimitModel",
+                    "defaultUserLimitCleanupInterval",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -158020,17 +158118,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "limitCleanupInterval": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "1h",
-                        "12h",
-                        "24h",
-                        "1w",
-                        "1m"
-                      ]
-                    },
                     "onboardingComplete": {
                       "type": "boolean"
                     },
@@ -158154,6 +158241,30 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultUserLimitValue": {
+                      "nullable": true,
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    },
+                    "defaultUserLimitModel": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "defaultUserLimitCleanupInterval": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
                     },
                     "defaultAgentId": {
                       "nullable": true,
@@ -158339,7 +158450,6 @@
                     "logoDark",
                     "createdAt",
                     "metadata",
-                    "limitCleanupInterval",
                     "onboardingComplete",
                     "theme",
                     "customFont",
@@ -158355,6 +158465,9 @@
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultLlmApiKeyId",
+                    "defaultUserLimitValue",
+                    "defaultUserLimitModel",
+                    "defaultUserLimitCleanupInterval",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -159089,17 +159202,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "limitCleanupInterval": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "1h",
-                        "12h",
-                        "24h",
-                        "1w",
-                        "1m"
-                      ]
-                    },
                     "onboardingComplete": {
                       "type": "boolean"
                     },
@@ -159223,6 +159325,30 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultUserLimitValue": {
+                      "nullable": true,
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    },
+                    "defaultUserLimitModel": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "defaultUserLimitCleanupInterval": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
                     },
                     "defaultAgentId": {
                       "nullable": true,
@@ -159408,7 +159534,6 @@
                     "logoDark",
                     "createdAt",
                     "metadata",
-                    "limitCleanupInterval",
                     "onboardingComplete",
                     "theme",
                     "customFont",
@@ -159424,6 +159549,9 @@
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultLlmApiKeyId",
+                    "defaultUserLimitValue",
+                    "defaultUserLimitModel",
+                    "defaultUserLimitCleanupInterval",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -159693,7 +159821,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update LLM settings (TOON compression, compression scope, limit cleanup interval)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmSettings:update`: Modify LLM settings",
+        "description": "Update LLM settings (TOON compression, compression scope, default user limit)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmSettings:update`: Modify LLM settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -159711,7 +159839,20 @@
                       "team"
                     ]
                   },
-                  "limitCleanupInterval": {
+                  "defaultUserLimitValue": {
+                    "nullable": true,
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
+                  "defaultUserLimitModel": {
+                    "nullable": true,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "defaultUserLimitCleanupInterval": {
                     "nullable": true,
                     "type": "string",
                     "enum": [
@@ -159759,17 +159900,6 @@
                     "metadata": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "limitCleanupInterval": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "1h",
-                        "12h",
-                        "24h",
-                        "1w",
-                        "1m"
-                      ]
                     },
                     "onboardingComplete": {
                       "type": "boolean"
@@ -159894,6 +160024,30 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultUserLimitValue": {
+                      "nullable": true,
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    },
+                    "defaultUserLimitModel": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "defaultUserLimitCleanupInterval": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
                     },
                     "defaultAgentId": {
                       "nullable": true,
@@ -160079,7 +160233,6 @@
                     "logoDark",
                     "createdAt",
                     "metadata",
-                    "limitCleanupInterval",
                     "onboardingComplete",
                     "theme",
                     "customFont",
@@ -160095,6 +160248,9 @@
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultLlmApiKeyId",
+                    "defaultUserLimitValue",
+                    "defaultUserLimitModel",
+                    "defaultUserLimitCleanupInterval",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -160449,17 +160605,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "limitCleanupInterval": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "1h",
-                        "12h",
-                        "24h",
-                        "1w",
-                        "1m"
-                      ]
-                    },
                     "onboardingComplete": {
                       "type": "boolean"
                     },
@@ -160583,6 +160728,30 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultUserLimitValue": {
+                      "nullable": true,
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    },
+                    "defaultUserLimitModel": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "defaultUserLimitCleanupInterval": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
                     },
                     "defaultAgentId": {
                       "nullable": true,
@@ -160768,7 +160937,6 @@
                     "logoDark",
                     "createdAt",
                     "metadata",
-                    "limitCleanupInterval",
                     "onboardingComplete",
                     "theme",
                     "customFont",
@@ -160784,6 +160952,9 @@
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultLlmApiKeyId",
+                    "defaultUserLimitValue",
+                    "defaultUserLimitModel",
+                    "defaultUserLimitCleanupInterval",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -161182,17 +161353,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "limitCleanupInterval": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "1h",
-                        "12h",
-                        "24h",
-                        "1w",
-                        "1m"
-                      ]
-                    },
                     "onboardingComplete": {
                       "type": "boolean"
                     },
@@ -161316,6 +161476,30 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultUserLimitValue": {
+                      "nullable": true,
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    },
+                    "defaultUserLimitModel": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "defaultUserLimitCleanupInterval": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
                     },
                     "defaultAgentId": {
                       "nullable": true,
@@ -161501,7 +161685,6 @@
                     "logoDark",
                     "createdAt",
                     "metadata",
-                    "limitCleanupInterval",
                     "onboardingComplete",
                     "theme",
                     "customFont",
@@ -161517,6 +161700,9 @@
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultLlmApiKeyId",
+                    "defaultUserLimitValue",
+                    "defaultUserLimitModel",
+                    "defaultUserLimitCleanupInterval",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -161840,17 +162026,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "limitCleanupInterval": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "1h",
-                        "12h",
-                        "24h",
-                        "1w",
-                        "1m"
-                      ]
-                    },
                     "onboardingComplete": {
                       "type": "boolean"
                     },
@@ -161974,6 +162149,30 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultUserLimitValue": {
+                      "nullable": true,
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    },
+                    "defaultUserLimitModel": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "defaultUserLimitCleanupInterval": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
                     },
                     "defaultAgentId": {
                       "nullable": true,
@@ -162159,7 +162358,6 @@
                     "logoDark",
                     "createdAt",
                     "metadata",
-                    "limitCleanupInterval",
                     "onboardingComplete",
                     "theme",
                     "customFont",
@@ -162175,6 +162373,9 @@
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultLlmApiKeyId",
+                    "defaultUserLimitValue",
+                    "defaultUserLimitModel",
+                    "defaultUserLimitCleanupInterval",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -162511,17 +162712,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "limitCleanupInterval": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "1h",
-                        "12h",
-                        "24h",
-                        "1w",
-                        "1m"
-                      ]
-                    },
                     "onboardingComplete": {
                       "type": "boolean"
                     },
@@ -162645,6 +162835,30 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultUserLimitValue": {
+                      "nullable": true,
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    },
+                    "defaultUserLimitModel": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "defaultUserLimitCleanupInterval": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
                     },
                     "defaultAgentId": {
                       "nullable": true,
@@ -162830,7 +163044,6 @@
                     "logoDark",
                     "createdAt",
                     "metadata",
-                    "limitCleanupInterval",
                     "onboardingComplete",
                     "theme",
                     "customFont",
@@ -162846,6 +163059,9 @@
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultLlmApiKeyId",
+                    "defaultUserLimitValue",
+                    "defaultUserLimitModel",
+                    "defaultUserLimitCleanupInterval",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -163149,17 +163365,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "limitCleanupInterval": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "1h",
-                        "12h",
-                        "24h",
-                        "1w",
-                        "1m"
-                      ]
-                    },
                     "onboardingComplete": {
                       "type": "boolean"
                     },
@@ -163283,6 +163488,30 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultUserLimitValue": {
+                      "nullable": true,
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    },
+                    "defaultUserLimitModel": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "defaultUserLimitCleanupInterval": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
                     },
                     "defaultAgentId": {
                       "nullable": true,
@@ -163468,7 +163697,6 @@
                     "logoDark",
                     "createdAt",
                     "metadata",
-                    "limitCleanupInterval",
                     "onboardingComplete",
                     "theme",
                     "customFont",
@@ -163484,6 +163712,9 @@
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultLlmApiKeyId",
+                    "defaultUserLimitValue",
+                    "defaultUserLimitModel",
+                    "defaultUserLimitCleanupInterval",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -164100,17 +164331,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "limitCleanupInterval": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "1h",
-                        "12h",
-                        "24h",
-                        "1w",
-                        "1m"
-                      ]
-                    },
                     "onboardingComplete": {
                       "type": "boolean"
                     },
@@ -164234,6 +164454,30 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultUserLimitValue": {
+                      "nullable": true,
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    },
+                    "defaultUserLimitModel": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "defaultUserLimitCleanupInterval": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
                     },
                     "defaultAgentId": {
                       "nullable": true,
@@ -164419,7 +164663,6 @@
                     "logoDark",
                     "createdAt",
                     "metadata",
-                    "limitCleanupInterval",
                     "onboardingComplete",
                     "theme",
                     "customFont",
@@ -164435,6 +164678,9 @@
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultLlmApiKeyId",
+                    "defaultUserLimitValue",
+                    "defaultUserLimitModel",
+                    "defaultUserLimitCleanupInterval",
                     "defaultAgentId",
                     "favicon",
                     "appName",

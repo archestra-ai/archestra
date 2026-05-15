@@ -31,6 +31,7 @@ interface WebSocketClientContext {
   userId: string;
   organizationId: string;
   userIsMcpServerAdmin: boolean;
+  userCanReadAuditLog?: boolean;
 }
 
 interface McpLogsSubscription {
@@ -72,6 +73,8 @@ const service = websocketService as unknown as {
   mcpExecSubscriptions: Map<WS, McpExecSubscription>;
   mcpDeploymentStatusSubscriptions: Map<WS, McpDeploymentStatusSubscription>;
   initBrowserStreamContextForTesting: () => void;
+  broadcastAuditLog: (event: Record<string, unknown>) => void;
+  wss: { clients: Set<WS> } | null;
 };
 
 // Initialize browser stream context once for all tests (config mock is already applied)
@@ -1550,5 +1553,108 @@ describe("websocket MCP exec", () => {
 
     expect(mockK8sWs1.close).toHaveBeenCalled();
     expect(service.mcpExecSubscriptions.get(ws)?.serverId).toBe(mcpServer2.id);
+  });
+});
+
+describe("broadcastAuditLog — org isolation + permission gating", () => {
+  let originalWss: { clients: Set<WS> } | null;
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    service.clientContexts.clear();
+    originalWss = service.wss;
+  });
+
+  afterEach(() => {
+    service.wss = originalWss;
+  });
+
+  function fakeClient(): WS {
+    return {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+    } as unknown as WS;
+  }
+
+  function installFakeWss(clients: WS[]) {
+    service.wss = { clients: new Set(clients) };
+  }
+
+  test("delivers only to clients in the same organization", () => {
+    const orgAClient = fakeClient();
+    const orgBClient = fakeClient();
+
+    service.clientContexts.set(orgAClient, {
+      userId: "user-a",
+      organizationId: "org-A",
+      userIsMcpServerAdmin: false,
+      userCanReadAuditLog: true,
+    });
+    service.clientContexts.set(orgBClient, {
+      userId: "user-b",
+      organizationId: "org-B",
+      userIsMcpServerAdmin: false,
+      userCanReadAuditLog: true,
+    });
+    installFakeWss([orgAClient, orgBClient]);
+
+    service.broadcastAuditLog({
+      id: "evt-1",
+      organizationId: "org-A",
+      action: "create",
+    });
+
+    expect(orgAClient.send).toHaveBeenCalledTimes(1);
+    expect(orgBClient.send).not.toHaveBeenCalled();
+
+    const payload = JSON.parse(
+      (orgAClient.send as ReturnType<typeof vi.fn>).mock.calls[0][0] as string,
+    ) as { type: string; payload: { event: { organizationId: string } } };
+    expect(payload.type).toBe("audit_log");
+    expect(payload.payload.event.organizationId).toBe("org-A");
+  });
+
+  test("does not deliver to admins without auditLog:read even in the same org", () => {
+    const adminClient = fakeClient();
+    const memberClient = fakeClient();
+
+    service.clientContexts.set(adminClient, {
+      userId: "admin",
+      organizationId: "org-A",
+      userIsMcpServerAdmin: false,
+      userCanReadAuditLog: true,
+    });
+    service.clientContexts.set(memberClient, {
+      userId: "member",
+      organizationId: "org-A",
+      userIsMcpServerAdmin: false,
+      userCanReadAuditLog: false,
+    });
+    installFakeWss([adminClient, memberClient]);
+
+    service.broadcastAuditLog({
+      id: "evt-2",
+      organizationId: "org-A",
+      action: "update",
+    });
+
+    expect(adminClient.send).toHaveBeenCalledTimes(1);
+    expect(memberClient.send).not.toHaveBeenCalled();
+  });
+
+  test("skips events with no organizationId rather than broadcasting to all", () => {
+    const client = fakeClient();
+    service.clientContexts.set(client, {
+      userId: "admin",
+      organizationId: "org-A",
+      userIsMcpServerAdmin: false,
+      userCanReadAuditLog: true,
+    });
+    installFakeWss([client]);
+
+    service.broadcastAuditLog({ id: "evt-3", action: "create" });
+
+    expect(client.send).not.toHaveBeenCalled();
   });
 });

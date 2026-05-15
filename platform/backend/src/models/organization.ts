@@ -23,16 +23,6 @@ class OrganizationModel {
   }
 
   /**
-   * Return the IDs of all organizations in the database.
-   */
-  static async findAllIds(): Promise<string[]> {
-    const rows = await db
-      .select({ id: schema.organizationsTable.id })
-      .from(schema.organizationsTable);
-    return rows.map((r) => r.id);
-  }
-
-  /**
    * Get or create the default organization
    */
   static async getOrCreateDefaultOrganization(): Promise<Organization> {

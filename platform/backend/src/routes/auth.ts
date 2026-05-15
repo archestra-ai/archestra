@@ -141,11 +141,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Let better-auth handle the member deletion
       const url = new URL(request.url, `http://${request.headers.host}`);
-      const headers = new Headers();
-
-      Object.entries(request.headers).forEach(([key, value]) => {
-        if (value) headers.append(key, value.toString());
-      });
+      const headers = buildBetterAuthForwardedHeaders(request);
 
       const req = new Request(url.toString(), {
         method: request.method,
@@ -309,13 +305,10 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      const headers = new Headers();
-      Object.entries(request.headers).forEach(([key, value]) => {
-        if (!value || shouldSkipForwardedAuthHeader(key)) {
-          return;
-        }
-        headers.append(key, value.toString());
-      });
+      const headers = buildBetterAuthForwardedHeaders(
+        request,
+        shouldSkipForwardedAuthHeader,
+      );
 
       const req = new Request(url.toString(), {
         method: request.method,
@@ -437,10 +430,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const tokenEndpointOrigin = getPublicRequestOrigin(request);
       const url = new URL(request.url, tokenEndpointOrigin);
-      const headers = new Headers();
-      Object.entries(request.headers).forEach(([key, value]) => {
-        if (value) headers.append(key, value.toString());
-      });
+      const headers = buildBetterAuthForwardedHeaders(request);
 
       const contentType = request.headers["content-type"] || "";
       const serializedBody = contentType.includes(
@@ -530,10 +520,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async handler(request, reply) {
       const url = new URL(request.url, `http://${request.headers.host}`);
-      const headers = new Headers();
-      Object.entries(request.headers).forEach(([key, value]) => {
-        if (value) headers.append(key, value.toString());
-      });
+      const headers = buildBetterAuthForwardedHeaders(request);
 
       const req = new Request(url.toString(), {
         method: request.method,
@@ -620,10 +607,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       body.token_endpoint_auth_method = "none";
 
       const url = new URL(request.url, `http://${request.headers.host}`);
-      const headers = new Headers();
-      Object.entries(request.headers).forEach(([key, value]) => {
-        if (value) headers.append(key, value.toString());
-      });
+      const headers = buildBetterAuthForwardedHeaders(request);
 
       const req = new Request(url.toString(), {
         method: request.method,
@@ -674,11 +658,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async handler(request, reply) {
       const url = new URL(request.url, `http://${request.headers.host}`);
-      const headers = new Headers();
-
-      Object.entries(request.headers).forEach(([key, value]) => {
-        if (value) headers.append(key, value.toString());
-      });
+      const headers = buildBetterAuthForwardedHeaders(request);
 
       const req = new Request(url.toString(), {
         method: request.method,
@@ -708,17 +688,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async handler(request, reply) {
       const url = new URL(request.url, `http://${request.headers.host}`);
-      const headers = new Headers();
-
-      Object.entries(request.headers).forEach(([key, value]) => {
-        if (value) headers.append(key, value.toString());
-      });
-
-      // Forward Fastify's resolved client IP so the auth audit hook can record
-      // it in non-proxied environments where x-forwarded-for is absent.
-      if (request.ip && !headers.has("x-archestra-client-ip")) {
-        headers.set("x-archestra-client-ip", request.ip);
-      }
+      const headers = buildBetterAuthForwardedHeaders(request);
 
       // Handle body based on content type
       // SAML callbacks use application/x-www-form-urlencoded
@@ -967,6 +937,35 @@ function shouldSkipForwardedAuthHeader(headerName: string): boolean {
     normalizedHeaderName === "connection" ||
     normalizedHeaderName === "transfer-encoding"
   );
+}
+
+/**
+ * Build the Headers object forwarded into the better-auth Web `Request`.
+ *
+ * - Strips any client-supplied `x-archestra-client-ip` and re-injects Fastify's
+ *   resolved `request.ip` in its place. This is the only IP header
+ *   `resolveAuthClientIp` trusts; without this sanitization any caller could
+ *   forge the IP recorded against their own auth audit rows simply by setting
+ *   the header themselves.
+ * - Skips empty header values.
+ * - Skips headers rejected by the optional `skipHeader` predicate (used by
+ *   `oauth2/authorize` to drop hop-by-hop headers).
+ */
+function buildBetterAuthForwardedHeaders(
+  request: { headers: Record<string, unknown>; ip?: string | null },
+  skipHeader?: (headerName: string) => boolean,
+): Headers {
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(request.headers)) {
+    if (!value) continue;
+    if (key.toLowerCase() === "x-archestra-client-ip") continue;
+    if (skipHeader?.(key)) continue;
+    headers.append(key, String(value));
+  }
+  if (request.ip) {
+    headers.set("x-archestra-client-ip", request.ip);
+  }
+  return headers;
 }
 
 async function applyOrganizationOAuthTokenLifetimeToResponse(params: {

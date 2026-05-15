@@ -697,4 +697,60 @@ describe("AuditLogModel", () => {
       expect(second).toBe(0);
     });
   });
+
+  describe("deleteAllOlderThan", () => {
+    test("deletes rows from every organization in one query", async ({
+      makeOrganization,
+    }) => {
+      const org1 = await makeOrganization();
+      const org2 = await makeOrganization();
+
+      await AuditLogModel.create({
+        ...BASE_PAYLOAD,
+        organizationId: org1.id,
+        resourceId: "org1-row",
+      });
+      await AuditLogModel.create({
+        ...BASE_PAYLOAD,
+        organizationId: org2.id,
+        resourceId: "org2-row",
+      });
+
+      const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      const deleted = await AuditLogModel.deleteAllOlderThan(tomorrow);
+
+      expect(deleted).toBe(2);
+
+      const org1Result = await AuditLogModel.findPaginated({
+        organizationId: org1.id,
+        limit: 100,
+        offset: 0,
+      });
+      const org2Result = await AuditLogModel.findPaginated({
+        organizationId: org2.id,
+        limit: 100,
+        offset: 0,
+      });
+      expect(org1Result.data).toHaveLength(0);
+      expect(org2Result.data).toHaveLength(0);
+    });
+
+    test("returns 0 when no row predates the cutoff", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      await AuditLogModel.create({ ...BASE_PAYLOAD, organizationId: org.id });
+
+      const pastDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const deleted = await AuditLogModel.deleteAllOlderThan(pastDate);
+
+      expect(deleted).toBe(0);
+      const result = await AuditLogModel.findPaginated({
+        organizationId: org.id,
+        limit: 100,
+        offset: 0,
+      });
+      expect(result.data).toHaveLength(1);
+    });
+  });
 });

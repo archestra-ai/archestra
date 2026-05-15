@@ -1622,21 +1622,27 @@ async function writeAuthAuditLog(params: {
 
 /**
  * Resolve the client IP for auth audit events. Better-auth hands us a Web
- * `Request`, which has no socket-level remote address — so we walk the usual
- * reverse-proxy headers and fall back to `x-archestra-client-ip`, which the
- * `/api/auth/*` Fastify catch-all injects from `request.ip`.
+ * `Request` with no socket-level remote address.
+ *
+ * Priority:
+ * 1. `x-archestra-client-ip` — injected by the Fastify auth route handlers
+ *    from `request.ip` after stripping any client-supplied copy. When present
+ *    this is the most trustworthy source because Fastify has already applied
+ *    the `trustProxy` / `ARCHESTRA_TRUST_PROXY` setting.
+ * 2. `x-forwarded-for` — forwarded verbatim from the Fastify request. Used as
+ *    a fallback for deployments where `socket.remoteAddress` is unavailable
+ *    (e.g. Unix-socket listeners) or where `ARCHESTRA_TRUST_PROXY` has not
+ *    been configured. Note: without a trusted-proxy config this value can be
+ *    set by clients; IPs here are informational and not used for access control.
  */
 function resolveAuthClientIp(request: Request | undefined): string | null {
   if (!request) return null;
+  const injected = request.headers.get("x-archestra-client-ip");
+  if (injected) return injected;
   const forwardedFor = request.headers.get("x-forwarded-for");
   if (forwardedFor) {
     const first = forwardedFor.split(",")[0]?.trim();
     if (first) return first;
   }
-  return (
-    request.headers.get("x-real-ip") ??
-    request.headers.get("cf-connecting-ip") ??
-    request.headers.get("x-archestra-client-ip") ??
-    null
-  );
+  return null;
 }

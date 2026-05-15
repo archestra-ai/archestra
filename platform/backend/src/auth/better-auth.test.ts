@@ -2309,7 +2309,7 @@ describe("auth event audit logging", () => {
     createSpy.mockRestore();
   });
 
-  describe("resolveAuthClientIp — header priority", () => {
+  describe("resolveAuthClientIp — x-archestra-client-ip preferred, x-forwarded-for as fallback", () => {
     // Typed loosely on purpose — the fixture types are not exported and we
     // only need their runtime contracts here.
     async function captureIp(
@@ -2359,51 +2359,41 @@ describe("auth event audit logging", () => {
       return data[0]?.ipAddress;
     }
 
-    test("x-forwarded-for first hop wins over every other header", async ({
+    test("records x-archestra-client-ip when set (the Fastify-injected, server-controlled header)", async ({
       makeUser,
       makeOrganization,
       makeMember,
     }) => {
       const ip = await captureIp(makeUser, makeOrganization, makeMember, {
-        "x-forwarded-for": "203.0.113.10, 10.0.0.1, 10.0.0.2",
-        "x-real-ip": "198.51.100.5",
-        "cf-connecting-ip": "198.51.100.7",
         "x-archestra-client-ip": "127.0.0.1",
+      });
+      expect(ip).toBe("127.0.0.1");
+    });
+
+    test("falls back to x-forwarded-for when x-archestra-client-ip is absent", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      // x-forwarded-for is used as a fallback for environments where
+      // socket.remoteAddress is unavailable or ARCHESTRA_TRUST_PROXY has not
+      // been configured. The value is informational — not used for access
+      // control — so recording it is better than recording null.
+      const ip = await captureIp(makeUser, makeOrganization, makeMember, {
+        "x-forwarded-for": "203.0.113.10",
       });
       expect(ip).toBe("203.0.113.10");
     });
 
-    test("falls through to x-real-ip when x-forwarded-for is missing", async ({
+    test("client-supplied x-forwarded-for never wins over the server-set header", async ({
       makeUser,
       makeOrganization,
       makeMember,
     }) => {
       const ip = await captureIp(makeUser, makeOrganization, makeMember, {
+        "x-forwarded-for": "203.0.113.10",
         "x-real-ip": "198.51.100.5",
         "cf-connecting-ip": "198.51.100.7",
-        "x-archestra-client-ip": "127.0.0.1",
-      });
-      expect(ip).toBe("198.51.100.5");
-    });
-
-    test("falls through to cf-connecting-ip when XFF / x-real-ip are missing", async ({
-      makeUser,
-      makeOrganization,
-      makeMember,
-    }) => {
-      const ip = await captureIp(makeUser, makeOrganization, makeMember, {
-        "cf-connecting-ip": "198.51.100.7",
-        "x-archestra-client-ip": "127.0.0.1",
-      });
-      expect(ip).toBe("198.51.100.7");
-    });
-
-    test("uses x-archestra-client-ip as the final fallback (Fastify injection)", async ({
-      makeUser,
-      makeOrganization,
-      makeMember,
-    }) => {
-      const ip = await captureIp(makeUser, makeOrganization, makeMember, {
         "x-archestra-client-ip": "127.0.0.1",
       });
       expect(ip).toBe("127.0.0.1");

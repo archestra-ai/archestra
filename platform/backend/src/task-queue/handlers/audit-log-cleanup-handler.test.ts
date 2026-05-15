@@ -1,11 +1,9 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-const mockFindAllIds = vi.hoisted(() => vi.fn().mockResolvedValue([]));
-const mockDeleteOlderThan = vi.hoisted(() => vi.fn().mockResolvedValue(0));
+const mockDeleteAllOlderThan = vi.hoisted(() => vi.fn().mockResolvedValue(0));
 
 vi.mock("@/models", () => ({
-  OrganizationModel: { findAllIds: mockFindAllIds },
-  AuditLogModel: { deleteOlderThan: mockDeleteOlderThan },
+  AuditLogModel: { deleteAllOlderThan: mockDeleteAllOlderThan },
 }));
 
 const mockConfig = vi.hoisted(() => ({
@@ -34,106 +32,63 @@ describe("handleAuditLogCleanup", () => {
 
     await handleAuditLogCleanup();
 
-    expect(mockFindAllIds).not.toHaveBeenCalled();
-    expect(mockDeleteOlderThan).not.toHaveBeenCalled();
+    expect(mockDeleteAllOlderThan).not.toHaveBeenCalled();
     expect(mockLogger.info).toHaveBeenCalledWith(
       expect.objectContaining({ retentionDays: 0 }),
       expect.stringContaining("disabled"),
     );
   });
 
-  test("does nothing when there are no organizations", async () => {
-    mockFindAllIds.mockResolvedValue([]);
-
-    await handleAuditLogCleanup();
-
-    expect(mockDeleteOlderThan).not.toHaveBeenCalled();
-    expect(mockLogger.info).toHaveBeenCalledWith(
-      expect.objectContaining({ orgs: 0, deleted: 0, retentionDays: 180 }),
-      expect.any(String),
-    );
-  });
-
-  test("calls deleteOlderThan for each organization with the correct cutoff date", async () => {
-    mockFindAllIds.mockResolvedValue(["org-1", "org-2"]);
-    mockDeleteOlderThan.mockResolvedValue(3);
+  test("runs a single DELETE across all orgs with the correct cutoff date", async () => {
+    mockDeleteAllOlderThan.mockResolvedValue(15);
 
     const before = Date.now();
     await handleAuditLogCleanup();
     const after = Date.now();
 
-    expect(mockDeleteOlderThan).toHaveBeenCalledTimes(2);
+    expect(mockDeleteAllOlderThan).toHaveBeenCalledTimes(1);
 
-    const call1 = mockDeleteOlderThan.mock.calls[0][0];
-    expect(call1.organizationId).toBe("org-1");
-    const cutoff1 = call1.before.getTime();
+    const cutoff = (mockDeleteAllOlderThan.mock.calls[0][0] as Date).getTime();
     const expectedMin = before - 180 * 24 * 60 * 60 * 1000;
     const expectedMax = after - 180 * 24 * 60 * 60 * 1000;
-    expect(cutoff1).toBeGreaterThanOrEqual(expectedMin);
-    expect(cutoff1).toBeLessThanOrEqual(expectedMax);
-
-    expect(mockDeleteOlderThan.mock.calls[1][0].organizationId).toBe("org-2");
+    expect(cutoff).toBeGreaterThanOrEqual(expectedMin);
+    expect(cutoff).toBeLessThanOrEqual(expectedMax);
   });
 
-  test("sums deleted counts across organizations and logs a summary", async () => {
-    mockFindAllIds.mockResolvedValue(["org-1", "org-2", "org-3"]);
-    mockDeleteOlderThan
-      .mockResolvedValueOnce(5)
-      .mockResolvedValueOnce(10)
-      .mockResolvedValueOnce(0);
+  test("logs the deleted count and retention window on completion", async () => {
+    mockDeleteAllOlderThan.mockResolvedValue(42);
 
     await handleAuditLogCleanup();
 
     expect(mockLogger.info).toHaveBeenCalledWith(
-      expect.objectContaining({ orgs: 3, deleted: 15, retentionDays: 180 }),
-      expect.any(String),
+      expect.objectContaining({ deleted: 42, retentionDays: 180 }),
+      "audit-log retention sweep: complete",
     );
   });
 
-  test("logs error for a failing org but continues processing remaining orgs", async () => {
-    mockFindAllIds.mockResolvedValue(["org-bad", "org-good"]);
-    mockDeleteOlderThan
-      .mockRejectedValueOnce(new Error("DB error"))
-      .mockResolvedValueOnce(7);
+  test("logs an error when the DELETE fails and does not throw", async () => {
+    mockDeleteAllOlderThan.mockRejectedValueOnce(new Error("DB error"));
 
-    await handleAuditLogCleanup();
+    await expect(handleAuditLogCleanup()).resolves.toBeUndefined();
 
     expect(mockLogger.error).toHaveBeenCalledWith(
-      expect.objectContaining({ organizationId: "org-bad" }),
-      expect.any(String),
-    );
-    expect(mockDeleteOlderThan).toHaveBeenCalledTimes(2);
-    expect(mockLogger.info).toHaveBeenCalledWith(
-      expect.objectContaining({ orgs: 2, deleted: 7 }),
-      expect.any(String),
+      expect.objectContaining({ error: "DB error", retentionDays: 180 }),
+      "audit-log retention sweep: failed",
     );
   });
 
   test("uses the configured retentionDays to compute the cutoff", async () => {
     mockConfig.auditLog.retentionDays = 30;
-    mockFindAllIds.mockResolvedValue(["org-1"]);
-    mockDeleteOlderThan.mockResolvedValue(2);
+    mockDeleteAllOlderThan.mockResolvedValue(2);
 
     const before = Date.now();
     await handleAuditLogCleanup();
     const after = Date.now();
 
-    const cutoff = mockDeleteOlderThan.mock.calls[0][0].before.getTime();
+    const cutoff = (mockDeleteAllOlderThan.mock.calls[0][0] as Date).getTime();
     const expectedMin = before - 30 * 24 * 60 * 60 * 1000;
     const expectedMax = after - 30 * 24 * 60 * 60 * 1000;
     expect(cutoff).toBeGreaterThanOrEqual(expectedMin);
     expect(cutoff).toBeLessThanOrEqual(expectedMax);
-  });
-
-  test("completion log uses the stable audit-log retention sweep message", async () => {
-    mockFindAllIds.mockResolvedValue(["org-1"]);
-    mockDeleteOlderThan.mockResolvedValue(0);
-
-    await handleAuditLogCleanup();
-
-    expect(mockLogger.info).toHaveBeenCalledWith(
-      expect.objectContaining({ orgs: 1, deleted: 0, retentionDays: 180 }),
-      "audit-log retention sweep: complete",
-    );
   });
 });

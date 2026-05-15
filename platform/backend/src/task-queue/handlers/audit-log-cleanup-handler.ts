@@ -1,6 +1,6 @@
 import config from "@/config";
 import logger from "@/logging";
-import { AuditLogModel, OrganizationModel } from "@/models";
+import { AuditLogModel } from "@/models";
 
 export async function handleAuditLogCleanup(): Promise<void> {
   const { retentionDays } = config.auditLog;
@@ -13,34 +13,23 @@ export async function handleAuditLogCleanup(): Promise<void> {
     return;
   }
 
-  const orgIds = await OrganizationModel.findAllIds();
   const before = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
-  let totalDeleted = 0;
 
-  for (const organizationId of orgIds) {
-    try {
-      const deleted = await AuditLogModel.deleteOlderThan({
-        organizationId,
-        before,
-      });
-      totalDeleted += deleted;
-    } catch (error) {
-      logger.error(
-        {
-          organizationId,
-          error: error instanceof Error ? error.message : String(error),
-        },
-        "audit-log retention sweep: failed for organization",
-      );
-    }
+  try {
+    // Single DELETE across all orgs — the index on `created_at` makes this
+    // cheap, and one query is much friendlier than N round-trips per org.
+    const deleted = await AuditLogModel.deleteAllOlderThan(before);
+    logger.info(
+      { deleted, retentionDays, before: before.toISOString() },
+      "audit-log retention sweep: complete",
+    );
+  } catch (error) {
+    logger.error(
+      {
+        error: error instanceof Error ? error.message : String(error),
+        retentionDays,
+      },
+      "audit-log retention sweep: failed",
+    );
   }
-
-  logger.info(
-    {
-      orgs: orgIds.length,
-      deleted: totalDeleted,
-      retentionDays,
-    },
-    "audit-log retention sweep: complete",
-  );
 }

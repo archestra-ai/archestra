@@ -143,6 +143,19 @@ class AuditLogModel {
       .returning({ id: schema.auditLogsTable.id });
     return deleted.length;
   }
+
+  /**
+   * Delete every audit row created strictly before `before`, across all
+   * organizations. Used by the retention sweep so it can run as a single
+   * query instead of N round-trips per org.
+   */
+  static async deleteAllOlderThan(before: Date): Promise<number> {
+    const deleted = await db
+      .delete(schema.auditLogsTable)
+      .where(lt(schema.auditLogsTable.createdAt, before))
+      .returning({ id: schema.auditLogsTable.id });
+    return deleted.length;
+  }
 }
 
 export default AuditLogModel;

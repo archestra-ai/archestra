@@ -199,18 +199,34 @@ async function resolveAuditedResourceId(
   const primary = cfg.resourceIdParam ?? "id";
   const v = params[primary];
   if (typeof v === "string") return v;
+  // If the route explicitly names a non-default param (e.g. `agentId`,
+  // `roleId`), do NOT silently fall back to `params.id` — nested routes like
+  // `/api/agents/:agentId/tools/:id` would otherwise record the *child* id
+  // under the parent resource's resourceType.
+  if (cfg.resourceIdParam) return null;
   const fallback = params.id;
   return typeof fallback === "string" ? fallback : null;
 }
 
+/**
+ * Resolve the client IP for an audited request.
+ *
+ * Prefers `request.ip` — Fastify applies the `trustProxy` setting so this
+ * already incorporates `x-forwarded-for` when a trusted proxy is configured.
+ * Falls back to the first hop in `x-forwarded-for` for environments where
+ * `socket.remoteAddress` is unavailable (e.g. Unix-socket listeners) and for
+ * setups that have a proxy but haven't configured `ARCHESTRA_TRUST_PROXY`.
+ */
 function extractIp(request: {
   ip: string;
   headers: Record<string, string | string[] | undefined>;
 }): string | null {
+  if (request.ip) return request.ip;
   const forwarded = request.headers["x-forwarded-for"];
-  if (typeof forwarded === "string") return forwarded.split(",")[0].trim();
+  if (typeof forwarded === "string")
+    return forwarded.split(",")[0]?.trim() || null;
   if (Array.isArray(forwarded)) return forwarded[0] ?? null;
-  return request.ip ?? null;
+  return null;
 }
 
 async function resolvePostState(params: {

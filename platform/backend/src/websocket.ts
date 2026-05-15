@@ -901,10 +901,27 @@ class WebSocketService {
 
   broadcastAuditLog(event: Record<string, unknown>): void {
     if (!this.wss) return;
-    this.sendToClients(
-      { type: "audit_log", payload: { event } },
-      (client) => this.clientContexts.get(client)?.userCanReadAuditLog === true,
-    );
+    const eventOrganizationId =
+      typeof event.organizationId === "string" ? event.organizationId : null;
+    if (!eventOrganizationId) {
+      logger.warn(
+        { event },
+        "broadcastAuditLog: skipping event with missing organizationId",
+      );
+      return;
+    }
+    // Scope broadcasts to the org the event belongs to. Without this filter,
+    // every admin (regardless of org) would receive every audit row — a
+    // cross-tenant data leak in multi-organization deployments.
+    // NOTE: userCanReadAuditLog is captured at WS connect time; a permission
+    // revocation only takes effect on reconnect.
+    this.sendToClients({ type: "audit_log", payload: { event } }, (client) => {
+      const ctx = this.clientContexts.get(client);
+      return (
+        ctx?.userCanReadAuditLog === true &&
+        ctx?.organizationId === eventOrganizationId
+      );
+    });
   }
 }
 

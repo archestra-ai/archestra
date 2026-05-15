@@ -47,6 +47,15 @@ vi.mock("./audit-log-registry", () => {
     },
     "/api/no-fetch-things": { resourceType: "noFetchThing" },
     "/api/no-fetch-things/:id": { resourceType: "noFetchThing" },
+    // Parent route that wants the `agentId` param (NOT `id`). Used to verify
+    // that nested routes like `/api/agents/:agentId/tools/:id` don't
+    // accidentally fall back to `params.id` (the child resource id).
+    "/api/agents/:agentId": {
+      resourceType: "agent",
+      resourceIdParam: "agentId",
+      fetchById: async (id: string) =>
+        id === KNOWN_RESOURCE_ID ? { id, name: "Some Agent" } : null,
+    },
   };
 
   function resolveAuditableRouteConfig(
@@ -136,6 +145,11 @@ describe("registerAuditLogHook", () => {
 
     // Not in AUDITABLE_ROUTES — exercises registry gap row (resource_type null).
     app.post("/api/orphan-events", async () => ({ ok: true }));
+
+    // Nested route under an agent — exercises the resourceIdParam fallback
+    // behavior (must NOT silently substitute `params.id` for the missing
+    // `agentId`).
+    app.delete("/api/agents/:agentId/tools/:id", async () => ({ ok: true }));
 
     // HEAD / OPTIONS — non-mutating verbs (use distinct URLs to avoid
     // conflict with the GET /api/things that Fastify auto-promotes to HEAD).
@@ -539,6 +553,62 @@ describe("registerAuditLogHook", () => {
       ).toBe(true);
 
       throwing.mockRestore();
+    });
+  });
+
+  describe("resourceIdParam — nested routes use the named param", () => {
+    test("nested route /api/agents/:agentId/tools/:id records the agentId, not the tool :id", async () => {
+      // The registry maps /api/agents/:agentId with resourceIdParam=agentId.
+      // A nested request resolves to that parent config via longest-prefix
+      // walking. Without the resourceIdParam guard, the hook would have
+      // silently fallen back to params.id (the *tool* id) and recorded the
+      // wrong resource id under resourceType=agent.
+      const agentId = KNOWN_RESOURCE_ID;
+      const toolId = "00000000-0000-0000-0000-000000000999";
+      const res = await app.inject({
+        method: "DELETE",
+        url: `/api/agents/${agentId}/tools/${toolId}`,
+      });
+      expect(res.statusCode).toBe(200);
+      await new Promise((r) => setTimeout(r, 50));
+
+      const { data } = await AuditLogModel.findPaginated({
+        organizationId: orgId,
+        limit: 10,
+        offset: 0,
+      });
+      expect(data).toHaveLength(1);
+      expect(data[0].resourceType).toBe("agent");
+      expect(data[0].resourceId).toBe(agentId);
+      expect(data[0].resourceId).not.toBe(toolId);
+    });
+  });
+
+  describe("IP address", () => {
+    test("records request.ip when available (trusts Fastify's resolved IP over forwarded headers)", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/things",
+        headers: {
+          "x-forwarded-for": "1.2.3.4",
+          "x-real-ip": "5.6.7.8",
+        },
+      });
+      expect(res.statusCode).toBe(200);
+      await new Promise((r) => setTimeout(r, 50));
+
+      const { data } = await AuditLogModel.findPaginated({
+        organizationId: orgId,
+        limit: 10,
+        offset: 0,
+      });
+
+      expect(data).toHaveLength(1);
+      // With trustProxy=false, request.ip is the socket address (127.0.0.1
+      // under fastify.inject) and takes priority over forwarded headers.
+      expect(data[0].ipAddress).not.toBeNull();
+      expect(data[0].ipAddress).not.toBe("1.2.3.4");
+      expect(data[0].ipAddress).not.toBe("5.6.7.8");
     });
   });
 

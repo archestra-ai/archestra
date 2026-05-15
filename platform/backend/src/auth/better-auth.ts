@@ -410,6 +410,15 @@ export const auth = betterAuth({
   },
 });
 
+/**
+ * Per-request stashes used to ferry data from the `before` hook to the
+ * `after` hook (prior member role, removed-member identity, sign-out session).
+ *
+ * Keyed by the better-auth `Request`. We use WeakMap so that if the `after`
+ * hook never fires (client abort, throw inside better-auth, etc.) the stash
+ * is reclaimed once the request object is GC'd — no manual cleanup needed.
+ */
+
 type SignOutAuditStash = {
   user: { id: string; email: string; name?: string | null };
   session: { id: string; activeOrganizationId?: string | null };
@@ -947,9 +956,20 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         const headers = new Headers(request.headers as HeadersInit);
         const resolved = await auth.api.getSession({ headers });
         if (resolved?.user && resolved?.session) {
-          // Find the invitation that was just created so we have its id
+          // Find the invitation that was just created so we have its id.
+          // The same email may have older canceled/expired rows, so narrow to
+          // the org + pending status and prefer the most recent.
           const invitation = await InvitationModel.findByEmail(email).then(
-            (rows) => rows.find((r) => r.organizationId === orgId) ?? null,
+            (rows) =>
+              rows
+                .filter(
+                  (r) => r.organizationId === orgId && r.status === "pending",
+                )
+                .sort(
+                  (a, b) =>
+                    (b.createdAt?.getTime() ?? 0) -
+                    (a.createdAt?.getTime() ?? 0),
+                )[0] ?? null,
           );
           const row = await AuditLogModel.create({
             organizationId: orgId,
@@ -1574,6 +1594,8 @@ async function writeAuthAuditLog(params: {
     }
   } else if (action === "sign_out") {
     postState = { sessionId: session.id, ended: true };
+  } else if (action === "sign_up") {
+    postState = { sessionId: session.id, userId: user.id };
   }
 
   const row = await AuditLogModel.create({

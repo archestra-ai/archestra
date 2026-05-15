@@ -189,6 +189,46 @@ describe("registerAuditLogHook", () => {
     });
   });
 
+  describe("POST — id capture from envelope responses", () => {
+    test("captures id from `{ data: { id } }` envelope so post_state is populated", async () => {
+      // Mount a fresh route that returns the wrapped shape some routes use.
+      const envelopeApp = createFastifyInstance();
+      envelopeApp.addHook("onRequest", async (request) => {
+        (request as typeof request & { user: User }).user = user;
+        (
+          request as typeof request & { organizationId: string }
+        ).organizationId = orgId;
+      });
+      registerAuditLogHook(envelopeApp);
+      envelopeApp.post("/api/things", async () => ({
+        data: { id: KNOWN_RESOURCE_ID, name: "Wrapped Thing" },
+      }));
+      await envelopeApp.ready();
+
+      const res = await envelopeApp.inject({
+        method: "POST",
+        url: "/api/things",
+      });
+      expect(res.statusCode).toBe(200);
+      await new Promise((r) => setTimeout(r, 50));
+
+      const { data } = await AuditLogModel.findPaginated({
+        organizationId: orgId,
+        limit: 10,
+        offset: 0,
+      });
+
+      expect(data).toHaveLength(1);
+      expect(data[0].resourceId).toBe(KNOWN_RESOURCE_ID);
+      expect(data[0].postState).toEqual({
+        id: KNOWN_RESOURCE_ID,
+        name: "Existing Thing",
+      });
+
+      await envelopeApp.close();
+    });
+  });
+
   describe("PATCH — update action", () => {
     test("writes one row with action=update, both prior_state and post_state populated", async () => {
       const res = await app.inject({

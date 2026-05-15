@@ -222,7 +222,8 @@ class OrganizationModel {
       appName: org.appName ?? null,
       ogDescription: org.ogDescription ?? null,
       footerText: org.footerText ?? null,
-      limitCleanupInterval: org.limitCleanupInterval,
+      defaultUserLimitCleanupInterval:
+        org.defaultUserLimitCleanupInterval ?? null,
       onboardingComplete: org.onboardingComplete,
       globalToolPolicy: org.globalToolPolicy,
       compressionScope: org.compressionScope,

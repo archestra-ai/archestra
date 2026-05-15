@@ -2195,7 +2195,10 @@ describe("auth event audit logging", () => {
     expect(auditRows[0].organizationId).toBe(org.id);
     expect(auditRows[0].httpMethod).toBe("POST");
     expect(auditRows[0].actorEmail).toBe(newUser.email);
-    expect(auditRows[0].postState).toBeNull();
+    expect(auditRows[0].postState).toEqual({
+      sessionId: "sess-signup-audit",
+      userId: newUser.id,
+    });
     expect(auditRows[0].priorState).toBeNull();
   });
 
@@ -2521,6 +2524,67 @@ describe("auth event audit logging", () => {
       role: "member",
     });
     expect(rows[0].priorState).toBeNull();
+  });
+
+  test("invite-member picks the most recent pending invitation when stale rows exist for the same email", async ({
+    makeUser,
+    makeOrganization,
+    makeInvitation,
+  }) => {
+    const admin = await makeUser({ email: "stale-audit-admin@example.com" });
+    const org = await makeOrganization();
+    // Older invitation that has since been canceled — must NOT be picked.
+    const stale = await makeInvitation(org.id, admin.id, {
+      email: "stale-audit-user@example.com",
+      status: "canceled",
+      role: "member",
+    });
+    // The freshly-created pending invitation — what the audit row should point at.
+    const fresh = await makeInvitation(org.id, admin.id, {
+      email: "stale-audit-user@example.com",
+      status: "pending",
+      role: "editor",
+    });
+
+    const getSessionSpy = vi
+      .spyOn(auth.api, "getSession")
+      .mockResolvedValueOnce({
+        user: { id: admin.id, email: admin.email, name: admin.name },
+        session: { id: "sess-stale-audit", activeOrganizationId: org.id },
+      } as unknown as NonNullable<
+        Awaited<ReturnType<typeof auth.api.getSession>>
+      >);
+
+    const ctx = createMockContext({
+      path: "/organization/invite-member",
+      method: "POST",
+      body: {
+        email: "stale-audit-user@example.com",
+        role: "editor",
+        organizationId: org.id,
+      },
+      request: new Request(
+        "http://localhost/api/auth/organization/invite-member",
+        { method: "POST" },
+      ),
+    });
+
+    await handleAfterHook(ctx);
+    await waitForAuditWrite();
+    getSessionSpy.mockRestore();
+
+    const { data } = await AuditLogModel.findPaginated({
+      organizationId: org.id,
+      limit: 10,
+      offset: 0,
+    });
+
+    const rows = data.filter(
+      (r) => r.resourceType === "invitation" && r.action === "create",
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].resourceId).toBe(fresh.id);
+    expect(rows[0].resourceId).not.toBe(stale.id);
   });
 
   test("cancel-invitation produces audit row with action=delete on invitation", async ({

@@ -38,16 +38,16 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
     const cfg = resolveAuditableRouteConfig(routePattern);
     if (!cfg?.fetchById) return payload;
 
+    // Skip oversized payloads (e.g. file upload responses) — the `id` we
+    // need lives near the top of typical create responses; large bodies just
+    // burn CPU on JSON.parse.
+    if (payload.length > AUDIT_ONSEND_MAX_PARSE_BYTES) return payload;
+
     try {
       const parsed = JSON.parse(payload) as unknown;
-      if (
-        parsed !== null &&
-        typeof parsed === "object" &&
-        !Array.isArray(parsed) &&
-        "id" in parsed &&
-        typeof (parsed as { id: unknown }).id === "string"
-      ) {
-        request.auditResponseBodyId = (parsed as { id: string }).id;
+      const id = extractCreatedResourceId(parsed);
+      if (id) {
+        request.auditResponseBodyId = id;
       }
     } catch {
       // payload is not JSON (e.g. streaming response) — skip
@@ -113,6 +113,28 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
 // === Internal helpers
 
 const AUDIT_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/** Cap on the response body size we'll JSON.parse just to harvest a created id. */
+const AUDIT_ONSEND_MAX_PARSE_BYTES = 64 * 1024;
+
+/**
+ * Pull a created resource's id from a typical create-response body. Handles
+ * both the bare `{ id }` shape and the `{ data: { id } }` envelope used by
+ * some Archestra routes.
+ */
+function extractCreatedResourceId(parsed: unknown): string | null {
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return null;
+  }
+  const obj = parsed as Record<string, unknown>;
+  if (typeof obj.id === "string") return obj.id;
+  const data = obj.data;
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    const nested = (data as Record<string, unknown>).id;
+    if (typeof nested === "string") return nested;
+  }
+  return null;
+}
 
 /**
  * High-volume or non-administrative `/api/*` surfaces excluded from org audit

@@ -485,6 +485,46 @@ describe("AuditLogModel", () => {
       expect(result.data[0].resourceId).toBe("SpecialAgentXYZ");
     });
 
+    test("search trims surrounding whitespace before matching", async () => {
+      await AuditLogModel.create({
+        ...BASE_PAYLOAD,
+        organizationId: orgId,
+        resourceId: "trim-target",
+      });
+
+      const result = await AuditLogModel.findPaginated({
+        organizationId: orgId,
+        limit: 100,
+        offset: 0,
+        search: "   trim-target   ",
+      });
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].resourceId).toBe("trim-target");
+    });
+
+    test("whitespace-only search is ignored (returns all org rows, not a literal-space match)", async () => {
+      await AuditLogModel.create({
+        ...BASE_PAYLOAD,
+        organizationId: orgId,
+        resourceId: "row-a",
+      });
+      await AuditLogModel.create({
+        ...BASE_PAYLOAD,
+        organizationId: orgId,
+        resourceId: "row-b",
+      });
+
+      const result = await AuditLogModel.findPaginated({
+        organizationId: orgId,
+        limit: 100,
+        offset: 0,
+        search: "   ",
+      });
+
+      expect(result.data).toHaveLength(2);
+    });
+
     test("multiple filters are AND-combined", async () => {
       await AuditLogModel.create({
         ...BASE_PAYLOAD,

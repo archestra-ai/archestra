@@ -768,6 +768,14 @@ class McpServerModel {
     id: string,
     organizationId: string,
   ): Promise<Record<string, unknown> | null> {
+    // `mcp_server` has no direct `organization_id` column, so we infer org
+    // membership through related rows. A snapshot is returned only when at
+    // least one of these holds:
+    //   - team-scoped: the team belongs to the org
+    //   - personal / org-scoped with an owner: the owner is a member of the org
+    //   - unowned + teamless: pre-existing system-owned rows that have no
+    //     org linkage at all (matches the previous semantics so we don't
+    //     regress legacy data or org-wide seeded servers).
     const [row] = await db
       .select({
         server: schema.mcpServersTable,
@@ -785,6 +793,13 @@ class McpServerModel {
         eq(schema.mcpServersTable.teamId, schema.teamsTable.id),
       )
       .leftJoin(
+        schema.membersTable,
+        and(
+          eq(schema.membersTable.userId, schema.mcpServersTable.ownerId),
+          eq(schema.membersTable.organizationId, organizationId),
+        ),
+      )
+      .leftJoin(
         schema.internalMcpCatalogTable,
         eq(schema.mcpServersTable.catalogId, schema.internalMcpCatalogTable.id),
       )
@@ -793,7 +808,11 @@ class McpServerModel {
           eq(schema.mcpServersTable.id, id),
           or(
             eq(schema.teamsTable.organizationId, organizationId),
-            isNull(schema.mcpServersTable.teamId),
+            isNotNull(schema.membersTable.id),
+            and(
+              isNull(schema.mcpServersTable.teamId),
+              isNull(schema.mcpServersTable.ownerId),
+            ),
           ),
         ),
       )

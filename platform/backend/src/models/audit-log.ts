@@ -28,7 +28,9 @@ function escapeLikePattern(value: string): string {
 }
 
 function buildSearchCondition(search: string) {
-  const pattern = `%${escapeLikePattern(search)}%`;
+  const trimmed = search.trim();
+  if (!trimmed) return undefined;
+  const pattern = `%${escapeLikePattern(trimmed)}%`;
   return or(
     ilike(schema.auditLogsTable.actorEmail, pattern),
     ilike(schema.auditLogsTable.actorName, pattern),
@@ -127,6 +129,9 @@ class AuditLogModel {
     organizationId: string;
     before: Date;
   }): Promise<number> {
+    // `.returning({ id })` rather than `result.rowCount` so this works on
+    // both the pg driver (production) and the PGlite driver used in tests,
+    // which doesn't populate `rowCount` for bare DELETEs.
     const deleted = await db
       .delete(schema.auditLogsTable)
       .where(

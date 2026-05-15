@@ -286,6 +286,45 @@ describe("McpServerModel.findByIdForAudit — secret/config flags", () => {
       await McpServerModel.findByIdForAudit(server.id, org2.id),
     ).toBeNull();
   });
+
+  test("returns null for a teamless server owned by a user from another org", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+  }) => {
+    // Defense-in-depth: `mcp_server` has no `organization_id` column, so
+    // teamless personal/org-scoped servers were previously returned
+    // unfiltered. Verify owner-via-members is the org boundary now.
+    const ownerOrg = await makeOrganization();
+    const intruderOrg = await makeOrganization();
+    const owner = await makeAdmin();
+    await makeMember(owner.id, ownerOrg.id, { role: "admin" });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: ownerOrg.id,
+    });
+
+    const server = await makeMcpServer({
+      catalogId: catalog.id,
+      scope: "personal",
+      ownerId: owner.id,
+      teamId: null,
+    });
+
+    // Owner's org sees it.
+    const visible = await McpServerModel.findByIdForAudit(
+      server.id,
+      ownerOrg.id,
+    );
+    expect(visible).not.toBeNull();
+    expect(visible?.id).toBe(server.id);
+
+    // Intruder org must not — owner is not a member of intruderOrg.
+    expect(
+      await McpServerModel.findByIdForAudit(server.id, intruderOrg.id),
+    ).toBeNull();
+  });
 });
 
 describe("audit snapshot shape — non-redacted models", () => {

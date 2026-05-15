@@ -233,11 +233,15 @@ class LlmOauthClientModel {
       clientId: client.clientId,
       organizationId: client.organizationId,
       allowedLlmProxyIds: [...client.allowedLlmProxyIds].sort(),
-      providerApiKeys: client.providerApiKeys.map((p) => ({
-        provider: p.provider,
-        providerApiKeyId: p.providerApiKeyId,
-        providerApiKeyName: p.providerApiKeyName,
-      })),
+      // Sort by providerApiKeyId so audit diffs ignore source ordering and
+      // only flag genuine add/remove changes.
+      providerApiKeys: [...client.providerApiKeys]
+        .sort((a, b) => a.providerApiKeyId.localeCompare(b.providerApiKeyId))
+        .map((p) => ({
+          provider: p.provider,
+          providerApiKeyId: p.providerApiKeyId,
+          providerApiKeyName: p.providerApiKeyName,
+        })),
       disabled: client.disabled,
       createdAt: client.createdAt.toISOString(),
       updatedAt: client.updatedAt.toISOString(),

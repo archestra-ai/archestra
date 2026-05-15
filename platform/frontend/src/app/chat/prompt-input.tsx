@@ -10,7 +10,7 @@ import {
 } from "@shared";
 import type { ChatStatus } from "ai";
 import { MoreVerticalIcon, PaperclipIcon, XIcon } from "lucide-react";
-import type { FormEvent } from "react";
+import type { FormEvent, KeyboardEvent } from "react";
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
@@ -111,6 +111,10 @@ interface ArchestraPromptInputProps {
   modelSource?: ModelSource | null;
   /** Callback to reset user model override back to agent/org default */
   onResetModelOverride?: () => void;
+  /** Focus the last navigable conversation message from the prompt textarea */
+  onNavigateToLastMessage?: () => void;
+  /** Chronological text history from user messages in the current conversation */
+  userMessageHistory?: string[];
 }
 
 // Inner component that has access to the controller context
@@ -141,6 +145,8 @@ const PromptInputContent = ({
   onModelSelectorOpenChange,
   modelSource,
   onResetModelOverride,
+  onNavigateToLastMessage,
+  userMessageHistory = [],
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
@@ -191,6 +197,13 @@ const PromptInputContent = ({
     : `archestra_chat_draft_new_${agentId}`;
 
   const isRestored = useRef(false);
+  const historyIndexRef = useRef<number | null>(null);
+  const historyDraftRef = useRef("");
+
+  const resetHistoryNavigation = useCallback(() => {
+    historyIndexRef.current = null;
+    historyDraftRef.current = "";
+  }, []);
 
   // Restore draft on mount or conversation change
   useEffect(() => {
@@ -248,10 +261,11 @@ const PromptInputContent = ({
 
   const handleWrappedSubmit = useCallback(
     (message: PromptInputMessage, e: FormEvent<HTMLFormElement>) => {
+      resetHistoryNavigation();
       localStorage.removeItem(storageKey);
       onSubmit(message, e);
     },
-    [onSubmit, storageKey],
+    [onSubmit, resetHistoryNavigation, storageKey],
   );
 
   const handleFileError = useCallback(
@@ -270,6 +284,105 @@ const PromptInputContent = ({
     [showFileUploadButton],
   );
   const submitStatus = status === "error" ? "ready" : status;
+
+  const setPromptInputFromHistory = useCallback(
+    (
+      value: string,
+      target: HTMLTextAreaElement,
+      caretPosition: "start" | "end",
+    ) => {
+      controller.textInput.setInput(value);
+      requestAnimationFrame(() => {
+        const position = caretPosition === "start" ? 0 : value.length;
+        target.setSelectionRange(position, position);
+      });
+    },
+    [controller.textInput],
+  );
+
+  const handlePromptTextareaKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (
+        (event.key !== "ArrowUp" && event.key !== "ArrowDown") ||
+        event.nativeEvent.isComposing
+      ) {
+        return;
+      }
+
+      const isAtStart =
+        event.currentTarget.selectionStart === 0 &&
+        event.currentTarget.selectionEnd === 0;
+      const isAtEnd =
+        event.currentTarget.selectionStart ===
+          event.currentTarget.value.length &&
+        event.currentTarget.selectionEnd === event.currentTarget.value.length;
+
+      if (event.shiftKey) {
+        if (event.key !== "ArrowUp" || !onNavigateToLastMessage || !isAtStart) {
+          return;
+        }
+
+        event.preventDefault();
+        onNavigateToLastMessage();
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        if (!isAtStart || userMessageHistory.length === 0) {
+          return;
+        }
+
+        event.preventDefault();
+        const nextIndex =
+          historyIndexRef.current === null
+            ? userMessageHistory.length - 1
+            : Math.max(0, historyIndexRef.current - 1);
+
+        if (historyIndexRef.current === null) {
+          historyDraftRef.current = event.currentTarget.value;
+        }
+
+        historyIndexRef.current = nextIndex;
+        setPromptInputFromHistory(
+          userMessageHistory[nextIndex],
+          event.currentTarget,
+          "start",
+        );
+        return;
+      }
+
+      if (!isAtEnd || historyIndexRef.current === null) {
+        return;
+      }
+
+      event.preventDefault();
+      const nextIndex = historyIndexRef.current + 1;
+
+      if (nextIndex >= userMessageHistory.length) {
+        const draft = historyDraftRef.current;
+        resetHistoryNavigation();
+        setPromptInputFromHistory(draft, event.currentTarget, "end");
+        return;
+      }
+
+      historyIndexRef.current = nextIndex;
+      setPromptInputFromHistory(
+        userMessageHistory[nextIndex],
+        event.currentTarget,
+        "end",
+      );
+    },
+    [
+      onNavigateToLastMessage,
+      resetHistoryNavigation,
+      setPromptInputFromHistory,
+      userMessageHistory,
+    ],
+  );
+
+  const handlePromptTextareaChange = useCallback(() => {
+    resetHistoryNavigation();
+  }, [resetHistoryNavigation]);
 
   return (
     <PromptInput
@@ -302,6 +415,8 @@ const PromptInputContent = ({
             disabled={submitDisabled}
             disableEnterSubmit={status !== "ready" && status !== "error"}
             data-testid={E2eTestId.ChatPromptTextarea}
+            onChange={handlePromptTextareaChange}
+            onKeyDown={handlePromptTextareaKeyDown}
           />
         )}
       </PromptInputBody>
@@ -636,6 +751,8 @@ const ArchestraPromptInput = ({
   onModelSelectorOpenChange,
   modelSource,
   onResetModelOverride,
+  onNavigateToLastMessage,
+  userMessageHistory,
 }: ArchestraPromptInputProps) => {
   return (
     <div className="flex size-full flex-col justify-end">
@@ -667,6 +784,8 @@ const ArchestraPromptInput = ({
           onModelSelectorOpenChange={onModelSelectorOpenChange}
           modelSource={modelSource}
           onResetModelOverride={onResetModelOverride}
+          onNavigateToLastMessage={onNavigateToLastMessage}
+          userMessageHistory={userMessageHistory}
         />
       </PromptInputProvider>
     </div>

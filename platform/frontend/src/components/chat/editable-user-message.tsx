@@ -251,7 +251,10 @@ export function EditableUserMessage({
         )}
         {/* Text message bubble - only show if there's text */}
         {text && (
-          <div className="flex max-w-[80%] items-center justify-end gap-2">
+          <div
+            data-message-focus-surface
+            className="flex max-w-[80%] items-center justify-end gap-2 transition-transform duration-150 ease-out"
+          >
             <MessageActions
               textToCopy={text}
               onEditClick={handleStartEdit}

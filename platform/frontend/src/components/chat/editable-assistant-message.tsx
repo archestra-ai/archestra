@@ -166,7 +166,10 @@ export function EditableAssistantMessage({
 
   return (
     <Message from="assistant" className="group/message">
-      <div className="flex max-w-[80%] items-center justify-start gap-2">
+      <div
+        data-message-focus-surface
+        className="flex max-w-[80%] items-center justify-start gap-2 transition-transform duration-150 ease-out"
+      >
         <div className="min-w-0 flex-1">
           <MessageContent className="max-w-none">
             <Response isStreaming={isStreaming}>{text}</Response>

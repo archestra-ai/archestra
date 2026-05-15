@@ -198,6 +198,7 @@ export function ChatPageContent({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const autoSendTriggeredRef = useRef(false);
   const oauthReauthResumeTriggeredRef = useRef(false);
+  const focusLastMessageRef = useRef<(() => void) | null>(null);
   // Store pending URL for browser navigation after conversation is created
   const [pendingBrowserUrl, setPendingBrowserUrl] = useState<
     string | undefined
@@ -864,6 +865,10 @@ export function ChatPageContent({
   );
   const latestTodoWriteToolState = useMemo(
     () => getLatestTodoWriteToolState(messages),
+    [messages],
+  );
+  const userMessageHistory = useMemo(
+    () => getUserMessageHistory(messages),
     [messages],
   );
   const sendMessage = chatSession?.sendMessage;
@@ -1813,6 +1818,8 @@ export function ChatPageContent({
                     agentId={currentProfileId || initialAgentId || undefined}
                     messages={messages}
                     status={status}
+                    promptTextareaRef={textareaRef}
+                    focusLastMessageRef={focusLastMessageRef}
                     optimisticToolCalls={optimisticToolCalls}
                     isLoadingConversation={isLoadingConversation}
                     onMessagesUpdate={setMessages}
@@ -1961,6 +1968,10 @@ export function ChatPageContent({
                         }
                         currentProvider={currentProvider}
                         textareaRef={textareaRef}
+                        onNavigateToLastMessage={() =>
+                          focusLastMessageRef.current?.()
+                        }
+                        userMessageHistory={userMessageHistory}
                         onProviderChange={handleProviderChange}
                         allowFileUploads={
                           organization?.allowChatFileUploads ?? false
@@ -2075,6 +2086,10 @@ export function ChatPageContent({
                       agentId={newChatAgentId}
                       currentProvider={initialProvider}
                       textareaRef={textareaRef}
+                      onNavigateToLastMessage={() =>
+                        focusLastMessageRef.current?.()
+                      }
+                      userMessageHistory={userMessageHistory}
                       initialApiKeyId={initialApiKeyId}
                       onApiKeyChange={setInitialApiKeyId}
                       onProviderChange={handleInitialProviderChange}
@@ -2272,6 +2287,22 @@ function getMessageText(message: UIMessage) {
     .filter((part) => part.type === "text")
     .map((part) => part.text)
     .join("\n");
+}
+
+function getUserMessageHistory(messages: UIMessage[]) {
+  return messages.flatMap((message) => {
+    if (message.role !== "user") {
+      return [];
+    }
+
+    return message.parts.flatMap((part) => {
+      if (part.type !== "text" || !part.text.trim()) {
+        return [];
+      }
+
+      return [part.text];
+    });
+  });
 }
 
 function hasCreatedAtMetadata(message: UIMessage) {

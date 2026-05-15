@@ -1,11 +1,13 @@
 import { E2eTestId } from "@shared";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockUseOrganization, mockUseChatPlaceholder } = vi.hoisted(() => ({
-  mockUseOrganization: vi.fn(),
-  mockUseChatPlaceholder: vi.fn(),
-}));
+const { mockUseOrganization, mockUseChatPlaceholder, mockPromptInputSetInput } =
+  vi.hoisted(() => ({
+    mockUseOrganization: vi.fn(),
+    mockUseChatPlaceholder: vi.fn(),
+    mockPromptInputSetInput: vi.fn(),
+  }));
 
 // Mock ResizeObserver which is used by Radix UI components
 global.ResizeObserver = vi.fn().mockImplementation(() => ({
@@ -83,14 +85,29 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
       Submit {status ?? "unset"}
     </button>
   ),
-  PromptInputTextarea: ({ placeholder }: { placeholder?: string }) => (
-    <textarea placeholder={placeholder} />
+  PromptInputTextarea: ({
+    placeholder,
+    onChange,
+    onKeyDown,
+    "data-testid": testId,
+  }: {
+    placeholder?: string;
+    onChange?: React.ChangeEventHandler<HTMLTextAreaElement>;
+    onKeyDown?: React.KeyboardEventHandler<HTMLTextAreaElement>;
+    "data-testid"?: string;
+  }) => (
+    <textarea
+      data-testid={testId}
+      placeholder={placeholder}
+      onChange={onChange}
+      onKeyDown={onKeyDown}
+    />
   ),
   PromptInputTools: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="prompt-tools">{children}</div>
   ),
   usePromptInputController: () => ({
-    textInput: { setInput: vi.fn() },
+    textInput: { value: "", setInput: mockPromptInputSetInput },
     attachments: { files: [] },
   }),
   usePromptInputAttachments: () => ({
@@ -193,6 +210,10 @@ describe("ArchestraPromptInput", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    window.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      callback(0);
+      return 0;
+    });
     mockUseOrganization.mockReturnValue({
       data: null,
       isLoading: false,
@@ -200,6 +221,11 @@ describe("ArchestraPromptInput", () => {
     mockUseChatPlaceholder.mockReturnValue({
       placeholder: "Animated placeholder",
       isAnimating: true,
+    });
+    mockUseHasPermissions.mockReturnValue({
+      data: false,
+      isPending: false,
+      isLoading: false,
     });
   });
 
@@ -336,6 +362,114 @@ describe("ArchestraPromptInput", () => {
       );
       // Should not have a settings link
       expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("Keyboard history", () => {
+    it("cycles through user message history with arrow keys at textarea boundaries", () => {
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          userMessageHistory={["first prompt", "second prompt"]}
+        />,
+      );
+
+      const textarea = screen.getByTestId(
+        E2eTestId.ChatPromptTextarea,
+      ) as HTMLTextAreaElement;
+      mockPromptInputSetInput.mockClear();
+
+      textarea.value = "draft";
+      textarea.setSelectionRange(0, 0);
+      fireEvent.keyDown(textarea, { key: "ArrowUp" });
+      expect(mockPromptInputSetInput).toHaveBeenLastCalledWith("second prompt");
+
+      textarea.value = "second prompt";
+      textarea.setSelectionRange(0, 0);
+      fireEvent.keyDown(textarea, { key: "ArrowUp" });
+      expect(mockPromptInputSetInput).toHaveBeenLastCalledWith("first prompt");
+
+      textarea.value = "first prompt";
+      textarea.setSelectionRange("first prompt".length, "first prompt".length);
+      fireEvent.keyDown(textarea, { key: "ArrowDown" });
+      expect(mockPromptInputSetInput).toHaveBeenLastCalledWith("second prompt");
+
+      textarea.value = "second prompt";
+      textarea.setSelectionRange(
+        "second prompt".length,
+        "second prompt".length,
+      );
+      fireEvent.keyDown(textarea, { key: "ArrowDown" });
+      expect(mockPromptInputSetInput).toHaveBeenLastCalledWith("draft");
+    });
+
+    it("does not cycle history when the caret is inside textarea content", () => {
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          userMessageHistory={["previous prompt"]}
+        />,
+      );
+
+      const textarea = screen.getByTestId(
+        E2eTestId.ChatPromptTextarea,
+      ) as HTMLTextAreaElement;
+      mockPromptInputSetInput.mockClear();
+
+      textarea.value = "current draft";
+      textarea.setSelectionRange(4, 4);
+      fireEvent.keyDown(textarea, { key: "ArrowUp" });
+
+      expect(mockPromptInputSetInput).not.toHaveBeenCalledWith(
+        "previous prompt",
+      );
+    });
+
+    it("resets history navigation after manual input changes", () => {
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          userMessageHistory={["first prompt", "second prompt"]}
+        />,
+      );
+
+      const textarea = screen.getByTestId(
+        E2eTestId.ChatPromptTextarea,
+      ) as HTMLTextAreaElement;
+      mockPromptInputSetInput.mockClear();
+
+      textarea.value = "draft";
+      textarea.setSelectionRange(0, 0);
+      fireEvent.keyDown(textarea, { key: "ArrowUp" });
+      expect(mockPromptInputSetInput).toHaveBeenLastCalledWith("second prompt");
+
+      fireEvent.change(textarea, { target: { value: "manual edit" } });
+      textarea.value = "manual edit";
+      textarea.setSelectionRange("manual edit".length, "manual edit".length);
+      fireEvent.keyDown(textarea, { key: "ArrowDown" });
+
+      expect(mockPromptInputSetInput).toHaveBeenCalledTimes(1);
+    });
+
+    it("navigates to the last message with shift arrow up at the start of the textarea", () => {
+      const onNavigateToLastMessage = vi.fn();
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          onNavigateToLastMessage={onNavigateToLastMessage}
+        />,
+      );
+
+      const textarea = screen.getByTestId(
+        E2eTestId.ChatPromptTextarea,
+      ) as HTMLTextAreaElement;
+      mockPromptInputSetInput.mockClear();
+
+      textarea.value = "draft";
+      textarea.setSelectionRange(0, 0);
+      fireEvent.keyDown(textarea, { key: "ArrowUp", shiftKey: true });
+
+      expect(onNavigateToLastMessage).toHaveBeenCalledTimes(1);
     });
   });
 

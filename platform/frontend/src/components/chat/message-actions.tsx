@@ -33,6 +33,7 @@ export function MessageActions({
 
   return (
     <div
+      data-message-actions
       className={cn(
         "flex items-center gap-0.5 rounded-md border bg-background/95 shadow-sm p-0.5",
         className,

@@ -1,10 +1,18 @@
 import type { UIMessage } from "@ai-sdk/react";
+import { SWAP_AGENT_POKE_TEXT } from "@shared";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/components/ai-elements/conversation", () => ({
-  Conversation: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
+  Conversation: ({
+    children,
+    ...props
+  }: React.HTMLAttributes<HTMLDivElement> & {
+    children: React.ReactNode;
+  }) => (
+    <div data-testid="conversation" {...props}>
+      {children}
+    </div>
   ),
   ConversationContent: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
@@ -194,6 +202,115 @@ import { ChatMessages } from "./chat-messages";
 describe("ChatMessages", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+  });
+
+  it("moves focus between messages with shift arrow navigation", () => {
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "First user message" }],
+      },
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "First assistant message" }],
+      },
+      {
+        id: "user-2",
+        role: "user",
+        parts: [{ type: "text", text: "Second user message" }],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    const firstMessage = screen.getByLabelText("Message 1 of 3");
+    const secondMessage = screen.getByLabelText("Message 2 of 3");
+    const thirdMessage = screen.getByLabelText("Message 3 of 3");
+
+    firstMessage.focus();
+    fireEvent.keyDown(firstMessage, { key: "ArrowDown", shiftKey: true });
+    expect(secondMessage).toHaveFocus();
+
+    fireEvent.keyDown(secondMessage, { key: "ArrowDown", shiftKey: true });
+    expect(thirdMessage).toHaveFocus();
+
+    fireEvent.keyDown(thirdMessage, { key: "ArrowUp", shiftKey: true });
+    expect(secondMessage).toHaveFocus();
+  });
+
+  it("returns focus to the prompt textarea from the last message with shift arrow down", () => {
+    const promptTextarea = document.createElement("textarea");
+    document.body.appendChild(promptTextarea);
+    const promptTextareaRef = { current: promptTextarea };
+
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "First user message" }],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        promptTextareaRef={promptTextareaRef}
+      />,
+    );
+
+    const message = screen.getByLabelText("Message 1 of 1");
+    message.focus();
+    fireEvent.keyDown(message, { key: "ArrowDown", shiftKey: true });
+
+    expect(promptTextarea).toHaveFocus();
+    promptTextarea.remove();
+  });
+
+  it("does not include hidden swap poke messages in keyboard navigation", () => {
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "Visible user message" }],
+      },
+      {
+        id: "swap-poke",
+        role: "user",
+        parts: [{ type: "text", text: SWAP_AGENT_POKE_TEXT }],
+      },
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "Visible assistant message" }],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(screen.getByLabelText("Message 1 of 2")).toHaveTextContent(
+      "Visible user message",
+    );
+    expect(screen.getByLabelText("Message 2 of 2")).toHaveTextContent(
+      "Visible assistant message",
+    );
+    expect(screen.queryByText(SWAP_AGENT_POKE_TEXT)).not.toBeInTheDocument();
   });
 
   it("renders URL and document source parts for assistant messages", () => {

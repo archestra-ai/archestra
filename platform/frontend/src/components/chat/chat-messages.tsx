@@ -31,7 +31,10 @@ import {
 import Link from "next/link";
 import {
   Fragment,
+  type KeyboardEvent,
+  type MutableRefObject,
   memo,
+  type RefObject,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -133,6 +136,8 @@ interface ChatMessagesProps {
   agentId?: string;
   messages: UIMessage[];
   status: ChatStatus;
+  promptTextareaRef?: RefObject<HTMLTextAreaElement | null>;
+  focusLastMessageRef?: MutableRefObject<(() => void) | null>;
   optimisticToolCalls?: Array<{
     toolCallId: string;
     toolName: string;
@@ -199,6 +204,8 @@ export function ChatMessages({
   agentId,
   messages,
   status,
+  promptTextareaRef,
+  focusLastMessageRef,
   optimisticToolCalls = [],
   isLoadingConversation = false,
   onMessagesUpdate,
@@ -418,14 +425,6 @@ export function ChatMessages({
     [messages],
   );
 
-  if (messages.length === 0 && chatErrors.length === 0) {
-    // Don't show "start conversation" message while loading - prevents flash of empty state
-    if (isLoadingConversation) {
-      return null;
-    }
-    return null;
-  }
-
   // Find the index of the message being edited
   const editingMessageIndex = editingMessageId
     ? messages.findIndex((m) => m.id === editingMessageId)
@@ -450,17 +449,162 @@ export function ChatMessages({
     return nextMessage.role !== "assistant";
   });
   const timelineItems = buildMessageTimeline({ messages, chatErrors });
+  const navigableMessages = useMemo(
+    () =>
+      timelineItems.flatMap((item) => {
+        if (item.kind !== "message") {
+          return [];
+        }
+        if (item.message.role !== "user" && item.message.role !== "assistant") {
+          return [];
+        }
+        if (!isDebugging && isSwapAgentPokeMessage(item.message)) {
+          return [];
+        }
+        return [
+          {
+            messageId: getNavigableMessageId(
+              item.message.id,
+              item.messageIndex,
+            ),
+            messageIndex: item.messageIndex,
+          },
+        ];
+      }),
+    [timelineItems, isDebugging],
+  );
+  const navigableMessageIndexMap = useMemo(
+    () =>
+      new Map(
+        navigableMessages.map((message, index) => [
+          message.messageIndex,
+          index,
+        ]),
+      ),
+    [navigableMessages],
+  );
   const liveErrorMessage = error ? getInlineErrorMessage(error) : null;
   const hasRenderedLiveError =
     !!error &&
     chatErrors.some(
       (chatError) => chatError.error.message === liveErrorMessage,
     );
+  const [
+    isKeyboardMessageNavigationActive,
+    setIsKeyboardMessageNavigationActive,
+  ] = useState(false);
+
+  const handleConversationKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      if (
+        !event.shiftKey ||
+        (event.key !== "ArrowUp" && event.key !== "ArrowDown")
+      ) {
+        return;
+      }
+
+      const target = event.target;
+      if (!(target instanceof HTMLElement) || isTextEntryElement(target)) {
+        return;
+      }
+
+      const currentMessageElement = target.closest<HTMLElement>(
+        "[data-message-nav-id]",
+      );
+      if (!currentMessageElement) {
+        return;
+      }
+
+      const currentMessageId = currentMessageElement.dataset.messageNavId;
+      if (!currentMessageId) {
+        return;
+      }
+
+      const currentIndex = navigableMessages.findIndex(
+        (message) => message.messageId === currentMessageId,
+      );
+      if (currentIndex === -1) {
+        return;
+      }
+
+      setIsKeyboardMessageNavigationActive(true);
+
+      const offset = event.key === "ArrowDown" ? 1 : -1;
+      const nextMessage = navigableMessages[currentIndex + offset];
+      if (!nextMessage) {
+        if (
+          event.key === "ArrowDown" &&
+          currentIndex === navigableMessages.length - 1
+        ) {
+          const promptTextarea = promptTextareaRef?.current;
+          if (promptTextarea) {
+            event.preventDefault();
+            promptTextarea.focus();
+          }
+        }
+        return;
+      }
+
+      const nextMessageElement = event.currentTarget.querySelector<HTMLElement>(
+        `[data-message-nav-id="${nextMessage.messageId}"]`,
+      );
+      if (!nextMessageElement) {
+        return;
+      }
+
+      event.preventDefault();
+      nextMessageElement.focus({ preventScroll: true });
+      nextMessageElement.scrollIntoView({
+        block: "nearest",
+        inline: "nearest",
+      });
+    },
+    [navigableMessages, promptTextareaRef],
+  );
+
+  const focusLastNavigableMessage = useCallback(() => {
+    const lastMessage = navigableMessages.at(-1);
+    if (!lastMessage) {
+      return;
+    }
+
+    const messageElement = document.querySelector<HTMLElement>(
+      `[data-message-nav-id="${lastMessage.messageId}"]`,
+    );
+    messageElement?.focus({ preventScroll: true });
+    messageElement?.scrollIntoView({
+      block: "nearest",
+      inline: "nearest",
+    });
+    setIsKeyboardMessageNavigationActive(true);
+  }, [navigableMessages]);
+
+  useEffect(() => {
+    if (!focusLastMessageRef) {
+      return;
+    }
+
+    focusLastMessageRef.current = focusLastNavigableMessage;
+
+    return () => {
+      focusLastMessageRef.current = null;
+    };
+  }, [focusLastMessageRef, focusLastNavigableMessage]);
+
+  if (messages.length === 0 && chatErrors.length === 0) {
+    // Don't show "start conversation" message while loading - prevents flash of empty state
+    if (isLoadingConversation) {
+      return null;
+    }
+    return null;
+  }
 
   return (
     <Conversation
       className="h-full"
       resize={instantResize || initialLoad ? "instant" : "smooth"}
+      onKeyDown={handleConversationKeyDown}
+      onPointerDown={() => setIsKeyboardMessageNavigationActive(false)}
     >
       <ScrollToBottomOnSubmit status={status} />
       <ConversationContent>
@@ -493,6 +637,8 @@ export function ChatMessages({
 
             const isDimmed =
               editingMessageIndex !== -1 && idx > editingMessageIndex;
+            const navigableMessagePosition =
+              navigableMessageIndexMap.get(idx) ?? null;
             const previousSwapBoundaryLabel =
               message.role === "assistant"
                 ? getPreviousAssistantSwapBoundaryLabel({
@@ -504,9 +650,33 @@ export function ChatMessages({
                 : null;
 
             return (
-              <div
+              <article
                 key={message.id || idx}
+                data-message-nav-id={
+                  navigableMessagePosition !== null
+                    ? getNavigableMessageId(message.id, idx)
+                    : undefined
+                }
+                tabIndex={navigableMessagePosition !== null ? -1 : undefined}
+                aria-label={
+                  navigableMessagePosition !== null
+                    ? `Message ${navigableMessagePosition + 1} of ${navigableMessages.length}`
+                    : undefined
+                }
                 className={cn(
+                  navigableMessagePosition !== null &&
+                    "rounded-2xl transition-[background-color,box-shadow,opacity] duration-150 ease-out focus:outline-none motion-reduce:transform-none",
+                  navigableMessagePosition !== null &&
+                    isKeyboardMessageNavigationActive &&
+                    "focus:bg-accent/30 focus:shadow-sm focus:[&_[data-message-actions]]:opacity-100 focus:[&_[data-message-actions]]:pointer-events-auto",
+                  navigableMessagePosition !== null &&
+                    isKeyboardMessageNavigationActive &&
+                    message.role === "user" &&
+                    "focus:[&_[data-message-focus-surface]]:-translate-x-2",
+                  navigableMessagePosition !== null &&
+                    isKeyboardMessageNavigationActive &&
+                    message.role === "assistant" &&
+                    "focus:[&_[data-message-focus-surface]]:translate-x-2",
                   isDimmed && "opacity-40 transition-opacity",
                   "flex flex-col gap-2",
                 )}
@@ -1239,7 +1409,7 @@ export function ChatMessages({
                     suppressLabel={previousSwapBoundaryLabel}
                   />
                 )}
-              </div>
+              </article>
             );
           })}
           {/* Inline error display */}
@@ -2494,6 +2664,26 @@ function buildMessageTimeline(params: {
   }
 
   return timelineItems;
+}
+
+function getNavigableMessageId(
+  messageId: string | undefined,
+  messageIndex: number,
+): string {
+  return messageId ?? `message-${messageIndex}`;
+}
+
+function isTextEntryElement(element: HTMLElement): boolean {
+  const tagName = element.tagName.toLowerCase();
+  if (tagName === "input" || tagName === "textarea" || tagName === "select") {
+    return true;
+  }
+
+  if (element.isContentEditable) {
+    return true;
+  }
+
+  return !!element.closest("[contenteditable='true']");
 }
 
 function getMessageCreatedAt(message: UIMessage): number | null {

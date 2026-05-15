@@ -1,15 +1,19 @@
 import {
+  CHAT_API_KEY_ID_HEADER,
   EXTERNAL_AGENT_ID_HEADER,
+  PROVIDER_BASE_URL_HEADER,
   SESSION_ID_HEADER,
   SOURCE_HEADER,
   UNTRUSTED_CONTEXT_HEADER,
   USER_ID_HEADER,
 } from "@shared";
 import { vi } from "vitest";
+import { ConversationModel, LlmProviderApiKeyModel } from "@/models";
 import { describe, expect, it, test } from "@/test";
 
 // Mock the gemini-client module before importing llm-client
 const mockIsVertexAiEnabled = vi.hoisted(() => vi.fn(() => false));
+const mockIsAzureOpenAiEntraIdEnabled = vi.hoisted(() => vi.fn(() => false));
 const mockCreateAnthropic = vi.hoisted(() =>
   vi.fn(({ headers }: { headers?: Record<string, string> }) =>
     vi.fn((modelName: string) => ({
@@ -22,6 +26,14 @@ const mockCreateAnthropic = vi.hoisted(() =>
 vi.mock("@/clients/gemini-client", () => ({
   isVertexAiEnabled: mockIsVertexAiEnabled,
 }));
+vi.mock("@/clients/azure-openai-credentials", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/clients/azure-openai-credentials")>();
+  return {
+    ...actual,
+    isAzureOpenAiEntraIdEnabled: mockIsAzureOpenAiEntraIdEnabled,
+  };
+});
 vi.mock("@ai-sdk/anthropic", () => ({
   createAnthropic: mockCreateAnthropic,
 }));
@@ -54,6 +66,7 @@ vi.mock("@ai-sdk/openai", async (importOriginal) => {
 import {
   createDirectLLMModel,
   createLLMModel,
+  createLLMModelForAgent,
   detectProviderFromModel,
 } from "./llm-client";
 
@@ -439,6 +452,76 @@ describe("createDirectLLMModel", () => {
 });
 
 describe("createLLMModel", () => {
+  test("uses an explicit keyless Azure conversation key and forwards its inference URL to the proxy", async ({
+    makeOrganization,
+    makeUser,
+    makeSecret,
+    makeAgent,
+  }) => {
+    mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(true);
+
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ name: "Azure Chat Agent", teams: [] });
+    const fallbackSecret = await makeSecret({
+      secret: { apiKey: "sk-fallback" },
+    });
+
+    const fallbackKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      secretId: fallbackSecret.id,
+      name: "Fallback Azure Key",
+      provider: "azure",
+      scope: "org",
+      baseUrl: "https://fallback.example.com/openai",
+      inferenceBaseUrl: "https://fallback-runtime.example.com/openai",
+    });
+    const selectedKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      secretId: null,
+      name: "Selected Keyless Azure Key",
+      provider: "azure",
+      scope: "org",
+      baseUrl: "https://discovery.example.com/openai",
+      inferenceBaseUrl: "https://runtime.example.com/openai",
+    });
+    const conversation = await ConversationModel.create({
+      agentId: agent.id,
+      userId: user.id,
+      organizationId: org.id,
+      title: "Azure Chat Conversation",
+      selectedModel: "gpt-4o",
+      selectedProvider: "azure",
+      chatApiKeyId: selectedKey.id,
+    });
+
+    const result = await createLLMModelForAgent({
+      organizationId: org.id,
+      userId: user.id,
+      agentId: agent.id,
+      model: "gpt-4o",
+      provider: "azure",
+      conversationId: conversation.id,
+      source: "chat",
+    });
+
+    expect(result.apiKeySource).toBe("org");
+    expect(capturedCreateOpenAIOptions.apiKey).toBeUndefined();
+    expect(capturedCreateOpenAIOptions.headers).toEqual(
+      expect.objectContaining({
+        [CHAT_API_KEY_ID_HEADER]: selectedKey.id,
+        [PROVIDER_BASE_URL_HEADER]: "https://runtime.example.com/openai",
+      }),
+    );
+    expect(capturedCreateOpenAIOptions.headers).not.toEqual(
+      expect.objectContaining({
+        [CHAT_API_KEY_ID_HEADER]: fallbackKey.id,
+        [PROVIDER_BASE_URL_HEADER]:
+          "https://fallback-runtime.example.com/openai",
+      }),
+    );
+  });
+
   test("sets the untrusted-context header only when contextIsTrusted is false", () => {
     createLLMModel({
       provider: "anthropic",

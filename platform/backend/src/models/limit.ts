@@ -1,5 +1,6 @@
 import { and, eq, inArray, lt, or, type SQL, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/_soft-delete";
 import logger from "@/logging";
 import type {
   CreateLimit,
@@ -569,7 +570,12 @@ export class LimitValidationService {
         const [agent] = await db
           .select({ organizationId: schema.agentsTable.organizationId })
           .from(schema.agentsTable)
-          .where(eq(schema.agentsTable.id, agentId))
+          .where(
+            and(
+              eq(schema.agentsTable.id, agentId),
+              notDeleted(schema.agentsTable),
+            ),
+          )
           .limit(1);
         if (agent?.organizationId) {
           organizationId = agent.organizationId;

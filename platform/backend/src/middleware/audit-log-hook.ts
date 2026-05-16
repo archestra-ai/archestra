@@ -3,7 +3,6 @@ import AuditLogModel from "@/models/audit-log";
 import UserTokenModel from "@/models/user-token";
 import type { FastifyInstanceWithZod } from "@/server";
 import type { AuditAction } from "@/types";
-import websocketService from "@/websocket";
 import {
   type AuditableRouteConfig,
   resolveAuditableRouteConfig,
@@ -100,13 +99,9 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
       userAgent,
     };
 
-    void AuditLogModel.create(payload)
-      .then((row) => {
-        void websocketService.broadcastAuditLog(row as Record<string, unknown>);
-      })
-      .catch((err) => {
-        logger.error({ err }, "audit: failed to write audit log row");
-      });
+    void AuditLogModel.create(payload).catch((err) => {
+      logger.error({ err }, "audit: failed to write audit log row");
+    });
   });
 }
 

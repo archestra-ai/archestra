@@ -30,10 +30,6 @@ import AuditLogModel from "@/models/audit-log";
 import InvitationModel from "@/models/invitation";
 import { beforeEach, describe, expect, test } from "@/test";
 
-vi.mock("@/websocket", () => ({
-  default: { broadcastAuditLog: vi.fn() },
-}));
-
 // Create a hoisted ref to control disableInvitations in tests
 const mockDisableInvitations = vi.hoisted(() => ({ value: false }));
 

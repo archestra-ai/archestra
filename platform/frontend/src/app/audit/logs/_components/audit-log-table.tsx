@@ -1,7 +1,7 @@
 "use client";
 
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, RefreshCw, User } from "lucide-react";
+import { ChevronDown, ChevronUp, User } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { SearchInput } from "@/components/search-input";
@@ -23,7 +23,6 @@ import {
   type AuditLog,
   useAuditLogs,
 } from "@/lib/audit-log/audit-log.query";
-import { useAuditLogWebsocket } from "@/lib/audit-log/audit-log-websocket.hook";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import { useMembersPaginated } from "@/lib/member.query";
 import { formatDate } from "@/lib/utils";
@@ -135,11 +134,7 @@ export function AuditLogTable() {
     resourceTypeFromUrl === ALL_VALUE ? undefined : resourceTypeFromUrl;
   const actorUserId = actorFromUrl === ALL_VALUE ? undefined : actorFromUrl;
 
-  const {
-    data: response,
-    isFetching,
-    refetch,
-  } = useAuditLogs({
+  const { data: response, isFetching } = useAuditLogs({
     limit: pagination.pageSize,
     offset: pagination.pageIndex * pagination.pageSize,
     sortDirection,
@@ -154,14 +149,6 @@ export function AuditLogTable() {
   const { data: membersResponse } = useMembersPaginated({
     limit: ACTOR_FILTER_LIMIT,
     offset: 0,
-  });
-
-  const isFirstPage = pagination.pageIndex === 0;
-  const hasStartDateFilter = dateTimePicker.startDateParam !== undefined;
-
-  const { newEventCount, resetNewEventCount } = useAuditLogWebsocket({
-    isFirstPage,
-    hasStartDateFilter,
   });
 
   const rows = response?.data ?? [];
@@ -353,25 +340,6 @@ export function AuditLogTable() {
           onApply={dateTimePicker.handleApplyDateRange}
         />
       </TableFilters>
-
-      {newEventCount > 0 && (
-        <div className="flex justify-end">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              resetNewEventCount();
-              setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-              void refetch();
-            }}
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            {newEventCount === 1
-              ? "1 new event — refresh"
-              : `${newEventCount} new events — refresh`}
-          </Button>
-        </div>
-      )}
 
       <DataTable
         columns={columns}

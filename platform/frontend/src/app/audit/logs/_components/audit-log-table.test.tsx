@@ -23,7 +23,6 @@ Element.prototype.setPointerCapture = vi.fn();
 Element.prototype.releasePointerCapture = vi.fn();
 
 const mockUseAuditLogs = vi.fn();
-const mockUseAuditLogWebsocket = vi.fn();
 const mockUseMembersPaginated = vi.fn();
 
 vi.mock("next/navigation", () => ({
@@ -41,11 +40,6 @@ vi.mock("@/lib/audit-log/audit-log.query", async () => {
     useAuditLogs: (...args: unknown[]) => mockUseAuditLogs(...args),
   };
 });
-
-vi.mock("@/lib/audit-log/audit-log-websocket.hook", () => ({
-  useAuditLogWebsocket: (...args: unknown[]) =>
-    mockUseAuditLogWebsocket(...args),
-}));
 
 vi.mock("@/lib/member.query", () => ({
   useMembersPaginated: (...args: unknown[]) => mockUseMembersPaginated(...args),
@@ -95,10 +89,6 @@ describe("AuditLogTable", () => {
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
     );
-    mockUseAuditLogWebsocket.mockReturnValue({
-      newEventCount: 0,
-      resetNewEventCount: vi.fn(),
-    });
     mockUseMembersPaginated.mockReturnValue({ data: { data: [] } });
   });
 
@@ -181,33 +171,6 @@ describe("AuditLogTable", () => {
       await screen.findByRole("heading", { name: /Event details/i }),
     ).toBeInTheDocument();
     expect(screen.getByText("/api/agents/agent-123")).toBeInTheDocument();
-  });
-
-  it("renders the 'new events' indicator when websocket reports unseen rows", () => {
-    mockUseAuditLogs.mockReturnValue({
-      data: {
-        data: [makeEvent()],
-        pagination: {
-          currentPage: 1,
-          limit: 10,
-          total: 1,
-          totalPages: 1,
-          hasNext: false,
-          hasPrev: false,
-        },
-      },
-      isFetching: false,
-      refetch: vi.fn(),
-    });
-    mockUseAuditLogWebsocket.mockReturnValue({
-      newEventCount: 3,
-      resetNewEventCount: vi.fn(),
-    });
-
-    renderTable();
-    expect(
-      screen.getByRole("button", { name: /3 new events — refresh/i }),
-    ).toBeInTheDocument();
   });
 
   it("does not render the resource_id in the table — only the resource-type badge", () => {

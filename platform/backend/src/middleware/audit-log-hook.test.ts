@@ -26,10 +26,6 @@ vi.mock("@/logging", () => ({
   },
 }));
 
-vi.mock("@/websocket", () => ({
-  default: { broadcastAuditLog: vi.fn() },
-}));
-
 vi.mock("./audit-log-registry", () => {
   const ROUTES: Record<
     string,

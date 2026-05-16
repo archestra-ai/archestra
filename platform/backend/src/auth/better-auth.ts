@@ -912,7 +912,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
           const headers = new Headers(request.headers as HeadersInit);
           const resolved = await auth.api.getSession({ headers });
           if (resolved?.user && resolved?.session) {
-            const row = await AuditLogModel.create({
+            await AuditLogModel.create({
               organizationId: canceledInvitation.organizationId,
               actorUserId: resolved.user.id,
               actorName: resolved.user.name ?? null,
@@ -933,8 +933,6 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
               ipAddress: resolveAuthClientIp(request),
               userAgent: request.headers.get("user-agent") ?? null,
             });
-            const { default: ws } = await import("@/websocket");
-            void ws.broadcastAuditLog(row as Record<string, unknown>);
           }
         } catch (err) {
           logger.error(
@@ -971,7 +969,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
                     (a.createdAt?.getTime() ?? 0),
                 )[0] ?? null,
           );
-          const row = await AuditLogModel.create({
+          await AuditLogModel.create({
             organizationId: orgId,
             actorUserId: resolved.user.id,
             actorName: resolved.user.name ?? null,
@@ -988,8 +986,6 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
             ipAddress: resolveAuthClientIp(request),
             userAgent: request.headers.get("user-agent") ?? null,
           });
-          const { default: ws } = await import("@/websocket");
-          void ws.broadcastAuditLog(row as Record<string, unknown>);
         }
       } catch (err) {
         logger.error(
@@ -1014,7 +1010,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         if (resolved?.user && resolved?.session) {
           const invitation = await InvitationModel.getById(invitationId);
           if (invitation) {
-            const row = await AuditLogModel.create({
+            await AuditLogModel.create({
               organizationId: invitation.organizationId,
               actorUserId: resolved.user.id,
               actorName: resolved.user.name ?? null,
@@ -1035,8 +1031,6 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
               ipAddress: resolveAuthClientIp(request),
               userAgent: request.headers.get("user-agent") ?? null,
             });
-            const { default: ws } = await import("@/websocket");
-            void ws.broadcastAuditLog(row as Record<string, unknown>);
           }
         }
       } catch (err) {
@@ -1067,7 +1061,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
             .where(eq(schema.membersTable.id, stash.memberId))
             .limit(1);
           if (member) {
-            const row = await AuditLogModel.create({
+            await AuditLogModel.create({
               organizationId: member.organizationId,
               actorUserId: resolved.user.id,
               actorName: resolved.user.name ?? null,
@@ -1084,8 +1078,6 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
               ipAddress: resolveAuthClientIp(request),
               userAgent: request.headers.get("user-agent") ?? null,
             });
-            const { default: ws } = await import("@/websocket");
-            void ws.broadcastAuditLog(row as Record<string, unknown>);
           }
         }
       } catch (err) {
@@ -1106,7 +1098,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         const headers = new Headers(request.headers as HeadersInit);
         const resolved = await auth.api.getSession({ headers });
         if (resolved?.user && resolved?.session) {
-          const row = await AuditLogModel.create({
+          await AuditLogModel.create({
             organizationId: stash.organizationId,
             actorUserId: resolved.user.id,
             actorName: resolved.user.name ?? null,
@@ -1127,8 +1119,6 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
             ipAddress: resolveAuthClientIp(request),
             userAgent: request.headers.get("user-agent") ?? null,
           });
-          const { default: ws } = await import("@/websocket");
-          void ws.broadcastAuditLog(row as Record<string, unknown>);
         }
       } catch (err) {
         logger.error(
@@ -1555,11 +1545,8 @@ async function cleanupRejectedSsoLogin(params: {
 }
 
 /**
- * Writes a single auth-event row to audit_logs and broadcasts it via WebSocket.
+ * Writes a single auth-event row to audit_logs.
  * Always called with `void … .catch(logger.error)` so it never blocks or throws.
- *
- * Dynamic import of @/websocket avoids the circular:
- *   better-auth → websocket → @/auth → better-auth
  */
 async function writeAuthAuditLog(params: {
   user: { id: string; name?: string | null; email: string };
@@ -1598,7 +1585,7 @@ async function writeAuthAuditLog(params: {
     postState = { sessionId: session.id, userId: user.id };
   }
 
-  const row = await AuditLogModel.create({
+  await AuditLogModel.create({
     organizationId,
     actorUserId: user.id,
     actorName: user.name ?? null,
@@ -1615,9 +1602,6 @@ async function writeAuthAuditLog(params: {
     ipAddress,
     userAgent,
   });
-
-  const { default: ws } = await import("@/websocket");
-  void ws.broadcastAuditLog(row as Record<string, unknown>);
 }
 
 /**

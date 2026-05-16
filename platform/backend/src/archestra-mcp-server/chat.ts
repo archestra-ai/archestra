@@ -218,8 +218,17 @@ const registry = defineArchestraTools([
             );
           }
         } else {
-          return errorResult(
-            "This tool requires conversation context. It can only be used within an active chat conversation or scheduled run.",
+          // When invoked via integrations without conversation context
+          // (e.g. Slack), return the content as a success with a note that
+          // persistence is not available. This allows the agent to continue
+          // without a hard failure.
+          logger.warn(
+            { agentId: contextAgent.id, contentLength: args.content.length },
+            "artifact_write called without conversation context (e.g. Slack invocation) — returning content inline",
+          );
+          return structuredSuccessResult(
+            { success: true, characterCount: args.content.length, persisted: false },
+            `Artifact content generated (${args.content.length} characters) but could not be persisted — no conversation context available. The content has been produced inline above.`,
           );
         }
 

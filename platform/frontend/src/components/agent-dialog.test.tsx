@@ -224,13 +224,26 @@ vi.mock("@/components/ui/command", () => ({
   ),
 }));
 
+let capturedOnInteractOutside: ((e: Event) => void) | undefined;
+let capturedOnEscapeKeyDown: ((e: KeyboardEvent) => void) | undefined;
+
 vi.mock("@/components/ui/dialog", () => ({
   Dialog: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
   ),
-  DialogContent: ({ children }: { children?: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
+  DialogContent: ({
+    children,
+    onInteractOutside,
+    onEscapeKeyDown,
+  }: {
+    children?: React.ReactNode;
+    onInteractOutside?: (e: Event) => void;
+    onEscapeKeyDown?: (e: KeyboardEvent) => void;
+  }) => {
+    capturedOnInteractOutside = onInteractOutside;
+    capturedOnEscapeKeyDown = onEscapeKeyDown;
+    return <div>{children}</div>;
+  },
   DialogForm: ({
     children,
     onSubmit,
@@ -409,6 +422,44 @@ describe("AgentDialog delegation state", () => {
     await waitFor(() => {
       expect(screen.getByText("Subagents (1)")).toBeInTheDocument();
     });
+  });
+});
+
+describe("AgentDialog dismiss behaviour", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    capturedOnInteractOutside = undefined;
+    capturedOnEscapeKeyDown = undefined;
+    useHasPermissionsMock.mockImplementation(() => ({ data: true }));
+    useProfileMock.mockReturnValue({ data: null, refetch: vi.fn() });
+    useInternalAgentsMock.mockReturnValue({ data: [] });
+    useAgentDelegationsMock.mockReturnValue({ data: [], isFetched: true });
+  });
+
+  it("blocks outside-click dismissal", () => {
+    const onOpenChange = vi.fn();
+    render(
+      <AgentDialog open={true} onOpenChange={onOpenChange} agentType="agent" />,
+    );
+
+    const event = { preventDefault: vi.fn() } as unknown as Event;
+    capturedOnInteractOutside?.(event);
+
+    expect(event.preventDefault).toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
+  it("blocks Escape-key dismissal", () => {
+    const onOpenChange = vi.fn();
+    render(
+      <AgentDialog open={true} onOpenChange={onOpenChange} agentType="agent" />,
+    );
+
+    const event = { preventDefault: vi.fn() } as unknown as KeyboardEvent;
+    capturedOnEscapeKeyDown?.(event);
+
+    expect(event.preventDefault).toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalled();
   });
 });
 

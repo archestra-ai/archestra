@@ -1,6 +1,6 @@
 import { and, eq, gt, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { InsertMessage, Message } from "@/types";
+import type { ChatMessage, InsertMessage, Message } from "@/types";
 
 class MessageModel {
   /**
@@ -103,6 +103,34 @@ class MessageModel {
 
     // Fall back to content ID (AI SDK nanoid)
     return MessageModel.findByContentId(id);
+  }
+
+  /**
+   * Replace stored JSON UI message (`content`) and role for an existing row.
+   * Used when the client/agentic loop evolves an already-persisted message in place
+   * (same UI id) — e.g. MCP tool approvals moving from approval-requested to output.
+   */
+  static async updateChatMessageContent(params: {
+    dbMessageId: string;
+    conversationId: string;
+    role: string;
+    content: ChatMessage;
+  }): Promise<void> {
+    await db
+      .update(schema.messagesTable)
+      .set({
+        role: params.role,
+        content: params.content,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.messagesTable.id, params.dbMessageId),
+          eq(schema.messagesTable.conversationId, params.conversationId),
+        ),
+      );
+
+    await MessageModel.touchConversation(params.conversationId);
   }
 
   static async updateTextPart(

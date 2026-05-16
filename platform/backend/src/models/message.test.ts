@@ -1079,4 +1079,283 @@ describe("MessageModel", () => {
       );
     });
   });
+
+  describe("updateChatMessageContent", () => {
+    test("replaces stored JSON envelope and refreshes conversation activity", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const agent = await makeAgent({ name: "Content Update Agent", teams: [] });
+
+      const conversation = await ConversationModel.create({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "Envelope Update Test",
+        selectedModel: "claude-3-haiku-20240307",
+      });
+
+      const message = await MessageModel.create({
+        conversationId: conversation.id,
+        role: "assistant",
+        content: {
+          id: "sdk-assistant-1",
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-mcpdummy__noop",
+              toolName: "mcpdummy__noop",
+              toolCallId: "call-approve-1",
+              state: "approval-requested",
+            },
+          ],
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await MessageModel.updateChatMessageContent({
+        dbMessageId: message.id,
+        conversationId: conversation.id,
+        role: "assistant",
+        content: {
+          id: "sdk-assistant-1",
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-mcpdummy__noop",
+              toolName: "mcpdummy__noop",
+              toolCallId: "call-approve-1",
+              state: "output-available",
+              output: { ok: true },
+            },
+          ],
+        },
+      });
+
+      const [dbRow] = await db
+        .select()
+        .from(schema.messagesTable)
+        .where(eq(schema.messagesTable.id, message.id));
+
+      const persisted = dbRow.content as {
+        parts: { state?: string; output?: unknown }[];
+      };
+
+      expect(persisted.parts[0].state).toBe("output-available");
+      expect(persisted.parts[0].output).toEqual({ ok: true });
+
+      const [updatedConversation] = await db
+        .select()
+        .from(schema.conversationsTable)
+        .where(eq(schema.conversationsTable.id, conversation.id));
+
+      expect(updatedConversation.updatedAt.getTime()).toBeGreaterThan(
+        conversation.updatedAt.getTime(),
+      );
+    });
+  });
+
+  describe("syncPersistedMessageContents (routes __test)", () => {
+    test("writes approval resolution into an existing row when incoming id is the DB uuid", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const agent = await makeAgent({
+        name: "Sync Persist uuid Agent",
+        teams: [],
+      });
+
+      const conversation = await ConversationModel.create({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "Sync uuid test",
+        selectedModel: "claude-3-haiku-20240307",
+      });
+
+      await MessageModel.create({
+        conversationId: conversation.id,
+        role: "user",
+        content: {
+          id: "user-sdk-1",
+          role: "user",
+          parts: [{ type: "text", text: "Ping" }],
+        },
+      });
+
+      const assistantDb = await MessageModel.create({
+        conversationId: conversation.id,
+        role: "assistant",
+        content: {
+          id: "sdk-assistant-uuid-test",
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-mcpdummy__noop",
+              toolName: "mcpdummy__noop",
+              toolCallId: "call-approve-uuid",
+              state: "approval-requested",
+            },
+          ],
+        },
+      });
+
+      const { __test } = await import("@/routes/chat/routes");
+
+      const syncedCount = await __test.syncPersistedMessageContents({
+        conversationId: conversation.id,
+        desiredThread: [
+          {
+            id: assistantDb.id,
+            role: "assistant",
+            parts: [
+              {
+                type: "tool-mcpdummy__noop",
+                toolName: "mcpdummy__noop",
+                toolCallId: "call-approve-uuid",
+                state: "output-available",
+                output: { result: "ok" },
+              },
+            ],
+          },
+        ],
+      });
+
+      expect(syncedCount).toBe(1);
+
+      const [stored] = await db
+        .select()
+        .from(schema.messagesTable)
+        .where(eq(schema.messagesTable.id, assistantDb.id));
+
+      expect(
+        ((stored.content as { parts?: { state?: string }[] }).parts ??
+          [])[0]?.state,
+      ).toBe("output-available");
+    });
+
+    test("writes approval resolution into an existing row when incoming id is the sdk content id", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const agent = await makeAgent({
+        name: "Sync Persist sdk id Agent",
+        teams: [],
+      });
+
+      const conversation = await ConversationModel.create({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "Sync sdk id test",
+        selectedModel: "claude-3-haiku-20240307",
+      });
+
+      const assistantDb = await MessageModel.create({
+        conversationId: conversation.id,
+        role: "assistant",
+        content: {
+          id: "sdk-assistant-inflight",
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-mcpdummy__noop",
+              toolName: "mcpdummy__noop",
+              toolCallId: "call-approve-inflight",
+              state: "approval-requested",
+            },
+          ],
+        },
+      });
+
+      const { __test } = await import("@/routes/chat/routes");
+
+      const syncedCount = await __test.syncPersistedMessageContents({
+        conversationId: conversation.id,
+        desiredThread: [
+          {
+            id: "sdk-assistant-inflight",
+            role: "assistant",
+            parts: [
+              {
+                type: "tool-mcpdummy__noop",
+                toolName: "mcpdummy__noop",
+                toolCallId: "call-approve-inflight",
+                state: "output-denied",
+              },
+            ],
+          },
+        ],
+      });
+
+      expect(syncedCount).toBe(1);
+
+      const [stored] = await db
+        .select()
+        .from(schema.messagesTable)
+        .where(eq(schema.messagesTable.id, assistantDb.id));
+
+      expect((stored.content as { id: string }).id).toBe(
+        "sdk-assistant-inflight",
+      );
+
+      expect(
+        ((stored.content as { parts?: { state?: string }[] }).parts ??
+          [])[0]?.state,
+      ).toBe("output-denied");
+    });
+
+    test("returns 0 when desired thread matches persisted payloads", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const agent = await makeAgent({ name: "Sync Noop Agent", teams: [] });
+
+      const conversation = await ConversationModel.create({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "Sync noop test",
+        selectedModel: "claude-3-haiku-20240307",
+      });
+
+      await MessageModel.create({
+        conversationId: conversation.id,
+        role: "assistant",
+        content: {
+          id: "sdk-assistant-same",
+          role: "assistant",
+          parts: [{ type: "text", text: "Hi" }],
+        },
+      });
+
+      const { __test } = await import("@/routes/chat/routes");
+
+      const syncedCount = await __test.syncPersistedMessageContents({
+        conversationId: conversation.id,
+        desiredThread: [
+          {
+            id: "sdk-assistant-same",
+            role: "assistant",
+            parts: [{ type: "text", text: "Hi" }],
+          },
+        ],
+      });
+
+      expect(syncedCount).toBe(0);
+    });
+  });
 });

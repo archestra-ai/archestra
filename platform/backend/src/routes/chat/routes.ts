@@ -771,6 +771,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                             conversationId,
                             finalMessages,
                             "onFinish",
+                            { syncExistingContents: true },
                           );
                           messagesPersisted = true;
                         } catch (error) {
@@ -1962,18 +1963,113 @@ export async function generateConversationTitle(
 // ============================================================================
 
 /**
+ * Applies in-place fixes to persisted message rows when their UI payloads evolved
+ * (same logical message id already in `messages`): e.g. MCP tool approvals that
+ * move from approval-requested to output-available across multiple /api/chat rounds.
+ *
+ * `@ai-sdk/react` merges updated tool state into existing UI messages rather than
+ * appending duplicates, while `persistNewMessages` historically only appended new
+ * rows — so approvals were lost after reload unless we update existing rows here.
+ */
+async function syncPersistedMessageContents(params: {
+  conversationId: string;
+  desiredThread: ChatMessage[];
+}): Promise<number> {
+  const persisted = await MessageModel.findByConversation(
+    params.conversationId,
+  );
+  if (persisted.length === 0) return 0;
+
+  const normalizedDesiredThread = normalizeChatMessages(params.desiredThread);
+  let updated = 0;
+
+  for (const normalizedDesired of normalizedDesiredThread) {
+    const lookupId =
+      typeof normalizedDesired.id === "string" ? normalizedDesired.id : undefined;
+    if (!lookupId) continue;
+
+    const storedRow = persisted.find((m) => {
+      const innerId = extractChatMessageInnerId(m.content);
+      return m.id === lookupId || innerId === lookupId;
+    });
+    if (!storedRow) continue;
+
+    const storedChatEnvelope = unwrapRowChatMessageEnvelope(storedRow);
+    if (!storedChatEnvelope) continue;
+
+    const normalizedStored = normalizeChatMessages([
+      storedChatEnvelope,
+    ])[0];
+    const preservedInnerSdkId =
+      extractChatMessageInnerId(storedRow.content) ?? normalizedDesired.id;
+
+    if (
+      serializeChatMessageComparable(normalizedDesired) ===
+      serializeChatMessageComparable(normalizedStored)
+    ) {
+      continue;
+    }
+
+    const contentPayload: ChatMessage = {
+      ...normalizedDesired,
+      id: preservedInnerSdkId,
+    };
+
+    await MessageModel.updateChatMessageContent({
+      dbMessageId: storedRow.id,
+      conversationId: storedRow.conversationId,
+      role: normalizedDesired.role ?? storedRow.role,
+      content: contentPayload,
+    });
+    updated++;
+  }
+
+  return updated;
+}
+
+function extractChatMessageInnerId(content: unknown): string | undefined {
+  if (
+    typeof content === "object" &&
+    content !== null &&
+    "id" in content &&
+    typeof (content as { id: unknown }).id === "string"
+  ) {
+    return (content as { id: string }).id;
+  }
+}
+
+function unwrapRowChatMessageEnvelope(row: {
+  content: unknown;
+  role: string;
+}): ChatMessage | null {
+  const envelope = row.content;
+  if (typeof envelope !== "object" || envelope === null || !("parts" in envelope)) {
+    return null;
+  }
+  return envelope as ChatMessage;
+}
+
+function serializeChatMessageComparable(message: ChatMessage): string {
+  const [normalized] = normalizeChatMessages([message]);
+  const { id: _ignoredId, ...rest } = normalized;
+  return JSON.stringify(rest);
+}
+
+/**
  * Persists new messages to the database for a conversation.
  * Strips images if browser streaming is enabled and handles empty message parts.
  *
  * @param conversationId - The conversation ID to persist messages for
  * @param messages - All messages (existing + new) to determine which ones to save
  * @param context - Context for logging (e.g., "onFinish", "onError")
- * @returns Promise<number> - Number of messages persisted
+ * @param options - Pass `syncExistingContents: true` on successful stream finish only
+ * @returns Promise<number> - Number of messages persisted (appended rows only)
  */
 async function persistNewMessages(
   conversationId: string,
   messages: unknown[],
   context: string,
+  options?: { syncExistingContents?: boolean },
 ): Promise<number> {
   try {
     // Get existing messages count to know how many are new
@@ -1985,61 +2081,80 @@ async function persistNewMessages(
       uiMessages,
     });
 
-    if (newMessages.length === 0) {
-      return 0;
+    let messagesToSave: ChatMessage[] = [];
+
+    if (newMessages.length > 0) {
+      // Check if last message has empty parts and strip it if so
+      messagesToSave = newMessages;
+      if (newMessages[newMessages.length - 1].parts?.length === 0) {
+        messagesToSave = newMessages.slice(0, -1);
+      }
     }
 
-    // Check if last message has empty parts and strip it if so
-    let messagesToSave = newMessages;
-    if (newMessages[newMessages.length - 1].parts?.length === 0) {
-      messagesToSave = newMessages.slice(0, -1);
-    }
+    let appendedCount = 0;
 
-    if (messagesToSave.length === 0) {
-      return 0;
-    }
+    if (messagesToSave.length > 0) {
+      let messagesToStore: ChatMessage[];
 
-    let messagesToStore: ChatMessage[];
+      // Strip base64 images and large browser tool results before storing
+      if (context === "onFinish") {
+        // Log size reduction only onFinish (where we have complete messages)
+        const beforeSize = estimateMessagesSize(messagesToSave);
+        messagesToStore = normalizeChatMessages(messagesToSave);
+        const afterSize = estimateMessagesSize(messagesToStore);
 
-    // Strip base64 images and large browser tool results before storing
-    if (context === "onFinish") {
-      // Log size reduction only for onFinish (where we have complete messages)
-      const beforeSize = estimateMessagesSize(messagesToSave);
-      messagesToStore = normalizeChatMessages(messagesToSave);
-      const afterSize = estimateMessagesSize(messagesToStore);
+        logger.info(
+          {
+            messageCount: messagesToSave.length,
+            beforeSizeKB: Math.round(beforeSize.length / 1024),
+            afterSizeKB: Math.round(afterSize.length / 1024),
+            savedKB: Math.round((beforeSize.length - afterSize.length) / 1024),
+            sizeEstimateReliable:
+              !beforeSize.isEstimated && !afterSize.isEstimated,
+          },
+          "[Chat] Stripped messages before saving to DB",
+        );
+      } else {
+        // For onError, just strip without detailed logging
+        messagesToStore = normalizeChatMessages(messagesToSave);
+      }
+
+      // Append only new messages with timestamps
+      const now = Date.now();
+      const messageData = messagesToStore.map((msg, index) => ({
+        conversationId,
+        role: msg.role ?? "assistant",
+        content: msg,
+        createdAt: new Date(now + index),
+      }));
+
+      await MessageModel.bulkCreate(messageData);
 
       logger.info(
-        {
-          messageCount: messagesToSave.length,
-          beforeSizeKB: Math.round(beforeSize.length / 1024),
-          afterSizeKB: Math.round(afterSize.length / 1024),
-          savedKB: Math.round((beforeSize.length - afterSize.length) / 1024),
-          sizeEstimateReliable:
-            !beforeSize.isEstimated && !afterSize.isEstimated,
-        },
-        "[Chat] Stripped messages before saving to DB",
+        `Appended ${messagesToSave.length} new messages to conversation ${conversationId} (${context})`,
       );
-    } else {
-      // For onError, just strip without detailed logging
-      messagesToStore = normalizeChatMessages(messagesToSave);
+
+      appendedCount = messagesToSave.length;
     }
 
-    // Append only new messages with timestamps
-    const now = Date.now();
-    const messageData = messagesToStore.map((msg, index) => ({
-      conversationId,
-      role: msg.role ?? "assistant",
-      content: msg,
-      createdAt: new Date(now + index),
-    }));
+    if (
+      context === "onFinish" &&
+      options?.syncExistingContents &&
+      uiMessages.length > 0
+    ) {
+      const synced = await syncPersistedMessageContents({
+        conversationId,
+        desiredThread: uiMessages,
+      });
+      if (synced > 0) {
+        logger.info(
+          { conversationId, syncedRows: synced },
+          "[Chat] Synced updated content into existing persisted messages",
+        );
+      }
+    }
 
-    await MessageModel.bulkCreate(messageData);
-
-    logger.info(
-      `Appended ${messagesToSave.length} new messages to conversation ${conversationId} (${context})`,
-    );
-
-    return messagesToSave.length;
+    return appendedCount;
   } catch (error) {
     logger.error(
       { error, conversationId, context },
@@ -2540,6 +2655,7 @@ async function validateChatApiKeyAccess(
 export const __test = {
   getMessagesNotYetPersisted,
   prepareMessagesForProvider,
+  syncPersistedMessageContents,
 };
 
 export default chatRoutes;

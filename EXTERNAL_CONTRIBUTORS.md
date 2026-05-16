@@ -336,3 +336,11 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @sachin0903
 - @mbachaud
 - @abrartawakl2056-cyber
+- @MoMia-Cerpro
+- @VinhTieuGit
+- @AlbinoGeek
+- @yi-hialong
+- @mirageaufsee
+- @funds0033-cmyk
+- @Rishikesh63
+- @antongordievsky

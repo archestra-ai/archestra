@@ -342,16 +342,41 @@ class SlackProvider implements ChatOpsProvider {
       });
     }
 
-    const result = await this.client.chat.postMessage({
-      channel: options.originalMessage.channelId,
-      text: options.footer
-        ? `${options.text}\n\n${options.footer}`
-        : options.text,
-      blocks,
-      thread_ts: options.originalMessage.threadId,
-    });
+    // Slack API rejects messages with more than 50 blocks.
+    // Split into batches and send sequentially in the same thread.
+    const SLACK_BLOCK_LIMIT = 50;
+    const fallbackText = options.footer
+      ? `${options.text}\n\n${options.footer}`
+      : options.text;
 
-    return (result.ts as string) || "";
+    let resultTs = "";
+
+    if (blocks.length <= SLACK_BLOCK_LIMIT) {
+      const result = await this.client.chat.postMessage({
+        channel: options.originalMessage.channelId,
+        text: fallbackText,
+        blocks,
+        thread_ts: options.originalMessage.threadId,
+      });
+      resultTs = (result.ts as string) || "";
+    } else {
+      // Send blocks in batches of SLACK_BLOCK_LIMIT
+      for (let i = 0; i < blocks.length; i += SLACK_BLOCK_LIMIT) {
+        const batch = blocks.slice(i, i + SLACK_BLOCK_LIMIT);
+        const isFirst = i === 0;
+        const result = await this.client.chat.postMessage({
+          channel: options.originalMessage.channelId,
+          text: isFirst ? fallbackText : "(continued)",
+          blocks: batch,
+          thread_ts: options.originalMessage.threadId,
+        });
+        if (isFirst) {
+          resultTs = (result.ts as string) || "";
+        }
+      }
+    }
+
+    return resultTs;
   }
 
   async addApprovalRequestForm(

@@ -342,3 +342,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @yi-hialong
 - @mirageaufsee
 - @funds0033-cmyk
+- @Rishikesh63

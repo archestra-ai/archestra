@@ -1,4 +1,9 @@
 import {
+  getAnthropicWorkloadIdentityAccessToken,
+  hasAnthropicSdkStaticCredentialsConfigured,
+  isAnthropicWorkloadIdentityConfigured,
+} from "@/clients/anthropic-workload-identity";
+import {
   getAzureAiFoundryBearerTokenProvider,
   isAnthropicAzureFoundryEntraIdEnabled,
 } from "@/clients/azure-openai-credentials";
@@ -18,7 +23,7 @@ export async function fetchAnthropicModels(
   const response = await fetch(url, {
     headers: {
       ...(extraHeaders ?? {}),
-      ...(await getAnthropicAuthHeaders(apiKey)),
+      ...(await getAnthropicAuthHeaders(apiKey, baseUrl)),
       "anthropic-version": "2023-06-01",
     },
   });
@@ -46,15 +51,25 @@ export async function fetchAnthropicModels(
 
 async function getAnthropicAuthHeaders(
   apiKey: string | undefined,
+  baseUrl: string,
 ): Promise<Record<string, string>> {
   if (apiKey) {
     return { "x-api-key": apiKey };
   }
 
-  if (!isAnthropicAzureFoundryEntraIdEnabled()) {
-    return { "x-api-key": "" };
+  if (isAnthropicAzureFoundryEntraIdEnabled()) {
+    const tokenProvider = getAzureAiFoundryBearerTokenProvider();
+    return { Authorization: `Bearer ${await tokenProvider()}` };
   }
 
-  const tokenProvider = getAzureAiFoundryBearerTokenProvider();
-  return { Authorization: `Bearer ${await tokenProvider()}` };
+  if (
+    !hasAnthropicSdkStaticCredentialsConfigured() &&
+    isAnthropicWorkloadIdentityConfigured()
+  ) {
+    return {
+      Authorization: `Bearer ${await getAnthropicWorkloadIdentityAccessToken(baseUrl)}`,
+    };
+  }
+
+  return { "x-api-key": "" };
 }

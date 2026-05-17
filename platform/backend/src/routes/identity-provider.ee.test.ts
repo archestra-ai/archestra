@@ -5,6 +5,15 @@ import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import { getIdpLogoutUrl } from "./identity-provider.ee";
 
+function createMockIdToken(claims: Record<string, unknown>): string {
+  const header = Buffer.from(
+    JSON.stringify({ alg: "HS256", typ: "JWT" }),
+  ).toString("base64url");
+  const payload = Buffer.from(JSON.stringify(claims)).toString("base64url");
+  const signature = "test-signature";
+  return `${header}.${payload}.${signature}`;
+}
+
 describe("getIdpLogoutUrl", () => {
   const originalFetch = globalThis.fetch;
 
@@ -405,6 +414,33 @@ describe("identity provider routes", () => {
       expect(provider).not.toHaveProperty("samlConfig");
     });
 
+    test("hides providers disabled for SSO login", async ({
+      makeIdentityProvider,
+    }) => {
+      await makeIdentityProvider(organizationId, {
+        providerId: "primary-login-provider",
+        ssoLoginEnabled: true,
+      });
+      await makeIdentityProvider(organizationId, {
+        providerId: "brokered-token-provider",
+        ssoLoginEnabled: false,
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/identity-providers/public",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const data = response.json() as Array<{ providerId: string }>;
+      expect(data.map((provider) => provider.providerId)).toContain(
+        "primary-login-provider",
+      );
+      expect(data.map((provider) => provider.providerId)).not.toContain(
+        "brokered-token-provider",
+      );
+    });
+
     test("returns empty array when no providers exist", async () => {
       const response = await app.inject({
         method: "GET",
@@ -450,6 +486,108 @@ describe("identity provider routes", () => {
       const data = response.json();
       expect(data).toHaveProperty("id", idp.id);
       expect(data).toHaveProperty("providerId", "get-by-id-provider");
+    });
+  });
+
+  describe("GET /api/identity-providers/:id/latest-id-token-claims", () => {
+    test("returns decoded claims for the current user's latest account", async ({
+      makeAccount,
+      makeIdentityProvider,
+    }) => {
+      const idp = await makeIdentityProvider(organizationId, {
+        providerId: "claims-provider",
+        oidcConfig: {
+          clientId: "test-client",
+          clientSecret: "test-secret",
+          issuer: "https://idp.example.com",
+          pkce: false,
+          discoveryEndpoint:
+            "https://idp.example.com/.well-known/openid-configuration",
+        },
+      });
+
+      await makeAccount(user.id, {
+        providerId: "claims-provider",
+        idToken: createMockIdToken({
+          sub: "user-subject",
+          email: "admin@example.com",
+          groups: ["engineering"],
+          roles: ["app-admin"],
+        }),
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/identity-providers/${idp.id}/latest-id-token-claims`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        providerId: "claims-provider",
+        claims: {
+          sub: "user-subject",
+          email: "admin@example.com",
+          groups: ["engineering"],
+          roles: ["app-admin"],
+        },
+      });
+      expect(response.json()).not.toHaveProperty("idToken");
+    });
+
+    test("does not expose another user's token claims", async ({
+      makeAccount,
+      makeIdentityProvider,
+      makeUser,
+    }) => {
+      const otherUser = await makeUser({ email: "other@example.com" });
+      const idp = await makeIdentityProvider(organizationId, {
+        providerId: "other-user-claims-provider",
+        oidcConfig: {
+          clientId: "test-client",
+          clientSecret: "test-secret",
+          issuer: "https://idp.example.com",
+          pkce: false,
+          discoveryEndpoint:
+            "https://idp.example.com/.well-known/openid-configuration",
+        },
+      });
+
+      await makeAccount(otherUser.id, {
+        providerId: "other-user-claims-provider",
+        idToken: createMockIdToken({
+          sub: "other-user",
+          email: "other@example.com",
+          groups: ["admins"],
+        }),
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/identity-providers/${idp.id}/latest-id-token-claims`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        providerId: "other-user-claims-provider",
+        claims: null,
+      });
+    });
+
+    test("returns 404 for a provider outside the current organization", async ({
+      makeIdentityProvider,
+      makeOrganization,
+    }) => {
+      const otherOrg = await makeOrganization();
+      const idp = await makeIdentityProvider(otherOrg.id, {
+        providerId: "other-org-provider",
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/identity-providers/${idp.id}/latest-id-token-claims`,
+      });
+
+      expect(response.statusCode).toBe(404);
     });
   });
 

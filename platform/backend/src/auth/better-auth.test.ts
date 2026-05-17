@@ -1374,6 +1374,55 @@ describe("handleAfterHook", () => {
       expect(member?.role).toBe("admin");
     });
 
+    test("should leave existing role unchanged when role mapping has no rules", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeAccount,
+      makeIdentityProvider,
+    }) => {
+      const user = await makeUser({ email: "default-only@example.com" });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "admin" });
+
+      await makeIdentityProvider(org.id, {
+        providerId: "keycloak-default-only",
+        roleMapping: {
+          defaultRole: "member",
+          rules: [],
+        } as unknown as Record<string, unknown>,
+      });
+
+      await makeAccount(user.id, {
+        providerId: "keycloak-default-only",
+        idToken: createMockIdToken({
+          sub: user.id,
+          email: user.email,
+          groups: ["admins"],
+        }),
+      });
+
+      const ctx = createMockContext({
+        path: "/sso/callback/keycloak-default-only",
+        method: "GET",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: "test-session-id", activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      await handleAfterHook(ctx);
+
+      // Default-role fallback must not silently overwrite an existing
+      // member's role — provisioning is handled elsewhere, and ongoing
+      // sync should only mutate when a rule explicitly matches.
+      const member = await MemberModel.getByUserId(user.id, org.id);
+      expect(member?.role).toBe("admin");
+    });
+
     test("should not sync role for regular sign-in (non-SSO)", async ({
       makeUser,
       makeOrganization,
@@ -1583,26 +1632,25 @@ describe("handleAfterHook", () => {
       // Start with admin role
       await makeMember(user.id, org.id, { role: "admin" });
 
-      // Create SSO provider with role mapping that demotes non-admins
+      // Create SSO provider with a rule that explicitly resolves the
+      // user's groups to "member" — only an explicit rule match should
+      // mutate an existing membership's role.
       await makeIdentityProvider(org.id, {
         providerId: "keycloak-demote",
         roleMapping: {
-          defaultRole: "member", // Default to member if no rules match
           rules: [
             {
-              expression:
-                '{{#includes groups "super-admins"}}true{{/includes}}',
-              role: "admin",
+              expression: '{{#includes groups "users"}}true{{/includes}}',
+              role: "member",
             },
           ],
         } as unknown as Record<string, unknown>,
       });
 
-      // Create SSO account WITHOUT super-admins group
       const idToken = createMockIdToken({
         sub: user.id,
         email: user.email,
-        groups: ["users"], // Not in super-admins
+        groups: ["users"],
       });
       await makeAccount(user.id, {
         providerId: "keycloak-demote",

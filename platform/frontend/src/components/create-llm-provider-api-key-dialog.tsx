@@ -1,6 +1,6 @@
 "use client";
 
-import { PROVIDERS_WITH_OPTIONAL_API_KEY } from "@shared";
+import { isProviderApiKeyOptional } from "@shared";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
@@ -47,6 +47,7 @@ export function CreateLlmProviderApiKeyDialog({
   const createMutation = useCreateLlmProviderApiKey();
   const { data: existingKeys = [] } = useLlmProviderApiKeys({ enabled: open });
   const byosEnabled = useFeature("byosEnabled");
+  const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
   const bedrockIamAuthEnabled = useFeature("bedrockIamAuthEnabled");
   const geminiVertexAiEnabled = useFeature("geminiVertexAiEnabled");
   const { data: canCreateOrgScopedKey } = useHasPermissions({
@@ -72,30 +73,43 @@ export function CreateLlmProviderApiKeyDialog({
 
   const formValues = form.watch();
   const isValid = getIsCreateFormValid({
+    azureOpenAiEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
     byosEnabled: Boolean(byosEnabled),
     values: formValues,
   });
 
   const handleCreate = form.handleSubmit(async (values) => {
+    const isBedrockSigV4 =
+      values.provider === "bedrock" && values.bedrockAuthMethod === "sigv4";
     try {
       await createMutation.mutateAsync({
         name: values.name?.trim() || PROVIDER_CONFIG[values.provider].name,
         provider: values.provider,
-        apiKey: values.apiKey || undefined,
+        apiKey: isBedrockSigV4 ? undefined : values.apiKey || undefined,
         baseUrl: values.baseUrl || undefined,
+        inferenceBaseUrl: values.inferenceBaseUrl || undefined,
         extraHeaders: serializeExtraHeaders(values.extraHeaders) ?? undefined,
         scope: values.scope,
         teamId:
           values.scope === "team" && values.teamId ? values.teamId : undefined,
         isPrimary: values.isPrimary,
         vaultSecretPath:
-          byosEnabled && values.vaultSecretPath
+          !isBedrockSigV4 && byosEnabled && values.vaultSecretPath
             ? values.vaultSecretPath
             : undefined,
         vaultSecretKey:
-          byosEnabled && values.vaultSecretKey
+          !isBedrockSigV4 && byosEnabled && values.vaultSecretKey
             ? values.vaultSecretKey
             : undefined,
+        awsAccessKeyId: isBedrockSigV4
+          ? values.awsAccessKeyId || undefined
+          : undefined,
+        awsSecretAccessKey: isBedrockSigV4
+          ? values.awsSecretAccessKey || undefined
+          : undefined,
+        awsSessionToken: isBedrockSigV4
+          ? values.awsSessionToken || undefined
+          : undefined,
       });
       onOpenChange(false);
       onSuccess?.();
@@ -111,6 +125,7 @@ export function CreateLlmProviderApiKeyDialog({
       title={title}
       description={description}
       size="small"
+      className="sm:max-w-xl"
     >
       <DialogForm
         onSubmit={handleCreate}
@@ -157,28 +172,44 @@ function getDefaultFormValues(params: {
     provider: "anthropic",
     apiKey: null,
     baseUrl: null,
+    inferenceBaseUrl: null,
     extraHeaders: [],
     scope: canCreateOrgScopedKey ? "org" : "personal",
     teamId: null,
     vaultSecretPath: null,
     vaultSecretKey: null,
     isPrimary: false,
+    bedrockAuthMethod: "api-key",
+    awsAccessKeyId: null,
+    awsSecretAccessKey: null,
+    awsSessionToken: null,
     ...defaultValues,
   };
 }
 
 function getIsCreateFormValid(params: {
+  azureOpenAiEntraIdEnabled: boolean;
   byosEnabled: boolean;
   values: LlmProviderApiKeyFormValues;
 }) {
-  const { byosEnabled, values } = params;
+  const { azureOpenAiEntraIdEnabled, byosEnabled, values } = params;
+
+  if (values.provider === "bedrock" && values.bedrockAuthMethod === "sigv4") {
+    return Boolean(
+      values.awsAccessKeyId &&
+        values.awsSecretAccessKey &&
+        (values.scope !== "team" || values.teamId),
+    );
+  }
 
   return Boolean(
     values.apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER &&
       (values.scope !== "team" || values.teamId) &&
       (byosEnabled
         ? values.vaultSecretPath && values.vaultSecretKey
-        : PROVIDERS_WITH_OPTIONAL_API_KEY.has(values.provider) ||
-          values.apiKey),
+        : isProviderApiKeyOptional({
+            provider: values.provider,
+            azureEntraIdEnabled: azureOpenAiEntraIdEnabled,
+          }) || values.apiKey),
   );
 }

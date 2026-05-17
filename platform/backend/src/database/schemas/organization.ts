@@ -3,7 +3,7 @@ import type {
   OrganizationTheme,
   SupportedProvider,
 } from "@shared";
-import { DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS } from "@shared";
+import { DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS } from "@shared";
 import {
   boolean,
   integer,
@@ -17,10 +17,10 @@ import {
 import type {
   ConnectionBaseUrl,
   GlobalToolPolicy,
+  LimitCleanupInterval,
   OnboardingWizard,
   OrganizationChatLink,
   OrganizationCompressionScope,
-  OrganizationLimitCleanupInterval,
 } from "@/types";
 
 const organizationsTable = pgTable("organization", {
@@ -31,9 +31,6 @@ const organizationsTable = pgTable("organization", {
   logoDark: text("logo_dark"),
   createdAt: timestamp("created_at").notNull(),
   metadata: text("metadata"),
-  limitCleanupInterval: varchar("limit_cleanup_interval")
-    .$type<OrganizationLimitCleanupInterval>()
-    .default("1h"),
   onboardingComplete: boolean("onboarding_complete").notNull().default(false),
   theme: text("theme")
     .$type<OrganizationTheme>()
@@ -101,6 +98,19 @@ const organizationsTable = pgTable("organization", {
    */
   defaultLlmApiKeyId: uuid("default_llm_api_key_id"),
 
+  /** Default token-cost limit value applied to every organization member. */
+  defaultUserLimitValue: integer("default_user_limit_value"),
+
+  /** Models covered by the default user limit. Null means all models. */
+  defaultUserLimitModel: jsonb("default_user_limit_model").$type<
+    string[] | null
+  >(),
+
+  /** Cleanup interval used by default user limits. Null falls back to weekly. */
+  defaultUserLimitCleanupInterval: varchar(
+    "default_user_limit_cleanup_interval",
+  ).$type<LimitCleanupInterval>(),
+
   /**
    * Organization-wide default agent ID (fallback when member has no personal default).
    * FK to agents(id) ON DELETE SET NULL — enforced by migration only
@@ -147,14 +157,14 @@ const organizationsTable = pgTable("organization", {
   showTwoFactor: boolean("show_two_factor").notNull().default(false),
 
   /**
-   * OAuth access token lifetime for MCP-native auth flows.
+   * Organization OAuth access token lifetime for user authorization-code flows.
    * Returned to clients via `expires_in` and used to persist token expiration.
    */
-  mcpOauthAccessTokenLifetimeSeconds: integer(
-    "mcp_oauth_access_token_lifetime_seconds",
+  oauthAccessTokenLifetimeSeconds: integer(
+    "oauth_access_token_lifetime_seconds",
   )
     .notNull()
-    .default(DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS),
+    .default(DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS),
 
   /**
    * Admin-selected MCP gateway pre-filled on /connection.

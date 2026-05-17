@@ -1,10 +1,11 @@
 import {
+  getProvidersWithOptionalApiKey,
   isVaultReference,
-  PROVIDERS_WITH_OPTIONAL_API_KEY,
   parseVaultReference,
   type SupportedProvider,
 } from "@shared";
 import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import db, { schema } from "@/database";
 import { computeSecretStorageType } from "@/secrets-manager/utils";
 import type {
@@ -16,6 +17,7 @@ import type {
   UpdateLlmProviderApiKey,
 } from "@/types";
 import { decryptSecretValue, isEncryptedSecret } from "@/utils/crypto";
+import { escapeLikePattern } from "@/utils/sql-search";
 import ConversationModel from "./conversation";
 
 class LlmProviderApiKeyModel {
@@ -164,6 +166,7 @@ class LlmProviderApiKeyModel {
         provider: schema.llmProviderApiKeysTable.provider,
         secretId: schema.llmProviderApiKeysTable.secretId,
         baseUrl: schema.llmProviderApiKeysTable.baseUrl,
+        inferenceBaseUrl: schema.llmProviderApiKeysTable.inferenceBaseUrl,
         extraHeaders: schema.llmProviderApiKeysTable.extraHeaders,
         scope: schema.llmProviderApiKeysTable.scope,
         userId: schema.llmProviderApiKeysTable.userId,
@@ -267,9 +270,12 @@ class LlmProviderApiKeyModel {
     const secretOrSystemCondition = or(
       sql`${schema.llmProviderApiKeysTable.secretId} IS NOT NULL`,
       eq(schema.llmProviderApiKeysTable.isSystem, true),
-      inArray(schema.llmProviderApiKeysTable.provider, [
-        ...PROVIDERS_WITH_OPTIONAL_API_KEY,
-      ]),
+      inArray(
+        schema.llmProviderApiKeysTable.provider,
+        getProvidersWithOptionalApiKey({
+          azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+        }),
+      ),
     );
     if (secretOrSystemCondition) {
       conditions.push(secretOrSystemCondition);
@@ -286,6 +292,7 @@ class LlmProviderApiKeyModel {
         provider: schema.llmProviderApiKeysTable.provider,
         secretId: schema.llmProviderApiKeysTable.secretId,
         baseUrl: schema.llmProviderApiKeysTable.baseUrl,
+        inferenceBaseUrl: schema.llmProviderApiKeysTable.inferenceBaseUrl,
         extraHeaders: schema.llmProviderApiKeysTable.extraHeaders,
         scope: schema.llmProviderApiKeysTable.scope,
         userId: schema.llmProviderApiKeysTable.userId,
@@ -381,7 +388,7 @@ class LlmProviderApiKeyModel {
       if (
         conversationKey &&
         conversationKey.provider === provider &&
-        conversationKey.secretId
+        canUseProviderApiKey(conversationKey)
       ) {
         // If conversation's key matches agent's configured key, skip user access check
         if (
@@ -407,7 +414,11 @@ class LlmProviderApiKeyModel {
     //    (no user permission check — permission flows through agent access)
     if (agentLlmApiKeyId) {
       const agentKey = await LlmProviderApiKeyModel.findById(agentLlmApiKeyId);
-      if (agentKey && agentKey.provider === provider && agentKey.secretId) {
+      if (
+        agentKey &&
+        agentKey.provider === provider &&
+        canUseProviderApiKey(agentKey)
+      ) {
         return agentKey;
       }
     }
@@ -415,9 +426,12 @@ class LlmProviderApiKeyModel {
     // Condition: key has a secret OR provider allows optional API keys
     const hasSecretOrOptional = or(
       sql`${schema.llmProviderApiKeysTable.secretId} IS NOT NULL`,
-      inArray(schema.llmProviderApiKeysTable.provider, [
-        ...PROVIDERS_WITH_OPTIONAL_API_KEY,
-      ]),
+      inArray(
+        schema.llmProviderApiKeysTable.provider,
+        getProvidersWithOptionalApiKey({
+          azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+        }),
+      ),
     );
 
     // 3. Try personal key (prefer isPrimary, then oldest)
@@ -702,10 +716,6 @@ class LlmProviderApiKeyModel {
   }
 }
 
-function escapeLikePattern(value: string): string {
-  return value.replace(/[%_\\]/g, "\\$&");
-}
-
 /**
  * Helper to parse vault reference from a secret value.
  * For LLM provider API keys, the secret contains { apiKey: "path#key" } format.
@@ -726,6 +736,18 @@ function parseVaultReferenceFromSecret(
     };
   }
   return null;
+}
+
+function canUseProviderApiKey(
+  apiKey: Pick<LlmProviderApiKey, "provider" | "secretId">,
+): boolean {
+  if (apiKey.secretId) {
+    return true;
+  }
+
+  return getProvidersWithOptionalApiKey({
+    azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+  }).includes(apiKey.provider);
 }
 
 export default LlmProviderApiKeyModel;

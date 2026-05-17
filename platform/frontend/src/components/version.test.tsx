@@ -46,7 +46,8 @@ vi.mock("@/lib/config/health.query", () => ({
 }));
 
 vi.mock("@/lib/github/github-release.query", () => ({
-  useLatestGitHubRelease: () => mockUseLatestGitHubRelease(),
+  useLatestGitHubRelease: (params?: { enabled?: boolean }) =>
+    mockUseLatestGitHubRelease(params),
 }));
 
 vi.mock("@/lib/organization.query", () => ({
@@ -101,5 +102,23 @@ describe("Version", () => {
         name: "v1.1.33",
       }),
     ).not.toBeInTheDocument();
+    expect(mockUseLatestGitHubRelease).toHaveBeenCalledWith({
+      enabled: false,
+      deferMs: 5000,
+    });
+  });
+
+  it("skips latest release lookup when custom footer text is configured", () => {
+    mockUseOrganization.mockReturnValue({
+      data: { footerText: "Custom footer" },
+    });
+
+    const { container } = render(<Version inline />);
+
+    expect(container.firstChild).toHaveTextContent("Custom footer (v1.1.32)");
+    expect(mockUseLatestGitHubRelease).toHaveBeenCalledWith({
+      enabled: false,
+      deferMs: 5000,
+    });
   });
 });

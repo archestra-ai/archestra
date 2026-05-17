@@ -16,7 +16,6 @@ import { authClient } from "@/lib/clients/auth/auth-client";
 vi.mock("@/lib/clients/auth/auth-client", () => ({
   authClient: {
     getSession: vi.fn(),
-    useSession: vi.fn(),
     organization: {
       listMembers: vi.fn(),
     },
@@ -50,13 +49,12 @@ const createWrapper = () => {
 beforeEach(() => {
   vi.clearAllMocks();
 
-  // Default mock for authClient.useSession - returns authenticated state
-  vi.mocked(authClient.useSession).mockReturnValue({
+  vi.mocked(authClient.getSession).mockResolvedValue({
     data: {
       user: { id: "test-user", email: "test@example.com" },
       session: { id: "test-session" },
     },
-  } as ReturnType<typeof authClient.useSession>);
+  } as Awaited<ReturnType<typeof authClient.getSession>>);
 });
 
 describe("useSession", () => {
@@ -303,6 +301,7 @@ describe("useHasPermissions", () => {
     expect(result2.current.data).toBe(true);
 
     // But getUserPermissions should only have been called once
+    expect(authClient.getSession).toHaveBeenCalledTimes(1);
     expect(archestraApiSdk.getUserPermissions).toHaveBeenCalledTimes(1);
   });
 });

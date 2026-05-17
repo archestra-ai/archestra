@@ -2,6 +2,7 @@ import { E2eTestId } from "@shared";
 import {
   Clock,
   Copy,
+  Download,
   Eye,
   MessageSquare,
   Pencil,
@@ -26,6 +27,7 @@ type AgentActionsProps = {
   onView: (agent: Agent) => void;
   onDelete: (agentId: string) => void;
   onClone: (agentId: string) => void;
+  onExport: (agent: Agent) => void;
 };
 
 export function AgentActions({
@@ -36,6 +38,7 @@ export function AgentActions({
   onView,
   onDelete,
   onClone,
+  onExport,
 }: AgentActionsProps) {
   const isBuiltIn = Boolean(agent.builtIn);
 
@@ -56,7 +59,7 @@ export function AgentActions({
           testId: `${E2eTestId.EditAgentButton}-${agent.name}`,
         };
 
-  const actions: TableRowAction[] = [
+  const primaryActions: TableRowAction[] = [
     {
       icon: <Plug className="h-4 w-4" />,
       label: "Connect",
@@ -72,6 +75,10 @@ export function AgentActions({
       disabledTooltip: "Built-in agents cannot be chatted with",
       href: `/chat/new?agent_id=${agent.id}`,
     },
+    editOrViewAction,
+  ];
+
+  const dropdownActions: TableRowAction[] = [
     {
       icon: <Clock className="h-4 w-4" />,
       label: "Schedule",
@@ -91,7 +98,18 @@ export function AgentActions({
       onClick: () => onClone(agent.id),
       testId: `${E2eTestId.CloneAgentButton}-${agent.name}`,
     },
-    editOrViewAction,
+    {
+      icon: <Download className="h-4 w-4" />,
+      label: "Export",
+      permissions: { agent: ["read"] },
+      disabled: isBuiltIn || agent.agentType !== "agent",
+      disabledTooltip: isBuiltIn
+        ? "Built-in agents cannot be exported"
+        : agent.agentType !== "agent"
+          ? "Only internal agents can be exported"
+          : undefined,
+      onClick: () => onExport(agent),
+    },
     {
       icon: <Trash2 className="h-4 w-4" />,
       label: "Delete",
@@ -106,5 +124,10 @@ export function AgentActions({
     },
   ];
 
-  return <TableRowActions actions={actions} />;
+  return (
+    <TableRowActions
+      actions={primaryActions}
+      dropdownActions={dropdownActions}
+    />
+  );
 }

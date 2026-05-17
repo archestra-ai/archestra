@@ -29,6 +29,7 @@ import { LlmProviderApiKeyModel, OrganizationModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import {
   getDefaultOrgEmbeddingConfig,
+  resolveApiKeyFromChatApiKey,
   resolveEmbeddingConfig,
   resolveRerankerConfig,
 } from "./kb-llm-client";
@@ -42,6 +43,32 @@ async function createSecret(): Promise<string> {
 }
 
 describe("resolveEmbeddingConfig", () => {
+  test("uses inferenceBaseUrl when resolving a chat API key", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const secretId = await createSecret();
+
+    const chatApiKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      name: "Azure Key",
+      provider: "azure",
+      secretId,
+      scope: "org",
+      userId: null,
+      teamId: null,
+      baseUrl: "https://discovery.example.com/openai",
+      inferenceBaseUrl: "https://runtime.example.com/openai",
+    });
+
+    mockGetSecretValue.mockResolvedValueOnce("azure-key");
+
+    const result = await resolveApiKeyFromChatApiKey(chatApiKey.id);
+
+    expect(result?.apiKey).toBe("azure-key");
+    expect(result?.baseUrl).toBe("https://runtime.example.com/openai");
+  });
+
   test("returns config when org has embedding key and model configured", async ({
     makeOrganization,
   }) => {

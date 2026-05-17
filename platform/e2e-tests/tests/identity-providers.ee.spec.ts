@@ -3,6 +3,7 @@ import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
   E2eTestId,
+  getIdentityProviderDialogNavButtonTestId,
   getIdpRoleMappingRuleRowTestId,
   KEYCLOAK_OIDC,
   KEYCLOAK_SAML,
@@ -27,6 +28,7 @@ import {
   fetchKeycloakSamlMetadata,
   loginViaApi,
   loginViaKeycloak,
+  loginViaUi,
 } from "../utils";
 
 // Run tests in this file serially to avoid conflicts when both tests
@@ -77,9 +79,7 @@ async function ensureAdminAuthenticated(page: Page): Promise<void> {
       "API login appeared to fail (redirected to sign-in), trying UI fallback...",
     );
     // Try logging in via UI as fallback
-    await page.getByLabel("Email").fill(ADMIN_EMAIL);
-    await page.getByLabel("Password").fill(ADMIN_PASSWORD);
-    await page.getByRole("button", { name: "Login" }).click();
+    await loginViaUi(page, ADMIN_EMAIL, ADMIN_PASSWORD);
     await page.waitForLoadState("domcontentloaded");
 
     // Check for error toast or message on the sign-in page
@@ -130,7 +130,10 @@ async function fillOidcProviderForm(
 ): Promise<void> {
   await page.getByLabel("Provider ID").fill(providerName);
   await page.getByLabel("Issuer").fill(KEYCLOAK_OIDC.issuer);
-  await page.getByLabel("Domain").fill(SSO_DOMAIN);
+  const allowedDomainsInput = page.getByLabel("Allowed Email Domains");
+  if (await allowedDomainsInput.isVisible().catch(() => false)) {
+    await allowedDomainsInput.fill(SSO_DOMAIN);
+  }
   await page.getByLabel("Client ID").fill(KEYCLOAK_OIDC.clientId);
   await page.getByLabel("Client Secret").fill(KEYCLOAK_OIDC.clientSecret);
   await page
@@ -253,6 +256,15 @@ async function getTeamIdByNameViaApi(
 
 function getRoleMappingRuleRow(page: Page, index: number) {
   return page.getByTestId(getIdpRoleMappingRuleRowTestId(index));
+}
+
+async function openIdentityProviderDialogSection(
+  page: Page,
+  section: string,
+): Promise<void> {
+  await page
+    .getByTestId(getIdentityProviderDialogNavButtonTestId(section))
+    .click();
 }
 
 function getIdentityProviderConfigId(
@@ -683,10 +695,18 @@ test.describe("Identity Provider OIDC E2E Flow with Keycloak", () => {
 
     // Click on Generic OIDC card to edit (our provider)
     await openIdentityProviderDialog(page, "Generic OIDC");
+    await expect(
+      page.getByTestId(E2eTestId.IdentityProviderUpdateButton),
+    ).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByLabel("Client ID")).toBeVisible({
+      timeout: 10_000,
+    });
 
-    // Update the domain (use a subdomain to keep it valid for the same email domain)
-    await page.getByLabel("Domain").clear();
-    await page.getByLabel("Domain").fill(`updated.${SSO_DOMAIN}`);
+    // Update a Generic OIDC field that is rendered in the edit dialog.
+    await page.getByLabel("Client ID").clear();
+    await page
+      .getByLabel("Client ID")
+      .fill(`${KEYCLOAK_OIDC.clientId}-updated`);
 
     // Save changes
     await page.getByTestId(E2eTestId.IdentityProviderUpdateButton).click();
@@ -807,7 +827,7 @@ test.describe("Identity Provider Role Mapping E2E", () => {
     // STEP 3: Configure Role Mapping with TWO rules
     // The first rule will NOT match (looks for a non-existent group)
     // The second rule WILL match (looks for archestra-admins group)
-    await page.getByTestId(E2eTestId.IdpRoleMappingAccordionTrigger).click();
+    await openIdentityProviderDialogSection(page, "role-mapping");
 
     const addRuleButton = page.getByTestId(E2eTestId.IdpRoleMappingAddRule);
     await expect(addRuleButton).toBeVisible();
@@ -875,8 +895,7 @@ test.describe("Identity Provider Role Mapping E2E", () => {
     await fillOidcProviderForm(page, providerName);
 
     // STEP 2: Configure Role Mapping
-    // Expand the Role Mapping accordion
-    await page.getByTestId(E2eTestId.IdpRoleMappingAccordionTrigger).click();
+    await openIdentityProviderDialogSection(page, "role-mapping");
 
     // Wait for accordion to expand - look for the Add Rule button
     const addRuleButton = page.getByTestId(E2eTestId.IdpRoleMappingAddRule);

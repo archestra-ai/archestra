@@ -10,7 +10,7 @@ import {
   isValidTimezone,
   normalizeCronExpression,
   normalizeTimezone,
-} from "@/schedule-triggers/utils";
+} from "@/utils/schedule-trigger";
 
 export const ScheduleTriggerRunKindSchema = z.enum(["due", "manual"]);
 export type ScheduleTriggerRunKind = z.infer<

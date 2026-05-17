@@ -1418,6 +1418,19 @@ describe("mapProviderError - Fallback behavior", () => {
     expect(result.originalError?.message).toBe("Standard error message");
   });
 
+  it("should map bare stream termination errors to retryable network errors", () => {
+    const error = new Error("terminated");
+    const result = mapProviderError(error, "openai");
+
+    expect(result.code).toBe(ChatErrorCode.NetworkError);
+    expect(result.isRetryable).toBe(true);
+    expect(result.message).toBe(ChatErrorMessages[ChatErrorCode.NetworkError]);
+    expect(result.originalError?.message).toBe(
+      "Upstream provider closed the connection unexpectedly",
+    );
+    expect(mockSentryCaptureException).not.toHaveBeenCalled();
+  });
+
   it("should handle string errors", () => {
     const result = mapProviderError("Simple string error", "openai");
 

@@ -24,14 +24,54 @@ import {
 } from "@/services/mcp-reinstall";
 import {
   ApiError,
+  CreateChildCatalogSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
+  ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
   InsertInternalMcpCatalogSchema,
+  type InternalMcpCatalog,
+  ListInternalMcpCatalogSchema,
   PartialUpdateInternalMcpCatalogSchema,
+  type PresetFieldValues,
   SelectInternalMcpCatalogSchema,
+  UpdateChildCatalogSchema,
   UuidIdSchema,
 } from "@/types";
 import { broadcastMcpInstallationStatus } from "@/websocket";
+
+/**
+ * Columns propagated from a parent catalog item to its children — both at
+ * child creation and on parent-edit cascade. Children inherit the parent's
+ * template and overlay only their `presetFieldValues` / identity columns.
+ *
+ * Note: `multitenant` is included so newly-created children match the parent.
+ * On parent PUT cascade, the schema-level "locked after creation" rule on
+ * Update silently no-ops it, which is what we want — children's tenancy was
+ * fixed at creation time.
+ */
+type SyncableCatalogFields = Pick<
+  InternalMcpCatalog,
+  | "version"
+  | "description"
+  | "instructions"
+  | "repository"
+  | "installationCommand"
+  | "requiresAuth"
+  | "authDescription"
+  | "authFields"
+  | "serverType"
+  | "multitenant"
+  | "serverUrl"
+  | "docsUrl"
+  | "clientSecretId"
+  | "localConfigSecretId"
+  | "localConfig"
+  | "deploymentSpecYaml"
+  | "userConfig"
+  | "oauthConfig"
+  | "enterpriseManagedConfig"
+  | "icon"
+>;
 
 // Match the schema from getMcpServerTools endpoint
 const ToolWithAssignedAgentCountSchema = z.object({
@@ -57,8 +97,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetInternalMcpCatalog,
         description: "Get all Internal MCP catalog items",
         tags: ["MCP Catalog"],
+        querystring: z.object({
+          includeChildren: z
+            .union([z.boolean(), z.enum(["true", "false"])])
+            .optional()
+            .transform((v) => v === true || v === "true"),
+        }),
         response: constructResponseSchema(
-          z.array(SelectInternalMcpCatalogSchema),
+          z.array(ListInternalMcpCatalogSchema),
         ),
       },
     },
@@ -73,6 +119,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           expandSecrets: false,
           userId: request.user.id,
           isAdmin,
+          organizationId: request.organizationId,
+          includeChildren: request.query.includeChildren,
         }),
       );
     },
@@ -165,14 +213,31 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       ) {
         // Direct client_secret value
         const clientSecret = restBody.oauthConfig.client_secret;
-        const secret = await secretManager().createSecret(
-          { client_secret: clientSecret },
-          `${restBody.name}-oauth-client-secret`,
-        );
-        clientSecretId = secret.id;
+        if (clientSecret) {
+          clientSecretId = await upsertCatalogClientSecretValue({
+            clientSecretId,
+            catalogName: restBody.name,
+            key: "client_secret",
+            value: clientSecret,
+          });
+
+          restBody.clientSecretId = clientSecretId;
+        }
+        delete restBody.oauthConfig.client_secret;
+      }
+
+      const enterpriseManagedClientSecretOverride =
+        restBody.enterpriseManagedConfig?.clientSecretOverride;
+      if (enterpriseManagedClientSecretOverride) {
+        clientSecretId = await upsertCatalogClientSecretValue({
+          clientSecretId,
+          catalogName: restBody.name,
+          key: ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
+          value: enterpriseManagedClientSecretOverride,
+        });
 
         restBody.clientSecretId = clientSecretId;
-        delete restBody.oauthConfig.client_secret;
+        delete restBody.enterpriseManagedConfig?.clientSecretOverride;
       }
 
       // Handle local config secrets - either via Readonly Vault or direct values
@@ -292,6 +357,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const catalogItem = await InternalMcpCatalogModel.findById(id, {
         userId: request.user.id,
         isAdmin,
+        organizationId: request.organizationId,
       });
 
       if (!catalogItem) {
@@ -318,12 +384,24 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { id } }, reply) => {
-      // Verify catalog exists (including virtual Archestra catalog)
-      const catalogItem = await InternalMcpCatalogModel.findById(id);
+    async (request, reply) => {
+      const { id } = request.params;
+      const { success: isAdmin } = await hasPermission(
+        { mcpServerInstallation: ["admin"] },
+        request.headers,
+      );
+      // The built-in Archestra catalog is virtual; custom/private catalog IDs
+      // still need an access-checked backing row.
+      if (!isBuiltInCatalogId(id)) {
+        const catalogItem = await InternalMcpCatalogModel.findById(id, {
+          userId: request.user.id,
+          isAdmin,
+          organizationId: request.organizationId,
+        });
 
-      if (!catalogItem) {
-        throw new ApiError(404, "Catalog item not found");
+        if (!catalogItem) {
+          throw new ApiError(404, "Catalog item not found");
+        }
       }
 
       const tools = await ToolModel.findByCatalogId(id);
@@ -377,18 +455,21 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // before persistence, so work on a cloned object instead of the request body.
       const restBody = structuredClone(restBodyInput);
 
-      // Get the original catalog item to check if name or serverUrl changed
-      const originalCatalogItem = await InternalMcpCatalogModel.findById(id);
-
-      if (!originalCatalogItem) {
-        throw new ApiError(404, "Catalog item not found");
-      }
-
-      // Enforce scope restrictions
       const { success: isAdmin } = await hasPermission(
         { mcpServerInstallation: ["admin"] },
         request.headers,
       );
+
+      // Get the original catalog item to check if name or serverUrl changed
+      const originalCatalogItem = await InternalMcpCatalogModel.findById(id, {
+        userId: request.user.id,
+        isAdmin,
+        organizationId: request.organizationId,
+      });
+
+      if (!originalCatalogItem) {
+        throw new ApiError(404, "Catalog item not found");
+      }
 
       if (!isAdmin) {
         // Non-admins can only edit their own personal items
@@ -428,6 +509,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         }
 
+        const existingSecretValues =
+          await getCatalogClientSecretValues(clientSecretId);
+
         // Delete existing secret if any
         if (clientSecretId) {
           await secretManager().deleteSecret(clientSecretId);
@@ -436,7 +520,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Store as { client_secret: "path#key" } format
         const vaultReference = `${oauthClientSecretVaultPath}#${oauthClientSecretVaultKey}`;
         const secret = await secretManager().createSecret(
-          { client_secret: vaultReference },
+          { ...existingSecretValues, client_secret: vaultReference },
           `${originalCatalogItem.name}-oauth-client-secret-vault`,
         );
         clientSecretId = secret.id;
@@ -456,22 +540,31 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       ) {
         // Direct client_secret value
         const clientSecret = restBody.oauthConfig.client_secret;
-        if (clientSecretId) {
-          // Update existing secret
-          await secretManager().updateSecret(clientSecretId, {
-            client_secret: clientSecret,
+        if (clientSecret) {
+          clientSecretId = await upsertCatalogClientSecretValue({
+            clientSecretId,
+            catalogName: originalCatalogItem.name,
+            key: "client_secret",
+            value: clientSecret,
           });
-        } else {
-          // Create new secret
-          const secret = await secretManager().createSecret(
-            { client_secret: clientSecret },
-            `${originalCatalogItem.name}-oauth-client-secret`,
-          );
-          clientSecretId = secret.id;
+
+          restBody.clientSecretId = clientSecretId;
         }
+        delete restBody.oauthConfig.client_secret;
+      }
+
+      const enterpriseManagedClientSecretOverride =
+        restBody.enterpriseManagedConfig?.clientSecretOverride;
+      if (enterpriseManagedClientSecretOverride) {
+        clientSecretId = await upsertCatalogClientSecretValue({
+          clientSecretId,
+          catalogName: originalCatalogItem.name,
+          key: ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
+          value: enterpriseManagedClientSecretOverride,
+        });
 
         restBody.clientSecretId = clientSecretId;
-        delete restBody.oauthConfig.client_secret;
+        delete restBody.enterpriseManagedConfig?.clientSecretOverride;
       }
 
       // Handle local config secrets - either via Readonly Vault or direct values
@@ -612,6 +705,35 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
+      // Children are edited via PATCH /:parentId/children/:childId — the
+      // catalog template fields cascade from parent only.
+      if (originalCatalogItem.parentCatalogItemId !== null) {
+        throw new ApiError(
+          400,
+          "Child catalog items (presets) cannot be edited via this endpoint. " +
+            "Use PATCH /api/internal_mcp_catalog/:parentId/children/:childId.",
+        );
+      }
+
+      // Default-preset values land on the parent row. Route them through the
+      // secret partitioner so secret-flagged keys end up in a secret bundle
+      // rather than the plaintext preset_field_values jsonb.
+      if (restBody.presetFieldValues !== undefined) {
+        const { nonSecretFieldValues, presetSecretId } =
+          await partitionPresetFieldValuesAndUpsertSecrets({
+            parent: originalCatalogItem,
+            catalogRow: {
+              name: restBody.name ?? originalCatalogItem.name,
+              presetSecretId: originalCatalogItem.presetSecretId,
+            },
+            incoming: restBody.presetFieldValues,
+          });
+        restBody.presetFieldValues = nonSecretFieldValues;
+        if (presetSecretId !== originalCatalogItem.presetSecretId) {
+          (restBody as Record<string, unknown>).presetSecretId = presetSecretId;
+        }
+      }
+
       // Update the catalog item
       const catalogItem = await InternalMcpCatalogModel.update(id, restBody);
 
@@ -619,83 +741,22 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Catalog item not found");
       }
 
-      // Handle reinstall for installed servers
-      const installedServers = await McpServerModel.findByCatalogId(id);
+      // Cascade reinstall for the parent's own installs.
+      await cascadeReinstallForCatalog(originalCatalogItem, catalogItem);
 
-      if (installedServers.length > 0) {
-        // Check if new user input is required for reinstall
-        if (
-          requiresNewUserInputForReinstall(originalCatalogItem, catalogItem)
-        ) {
-          // Manual reinstall required: mark servers and let user trigger reinstall
-          logger.info(
-            { catalogId: id, serverCount: installedServers.length },
-            "Catalog edit requires new user input - marking servers for manual reinstall",
-          );
-          for (const server of installedServers) {
-            await McpServerModel.update(server.id, { reinstallRequired: true });
-          }
-        } else {
-          // Auto-reinstall in background (no new user input needed)
-          logger.info(
-            { catalogId: id, serverCount: installedServers.length },
-            "Catalog edit does not require new user input - auto-reinstalling servers",
-          );
-
-          // Use setImmediate to not block the response
-          // Wrap entire callback in try/catch to prevent unhandled promise rejections
-          setImmediate(async () => {
-            try {
-              for (const server of installedServers) {
-                try {
-                  await McpServerModel.update(server.id, {
-                    localInstallationStatus: "pending",
-                    localInstallationError: null,
-                  });
-                  broadcastMcpInstallationStatus(server.id, "pending", null);
-                  await autoReinstallServer(server, catalogItem);
-                  await McpServerModel.update(server.id, {
-                    localInstallationStatus: "success",
-                    localInstallationError: null,
-                  });
-                  broadcastMcpInstallationStatus(server.id, "success", null);
-                  logger.info(
-                    { serverId: server.id, serverName: server.name },
-                    "Auto-reinstalled MCP server successfully",
-                  );
-                } catch (error) {
-                  const errorMessage =
-                    error instanceof Error ? error.message : "Unknown error";
-                  logger.error(
-                    {
-                      err: error,
-                      serverId: server.id,
-                      serverName: server.name,
-                    },
-                    "Failed to auto-reinstall MCP server - marking for manual reinstall",
-                  );
-                  // Mark for manual reinstall on failure
-                  await McpServerModel.update(server.id, {
-                    reinstallRequired: true,
-                    localInstallationStatus: "error",
-                    localInstallationError: errorMessage,
-                  });
-                  broadcastMcpInstallationStatus(
-                    server.id,
-                    "error",
-                    errorMessage,
-                  );
-                }
-              }
-            } catch (error) {
-              // Catch any unexpected errors from the iteration itself
-              logger.error(
-                { err: error, catalogId: id },
-                "Unexpected error during auto-reinstall batch - some servers may need manual reinstall",
-              );
-            }
-          });
-        }
+      // Cascade syncable fields to children, then trigger reinstall for each
+      // child's installs. Note: this snapshots children BEFORE updating them
+      // so the original-vs-new comparison passed to the cascade helper still
+      // reflects what changed.
+      const children = await InternalMcpCatalogModel.findChildren(id);
+      const syncableValues = pickSyncableFields(catalogItem);
+      for (const originalChild of children) {
+        const updatedChild = await InternalMcpCatalogModel.update(
+          originalChild.id,
+          syncableValues,
+        );
+        if (!updatedChild) continue;
+        await cascadeReinstallForCatalog(originalChild, updatedChild);
       }
 
       // Note: Tools are NOT deleted - they are synced during reinstall to preserve
@@ -724,8 +785,16 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(403, "Built-in catalog items cannot be deleted");
       }
 
+      const { success: isAdmin } = await hasPermission(
+        { mcpServerInstallation: ["admin"] },
+        request.headers,
+      );
+
       // Get the catalog item to check if it has secrets - don't expand secrets, just need IDs
       const catalogItem = await InternalMcpCatalogModel.findById(id, {
+        userId: request.user.id,
+        isAdmin,
+        organizationId: request.organizationId,
         expandSecrets: false,
       });
 
@@ -734,10 +803,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Enforce ownership: non-admins can only delete own personal items
-      const { success: isAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        request.headers,
-      );
       if (
         !isAdmin &&
         (catalogItem.scope !== "personal" ||
@@ -749,13 +814,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      if (catalogItem.clientSecretId) {
-        await secretManager().deleteSecret(catalogItem.clientSecretId);
-      }
-
-      if (catalogItem.localConfigSecretId) {
-        await secretManager().deleteSecret(catalogItem.localConfigSecretId);
-      }
+      await deleteCatalogSecretsCascade(catalogItem);
 
       return reply.send({
         success: await InternalMcpCatalogModel.delete(id),
@@ -778,7 +837,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { name } = request.params;
-      const catalogItem = await InternalMcpCatalogModel.findByName(name);
+      const catalogItem = await InternalMcpCatalogModel.findByName(name, {
+        organizationId: request.organizationId,
+      });
 
       if (!catalogItem) {
         throw new ApiError(404, `Catalog item with name "${name}" not found`);
@@ -804,13 +865,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      if (catalogItem.clientSecretId) {
-        await secretManager().deleteSecret(catalogItem.clientSecretId);
-      }
-
-      if (catalogItem.localConfigSecretId) {
-        await secretManager().deleteSecret(catalogItem.localConfigSecretId);
-      }
+      await deleteCatalogSecretsCascade(catalogItem);
 
       return reply.send({
         success: await InternalMcpCatalogModel.delete(catalogItem.id),
@@ -844,8 +899,17 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeploymentYamlPreviewSchema),
       },
     },
-    async ({ params: { id } }, reply) => {
-      const catalogItem = await InternalMcpCatalogModel.findById(id);
+    async (request, reply) => {
+      const { id } = request.params;
+      const { success: isAdmin } = await hasPermission(
+        { mcpServerInstallation: ["admin"] },
+        request.headers,
+      );
+      const catalogItem = await InternalMcpCatalogModel.findById(id, {
+        userId: request.user.id,
+        isAdmin,
+        organizationId: request.organizationId,
+      });
 
       if (!catalogItem) {
         throw new ApiError(404, "Catalog item not found");
@@ -925,8 +989,17 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeploymentYamlPreviewSchema),
       },
     },
-    async ({ params: { id } }, reply) => {
-      const catalogItem = await InternalMcpCatalogModel.findById(id);
+    async (request, reply) => {
+      const { id } = request.params;
+      const { success: isAdmin } = await hasPermission(
+        { mcpServerInstallation: ["admin"] },
+        request.headers,
+      );
+      const catalogItem = await InternalMcpCatalogModel.findById(id, {
+        userId: request.user.id,
+        isAdmin,
+        organizationId: request.organizationId,
+      });
 
       if (!catalogItem) {
         throw new ApiError(404, "Catalog item not found");
@@ -1015,6 +1088,227 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
+    "/api/internal_mcp_catalog/:catalogId/children",
+    {
+      schema: {
+        operationId: RouteId.GetCatalogChildren,
+        description:
+          'List child catalog items ("presets" in UI) for a parent catalog item',
+        tags: ["MCP Catalog"],
+        params: z.object({
+          catalogId: UuidIdSchema,
+        }),
+        response: constructResponseSchema(
+          z.array(SelectInternalMcpCatalogSchema),
+        ),
+      },
+    },
+    async ({ params: { catalogId } }, reply) => {
+      const parent = await InternalMcpCatalogModel.findById(catalogId, {
+        expandSecrets: false,
+      });
+      if (!parent) {
+        throw new ApiError(404, "Catalog item not found");
+      }
+      if (parent.parentCatalogItemId !== null) {
+        throw new ApiError(
+          400,
+          "Children can only be listed under root catalog items",
+        );
+      }
+      return reply.send(await InternalMcpCatalogModel.findChildren(catalogId));
+    },
+  );
+
+  fastify.post(
+    "/api/internal_mcp_catalog/:catalogId/children",
+    {
+      schema: {
+        operationId: RouteId.CreateCatalogChild,
+        description:
+          'Create a child catalog item ("preset" in UI) under a parent. ' +
+          "Inherits all template columns from parent.",
+        tags: ["MCP Catalog"],
+        params: z.object({
+          catalogId: UuidIdSchema,
+        }),
+        body: CreateChildCatalogSchema,
+        response: constructResponseSchema(SelectInternalMcpCatalogSchema),
+      },
+    },
+    async (request, reply) => {
+      const { catalogId } = request.params;
+      const { childName, presetFieldValues } = request.body;
+
+      const parent = await InternalMcpCatalogModel.findById(catalogId, {
+        expandSecrets: false,
+      });
+      if (!parent) {
+        throw new ApiError(404, "Catalog item not found");
+      }
+      if (parent.parentCatalogItemId !== null) {
+        throw new ApiError(
+          400,
+          "Children can only be created under root catalog items",
+        );
+      }
+
+      try {
+        InternalMcpCatalogModel.validateFieldValuesAgainstCatalog(
+          parent,
+          presetFieldValues,
+        );
+      } catch (e) {
+        throw new ApiError(400, (e as Error).message);
+      }
+
+      const composedName = `${parent.name}-${childName}`;
+      const { nonSecretFieldValues, presetSecretId } =
+        await partitionPresetFieldValuesAndUpsertSecrets({
+          parent,
+          catalogRow: { name: composedName, presetSecretId: null },
+          incoming: presetFieldValues ?? {},
+        });
+
+      const childInsert = {
+        ...pickSyncableFields(parent),
+        // Model.create will overwrite `name` with the composed value; we set it
+        // here only so the InsertInternalMcpCatalog schema's notNull constraint
+        // is satisfied at the type level.
+        name: composedName,
+        childName,
+        presetFieldValues: nonSecretFieldValues,
+        presetSecretId,
+        parentCatalogItemId: parent.id,
+        scope: parent.scope,
+      };
+
+      const child = await InternalMcpCatalogModel.create(childInsert, {
+        organizationId: parent.organizationId ?? request.organizationId,
+        authorId: request.user.id,
+      });
+
+      return reply.send(child);
+    },
+  );
+
+  fastify.patch(
+    "/api/internal_mcp_catalog/:catalogId/children/:childId",
+    {
+      schema: {
+        operationId: RouteId.UpdateCatalogChild,
+        description:
+          'Update a child catalog item ("preset" in UI). Only ' +
+          "`presetFieldValues` may be edited; template fields cascade from parent " +
+          "and the name is immutable after creation.",
+        tags: ["MCP Catalog"],
+        params: z.object({
+          catalogId: UuidIdSchema,
+          childId: UuidIdSchema,
+        }),
+        body: UpdateChildCatalogSchema,
+        response: constructResponseSchema(SelectInternalMcpCatalogSchema),
+      },
+    },
+    async (request, reply) => {
+      const { catalogId, childId } = request.params;
+      const { presetFieldValues } = request.body;
+
+      const parent = await InternalMcpCatalogModel.findById(catalogId, {
+        expandSecrets: false,
+      });
+      if (!parent || parent.parentCatalogItemId !== null) {
+        throw new ApiError(404, "Parent catalog item not found");
+      }
+
+      const originalChild = await InternalMcpCatalogModel.findById(childId);
+      if (!originalChild || originalChild.parentCatalogItemId !== parent.id) {
+        throw new ApiError(404, "Child catalog item not found");
+      }
+
+      const updates: Record<string, unknown> = {};
+      if (presetFieldValues !== undefined) {
+        // Lenient filter (not the strict validator used on create / install):
+        // when a parent edit flips a field's scope from `promptOnPreset:
+        // true` to non-preset, the cascade syncs the parent's localConfig
+        // template down to children but does NOT scrub their existing
+        // `preset_field_values` jsonb. The frontend's preset editor copies
+        // the row's full presetFieldValues into local state and re-sends
+        // them on save, so without this filter every PATCH after a parent
+        // scope flip would 400 ("Fields not configured for preset
+        // overrides: …") and silently drop the user's new value.
+        //
+        // As a beneficial side effect, every successful PATCH garbage-
+        // collects the orphan keys from the row's jsonb (see Model.update
+        // call below — `presetFieldValues` is replaced wholesale with the
+        // filtered set).
+        const sanitized =
+          InternalMcpCatalogModel.filterFieldValuesToPresetScope(
+            parent,
+            presetFieldValues,
+          );
+
+        const { nonSecretFieldValues, presetSecretId } =
+          await partitionPresetFieldValuesAndUpsertSecrets({
+            parent,
+            catalogRow: {
+              name: originalChild.name,
+              presetSecretId: originalChild.presetSecretId,
+            },
+            incoming: sanitized,
+          });
+        updates.presetFieldValues = nonSecretFieldValues;
+        if (presetSecretId !== originalChild.presetSecretId) {
+          updates.presetSecretId = presetSecretId;
+        }
+      }
+
+      const updatedChild = await InternalMcpCatalogModel.update(
+        childId,
+        updates,
+      );
+      if (!updatedChild) {
+        throw new ApiError(404, "Child catalog item not found");
+      }
+
+      // Reinstall installs that point at this child if preset values changed.
+      await cascadeReinstallForCatalog(originalChild, updatedChild);
+
+      return reply.send(updatedChild);
+    },
+  );
+
+  fastify.delete(
+    "/api/internal_mcp_catalog/:catalogId/children/:childId",
+    {
+      schema: {
+        operationId: RouteId.DeleteCatalogChild,
+        description: 'Delete a child catalog item ("preset" in UI)',
+        tags: ["MCP Catalog"],
+        params: z.object({
+          catalogId: UuidIdSchema,
+          childId: UuidIdSchema,
+        }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { catalogId, childId } }, reply) => {
+      const child = await InternalMcpCatalogModel.findById(childId, {
+        expandSecrets: false,
+      });
+      if (!child || child.parentCatalogItemId !== catalogId) {
+        throw new ApiError(404, "Child catalog item not found");
+      }
+
+      await deleteCatalogSecretsCascade(child);
+
+      return reply.send({
+        success: await InternalMcpCatalogModel.delete(childId),
+      });
+    },
+  );
+
+  fastify.get(
     "/api/internal_mcp_catalog/labels/values",
     {
       schema: {
@@ -1036,5 +1330,252 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 };
+
+/**
+ * Ownership model:
+ *   - clientSecretId / localConfigSecretId are owned by the parent row.
+ *     Children store the same UUID in their columns for read-path convenience
+ *     (so a preset install can resolve OAuth and local-env secrets without
+ *     walking up to the parent), but they do not own those secret bags.
+ *   - presetSecretId is per-row: parent has its own default-preset bag; each
+ *     child has its own overlay bag.
+ *
+ * Therefore deleting a child must only delete the child's presetSecretId;
+ * deleting the parent deletes the parent-owned bags plus every child's
+ * presetSecretId.
+ */
+async function deleteCatalogSecretsCascade(
+  item: InternalMcpCatalog,
+): Promise<void> {
+  const ids = new Set<string>();
+
+  if (item.parentCatalogItemId === null) {
+    if (item.clientSecretId) ids.add(item.clientSecretId);
+    if (item.localConfigSecretId) ids.add(item.localConfigSecretId);
+    if (item.presetSecretId) ids.add(item.presetSecretId);
+
+    const children = await InternalMcpCatalogModel.findChildren(item.id);
+    for (const child of children) {
+      if (child.presetSecretId) ids.add(child.presetSecretId);
+    }
+  } else {
+    if (item.presetSecretId) ids.add(item.presetSecretId);
+  }
+
+  for (const id of ids) {
+    await secretManager().deleteSecret(id);
+  }
+}
+
+async function upsertCatalogClientSecretValue(params: {
+  clientSecretId: string | null | undefined;
+  catalogName: string;
+  key: string;
+  value: string;
+}): Promise<string> {
+  const existingSecretValues = await getCatalogClientSecretValues(
+    params.clientSecretId,
+  );
+  const secretValue = {
+    ...existingSecretValues,
+    [params.key]: params.value,
+  };
+
+  if (params.clientSecretId) {
+    await secretManager().updateSecret(params.clientSecretId, secretValue);
+    return params.clientSecretId;
+  }
+
+  const secret = await secretManager().createSecret(
+    secretValue,
+    `${params.catalogName}-client-secrets`,
+  );
+  return secret.id;
+}
+
+async function getCatalogClientSecretValues(
+  clientSecretId: string | null | undefined,
+): Promise<Record<string, string>> {
+  if (!clientSecretId) {
+    return {};
+  }
+
+  const existingSecret = await secretManager().getSecret(clientSecretId);
+  if (!existingSecret?.secret) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(existingSecret.secret).map(([key, value]) => [
+      key,
+      String(value),
+    ]),
+  );
+}
+
+/**
+ * Identify which preset-scoped fields on a parent catalog are secret-typed
+ * (userConfig.sensitive=true OR localConfig env type=secret).
+ */
+function collectSecretPresetKeys(parent: InternalMcpCatalog): Set<string> {
+  const keys = new Set<string>();
+  for (const [key, field] of Object.entries(parent.userConfig ?? {})) {
+    if (field.promptOnPreset && field.sensitive) keys.add(key);
+  }
+  for (const env of parent.localConfig?.environment ?? []) {
+    if (env.promptOnPreset && env.type === "secret") keys.add(env.key);
+  }
+  return keys;
+}
+
+/**
+ * Split an incoming `presetFieldValues` payload into a non-secret subset
+ * (persisted on the catalog row as plain JSONB) and a secret bundle
+ * (persisted via secretManager and referenced by `presetSecretId`).
+ *
+ * Semantics for secret fields:
+ *   - non-empty incoming value → write to secret bag (replace existing key)
+ *   - empty / missing incoming value → preserve existing stored secret
+ *     (this mirrors how the install dialog handles already-stored secrets)
+ *
+ * Returns the values to persist on the row.
+ */
+async function partitionPresetFieldValuesAndUpsertSecrets(params: {
+  parent: InternalMcpCatalog;
+  catalogRow: { name: string; presetSecretId: string | null };
+  incoming: PresetFieldValues;
+}): Promise<{
+  nonSecretFieldValues: PresetFieldValues;
+  presetSecretId: string | null;
+}> {
+  const { parent, catalogRow, incoming } = params;
+  const secretKeys = collectSecretPresetKeys(parent);
+
+  const nonSecretFieldValues: PresetFieldValues = {};
+  const incomingSecretValues: Record<string, string> = {};
+  for (const [key, value] of Object.entries(incoming)) {
+    if (secretKeys.has(key)) {
+      if (value !== undefined && value !== null && value !== "") {
+        incomingSecretValues[key] = String(value);
+      }
+    } else {
+      nonSecretFieldValues[key] = value;
+    }
+  }
+
+  let existingBag: Record<string, unknown> = {};
+  if (catalogRow.presetSecretId) {
+    const existing = await secretManager().getSecret(catalogRow.presetSecretId);
+    if (existing?.secret) existingBag = existing.secret;
+  }
+
+  const mergedBag = { ...existingBag, ...incomingSecretValues };
+
+  let presetSecretId = catalogRow.presetSecretId;
+  if (Object.keys(mergedBag).length > 0) {
+    if (presetSecretId) {
+      await secretManager().updateSecret(presetSecretId, mergedBag);
+    } else {
+      const secret = await secretManager().createSecret(
+        mergedBag,
+        `${catalogRow.name}-preset-secrets`,
+      );
+      presetSecretId = secret.id;
+    }
+  }
+
+  return { nonSecretFieldValues, presetSecretId };
+}
+
+async function cascadeReinstallForCatalog(
+  originalCatalogItem: InternalMcpCatalog,
+  catalogItem: InternalMcpCatalog,
+): Promise<void> {
+  const installedServers = await McpServerModel.findByCatalogId(catalogItem.id);
+  if (installedServers.length === 0) return;
+
+  if (requiresNewUserInputForReinstall(originalCatalogItem, catalogItem)) {
+    logger.info(
+      { catalogId: catalogItem.id, serverCount: installedServers.length },
+      "Catalog edit requires new user input - marking servers for manual reinstall",
+    );
+    for (const server of installedServers) {
+      await McpServerModel.update(server.id, { reinstallRequired: true });
+    }
+    return;
+  }
+
+  logger.info(
+    { catalogId: catalogItem.id, serverCount: installedServers.length },
+    "Catalog edit does not require new user input - auto-reinstalling servers",
+  );
+
+  setImmediate(async () => {
+    try {
+      for (const server of installedServers) {
+        try {
+          await McpServerModel.update(server.id, {
+            localInstallationStatus: "pending",
+            localInstallationError: null,
+          });
+          broadcastMcpInstallationStatus(server.id, "pending", null);
+          await autoReinstallServer(server, catalogItem);
+          await McpServerModel.update(server.id, {
+            localInstallationStatus: "success",
+            localInstallationError: null,
+          });
+          broadcastMcpInstallationStatus(server.id, "success", null);
+          logger.info(
+            { serverId: server.id, serverName: server.name },
+            "Auto-reinstalled MCP server successfully",
+          );
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : "Unknown error";
+          logger.error(
+            { err: error, serverId: server.id, serverName: server.name },
+            "Failed to auto-reinstall MCP server - marking for manual reinstall",
+          );
+          await McpServerModel.update(server.id, {
+            reinstallRequired: true,
+            localInstallationStatus: "error",
+            localInstallationError: errorMessage,
+          });
+          broadcastMcpInstallationStatus(server.id, "error", errorMessage);
+        }
+      }
+    } catch (error) {
+      logger.error(
+        { err: error, catalogId: catalogItem.id },
+        "Unexpected error during auto-reinstall batch - some servers may need manual reinstall",
+      );
+    }
+  });
+}
+
+function pickSyncableFields(parent: InternalMcpCatalog): SyncableCatalogFields {
+  return {
+    version: parent.version,
+    description: parent.description,
+    instructions: parent.instructions,
+    repository: parent.repository,
+    installationCommand: parent.installationCommand,
+    requiresAuth: parent.requiresAuth,
+    authDescription: parent.authDescription,
+    authFields: parent.authFields,
+    serverType: parent.serverType,
+    multitenant: parent.multitenant,
+    serverUrl: parent.serverUrl,
+    docsUrl: parent.docsUrl,
+    clientSecretId: parent.clientSecretId,
+    localConfigSecretId: parent.localConfigSecretId,
+    localConfig: parent.localConfig,
+    deploymentSpecYaml: parent.deploymentSpecYaml,
+    userConfig: parent.userConfig,
+    oauthConfig: parent.oauthConfig,
+    enterpriseManagedConfig: parent.enterpriseManagedConfig,
+    icon: parent.icon,
+  };
+}
 
 export default internalMcpCatalogRoutes;

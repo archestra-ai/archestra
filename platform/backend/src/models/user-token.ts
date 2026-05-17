@@ -3,7 +3,6 @@ import { ARCHESTRA_TOKEN_PREFIX } from "@shared";
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
-import SecretModel from "@/models/secret";
 import { secretManager } from "@/secrets-manager";
 import type { SelectUserToken } from "@/types";
 
@@ -208,14 +207,21 @@ class UserTokenModel {
       .where(eq(schema.userTokensTable.tokenStart, tokenStart));
     if (candidates.length === 0) return null;
 
-    // Batch-fetch secrets for candidates (user tokens always use DB storage)
-    const secretIds = candidates.map((t) => t.secretId);
-    const secrets = await SecretModel.findByIds(secretIds);
-    const secretMap = new Map(secrets.map((s) => [s.id, s]));
+    const secretsById = new Map(
+      await Promise.all(
+        candidates.map(
+          async (token) =>
+            [
+              token.secretId,
+              await secretManager().getSecret(token.secretId),
+            ] as const,
+        ),
+      ),
+    );
 
     // Match the provided token value against stored secrets
     for (const token of candidates) {
-      const secret = secretMap.get(token.secretId);
+      const secret = secretsById.get(token.secretId);
       if (
         secret?.secret &&
         (secret.secret as { token?: string }).token === tokenValue

@@ -1611,6 +1611,62 @@
       "when": 1777809378992,
       "tag": "0229_awesome_galactus",
       "breakpoints": true
+    },
+    {
+      "idx": 230,
+      "version": "7",
+      "when": 1777924366437,
+      "tag": "0230_bored_pride",
+      "breakpoints": true
+    },
+    {
+      "idx": 231,
+      "version": "7",
+      "when": 1778059392895,
+      "tag": "0231_complex_flatman",
+      "breakpoints": true
+    },
+    {
+      "idx": 232,
+      "version": "7",
+      "when": 1778179411895,
+      "tag": "0232_outstanding_layla_miller",
+      "breakpoints": true
+    },
+    {
+      "idx": 233,
+      "version": "7",
+      "when": 1778182339364,
+      "tag": "0233_nebulous_elektra",
+      "breakpoints": true
+    },
+    {
+      "idx": 234,
+      "version": "7",
+      "when": 1778189799447,
+      "tag": "0234_cool_colossus",
+      "breakpoints": true
+    },
+    {
+      "idx": 235,
+      "version": "7",
+      "when": 1778761776594,
+      "tag": "0235_far_excalibur",
+      "breakpoints": true
+    },
+    {
+      "idx": 236,
+      "version": "7",
+      "when": 1778774649490,
+      "tag": "0236_purple_red_ghost",
+      "breakpoints": true
+    },
+    {
+      "idx": 237,
+      "version": "7",
+      "when": 1778786612751,
+      "tag": "0237_regular_goblin_queen",
+      "breakpoints": true
     }
   ]
 }

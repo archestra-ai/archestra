@@ -70,6 +70,7 @@ describe("config routes", () => {
       orchestratorK8sRuntime: expect.any(Boolean),
       advancedToolFeaturesEnabled: false,
       byosEnabled: expect.any(Boolean),
+      azureOpenAiEntraIdEnabled: expect.any(Boolean),
       bedrockIamAuthEnabled: expect.any(Boolean),
       geminiVertexAiEnabled: expect.any(Boolean),
       mcpServerBaseImage: expect.any(String),

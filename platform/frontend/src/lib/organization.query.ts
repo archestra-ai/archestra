@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Invitation } from "better-auth/plugins/organization";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { useSession } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { handleApiError } from "./utils";
 
@@ -61,18 +62,16 @@ export const organizationKeys = {
  * Fetch invitation details by ID
  */
 export function useInvitation(invitationId: string) {
-  const session = authClient.useSession();
+  const session = useSession();
   return useQuery({
     queryKey: organizationKeys.invitation(invitationId),
     queryFn: async () => {
-      if (!session) {
-        return undefined;
-      }
       const response = await authClient.organization.getInvitation({
         query: { id: invitationId },
       });
       return response.data;
     },
+    enabled: !!session.data?.user,
   });
 }
 
@@ -254,7 +253,7 @@ export function useCreateInvitation(organizationId: string | undefined) {
  * Get organization
  */
 export function useOrganization(enabled = true) {
-  const session = authClient.useSession();
+  const session = useSession();
 
   return useQuery({
     queryKey: organizationKeys.details(),
@@ -469,19 +468,19 @@ export function useUpdateConnectionSettings(
 }
 
 /**
- * Update MCP settings (OAuth access token lifetime)
+ * Update Auth settings (OAuth access token lifetime)
  */
-export function useUpdateMcpSettings(
+export function useUpdateAuthSettings(
   onSuccessMessage: string,
   onErrorMessage: string,
 ) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (
-      data: archestraApiTypes.UpdateMcpSettingsData["body"],
+      data: archestraApiTypes.UpdateAuthSettingsData["body"],
     ) => {
       const { data: updatedOrganization, error } =
-        await archestraApiSdk.updateMcpSettings({ body: data });
+        await archestraApiSdk.updateAuthSettings({ body: data });
 
       if (error) {
         toast.error(onErrorMessage);

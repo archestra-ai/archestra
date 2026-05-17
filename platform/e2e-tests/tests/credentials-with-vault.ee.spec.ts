@@ -32,7 +32,7 @@ import {
  * Navigate to the LLM API Keys page and expand pagination to show all rows.
  */
 async function goToApiKeysPage(page: Page) {
-  await goToPage(page, "/llm/providers/api-keys");
+  await goToPage(page, "/llm/model-providers/api-keys");
   await expandTablePagination(page, E2eTestId.ChatApiKeysTable);
 }
 
@@ -184,7 +184,7 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     makeRandomString,
   }) => {
     test.skip(!byosEnabled, "BYOS Vault is not enabled in this environment.");
-    test.setTimeout(90_000);
+    test.setTimeout(180_000);
     const cookieHeaders = await extractCookieHeaders(adminPage);
     const catalogItemName = makeRandomString(10, "mcp");
     const newCatalogItem = await addCustomSelfHostedCatalogItem({

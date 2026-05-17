@@ -25,19 +25,23 @@ import logger from "@/logging";
 import type {
   InsertInteraction,
   Interaction,
+  InteractionAuthMethod,
   SessionSummary,
   SortingQuery,
   UserInfo,
 } from "@/types";
+import { InteractionAuthMethodSchema } from "@/types";
+import { escapeLikePattern } from "@/utils/sql-search";
 import AgentTeamModel from "./agent-team";
+import ConversationChatErrorModel from "./conversation-chat-error";
 import LimitModel from "./limit";
 
-/**
- * Escapes special LIKE pattern characters (%, _, \) to treat them as literals.
- * This prevents users from crafting searches that behave unexpectedly.
- */
-function escapeLikePattern(value: string): string {
-  return value.replace(/[%_\\]/g, "\\$&");
+async function findChatErrorsForSessionId(sessionId: string | null) {
+  if (!sessionId || !isUuid(sessionId)) {
+    return [];
+  }
+
+  return ConversationChatErrorModel.findByConversation(sessionId);
 }
 
 /**
@@ -465,7 +469,10 @@ class InteractionModel {
       }
     }
 
-    return interaction as Interaction;
+    return {
+      ...interaction,
+      chatErrors: await findChatErrorsForSessionId(interaction.sessionId),
+    } as Interaction;
   }
 
   static async getAllInteractionsForProfile(
@@ -746,6 +753,30 @@ class InteractionModel {
         ),
       );
 
+      if (interaction.userId) {
+        updatePromises.push(
+          LimitModel.updateTokenLimitUsage(
+            "user",
+            interaction.userId,
+            model,
+            inputTokens,
+            outputTokens,
+          ),
+        );
+      }
+
+      if (interaction.virtualKeyId) {
+        updatePromises.push(
+          LimitModel.updateTokenLimitUsage(
+            "virtual_key",
+            interaction.virtualKeyId,
+            model,
+            inputTokens,
+            outputTokens,
+          ),
+        );
+      }
+
       // Execute all updates in parallel
       await Promise.all(updatePromises);
     } catch (error) {
@@ -891,6 +922,10 @@ class InteractionModel {
           profileId: schema.interactionsTable.profileId,
           profileName: schema.agentsTable.name,
           externalAgentIds: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.externalAgentId}, ',')`,
+          authMethods: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.authMethod}, ',')`,
+          authenticatedAppNames: sql<
+            string[]
+          >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.authenticatedAppName}), NULL)`,
           userNames: sql<string>`STRING_AGG(DISTINCT ${schema.usersTable.name}, ',')`,
           // Get conversation title if sessionId matches a conversation (for Archestra Chat sessions)
           conversationTitle: max(schema.conversationsTable.title),
@@ -987,6 +1022,8 @@ class InteractionModel {
         externalAgentIdLabels: externalAgentIds.map((id) =>
           resolveExternalAgentIdLabel(id, agentNamesMap),
         ),
+        authMethods: parseInteractionAuthMethods(s.authMethods),
+        authenticatedAppNames: s.authenticatedAppNames ?? [],
         userNames: s.userNames ? s.userNames.split(",").filter(Boolean) : [],
         lastInteractionRequest: lastInteraction?.request ?? null,
         lastInteractionType: lastInteraction?.type ?? null,
@@ -1176,3 +1213,19 @@ class InteractionModel {
 }
 
 export default InteractionModel;
+
+function parseInteractionAuthMethods(
+  value: string | null,
+): InteractionAuthMethod[] {
+  if (!value) {
+    return [];
+  }
+
+  return value
+    .split(",")
+    .filter(Boolean)
+    .flatMap((authMethod) => {
+      const result = InteractionAuthMethodSchema.safeParse(authMethod);
+      return result.success ? [result.data] : [];
+    });
+}

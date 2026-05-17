@@ -11,6 +11,8 @@ export const identityProviderKeys = {
   all: ["identity-provider"] as const,
   public: ["identity-provider", "public"] as const,
   details: () => [...identityProviderKeys.all, "details"] as const,
+  latestIdTokenClaims: (id: string) =>
+    [...identityProviderKeys.all, id, "latest-id-token-claims"] as const,
 };
 
 /**
@@ -64,6 +66,27 @@ export function useIdentityProvider(id: string) {
     retry: false,
     throwOnError: false,
     enabled: config.enterpriseFeatures.core,
+  });
+}
+
+export function useIdentityProviderLatestIdTokenClaims(id: string | undefined) {
+  return useQuery({
+    queryKey: identityProviderKeys.latestIdTokenClaims(id ?? ""),
+    queryFn: async () => {
+      if (!id) return null;
+      const { data, error } =
+        await archestraApiSdk.getIdentityProviderLatestIdTokenClaims({
+          path: { id },
+        });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+    retry: false,
+    throwOnError: false,
+    enabled: config.enterpriseFeatures.core && !!id,
   });
 }
 

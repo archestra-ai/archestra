@@ -19,7 +19,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useFeature } from "@/lib/config/config.query";
+import { useCatalogPresets } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useTeamsWithVaultFolders } from "@/lib/teams/team.query";
+import { InstallPresetPicker } from "./install-preset-picker";
+import {
+  collectPresetFallbackValues,
+  PresetFallbackFields,
+} from "./preset-fallback-fields";
 import {
   type McpServerInstallScope,
   SelectMcpServerCredentialTypeAndTeams,
@@ -40,6 +46,7 @@ type UserConfigType = Record<
     title: string;
     description: string;
     promptOnInstallation?: boolean;
+    promptOnPreset?: boolean;
     required?: boolean;
     default?: string | number | boolean | Array<string>;
     multiple?: boolean;
@@ -50,7 +57,14 @@ type UserConfigType = Record<
 >;
 
 export interface RemoteServerInstallResult {
+  /** Catalog id to install from — parent or selected preset. */
+  catalogId: string;
   metadata: Record<string, unknown>;
+  /**
+   * Values entered for preset-scoped fields the selected preset doesn't fill.
+   * Persisted onto the targeted preset row (same path as the preset editor).
+   */
+  presetFieldValues?: Record<string, string>;
   /** Installation scope (personal, team, org) */
   scope: McpServerInstallScope;
   /** Team ID to assign the MCP server to (only when scope is "team") */
@@ -97,6 +111,21 @@ export function RemoteServerInstallDialog({
     orgOnly ? "org" : "personal",
   );
   const [canInstall, setCanInstall] = useState(true);
+  const [selectedCatalogId, setSelectedCatalogId] = useState<string>(
+    catalogItem?.id ?? "",
+  );
+  const [presetFallbackValues, setPresetFallbackValues] = useState<
+    Record<string, string>
+  >({});
+  const { data: presets = [] } = useCatalogPresets(catalogItem?.id ?? null);
+  const hasPresets = presets.length > 0;
+
+  useEffect(() => {
+    if (isOpen && catalogItem) {
+      setSelectedCatalogId(catalogItem.id);
+      setPresetFallbackValues({});
+    }
+  }, [isOpen, catalogItem]);
 
   // Vault team selection (separate from install team for personal + BYOS)
   const [vaultTeamId, setVaultTeamId] = useState<string | null>(null);
@@ -112,7 +141,10 @@ export function RemoteServerInstallDialog({
   const userConfig =
     (catalogItem?.userConfig as UserConfigType | null | undefined) || {};
   const hasPromptSensitiveFields = Object.values(userConfig).some(
-    (config) => config.sensitive && config.promptOnInstallation !== false,
+    (config) =>
+      config.sensitive &&
+      config.promptOnInstallation !== false &&
+      !config.promptOnPreset,
   );
 
   // Helper to update vault secret for a specific field
@@ -159,7 +191,10 @@ export function RemoteServerInstallDialog({
       const metadata: Record<string, unknown> = {};
 
       for (const [fieldName, fieldConfig] of Object.entries(userConfig)) {
-        if (fieldConfig.promptOnInstallation === false) {
+        if (
+          fieldConfig.promptOnInstallation === false ||
+          fieldConfig.promptOnPreset
+        ) {
           continue;
         }
 
@@ -188,8 +223,20 @@ export function RemoteServerInstallDialog({
         }
       }
 
+      // Preset-scoped fallback values are persisted on the targeted preset row
+      // by the backend (same path as the preset editor) — send them separately.
+      const presetFieldValuesForRequest = collectPresetFallbackValues(
+        catalogItem,
+        presetFallbackValues,
+      );
+
       await onConfirm(catalogItem, {
+        catalogId: selectedCatalogId || catalogItem.id,
         metadata,
+        presetFieldValues:
+          Object.keys(presetFieldValuesForRequest).length > 0
+            ? presetFieldValuesForRequest
+            : undefined,
         scope,
         teamId: selectedTeamId,
         isByosVault: useVaultSecrets,
@@ -220,7 +267,10 @@ export function RemoteServerInstallDialog({
 
   const promptableUserConfig = Object.fromEntries(
     Object.entries(userConfig).filter(([_fieldName, fieldConfig]) => {
-      return fieldConfig.promptOnInstallation !== false;
+      return (
+        fieldConfig.promptOnInstallation !== false &&
+        !fieldConfig.promptOnPreset
+      );
     }),
   );
   const hasConfig = Object.keys(promptableUserConfig).length > 0;
@@ -318,13 +368,34 @@ export function RemoteServerInstallDialog({
 
       <SelectMcpServerCredentialTypeAndTeams
         onTeamChange={setSelectedTeamId}
-        catalogId={catalogItem?.id}
+        catalogId={selectedCatalogId || catalogItem?.id}
         onScopeChange={setScope}
         onCanInstallChange={setCanInstall}
         preselectedTeamId={preselectedTeamId}
         personalOnly={personalOnly}
         orgOnly={orgOnly}
+        hasPresets={hasPresets && !isReauth}
+        presetPicker={
+          !isReauth && catalogItem && hasPresets ? (
+            <InstallPresetPicker
+              parent={catalogItem}
+              value={selectedCatalogId}
+              onChange={setSelectedCatalogId}
+            />
+          ) : null
+        }
       />
+
+      {!isReauth && (
+        <PresetFallbackFields
+          catalog={catalogItem}
+          selectedPresetId={selectedCatalogId}
+          values={presetFallbackValues}
+          onChange={(key, value) =>
+            setPresetFallbackValues((prev) => ({ ...prev, [key]: value }))
+          }
+        />
+      )}
 
       {useVaultSecrets && scope !== "team" && (
         <div className="space-y-2">

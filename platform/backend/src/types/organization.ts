@@ -1,6 +1,7 @@
 import {
-  MCP_OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS,
-  MCP_OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS,
+  EmbeddingDimensionsSchema,
+  OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS,
+  OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS,
   OrganizationCustomFontSchema,
   OrganizationThemeSchema,
   SupportedProvidersSchema,
@@ -8,6 +9,7 @@ import {
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { LimitCleanupIntervalSchema } from "./limit";
 
 const DATA_URI_PREFIX = "data:image/png;base64,";
 const GIF_DATA_URI_PREFIX = "data:image/gif;base64,";
@@ -201,32 +203,30 @@ export const AppearanceSettingsSchema = z.object({
   animateChatPlaceholders: z.boolean(),
 });
 
-export const OrganizationLimitCleanupIntervalSchema = z
-  .enum(["1h", "12h", "24h", "1w", "1m"])
-  .nullable();
-
 export const OrganizationCompressionScopeSchema = z.enum([
   "organization",
   "team",
 ]);
 
 export const GlobalToolPolicySchema = z.enum(["permissive", "restrictive"]);
-export const McpOauthAccessTokenLifetimeSecondsSchema = z
+export const OAuthAccessTokenLifetimeSecondsSchema = z
   .number()
   .int()
-  .min(MCP_OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS)
-  .max(MCP_OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS);
+  .min(OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS)
+  .max(OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS);
 
 const extendedFields = {
   theme: OrganizationThemeSchema,
   customFont: OrganizationCustomFontSchema,
-  limitCleanupInterval: OrganizationLimitCleanupIntervalSchema,
   compressionScope: OrganizationCompressionScopeSchema,
   globalToolPolicy: GlobalToolPolicySchema,
   embeddingModel: z.string().nullable(),
-  embeddingDimensions: z.number().nullable(),
+  embeddingDimensions: EmbeddingDimensionsSchema.nullable(),
   defaultLlmModel: z.string().nullable(),
   defaultLlmProvider: SupportedProvidersSchema.nullable(),
+  defaultUserLimitValue: z.number().int().positive().nullable(),
+  defaultUserLimitModel: z.array(z.string()).nullable(),
+  defaultUserLimitCleanupInterval: LimitCleanupIntervalSchema.nullable(),
   defaultAgentId: z.string().uuid().nullable(),
   favicon: z.string().nullable(),
   iconLogo: z.string().nullable(),
@@ -240,7 +240,7 @@ const extendedFields = {
   chatPlaceholders: z.array(z.string()).nullable(),
   animateChatPlaceholders: z.boolean(),
   showTwoFactor: z.boolean(),
-  mcpOauthAccessTokenLifetimeSeconds: McpOauthAccessTokenLifetimeSecondsSchema,
+  oauthAccessTokenLifetimeSeconds: OAuthAccessTokenLifetimeSecondsSchema,
   connectionBaseUrls: z.array(ConnectionBaseUrlSchema).nullable(),
 };
 
@@ -268,7 +268,6 @@ export const UpdateAppearanceSettingsSchema = z.object({
   slimChatErrorUi: z.boolean().optional(),
   chatPlaceholders: z.array(z.string().max(80)).max(20).nullable().optional(),
   animateChatPlaceholders: z.boolean().optional(),
-  showTwoFactor: z.boolean().optional(),
 });
 
 export const UpdateSecuritySettingsSchema = z.object({
@@ -279,7 +278,10 @@ export const UpdateSecuritySettingsSchema = z.object({
 export const UpdateLlmSettingsSchema = z.object({
   convertToolResultsToToon: z.boolean().optional(),
   compressionScope: OrganizationCompressionScopeSchema.optional(),
-  limitCleanupInterval: OrganizationLimitCleanupIntervalSchema.optional(),
+  defaultUserLimitValue: z.number().int().positive().nullable().optional(),
+  defaultUserLimitModel: z.array(z.string()).nullable().optional(),
+  defaultUserLimitCleanupInterval:
+    LimitCleanupIntervalSchema.nullable().optional(),
 });
 
 export const UpdateAgentSettingsSchema = z.object({
@@ -296,9 +298,10 @@ export const UpdateKnowledgeSettingsSchema = z.object({
   rerankerModel: z.string().nullable().optional(),
 });
 
-export const UpdateMcpSettingsSchema = z.object({
-  mcpOauthAccessTokenLifetimeSeconds:
-    McpOauthAccessTokenLifetimeSecondsSchema.optional(),
+export const UpdateAuthSettingsSchema = z.object({
+  oauthAccessTokenLifetimeSeconds:
+    OAuthAccessTokenLifetimeSecondsSchema.optional(),
+  showTwoFactor: z.boolean().optional(),
 });
 
 export const UpdateConnectionSettingsSchema = z.object({
@@ -346,9 +349,6 @@ export const CompleteOnboardingSchema = z.object({
   onboardingComplete: z.literal(true),
 });
 
-export type OrganizationLimitCleanupInterval = z.infer<
-  typeof OrganizationLimitCleanupIntervalSchema
->;
 export type OrganizationCompressionScope = z.infer<
   typeof OrganizationCompressionScopeSchema
 >;
@@ -359,8 +359,8 @@ export type AppearanceSettings = z.infer<typeof AppearanceSettingsSchema>;
 export type OrganizationChatLink = z.infer<typeof OrganizationChatLinkSchema>;
 export type OnboardingWizardPage = z.infer<typeof OnboardingWizardPageSchema>;
 export type OnboardingWizard = z.infer<typeof OnboardingWizardSchema>;
-export type McpOauthAccessTokenLifetimeSeconds = z.infer<
-  typeof McpOauthAccessTokenLifetimeSecondsSchema
+export type OAuthAccessTokenLifetimeSeconds = z.infer<
+  typeof OAuthAccessTokenLifetimeSecondsSchema
 >;
 export type ConnectionBaseUrl = z.infer<typeof ConnectionBaseUrlSchema>;
 

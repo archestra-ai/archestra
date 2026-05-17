@@ -3,6 +3,7 @@ import { RouteId, SupportedProvidersSchema } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getEmailProviderInfo } from "@/agents/incoming-email";
+import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config from "@/config";
@@ -63,6 +64,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               advancedToolFeaturesEnabled: z.boolean(),
               byosEnabled: z.boolean(),
               byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
+              azureOpenAiEntraIdEnabled: z.boolean(),
               bedrockIamAuthEnabled: z.boolean(),
               geminiVertexAiEnabled: z.boolean(),
               globalToolPolicy: z.enum(["permissive", "restrictive"]),
@@ -105,6 +107,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
             config.agents.advancedToolFeaturesEnabled,
           byosEnabled: isByosEnabled(),
           byosVaultKvVersion: getByosVaultKvVersion(),
+          azureOpenAiEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
           bedrockIamAuthEnabled: isBedrockIamAuthEnabled(),
           geminiVertexAiEnabled: isVertexAiEnabled(),
           globalToolPolicy,

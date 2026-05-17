@@ -2,9 +2,17 @@ import { archestraApiSdk } from "@shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { handleApiError } from "@/lib/utils";
+
+// better-auth's admin plugin gates impersonateUser on `users.role === "admin"`
+// (the system-level role, not the org membership role). Org-admins whose
+// `users.role` is null pass `member:update` but still get rejected at call time.
+export function useCanImpersonate() {
+  const { data: session } = useSession();
+  return session?.user.role === "admin";
+}
 
 export const impersonationKeys = {
   all: ["impersonation"] as const,

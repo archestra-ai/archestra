@@ -1,6 +1,6 @@
 import type { IncomingHttpHeaders } from "node:http";
 import {
-  PROVIDERS_WITH_OPTIONAL_API_KEY,
+  isProviderApiKeyOptional,
   RouteId,
   type SupportedProvider,
   SupportedProvidersSchema,
@@ -9,9 +9,15 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { capitalize } from "lodash-es";
 import { z } from "zod";
 import { hasPermission, userHasPermission } from "@/auth";
+import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
+import {
+  type BedrockSigV4Credentials,
+  encodeBedrockSigV4Marker,
+} from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import logger from "@/logging";
 import {
+  LlmOauthClientModel,
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
@@ -30,6 +36,7 @@ import { modelSyncService } from "@/services/model-sync";
 import {
   ApiError,
   constructResponseSchema,
+  type LlmProviderApiKey,
   LlmProviderApiKeyWithScopeInfoSchema,
   type ResourceVisibilityScope,
   ResourceVisibilityScopeSchema,
@@ -51,6 +58,47 @@ async function testApiKeyOrThrow(
       `Invalid API key: Failed to connect to ${capitalize(provider)}: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
+}
+
+async function testKeylessAzureEntraOrThrow(
+  context: "discovery" | "runtime",
+  baseUrl?: string | null,
+  extraHeaders?: Record<string, string> | null,
+): Promise<void> {
+  try {
+    await testProviderApiKey("azure", "", baseUrl, extraHeaders);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const contextMessage =
+      context === "discovery"
+        ? "Archestra could not discover any Azure model deployments. Confirm the Base URL points to an Azure OpenAI resource or Foundry v1 endpoint, and that the Azure identity has permission to read deployments on that resource."
+        : "Archestra could not connect to the Azure inference endpoint. Confirm the Inference URL is reachable and the Azure identity can use models on that endpoint.";
+    const validationLabel =
+      context === "discovery"
+        ? "Azure Entra ID validation"
+        : "Azure Entra ID runtime validation";
+    throw new ApiError(
+      400,
+      `${validationLabel} failed: ${contextMessage} Provider error: ${errorMessage}`,
+    );
+  }
+}
+
+function resolveRuntimeTestBaseUrl(params: {
+  body: {
+    baseUrl?: string | null;
+    inferenceBaseUrl?: string | null;
+  };
+  apiKey: Pick<LlmProviderApiKey, "baseUrl" | "inferenceBaseUrl">;
+}): string | null {
+  const { body, apiKey } = params;
+  const effectiveInferenceBaseUrl =
+    body.inferenceBaseUrl !== undefined
+      ? body.inferenceBaseUrl
+      : apiKey.inferenceBaseUrl;
+  const effectiveBaseUrl =
+    body.baseUrl !== undefined ? body.baseUrl : apiKey.baseUrl;
+  return effectiveInferenceBaseUrl ?? effectiveBaseUrl;
 }
 
 const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -173,6 +221,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             provider: SupportedProvidersSchema,
             apiKey: z.string().min(1).optional(),
             baseUrl: z.string().url().nullable().optional(),
+            inferenceBaseUrl: z.string().url().nullable().optional(),
             extraHeaders: z
               .record(z.string(), z.string())
               .nullable()
@@ -182,16 +231,30 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             isPrimary: z.boolean().optional(),
             vaultSecretPath: z.string().min(1).optional(),
             vaultSecretKey: z.string().min(1).optional(),
+            /** Bedrock-only: AWS access key ID for SigV4 auth */
+            awsAccessKeyId: z.string().min(1).optional(),
+            /** Bedrock-only: AWS secret access key for SigV4 auth */
+            awsSecretAccessKey: z.string().min(1).optional(),
+            /** Bedrock-only: optional AWS session token for STS/temporary creds */
+            awsSessionToken: z.string().min(1).optional(),
           })
           .refine(
-            (data) =>
-              isByosEnabled()
-                ? data.vaultSecretPath && data.vaultSecretKey
-                : PROVIDERS_WITH_OPTIONAL_API_KEY.has(data.provider) ||
-                  data.apiKey,
+            (data) => {
+              const hasSigV4 = data.awsAccessKeyId && data.awsSecretAccessKey;
+              if (hasSigV4) return data.provider === "bedrock";
+              if (isByosEnabled()) {
+                return data.vaultSecretPath && data.vaultSecretKey;
+              }
+              return (
+                isProviderApiKeyOptional({
+                  provider: data.provider,
+                  azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+                }) || data.apiKey
+              );
+            },
             {
               message:
-                "Either apiKey or both vaultSecretPath and vaultSecretKey must be provided",
+                "Either apiKey, both vaultSecretPath and vaultSecretKey, or AWS SigV4 credentials (Bedrock only) must be provided",
             },
           ),
         response: constructResponseSchema(SelectLlmProviderApiKeySchema),
@@ -212,9 +275,42 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       let secret: SelectSecret | null = null;
       let actualApiKeyValue: string | null = null;
+      const runtimeTestBaseUrl = body.inferenceBaseUrl ?? body.baseUrl;
 
-      // If readonly_vault is enabled
-      if (isByosEnabled()) {
+      // Bedrock SigV4: store credentials as JSON in the secret payload, then
+      // test using the marker-encoded form.
+      if (body.awsAccessKeyId && body.awsSecretAccessKey) {
+        if (body.provider !== "bedrock") {
+          throw new ApiError(
+            400,
+            "AWS SigV4 credentials are only supported for the Bedrock provider",
+          );
+        }
+        const sigV4: BedrockSigV4Credentials = {
+          accessKeyId: body.awsAccessKeyId,
+          secretAccessKey: body.awsSecretAccessKey,
+          sessionToken: body.awsSessionToken,
+        };
+        actualApiKeyValue = encodeBedrockSigV4Marker(sigV4);
+        await testApiKeyOrThrow(
+          body.provider,
+          actualApiKeyValue,
+          runtimeTestBaseUrl,
+          body.extraHeaders,
+        );
+        secret = await secretManager().createSecret(
+          {
+            accessKeyId: sigV4.accessKeyId,
+            secretAccessKey: sigV4.secretAccessKey,
+            ...(sigV4.sessionToken ? { sessionToken: sigV4.sessionToken } : {}),
+          },
+          getChatApiKeySecretName({
+            scope: body.scope,
+            teamId: body.teamId ?? null,
+            userId: user.id,
+          }),
+        );
+      } else if (isByosEnabled()) {
         if (!body.vaultSecretPath || !body.vaultSecretKey) {
           throw new ApiError(400, "Vault secret path and key are required");
         }
@@ -234,7 +330,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await testApiKeyOrThrow(
           body.provider,
           actualApiKeyValue,
-          body.baseUrl,
+          runtimeTestBaseUrl,
           body.extraHeaders,
         );
         // then create the secret
@@ -253,7 +349,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await testApiKeyOrThrow(
           body.provider,
           actualApiKeyValue,
-          body.baseUrl,
+          runtimeTestBaseUrl,
           body.extraHeaders,
         );
 
@@ -267,7 +363,32 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      if (!secret && !PROVIDERS_WITH_OPTIONAL_API_KEY.has(body.provider)) {
+      if (
+        body.provider === "azure" &&
+        !actualApiKeyValue &&
+        isAzureOpenAiEntraIdEnabled()
+      ) {
+        await testKeylessAzureEntraOrThrow(
+          "discovery",
+          body.baseUrl,
+          body.extraHeaders,
+        );
+        if (body.inferenceBaseUrl && body.inferenceBaseUrl !== body.baseUrl) {
+          await testKeylessAzureEntraOrThrow(
+            "runtime",
+            body.inferenceBaseUrl,
+            body.extraHeaders,
+          );
+        }
+      }
+
+      if (
+        !secret &&
+        !isProviderApiKeyOptional({
+          provider: body.provider,
+          azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+        })
+      ) {
         throw new ApiError(
           400,
           "Secret creation failed, cannot create API key",
@@ -281,6 +402,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         provider: body.provider,
         secretId: secret?.id ?? null,
         baseUrl: body.baseUrl ?? null,
+        inferenceBaseUrl: body.inferenceBaseUrl ?? null,
         extraHeaders: body.extraHeaders ?? null,
         scope: body.scope,
         userId: body.scope === "personal" ? user.id : null,
@@ -292,13 +414,18 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // can immediately show available models after creation.
       // For optional-key providers (Ollama, vLLM), sync even without an API key value.
       const canSync =
-        actualApiKeyValue || PROVIDERS_WITH_OPTIONAL_API_KEY.has(body.provider);
+        actualApiKeyValue ||
+        isProviderApiKeyOptional({
+          provider: body.provider,
+          azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+        });
       if (canSync) {
         try {
           await modelSyncService.syncModelsForApiKey({
             apiKeyId: createdApiKey.id,
             provider: body.provider,
             apiKeyValue: actualApiKeyValue ?? "",
+            // Model sync uses the discovery endpoint; runtime calls use inferenceBaseUrl.
             baseUrl: body.baseUrl,
             extraHeaders: body.extraHeaders ?? null,
           });
@@ -383,6 +510,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             name: z.string().min(1).optional(),
             apiKey: z.string().min(1).optional(),
             baseUrl: z.string().url().nullable().optional(),
+            inferenceBaseUrl: z.string().url().nullable().optional(),
             extraHeaders: z
               .record(z.string(), z.string())
               .nullable()
@@ -392,9 +520,17 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             isPrimary: z.boolean().optional(),
             vaultSecretPath: z.string().min(1).optional(),
             vaultSecretKey: z.string().min(1).optional(),
+            /** Bedrock-only: AWS access key ID for SigV4 auth */
+            awsAccessKeyId: z.string().min(1).optional(),
+            /** Bedrock-only: AWS secret access key for SigV4 auth */
+            awsSecretAccessKey: z.string().min(1).optional(),
+            /** Bedrock-only: optional AWS session token for STS/temporary creds */
+            awsSessionToken: z.string().min(1).optional(),
           })
           .refine(
             (data) => {
+              const hasSigV4 = data.awsAccessKeyId && data.awsSecretAccessKey;
+              if (hasSigV4) return true;
               // If no key-related fields are provided, that's fine (updating other fields)
               if (
                 !data.apiKey &&
@@ -415,7 +551,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
             {
               message:
-                "Either apiKey or both vaultSecretPath and vaultSecretKey must be provided",
+                "Either apiKey, both vaultSecretPath and vaultSecretKey, or AWS SigV4 credentials must be provided",
             },
           ),
         response: constructResponseSchema(SelectLlmProviderApiKeySchema),
@@ -452,28 +588,63 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      // Update the secret if a new API key is provided (via direct value or vault reference)
-      if (body.apiKey || (body.vaultSecretPath && body.vaultSecretKey)) {
-        let apiKeyValue: string;
-        let vaultReference: string | undefined;
+      const sigV4FromBody =
+        body.awsAccessKeyId && body.awsSecretAccessKey
+          ? {
+              accessKeyId: body.awsAccessKeyId,
+              secretAccessKey: body.awsSecretAccessKey,
+              sessionToken: body.awsSessionToken,
+            }
+          : null;
+      const hasSigV4Update = sigV4FromBody !== null;
+      if (hasSigV4Update && apiKeyFromDB.provider !== "bedrock") {
+        throw new ApiError(
+          400,
+          "AWS SigV4 credentials are only supported for the Bedrock provider",
+        );
+      }
 
-        if (isByosEnabled() && body.vaultSecretPath && body.vaultSecretKey) {
+      // Update the secret if a new API key is provided (via direct value, vault reference, or SigV4 credentials)
+      if (
+        body.apiKey ||
+        (body.vaultSecretPath && body.vaultSecretKey) ||
+        hasSigV4Update
+      ) {
+        let secretPayload: Record<string, string>;
+        let testValue: string;
+
+        if (sigV4FromBody) {
+          const sigV4: BedrockSigV4Credentials = sigV4FromBody;
+          secretPayload = {
+            accessKeyId: sigV4.accessKeyId,
+            secretAccessKey: sigV4.secretAccessKey,
+            ...(sigV4.sessionToken ? { sessionToken: sigV4.sessionToken } : {}),
+          };
+          testValue = encodeBedrockSigV4Marker(sigV4);
+        } else if (
+          isByosEnabled() &&
+          body.vaultSecretPath &&
+          body.vaultSecretKey
+        ) {
           // Get secret from vault
           const manager = assertByosEnabled();
           const vaultData = await manager.getSecretFromPath(
             body.vaultSecretPath,
           );
-          apiKeyValue = vaultData[body.vaultSecretKey];
+          const apiKeyValue = vaultData[body.vaultSecretKey];
           if (!apiKeyValue) {
             throw new ApiError(
               400,
               `API key not found in Vault secret at path "${body.vaultSecretPath}" with key "${body.vaultSecretKey}"`,
             );
           }
-          vaultReference = `${body.vaultSecretPath}#${body.vaultSecretKey}`;
+          const vaultReference = `${body.vaultSecretPath}#${body.vaultSecretKey}`;
+          secretPayload = { apiKey: vaultReference };
+          testValue = apiKeyValue;
         } else if (body.apiKey) {
           // Use direct API key value
-          apiKeyValue = body.apiKey;
+          secretPayload = { apiKey: body.apiKey };
+          testValue = body.apiKey;
         } else {
           // This shouldn't happen due to refine, but TypeScript needs this
           throw new ApiError(400, "API key or vault reference is required");
@@ -482,29 +653,30 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Test the API key before saving
         // Use user-provided baseUrl/extraHeaders if present, otherwise fall
         // back to what's stored on the API key record.
-        const testBaseUrl =
-          body.baseUrl !== undefined ? body.baseUrl : apiKeyFromDB.baseUrl;
+        const testBaseUrl = resolveRuntimeTestBaseUrl({
+          body,
+          apiKey: apiKeyFromDB,
+        });
         const testExtraHeaders =
           body.extraHeaders !== undefined
             ? body.extraHeaders
             : apiKeyFromDB.extraHeaders;
         await testApiKeyOrThrow(
           apiKeyFromDB.provider,
-          apiKeyValue,
+          testValue,
           testBaseUrl,
           testExtraHeaders,
         );
 
         // Update or create the secret
         if (apiKeyFromDB.secretId) {
-          // Update with vault reference
-          await secretManager().updateSecret(apiKeyFromDB.secretId, {
-            apiKey: vaultReference ?? apiKeyValue,
-          });
+          await secretManager().updateSecret(
+            apiKeyFromDB.secretId,
+            secretPayload,
+          );
         } else {
-          // Create new secret
           const secret = await secretManager().createSecret(
-            { apiKey: vaultReference ?? apiKeyValue },
+            secretPayload,
             getChatApiKeySecretName({
               scope: newScope,
               teamId: newTeamId,
@@ -515,10 +687,11 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       } else if (
         body.baseUrl !== undefined ||
+        body.inferenceBaseUrl !== undefined ||
         body.extraHeaders !== undefined
       ) {
-        // If baseUrl/extraHeaders are being updated without a new API key,
-        // we need to re-test using the existing API key.
+        // If runtime connection settings are being updated without a new API key,
+        // re-test using the existing API key.
         let apiKeyValue: string | undefined;
 
         if (apiKeyFromDB.secretId) {
@@ -526,8 +699,10 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             apiKeyFromDB.secretId,
           );
         }
-        const testBaseUrl =
-          body.baseUrl !== undefined ? body.baseUrl : apiKeyFromDB.baseUrl;
+        const testBaseUrl = resolveRuntimeTestBaseUrl({
+          body,
+          apiKey: apiKeyFromDB,
+        });
         const testExtraHeaders =
           body.extraHeaders !== undefined
             ? body.extraHeaders
@@ -540,11 +715,23 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             testExtraHeaders,
           );
         } else if (
-          !PROVIDERS_WITH_OPTIONAL_API_KEY.has(apiKeyFromDB.provider)
+          apiKeyFromDB.provider === "azure" &&
+          isAzureOpenAiEntraIdEnabled()
+        ) {
+          await testKeylessAzureEntraOrThrow(
+            "runtime",
+            testBaseUrl,
+            testExtraHeaders,
+          );
+        } else if (
+          !isProviderApiKeyOptional({
+            provider: apiKeyFromDB.provider,
+            azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+          })
         ) {
           throw new ApiError(
             400,
-            "Cannot update Base URL or extra headers without existing API key",
+            "Cannot update Base URL, Inference URL, or extra headers without existing API key",
           );
         }
       }
@@ -553,6 +740,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const updateData: Partial<{
         name: string;
         baseUrl: string | null;
+        inferenceBaseUrl: string | null;
         extraHeaders: Record<string, string> | null;
         scope: ResourceVisibilityScope;
         userId: string | null;
@@ -567,6 +755,10 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (body.baseUrl !== undefined) {
         updateData.baseUrl = body.baseUrl;
+      }
+
+      if (body.inferenceBaseUrl !== undefined) {
+        updateData.inferenceBaseUrl = body.inferenceBaseUrl;
       }
 
       if (body.extraHeaders !== undefined) {
@@ -646,29 +838,29 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Delete virtual key secrets before deleting the parent API key.
-      // The DB cascades the virtual key rows, but their secrets in the
-      // secret manager would be orphaned without explicit cleanup.
-      const virtualKeys = await VirtualApiKeyModel.findByChatApiKeyId({
-        chatApiKeyId: params.id,
+      const virtualKeys = await VirtualApiKeyModel.findByProviderApiKeyId({
+        providerApiKeyId: params.id,
         organizationId,
         userId: user.id,
         userTeamIds: await TeamModel.getUserTeamIds(user.id),
         isAdmin: true,
       });
-      for (const vk of virtualKeys) {
-        try {
-          await secretManager().deleteSecret(vk.secretId);
-        } catch (error) {
-          logger.warn(
-            {
-              virtualKeyId: vk.id,
-              secretId: vk.secretId,
-              error: String(error),
-            },
-            "Failed to delete virtual key secret during parent key deletion",
-          );
-        }
+      if (virtualKeys.length > 0) {
+        throw new ApiError(
+          400,
+          "This API key is mapped to one or more virtual API keys. Remove those mappings before deleting it.",
+        );
+      }
+
+      const oauthClients = await LlmOauthClientModel.findByProviderApiKeyId({
+        providerApiKeyId: params.id,
+        organizationId,
+      });
+      if (oauthClients.length > 0) {
+        throw new ApiError(
+          400,
+          "This API key is mapped to one or more OAuth clients. Remove those mappings before deleting it.",
+        );
       }
 
       // Delete the parent key's associated secret

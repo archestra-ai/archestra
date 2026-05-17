@@ -10,7 +10,13 @@ import { schema } from "@/database";
  * Entity types that can have limits applied
  */
 // TODO: need to make a database migration to migrate agent -> profile
-export const LimitEntityTypeSchema = z.enum(["organization", "team", "agent"]);
+export const LimitEntityTypeSchema = z.enum([
+  "organization",
+  "team",
+  "agent",
+  "user",
+  "virtual_key",
+]);
 export type LimitEntityType = z.infer<typeof LimitEntityTypeSchema>;
 
 /**
@@ -23,6 +29,15 @@ export const LimitTypeSchema = z.enum([
 ]);
 export type LimitType = z.infer<typeof LimitTypeSchema>;
 
+export const LimitCleanupIntervalSchema = z.enum([
+  "1h",
+  "12h",
+  "24h",
+  "1w",
+  "1m",
+]);
+export type LimitCleanupInterval = z.infer<typeof LimitCleanupIntervalSchema>;
+
 /**
  * Base database schema derived from Drizzle
  */
@@ -30,16 +45,19 @@ export const SelectLimitSchema = createSelectSchema(schema.limitsTable, {
   entityType: LimitEntityTypeSchema,
   limitType: LimitTypeSchema,
   model: z.array(z.string()).nullable().optional(),
+  cleanupInterval: LimitCleanupIntervalSchema.optional(),
 });
 export const InsertLimitSchema = createInsertSchema(schema.limitsTable, {
   entityType: LimitEntityTypeSchema,
   limitType: LimitTypeSchema,
   model: z.array(z.string()).nullable().optional(),
+  cleanupInterval: LimitCleanupIntervalSchema.optional(),
 });
 export const UpdateLimitSchema = createUpdateSchema(schema.limitsTable, {
   entityType: LimitEntityTypeSchema,
   limitType: LimitTypeSchema,
   model: z.array(z.string()).nullable().optional(),
+  cleanupInterval: LimitCleanupIntervalSchema.optional(),
 }).omit({
   id: true,
   createdAt: true,
@@ -73,17 +91,17 @@ export const CreateLimitSchema = InsertLimitSchema.omit({
         return false;
       }
     }
-    // Validation: token_cost requires non-empty model array and should not have mcp or tool specificity
+    // Validation: token_cost should not have mcp or tool specificity
     if (data.limitType === "token_cost") {
+      if (data.mcpServerName || data.toolName) {
+        return false;
+      }
       if (
         !data.model ||
         !Array.isArray(data.model) ||
         data.model.length === 0
       ) {
-        return false;
-      }
-      if (data.mcpServerName || data.toolName) {
-        return false;
+        data.model = null;
       }
     }
     return true;

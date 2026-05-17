@@ -59,6 +59,7 @@ vi.mock("@/services/identity-providers/session-token", () => ({
 beforeEach(() => {
   vi.mocked(mcpClient.executeToolCall).mockReset();
   vi.mocked(resolveSessionExternalIdpToken).mockResolvedValue(null);
+  vi.mocked(StreamableHTTPClientTransport).mockClear();
 });
 
 describe("isBrowserMcpTool", () => {
@@ -365,6 +366,52 @@ describe("chat-mcp-client health check", () => {
     // listTools should NOT have been called on the dead client
     expect(deadClient.listTools).not.toHaveBeenCalled();
     // Tools will be empty since we can't create a real client in tests
+    expect(tools).toEqual({});
+
+    chatClient.clearChatMcpClient(agent.id);
+    await chatClient.__test.clearToolCache(cacheKey);
+  });
+
+  test("skips ping for recently validated cached clients", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ teams: [team.id] });
+    await makeTeamMember(team.id, user.id);
+    await TeamTokenModel.createTeamToken(team.id, team.name);
+
+    const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
+    chatClient.clearChatMcpClient(agent.id);
+    await chatClient.__test.clearToolCache(cacheKey);
+
+    const cachedClient = {
+      ping: vi.fn().mockResolvedValue(undefined),
+      listTools: vi.fn().mockResolvedValue({ tools: [] }),
+      callTool: vi.fn(),
+      close: vi.fn(),
+    };
+
+    chatClient.__test.setCachedClient(
+      cacheKey,
+      cachedClient as unknown as Client,
+    );
+    chatClient.__test.setCachedClientLastValidatedAt(cacheKey, Date.now());
+
+    const tools = await chatClient.getChatMcpTools({
+      agentName: agent.name,
+      agentId: agent.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
+
+    expect(cachedClient.ping).not.toHaveBeenCalled();
+    expect(cachedClient.listTools).toHaveBeenCalledTimes(1);
     expect(tools).toEqual({});
 
     chatClient.clearChatMcpClient(agent.id);
@@ -1267,6 +1314,44 @@ describe("getChatMcpClient", () => {
       .calls[0] as [URL, { requestInit?: RequestInit }];
     const headers = new Headers(options.requestInit?.headers);
     expect(headers.get("Authorization")).toBe("Bearer external-idp-jwt");
+  });
+
+  test("falls back to the internal gateway token when session-derived external IdP auth fails", async () => {
+    mockConnect.mockReset();
+    mockConnect
+      .mockRejectedValueOnce(new Error("Unauthorized"))
+      .mockResolvedValueOnce(undefined);
+    mockClose.mockReset();
+    vi.mocked(resolveSessionExternalIdpToken).mockResolvedValue({
+      identityProviderId: crypto.randomUUID(),
+      providerId: "okta-chat",
+      rawToken: "external-idp-jwt",
+    });
+
+    const agentId = crypto.randomUUID();
+    const userId = crypto.randomUUID();
+    const organizationId = crypto.randomUUID();
+
+    const client = await chatClient.getChatMcpClient(
+      agentId,
+      userId,
+      organizationId,
+      undefined,
+      "internal-fallback-token",
+    );
+
+    expect(client).not.toBeNull();
+    expect(mockConnect).toHaveBeenCalledTimes(2);
+
+    const authorizationHeaders = vi
+      .mocked(StreamableHTTPClientTransport)
+      .mock.calls.map(([, options]) =>
+        new Headers(
+          (options as { requestInit?: RequestInit }).requestInit?.headers,
+        ).get("Authorization"),
+      );
+    expect(authorizationHeaders).toContain("Bearer external-idp-jwt");
+    expect(authorizationHeaders).toContain("Bearer internal-fallback-token");
   });
 });
 

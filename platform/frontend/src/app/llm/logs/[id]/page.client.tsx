@@ -86,6 +86,10 @@ function LogDetail({
   const requestMessages = new DynamicInteraction(
     dynamicInteraction,
   ).mapToUiMessages(allDualLlmAnalyses);
+  const chatErrors = dynamicInteraction.chatErrors ?? [];
+  const authMethod = dynamicInteraction.authMethod
+    ? formatAuthMethod(dynamicInteraction.authMethod)
+    : null;
 
   return (
     <div className="space-y-6">
@@ -181,6 +185,25 @@ function LogDetail({
                 {formatDate({ date: interaction.createdAt })}
               </div>
             </MetadataItem>
+            {authMethod && (
+              <MetadataItem label="Auth Method">
+                <div className="font-mono text-xs">{authMethod}</div>
+              </MetadataItem>
+            )}
+            {dynamicInteraction.authenticatedAppName && (
+              <MetadataItem label="OAuth Client">
+                <div className="space-y-1">
+                  <div className="font-mono text-xs">
+                    {dynamicInteraction.authenticatedAppName}
+                  </div>
+                  {dynamicInteraction.authenticatedAppId && (
+                    <div className="font-mono text-xs text-muted-foreground">
+                      {dynamicInteraction.authenticatedAppId}
+                    </div>
+                  )}
+                </div>
+              </MetadataItem>
+            )}
             {dynamicInteraction.externalAgentId && (
               <MetadataItem label="External Agent">
                 <div className="font-mono text-xs">
@@ -245,9 +268,13 @@ function LogDetail({
             <div className="border border-border rounded-lg bg-background overflow-hidden">
               <MessageThread
                 messages={requestMessages}
+                chatErrors={chatErrors}
+                conversationId={dynamicInteraction.sessionId ?? undefined}
                 containerClassName="h-auto"
                 hideDivider={true}
                 profileId={agent?.id}
+                agentName={agent?.name ?? undefined}
+                selectedModel={interaction.modelName}
                 unsafeContextBoundary={dynamicInteraction.unsafeContextBoundary}
               />
             </div>
@@ -304,4 +331,27 @@ function LogDetail({
       </div>
     </div>
   );
+}
+
+type InteractionAuthMethod = NonNullable<
+  archestraApiTypes.GetInteractionResponses["200"]["authMethod"]
+>;
+
+function formatAuthMethod(authMethod: InteractionAuthMethod) {
+  switch (authMethod) {
+    case "oauth_client_credentials":
+      return "OAuth Client Credentials";
+    case "oauth_user":
+      return "OAuth User";
+    case "virtual_key":
+      return "Virtual Key";
+    case "provider_key":
+      return "Provider Key";
+    case "jwks":
+      return "JWKS";
+    case "internal":
+      return "Internal";
+    default:
+      return authMethod;
+  }
 }

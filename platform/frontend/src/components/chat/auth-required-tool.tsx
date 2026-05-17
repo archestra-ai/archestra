@@ -1,30 +1,47 @@
+import type { AuthRequiredAction } from "@shared";
 import { AuthErrorTool } from "./auth-error-tool";
 
 interface AuthRequiredToolProps {
   toolName: string;
   catalogName: string;
-  installUrl: string;
-  /** When provided, opens the install dialog inline instead of navigating */
+  actionUrl: string;
+  action: AuthRequiredAction;
+  providerId?: string | null;
+  /** When provided, opens the MCP credential install dialog inline. */
   onInstall?: () => void;
 }
 
 export function AuthRequiredTool({
   catalogName,
-  installUrl,
+  actionUrl,
+  action,
+  providerId,
   onInstall,
 }: AuthRequiredToolProps) {
+  const isIdentityProviderConnect = action === "connect_identity_provider";
+  const providerName = providerId ?? "identity provider";
+
   return (
     <AuthErrorTool
       title="Authentication Required"
       description={
-        <>
-          No credentials found for &ldquo;{catalogName}&rdquo;. Set up your
-          credentials to use this tool.
-        </>
+        isIdentityProviderConnect ? (
+          `Connect ${providerName}. This deployment can then request the downstream credential for "${catalogName}".`
+        ) : (
+          <>
+            No credentials found for &ldquo;{catalogName}&rdquo;. Set up your
+            credentials to use this tool.
+          </>
+        )
       }
-      buttonText="Set up credentials"
-      buttonUrl={installUrl}
-      onAction={onInstall}
+      buttonText={
+        isIdentityProviderConnect
+          ? `Connect ${providerName}`
+          : "Set up credentials"
+      }
+      buttonUrl={actionUrl}
+      onAction={isIdentityProviderConnect ? undefined : onInstall}
+      openInNewTab={!isIdentityProviderConnect}
     />
   );
 }

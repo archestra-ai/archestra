@@ -17,7 +17,7 @@ const agentKnowledgeBasesTable = pgTable(
     knowledgeBaseId: uuid("knowledge_base_id")
       .notNull()
       .references(() => knowledgeBasesTable.id, { onDelete: "cascade" }),
-    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [
     primaryKey({ columns: [table.agentId, table.knowledgeBaseId] }),

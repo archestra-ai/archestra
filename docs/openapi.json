@@ -142438,12 +142438,6 @@
                   },
                   "serviceAccount": {
                     "type": "string"
-                  },
-                  "presetFieldValues": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "$ref": "#/components/schemas/UserConfigFieldDefaultInput"
-                    }
                   }
                 },
                 "required": [

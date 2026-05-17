@@ -31,7 +31,7 @@ const apikey = pgTable(
     remaining: integer("remaining"),
     lastRequest: timestamp("last_request"),
     expiresAt: timestamp("expires_at"),
-    createdAt: timestamp("created_at").notNull(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at").notNull(),
     updatedAt: timestamp("updated_at").notNull(),
     permissions: text("permissions"),
     metadata: text("metadata"),

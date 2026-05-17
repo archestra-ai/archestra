@@ -15,7 +15,7 @@ const mcpCatalogLabelsTable = pgTable(
     valueId: uuid("value_id")
       .notNull()
       .references(() => labelValueTable.id, { onDelete: "cascade" }),
-    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({
     pk: primaryKey({ columns: [table.catalogId, table.keyId] }),

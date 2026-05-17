@@ -125,6 +125,9 @@ export const TOOL_PERMISSIONS: Record<
   // Meta — permission is enforced on the target tool, not on run_tool itself
   search_tools: null,
   run_tool: null,
+
+  // Scheduled tasks
+  create_scheduled_task: { resource: "scheduledTask", action: "create" },
 };
 
 /**

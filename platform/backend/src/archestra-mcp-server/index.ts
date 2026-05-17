@@ -48,6 +48,10 @@ import {
   tools as runToolTools,
 } from "./run-tool";
 import {
+  toolEntries as scheduleTaskToolEntries,
+  tools as scheduleTaskTools,
+} from "./schedule-tasks";
+import {
   toolEntries as searchToolEntries,
   tools as searchToolTools,
 } from "./search-tools";
@@ -77,6 +81,7 @@ const toolEntries: Partial<
   ...chatToolEntries,
   ...searchToolEntries,
   ...runToolEntries,
+  ...scheduleTaskToolEntries,
 };
 
 export function getArchestraMcpTools() {
@@ -93,6 +98,7 @@ export function getArchestraMcpTools() {
     ...chatTools,
     ...searchToolTools,
     ...runToolTools,
+    ...scheduleTaskTools,
   ];
 
   if (archestraMcpBranding.toolPrefix === ARCHESTRA_TOOL_PREFIX) {

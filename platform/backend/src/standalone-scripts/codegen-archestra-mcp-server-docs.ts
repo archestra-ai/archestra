@@ -29,6 +29,7 @@ enum ToolGroup {
   ToolAssignment = "Tool Assignment",
   KnowledgeManagement = "Knowledge Management",
   Chat = "Chat",
+  ScheduledTasks = "Scheduled Tasks",
   Meta = "Meta",
 }
 
@@ -43,7 +44,8 @@ const groupOrder: Record<ToolGroup, number> = {
   [ToolGroup.ToolAssignment]: 7,
   [ToolGroup.KnowledgeManagement]: 8,
   [ToolGroup.Chat]: 9,
-  [ToolGroup.Meta]: 10,
+  [ToolGroup.ScheduledTasks]: 10,
+  [ToolGroup.Meta]: 11,
 };
 
 /**
@@ -126,6 +128,8 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
 
   search_tools: ToolGroup.Meta,
   run_tool: ToolGroup.Meta,
+
+  create_scheduled_task: ToolGroup.ScheduledTasks,
 };
 
 // === Script entry point ===

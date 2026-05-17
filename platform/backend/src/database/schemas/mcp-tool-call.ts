@@ -38,7 +38,7 @@ const mcpToolCallsTable = pgTable(
     authMethod: varchar("auth_method", {
       length: 50,
     }).$type<MCPGatewayAuthMethod>(),
-    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({
     agentIdIdx: index("mcp_tool_calls_agent_id_idx").on(table.agentId),

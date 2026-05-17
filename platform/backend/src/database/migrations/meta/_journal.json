@@ -1667,13 +1667,6 @@
       "when": 1778786612751,
       "tag": "0237_regular_goblin_queen",
       "breakpoints": true
-    },
-    {
-      "idx": 238,
-      "version": "7",
-      "when": 1779041407110,
-      "tag": "0238_round_silhouette",
-      "breakpoints": true
     }
   ]
 }

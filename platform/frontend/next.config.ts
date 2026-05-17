@@ -8,6 +8,11 @@ const platformPkg = JSON.parse(
   readFileSync(resolve(import.meta.dirname, "../package.json"), "utf-8"),
 ) as { name: string; version: string };
 
+type ExperimentalConfig = NonNullable<NextConfig["experimental"]>;
+
+const proxyClientMaxBodySize = (process.env.ARCHESTRA_MIDDLEWARE_BODY_LIMIT ||
+  "50mb") as ExperimentalConfig["proxyClientMaxBodySize"];
+
 const nextConfig: NextConfig = {
   allowedDevOrigins: getAllowedDevOrigins(),
   env: {
@@ -41,6 +46,7 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     proxyTimeout: 300000, // 5 minutes in milliseconds - prevents SSE stream timeout
+    proxyClientMaxBodySize,
   },
   httpAgentOptions: {
     keepAlive: true,

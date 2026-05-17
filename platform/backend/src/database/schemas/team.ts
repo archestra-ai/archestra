@@ -12,7 +12,7 @@ export const team = pgTable("team", {
   createdBy: text("created_by")
     .notNull()
     .references(() => usersTable.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at").notNull(),
+  deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at").notNull(),
   updatedAt: timestamp("updated_at")
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
@@ -38,7 +38,7 @@ export const teamMember = pgTable(
      * Members without this flag were added manually and won't be removed by sync.
      */
     syncedFromSso: boolean("synced_from_sso").notNull().default(false),
-    createdAt: timestamp("created_at").notNull(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at").notNull(),
   },
   (table) => [
     index("team_member_team_id_user_id_idx").on(table.teamId, table.userId),

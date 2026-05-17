@@ -63,10 +63,7 @@ export function LogosSection({
 
   return (
     <Card>
-      <SettingsCardHeader
-        title="Logos"
-        description="PNG or SVG, max 2 MB."
-      />
+      <SettingsCardHeader title="Logos" description="PNG or SVG, max 2 MB." />
       <CardContent>
         <div className="divide-y divide-border border-t border-border">
           {ROWS.map(({ label, description, field }) => (

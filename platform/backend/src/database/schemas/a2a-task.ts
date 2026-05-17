@@ -9,7 +9,7 @@ const a2aTaskTable = pgTable(
       .notNull()
       .references(() => a2aContextTable.id, { onDelete: "cascade" }),
     state: text("state").notNull(),
-    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()
       .defaultNow()

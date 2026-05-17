@@ -561,16 +561,13 @@ class InternalMcpCatalogModel {
   }
 
   static async delete(id: string): Promise<boolean> {
-    // Servers across the row and its presets must be removed before the
-    // catalog DELETE. The parent_catalog_item_id FK cascades, but
-    // mcp_server.catalog_id is NOT NULL with ON DELETE SET NULL — letting the
-    // DB cascade reach a preset with an installed server aborts the
-    // transaction.
+    // Cleanup mcp server installations across the catalog item and it's children (presets), if any.
     const children = await InternalMcpCatalogModel.findChildren(id);
     const catalogIds = [id, ...children.map((c) => c.id)];
 
     for (const catalogId of catalogIds) {
       const servers = await McpServerModel.findByCatalogId(catalogId);
+      // Deleting each seever cascades it's tools.
       for (const server of servers) {
         await McpServerModel.delete(server.id);
       }

@@ -32,7 +32,7 @@ const mcpServerInstallationRequestTable = pgTable(
     notes: jsonb("notes")
       .$type<Array<McpServerInstallationRequestNote>>()
       .default([]),
-    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()
       .defaultNow()

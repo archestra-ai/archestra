@@ -2,7 +2,7 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 
-export interface PresetEntryWithAssignedCount {
+interface PresetEntryWithAssignedCount {
   id: string;
   organizationId: string;
   name: string;

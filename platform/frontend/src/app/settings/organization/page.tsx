@@ -29,8 +29,7 @@ import {
 } from "./_components/chat-links-editor.utils";
 import { ChatPlaceholdersEditor } from "./_components/chat-placeholders-editor";
 import { FaviconUpload } from "./_components/favicon-upload";
-import { IconLogoUpload } from "./_components/icon-logo-upload";
-import { LogoUpload } from "./_components/logo-upload";
+import { LogosSection } from "./_components/logos-section";
 import { OAuthTokenLifetimeSection } from "./_components/oauth-token-lifetime-section";
 import { OnboardingWizardEditor } from "./_components/onboarding-wizards-editor";
 import {
@@ -258,18 +257,16 @@ export default function OrganizationSettingsPage() {
       <div>
         <h3 className="text-lg font-medium mb-4">Appearance</h3>
         <SettingsSectionStack>
-          <LogoUpload
+          <LogosSection
             currentLogo={logo}
             currentLogoDark={logoDark}
-            onLogoChange={handleLogoChange}
+            currentIconLogo={organization?.iconLogo}
+            currentIconLogoDark={organization?.iconLogoDark}
+            onChange={handleLogoChange}
           />
           <FaviconUpload
             currentFavicon={organization?.favicon}
             onFaviconChange={handleLogoChange}
-          />
-          <IconLogoUpload
-            currentIconLogo={organization?.iconLogo}
-            onIconLogoChange={handleLogoChange}
           />
           <ThemeSelector
             selectedTheme={currentUITheme}

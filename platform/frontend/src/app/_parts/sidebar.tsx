@@ -469,7 +469,7 @@ export function AppSidebar() {
       <SidebarHeader className="pt-4 group-data-[collapsible=icon]:pt-2 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:gap-1">
         <div className="group-data-[collapsible=icon]:hidden">
           <SidebarPrefetchLink href="/chat" className="block min-w-0">
-            <AppLogo centered={false} />
+            <AppLogo />
           </SidebarPrefetchLink>
         </div>
         <SidebarPrefetchLink

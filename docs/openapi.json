@@ -157035,6 +157035,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "iconLogoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
@@ -157151,6 +157155,7 @@
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
+                    "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
@@ -157470,6 +157475,10 @@
                     "type": "string"
                   },
                   "iconLogo": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "iconLogoDark": {
                     "nullable": true,
                     "type": "string"
                   },
@@ -157848,6 +157857,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "iconLogoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
@@ -157964,6 +157977,7 @@
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
+                    "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
@@ -158286,6 +158300,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "iconLogoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "appName": {
                       "nullable": true,
                       "type": "string"
@@ -158376,6 +158394,7 @@
                     "logoDark",
                     "favicon",
                     "iconLogo",
+                    "iconLogoDark",
                     "appName",
                     "ogDescription",
                     "footerText",
@@ -158932,6 +158951,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "iconLogoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
@@ -159048,6 +159071,7 @@
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
+                    "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
@@ -159631,6 +159655,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "iconLogoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
@@ -159747,6 +159775,7 @@
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
+                    "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
@@ -160335,6 +160364,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "iconLogoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
@@ -160451,6 +160484,7 @@
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
+                    "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
@@ -161083,6 +161117,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "iconLogoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
@@ -161199,6 +161237,7 @@
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
+                    "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
@@ -161756,6 +161795,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "iconLogoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
@@ -161872,6 +161915,7 @@
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
+                    "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
@@ -162442,6 +162486,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "iconLogoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
@@ -162558,6 +162606,7 @@
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
+                    "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
@@ -163095,6 +163144,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "iconLogoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
@@ -163211,6 +163264,7 @@
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
+                    "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
@@ -164061,6 +164115,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "iconLogoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
@@ -164177,6 +164235,7 @@
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
+                    "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",

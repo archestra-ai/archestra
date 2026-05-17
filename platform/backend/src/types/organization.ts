@@ -9,10 +9,12 @@ import {
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { sanitizeSvg } from "@/utils/sanitize-svg";
 import { LimitCleanupIntervalSchema } from "./limit";
 
 const DATA_URI_PREFIX = "data:image/png;base64,";
 const GIF_DATA_URI_PREFIX = "data:image/gif;base64,";
+const SVG_DATA_URI_PREFIX = "data:image/svg+xml;base64,";
 const MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB decoded
 const PNG_MAGIC_BYTES = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 // "GIF87a" or "GIF89a"
@@ -73,6 +75,72 @@ const Base64PngSchema = z
         message: "Logo must contain valid PNG image data",
       });
     }
+  });
+
+/**
+ * Validates a Base64-encoded PNG or SVG data URI. SVGs are sanitized (script
+ * tags, event handlers, foreignObject, and javascript: URLs are stripped) and
+ * re-encoded; the returned value is the cleaned data URI.
+ */
+const Base64LogoSchema = z
+  .string()
+  .nullable()
+  .transform((val, ctx) => {
+    if (val === null) return val;
+
+    const isPng = val.startsWith(DATA_URI_PREFIX);
+    const isSvg = val.startsWith(SVG_DATA_URI_PREFIX);
+    if (!isPng && !isSvg) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Logo must be a PNG or SVG image in data URI format",
+      });
+      return z.NEVER;
+    }
+
+    const prefix = isPng ? DATA_URI_PREFIX : SVG_DATA_URI_PREFIX;
+    const base64Payload = val.slice(prefix.length);
+    const decoded = Buffer.from(base64Payload, "base64");
+    if (decoded.toString("base64") !== base64Payload) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Logo contains invalid Base64 encoding",
+      });
+      return z.NEVER;
+    }
+    if (decoded.length > MAX_LOGO_SIZE_BYTES) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Logo must be less than 2MB",
+      });
+      return z.NEVER;
+    }
+
+    if (isPng) {
+      if (
+        decoded.length < PNG_MAGIC_BYTES.length ||
+        !PNG_MAGIC_BYTES.every((byte, i) => decoded[i] === byte)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Logo must contain valid PNG image data",
+        });
+        return z.NEVER;
+      }
+      return val;
+    }
+
+    const svgSource = decoded.toString("utf8");
+    const cleaned = sanitizeSvg(svgSource);
+    if (cleaned === null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Logo must contain valid SVG image data",
+      });
+      return z.NEVER;
+    }
+    const cleanedBase64 = Buffer.from(cleaned, "utf8").toString("base64");
+    return `${SVG_DATA_URI_PREFIX}${cleanedBase64}`;
   });
 
 /**
@@ -193,6 +261,7 @@ export const AppearanceSettingsSchema = z.object({
   logoDark: z.string().nullable(),
   favicon: z.string().nullable(),
   iconLogo: z.string().nullable(),
+  iconLogoDark: z.string().nullable(),
   appName: z.string().nullable(),
   ogDescription: z.string().nullable(),
   footerText: z.string().nullable(),
@@ -230,6 +299,7 @@ const extendedFields = {
   defaultAgentId: z.string().uuid().nullable(),
   favicon: z.string().nullable(),
   iconLogo: z.string().nullable(),
+  iconLogoDark: z.string().nullable(),
   appName: z.string().nullable(),
   ogDescription: z.string().nullable(),
   footerText: z.string().nullable(),
@@ -255,10 +325,11 @@ export const InsertOrganizationSchema = createInsertSchema(
 export const UpdateAppearanceSettingsSchema = z.object({
   theme: OrganizationThemeSchema.optional(),
   customFont: OrganizationCustomFontSchema.optional(),
-  logo: Base64PngSchema.optional(),
-  logoDark: Base64PngSchema.optional(),
+  logo: Base64LogoSchema.optional(),
+  logoDark: Base64LogoSchema.optional(),
   favicon: Base64PngSchema.optional(),
-  iconLogo: Base64PngSchema.optional(),
+  iconLogo: Base64LogoSchema.optional(),
+  iconLogoDark: Base64LogoSchema.optional(),
   appName: z.string().max(100).nullable().optional(),
   ogDescription: z.string().max(500).nullable().optional(),
   footerText: z.string().max(500).nullable().optional(),

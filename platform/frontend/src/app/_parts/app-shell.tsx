@@ -4,6 +4,10 @@ import type { Permissions } from "@shared/permission.types";
 import { usePathname } from "next/navigation";
 import { ConversationSearchProvider } from "@/components/conversation-search-provider";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
+import {
+  NavigationStatusProvider,
+  useNavigationStatus,
+} from "@/components/navigation-status-provider";
 import { OnboardingDialogWrapper } from "@/components/onboarding-dialog-wrapper";
 import {
   SidebarCircleToggle,
@@ -67,23 +71,33 @@ export function AppShell({ children }: AppShellProps) {
 
   // Normal mode: render full app shell with sidebar
   return (
-    <SidebarProvider defaultOpen={!shouldCollapse}>
-      <AppSidebar />
-      <SidebarCircleToggle />
-      <main className="h-screen w-full flex flex-col bg-background min-w-0 relative">
-        <ImpersonationBanner />
-        <header className="h-14 border-b border-border flex md:hidden items-center justify-between px-6 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">
-          <SidebarTrigger className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2 -ml-2" />
-          <div id="mobile-header-actions" className="flex items-center gap-2" />
-        </header>
-        <div className="flex-1 min-w-0 flex flex-col">
-          <div className="flex-1 flex flex-col">{children}</div>
-          <Version />
-        </div>
-      </main>
-      <Toaster />
-      <OnboardingDialogWrapper />
-      <ConversationSearchProvider />
-    </SidebarProvider>
+    <NavigationStatusProvider>
+      <SidebarProvider defaultOpen={!shouldCollapse}>
+        <AppSidebar />
+        <NavAwareSidebarCircleToggle />
+        <main className="h-screen w-full flex flex-col bg-background min-w-0 relative">
+          <ImpersonationBanner />
+          <header className="h-14 border-b border-border flex md:hidden items-center justify-between px-6 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">
+            <SidebarTrigger className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2 -ml-2" />
+            <div
+              id="mobile-header-actions"
+              className="flex items-center gap-2"
+            />
+          </header>
+          <div className="flex-1 min-w-0 flex flex-col">
+            <div className="flex-1 flex flex-col">{children}</div>
+            <Version />
+          </div>
+        </main>
+        <Toaster />
+        <OnboardingDialogWrapper />
+        <ConversationSearchProvider />
+      </SidebarProvider>
+    </NavigationStatusProvider>
   );
+}
+
+function NavAwareSidebarCircleToggle() {
+  const { isNavigating } = useNavigationStatus();
+  return <SidebarCircleToggle loading={isNavigating} />;
 }

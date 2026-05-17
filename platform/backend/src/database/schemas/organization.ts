@@ -144,8 +144,11 @@ const organizationsTable = pgTable("organization", {
     .notNull()
     .default(true),
 
-  /** Square icon logo (28x28px recommended) for collapsed sidebar and chat loading indicator */
+  /** Square icon logo (28x28px recommended) for collapsed sidebar and chat loading indicator. PNG or SVG. */
   iconLogo: text("icon_logo"),
+
+  /** Dark-mode variant of the icon logo. Falls back to `iconLogo` when not set. */
+  iconLogoDark: text("icon_logo_dark"),
 
   /** Support contact message shown in chat error cards */
   chatErrorSupportMessage: text("chat_error_support_message"),

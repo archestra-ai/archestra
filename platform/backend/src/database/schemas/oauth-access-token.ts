@@ -21,7 +21,7 @@ const oauthAccessToken = pgTable("oauth_access_token", {
     onDelete: "set null",
   }),
   expiresAt: timestamp("expires_at").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at").defaultNow().notNull(),
   scopes: text("scopes").array(),
 });
 

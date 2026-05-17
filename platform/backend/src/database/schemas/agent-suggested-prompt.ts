@@ -21,7 +21,7 @@ const agentSuggestedPromptsTable = pgTable(
     prompt: text("prompt").notNull(),
     /** Display order (lower = first) */
     sortOrder: integer("sort_order").notNull().default(0),
-    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()
       .defaultNow()

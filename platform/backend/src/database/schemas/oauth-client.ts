@@ -32,7 +32,7 @@ const oauthClient = pgTable("oauth_client", {
   type: text("type"),
   requirePKCE: boolean("require_pkce"),
   metadata: jsonb("metadata"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .defaultNow()
     .$onUpdate(() => new Date())

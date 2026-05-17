@@ -29,7 +29,7 @@ const scheduleTriggersTable = pgTable(
       withTimezone: true,
       mode: "date",
     }),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
       .notNull()
       .defaultNow(),
   },

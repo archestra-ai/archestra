@@ -33,7 +33,7 @@ const kbUploadedFilesTable = pgTable(
     fileData: bytea("file_data").notNull(),
     processingStatus: text("processing_status").notNull().default("completed"),
     processingError: text("processing_error"),
-    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [
     index("kb_uploaded_files_connector_id_idx").on(table.connectorId),

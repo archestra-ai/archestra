@@ -24,7 +24,7 @@ const teamExternalGroupsTable = pgTable(
      * - Azure AD: Group Object ID (GUID) e.g., "00000000-0000-0000-0000-000000000000"
      */
     groupIdentifier: text("group_identifier").notNull(),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (table) => [
     // Ensure unique combination of team and group

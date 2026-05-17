@@ -6,7 +6,7 @@ const a2aContextTable = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     actorKind: text("actor_kind").notNull(),
     actorId: text("actor_id").notNull(),
-    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()
       .defaultNow()

@@ -109,70 +109,102 @@ export function PresetEditorDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-[560px]">
-        <DialogHeader className="border-b px-6 py-4">
-          <DialogTitle>
-            {isEditingDefaultPreset
-              ? "Edit default preset"
-              : isEdit
-                ? `Edit preset — ${preset?.name}`
-                : "New preset"}
-          </DialogTitle>
-        </DialogHeader>
+        {/*
+         * Wrap the editor in a real <form autoComplete="off"> so Chrome's
+         * password manager scopes its autofill scan to this form. Without
+         * a form ancestor for the secret-typed Input (which renders as
+         * <input type="password">), Chrome treats it as an "unaffiliated"
+         * password field, hunts the entire page for a username field, and
+         * falls back to the catalog SearchInput behind this dialog —
+         * filling it with the user's saved Archestra credential
+         * (admin@example.com), which then fires its onChange and
+         * router.replace, which dismisses BOTH dialogs.
+         *
+         * onSubmit prevents the native form submission so Enter still
+         * triggers our save() instead of a browser navigation.
+         */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            save();
+          }}
+          autoComplete="off"
+          className="contents"
+        >
+          <DialogHeader className="border-b px-6 py-4">
+            <DialogTitle>
+              {isEditingDefaultPreset
+                ? "Edit default preset"
+                : isEdit
+                  ? `Edit preset — ${preset?.name}`
+                  : "New preset"}
+            </DialogTitle>
+          </DialogHeader>
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
-          {!isEdit && (
-            <div className="space-y-1.5">
-              <Label htmlFor="preset-name">Name</Label>
-              <Input
-                id="preset-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="staging"
-                className="font-mono"
-              />
-              <p className="text-xs text-muted-foreground">
-                DNS-1123 label, max 63 chars. Immutable after creation.
-              </p>
-              {nameError && (
-                <p className="text-xs text-destructive" role="alert">
-                  {nameError}
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
+            {!isEdit && (
+              <div className="space-y-1.5">
+                <Label htmlFor="preset-name">Name</Label>
+                <Input
+                  id="preset-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="staging"
+                  className="font-mono"
+                  autoComplete="off"
+                />
+                <p className="text-xs text-muted-foreground">
+                  DNS-1123 label, max 63 chars. Immutable after creation.
                 </p>
-              )}
-            </div>
-          )}
+                {nameError && (
+                  <p className="text-xs text-destructive" role="alert">
+                    {nameError}
+                  </p>
+                )}
+              </div>
+            )}
 
-          {presetFields.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              This catalog has no preset-scoped fields. Mark fields with{" "}
-              <span className="font-mono">promptOnPreset</span> in the
-              Configuration tab first.
-            </p>
-          ) : (
-            <PresetFieldSections
-              fields={presetFields}
-              values={fieldValues}
-              hasStoredSecrets={isEdit && preset?.presetSecretId != null}
-              onChange={(key, v) =>
-                setFieldValues((prev) => {
-                  if (v === undefined) {
-                    const { [key]: _drop, ...rest } = prev;
-                    return rest;
-                  }
-                  return { ...prev, [key]: v };
-                })
-              }
-            />
-          )}
-        </div>
+            {presetFields.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                This catalog has no preset-scoped fields. Mark fields with{" "}
+                <span className="font-mono">promptOnPreset</span> in the
+                Configuration tab first.
+              </p>
+            ) : (
+              <PresetFieldSections
+                fields={presetFields}
+                values={fieldValues}
+                hasStoredSecrets={isEdit && preset?.presetSecretId != null}
+                onChange={(key, v) =>
+                  setFieldValues((prev) => {
+                    if (v === undefined) {
+                      const { [key]: _drop, ...rest } = prev;
+                      return rest;
+                    }
+                    return { ...prev, [key]: v };
+                  })
+                }
+              />
+            )}
+          </div>
 
-        <DialogFooter className="border-t px-6 py-3">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={save} disabled={isPending}>
-            {isPending ? "Saving…" : isEdit ? "Save changes" : "Create preset"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter className="border-t px-6 py-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isPending}>
+              {isPending
+                ? "Saving…"
+                : isEdit
+                  ? "Save changes"
+                  : "Create preset"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

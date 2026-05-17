@@ -3728,7 +3728,7 @@ export const updateSecuritySettings = <ThrowOnError extends boolean = false>(opt
 });
 
 /**
- * Update LLM settings (TOON compression, compression scope, limit cleanup interval)
+ * Update LLM settings (TOON compression, compression scope, default user limit)
  *
  * Authentication:
  *

@@ -84,6 +84,13 @@ export function PresetFieldInput({
         }
         className="font-mono"
         disabled={disabled}
+        // Suppress browser/password-manager autofill. For type="password"
+        // fields specifically, "new-password" is the standard hint that
+        // tells Chrome/Safari/Firefox not to attempt credential fill —
+        // these are catalog secrets (DB passwords, API tokens), NOT login
+        // credentials, so password-manager interference would surface a
+        // saved Archestra login here instead of the actual stored value.
+        autoComplete={field.secret ? "new-password" : "off"}
       />
     </div>
   );

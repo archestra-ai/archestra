@@ -95,6 +95,8 @@ describe("Authnz", () => {
         "/health",
         "/ready",
         "/metrics",
+        "/api/archestra-catalog/category",
+        "/api/archestra-catalog/search?q=foo",
       ];
 
       for (const url of whitelistedPaths) {

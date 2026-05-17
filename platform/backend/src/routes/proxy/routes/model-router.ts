@@ -822,7 +822,7 @@ async function getModelRouterOAuthClientAuth(
             providerApiKeyId: apiKey.id,
             providerApiKeyName: apiKey.name,
             secretId: apiKey.secretId,
-            baseUrl: apiKey.baseUrl,
+            baseUrl: apiKey.inferenceBaseUrl ?? apiKey.baseUrl,
           },
         ];
       }),
@@ -877,7 +877,7 @@ async function getModelRouterUserOAuthAuth(params: {
       providerApiKeyId: apiKey.id,
       providerApiKeyName: apiKey.name,
       secretId: apiKey.secretId,
-      baseUrl: apiKey.baseUrl,
+      baseUrl: apiKey.inferenceBaseUrl ?? apiKey.baseUrl,
     });
   }
 

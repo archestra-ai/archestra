@@ -16,3 +16,12 @@ export const ORGANIZATION_APPEARANCE_SETTINGS_PATH =
 export const PUBLIC_CONFIG_PATH = "/api/config/public";
 
 export const INCOMING_EMAIL_WEBHOOK_PREFIX = "/api/webhooks/incoming-email";
+
+/**
+ * Reverse proxy to the public Archestra MCP catalog. Lets the browser fetch
+ * catalog data via `/api/archestra-catalog/*` on its own origin (avoids CORS)
+ * — this backend route is the fallback for deployments whose ingress sends
+ * `/api/*` directly to the backend, bypassing the Next.js rewrite at
+ * `frontend/next.config.ts`.
+ */
+export const ARCHESTRA_CATALOG_PROXY_PREFIX = "/api/archestra-catalog";

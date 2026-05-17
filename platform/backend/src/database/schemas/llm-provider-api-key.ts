@@ -38,6 +38,8 @@ const llmProviderApiKeysTable = pgTable(
     }),
     /** Optional custom base URL override for the LLM provider API */
     baseUrl: text("base_url"),
+    /** Optional runtime endpoint override when discovery and inference use different provider URLs. */
+    inferenceBaseUrl: text("inference_base_url"),
     /** Optional custom HTTP headers sent on every request to the provider (e.g. RBAC headers required by gateways like Kubeflow). */
     extraHeaders: jsonb("extra_headers").$type<Record<string, string>>(),
     /** System keys are auto-managed for keyless LLM providers (Vertex AI, vLLM, etc.) */

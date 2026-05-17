@@ -10,6 +10,7 @@ import {
   or,
 } from "drizzle-orm";
 import db, { schema } from "@/database";
+import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import {
   ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
@@ -474,24 +475,41 @@ class InternalMcpCatalogModel {
   }
 
   /**
-   * Validate a `presetFieldValues` payload against a parent's userConfig and
-   * localConfig.environment field-scope flags. Only fields flagged
-   * `promptOnPreset: true` are allowed; throws an Error listing offenders
-   * when any other key is present.
+   * Compute the set of field keys (env-var keys + userConfig field names)
+   * that the parent currently exposes as `promptOnPreset: true`. Used by
+   * both the strict validator and the lenient filter below.
+   */
+  static getPresetScopedKeys(parent: InternalMcpCatalog): Set<string> {
+    const keys = new Set<string>();
+    for (const [key, field] of Object.entries(parent.userConfig ?? {})) {
+      if (field.promptOnPreset) keys.add(key);
+    }
+    for (const env of parent.localConfig?.environment ?? []) {
+      if (env.promptOnPreset) keys.add(env.key);
+    }
+    return keys;
+  }
+
+  /**
+   * Validate a `presetFieldValues` payload against a parent's currently
+   * preset-scoped fields. Only fields flagged `promptOnPreset: true` are
+   * allowed; throws an Error listing offenders when any other key is present.
+   *
+   * Use for *create-time* paths where a non-preset key in the payload almost
+   * certainly indicates a typo or stale frontend that should fail loudly:
+   *   - POST /api/internal_mcp_catalog/:id/children (createChild)
+   *   - POST /api/mcp_server (install — frontend builds payload from current scope)
+   *
+   * Do NOT use for PATCH update on existing children — those routes must
+   * tolerate orphan keys left over from past scope flips. See
+   * `filterFieldValuesToPresetScope` below.
    */
   static validateFieldValuesAgainstCatalog(
     parent: InternalMcpCatalog,
     fieldValues: PresetFieldValues | undefined,
   ): void {
     if (!fieldValues) return;
-    const presetKeys = new Set<string>();
-    for (const [key, field] of Object.entries(parent.userConfig ?? {})) {
-      if (field.promptOnPreset) presetKeys.add(key);
-    }
-    for (const env of parent.localConfig?.environment ?? []) {
-      if (env.promptOnPreset) presetKeys.add(env.key);
-    }
-
+    const presetKeys = InternalMcpCatalogModel.getPresetScopedKeys(parent);
     const offenders = Object.keys(fieldValues).filter(
       (key) => !presetKeys.has(key),
     );
@@ -500,6 +518,46 @@ class InternalMcpCatalogModel {
         `Fields not configured for preset overrides: ${offenders.join(", ")}`,
       );
     }
+  }
+
+  /**
+   * Return a sanitized copy of `fieldValues` that contains only keys
+   * currently flagged `promptOnPreset: true` on the parent. Keys that are no
+   * longer preset-scoped (orphans left by a past scope flip on the parent —
+   * the cascade syncs the parent's localConfig template down but does not
+   * scrub children's `preset_field_values` jsonb) are silently dropped.
+   *
+   * Use for *update* paths on existing children — when an admin opens the
+   * preset editor the frontend copies the row's full presetFieldValues into
+   * local state and re-sends them on save, so without this filter every
+   * "Save" after a parent scope flip would 400 and silently drop the user's
+   * new value (PR #4402, user-reported).
+   *
+   * As a beneficial side effect, every successful PATCH that round-trips
+   * through this filter garbage-collects the orphans from the row's jsonb.
+   */
+  static filterFieldValuesToPresetScope(
+    parent: InternalMcpCatalog,
+    fieldValues: PresetFieldValues | undefined,
+  ): PresetFieldValues {
+    if (!fieldValues) return {};
+    const presetKeys = InternalMcpCatalogModel.getPresetScopedKeys(parent);
+    const filtered: PresetFieldValues = {};
+    const dropped: string[] = [];
+    for (const [key, value] of Object.entries(fieldValues)) {
+      if (presetKeys.has(key)) {
+        filtered[key] = value;
+      } else {
+        dropped.push(key);
+      }
+    }
+    if (dropped.length > 0) {
+      logger.info(
+        { catalogId: parent.id, droppedKeys: dropped },
+        "Dropped orphan preset keys from PATCH payload (no longer promptOnPreset on parent)",
+      );
+    }
+    return filtered;
   }
 
   static async delete(id: string): Promise<boolean> {

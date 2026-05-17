@@ -780,7 +780,15 @@ For Microsoft Foundry v1, use the OpenAI-compatible API root:
 https://<resource-name>.services.ai.azure.com/openai/v1
 ```
 
-The same formats apply when configuring a Base URL in the API key settings UI.
+The same formats apply when configuring a Base URL in the API key settings UI. Base URL is used for deployment discovery and as the default runtime endpoint.
+
+If deployment discovery and runtime inference use different Azure OpenAI endpoints, set the provider key's optional Inference URL to the runtime endpoint:
+
+```
+https://<runtime-resource-name>.openai.azure.com/openai
+```
+
+Archestra will still discover deployments from Base URL, then send chat, reranking, embedding, LLM Proxy, OAuth client, and virtual key traffic to Inference URL.
 
 ### Deployment Discovery and RBAC
 

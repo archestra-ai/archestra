@@ -17,10 +17,10 @@ import {
 import type {
   ConnectionBaseUrl,
   GlobalToolPolicy,
+  LimitCleanupInterval,
   OnboardingWizard,
   OrganizationChatLink,
   OrganizationCompressionScope,
-  OrganizationLimitCleanupInterval,
 } from "@/types";
 
 const organizationsTable = pgTable("organization", {
@@ -31,9 +31,6 @@ const organizationsTable = pgTable("organization", {
   logoDark: text("logo_dark"),
   createdAt: timestamp("created_at").notNull(),
   metadata: text("metadata"),
-  limitCleanupInterval: varchar("limit_cleanup_interval")
-    .$type<OrganizationLimitCleanupInterval>()
-    .default("1h"),
   onboardingComplete: boolean("onboarding_complete").notNull().default(false),
   theme: text("theme")
     .$type<OrganizationTheme>()
@@ -100,6 +97,19 @@ const organizationsTable = pgTable("organization", {
    * FK to chat_api_keys(id) ON DELETE SET NULL — enforced by migration only (same circular issue).
    */
   defaultLlmApiKeyId: uuid("default_llm_api_key_id"),
+
+  /** Default token-cost limit value applied to every organization member. */
+  defaultUserLimitValue: integer("default_user_limit_value"),
+
+  /** Models covered by the default user limit. Null means all models. */
+  defaultUserLimitModel: jsonb("default_user_limit_model").$type<
+    string[] | null
+  >(),
+
+  /** Cleanup interval used by default user limits. Null falls back to weekly. */
+  defaultUserLimitCleanupInterval: varchar(
+    "default_user_limit_cleanup_interval",
+  ).$type<LimitCleanupInterval>(),
 
   /**
    * Organization-wide default agent ID (fallback when member has no personal default).

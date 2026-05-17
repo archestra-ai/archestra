@@ -12,7 +12,7 @@ export const organizationRole = pgTable(
     name: text("name").notNull(), // Editable display name - shown in UI
     description: text("description"),
     permission: text("permission").notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").$onUpdate(
       () => /* @__PURE__ */ new Date(),
     ),

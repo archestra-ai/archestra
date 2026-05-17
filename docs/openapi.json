@@ -162512,6 +162512,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "iconLogoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
@@ -162636,6 +162640,7 @@
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
+                    "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",

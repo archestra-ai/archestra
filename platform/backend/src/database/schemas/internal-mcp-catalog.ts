@@ -113,7 +113,7 @@ const internalMcpCatalogTable = pgTable(
     presetSecretId: uuid("preset_secret_id").references(() => secretTable.id, {
       onDelete: "set null",
     }),
-    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()
       .defaultNow()

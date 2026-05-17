@@ -31,7 +31,7 @@ const tasksTable = pgTable(
     completedAt: timestamp("completed_at", { mode: "date" }),
     lastError: text("last_error"),
     periodic: boolean("periodic").notNull().default(false),
-    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [
     index("tasks_dequeue_idx").on(

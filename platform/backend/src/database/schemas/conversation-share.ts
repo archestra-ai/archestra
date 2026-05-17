@@ -26,7 +26,7 @@ const conversationSharesTable = pgTable("conversation_shares", {
   visibility: conversationShareVisibilityEnum("visibility")
     .notNull()
     .default("organization"),
-  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
 
 export const conversationShareTeamsTable = pgTable(
@@ -38,7 +38,7 @@ export const conversationShareTeamsTable = pgTable(
     teamId: text("team_id")
       .notNull()
       .references(() => team.id, { onDelete: "cascade" }),
-    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({
     pk: primaryKey({ columns: [table.shareId, table.teamId] }),
@@ -54,7 +54,7 @@ export const conversationShareUsersTable = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => usersTable.id, { onDelete: "cascade" }),
-    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({
     pk: primaryKey({ columns: [table.shareId, table.userId] }),

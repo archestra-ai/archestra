@@ -23,7 +23,7 @@ const browserTabStatesTable = pgTable(
     isolationKey: text("isolation_key").notNull(),
     url: text("url"),
     tabIndex: integer("tab_index"),
-    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()
       .defaultNow()

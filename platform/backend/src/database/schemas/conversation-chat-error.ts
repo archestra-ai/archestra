@@ -10,7 +10,7 @@ const conversationChatErrorsTable = pgTable(
       .notNull()
       .references(() => conversationsTable.id, { onDelete: "cascade" }),
     error: jsonb("error").$type<ChatErrorResponse>().notNull(),
-    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({
     conversationIdIdx: index("conversation_chat_errors_conversation_id_idx").on(

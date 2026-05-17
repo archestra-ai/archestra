@@ -816,8 +816,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      await deleteCatalogSecretsCascade(catalogItem);
-
       return reply.send({
         success: await InternalMcpCatalogModel.delete(id),
       });
@@ -866,8 +864,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "You can only delete your own personal catalog items",
         );
       }
-
-      await deleteCatalogSecretsCascade(catalogItem);
 
       return reply.send({
         success: await InternalMcpCatalogModel.delete(catalogItem.id),
@@ -1333,8 +1329,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       await assertCanEditCatalogPresets(parent, request);
 
-      await deleteCatalogSecretsCascade(child);
-
       return reply.send({
         success: await InternalMcpCatalogModel.delete(childId),
       });
@@ -1382,42 +1376,6 @@ async function assertCanEditCatalogPresets(
       403,
       "You can only edit presets on your own personal catalog items",
     );
-  }
-}
-
-/**
- * Ownership model:
- *   - clientSecretId / localConfigSecretId are owned by the parent row.
- *     Children store the same UUID in their columns for read-path convenience
- *     (so a preset install can resolve OAuth and local-env secrets without
- *     walking up to the parent), but they do not own those secret bags.
- *   - presetSecretId is per-row: parent has its own default-preset bag; each
- *     child has its own overlay bag.
- *
- * Therefore deleting a child must only delete the child's presetSecretId;
- * deleting the parent deletes the parent-owned bags plus every child's
- * presetSecretId.
- */
-async function deleteCatalogSecretsCascade(
-  item: InternalMcpCatalog,
-): Promise<void> {
-  const ids = new Set<string>();
-
-  if (item.parentCatalogItemId === null) {
-    if (item.clientSecretId) ids.add(item.clientSecretId);
-    if (item.localConfigSecretId) ids.add(item.localConfigSecretId);
-    if (item.presetSecretId) ids.add(item.presetSecretId);
-
-    const children = await InternalMcpCatalogModel.findChildren(item.id);
-    for (const child of children) {
-      if (child.presetSecretId) ids.add(child.presetSecretId);
-    }
-  } else {
-    if (item.presetSecretId) ids.add(item.presetSecretId);
-  }
-
-  for (const id of ids) {
-    await secretManager().deleteSecret(id);
   }
 }
 

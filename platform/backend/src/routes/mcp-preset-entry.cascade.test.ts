@@ -2,7 +2,8 @@ import { eq } from "drizzle-orm";
 import { type Mock, vi } from "vitest";
 import db, { schema } from "@/database";
 import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
-import { McpPresetEntryModel } from "@/models";
+import { InternalMcpCatalogModel, McpPresetEntryModel } from "@/models";
+import { secretManager } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -126,6 +127,69 @@ describe("Delete preset entry cascade", () => {
     expect(remainingServer).toHaveLength(0);
 
     expect(removeMcpServerSpy).toHaveBeenCalledWith(installedServer.id);
+  });
+
+  test("deleting a preset entry cleans up its per-entry catalog row's preset secret bag", async () => {
+    // Parent declares a preset-scoped secret env so each child stores its
+    // own preset_secrets bag (presetSecretId).
+    const parent = await createCatalog({
+      name: "preset-entry-cascade-secrets",
+      serverType: "local",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [
+          {
+            key: "PRESET_PASSWORD",
+            type: "secret",
+            promptOnInstallation: false,
+            promptOnPreset: true,
+          },
+        ],
+      },
+    });
+
+    const entry = await McpPresetEntryModel.create({
+      organizationId,
+      name: "production",
+    });
+
+    const childResponse = await app.inject({
+      method: "POST",
+      url: `/api/internal_mcp_catalog/${parent.id}/children`,
+      payload: {
+        presetEntryId: entry.id,
+        presetFieldValues: { PRESET_PASSWORD: "entry-secret-value" },
+      },
+    });
+    expect(childResponse.statusCode).toBe(200);
+    const child = childResponse.json<{ id: string }>();
+
+    const childRaw = await InternalMcpCatalogModel.findById(child.id, {
+      expandSecrets: false,
+      userId: user.id,
+      isAdmin: true,
+      organizationId,
+    });
+    const childPresetSecretId = childRaw?.presetSecretId;
+    if (!childPresetSecretId) {
+      throw new Error("expected child to have a presetSecretId");
+    }
+
+    // Sanity: the bag actually exists before deletion.
+    expect(await secretManager().getSecret(childPresetSecretId)).not.toBeNull();
+
+    const deleteResponse = await app.inject({
+      method: "DELETE",
+      url: `/api/organization/mcp-preset-entries/${entry.id}`,
+    });
+    expect(deleteResponse.statusCode).toBe(200);
+
+    // The per-entry catalog row is gone (covered elsewhere), but the secret
+    // bag it owned must also be gone. Today: McpPresetEntryModel.delete
+    // calls InternalMcpCatalogModel.delete which removes the catalog row
+    // without touching secretManager, leaving the bag orphaned.
+    expect(await secretManager().getSecret(childPresetSecretId)).toBeNull();
   });
 
   async function createCatalog(payload: Record<string, unknown>): Promise<{

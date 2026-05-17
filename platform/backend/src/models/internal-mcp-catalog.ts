@@ -560,17 +560,50 @@ class InternalMcpCatalogModel {
     return filtered;
   }
 
+  /**
+   * Secret ownership when deleting a row:
+   *   - clientSecretId / localConfigSecretId are owned by the parent row.
+   *     Children store the same UUID for read-path convenience but do not own
+   *     the bag, so a child delete must leave it alone.
+   *   - presetSecretId is per-row: parent has its own default-preset bag;
+   *     each child has its own overlay bag.
+   *
+   * Therefore deleting a child only removes the child's presetSecretId;
+   * deleting a parent removes the parent-owned bags plus every child's
+   * presetSecretId. Centralizing this here means every caller — the catalog
+   * DELETE routes and McpPresetEntryModel.delete (which removes per-entry
+   * catalog rows) — gets the cleanup automatically.
+   */
   static async delete(id: string): Promise<boolean> {
+    const row = await InternalMcpCatalogModel.findSecretReferences(id);
+    if (!row) return false;
+
     // Cleanup mcp server installations across the catalog item and it's children (presets), if any.
     const children = await InternalMcpCatalogModel.findChildren(id);
     const catalogIds = [id, ...children.map((c) => c.id)];
 
     for (const catalogId of catalogIds) {
       const servers = await McpServerModel.findByCatalogId(catalogId);
-      // Deleting each seever cascades it's tools.
+      // Deleting each server cascades its tools.
       for (const server of servers) {
         await McpServerModel.delete(server.id);
       }
+    }
+
+    const secretIds = new Set<string>();
+    if (row.parentCatalogItemId === null) {
+      if (row.clientSecretId) secretIds.add(row.clientSecretId);
+      if (row.localConfigSecretId) secretIds.add(row.localConfigSecretId);
+      if (row.presetSecretId) secretIds.add(row.presetSecretId);
+      for (const child of children) {
+        if (child.presetSecretId) secretIds.add(child.presetSecretId);
+      }
+    } else if (row.presetSecretId) {
+      secretIds.add(row.presetSecretId);
+    }
+
+    for (const secretId of secretIds) {
+      await secretManager().deleteSecret(secretId);
     }
 
     const deletedRows = await db
@@ -582,6 +615,29 @@ class InternalMcpCatalogModel {
   }
 
   // ===== Private methods =====
+
+  /**
+   * Lean lookup used by `delete` to gather the secret-ownership context
+   * (clientSecretId / localConfigSecretId / presetSecretId / parent flag)
+   * without expanding the row's full secret bags.
+   */
+  private static async findSecretReferences(id: string): Promise<{
+    clientSecretId: string | null;
+    localConfigSecretId: string | null;
+    presetSecretId: string | null;
+    parentCatalogItemId: string | null;
+  } | null> {
+    const [row] = await db
+      .select({
+        clientSecretId: schema.internalMcpCatalogTable.clientSecretId,
+        localConfigSecretId: schema.internalMcpCatalogTable.localConfigSecretId,
+        presetSecretId: schema.internalMcpCatalogTable.presetSecretId,
+        parentCatalogItemId: schema.internalMcpCatalogTable.parentCatalogItemId,
+      })
+      .from(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.id, id));
+    return row ?? null;
+  }
 
   /**
    * Expands secrets and adds them to the catalog items, mutating the items.

@@ -124,7 +124,8 @@ const agentsTable = pgTable(
       (): SQL => sql`${agentsTable.builtInAgentConfig} IS NOT NULL`,
     ),
 
-    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()
       .defaultNow()

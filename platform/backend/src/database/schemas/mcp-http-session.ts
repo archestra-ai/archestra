@@ -17,7 +17,7 @@ const mcpHttpSessionsTable = pgTable("mcp_http_sessions", {
   sessionId: text("session_id").notNull(),
   sessionEndpointUrl: text("session_endpoint_url"),
   sessionEndpointPodName: text("session_endpoint_pod_name"),
-  updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
+  deletedAt: timestamp("deleted_at", { mode: "date" }),`n    updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
 });
 
 export default mcpHttpSessionsTable;

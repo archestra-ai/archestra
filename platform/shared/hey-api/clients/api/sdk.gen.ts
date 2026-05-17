@@ -2864,7 +2864,7 @@ export const listMcpPresetEntries = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `organizationSettings:update`: Customize organization appearance, authentication, etc
+ * `mcpServerInstallation:admin`: Approve or manage all MCP server installations
  */
 export const createMcpPresetEntry = <ThrowOnError extends boolean = false>(options: Options<CreateMcpPresetEntryData, ThrowOnError>) => (options.client ?? client).post<CreateMcpPresetEntryResponses, CreateMcpPresetEntryErrors, ThrowOnError>({
     url: '/api/organization/mcp-preset-entries',
@@ -2884,7 +2884,7 @@ export const createMcpPresetEntry = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `organizationSettings:update`: Customize organization appearance, authentication, etc
+ * `mcpServerInstallation:admin`: Approve or manage all MCP server installations
  */
 export const deleteMcpPresetEntry = <ThrowOnError extends boolean = false>(options: Options<DeleteMcpPresetEntryData, ThrowOnError>) => (options.client ?? client).delete<DeleteMcpPresetEntryResponses, DeleteMcpPresetEntryErrors, ThrowOnError>({ url: '/api/organization/mcp-preset-entries/{id}', ...options });
 
@@ -3842,7 +3842,7 @@ export const updateConnectionSettings = <ThrowOnError extends boolean = false>(o
  *
  * Authorization:
  *
- * `organizationSettings:update`: Customize organization appearance, authentication, etc
+ * `mcpServerInstallation:admin`: Approve or manage all MCP server installations
  */
 export const updatePresetEntityName = <ThrowOnError extends boolean = false>(options: Options<UpdatePresetEntityNameData, ThrowOnError>) => (options.client ?? client).patch<UpdatePresetEntityNameResponses, UpdatePresetEntityNameErrors, ThrowOnError>({
     url: '/api/organization/preset-entity-name',

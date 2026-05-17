@@ -41,6 +41,8 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     proxyTimeout: 300000, // 5 minutes in milliseconds - prevents SSE stream timeout
+    middlewareClientMaxBodySize:
+      process.env.ARCHESTRA_MIDDLEWARE_BODY_LIMIT || "50mb",
   },
   httpAgentOptions: {
     keepAlive: true,

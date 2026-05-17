@@ -40,7 +40,7 @@ const knowledgeBaseConnectorsTable = pgTable(
     lastSyncStatus: text("last_sync_status").$type<ConnectorSyncStatus>(),
     lastSyncError: text("last_sync_error"),
     checkpoint: jsonb("checkpoint").$type<ConnectorCheckpoint>(),
-    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()
       .defaultNow()
@@ -71,7 +71,7 @@ export const knowledgeBaseConnectorAssignmentsTable = pgTable(
       .references(() => knowledgeBaseConnectorsTable.id, {
         onDelete: "cascade",
       }),
-    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [
     index("kb_connector_assignment_kb_id_idx").on(table.knowledgeBaseId),

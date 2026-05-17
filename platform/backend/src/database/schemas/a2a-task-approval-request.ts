@@ -20,7 +20,7 @@ const a2aTaskApprovalRequestTable = pgTable(
     toolName: text("tool_name").notNull(),
     approved: boolean("approved").notNull().default(false),
     resolved: boolean("resolved").notNull().default(false),
-    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()
       .defaultNow()

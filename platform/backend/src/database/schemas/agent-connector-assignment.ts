@@ -19,7 +19,7 @@ const agentConnectorAssignmentsTable = pgTable(
       .references(() => knowledgeBaseConnectorsTable.id, {
         onDelete: "cascade",
       }),
-    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [
     primaryKey({ columns: [table.agentId, table.connectorId] }),

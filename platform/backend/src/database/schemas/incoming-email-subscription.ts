@@ -15,7 +15,7 @@ const incomingEmailSubscriptionsTable = pgTable("incoming_email_subscription", {
   clientState: varchar("client_state", { length: 256 }).notNull(),
   /** When the subscription expires (Graph subscriptions max 3 days) */
   expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
-  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .notNull()
     .defaultNow()

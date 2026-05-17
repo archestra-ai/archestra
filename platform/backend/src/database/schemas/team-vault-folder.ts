@@ -14,7 +14,7 @@ const teamVaultFolderTable = pgTable("team_vault_folder", {
     .references(() => team.id, { onDelete: "cascade" }),
   /** Vault folder path, e.g., "secret/data/engineering" */
   vaultPath: text("vault_path").notNull(),
-  createdAt: timestamp("created_at").notNull(),
+  deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at").notNull(),
   updatedAt: timestamp("updated_at")
     .$onUpdate(() => new Date())
     .notNull(),

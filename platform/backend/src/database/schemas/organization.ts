@@ -29,7 +29,7 @@ const organizationsTable = pgTable("organization", {
   slug: text("slug").notNull().unique(),
   logo: text("logo"),
   logoDark: text("logo_dark"),
-  createdAt: timestamp("created_at").notNull(),
+  deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at").notNull(),
   metadata: text("metadata"),
   onboardingComplete: boolean("onboarding_complete").notNull().default(false),
   theme: text("theme")

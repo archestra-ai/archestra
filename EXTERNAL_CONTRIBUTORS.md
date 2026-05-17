@@ -355,3 +355,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @MightGainer
 - @holden-alt
 - @thewshii
+- @iiishop

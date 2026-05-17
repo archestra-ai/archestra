@@ -12,7 +12,7 @@ const oauthConsent = pgTable("oauth_consent", {
   }),
   referenceId: text("reference_id"),
   scopes: text("scopes").array(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .defaultNow()
     .$onUpdate(() => new Date())

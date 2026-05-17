@@ -34,7 +34,7 @@ const llmProviderApiKeyModelsTable = pgTable(
     isFastest: boolean("is_fastest").notNull().default(false),
     /** Whether this model is marked as the best (highest quality) for this API key */
     isBest: boolean("is_best").notNull().default(false),
-    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({
     /** Prevent duplicate API key + model combinations */

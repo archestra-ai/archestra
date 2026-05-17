@@ -30,7 +30,7 @@ const virtualApiKeysTable = pgTable(
       onDelete: "set null",
     }),
     expiresAt: timestamp("expires_at", { mode: "date", withTimezone: true }),
-    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     lastUsedAt: timestamp("last_used_at", { mode: "date" }),
   },
   (table) => [

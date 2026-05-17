@@ -410,6 +410,125 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       });
     });
 
+    test("still evaluates tool result policies when context starts untrusted", async () => {
+      // Regression test: when considerContextUntrusted=true, tool result
+      // policies (blocking/sanitization) must still be evaluated so that
+      // blocked content is replaced before being sent to the LLM.
+      // See: https://github.com/archestra-ai/archestra/issues/4225
+
+      // Create a block policy
+      await TrustedDataPolicyModel.create({
+        toolId,
+        conditions: [
+          { key: "emails[*].from", operator: "contains", value: "hacker" },
+        ],
+        action: "block_always",
+        description: "Block hacker emails",
+      });
+
+      const commonMessages: CommonMessage[] = [
+        { role: "user", content: "Read my emails" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_blocked",
+              name: "get_emails",
+              content: {
+                emails: [
+                  { from: "hacker@evil.com", subject: "Suspicious" },
+                ],
+              },
+              isError: false,
+            },
+          ],
+        },
+      ];
+
+      const result = await evaluateIfContextIsTrusted(
+        commonMessages,
+        agentId,
+        organizationId,
+        undefined,
+        true, // considerContextUntrusted = true
+        "restrictive",
+        { teamIds: [] },
+      );
+
+      // Context should be untrusted (preexisting)
+      expect(result.contextIsTrusted).toBe(false);
+      // Tool result should be replaced with blocked message (not raw output)
+      expect(result.toolResultUpdates).toEqual({
+        call_blocked:
+          "[Content blocked by policy: Data blocked by policy: Block hacker emails]",
+      });
+      // Boundary should still be preexisting_untrusted
+      expect(result.unsafeContextBoundary).toEqual({
+        kind: "preexisting_untrusted",
+        reason: "agent_configured_untrusted",
+      });
+    });
+
+    test("still evaluates tool result policies with sanitization when context starts untrusted", async () => {
+      // Create a sanitize policy
+      await TrustedDataPolicyModel.create({
+        toolId,
+        conditions: [{ key: "source", operator: "equal", value: "external" }],
+        action: "sanitize_with_dual_llm",
+        description: "Sanitize external data",
+      });
+
+      const createSpy = vi
+        .spyOn(DualLlmSubagent, "create")
+        .mockResolvedValue({
+          processWithMainAgent: vi.fn().mockResolvedValue({
+            toolCallId: "call_sanitize",
+            conversations: [],
+            result: "Sanitized summary",
+          }),
+        } as unknown as DualLlmSubagent);
+
+      const commonMessages: CommonMessage[] = [
+        { role: "user", content: "Read external data" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_sanitize",
+              name: "get_emails",
+              content: { source: "external", payload: "raw" },
+              isError: false,
+            },
+          ],
+        },
+      ];
+
+      const result = await evaluateIfContextIsTrusted(
+        commonMessages,
+        agentId,
+        organizationId,
+        undefined,
+        true, // considerContextUntrusted = true
+        "restrictive",
+        { teamIds: [] },
+      );
+
+      // Context should be untrusted (preexisting)
+      expect(result.contextIsTrusted).toBe(false);
+      // Dual LLM sanitization should still be applied
+      expect(result.usedDualLlm).toBe(true);
+      expect(result.toolResultUpdates).toEqual({
+        call_sanitize: "Sanitized summary",
+      });
+      // Boundary should still be preexisting_untrusted
+      expect(result.unsafeContextBoundary).toEqual({
+        kind: "preexisting_untrusted",
+        reason: "agent_configured_untrusted",
+      });
+
+      createSpy.mockRestore();
+    });
+
     test("handles multiple tool calls with mixed trust", async () => {
       // Create policies
       await TrustedDataPolicyModel.create({

@@ -20,7 +20,7 @@ const virtualApiKeyProviderApiKeysTable = pgTable(
     providerApiKeyId: uuid("provider_api_key_id")
       .notNull()
       .references(() => llmProviderApiKeysTable.id, { onDelete: "cascade" }),
-    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [
     primaryKey({ columns: [table.virtualApiKeyId, table.provider] }),

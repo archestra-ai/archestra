@@ -110,7 +110,7 @@ const interactionsTable = pgTable(
     toonTokensAfter: integer("toon_tokens_after"),
     toonCostSavings: numeric("toon_cost_savings", { precision: 13, scale: 10 }),
     toonSkipReason: varchar("toon_skip_reason").$type<ToonSkipReason>(),
-    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({
     profileIdIdx: index("interactions_agent_id_idx").on(table.profileId),

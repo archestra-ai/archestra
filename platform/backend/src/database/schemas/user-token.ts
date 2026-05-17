@@ -33,7 +33,7 @@ const userTokensTable = pgTable(
       .references(() => secretsTable.id, { onDelete: "cascade" }),
     /** First 14-16 characters of token (archestra_xxxx) for display */
     tokenStart: varchar("token_start", { length: 16 }).notNull(),
-    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     lastUsedAt: timestamp("last_used_at", { mode: "date" }),
   },
   (table) => [

@@ -18,7 +18,7 @@ const virtualApiKeyTeamsTable = pgTable(
     teamId: text("team_id")
       .notNull()
       .references(() => team.id, { onDelete: "cascade" }),
-    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({
     pk: primaryKey({ columns: [table.virtualApiKeyId, table.teamId] }),

@@ -35,7 +35,8 @@ export function FieldScopeSelect({
   disableInstallation = false,
   disabledReason,
 }: FieldScopeSelectProps) {
-  const { singular } = usePresetEntityName();
+  const { singular, configured } = usePresetEntityName();
+  const showPresetScope = allowPresetScope && configured;
   const select = (
     <Select
       value={value}
@@ -51,7 +52,7 @@ export function FieldScopeSelect({
         <SelectItem value="installation" disabled={disableInstallation}>
           Installation
         </SelectItem>
-        {allowPresetScope && <SelectItem value="preset">{singular}</SelectItem>}
+        {showPresetScope && <SelectItem value="preset">{singular}</SelectItem>}
         <SelectItem value="static">Static</SelectItem>
       </SelectContent>
     </Select>

@@ -99,12 +99,16 @@ export type McpServerCardProps = {
   onEdit: () => void;
   onDelete: () => void;
   onCancelInstallation?: (serverId: string) => void;
-  /** Called when user wants to add a personal connection from manage dialog */
-  onAddPersonalConnection?: () => void;
+  /**
+   * Called when user wants to add a personal connection from manage dialog.
+   * `presetCatalogId` is set when the user clicked Install on a specific
+   * preset card on the Credentials page; falls back to the parent catalog.
+   */
+  onAddPersonalConnection?: (presetCatalogId?: string) => void;
   /** Called when user wants to add a team connection for a specific team */
-  onAddSharedConnection?: (teamId: string) => void;
+  onAddSharedConnection?: (teamId: string, presetCatalogId?: string) => void;
   /** Called when user wants to add an organization-wide connection */
-  onAddOrgConnection?: () => void;
+  onAddOrgConnection?: (presetCatalogId?: string) => void;
   /** When true, renders as a built-in Playwright server (non-editable, personal-only) */
   isBuiltInPlaywright?: boolean;
 };

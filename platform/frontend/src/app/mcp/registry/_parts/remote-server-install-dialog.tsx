@@ -86,6 +86,11 @@ interface RemoteServerInstallDialogProps {
   isReauth?: boolean;
   /** Pre-select a specific team in the credential type selector */
   preselectedTeamId?: string | null;
+  /**
+   * Pre-select a preset (child catalog) in the InstallPresetPicker when the
+   * dialog opens. Falls back to the parent's id when unset.
+   */
+  preselectedCatalogId?: string | null;
   /** When true, only personal installation is allowed */
   personalOnly?: boolean;
   /** When true, only organization-wide installation is allowed */
@@ -100,6 +105,7 @@ export function RemoteServerInstallDialog({
   isInstalling,
   isReauth = false,
   preselectedTeamId,
+  preselectedCatalogId,
   personalOnly = false,
   orgOnly = false,
 }: RemoteServerInstallDialogProps) {
@@ -112,7 +118,7 @@ export function RemoteServerInstallDialog({
   );
   const [canInstall, setCanInstall] = useState(true);
   const [selectedCatalogId, setSelectedCatalogId] = useState<string>(
-    catalogItem?.id ?? "",
+    preselectedCatalogId ?? catalogItem?.id ?? "",
   );
   const [presetFallbackValues, setPresetFallbackValues] = useState<
     Record<string, string>
@@ -122,10 +128,10 @@ export function RemoteServerInstallDialog({
 
   useEffect(() => {
     if (isOpen && catalogItem) {
-      setSelectedCatalogId(catalogItem.id);
+      setSelectedCatalogId(preselectedCatalogId ?? catalogItem.id);
       setPresetFallbackValues({});
     }
-  }, [isOpen, catalogItem]);
+  }, [isOpen, catalogItem, preselectedCatalogId]);
 
   // Vault team selection (separate from install team for personal + BYOS)
   const [vaultTeamId, setVaultTeamId] = useState<string | null>(null);

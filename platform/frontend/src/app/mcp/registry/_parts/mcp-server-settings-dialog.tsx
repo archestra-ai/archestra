@@ -2,7 +2,7 @@
 
 import { E2eTestId, type McpDeploymentStatusEntry } from "@shared";
 import { AlertCircle, PlugZap, RefreshCw, XIcon } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,7 +32,11 @@ import {
 } from "./deployment-status";
 import { EditCatalogContent } from "./edit-catalog-dialog";
 import { ManageUsersContent } from "./manage-users-dialog";
-import { McpLogsContent, type McpLogsTab } from "./mcp-logs-dialog";
+import {
+  McpLogsContent,
+  type McpLogsTab,
+  PresetSelector,
+} from "./mcp-logs-dialog";
 import type { CatalogItem } from "./mcp-server-card";
 import { PresetsSection } from "./presets-section";
 import { YamlConfigContent } from "./yaml-config-dialog";
@@ -64,9 +68,9 @@ interface McpServerSettingsDialogProps {
   showInspector: boolean;
   showYaml: boolean;
   // Connections
-  onAddPersonalConnection?: () => void;
-  onAddSharedConnection?: (teamId: string) => void;
-  onAddOrgConnection?: () => void;
+  onAddPersonalConnection?: (presetCatalogId?: string) => void;
+  onAddSharedConnection?: (teamId: string, presetCatalogId?: string) => void;
+  onAddOrgConnection?: (presetCatalogId?: string) => void;
   // Debug
   installs: {
     id: string;
@@ -200,6 +204,36 @@ export function McpServerSettingsDialog({
     ...PAGE_TITLES,
     presets: presetEntityName.plural,
   };
+
+  // Preset filter shown in the slim page header on Logs/Inspector/Shell and
+  // Credentials. Drives both McpLogsContent (filters the pod selector) and
+  // ManageUsersContent (filters credential sections). Hidden unless the org
+  // has the preset term configured AND the catalog has ≥ 1 preset child.
+  // The literal "All" is a sentinel for "no filter".
+  const presetLabelOptions = ["All", "default", ...presets.map((p) => p.name)];
+  const presetIdByLabel = new Map<string, string>([
+    ["default", item.id],
+    ...presets.map((p) => [p.name, p.id] as const),
+  ]);
+  const [pageSelectedPreset, setPageSelectedPreset] = useState<string>("All");
+  // Keep the selector in sync when the dialog opens deep-linked to a
+  // specific pod (e.g. from the chat log button or the per-install reinstall
+  // banner) — otherwise the user might land on a preset that doesn't contain
+  // that pod and see it disappear from the dropdown.
+  useEffect(() => {
+    const init = clickedServerId ?? logsInitialServerId;
+    if (!init) return;
+    const found = installs.find((i) => i.id === init);
+    if (found) setPageSelectedPreset(found.presetLabel ?? "default");
+  }, [clickedServerId, logsInitialServerId, installs]);
+  const presetSelectorVisible =
+    presetEntityName.configured &&
+    presets.length > 0 &&
+    (isDebugPage || validPage === "connections");
+  const credentialsControlledFilter =
+    pageSelectedPreset === "All"
+      ? "all"
+      : (presetIdByLabel.get(pageSelectedPreset) ?? "all");
 
   // Configuration dirty state tracking
   const [isConfigDirty, setIsConfigDirty] = useState(false);
@@ -344,15 +378,24 @@ export function McpServerSettingsDialog({
             {/* Content header */}
             <div className="flex min-h-[72px] shrink-0 items-center justify-between border-b px-4 py-4">
               <h2 className="text-lg font-semibold">{pageTitles[validPage]}</h2>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 rounded-xs opacity-70 hover:opacity-100"
-                onClick={handleClose}
-              >
-                <XIcon className="h-4 w-4" />
-                <span className="sr-only">Close</span>
-              </Button>
+              <div className="flex items-center gap-2">
+                {presetSelectorVisible && (
+                  <PresetSelector
+                    presets={presetLabelOptions}
+                    selectedPreset={pageSelectedPreset}
+                    setSelectedPreset={setPageSelectedPreset}
+                  />
+                )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-xs opacity-70 hover:opacity-100"
+                  onClick={handleClose}
+                >
+                  <XIcon className="h-4 w-4" />
+                  <span className="sr-only">Close</span>
+                </Button>
+              </div>
             </div>
 
             {/* Content body */}
@@ -391,6 +434,23 @@ export function McpServerSettingsDialog({
                   onAddOrgConnection={onAddOrgConnection}
                   deploymentStatuses={deploymentStatuses}
                   hideHeader
+                  controlledPresetFilter={
+                    presetSelectorVisible
+                      ? credentialsControlledFilter
+                      : undefined
+                  }
+                  onControlledPresetFilterChange={(presetId) => {
+                    if (presetId === "all") {
+                      setPageSelectedPreset("default");
+                      return;
+                    }
+                    for (const [label, id] of presetIdByLabel) {
+                      if (id === presetId) {
+                        setPageSelectedPreset(label);
+                        return;
+                      }
+                    }
+                  }}
                   onOpenPodLogs={
                     showDebug
                       ? (podServerId: string) => {
@@ -435,6 +495,10 @@ export function McpServerSettingsDialog({
                       hideHeader
                       hideTabBar
                       controlledTab={DEBUG_TAB_MAP[validPage]}
+                      controlledSelectedPreset={
+                        presetSelectorVisible ? pageSelectedPreset : undefined
+                      }
+                      onSelectedPresetChange={setPageSelectedPreset}
                       onReinstall={() => onReinstall()}
                       initialServerId={clickedServerId ?? logsInitialServerId}
                     />

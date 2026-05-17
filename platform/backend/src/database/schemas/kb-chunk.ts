@@ -51,7 +51,7 @@ const kbChunksTable = pgTable(
     metadataSuffixSemantic: text("metadata_suffix_semantic"),
     metadataSuffixKeyword: text("metadata_suffix_keyword"),
     acl: jsonb("acl").$type<string[]>().notNull().default([]),
-    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [index("kb_chunks_document_id_idx").on(table.documentId)],
 );

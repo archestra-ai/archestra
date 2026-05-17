@@ -69,7 +69,6 @@ export const RouteId = {
   GetCatalogChildren: "getCatalogChildren",
   CreateCatalogChild: "createCatalogChild",
   UpdateCatalogChild: "updateCatalogChild",
-  DeleteCatalogChild: "deleteCatalogChild",
 
   // MCP Server Routes
   GetMcpServers: "getMcpServers",

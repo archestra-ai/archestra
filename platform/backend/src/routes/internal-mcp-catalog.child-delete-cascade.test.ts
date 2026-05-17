@@ -15,18 +15,13 @@ import { hasPermission } from "@/auth";
 const mockHasPermission = hasPermission as Mock;
 
 /**
- * Delete-cascade ownership for preset (child) catalog items.
- *
- * Children store the parent's `clientSecretId` / `localConfigSecretId` in
- * their columns for read-path convenience, but those bags are owned by the
- * parent. Only `presetSecretId` is per-row.
- *
- * Deleting a child must therefore delete ONLY the child's `presetSecretId`.
- * Deleting the parent deletes parent-owned bags plus every child's preset
- * bag. A regression here breaks OAuth and local-env secret resolution for
- * the parent and every sibling preset.
+ * Parent-delete cascade: deleting a parent catalog row removes the
+ * parent-owned secret bags (`clientSecretId` / `localConfigSecretId`) and
+ * every child's per-row `presetSecretId`. The child-side invariant
+ * (deleting a child must preserve parent-owned bags) is exercised through
+ * the preset-entry delete path in `mcp-preset-entry.cascade.test.ts`.
  */
-describe("Internal MCP Catalog - child delete secret cascade", () => {
+describe("Internal MCP Catalog - parent delete secret cascade", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
   let organizationId: string;
@@ -53,66 +48,6 @@ describe("Internal MCP Catalog - child delete secret cascade", () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     await app.close();
-  });
-
-  test("deleting a child preserves the parent's local-config secret bag", async () => {
-    const parent = await createCatalog({
-      name: "delete-child-keeps-parent-bag",
-      serverType: "local",
-      localConfig: {
-        command: "node",
-        arguments: ["server.js"],
-        environment: [
-          {
-            key: "API_KEY",
-            type: "secret",
-            promptOnInstallation: false,
-            value: "parent-owned-secret",
-          },
-          {
-            key: "PRESET_PASSWORD",
-            type: "secret",
-            promptOnInstallation: false,
-            promptOnPreset: true,
-          },
-        ],
-      },
-    });
-
-    const parentRaw = await loadRaw(parent.id);
-    const parentLocalConfigSecretId = requireSecretId(
-      parentRaw.localConfigSecretId,
-      "parent local-config secret",
-    );
-
-    const child = await createChild(parent.id, {
-      childName: "prod",
-      presetFieldValues: { PRESET_PASSWORD: "child-only-secret" },
-    });
-
-    const childRaw = await loadRaw(child.id);
-    expect(childRaw.presetSecretId).toBeTruthy();
-    expect(childRaw.localConfigSecretId).toBe(parentLocalConfigSecretId);
-
-    const deleteResponse = await app.inject({
-      method: "DELETE",
-      url: `/api/internal_mcp_catalog/${parent.id}/children/${child.id}`,
-    });
-    expect(deleteResponse.statusCode).toBe(200);
-
-    // Parent's local-config secret bag must still resolve — sibling presets
-    // and the parent install both depend on it.
-    const parentBag = await secretManager().getSecret(
-      parentLocalConfigSecretId,
-    );
-    expect(parentBag).not.toBeNull();
-    expect(parentBag?.secret).toEqual({ API_KEY: "parent-owned-secret" });
-
-    // Child's own preset secret bag is gone.
-    const childPresetBag = await secretManager().getSecret(
-      requireSecretId(childRaw.presetSecretId, "child preset secret"),
-    );
-    expect(childPresetBag).toBeNull();
   });
 
   test("deleting the parent removes parent-owned bags plus every child's preset bag", async () => {

@@ -6,7 +6,6 @@ import { usePresetEntityName } from "@/lib/organization.query";
 const {
   createCatalogChild,
   createInternalMcpCatalogItem,
-  deleteCatalogChild,
   deleteInternalMcpCatalogItem,
   getCatalogChildren,
   getDeploymentYamlPreview,
@@ -309,30 +308,6 @@ export function useUpdateCatalogPreset(catalogId: string) {
     onError: (error) => {
       console.error("Update preset error:", error);
       toast.error(`Failed to update ${singular}`);
-    },
-  });
-}
-
-export function useDeleteCatalogPreset(catalogId: string) {
-  const queryClient = useQueryClient();
-  const { singular } = usePresetEntityName();
-  return useMutation({
-    mutationFn: async (presetId: string) => {
-      const response = await deleteCatalogChild({
-        path: { catalogId, childId: presetId },
-      });
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["mcp-catalog", catalogId, "presets"],
-      });
-      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
-      toast.success(`${singular} deleted`);
-    },
-    onError: (error) => {
-      console.error("Delete preset error:", error);
-      toast.error(`Failed to delete ${singular}`);
     },
   });
 }

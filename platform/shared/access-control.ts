@@ -532,9 +532,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateCatalogChild]: {
     mcpRegistry: ["update"],
   },
-  [RouteId.DeleteCatalogChild]: {
-    mcpRegistry: ["delete"],
-  },
   [RouteId.GetMcpServers]: {
     mcpServerInstallation: ["read"],
   },

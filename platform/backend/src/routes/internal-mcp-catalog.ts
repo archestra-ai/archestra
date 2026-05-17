@@ -1297,44 +1297,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  fastify.delete(
-    "/api/internal_mcp_catalog/:catalogId/children/:childId",
-    {
-      schema: {
-        operationId: RouteId.DeleteCatalogChild,
-        description: 'Delete a child catalog item ("preset" in UI)',
-        tags: ["MCP Catalog"],
-        params: z.object({
-          catalogId: UuidIdSchema,
-          childId: UuidIdSchema,
-        }),
-        response: constructResponseSchema(DeleteObjectResponseSchema),
-      },
-    },
-    async (request, reply) => {
-      const { catalogId, childId } = request.params;
-      const child = await InternalMcpCatalogModel.findById(childId, {
-        expandSecrets: false,
-      });
-      if (!child || child.parentCatalogItemId !== catalogId) {
-        throw new ApiError(404, "Child catalog item not found");
-      }
-
-      const parent = await InternalMcpCatalogModel.findById(catalogId, {
-        expandSecrets: false,
-      });
-      if (!parent) {
-        throw new ApiError(404, "Parent catalog item not found");
-      }
-
-      await assertCanEditCatalogPresets(parent, request);
-
-      return reply.send({
-        success: await InternalMcpCatalogModel.delete(childId),
-      });
-    },
-  );
-
   fastify.get(
     "/api/internal_mcp_catalog/labels/values",
     {

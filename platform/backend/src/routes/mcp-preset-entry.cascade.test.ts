@@ -192,6 +192,76 @@ describe("Delete preset entry cascade", () => {
     expect(await secretManager().getSecret(childPresetSecretId)).toBeNull();
   });
 
+  test("deleting a preset entry preserves the parent's local-config secret bag", async () => {
+    // Parent declares BOTH a non-preset secret env (parent-owned bag) and a
+    // preset-scoped secret env (per-child bag). The cascade must wipe the
+    // per-child bag without touching the parent-owned bag — child rows
+    // store the same `localConfigSecretId` only for read-path convenience,
+    // they do not own it.
+    const parent = await createCatalog({
+      name: "preset-entry-cascade-keeps-parent-bag",
+      serverType: "local",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [
+          {
+            key: "API_KEY",
+            type: "secret",
+            promptOnInstallation: false,
+            value: "parent-owned-secret",
+          },
+          {
+            key: "PRESET_PASSWORD",
+            type: "secret",
+            promptOnInstallation: false,
+            promptOnPreset: true,
+          },
+        ],
+      },
+    });
+
+    const parentRaw = await InternalMcpCatalogModel.findById(parent.id, {
+      expandSecrets: false,
+      userId: user.id,
+      isAdmin: true,
+      organizationId,
+    });
+    const parentLocalConfigSecretId = parentRaw?.localConfigSecretId;
+    if (!parentLocalConfigSecretId) {
+      throw new Error("expected parent to have a localConfigSecretId");
+    }
+
+    const entry = await McpPresetEntryModel.create({
+      organizationId,
+      name: "production",
+    });
+
+    const childResponse = await app.inject({
+      method: "POST",
+      url: `/api/internal_mcp_catalog/${parent.id}/children`,
+      payload: {
+        presetEntryId: entry.id,
+        presetFieldValues: { PRESET_PASSWORD: "child-only-secret" },
+      },
+    });
+    expect(childResponse.statusCode).toBe(200);
+
+    const deleteResponse = await app.inject({
+      method: "DELETE",
+      url: `/api/organization/mcp-preset-entries/${entry.id}`,
+    });
+    expect(deleteResponse.statusCode).toBe(200);
+
+    // Parent's local-config bag still resolves — sibling presets and the
+    // parent install both depend on it.
+    const parentBag = await secretManager().getSecret(
+      parentLocalConfigSecretId,
+    );
+    expect(parentBag).not.toBeNull();
+    expect(parentBag?.secret).toEqual({ API_KEY: "parent-owned-secret" });
+  });
+
   async function createCatalog(payload: Record<string, unknown>): Promise<{
     id: string;
   }> {

@@ -785,7 +785,6 @@ export function InternalMCPCatalog({
       catalogId: installResult.catalogId,
       environmentValues: installResult.environmentValues,
       userConfigValues: installResult.userConfigValues,
-      presetFieldValues: installResult.presetFieldValues,
       isByosVault: installResult.isByosVault,
       scope: installResult.scope,
       teamId:
@@ -839,7 +838,6 @@ export function InternalMCPCatalog({
       name: catalogItem.name,
       catalogId: result.catalogId,
       ...credentialPayload,
-      presetFieldValues: result.presetFieldValues,
       scope: result.scope,
       teamId:
         result.scope === "team" ? (result.teamId ?? undefined) : undefined,

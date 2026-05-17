@@ -48,6 +48,7 @@ import {
   useCatalogPresets,
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
+import { usePresetEntityName } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 import {
   computeDeploymentStatusSummary,
@@ -58,6 +59,10 @@ import {
   McpServerSettingsDialog,
   type SettingsPage,
 } from "./mcp-server-settings-dialog";
+import {
+  presetHasUnfilledFields,
+  useCanEditCatalogPresets,
+} from "./preset-helpers";
 import {
   UninstallServerDialog,
   type UninstallServerInstall,
@@ -156,6 +161,19 @@ export function McpServerCard({
     mcpServerInstallation: ["admin"],
   });
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
+
+  // Gate the Install button when the default preset (the parent catalog
+  // itself) has unfilled preset-scoped fields and the current user cannot
+  // edit them — clicking Install would land on Step 1 and 403 on save.
+  const { singular: presetSingular } = usePresetEntityName();
+  const presetSingularLower = presetSingular.toLowerCase();
+  const { canEdit: canEditPresets } = useCanEditCatalogPresets(
+    variant !== "builtin" ? item : null,
+  );
+  const defaultPresetNeedsFill =
+    variant !== "builtin" && presetHasUnfilledFields(item, item);
+  const installBlockedByPresetFill = defaultPresetNeedsFill && !canEditPresets;
+  const installBlockedByPresetFillTooltip = `This ${presetSingularLower} is missing values required to install it. Ask someone who can edit this catalog item to fill them in.`;
 
   // Fetch all MCP servers to get installations for logs dropdown
   const { data: allMcpServers } = useMcpServers();
@@ -724,6 +742,12 @@ export function McpServerCard({
       size="sm"
       variant="outline"
       className="flex-1"
+      disabled={installBlockedByPresetFill}
+      tooltip={
+        installBlockedByPresetFill
+          ? installBlockedByPresetFillTooltip
+          : undefined
+      }
     >
       <User className="h-4 w-4" />
       Install
@@ -764,11 +788,16 @@ export function McpServerCard({
             <PermissionButton
               permissions={{ mcpServerInstallation: ["create"] }}
               onClick={onInstallLocalServer}
-              disabled={!isLocalMcpEnabled}
+              disabled={!isLocalMcpEnabled || installBlockedByPresetFill}
               size="sm"
               variant="outline"
               className="w-full"
               data-testid={`${E2eTestId.ConnectCatalogItemButton}-${item.name}`}
+              tooltip={
+                installBlockedByPresetFill && isLocalMcpEnabled
+                  ? installBlockedByPresetFillTooltip
+                  : undefined
+              }
             >
               <Server className="h-4 w-4" />
               Install

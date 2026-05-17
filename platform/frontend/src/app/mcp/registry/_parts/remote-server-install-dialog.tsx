@@ -3,7 +3,10 @@
 import type { archestraApiTypes } from "@shared";
 import { AlertTriangle, Info, ShieldCheck, User } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
-import { StandardFormDialog } from "@/components/standard-dialog";
+import {
+  StandardDialog,
+  StandardFormDialog,
+} from "@/components/standard-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,10 +25,8 @@ import { useFeature } from "@/lib/config/config.query";
 import { useCatalogPresets } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useTeamsWithVaultFolders } from "@/lib/teams/team.query";
 import { InstallPresetPicker } from "./install-preset-picker";
-import {
-  collectPresetFallbackValues,
-  PresetFallbackFields,
-} from "./preset-fallback-fields";
+import { FillPresetFieldsStep } from "./preset-fallback-fields";
+import { presetHasUnfilledFields } from "./preset-helpers";
 import {
   type McpServerInstallScope,
   SelectMcpServerCredentialTypeAndTeams,
@@ -60,11 +61,6 @@ export interface RemoteServerInstallResult {
   /** Catalog id to install from — parent or selected preset. */
   catalogId: string;
   metadata: Record<string, unknown>;
-  /**
-   * Values entered for preset-scoped fields the selected preset doesn't fill.
-   * Persisted onto the targeted preset row (same path as the preset editor).
-   */
-  presetFieldValues?: Record<string, string>;
   /** Installation scope (personal, team, org) */
   scope: McpServerInstallScope;
   /** Team ID to assign the MCP server to (only when scope is "team") */
@@ -120,18 +116,35 @@ export function RemoteServerInstallDialog({
   const [selectedCatalogId, setSelectedCatalogId] = useState<string>(
     preselectedCatalogId ?? catalogItem?.id ?? "",
   );
-  const [presetFallbackValues, setPresetFallbackValues] = useState<
-    Record<string, string>
-  >({});
   const { data: presets = [] } = useCatalogPresets(catalogItem?.id ?? null);
   const hasPresets = presets.length > 0;
+
+  // Step 1 ("fill-preset") asks the caller to fill in any preset-scoped fields
+  // the selected preset doesn't have values for, persists them onto the preset
+  // row, then transitions to Step 2 ("install"). When the preset is already
+  // filled (or we're in reauth mode), we start directly at Step 2.
+  const selectedPreset =
+    selectedCatalogId === catalogItem?.id
+      ? catalogItem
+      : (presets.find((p) => p.id === selectedCatalogId) ?? null);
+  const needsFillStep =
+    !isReauth &&
+    !!catalogItem &&
+    presetHasUnfilledFields(catalogItem, selectedPreset);
+  const [step, setStep] = useState<"fill-preset" | "install">(
+    needsFillStep ? "fill-preset" : "install",
+  );
 
   useEffect(() => {
     if (isOpen && catalogItem) {
       setSelectedCatalogId(preselectedCatalogId ?? catalogItem.id);
-      setPresetFallbackValues({});
     }
   }, [isOpen, catalogItem, preselectedCatalogId]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setStep(needsFillStep ? "fill-preset" : "install");
+  }, [isOpen, needsFillStep]);
 
   // Vault team selection (separate from install team for personal + BYOS)
   const [vaultTeamId, setVaultTeamId] = useState<string | null>(null);
@@ -189,7 +202,7 @@ export function RemoteServerInstallDialog({
   const useVaultSecrets = byosEnabled && hasPromptSensitiveFields;
 
   const handleConfirm = async () => {
-    if (!catalogItem) {
+    if (!catalogItem || step !== "install") {
       return;
     }
 
@@ -229,20 +242,9 @@ export function RemoteServerInstallDialog({
         }
       }
 
-      // Preset-scoped fallback values are persisted on the targeted preset row
-      // by the backend (same path as the preset editor) — send them separately.
-      const presetFieldValuesForRequest = collectPresetFallbackValues(
-        catalogItem,
-        presetFallbackValues,
-      );
-
       await onConfirm(catalogItem, {
         catalogId: selectedCatalogId || catalogItem.id,
         metadata,
-        presetFieldValues:
-          Object.keys(presetFieldValuesForRequest).length > 0
-            ? presetFieldValuesForRequest
-            : undefined,
         scope,
         teamId: selectedTeamId,
         isByosVault: useVaultSecrets,
@@ -310,6 +312,35 @@ export function RemoteServerInstallDialog({
       );
 
   const isValid = !hasConfig || (isNonSensitiveValid && isSensitiveValid);
+
+  if (step === "fill-preset") {
+    return (
+      <StandardDialog
+        open={isOpen}
+        onOpenChange={handleClose}
+        title={
+          <div className="flex items-end gap-2">
+            <User className="h-5 w-5" />
+            <span>
+              Install Server
+              <span className="text-muted-foreground ml-2 font-normal">
+                {catalogItem.name}
+              </span>
+            </span>
+          </div>
+        }
+        size="medium"
+        bodyClassName="grid gap-6"
+      >
+        <FillPresetFieldsStep
+          catalog={catalogItem}
+          selectedPresetId={selectedCatalogId || catalogItem.id}
+          onSaved={() => setStep("install")}
+          onCancel={handleClose}
+        />
+      </StandardDialog>
+    );
+  }
 
   return (
     <StandardFormDialog
@@ -391,17 +422,6 @@ export function RemoteServerInstallDialog({
           ) : null
         }
       />
-
-      {!isReauth && (
-        <PresetFallbackFields
-          catalog={catalogItem}
-          selectedPresetId={selectedCatalogId}
-          values={presetFallbackValues}
-          onChange={(key, value) =>
-            setPresetFallbackValues((prev) => ({ ...prev, [key]: value }))
-          }
-        />
-      )}
 
       {useVaultSecrets && scope !== "team" && (
         <div className="space-y-2">

@@ -1,7 +1,13 @@
 import type { archestraApiTypes } from "@shared";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 
 export type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
+
+type PresetLike = {
+  presetFieldValues?: Record<string, unknown> | null;
+  presetSecretId?: string | null;
+};
 
 export type FieldScope = "static" | "preset" | "user";
 
@@ -73,4 +79,45 @@ export function presetFieldKeys(cat: CatalogItem): string[] {
   return listCatalogFields(cat)
     .filter((f) => f.scope === "preset")
     .map((f) => f.key);
+}
+
+/** True when the given preset row is missing values for any preset-scoped field on its parent catalog. */
+export function presetHasUnfilledFields(
+  catalog: CatalogItem,
+  preset: PresetLike | null | undefined,
+): boolean {
+  if (!preset) return false;
+  const presetFields = listCatalogFields(catalog).filter(
+    (f) => f.scope === "preset",
+  );
+  if (presetFields.length === 0) return false;
+  const filled = preset.presetFieldValues ?? {};
+  const hasStoredSecrets = preset.presetSecretId != null;
+  return presetFields.some(
+    (f) => !(f.key in filled) && !(f.secret && hasStoredSecrets),
+  );
+}
+
+/**
+ * Frontend mirror of `assertCanEditCatalogPresets` (backend):
+ * an mcpServerInstallation admin, OR the author of a personal-scope catalog.
+ */
+export function useCanEditCatalogPresets(
+  catalog: CatalogItem | null | undefined,
+): { canEdit: boolean; isLoading: boolean } {
+  const { data: isAdmin, isLoading: isAdminLoading } = useHasPermissions({
+    mcpServerInstallation: ["admin"],
+  });
+  const { data: session, isPending: isSessionLoading } = useSession();
+  const isLoading = isAdminLoading || isSessionLoading;
+
+  if (!catalog) return { canEdit: false, isLoading };
+  if (isAdmin) return { canEdit: true, isLoading };
+
+  const currentUserId = session?.user?.id;
+  const canEdit =
+    !!currentUserId &&
+    catalog.scope === "personal" &&
+    catalog.authorId === currentUserId;
+  return { canEdit, isLoading };
 }

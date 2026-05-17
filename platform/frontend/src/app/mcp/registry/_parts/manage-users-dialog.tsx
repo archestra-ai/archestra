@@ -484,87 +484,89 @@ export function ManageUsersContent({
             ? undefined
             : preset.id;
 
+          const installMenu = (
+            <InstallMenuButton
+              onAddPersonal={
+                hasAddCallbacks &&
+                onAddPersonalConnection &&
+                !split.myPersonalServer
+                  ? () => {
+                      onClose();
+                      onAddPersonalConnection(installPresetCatalogId);
+                    }
+                  : undefined
+              }
+              onAddForTeam={
+                hasAddCallbacks && onAddSharedConnection
+                  ? (teamId) => {
+                      onClose();
+                      onAddSharedConnection(teamId, installPresetCatalogId);
+                    }
+                  : undefined
+              }
+              onAddForOrg={
+                hasAddCallbacks && onAddOrgConnection && !split.hasOrgConnection
+                  ? () => {
+                      onClose();
+                      onAddOrgConnection(installPresetCatalogId);
+                    }
+                  : undefined
+              }
+              availableTeamsForShared={split.availableTeamsForShared}
+              addOrgDisabled={!hasMcpServerAdminPermission}
+              addOrgDisabledReason={
+                !hasMcpServerAdminPermission
+                  ? "Only organization admins can install organization-wide"
+                  : undefined
+              }
+            />
+          );
+
           return (
-            <Card key={preset.id}>
-              <CardContent className="p-0">
-                <div className="flex items-center justify-between gap-2 border-b px-4 py-2.5">
-                  {showAnnotatedTitle ? (
-                    <span className="text-sm font-semibold">
-                      <span className="text-muted-foreground font-normal">
-                        {presetSingular}:{" "}
+            <div key={preset.id} className="space-y-2">
+              {!showAnnotatedTitle && (
+                <div className="flex justify-end">{installMenu}</div>
+              )}
+              <Card>
+                <CardContent className="p-0">
+                  {showAnnotatedTitle && (
+                    <div className="flex items-center justify-between gap-2 border-b px-4 py-2.5">
+                      <span className="text-sm font-semibold">
+                        <span className="text-muted-foreground font-normal">
+                          {presetSingular}:{" "}
+                        </span>
+                        {preset.name}
                       </span>
-                      {preset.name}
-                    </span>
-                  ) : (
-                    <span />
+                      {installMenu}
+                    </div>
                   )}
-                  <InstallMenuButton
-                    onAddPersonal={
-                      hasAddCallbacks &&
-                      onAddPersonalConnection &&
-                      !split.myPersonalServer
-                        ? () => {
-                            onClose();
-                            onAddPersonalConnection(installPresetCatalogId);
-                          }
-                        : undefined
-                    }
-                    onAddForTeam={
-                      hasAddCallbacks && onAddSharedConnection
-                        ? (teamId) => {
-                            onClose();
-                            onAddSharedConnection(
-                              teamId,
-                              installPresetCatalogId,
-                            );
-                          }
-                        : undefined
-                    }
-                    onAddForOrg={
-                      hasAddCallbacks &&
-                      onAddOrgConnection &&
-                      !split.hasOrgConnection
-                        ? () => {
-                            onClose();
-                            onAddOrgConnection(installPresetCatalogId);
-                          }
-                        : undefined
-                    }
-                    availableTeamsForShared={split.availableTeamsForShared}
-                    addOrgDisabled={!hasMcpServerAdminPermission}
-                    addOrgDisabledReason={
-                      !hasMcpServerAdminPermission
-                        ? "Only organization admins can install organization-wide"
-                        : undefined
-                    }
-                  />
-                </div>
-                {hasContent ? (
-                  <UnifiedConnectionsTable
-                    myPersonalServer={split.myPersonalServer}
-                    otherPersonalServers={split.otherPersonalServers}
-                    teamServers={split.teamServers}
-                    orgServers={split.orgServers}
-                    isOAuthServer={isOAuthServer}
-                    getCredentialOwnerName={getCredentialOwnerName}
-                    canReauthenticate={canReauthenticate}
-                    getReauthTooltip={getReauthTooltip}
-                    canRevoke={canRevoke}
-                    getRevokeTooltip={getRevokeTooltip}
-                    handleReauthenticate={handleReauthenticate}
-                    handleRevoke={handleRevoke}
-                    isDeleting={deleteMcpServerMutation.isPending}
-                    deploymentStatuses={deploymentStatuses}
-                    onOpenPodLogs={onOpenPodLogs}
-                    availableTeamsForShared={split.availableTeamsForShared}
-                  />
-                ) : (
-                  <p className="text-sm text-muted-foreground px-4 py-3">
-                    No callers yet.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
+                  {hasContent ? (
+                    <UnifiedConnectionsTable
+                      myPersonalServer={split.myPersonalServer}
+                      otherPersonalServers={split.otherPersonalServers}
+                      teamServers={split.teamServers}
+                      orgServers={split.orgServers}
+                      isOAuthServer={isOAuthServer}
+                      getCredentialOwnerName={getCredentialOwnerName}
+                      canReauthenticate={canReauthenticate}
+                      getReauthTooltip={getReauthTooltip}
+                      canRevoke={canRevoke}
+                      getRevokeTooltip={getRevokeTooltip}
+                      handleReauthenticate={handleReauthenticate}
+                      handleRevoke={handleRevoke}
+                      isDeleting={deleteMcpServerMutation.isPending}
+                      deploymentStatuses={deploymentStatuses}
+                      onOpenPodLogs={onOpenPodLogs}
+                      availableTeamsForShared={split.availableTeamsForShared}
+                    />
+                  ) : (
+                    <p className="text-sm text-muted-foreground px-4 py-3">
+                      No callers yet.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           );
         })}
       </div>

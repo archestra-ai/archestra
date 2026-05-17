@@ -14,7 +14,10 @@ import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
-import { StandardFormDialog } from "@/components/standard-dialog";
+import {
+  StandardDialog,
+  StandardFormDialog,
+} from "@/components/standard-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -33,10 +36,8 @@ import { useFeature } from "@/lib/config/config.query";
 import { useCatalogPresets } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useTeamsWithVaultFolders } from "@/lib/teams/team.query";
 import { InstallPresetPicker } from "./install-preset-picker";
-import {
-  collectPresetFallbackValues,
-  PresetFallbackFields,
-} from "./preset-fallback-fields";
+import { FillPresetFieldsStep } from "./preset-fallback-fields";
+import { presetHasUnfilledFields } from "./preset-helpers";
 import {
   type McpServerInstallScope,
   SelectMcpServerCredentialTypeAndTeams,
@@ -82,11 +83,6 @@ export interface LocalServerInstallResult {
   catalogId: string;
   environmentValues: Record<string, string>;
   userConfigValues?: Record<string, string>;
-  /**
-   * Values entered for preset-scoped fields the selected preset doesn't fill.
-   * Persisted onto the targeted preset row (same path as the preset editor).
-   */
-  presetFieldValues?: Record<string, string>;
   /** Installation scope (personal, team, org) */
   scope: McpServerInstallScope;
   /** Team ID to assign the MCP server to (only when scope is "team") */
@@ -157,18 +153,35 @@ export function LocalServerInstallDialog({
   const [selectedCatalogId, setSelectedCatalogId] = useState<string>(
     preselectedCatalogId ?? catalogItem?.id ?? "",
   );
-  const [presetFallbackValues, setPresetFallbackValues] = useState<
-    Record<string, string>
-  >({});
   const { data: presets = [] } = useCatalogPresets(catalogItem?.id ?? null);
   const hasPresets = presets.length > 0;
+
+  // Step 1 ("fill-preset") asks the caller to fill in any preset-scoped fields
+  // the selected preset doesn't have values for, persists them onto the preset
+  // row, then transitions to Step 2 ("install"). Skipped for reinstall/reauth.
+  const selectedPreset =
+    selectedCatalogId === catalogItem?.id
+      ? catalogItem
+      : (presets.find((p) => p.id === selectedCatalogId) ?? null);
+  const needsFillStep =
+    !isReinstall &&
+    !isReauth &&
+    !!catalogItem &&
+    presetHasUnfilledFields(catalogItem, selectedPreset);
+  const [step, setStep] = useState<"fill-preset" | "install">(
+    needsFillStep ? "fill-preset" : "install",
+  );
 
   useEffect(() => {
     if (isOpen && catalogItem) {
       setSelectedCatalogId(preselectedCatalogId ?? catalogItem.id);
-      setPresetFallbackValues({});
     }
   }, [isOpen, catalogItem, preselectedCatalogId]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setStep(needsFillStep ? "fill-preset" : "install");
+  }, [isOpen, needsFillStep]);
   const userConfig =
     (catalogItem?.userConfig as UserConfigType | null | undefined) || {};
   const promptableUserConfig = Object.fromEntries(
@@ -304,7 +317,7 @@ export function LocalServerInstallDialog({
   };
 
   const handleInstall = async () => {
-    if (!catalogItem) return;
+    if (!catalogItem || step !== "install") return;
 
     const finalEnvironmentValues: Record<string, string> = {};
     const finalUserConfigValues: Record<string, string> = {};
@@ -365,23 +378,10 @@ export function LocalServerInstallDialog({
       }
     }
 
-    // Preset-scoped fallback values are persisted on the targeted preset row
-    // by the backend (same path as the preset editor) — keep them separate
-    // from per-install env/userConfig values.
-    const presetFieldValuesForRequest = (() => {
-      if (!catalogItem) return undefined;
-      const collected = collectPresetFallbackValues(
-        catalogItem,
-        presetFallbackValues,
-      );
-      return Object.keys(collected).length > 0 ? collected : undefined;
-    })();
-
     await onConfirm({
       catalogId: selectedCatalogId || catalogItem?.id || "",
       environmentValues: finalEnvironmentValues,
       userConfigValues: finalUserConfigValues,
-      presetFieldValues: presetFieldValuesForRequest,
       scope,
       teamId: selectedTeamId,
       isByosVault:
@@ -496,6 +496,26 @@ export function LocalServerInstallDialog({
   const isUserConfigValid =
     isNonSensitiveUserConfigValid && isSensitiveUserConfigValid;
 
+  if (step === "fill-preset" && catalogItem) {
+    return (
+      <StandardDialog
+        open={isOpen}
+        onOpenChange={handleClose}
+        title={<span>Install - {catalogItem.name}</span>}
+        size="medium"
+        className="max-w-2xl max-h-[80vh]"
+        bodyClassName="space-y-6 px-6"
+      >
+        <FillPresetFieldsStep
+          catalog={catalogItem}
+          selectedPresetId={selectedCatalogId || catalogItem.id}
+          onSaved={() => setStep("install")}
+          onCancel={handleClose}
+        />
+      </StandardDialog>
+    );
+  }
+
   return (
     <StandardFormDialog
       open={isOpen}
@@ -591,17 +611,6 @@ export function LocalServerInstallDialog({
           ) : null
         }
       />
-
-      {!isReinstall && !isReauth && catalogItem && (
-        <PresetFallbackFields
-          catalog={catalogItem}
-          selectedPresetId={selectedCatalogId}
-          values={presetFallbackValues}
-          onChange={(key, value) =>
-            setPresetFallbackValues((prev) => ({ ...prev, [key]: value }))
-          }
-        />
-      )}
 
       {useVaultSecrets && scope !== "team" && (
         <div className="space-y-2">

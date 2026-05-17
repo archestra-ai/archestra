@@ -250,7 +250,6 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
       name: catalogItem.name,
       catalogId: result.catalogId,
       ...credentialPayload,
-      presetFieldValues: result.presetFieldValues,
       scope: result.scope,
       teamId:
         result.scope === "team" ? (result.teamId ?? undefined) : undefined,
@@ -323,7 +322,6 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
       catalogId: installResult.catalogId,
       environmentValues: installResult.environmentValues,
       userConfigValues: installResult.userConfigValues,
-      presetFieldValues: installResult.presetFieldValues,
       isByosVault: installResult.isByosVault,
       scope: installResult.scope,
       teamId:

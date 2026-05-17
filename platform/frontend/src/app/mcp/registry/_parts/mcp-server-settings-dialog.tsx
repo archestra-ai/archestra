@@ -419,7 +419,10 @@ export function McpServerSettingsDialog({
 
               {validPage === "presets" && showPresets && (
                 <div className="flex-1 overflow-y-auto p-6">
-                  <PresetsSection cat={item} />
+                  <PresetsSection
+                    cat={item}
+                    onGoToConfiguration={() => navigateTo("configuration")}
+                  />
                 </div>
               )}
 

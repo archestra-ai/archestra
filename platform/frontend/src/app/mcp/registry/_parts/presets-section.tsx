@@ -1,9 +1,17 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { Pencil } from "lucide-react";
+import { Pencil, SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { useCatalogPresets } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
   type McpPresetEntryWithAssignedCount,
@@ -21,6 +29,7 @@ type Preset = archestraApiTypes.GetCatalogChildrenResponses["200"][number];
 
 interface PresetsSectionProps {
   cat: CatalogItem;
+  onGoToConfiguration?: () => void;
 }
 
 interface Row {
@@ -33,13 +42,16 @@ interface Row {
   entry: McpPresetEntryWithAssignedCount | null;
 }
 
-export function PresetsSection({ cat }: PresetsSectionProps) {
+export function PresetsSection({
+  cat,
+  onGoToConfiguration,
+}: PresetsSectionProps) {
   const { data: children = [], isLoading: childrenLoading } = useCatalogPresets(
     cat.id,
   );
   const { data: entries = [], isLoading: entriesLoading } =
     useMcpPresetEntries();
-  const { singular, plural } = usePresetEntityName();
+  const { singular } = usePresetEntityName();
 
   const [editTarget, setEditTarget] = useState<{
     preset: Preset | null;
@@ -77,20 +89,27 @@ export function PresetsSection({ cat }: PresetsSectionProps) {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h3 className="text-sm font-medium">
-          {plural}{" "}
-          <span className="text-muted-foreground">· {entries.length}</span>
-        </h3>
-        {!hasFields && (
-          <p className="text-xs text-muted-foreground">
-            {`To vary settings per ${singular}, create a ${singular}-scoped env variable or header in Configuration tab.`}
-          </p>
-        )}
-      </div>
-
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : !hasFields ? (
+        <Empty className="border">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <SlidersHorizontal />
+            </EmptyMedia>
+            <EmptyTitle>No preset fields configured</EmptyTitle>
+            <EmptyDescription>
+              {`To vary settings per ${singular}, add a ${singular}-scoped env variable or header in the Configuration tab.`}
+            </EmptyDescription>
+          </EmptyHeader>
+          {onGoToConfiguration && (
+            <EmptyContent>
+              <Button variant="outline" onClick={onGoToConfiguration}>
+                Go to Configuration
+              </Button>
+            </EmptyContent>
+          )}
+        </Empty>
       ) : (
         <div className="rounded-md border">
           <table className="w-full text-sm">

@@ -33,7 +33,7 @@ const toolInvocationPoliciesTable = pgTable("tool_invocation_policies", {
     .$type<ToolInvocation.ToolInvocationPolicyAction>()
     .notNull(),
   reason: text("reason"),
-  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .notNull()
     .defaultNow()

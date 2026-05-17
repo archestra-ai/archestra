@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { usePresetEntityName } from "@/lib/organization.query";
 
 const {
   createCatalogChild,
@@ -260,6 +261,7 @@ export function useCatalogPresets(catalogId: string | null) {
 
 export function useCreateCatalogPreset(catalogId: string) {
   const queryClient = useQueryClient();
+  const { singular } = usePresetEntityName();
   return useMutation({
     mutationFn: async (
       data: archestraApiTypes.CreateCatalogChildData["body"],
@@ -274,17 +276,18 @@ export function useCreateCatalogPreset(catalogId: string) {
       queryClient.invalidateQueries({
         queryKey: ["mcp-catalog", catalogId, "presets"],
       });
-      toast.success("Preset created");
+      toast.success(`${singular} created`);
     },
     onError: (error) => {
       console.error("Create preset error:", error);
-      toast.error("Failed to create preset");
+      toast.error(`Failed to create ${singular}`);
     },
   });
 }
 
 export function useUpdateCatalogPreset(catalogId: string) {
   const queryClient = useQueryClient();
+  const { singular } = usePresetEntityName();
   return useMutation({
     mutationFn: async (params: {
       presetId: string;
@@ -301,17 +304,18 @@ export function useUpdateCatalogPreset(catalogId: string) {
         queryKey: ["mcp-catalog", catalogId, "presets"],
       });
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
-      toast.success("Preset updated");
+      toast.success(`${singular} updated`);
     },
     onError: (error) => {
       console.error("Update preset error:", error);
-      toast.error("Failed to update preset");
+      toast.error(`Failed to update ${singular}`);
     },
   });
 }
 
 export function useDeleteCatalogPreset(catalogId: string) {
   const queryClient = useQueryClient();
+  const { singular } = usePresetEntityName();
   return useMutation({
     mutationFn: async (presetId: string) => {
       const response = await deleteCatalogChild({
@@ -324,11 +328,11 @@ export function useDeleteCatalogPreset(catalogId: string) {
         queryKey: ["mcp-catalog", catalogId, "presets"],
       });
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
-      toast.success("Preset deleted");
+      toast.success(`${singular} deleted`);
     },
     onError: (error) => {
       console.error("Delete preset error:", error);
-      toast.error("Failed to delete preset");
+      toast.error(`Failed to delete ${singular}`);
     },
   });
 }

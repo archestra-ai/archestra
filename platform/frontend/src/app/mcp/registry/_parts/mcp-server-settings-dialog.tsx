@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/empty";
 import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { useCatalogPresets } from "@/lib/mcp/internal-mcp-catalog.query";
+import { usePresetEntityName } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
 import {
   computeDeploymentStatusSummary,
@@ -140,8 +141,11 @@ export function McpServerSettingsDialog({
   onDelete,
 }: McpServerSettingsDialogProps) {
   const isBuiltin = variant === "builtin";
-  const { data: presets = [] } = useCatalogPresets(isBuiltin ? null : item.id);
-  const showPresets = !isBuiltin;
+  const presetEntityName = usePresetEntityName();
+  const { data: presets = [] } = useCatalogPresets(
+    isBuiltin || !presetEntityName.configured ? null : item.id,
+  );
+  const showPresets = !isBuiltin && presetEntityName.configured;
 
   const navItems: NavItemDef[] = [];
   if (!isBuiltin) {
@@ -150,7 +154,7 @@ export function McpServerSettingsDialog({
   if (showPresets) {
     navItems.push({
       id: "presets",
-      label: "Presets",
+      label: presetEntityName.plural,
       badge: presets.length + 1,
     });
   }
@@ -191,6 +195,11 @@ export function McpServerSettingsDialog({
     : (navItems[0]?.id ?? "configuration");
 
   const isDebugPage = validPage.startsWith("debug-");
+
+  const pageTitles: Record<SettingsPage, string> = {
+    ...PAGE_TITLES,
+    presets: presetEntityName.plural,
+  };
 
   // Configuration dirty state tracking
   const [isConfigDirty, setIsConfigDirty] = useState(false);
@@ -334,9 +343,7 @@ export function McpServerSettingsDialog({
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
             {/* Content header */}
             <div className="flex min-h-[72px] shrink-0 items-center justify-between border-b px-4 py-4">
-              <h2 className="text-lg font-semibold">
-                {PAGE_TITLES[validPage]}
-              </h2>
+              <h2 className="text-lg font-semibold">{pageTitles[validPage]}</h2>
               <Button
                 variant="ghost"
                 size="icon"
@@ -440,7 +447,7 @@ export function McpServerSettingsDialog({
                       </EmptyMedia>
                       <EmptyDescription>
                         Install this server to open the{" "}
-                        {PAGE_TITLES[validPage].toLowerCase()}.
+                        {pageTitles[validPage].toLowerCase()}.
                       </EmptyDescription>
                     </EmptyHeader>
                     {onConnect && (

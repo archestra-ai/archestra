@@ -1667,6 +1667,13 @@
       "when": 1778786612751,
       "tag": "0237_regular_goblin_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 238,
+      "version": "7",
+      "when": 1779040265749,
+      "tag": "0238_wet_newton_destine",
+      "breakpoints": true
     }
   ]
 }

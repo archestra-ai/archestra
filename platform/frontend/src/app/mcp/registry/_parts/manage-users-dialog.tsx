@@ -75,6 +75,7 @@ import {
   useInternalMcpCatalog,
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp/mcp-server.query";
+import { usePresetEntityName } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { type DeploymentState, DeploymentStatusDot } from "./deployment-status";
 
@@ -160,6 +161,7 @@ export function ManageUsersContent({
     useMcpServers();
   const { data: catalogItems } = useInternalMcpCatalog({});
   const { data: childPresets = [] } = useCatalogPresets(catalogId);
+  const { plural: presetPlural } = usePresetEntityName();
 
   // Map of presetId → preset row. Parent is the "default" preset.
   const presetEntries = [
@@ -433,7 +435,7 @@ export function ManageUsersContent({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All presets</SelectItem>
+                    <SelectItem value="all">All {presetPlural}</SelectItem>
                     {presetEntries.map((p) => (
                       <SelectItem key={p.id} value={p.id}>
                         {p.name}

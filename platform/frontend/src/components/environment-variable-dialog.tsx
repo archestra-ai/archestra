@@ -25,6 +25,7 @@ import {
   MCP_CONFIG_AUTOCOMPLETE,
   MCP_SECRET_AUTOCOMPLETE,
 } from "@/lib/mcp/mcp-form-autocomplete";
+import { usePresetEntityName } from "@/lib/organization.query";
 
 const ExternalSecretSelector = lazy(
   () =>
@@ -79,6 +80,7 @@ export function EnvironmentVariableDialog({
   onClose,
   onConfirm,
 }: EnvironmentVariableDialogProps) {
+  const { singular } = usePresetEntityName();
   const [draft, setDraft] = useState<EnvVarDraft>(initial ?? EMPTY_DRAFT);
   const [vaultDialogOpen, setVaultDialogOpen] = useState(false);
 
@@ -228,8 +230,8 @@ export function EnvironmentVariableDialog({
         )}
         {draft.scope === "preset" && (
           <ScopeCallout
-            title="An admin sets this for each preset"
-            body="Each preset that uses this server supplies its own value."
+            title={`An admin sets this for each ${singular}`}
+            body={`Each ${singular} that uses this server supplies its own value.`}
           />
         )}
         {draft.scope === "static" && (

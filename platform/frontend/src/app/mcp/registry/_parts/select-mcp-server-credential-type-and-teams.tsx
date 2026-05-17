@@ -19,6 +19,7 @@ import {
 } from "@/components/visibility-selector";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
+import { usePresetEntityName } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 
 export type McpServerInstallScope = "personal" | "team" | "org";
@@ -77,6 +78,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
   const { data: teams, isLoading: isLoadingTeams } = useTeams();
   const { data: installedServers } = useMcpServers();
   const { data: session } = useSession();
+  const { singular } = usePresetEntityName();
   const currentUserId = session?.user?.id;
 
   // WHY: Check mcpServer:update permission to determine if user can create team installations
@@ -336,7 +338,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
             <p className="mt-1">
               This MCP server is already installed everywhere you have
               permission to install it
-              {presetPicker ? " for the selected preset" : ""}.
+              {presetPicker ? ` for the selected ${singular}` : ""}.
             </p>
           </AlertDescription>
         </Alert>

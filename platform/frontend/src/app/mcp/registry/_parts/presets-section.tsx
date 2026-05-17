@@ -1,15 +1,15 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { useState } from "react";
-import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useCatalogPresets } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
-  useCatalogPresets,
-  useDeleteCatalogPreset,
-} from "@/lib/mcp/internal-mcp-catalog.query";
+  type McpPresetEntryWithAssignedCount,
+  useMcpPresetEntries,
+} from "@/lib/mcp/mcp-preset-entry.query";
+import { usePresetEntityName } from "@/lib/organization.query";
 import { PresetEditorDialog } from "./preset-editor-dialog";
 import {
   type CatalogItem,
@@ -23,44 +23,70 @@ interface PresetsSectionProps {
   cat: CatalogItem;
 }
 
+interface Row {
+  rowId: string;
+  displayName: string;
+  isDefault: boolean;
+  /** The persisted child catalog row, if this entry has been configured. */
+  child: Preset | null;
+  /** The org-level entry that this row represents. Null for the default row. */
+  entry: McpPresetEntryWithAssignedCount | null;
+}
+
 export function PresetsSection({ cat }: PresetsSectionProps) {
-  const { data: children = [], isLoading } = useCatalogPresets(cat.id);
-  const deletePreset = useDeleteCatalogPreset(cat.id);
-  const [editing, setEditing] = useState<Preset | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<Preset | null>(null);
+  const { data: children = [], isLoading: childrenLoading } = useCatalogPresets(
+    cat.id,
+  );
+  const { data: entries = [], isLoading: entriesLoading } =
+    useMcpPresetEntries();
+  const { singular, plural } = usePresetEntityName();
+
+  const [editTarget, setEditTarget] = useState<{
+    preset: Preset | null;
+    entry: McpPresetEntryWithAssignedCount | null;
+  } | null>(null);
 
   const fieldKeys = presetFieldKeys(cat);
   const presetFields = listCatalogFields(cat).filter(
     (f) => f.scope === "preset",
   );
+  const childByEntryId = new Map<string, Preset>();
+  for (const c of children) {
+    if (c.presetEntryId) childByEntryId.set(c.presetEntryId, c);
+  }
 
-  const rows: Array<{ entry: Preset; isDefault: boolean }> = [
-    { entry: cat as Preset, isDefault: true },
-    ...children.map((c) => ({ entry: c, isDefault: false })),
+  const rows: Row[] = [
+    {
+      rowId: cat.id,
+      displayName: "Default",
+      isDefault: true,
+      child: cat as unknown as Preset,
+      entry: null,
+    },
+    ...entries.map((entry) => ({
+      rowId: entry.id,
+      displayName: entry.name,
+      isDefault: false,
+      child: childByEntryId.get(entry.id) ?? null,
+      entry,
+    })),
   ];
+
+  const isLoading = childrenLoading || entriesLoading;
+  const hasFields = fieldKeys.length > 0;
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-medium">
-            {rows.length} {rows.length === 1 ? "preset" : "presets"}
-          </h3>
+      <div>
+        <h3 className="text-sm font-medium">
+          {plural}{" "}
+          <span className="text-muted-foreground">· {entries.length}</span>
+        </h3>
+        {!hasFields && (
           <p className="text-xs text-muted-foreground">
-            {fieldKeys.length === 0
-              ? "This catalog has no preset-scoped fields. Mark fields with promptOnPreset in Configuration to vary them per preset."
-              : `Preset fields: ${fieldKeys.join(", ")}`}
+            {`To vary settings per ${singular}, create a ${singular}-scoped env variable or header in Configuration tab.`}
           </p>
-        </div>
-        <Button
-          size="sm"
-          onClick={() => setCreating(true)}
-          disabled={fieldKeys.length === 0}
-        >
-          <Plus className="h-4 w-4" />
-          New preset
-        </Button>
+        )}
       </div>
 
       {isLoading ? (
@@ -71,7 +97,7 @@ export function PresetsSection({ cat }: PresetsSectionProps) {
             <thead className="bg-muted/40 text-xs text-muted-foreground">
               <tr>
                 <th className="px-3 py-2 text-left font-medium">Name</th>
-                <th className="px-3 py-2 text-left font-medium">Default</th>
+                <th className="px-3 py-2 text-left font-medium">Status</th>
                 <th className="px-3 py-2 text-left font-medium">
                   Field values
                 </th>
@@ -79,42 +105,47 @@ export function PresetsSection({ cat }: PresetsSectionProps) {
               </tr>
             </thead>
             <tbody>
-              {rows.map(({ entry, isDefault }) => (
-                <tr key={entry.id} className="border-t">
-                  <td className="px-3 py-2 font-mono text-xs">{entry.name}</td>
-                  <td className="px-3 py-2">
-                    {isDefault && (
-                      <Badge variant="outline" className="text-[10px]">
-                        default
-                      </Badge>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 font-mono text-[11px] text-muted-foreground">
-                    {formatFieldValues(entry, presetFields)}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <div className="flex justify-end gap-1">
+              {rows.map((row) => {
+                const valueDisplay = row.child
+                  ? formatFieldValues(row.child, presetFields)
+                  : "—";
+                const hasValues = valueDisplay !== "—";
+                const isConfigured = row.isDefault
+                  ? hasValues
+                  : row.child !== null;
+                return (
+                  <tr key={row.rowId} className="border-t">
+                    <td className="px-3 py-2 font-medium">{row.displayName}</td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {isConfigured ? "Set" : "Not set"}
+                    </td>
+                    <td className="px-3 py-2 font-mono text-[11px] text-muted-foreground">
+                      {valueDisplay}
+                    </td>
+                    <td className="px-3 py-2 text-right">
                       <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        onClick={() => setEditing(entry)}
+                        variant={isConfigured ? "ghost" : "outline"}
+                        size={isConfigured ? "icon" : "sm"}
+                        className={isConfigured ? "h-7 w-7" : ""}
+                        disabled={!hasFields}
+                        onClick={() =>
+                          setEditTarget({
+                            preset: row.child,
+                            entry: row.entry,
+                          })
+                        }
+                        aria-label={isConfigured ? "Edit values" : "Configure"}
                       >
-                        <Pencil className="h-3.5 w-3.5" />
+                        {isConfigured ? (
+                          <Pencil className="h-3.5 w-3.5" />
+                        ) : (
+                          "Configure"
+                        )}
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-destructive hover:text-destructive"
-                        disabled={isDefault}
-                        onClick={() => setDeleteTarget(entry)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -122,39 +153,10 @@ export function PresetsSection({ cat }: PresetsSectionProps) {
 
       <PresetEditorDialog
         cat={cat}
-        preset={editing}
-        open={editing !== null}
-        onOpenChange={(v) => !v && setEditing(null)}
-      />
-      <PresetEditorDialog
-        cat={cat}
-        preset={null}
-        open={creating}
-        onOpenChange={setCreating}
-      />
-      <DeleteConfirmDialog
-        open={deleteTarget !== null}
-        onOpenChange={(v) => !v && setDeleteTarget(null)}
-        title="Delete preset"
-        description={
-          deleteTarget ? (
-            <span>
-              Are you sure you want to delete preset{" "}
-              <span className="font-mono font-semibold">
-                {deleteTarget.name}
-              </span>
-              ? Servers installed from this preset will be uninstalled.
-            </span>
-          ) : (
-            ""
-          )
-        }
-        isPending={deletePreset.isPending}
-        onConfirm={async () => {
-          if (!deleteTarget) return;
-          await deletePreset.mutateAsync(deleteTarget.id);
-          setDeleteTarget(null);
-        }}
+        preset={editTarget?.preset ?? null}
+        entry={editTarget?.entry ?? null}
+        open={editTarget !== null}
+        onOpenChange={(v) => !v && setEditTarget(null)}
       />
     </div>
   );

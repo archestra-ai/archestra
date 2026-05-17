@@ -1,4 +1,5 @@
 import { isBuiltInCatalogId, isPlaywrightCatalogItem, RouteId } from "@shared";
+import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
@@ -13,6 +14,7 @@ import logger from "@/logging";
 import {
   InternalMcpCatalogModel,
   McpCatalogLabelModel,
+  McpPresetEntryModel,
   McpServerModel,
   TeamModel,
   ToolModel,
@@ -1138,7 +1140,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { catalogId } = request.params;
-      const { childName, presetFieldValues } = request.body;
+      const { presetEntryId, presetFieldValues } = request.body;
 
       const parent = await InternalMcpCatalogModel.findById(catalogId, {
         expandSecrets: false,
@@ -1153,6 +1155,23 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
+      await assertCanEditCatalogPresets(parent, request);
+
+      const entry = await McpPresetEntryModel.findByIdForOrganization(
+        presetEntryId,
+        request.organizationId,
+      );
+      if (!entry) {
+        throw new ApiError(404, "Preset entry not found");
+      }
+
+      const existingChildren = await InternalMcpCatalogModel.findChildren(
+        parent.id,
+      );
+      if (existingChildren.some((c) => c.presetEntryId === entry.id)) {
+        throw new ApiError(409, `${entry.name} is already configured.`);
+      }
+
       try {
         InternalMcpCatalogModel.validateFieldValuesAgainstCatalog(
           parent,
@@ -1162,6 +1181,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, (e as Error).message);
       }
 
+      const childName = toDns1123Label(entry.name);
       const composedName = `${parent.name}-${childName}`;
       const { nonSecretFieldValues, presetSecretId } =
         await partitionPresetFieldValuesAndUpsertSecrets({
@@ -1177,6 +1197,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // is satisfied at the type level.
         name: composedName,
         childName,
+        presetEntryId: entry.id,
         presetFieldValues: nonSecretFieldValues,
         presetSecretId,
         parentCatalogItemId: parent.id,
@@ -1220,6 +1241,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!parent || parent.parentCatalogItemId !== null) {
         throw new ApiError(404, "Parent catalog item not found");
       }
+
+      await assertCanEditCatalogPresets(parent, request);
 
       const originalChild = await InternalMcpCatalogModel.findById(childId);
       if (!originalChild || originalChild.parentCatalogItemId !== parent.id) {
@@ -1292,13 +1315,23 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { catalogId, childId } }, reply) => {
+    async (request, reply) => {
+      const { catalogId, childId } = request.params;
       const child = await InternalMcpCatalogModel.findById(childId, {
         expandSecrets: false,
       });
       if (!child || child.parentCatalogItemId !== catalogId) {
         throw new ApiError(404, "Child catalog item not found");
       }
+
+      const parent = await InternalMcpCatalogModel.findById(catalogId, {
+        expandSecrets: false,
+      });
+      if (!parent) {
+        throw new ApiError(404, "Parent catalog item not found");
+      }
+
+      await assertCanEditCatalogPresets(parent, request);
 
       await deleteCatalogSecretsCascade(child);
 
@@ -1330,6 +1363,27 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 };
+
+/**
+ * Mirror catalog item permissions - preset scoped fields could be added or
+ * edited by same person who can edit catalog item.
+ */
+async function assertCanEditCatalogPresets(
+  parent: InternalMcpCatalog,
+  request: FastifyRequest,
+): Promise<void> {
+  const { success: isAdmin } = await hasPermission(
+    { mcpServerInstallation: ["admin"] },
+    request.headers,
+  );
+  if (isAdmin) return;
+  if (parent.scope !== "personal" || parent.authorId !== request.user.id) {
+    throw new ApiError(
+      403,
+      "You can only edit presets on your own personal catalog items",
+    );
+  }
+}
 
 /**
  * Ownership model:
@@ -1551,6 +1605,19 @@ async function cascadeReinstallForCatalog(
       );
     }
   });
+}
+
+/**
+ * Coerce an org-level preset entry name (e.g. "Production EU") into a DNS-1123
+ * label suitable for use as a K8s resource name component. The display name on
+ * the org-structure page still uses the original entry value.
+ */
+function toDns1123Label(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 50);
 }
 
 function pickSyncableFields(parent: InternalMcpCatalog): SyncableCatalogFields {

@@ -205,6 +205,16 @@ const organizationsTable = pgTable("organization", {
   connectionBaseUrls: jsonb("connection_base_urls").$type<
     ConnectionBaseUrl[]
   >(),
+
+  /**
+   * Custom label admins choose for the child-configuration entity of every
+   * catalog item (internally still called "preset"). When both singular and
+   * plural are set, the catalog UI exposes the per-item presets section and
+   * replaces "Preset"/"presets" copy. Both must be set together — partial
+   * values are rejected at the API.
+   */
+  presetEntityName: text("preset_entity_name"),
+  presetEntityNamePlural: text("preset_entity_name_plural"),
 });
 
 export default organizationsTable;

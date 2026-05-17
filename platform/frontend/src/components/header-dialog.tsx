@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
+import { usePresetEntityName } from "@/lib/organization.query";
 
 export interface HeaderDraft {
   headerName: string;
@@ -55,6 +56,7 @@ export function HeaderDialog({
   onClose,
   onConfirm,
 }: HeaderDialogProps) {
+  const { singular } = usePresetEntityName();
   const [draft, setDraft] = useState<HeaderDraft>(initial ?? EMPTY_DRAFT);
 
   useEffect(() => {
@@ -160,8 +162,8 @@ export function HeaderDialog({
         )}
         {draft.scope === "preset" && (
           <ScopeCallout
-            title="An admin sets this for each preset"
-            body="Each preset that uses this server supplies its own value."
+            title={`An admin sets this for each ${singular}`}
+            body={`Each ${singular} that uses this server supplies its own value.`}
           />
         )}
         {draft.scope === "static" && (

@@ -10,6 +10,7 @@ import type {
 } from "react-hook-form";
 import type { FieldScopeValue } from "@/components/field-scope-select";
 import { Button } from "@/components/ui/button";
+import { usePresetEntityName } from "@/lib/organization.query";
 
 interface EnvironmentVariablesReadOnlyTableProps<
   TFieldValues extends FieldValues,
@@ -184,11 +185,12 @@ function ValueCell({
   hasStoredSecret: boolean;
   useExternalSecretsManager: boolean;
 }) {
+  const { singular } = usePresetEntityName();
   if (scope === "installation") {
     return <span className="text-muted-foreground">per-installation</span>;
   }
   if (scope === "preset") {
-    return <span className="text-muted-foreground">per-preset</span>;
+    return <span className="text-muted-foreground">per-{singular}</span>;
   }
 
   if (useExternalSecretsManager && type === "secret" && value) {

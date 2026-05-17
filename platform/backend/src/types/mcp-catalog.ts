@@ -221,17 +221,13 @@ export const PartialUpdateInternalMcpCatalogSchema =
     validateInternalMcpCatalog,
   );
 
-const CHILD_CATALOG_NAME = z
-  .string()
-  .min(1, "Name is required")
-  .max(63, "Name must be 63 characters or fewer")
-  .regex(
-    /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/,
-    "Name must be a DNS-1123 label: lowercase alphanumeric and hyphens, starting and ending with alphanumeric",
-  );
-
 export const CreateChildCatalogSchema = z.object({
-  childName: CHILD_CATALOG_NAME,
+  /**
+   * The org-level preset entry (from /mcp/registry/org-structure) being
+   * configured for this catalog. The server derives the child's name from
+   * the entry.
+   */
+  presetEntryId: z.string().uuid(),
   presetFieldValues: PresetFieldValuesSchema.optional(),
 });
 

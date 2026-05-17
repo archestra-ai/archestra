@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { usePresetEntityName } from "@/lib/organization.query";
 
 interface CascadeReinstallConfirmDialogProps {
   open: boolean;
@@ -28,6 +29,8 @@ export function CascadeReinstallConfirmDialog({
   serverCount,
   presetCount,
 }: CascadeReinstallConfirmDialogProps) {
+  const { singular, plural } = usePresetEntityName();
+  const presetCountLabel = presetCount + 1 === 1 ? singular : plural;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
@@ -40,8 +43,7 @@ export function CascadeReinstallConfirmDialog({
               {presetCount > 0 ? (
                 <>
                   {" "}
-                  across <strong>{presetCount + 1}</strong>{" "}
-                  {presetCount + 1 === 1 ? "preset" : "presets"}
+                  across <strong>{presetCount + 1}</strong> {presetCountLabel}
                 </>
               ) : null}
               .

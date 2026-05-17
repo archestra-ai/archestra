@@ -40,6 +40,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAnimatedDots } from "@/lib/hooks/use-animated-dots";
+import { usePresetEntityName } from "@/lib/organization.query";
 import websocketService from "@/lib/websocket/websocket";
 import {
   type DeploymentState,
@@ -749,6 +750,7 @@ function PresetSelector({
   setSelectedPreset,
 }: PresetSelectorProps) {
   const [open, setOpen] = useState(false);
+  const { singular } = usePresetEntityName();
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -757,7 +759,7 @@ function PresetSelector({
           size="sm"
           className="h-7 flex-shrink-0 gap-1.5 text-xs font-normal"
         >
-          <span className="text-muted-foreground">Preset:</span>
+          <span className="text-muted-foreground">{singular}:</span>
           <span className="truncate max-w-[10rem]">{selectedPreset}</span>
           <ChevronsUpDown className="h-3 w-3 opacity-50" />
         </Button>

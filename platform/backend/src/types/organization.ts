@@ -242,6 +242,8 @@ const extendedFields = {
   showTwoFactor: z.boolean(),
   oauthAccessTokenLifetimeSeconds: OAuthAccessTokenLifetimeSecondsSchema,
   connectionBaseUrls: z.array(ConnectionBaseUrlSchema).nullable(),
+  presetEntityName: z.string().nullable(),
+  presetEntityNamePlural: z.string().nullable(),
 };
 
 export const SelectOrganizationSchema = createSelectSchema(
@@ -344,6 +346,23 @@ export const UpdateConnectionSettingsSchema = z.object({
       }
     }),
 });
+
+export const UpdatePresetEntityNameSchema = z
+  .object({
+    presetEntityName: z.string().trim().min(1).max(50).nullable(),
+    presetEntityNamePlural: z.string().trim().min(1).max(50).nullable(),
+  })
+  .superRefine((value, ctx) => {
+    const singularSet = value.presetEntityName !== null;
+    const pluralSet = value.presetEntityNamePlural !== null;
+    if (singularSet !== pluralSet) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "Both presetEntityName and presetEntityNamePlural must be set together (or both null to reset).",
+      });
+    }
+  });
 
 export const CompleteOnboardingSchema = z.object({
   onboardingComplete: z.literal(true),

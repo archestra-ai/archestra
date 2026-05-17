@@ -1,5 +1,5 @@
 import { type Mock, vi } from "vitest";
-import { InternalMcpCatalogModel } from "@/models";
+import { InternalMcpCatalogModel, McpPresetEntryModel } from "@/models";
 import { secretManager } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -428,10 +428,17 @@ describe("Internal MCP Catalog - Storage Routing", () => {
     parentId: string,
     body: { childName: string; presetFieldValues: Record<string, unknown> },
   ): Promise<{ id: string }> {
+    const entry = await McpPresetEntryModel.create({
+      organizationId,
+      name: body.childName,
+    });
     const response = await app.inject({
       method: "POST",
       url: `/api/internal_mcp_catalog/${parentId}/children`,
-      payload: body,
+      payload: {
+        presetEntryId: entry.id,
+        presetFieldValues: body.presetFieldValues,
+      },
     });
     if (response.statusCode !== 200) {
       throw new Error(

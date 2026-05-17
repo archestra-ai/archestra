@@ -28,7 +28,7 @@ const optimizationRulesTable = pgTable(
     provider: text("provider").$type<SupportedProvider>().notNull(),
     targetModel: text("target_model").notNull(),
     enabled: boolean("enabled").notNull().default(true),
-    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()
       .defaultNow()

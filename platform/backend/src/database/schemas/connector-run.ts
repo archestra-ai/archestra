@@ -32,7 +32,7 @@ const connectorRunsTable = pgTable(
     error: text("error"),
     logs: text("logs"),
     checkpoint: jsonb("checkpoint").$type<Record<string, unknown>>(),
-    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),`n  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [index("connector_runs_connector_id_idx").on(table.connectorId)],
 );

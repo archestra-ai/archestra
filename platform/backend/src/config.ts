@@ -518,19 +518,20 @@ export function parseProcessType(value: string | undefined): ProcessType {
 
 /**
  * Parse ARCHESTRA_AUDIT_LOG_RETENTION_DAYS into a non-negative integer.
- * 0 disables the retention sweep. Invalid values fall back to the default (180 days).
+ * Default is 0 (retention disabled — audit rows are never auto-deleted).
+ * Org admins opt in by setting a positive number of days.
  * @public — exported for testability
  */
 export const parseAuditLogRetentionDays = (
   envValue: string | undefined,
 ): number => {
-  const DEFAULT_RETENTION_DAYS = 180;
+  const DEFAULT_RETENTION_DAYS = 0;
   const value = envValue?.trim();
   if (!value) return DEFAULT_RETENTION_DAYS;
   const parsed = Number.parseInt(value, 10);
   if (Number.isNaN(parsed) || parsed < 0) {
     logger.warn(
-      `Invalid ARCHESTRA_AUDIT_LOG_RETENTION_DAYS value "${value}", using default ${DEFAULT_RETENTION_DAYS}`,
+      `Invalid ARCHESTRA_AUDIT_LOG_RETENTION_DAYS value "${value}", using default ${DEFAULT_RETENTION_DAYS} (disabled)`,
     );
     return DEFAULT_RETENTION_DAYS;
   }

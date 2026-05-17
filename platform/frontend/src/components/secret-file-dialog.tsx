@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { MCP_SECRET_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
+import { usePresetEntityName } from "@/lib/organization.query";
 
 const ExternalSecretSelector = lazy(
   () =>
@@ -62,6 +63,7 @@ export function SecretFileDialog({
   onClose,
   onConfirm,
 }: SecretFileDialogProps) {
+  const { singular } = usePresetEntityName();
   const [draft, setDraft] = useState<SecretFileDraft>(initial ?? EMPTY_DRAFT);
   const [vaultDialogOpen, setVaultDialogOpen] = useState(false);
 
@@ -169,8 +171,8 @@ export function SecretFileDialog({
         )}
         {draft.scope === "preset" && (
           <ScopeCallout
-            title="An admin sets this for each preset"
-            body="Each preset that uses this server supplies its own value."
+            title={`An admin sets this for each ${singular}`}
+            body={`Each ${singular} that uses this server supplies its own value.`}
           />
         )}
         {draft.scope === "static" && (

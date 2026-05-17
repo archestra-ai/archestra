@@ -532,9 +532,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateCatalogChild]: {
     mcpRegistry: ["update"],
   },
-  [RouteId.DeleteCatalogChild]: {
-    mcpRegistry: ["delete"],
-  },
   [RouteId.GetMcpServers]: {
     mcpServerInstallation: ["read"],
   },
@@ -848,6 +845,18 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.UpdateConnectionSettings]: {
     organizationSettings: ["update"],
+  },
+  [RouteId.UpdatePresetEntityName]: {
+    mcpServerInstallation: ["admin"],
+  },
+  [RouteId.ListMcpPresetEntries]: {
+    mcpRegistry: ["read"],
+  },
+  [RouteId.CreateMcpPresetEntry]: {
+    mcpServerInstallation: ["admin"],
+  },
+  [RouteId.DeleteMcpPresetEntry]: {
+    mcpServerInstallation: ["admin"],
   },
   [RouteId.UpdateKnowledgeSettings]: {
     knowledgeSettings: ["update"],

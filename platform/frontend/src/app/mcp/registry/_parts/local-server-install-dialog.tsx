@@ -113,6 +113,12 @@ interface LocalServerInstallDialogProps {
   isReauth?: boolean;
   /** Pre-select a specific team in the credential type selector */
   preselectedTeamId?: string | null;
+  /**
+   * Pre-select a preset (child catalog) in the InstallPresetPicker when the
+   * dialog opens. Used when launching install from a specific preset card on
+   * the Credentials page. Falls back to the parent's id when unset.
+   */
+  preselectedCatalogId?: string | null;
   /** When true, only personal installation is allowed */
   personalOnly?: boolean;
   /** When true, only organization-wide installation is allowed */
@@ -130,6 +136,7 @@ export function LocalServerInstallDialog({
   existingScope,
   isReauth = false,
   preselectedTeamId,
+  preselectedCatalogId,
   personalOnly: personalOnlyProp = false,
   orgOnly = false,
 }: LocalServerInstallDialogProps) {
@@ -148,7 +155,7 @@ export function LocalServerInstallDialog({
     catalogItem?.localConfig?.serviceAccount,
   );
   const [selectedCatalogId, setSelectedCatalogId] = useState<string>(
-    catalogItem?.id ?? "",
+    preselectedCatalogId ?? catalogItem?.id ?? "",
   );
   const [presetFallbackValues, setPresetFallbackValues] = useState<
     Record<string, string>
@@ -158,10 +165,10 @@ export function LocalServerInstallDialog({
 
   useEffect(() => {
     if (isOpen && catalogItem) {
-      setSelectedCatalogId(catalogItem.id);
+      setSelectedCatalogId(preselectedCatalogId ?? catalogItem.id);
       setPresetFallbackValues({});
     }
-  }, [isOpen, catalogItem]);
+  }, [isOpen, catalogItem, preselectedCatalogId]);
   const userConfig =
     (catalogItem?.userConfig as UserConfigType | null | undefined) || {};
   const promptableUserConfig = Object.fromEntries(

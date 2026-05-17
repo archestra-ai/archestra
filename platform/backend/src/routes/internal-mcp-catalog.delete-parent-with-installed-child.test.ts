@@ -1,6 +1,7 @@
+import { eq } from "drizzle-orm";
 import { type Mock, vi } from "vitest";
-import { InternalMcpCatalogModel, McpPresetEntryModel } from "@/models";
-import { secretManager } from "@/secrets-manager";
+import db, { schema } from "@/database";
+import { McpPresetEntryModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -15,13 +16,16 @@ import { hasPermission } from "@/auth";
 const mockHasPermission = hasPermission as Mock;
 
 /**
- * Parent-delete cascade: deleting a parent catalog row removes the
- * parent-owned secret bags (`clientSecretId` / `localConfigSecretId`) and
- * every child's per-row `presetSecretId`. The child-side invariant
- * (deleting a child must preserve parent-owned bags) is exercised through
- * the preset-entry delete path in `mcp-preset-entry.cascade.test.ts`.
+ * Deleting a parent catalog item when one of its children has an installed
+ * mcp_server must succeed.
+ *
+ * Trap: `mcp_server.catalog_id` is `NOT NULL` but its FK declares
+ * `ON DELETE SET NULL`. The parent's DB cascade tries to clear the column on
+ * the child's server rows and aborts the whole DELETE with a NOT NULL
+ * violation. The model must therefore remove servers for the WHOLE subtree
+ * (parent + every descendant) before issuing the catalog DELETE.
  */
-describe("Internal MCP Catalog - parent delete secret cascade", () => {
+describe("DELETE /api/internal_mcp_catalog/:id — parent with installed child", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
   let organizationId: string;
@@ -50,20 +54,16 @@ describe("Internal MCP Catalog - parent delete secret cascade", () => {
     await app.close();
   });
 
-  test("deleting the parent removes parent-owned bags plus every child's preset bag", async () => {
+  test("succeeds when a child has an installed mcp_server", async ({
+    makeMcpServer,
+  }) => {
     const parent = await createCatalog({
-      name: "delete-parent-cleans-everything",
+      name: "parent-with-installed-child",
       serverType: "local",
       localConfig: {
         command: "node",
         arguments: ["server.js"],
         environment: [
-          {
-            key: "API_KEY",
-            type: "secret",
-            promptOnInstallation: false,
-            value: "parent-owned-secret",
-          },
           {
             key: "PRESET_PASSWORD",
             type: "secret",
@@ -74,48 +74,42 @@ describe("Internal MCP Catalog - parent delete secret cascade", () => {
       },
     });
 
-    const childA = await createChild(parent.id, {
-      childName: "a",
-      presetFieldValues: { PRESET_PASSWORD: "a-secret" },
-    });
-    const childB = await createChild(parent.id, {
-      childName: "b",
-      presetFieldValues: { PRESET_PASSWORD: "b-secret" },
+    const child = await createChild(parent.id, {
+      childName: "prod",
+      presetFieldValues: { PRESET_PASSWORD: "child-secret" },
     });
 
-    const parentRaw = await loadRaw(parent.id);
-    const childARaw = await loadRaw(childA.id);
-    const childBRaw = await loadRaw(childB.id);
-
-    const parentLocalConfigSecretId = requireSecretId(
-      parentRaw.localConfigSecretId,
-      "parent local-config secret",
-    );
-    const childAPresetSecretId = requireSecretId(
-      childARaw.presetSecretId,
-      "child A preset secret",
-    );
-    const childBPresetSecretId = requireSecretId(
-      childBRaw.presetSecretId,
-      "child B preset secret",
-    );
+    const installedServer = await makeMcpServer({
+      catalogId: child.id,
+      ownerId: user.id,
+      scope: "personal",
+    });
 
     const deleteResponse = await app.inject({
       method: "DELETE",
       url: `/api/internal_mcp_catalog/${parent.id}`,
     });
+
     expect(deleteResponse.statusCode).toBe(200);
 
-    expect(
-      await secretManager().getSecret(parentLocalConfigSecretId),
-    ).toBeNull();
-    expect(await secretManager().getSecret(childAPresetSecretId)).toBeNull();
-    expect(await secretManager().getSecret(childBPresetSecretId)).toBeNull();
-  });
+    const parentRow = await db
+      .select()
+      .from(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.id, parent.id));
+    expect(parentRow).toHaveLength(0);
 
-  // ===========================================================================
-  // Helpers
-  // ===========================================================================
+    const childRow = await db
+      .select()
+      .from(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.id, child.id));
+    expect(childRow).toHaveLength(0);
+
+    const serverRow = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.id, installedServer.id));
+    expect(serverRow).toHaveLength(0);
+  });
 
   async function createCatalog(payload: Record<string, unknown>): Promise<{
     id: string;
@@ -155,26 +149,5 @@ describe("Internal MCP Catalog - parent delete secret cascade", () => {
       );
     }
     return response.json();
-  }
-
-  async function loadRaw(id: string) {
-    const row = await InternalMcpCatalogModel.findById(id, {
-      expandSecrets: false,
-      userId: user.id,
-      isAdmin: true,
-      organizationId,
-    });
-    if (!row) throw new Error(`row ${id} not found`);
-    return row;
-  }
-
-  function requireSecretId(
-    value: string | null | undefined,
-    label: string,
-  ): string {
-    if (!value) {
-      throw new Error(`Expected ${label} to be present`);
-    }
-    return value;
   }
 });

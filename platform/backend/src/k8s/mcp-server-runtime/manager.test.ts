@@ -1060,12 +1060,12 @@ describe("McpServerRuntimeManager", () => {
       ${"STATIC_SECRET"}     | ${"static-secret-from-catalog"} | ${"catalog static-secret merge (manager.ts:259-277)"}
       ${"USER_REQ_SECRET"}   | ${"user-req-sec-stored"}        | ${"install Secret bag (prompted+secret, required)"}
       ${"USER_OPT_SECRET"}   | ${"user-opt-sec-stored"}        | ${"install Secret bag (prompted+secret, optional)"}
-      ${"USER_REQ_PLAIN"}    | ${"user-req-plain-stored"}      | ${"mcp_server.environmentValues overlay (this PR)"}
-      ${"USER_OPT_PLAIN"}    | ${"user-opt-plain-stored"}      | ${"mcp_server.environmentValues overlay (this PR)"}
+      ${"USER_REQ_PLAIN"}    | ${"user-req-plain-stored"}      | ${"mcp_server.environmentValues overlay"}
+      ${"USER_OPT_PLAIN"}    | ${"user-opt-plain-stored"}      | ${"mcp_server.environmentValues overlay"}
       ${"PRESET_REQ_SECRET"} | ${"preset-req-sec-stored"}      | ${"install Secret bag (preset+secret, required)"}
       ${"PRESET_OPT_SECRET"} | ${"preset-opt-sec-stored"}      | ${"install Secret bag (preset+secret, optional)"}
-      ${"PRESET_REQ_PLAIN"}  | ${"preset-req-plain-stored"}    | ${"catalog.presetFieldValues overlay (PR #4703)"}
-      ${"PRESET_OPT_PLAIN"}  | ${"preset-opt-plain-stored"}    | ${"catalog.presetFieldValues overlay (PR #4703)"}
+      ${"PRESET_REQ_PLAIN"}  | ${"preset-req-plain-stored"}    | ${"catalog.presetFieldValues overlay"}
+      ${"PRESET_OPT_PLAIN"}  | ${"preset-opt-plain-stored"}    | ${"catalog.presetFieldValues overlay"}
     `(
       "auto redeploy preserves $key — $via",
       ({ key, expected }: { key: string; expected: string | undefined }) => {

@@ -37401,6 +37401,9 @@ export type GetMcpServersResponses = {
         catalogId: string;
         serverType: 'local' | 'remote' | 'builtin';
         secretId: string | null;
+        environmentValues: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
@@ -37435,6 +37438,9 @@ export type InstallMcpServerData = {
         name: string;
         catalogId: string;
         secretId?: string;
+        environmentValues?: {
+            [key: string]: string;
+        };
         ownerId?: string | null;
         teamId?: string | null;
         scope?: 'personal' | 'team' | 'org';
@@ -37445,9 +37451,6 @@ export type InstallMcpServerData = {
         oauthRefreshFailedAt?: unknown;
         userId?: string;
         userConfigValues?: {
-            [key: string]: string;
-        };
-        environmentValues?: {
             [key: string]: string;
         };
         agentIds?: Array<string>;
@@ -37535,6 +37538,9 @@ export type InstallMcpServerResponses = {
         catalogId: string;
         serverType: 'local' | 'remote' | 'builtin';
         secretId: string | null;
+        environmentValues: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
@@ -37733,6 +37739,9 @@ export type GetMcpServerResponses = {
         catalogId: string;
         serverType: 'local' | 'remote' | 'builtin';
         secretId: string | null;
+        environmentValues: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
@@ -37856,6 +37865,9 @@ export type ReauthenticateMcpServerResponses = {
         catalogId: string;
         serverType: 'local' | 'remote' | 'builtin';
         secretId: string | null;
+        environmentValues: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
@@ -38251,6 +38263,9 @@ export type ReinstallMcpServerResponses = {
         catalogId: string;
         serverType: 'local' | 'remote' | 'builtin';
         secretId: string | null;
+        environmentValues: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';

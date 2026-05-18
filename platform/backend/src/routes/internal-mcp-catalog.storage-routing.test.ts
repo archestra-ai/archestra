@@ -402,6 +402,87 @@ describe("Internal MCP Catalog - Storage Routing", () => {
       expect(row.localConfigSecretId).toBeNull();
       expect(row.userConfig?.tenant_id.default).toBeUndefined();
     });
+
+    test("flipping a per-preset header from non-sensitive to sensitive moves the value from preset_field_values jsonb into the preset secret bag on the next child PATCH", async () => {
+      // Test 2 (toggle on re-save) — once an admin flips the field's
+      // `sensitive` flag in the parent's userConfig, the next time a child
+      // preset is edited and resupplies the value, the partition function
+      // routes it to the secret bag and the wholesale `presetFieldValues`
+      // replace drops the now-orphan plaintext copy from the jsonb.
+      const parentName = "header-flip-sensitivity-parent";
+      const parent = await createCatalog({
+        name: parentName,
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        userConfig: {
+          api_key: {
+            type: "string",
+            title: "API Key",
+            description: "Per-preset key (initially plaintext)",
+            required: false,
+            sensitive: false,
+            headerName: "x-api-key",
+            promptOnPreset: true,
+          },
+        },
+      });
+
+      // Before the flip: value lives in preset_field_values jsonb.
+      const child = await createChild(parent.id, {
+        childName: "acme",
+        presetFieldValues: { api_key: "plain-acme-key" },
+      });
+      let row = await loadRaw(child.id);
+      expect(row.presetSecretId).toBeNull();
+      expect(row.presetFieldValues).toEqual({ api_key: "plain-acme-key" });
+
+      // Admin flips the parent userConfig field to sensitive.
+      const flip = await app.inject({
+        method: "PUT",
+        url: `/api/internal_mcp_catalog/${parent.id}`,
+        payload: {
+          name: parentName,
+          serverType: "remote",
+          serverUrl: "https://example.com/mcp",
+          userConfig: {
+            api_key: {
+              type: "string",
+              title: "API Key",
+              description: "Per-preset key (now sensitive)",
+              required: false,
+              sensitive: true,
+              headerName: "x-api-key",
+              promptOnPreset: true,
+            },
+          },
+        },
+      });
+      expect(flip.statusCode).toBe(200);
+
+      // The plain copy in jsonb is still there until the child is re-saved
+      // (the parent PUT doesn't touch child rows). Sanity check.
+      row = await loadRaw(child.id);
+      expect(row.presetFieldValues).toEqual({ api_key: "plain-acme-key" });
+
+      // Admin re-saves the child preset, resupplying the value.
+      const patch = await app.inject({
+        method: "PATCH",
+        url: `/api/internal_mcp_catalog/${parent.id}/children/${child.id}`,
+        payload: {
+          presetFieldValues: { api_key: "rotated-acme-key" },
+        },
+      });
+      expect(patch.statusCode).toBe(200);
+
+      // After re-save: value lives in the secret bag, jsonb is empty.
+      row = await loadRaw(child.id);
+      const { presetSecretId } = row;
+      if (!presetSecretId) throw new Error("expected presetSecretId");
+      expect(row.presetFieldValues).toEqual({});
+
+      const bag = await secretManager().getSecret(presetSecretId);
+      expect(bag?.secret).toEqual({ api_key: "rotated-acme-key" });
+    });
   });
 
   // ===========================================================================

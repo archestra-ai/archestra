@@ -17,10 +17,10 @@ import {
 import type {
   ConnectionBaseUrl,
   GlobalToolPolicy,
+  LimitCleanupInterval,
   OnboardingWizard,
   OrganizationChatLink,
   OrganizationCompressionScope,
-  OrganizationLimitCleanupInterval,
 } from "@/types";
 
 const organizationsTable = pgTable("organization", {
@@ -31,9 +31,6 @@ const organizationsTable = pgTable("organization", {
   logoDark: text("logo_dark"),
   createdAt: timestamp("created_at").notNull(),
   metadata: text("metadata"),
-  limitCleanupInterval: varchar("limit_cleanup_interval")
-    .$type<OrganizationLimitCleanupInterval>()
-    .default("1h"),
   onboardingComplete: boolean("onboarding_complete").notNull().default(false),
   theme: text("theme")
     .$type<OrganizationTheme>()
@@ -101,6 +98,19 @@ const organizationsTable = pgTable("organization", {
    */
   defaultLlmApiKeyId: uuid("default_llm_api_key_id"),
 
+  /** Default token-cost limit value applied to every organization member. */
+  defaultUserLimitValue: integer("default_user_limit_value"),
+
+  /** Models covered by the default user limit. Null means all models. */
+  defaultUserLimitModel: jsonb("default_user_limit_model").$type<
+    string[] | null
+  >(),
+
+  /** Cleanup interval used by default user limits. Null falls back to weekly. */
+  defaultUserLimitCleanupInterval: varchar(
+    "default_user_limit_cleanup_interval",
+  ).$type<LimitCleanupInterval>(),
+
   /**
    * Organization-wide default agent ID (fallback when member has no personal default).
    * FK to agents(id) ON DELETE SET NULL — enforced by migration only
@@ -134,8 +144,11 @@ const organizationsTable = pgTable("organization", {
     .notNull()
     .default(true),
 
-  /** Square icon logo (28x28px recommended) for collapsed sidebar and chat loading indicator */
+  /** Square icon logo (28x28px recommended) for collapsed sidebar and chat loading indicator. PNG or SVG. */
   iconLogo: text("icon_logo"),
+
+  /** Dark-mode variant of the icon logo. Falls back to `iconLogo` when not set. */
+  iconLogoDark: text("icon_logo_dark"),
 
   /** Support contact message shown in chat error cards */
   chatErrorSupportMessage: text("chat_error_support_message"),
@@ -195,6 +208,22 @@ const organizationsTable = pgTable("organization", {
   connectionBaseUrls: jsonb("connection_base_urls").$type<
     ConnectionBaseUrl[]
   >(),
+
+  /**
+   * Custom label admins choose for the child-configuration entity of every
+   * catalog item (internally still called "preset"). When both singular and
+   * plural are set, the catalog UI exposes the per-item presets section and
+   * replaces "Preset"/"presets" copy. Both must be set together — partial
+   * values are rejected at the API.
+   */
+  presetEntityName: text("preset_entity_name"),
+  presetEntityNamePlural: text("preset_entity_name_plural"),
+
+  /**
+   * Custom display label for the implicit "default" preset row (parent catalog
+   * item). NULL falls back to "Default" in the UI.
+   */
+  presetEntityDefaultLabel: text("preset_entity_default_label"),
 });
 
 export default organizationsTable;

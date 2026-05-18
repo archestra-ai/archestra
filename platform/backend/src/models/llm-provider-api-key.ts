@@ -17,6 +17,7 @@ import type {
   UpdateLlmProviderApiKey,
 } from "@/types";
 import { decryptSecretValue, isEncryptedSecret } from "@/utils/crypto";
+import { escapeLikePattern } from "@/utils/sql-search";
 import ConversationModel from "./conversation";
 
 class LlmProviderApiKeyModel {
@@ -165,6 +166,7 @@ class LlmProviderApiKeyModel {
         provider: schema.llmProviderApiKeysTable.provider,
         secretId: schema.llmProviderApiKeysTable.secretId,
         baseUrl: schema.llmProviderApiKeysTable.baseUrl,
+        inferenceBaseUrl: schema.llmProviderApiKeysTable.inferenceBaseUrl,
         extraHeaders: schema.llmProviderApiKeysTable.extraHeaders,
         scope: schema.llmProviderApiKeysTable.scope,
         userId: schema.llmProviderApiKeysTable.userId,
@@ -290,6 +292,7 @@ class LlmProviderApiKeyModel {
         provider: schema.llmProviderApiKeysTable.provider,
         secretId: schema.llmProviderApiKeysTable.secretId,
         baseUrl: schema.llmProviderApiKeysTable.baseUrl,
+        inferenceBaseUrl: schema.llmProviderApiKeysTable.inferenceBaseUrl,
         extraHeaders: schema.llmProviderApiKeysTable.extraHeaders,
         scope: schema.llmProviderApiKeysTable.scope,
         userId: schema.llmProviderApiKeysTable.userId,
@@ -385,7 +388,7 @@ class LlmProviderApiKeyModel {
       if (
         conversationKey &&
         conversationKey.provider === provider &&
-        conversationKey.secretId
+        canUseProviderApiKey(conversationKey)
       ) {
         // If conversation's key matches agent's configured key, skip user access check
         if (
@@ -411,7 +414,11 @@ class LlmProviderApiKeyModel {
     //    (no user permission check — permission flows through agent access)
     if (agentLlmApiKeyId) {
       const agentKey = await LlmProviderApiKeyModel.findById(agentLlmApiKeyId);
-      if (agentKey && agentKey.provider === provider && agentKey.secretId) {
+      if (
+        agentKey &&
+        agentKey.provider === provider &&
+        canUseProviderApiKey(agentKey)
+      ) {
         return agentKey;
       }
     }
@@ -709,10 +716,6 @@ class LlmProviderApiKeyModel {
   }
 }
 
-function escapeLikePattern(value: string): string {
-  return value.replace(/[%_\\]/g, "\\$&");
-}
-
 /**
  * Helper to parse vault reference from a secret value.
  * For LLM provider API keys, the secret contains { apiKey: "path#key" } format.
@@ -733,6 +736,18 @@ function parseVaultReferenceFromSecret(
     };
   }
   return null;
+}
+
+function canUseProviderApiKey(
+  apiKey: Pick<LlmProviderApiKey, "provider" | "secretId">,
+): boolean {
+  if (apiKey.secretId) {
+    return true;
+  }
+
+  return getProvidersWithOptionalApiKey({
+    azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+  }).includes(apiKey.provider);
 }
 
 export default LlmProviderApiKeyModel;

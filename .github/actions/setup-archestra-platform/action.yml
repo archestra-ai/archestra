@@ -317,7 +317,7 @@ runs:
           --set "archestra.image=${PLATFORM_IMAGE_TAG}" \
           ${MCP_SET_FLAG} \
           ${EXTRA_SET_FLAGS} \
-          --atomic --timeout=7m
+          --atomic --timeout=15m
 
         # Wait for e2e-tests to complete (should already be done by now)
         if [ -n "${E2E_PID}" ]; then

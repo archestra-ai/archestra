@@ -218,6 +218,26 @@ export async function syncSsoRole(
     return;
   }
 
+  // Only apply the resolved role when a mapping rule explicitly matched.
+  // When no rule matched, evaluateRoleMapping falls back to defaultRole (or
+  // the function-level fallback), which would silently overwrite an existing
+  // member's role on every SSO callback — e.g. demoting an admin to "member"
+  // just because the IdP has no role-mapping rules configured. Provisioning
+  // of brand-new memberships is handled by ssoConfig.organizationProvisioning,
+  // so here we only sync established members when there is an actual match.
+  if (!result.matched) {
+    logger.debug(
+      {
+        providerId,
+        userEmail,
+        currentRole: existingMember.role,
+        fallbackRole: result.role,
+      },
+      "[syncSsoRole] No role mapping rule matched - leaving existing role unchanged",
+    );
+    return;
+  }
+
   // Update role if it changed
   if (existingMember.role !== result.role) {
     await MemberModel.updateRole(

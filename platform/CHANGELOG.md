@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.2.48](https://github.com/archestra-ai/archestra/compare/platform-v1.2.47...platform-v1.2.48) (2026-05-14)
+
+
+### Features
+
+* **frontend:** enable version skew protection via deploymentId ([#4629](https://github.com/archestra-ai/archestra/issues/4629)) ([f6c00ad](https://github.com/archestra-ai/archestra/commit/f6c00ada4f1fe8382cdea08183e770902d631463))
+
+
+### Bug Fixes
+
+* **auth:** don't downgrade existing member role via SSO default-role … ([#4580](https://github.com/archestra-ai/archestra/issues/4580)) ([3b02507](https://github.com/archestra-ai/archestra/commit/3b025070ae364a98c435ef5e2296e3d2147bebec))
+* **helm:** bound the postgres-wait init container loops ([#4657](https://github.com/archestra-ai/archestra/issues/4657)) ([03c9d88](https://github.com/archestra-ai/archestra/commit/03c9d88843cb9e544bbe5cbb660186feb694a99f))
+
+## [1.2.47](https://github.com/archestra-ai/archestra/compare/platform-v1.2.46...platform-v1.2.47) (2026-05-14)
+
+
+### Features
+
+* improve Azure Foundry deployment sync ([#4617](https://github.com/archestra-ai/archestra/issues/4617)) ([cb0fd9b](https://github.com/archestra-ai/archestra/commit/cb0fd9b2187a18cb5ff81b1b0bb025a63ec183b1))
+
+
+### Bug Fixes
+
+* support Azure knowledge embeddings ([#4646](https://github.com/archestra-ai/archestra/issues/4646)) ([4c3255f](https://github.com/archestra-ai/archestra/commit/4c3255f83303c930ba874aedf23c85692b1e974a))
+
 ## [1.2.46](https://github.com/archestra-ai/archestra/compare/platform-v1.2.45...platform-v1.2.46) (2026-05-13)
 
 

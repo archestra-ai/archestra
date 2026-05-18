@@ -289,7 +289,6 @@ export function CustomServerRequestDialog({
                     )}
                   />
                   <EnvironmentVariablesFormField
-                    control={form.control}
                     fields={fields}
                     append={append}
                     remove={remove}

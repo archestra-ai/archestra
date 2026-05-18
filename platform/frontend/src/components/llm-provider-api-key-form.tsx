@@ -52,6 +52,7 @@ export type LlmProviderApiKeyFormValues = {
   provider: CreateLlmProviderApiKeyBody["provider"];
   apiKey: string | null;
   baseUrl: string | null;
+  inferenceBaseUrl: string | null;
   /** Edited as an array of rows; serialized to Record<string, string> on submit. */
   extraHeaders: Array<{ name: string; value: string }>;
   scope: NonNullable<CreateLlmProviderApiKeyBody["scope"]>;
@@ -249,7 +250,7 @@ const PROVIDER_CONFIG: Record<
       "https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/OpenAI",
     consoleName: "Azure Portal",
     description:
-      "Use your Azure OpenAI resource URL, such as https://<resource>.openai.azure.com/openai. Archestra will discover deployments and route by model name.",
+      "Use your Azure OpenAI or Foundry URL for deployment discovery. If runtime traffic uses a different Azure OpenAI endpoint, set the optional inference URL below.",
   },
 } as const;
 
@@ -856,6 +857,47 @@ export function LlmProviderApiKeyForm({
             </p>
           )}
         </div>
+
+        {provider === "azure" && (
+          <div className="space-y-2">
+            <Label htmlFor="llm-provider-api-key-inference-base-url">
+              Inference URL{" "}
+              <span className="font-normal text-muted-foreground">
+                (optional)
+              </span>
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Runtime endpoint for chat and embeddings when it differs from the
+              Base URL used for Azure deployment discovery.
+            </p>
+            <Input
+              id="llm-provider-api-key-inference-base-url"
+              type="url"
+              placeholder="https://<resource>.openai.azure.com/openai"
+              disabled={isPending}
+              {...form.register("inferenceBaseUrl", {
+                validate: (value) => {
+                  if (!value) return true;
+
+                  try {
+                    const url = new URL(value);
+                    if (!["http:", "https:"].includes(url.protocol)) {
+                      return "URL must use http or https protocol";
+                    }
+                    return true;
+                  } catch {
+                    return "Please enter a valid URL (e.g. https://api.example.com)";
+                  }
+                },
+              })}
+            />
+            {form.formState.errors.inferenceBaseUrl && (
+              <p className="text-xs text-destructive">
+                {form.formState.errors.inferenceBaseUrl.message}
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="space-y-2">
           <Label>

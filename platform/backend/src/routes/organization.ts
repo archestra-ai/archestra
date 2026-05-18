@@ -38,6 +38,8 @@ import {
   UpdateConnectionSettingsSchema,
   UpdateKnowledgeSettingsSchema,
   UpdateLlmSettingsSchema,
+  UpdatePresetEntityDefaultLabelSchema,
+  UpdatePresetEntityNameSchema,
   UpdateSecuritySettingsSchema,
 } from "@/types";
 
@@ -138,14 +140,31 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateLlmSettings,
         description:
-          "Update LLM settings (TOON compression, compression scope, limit cleanup interval)",
+          "Update LLM settings (TOON compression, compression scope, default user limit)",
         tags: ["Organization"],
         body: UpdateLlmSettingsSchema,
         response: constructResponseSchema(SelectOrganizationSchema),
       },
     },
     async ({ organizationId, body }, reply) => {
-      const organization = await OrganizationModel.patch(organizationId, body);
+      const normalizedBody =
+        body.defaultUserLimitValue === null
+          ? {
+              ...body,
+              defaultUserLimitModel: null,
+              defaultUserLimitCleanupInterval: null,
+            }
+          : {
+              ...body,
+              ...(body.defaultUserLimitModel?.length === 0
+                ? { defaultUserLimitModel: null }
+                : {}),
+            };
+
+      const organization = await OrganizationModel.patch(
+        organizationId,
+        normalizedBody,
+      );
 
       if (!organization) {
         throw new ApiError(404, "Organization not found");
@@ -233,6 +252,52 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      const organization = await OrganizationModel.patch(organizationId, body);
+
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
+      }
+
+      return reply.send(organization);
+    },
+  );
+
+  fastify.patch(
+    "/api/organization/preset-entity-name",
+    {
+      schema: {
+        operationId: RouteId.UpdatePresetEntityName,
+        description:
+          "Configure the org-wide display label for catalog presets (the per-item child-configuration entity). Both singular and plural must be set together, or both null to reset.",
+        tags: ["Organization"],
+        body: UpdatePresetEntityNameSchema,
+        response: constructResponseSchema(SelectOrganizationSchema),
+      },
+    },
+    async ({ organizationId, body }, reply) => {
+      const organization = await OrganizationModel.patch(organizationId, body);
+
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
+      }
+
+      return reply.send(organization);
+    },
+  );
+
+  fastify.patch(
+    "/api/organization/preset-entity-default-label",
+    {
+      schema: {
+        operationId: RouteId.UpdatePresetEntityDefaultLabel,
+        description:
+          "Configure the org-wide display label for the implicit default preset row (parent catalog item). Pass null to reset to the built-in 'Default' label.",
+        tags: ["Organization"],
+        body: UpdatePresetEntityDefaultLabelSchema,
+        response: constructResponseSchema(SelectOrganizationSchema),
+      },
+    },
+    async ({ organizationId, body }, reply) => {
       const organization = await OrganizationModel.patch(organizationId, body);
 
       if (!organization) {

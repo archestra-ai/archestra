@@ -5,6 +5,8 @@
  * proxy requests — NO mocking of LimitValidationService or the database.
  * Only the upstream LLM client is mocked via createHarness.
  */
+
+import { eq } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   serializerCompiler,
@@ -13,7 +15,8 @@ import {
 } from "fastify-type-provider-zod";
 import type OpenAI from "openai";
 import { vi } from "vitest";
-import { ModelModel } from "@/models";
+import db, { schema } from "@/database";
+import { ModelModel, OrganizationModel } from "@/models";
 import LimitModel from "@/models/limit";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -220,6 +223,111 @@ describe("LLM proxy limit enforcement (integration)", () => {
         code: "token_cost_limit_exceeded",
       },
     });
+  });
+
+  test("blocks request with 429 when default user limit is exceeded", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeInteraction,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
+      name: "Default User Limit Agent",
+    });
+
+    await OrganizationModel.patch(org.id, {
+      defaultUserLimitValue: 1,
+      defaultUserLimitModel: ["gpt-4o"],
+      defaultUserLimitCleanupInterval: "1w",
+    });
+    const interaction = await makeInteraction(agent.id, {
+      model: "gpt-4o",
+      inputTokens: 100,
+      outputTokens: 100,
+    });
+    await db
+      .update(schema.interactionsTable)
+      .set({ userId: user.id, cost: "2" })
+      .where(eq(schema.interactionsTable.id, interaction.id));
+
+    await setupRoute();
+
+    const response = await app.inject({
+      method: "POST",
+      url: OPENAI_ENDPOINT(agent.id),
+      headers: {
+        ...OPENAI_HEADERS(),
+        "X-Archestra-User-Id": user.id,
+      },
+      payload: SIMPLE_PAYLOAD(),
+    });
+
+    expect(response.statusCode).toBe(429);
+    expect(response.json()).toMatchObject({
+      error: {
+        code: "token_cost_limit_exceeded",
+      },
+    });
+    expect(response.json().error.message).toContain("user-level");
+  });
+
+  test("uses custom user limit instead of default user limit", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeInteraction,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
+      name: "Custom User Limit Override Agent",
+    });
+
+    await OrganizationModel.patch(org.id, {
+      defaultUserLimitValue: 1,
+      defaultUserLimitModel: null,
+      defaultUserLimitCleanupInterval: "1w",
+    });
+    await LimitModel.create({
+      entityType: "user",
+      entityId: user.id,
+      limitType: "token_cost",
+      limitValue: 100,
+      model: null,
+      cleanupInterval: "1w",
+    });
+    const interaction = await makeInteraction(agent.id, {
+      model: "gpt-4o",
+      inputTokens: 100,
+      outputTokens: 100,
+    });
+    await db
+      .update(schema.interactionsTable)
+      .set({ userId: user.id, cost: "2" })
+      .where(eq(schema.interactionsTable.id, interaction.id));
+    await ModelModel.ensureModelExists("gpt-4o", "openai");
+
+    await setupRoute();
+
+    const response = await app.inject({
+      method: "POST",
+      url: OPENAI_ENDPOINT(agent.id),
+      headers: {
+        ...OPENAI_HEADERS(),
+        "X-Archestra-User-Id": user.id,
+      },
+      payload: SIMPLE_PAYLOAD(),
+    });
+
+    expect(response.statusCode).toBe(200);
   });
 
   test("allows request when limits are not exceeded", async ({ makeAgent }) => {

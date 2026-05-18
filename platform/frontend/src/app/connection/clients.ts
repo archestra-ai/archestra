@@ -181,7 +181,7 @@ export const CONNECT_CLIENTS: ConnectClient[] = [
             kind: "steps",
             steps: [
               {
-                title: "Open ~/.claude/settings.local.json",
+                title: "Open ~/.claude/settings.json",
                 body: "Create the file if it doesn't exist.",
               },
               {
@@ -210,7 +210,7 @@ claude`,
           kind: "steps",
           steps: [
             {
-              title: "Open ~/.claude/settings.local.json",
+              title: "Open ~/.claude/settings.json",
               body: "Create the file if it doesn't exist.",
             },
             {

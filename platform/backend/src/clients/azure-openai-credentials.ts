@@ -7,6 +7,7 @@ import config from "@/config";
 
 const AZURE_OPENAI_TOKEN_SCOPE = "https://cognitiveservices.azure.com/.default";
 const AZURE_AI_FOUNDRY_TOKEN_SCOPE = "https://ai.azure.com/.default";
+const AZURE_MANAGEMENT_TOKEN_SCOPE = "https://management.azure.com/.default";
 
 const azureBearerTokenProviders = new Map<string, () => Promise<string>>();
 
@@ -26,6 +27,10 @@ export function getAzureOpenAiBearerTokenProvider(
 
 export function getAzureAiFoundryBearerTokenProvider(): () => Promise<string> {
   return getAzureBearerTokenProvider(AZURE_AI_FOUNDRY_TOKEN_SCOPE);
+}
+
+export function getAzureManagementBearerTokenProvider(): () => Promise<string> {
+  return getAzureBearerTokenProvider(AZURE_MANAGEMENT_TOKEN_SCOPE);
 }
 
 function resolveAzureOpenAiTokenScope(baseUrl?: string): string {

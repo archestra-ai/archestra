@@ -77,6 +77,7 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   provider: "openai",
   apiKey: null,
   baseUrl: null,
+  inferenceBaseUrl: null,
   extraHeaders: [],
   scope: "org",
   teamId: null,
@@ -164,6 +165,7 @@ function AddApiKeyDialog({
         provider: values.provider,
         apiKey: isBedrockSigV4 ? undefined : values.apiKey || undefined,
         baseUrl: values.baseUrl || undefined,
+        inferenceBaseUrl: values.inferenceBaseUrl || undefined,
         scope: values.scope,
         teamId:
           values.scope === "team" && values.teamId ? values.teamId : undefined,
@@ -781,6 +783,22 @@ function KnowledgeSettingsContent() {
                       }
                     />
                   </CardRow>
+                  {(rerankerChatApiKeyId || rerankerModel) && (
+                    <div className="sm:pl-28">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={!hasPermission}
+                        onClick={() => {
+                          setRerankerChatApiKeyId(null);
+                          setRerankerModel(null);
+                        }}
+                      >
+                        Clear reranking configuration
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </WithPermissions>

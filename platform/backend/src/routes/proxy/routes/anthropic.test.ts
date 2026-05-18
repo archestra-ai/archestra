@@ -469,15 +469,14 @@ describe("Anthropic proxy routing", () => {
   beforeEach(async () => {
     mockUpstream = Fastify();
 
-    // Note: Our proxy rewrites /v1/anthropic/v1/models to /v1/v1/models
-    mockUpstream.get("/v1/v1/models", async () => ({
+    mockUpstream.get("/v1/models", async () => ({
       data: [
         { id: "claude-3-5-sonnet-20241022", type: "model" },
         { id: "claude-3-opus-20240229", type: "model" },
       ],
     }));
 
-    mockUpstream.get("/v1/v1/models/:model", async (request) => ({
+    mockUpstream.get("/v1/models/:model", async (request) => ({
       id: (request.params as { model: string }).model,
       type: "model",
     }));
@@ -496,7 +495,7 @@ describe("Anthropic proxy routing", () => {
       await fastify.register(fastifyHttpProxy, {
         upstream: `http://localhost:${upstreamPort}`,
         prefix: API_PREFIX,
-        rewritePrefix: "/v1",
+        rewritePrefix: "",
         preHandler: (request, reply, next) => {
           const urlPath = request.url.split("?")[0];
           if (request.method === "POST" && urlPath.endsWith(MESSAGES_SUFFIX)) {

@@ -10,14 +10,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import {
   useCreateCatalogPreset,
   useUpdateCatalogPreset,
   useUpdateInternalMcpCatalogItem,
 } from "@/lib/mcp/internal-mcp-catalog.query";
+import type { McpPresetEntryWithAssignedCount } from "@/lib/mcp/mcp-preset-entry.query";
+import { usePresetEntityName } from "@/lib/organization.query";
 import { PresetFieldInput } from "./preset-field-input";
 import {
   type CatalogFieldEntry,
@@ -25,15 +25,21 @@ import {
   listCatalogFields,
 } from "./preset-helpers";
 
-const DNS_LABEL = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
-
 type FieldValue = string | number | boolean | string[];
 type Preset = archestraApiTypes.GetCatalogChildrenResponses["200"][number];
 
 interface PresetEditorDialogProps {
   cat: CatalogItem;
-  /** When null, dialog is in "create" mode. When set, edits that preset (or parent's default values when preset.id === cat.id). */
+  /**
+   * The existing per-catalog row to edit. Null while configuring an org entry
+   * for the first time (in which case `entry` must be provided).
+   */
   preset: Preset | null;
+  /**
+   * The org-level entry being configured. Required when `preset` is null
+   * (create mode). Ignored when editing the parent's default row.
+   */
+  entry?: McpPresetEntryWithAssignedCount | null;
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }
@@ -41,11 +47,13 @@ interface PresetEditorDialogProps {
 export function PresetEditorDialog({
   cat,
   preset,
+  entry,
   open,
   onOpenChange,
 }: PresetEditorDialogProps) {
   const isEdit = preset !== null;
   const isEditingDefaultPreset = preset !== null && preset.id === cat.id;
+  const { singular } = usePresetEntityName();
 
   const presetFields = listCatalogFields(cat).filter(
     (f) => f.scope === "preset",
@@ -55,26 +63,16 @@ export function PresetEditorDialog({
   const update = useUpdateCatalogPreset(cat.id);
   const updateParent = useUpdateInternalMcpCatalogItem();
 
-  const [name, setName] = useState("");
   const [fieldValues, setFieldValues] = useState<Record<string, FieldValue>>(
     {},
   );
-  const [nameError, setNameError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    if (preset) {
-      setName(preset.name);
-      setFieldValues({ ...preset.presetFieldValues });
-    } else {
-      setName("");
-      setFieldValues({});
-    }
-    setNameError(null);
+    setFieldValues(preset ? { ...preset.presetFieldValues } : {});
   }, [open, preset]);
 
   async function save() {
-    setNameError(null);
     if (isEdit && preset) {
       if (isEditingDefaultPreset) {
         await updateParent.mutateAsync({
@@ -88,15 +86,9 @@ export function PresetEditorDialog({
         });
       }
     } else {
-      const trimmed = name.trim();
-      if (!DNS_LABEL.test(trimmed)) {
-        setNameError(
-          "Name must be a DNS-1123 label: lowercase alphanumeric and hyphens, starting and ending with alphanumeric.",
-        );
-        return;
-      }
+      if (!entry) return;
       await create.mutateAsync({
-        childName: trimmed,
+        presetEntryId: entry.id,
         presetFieldValues: fieldValues,
       });
     }
@@ -105,6 +97,14 @@ export function PresetEditorDialog({
 
   const isPending =
     create.isPending || update.isPending || updateParent.isPending;
+
+  const title = isEditingDefaultPreset
+    ? `Edit default ${singular}`
+    : isEdit
+      ? `Edit ${singular} — ${preset?.name}`
+      : entry
+        ? `Configure ${entry.name}`
+        : `New ${singular}`;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -132,43 +132,14 @@ export function PresetEditorDialog({
           className="contents"
         >
           <DialogHeader className="border-b px-6 py-4">
-            <DialogTitle>
-              {isEditingDefaultPreset
-                ? "Edit default preset"
-                : isEdit
-                  ? `Edit preset — ${preset?.name}`
-                  : "New preset"}
-            </DialogTitle>
+            <DialogTitle>{title}</DialogTitle>
           </DialogHeader>
 
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
-            {!isEdit && (
-              <div className="space-y-1.5">
-                <Label htmlFor="preset-name">Name</Label>
-                <Input
-                  id="preset-name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="staging"
-                  className="font-mono"
-                  autoComplete="off"
-                />
-                <p className="text-xs text-muted-foreground">
-                  DNS-1123 label, max 63 chars. Immutable after creation.
-                </p>
-                {nameError && (
-                  <p className="text-xs text-destructive" role="alert">
-                    {nameError}
-                  </p>
-                )}
-              </div>
-            )}
-
             {presetFields.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                This catalog has no preset-scoped fields. Mark fields with{" "}
-                <span className="font-mono">promptOnPreset</span> in the
-                Configuration tab first.
+                To vary settings per {singular}, create a {singular}-scoped env
+                variable or header in the Configuration tab first.
               </p>
             ) : (
               <PresetFieldSections
@@ -197,11 +168,7 @@ export function PresetEditorDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={isPending}>
-              {isPending
-                ? "Saving…"
-                : isEdit
-                  ? "Save changes"
-                  : "Create preset"}
+              {isPending ? "Saving…" : isEdit ? "Save changes" : "Save"}
             </Button>
           </DialogFooter>
         </form>

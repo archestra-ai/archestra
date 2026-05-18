@@ -360,3 +360,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @NguyenCong2k
 - @Bilal-Lodhi
 - @alexfedosov
+- @chasdaddy

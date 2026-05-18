@@ -2,6 +2,10 @@ import { desc, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertConversationCompaction } from "@/types/conversation-compaction";
 
+type DbExecutor =
+  | typeof db
+  | Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 class ConversationCompactionModel {
   static async create(data: InsertConversationCompaction) {
     const [record] = await db
@@ -35,8 +39,11 @@ class ConversationCompactionModel {
       .orderBy(schema.conversationCompactionsTable.createdAt);
   }
 
-  static async deleteByConversation(conversationId: string): Promise<void> {
-    await db
+  static async deleteByConversation(
+    conversationId: string,
+    executor: DbExecutor = db,
+  ): Promise<void> {
+    await executor
       .delete(schema.conversationCompactionsTable)
       .where(
         eq(schema.conversationCompactionsTable.conversationId, conversationId),

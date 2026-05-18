@@ -35,6 +35,7 @@ import {
   isApiKeyRequired,
 } from "@/clients/llm-client";
 import config from "@/config";
+import db from "@/database";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
 import { extractAndIngestDocuments } from "@/knowledge-base";
 import logger from "@/logging";
@@ -1772,17 +1773,19 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Message not found or access denied");
       }
 
-      // Update the message and optionally delete subsequent messages atomically
-      // Using a transaction ensures both operations succeed or fail together,
-      // preventing inconsistent state where message is updated but subsequent
-      // messages remain when they should have been deleted
-      await MessageModel.updateTextPartAndDeleteSubsequent(
-        message.id,
-        partIndex,
-        text,
-        deleteSubsequentMessages ?? false,
-      );
-      await invalidateConversationCompactions(message.conversationId);
+      // run the message edit, optional subsequent-message deletion, and
+      // compaction invalidation inside one transaction so a crash can't leave
+      // stale compactions pointing at a now-edited or truncated history
+      await db.transaction(async (tx) => {
+        await MessageModel.updateTextPartAndDeleteSubsequent(
+          message.id,
+          partIndex,
+          text,
+          deleteSubsequentMessages ?? false,
+          tx,
+        );
+        await invalidateConversationCompactions(message.conversationId, tx);
+      });
 
       // Return updated conversation with all messages
       const updatedConversation = await ConversationModel.findById({

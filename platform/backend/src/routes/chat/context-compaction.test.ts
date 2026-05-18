@@ -135,4 +135,64 @@ describe("context compaction helpers", () => {
     expect(prompt).toContain("[file notes.txt text/plain]");
     expect(prompt).toContain("Notes: keep the orchid thunder fact.");
   });
+
+  test("compaction prompt parses data URLs with intermediate media type parameters", async () => {
+    const prompt = await __test.buildCompactionPrompt({
+      previousSummary: null,
+      messages: [
+        {
+          id: "u1",
+          role: "user",
+          parts: [
+            { type: "text", text: "Use this uploaded file later." },
+            {
+              type: "file",
+              filename: "notes.txt",
+              url: "data:text/plain;charset=utf-8;base64,SGVsbG8sIHdvcmxkIQ==",
+            },
+          ],
+        } as ChatMessage,
+      ],
+    });
+
+    expect(prompt).toContain("[file notes.txt text/plain]");
+    expect(prompt).toContain("Hello, world!");
+  });
+
+  describe("data URL parsing", () => {
+    test("decodes base64 payloads with intermediate parameters", () => {
+      const result = __test.decodeDataUrl(
+        "data:text/plain;charset=utf-8;base64,SGVsbG8sIHdvcmxkIQ==",
+      );
+      expect(result?.mediaType).toBe("text/plain");
+      expect(result?.buffer.toString("utf8")).toBe("Hello, world!");
+    });
+
+    test("decodes plain (non-base64) payloads with intermediate parameters", () => {
+      const result = __test.decodeDataUrl(
+        "data:text/plain;charset=utf-8,Hello%2C%20world!",
+      );
+      expect(result?.mediaType).toBe("text/plain");
+      expect(result?.buffer.toString("utf8")).toBe("Hello, world!");
+    });
+
+    test("decodes simple base64 data URLs", () => {
+      const result = __test.decodeDataUrl("data:text/plain;base64,SGVsbG8=");
+      expect(result?.mediaType).toBe("text/plain");
+      expect(result?.buffer.toString("utf8")).toBe("Hello");
+    });
+
+    test("defaults media type to application/octet-stream when omitted", () => {
+      expect(__test.getDataUrlMediaType("data:,Hello")).toBe(
+        "application/octet-stream",
+      );
+      expect(__test.getDataUrlMediaType("data:;base64,SGVsbG8=")).toBe(
+        "application/octet-stream",
+      );
+    });
+
+    test("returns null for non-data URLs", () => {
+      expect(__test.decodeDataUrl("https://example.com/file.txt")).toBeNull();
+    });
+  });
 });

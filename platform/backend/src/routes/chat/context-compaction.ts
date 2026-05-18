@@ -136,8 +136,14 @@ export async function compactMessagesForChat(params: {
 
 export async function invalidateConversationCompactions(
   conversationId: string,
+  executor?: Parameters<
+    typeof ConversationCompactionModel.deleteByConversation
+  >[1],
 ): Promise<void> {
-  await ConversationCompactionModel.deleteByConversation(conversationId);
+  await ConversationCompactionModel.deleteByConversation(
+    conversationId,
+    executor,
+  );
 }
 
 export function __testEstimateChatMessagesTokens(params: {
@@ -152,6 +158,8 @@ export const __test = {
   applyCompactionToMessages,
   buildCompactionPrompt,
   splitMessagesForCompaction,
+  decodeDataUrl,
+  getDataUrlMediaType,
 };
 
 async function shouldAutoCompact(params: {
@@ -514,27 +522,49 @@ function getFilePartMediaType(
 }
 
 function getDataUrlMediaType(url: string): string {
-  return (
-    /^data:([^;,]+)?(?:;base64)?,/s.exec(url)?.[1] ?? "application/octet-stream"
-  );
+  return parseDataUrlMeta(url)?.mediaType ?? "application/octet-stream";
 }
 
 function decodeDataUrl(
   url: string,
 ): { mediaType: string; buffer: Buffer } | null {
-  const match = /^data:([^;,]+)?(;base64)?,(.*)$/s.exec(url);
+  // split meta (everything between `data:` and the first `,`) from payload,
+  // so media types with parameters like `text/plain;charset=utf-8;base64` parse correctly
+  const match = /^data:([^,]*),(.*)$/s.exec(url);
   if (!match) {
     return null;
   }
 
-  const mediaType = match[1] ?? "application/octet-stream";
-  const isBase64 = Boolean(match[2]);
-  const payload = match[3] ?? "";
+  const { mediaType, isBase64 } = parseDataUrlMetaString(match[1] ?? "");
+  const payload = match[2] ?? "";
   const buffer = isBase64
     ? Buffer.from(payload, "base64")
     : Buffer.from(decodeURIComponent(payload), "utf8");
 
   return { mediaType, buffer };
+}
+
+function parseDataUrlMeta(
+  url: string,
+): { mediaType: string; isBase64: boolean } | null {
+  const match = /^data:([^,]*),/s.exec(url);
+  if (!match) {
+    return null;
+  }
+  return parseDataUrlMetaString(match[1] ?? "");
+}
+
+function parseDataUrlMetaString(raw: string): {
+  mediaType: string;
+  isBase64: boolean;
+} {
+  let meta = raw;
+  const isBase64 = meta.endsWith(";base64");
+  if (isBase64) {
+    meta = meta.slice(0, -";base64".length);
+  }
+  const mediaType = meta.split(";", 1)[0] || "application/octet-stream";
+  return { mediaType, isBase64 };
 }
 
 function isTextLikeMediaType(mediaType: string): boolean {

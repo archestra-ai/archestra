@@ -1,4 +1,8 @@
-import { type ChatErrorResponse, ChatErrorResponseSchema } from "@shared";
+import {
+  ChatErrorCode,
+  type ChatErrorResponse,
+  ChatErrorResponseSchema,
+} from "@shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
@@ -44,17 +48,31 @@ function normalizeChatErrorResponse(
     return parsed.data;
   }
 
-  const originalError = error.originalError;
-  if (!originalError || originalError.message === undefined) {
-    return error;
+  // first try the targeted fix for the known producer that stored a non-string
+  // originalError.message; if the result still doesn't match the schema, fall
+  // through to a minimal valid response so the API never serializes garbage
+  const originalError = error?.originalError;
+  if (originalError && originalError.message !== undefined) {
+    const coerced: ChatErrorResponse = {
+      ...error,
+      originalError: {
+        ...originalError,
+        message: stringifyUnknown(originalError.message),
+      },
+    };
+    const reparsed = ChatErrorResponseSchema.safeParse(coerced);
+    if (reparsed.success) {
+      return reparsed.data;
+    }
   }
 
   return {
-    ...error,
-    originalError: {
-      ...originalError,
-      message: stringifyUnknown(originalError.message),
-    },
+    code: ChatErrorCode.Unknown,
+    message:
+      typeof error?.message === "string"
+        ? error.message
+        : stringifyUnknown(error),
+    isRetryable: false,
   };
 }
 
@@ -71,3 +89,5 @@ function stringifyUnknown(value: unknown): string {
 }
 
 export default ConversationChatErrorModel;
+
+export const __test = { normalizeChatErrorResponse };

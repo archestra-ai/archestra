@@ -368,3 +368,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @fzimmermann89
 - @timm-oh
 - @billy-syrett
+- @attilaolah

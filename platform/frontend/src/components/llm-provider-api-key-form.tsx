@@ -51,6 +51,13 @@ export type LlmProviderApiKeyFormValues = {
   name: string;
   provider: CreateLlmProviderApiKeyBody["provider"];
   apiKey: string | null;
+  anthropicAuthMethod: "api-key" | "workload-identity-federation";
+  anthropicFederationRuleId: string | null;
+  anthropicOrganizationId: string | null;
+  anthropicServiceAccountId: string | null;
+  anthropicWorkspaceId: string | null;
+  anthropicIdentityToken: string | null;
+  anthropicIdentityTokenFile: string | null;
   baseUrl: string | null;
   inferenceBaseUrl: string | null;
   /** Edited as an array of rows; serialized to Record<string, string> on submit. */
@@ -312,8 +319,12 @@ export function LlmProviderApiKeyForm({
   const scope = form.watch("scope");
   const teamId = form.watch("teamId");
   const bedrockAuthMethod = form.watch("bedrockAuthMethod");
+  const anthropicAuthMethod = form.watch("anthropicAuthMethod");
   const isBedrockSigV4 =
     provider === "bedrock" && bedrockAuthMethod === "sigv4";
+  const isAnthropicWorkloadIdentity =
+    provider === "anthropic" &&
+    anthropicAuthMethod === "workload-identity-federation";
 
   const extraHeadersFieldArray = useFieldArray({
     control: form.control,
@@ -435,6 +446,30 @@ export function LlmProviderApiKeyForm({
     form.setValue("vaultSecretPath", null);
     form.setValue("vaultSecretKey", null);
   }, [form, scope]);
+
+  useEffect(() => {
+    if (provider !== "anthropic") {
+      form.setValue("anthropicAuthMethod", "api-key");
+      form.setValue("anthropicFederationRuleId", null);
+      form.setValue("anthropicOrganizationId", null);
+      form.setValue("anthropicServiceAccountId", null);
+      form.setValue("anthropicWorkspaceId", null);
+      form.setValue("anthropicIdentityToken", null);
+      form.setValue("anthropicIdentityTokenFile", null);
+      return;
+    }
+
+    if (anthropicAuthMethod !== "workload-identity-federation") {
+      form.setValue("anthropicFederationRuleId", null);
+      form.setValue("anthropicOrganizationId", null);
+      form.setValue("anthropicServiceAccountId", null);
+      form.setValue("anthropicWorkspaceId", null);
+      form.setValue("anthropicIdentityToken", null);
+      form.setValue("anthropicIdentityTokenFile", null);
+    } else {
+      form.setValue("apiKey", null);
+    }
+  }, [anthropicAuthMethod, form, provider]);
 
   const vaultSecretSelector =
     scope === "team" ? (
@@ -561,6 +596,30 @@ export function LlmProviderApiKeyForm({
               </Tabs>
             )}
 
+            {provider === "anthropic" && (
+              <Tabs
+                value={anthropicAuthMethod}
+                onValueChange={(value) =>
+                  form.setValue(
+                    "anthropicAuthMethod",
+                    value as "api-key" | "workload-identity-federation",
+                  )
+                }
+              >
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="api-key" disabled={isPending}>
+                    API Key
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="workload-identity-federation"
+                    disabled={isPending}
+                  >
+                    Workload Identity Federation (Keyless)
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            )}
+
             {provider === "bedrock" && bedrockAuthMethod === "iam" && (
               <div className="space-y-3 text-sm">
                 <p className="text-muted-foreground">
@@ -612,59 +671,147 @@ export function LlmProviderApiKeyForm({
               </div>
             )}
 
-            {!isBedrockSigV4 && bedrockAuthMethod !== "iam" && (
-              <>
-                <Label htmlFor="llm-provider-api-key-value">
-                  API Key{" "}
-                  {isProviderApiKeyOptional({
-                    provider,
-                    azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
-                  }) ? (
+            {!isBedrockSigV4 &&
+              bedrockAuthMethod !== "iam" &&
+              !isAnthropicWorkloadIdentity && (
+                <>
+                  <Label htmlFor="llm-provider-api-key-value">
+                    API Key{" "}
+                    {isProviderApiKeyOptional({
+                      provider,
+                      azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
+                    }) ? (
+                      <span className="font-normal text-muted-foreground">
+                        (optional)
+                      </span>
+                    ) : (
+                      isEditMode && (
+                        <span className="font-normal text-muted-foreground">
+                          (leave blank to keep current)
+                        </span>
+                      )
+                    )}
+                  </Label>
+                  {providerConfig.description && (
+                    <p className="text-xs text-muted-foreground">
+                      {providerConfig.description}
+                    </p>
+                  )}
+                  <div className="relative">
+                    <Input
+                      id="llm-provider-api-key-value"
+                      type="password"
+                      placeholder={providerConfig.placeholder}
+                      disabled={isPending}
+                      className={
+                        showConfiguredStyling ? "border-green-500 pr-10" : ""
+                      }
+                      {...form.register("apiKey")}
+                    />
+                    {showConfiguredStyling && (
+                      <CheckCircle2 className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-green-500" />
+                    )}
+                  </div>
+                  {showConsoleLink && (
+                    <p className="text-xs text-muted-foreground">
+                      Get your API key from{" "}
+                      <Link
+                        href={providerConfig.consoleUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline hover:text-foreground"
+                      >
+                        {providerConfig.consoleName}
+                      </Link>
+                    </p>
+                  )}
+                </>
+              )}
+
+            {isAnthropicWorkloadIdentity && (
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor="llm-provider-anthropic-federation-rule-id">
+                    Federation Rule ID
+                  </Label>
+                  <Input
+                    id="llm-provider-anthropic-federation-rule-id"
+                    placeholder="fdrl_..."
+                    disabled={isPending}
+                    {...form.register("anthropicFederationRuleId")}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="llm-provider-anthropic-organization-id">
+                    Organization ID
+                  </Label>
+                  <Input
+                    id="llm-provider-anthropic-organization-id"
+                    placeholder="org_..."
+                    disabled={isPending}
+                    {...form.register("anthropicOrganizationId")}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="llm-provider-anthropic-service-account-id">
+                    Service Account ID
+                  </Label>
+                  <Input
+                    id="llm-provider-anthropic-service-account-id"
+                    placeholder="svcacct_..."
+                    disabled={isPending}
+                    {...form.register("anthropicServiceAccountId")}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="llm-provider-anthropic-workspace-id">
+                    Workspace ID{" "}
                     <span className="font-normal text-muted-foreground">
                       (optional)
                     </span>
-                  ) : (
-                    isEditMode && (
-                      <span className="font-normal text-muted-foreground">
-                        (leave blank to keep current)
-                      </span>
-                    )
-                  )}
-                </Label>
-                {providerConfig.description && (
-                  <p className="text-xs text-muted-foreground">
-                    {providerConfig.description}
-                  </p>
-                )}
-                <div className="relative">
+                  </Label>
                   <Input
-                    id="llm-provider-api-key-value"
-                    type="password"
-                    placeholder={providerConfig.placeholder}
+                    id="llm-provider-anthropic-workspace-id"
+                    placeholder="ws_..."
                     disabled={isPending}
-                    className={
-                      showConfiguredStyling ? "border-green-500 pr-10" : ""
-                    }
-                    {...form.register("apiKey")}
+                    {...form.register("anthropicWorkspaceId")}
                   />
-                  {showConfiguredStyling && (
-                    <CheckCircle2 className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-green-500" />
-                  )}
                 </div>
-                {showConsoleLink && (
+                <div className="space-y-2">
+                  <Label htmlFor="llm-provider-anthropic-identity-token-file">
+                    Identity Token File{" "}
+                    <span className="font-normal text-muted-foreground">
+                      (provide this or token)
+                    </span>
+                  </Label>
+                  <Input
+                    id="llm-provider-anthropic-identity-token-file"
+                    placeholder="/var/run/secrets/.../token"
+                    disabled={isPending}
+                    {...form.register("anthropicIdentityTokenFile")}
+                  />
                   <p className="text-xs text-muted-foreground">
-                    Get your API key from{" "}
-                    <Link
-                      href={providerConfig.consoleUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline hover:text-foreground"
-                    >
-                      {providerConfig.consoleName}
-                    </Link>
+                    Path on the backend server or container. Prefer this option
+                    for production.
                   </p>
-                )}
-              </>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="llm-provider-anthropic-identity-token">
+                    Identity Token{" "}
+                    <span className="font-normal text-muted-foreground">
+                      (provide this or file)
+                    </span>
+                  </Label>
+                  <Input
+                    id="llm-provider-anthropic-identity-token"
+                    type="password"
+                    placeholder="JWT assertion token"
+                    autoComplete="off"
+                    disabled={isPending}
+                    {...form.register("anthropicIdentityToken")}
+                  />
+                </div>
+              </div>
             )}
 
             {isBedrockSigV4 && (

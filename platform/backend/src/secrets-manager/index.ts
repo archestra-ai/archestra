@@ -1,4 +1,8 @@
 import { SecretsManagerType, SupportedProviders } from "@shared";
+import {
+  type AnthropicWorkloadIdentityStoredConfig,
+  encodeAnthropicWorkloadIdentityMarker,
+} from "@/clients/anthropic-workload-identity";
 import { encodeBedrockSigV4Marker } from "@/clients/bedrock-credentials";
 import config from "@/config";
 import logger from "@/logging";
@@ -219,6 +223,10 @@ export function assertByosEnabled(): ReadonlyVaultSecretManager {
  * Retrieve the API key value for an LLM provider from the secrets store.
  *
  * Current format: `{ apiKey: "sk-..." }`
+ * Anthropic Workload Identity Federation format:
+ *   `{ anthropicWorkloadIdentity: { federationRuleId, organizationId, serviceAccountId, workspaceId?, identityToken?, identityTokenFile? } }` —
+ *   encoded as a marker string so it flows through the existing single-string
+ *   apiKey pipeline.
  * Bedrock SigV4 format: `{ accessKeyId, secretAccessKey, sessionToken? }` —
  *   encoded as a marker string so it flows through the existing single-string
  *   apiKey pipeline. Only Bedrock terminal call sites decode it.
@@ -235,6 +243,36 @@ export async function getSecretValueForLlmProviderApiKey(
 
   // Current format
   if (typeof data.apiKey === "string") return data.apiKey;
+
+  const anthropicWorkloadIdentity = data.anthropicWorkloadIdentity as
+    | Partial<AnthropicWorkloadIdentityStoredConfig>
+    | undefined;
+  if (
+    anthropicWorkloadIdentity &&
+    typeof anthropicWorkloadIdentity.federationRuleId === "string" &&
+    typeof anthropicWorkloadIdentity.organizationId === "string" &&
+    typeof anthropicWorkloadIdentity.serviceAccountId === "string" &&
+    (typeof anthropicWorkloadIdentity.identityToken === "string" ||
+      typeof anthropicWorkloadIdentity.identityTokenFile === "string")
+  ) {
+    return encodeAnthropicWorkloadIdentityMarker({
+      federationRuleId: anthropicWorkloadIdentity.federationRuleId,
+      organizationId: anthropicWorkloadIdentity.organizationId,
+      serviceAccountId: anthropicWorkloadIdentity.serviceAccountId,
+      workspaceId:
+        typeof anthropicWorkloadIdentity.workspaceId === "string"
+          ? anthropicWorkloadIdentity.workspaceId
+          : undefined,
+      identityToken:
+        typeof anthropicWorkloadIdentity.identityToken === "string"
+          ? anthropicWorkloadIdentity.identityToken
+          : undefined,
+      identityTokenFile:
+        typeof anthropicWorkloadIdentity.identityTokenFile === "string"
+          ? anthropicWorkloadIdentity.identityTokenFile
+          : undefined,
+    });
+  }
 
   // Bedrock SigV4 (no apiKey, but AWS access key pair)
   if (

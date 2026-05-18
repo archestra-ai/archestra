@@ -1,6 +1,6 @@
 "use client";
 
-import { isProviderApiKeyOptional } from "@shared";
+import { type archestraApiTypes, isProviderApiKeyOptional } from "@shared";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
@@ -81,11 +81,35 @@ export function CreateLlmProviderApiKeyDialog({
   const handleCreate = form.handleSubmit(async (values) => {
     const isBedrockSigV4 =
       values.provider === "bedrock" && values.bedrockAuthMethod === "sigv4";
+    const isAnthropicWorkloadIdentity =
+      values.provider === "anthropic" &&
+      values.anthropicAuthMethod === "workload-identity-federation";
     try {
-      await createMutation.mutateAsync({
+      const payload: archestraApiTypes.CreateLlmProviderApiKeyData["body"] = {
         name: values.name?.trim() || PROVIDER_CONFIG[values.provider].name,
         provider: values.provider,
-        apiKey: isBedrockSigV4 ? undefined : values.apiKey || undefined,
+        apiKey:
+          isBedrockSigV4 || isAnthropicWorkloadIdentity
+            ? undefined
+            : values.apiKey || undefined,
+        anthropicFederationRuleId: isAnthropicWorkloadIdentity
+          ? values.anthropicFederationRuleId || undefined
+          : undefined,
+        anthropicOrganizationId: isAnthropicWorkloadIdentity
+          ? values.anthropicOrganizationId || undefined
+          : undefined,
+        anthropicServiceAccountId: isAnthropicWorkloadIdentity
+          ? values.anthropicServiceAccountId || undefined
+          : undefined,
+        anthropicWorkspaceId: isAnthropicWorkloadIdentity
+          ? values.anthropicWorkspaceId || undefined
+          : undefined,
+        anthropicIdentityToken: isAnthropicWorkloadIdentity
+          ? values.anthropicIdentityToken || undefined
+          : undefined,
+        anthropicIdentityTokenFile: isAnthropicWorkloadIdentity
+          ? values.anthropicIdentityTokenFile || undefined
+          : undefined,
         baseUrl: values.baseUrl || undefined,
         inferenceBaseUrl: values.inferenceBaseUrl || undefined,
         extraHeaders: serializeExtraHeaders(values.extraHeaders) ?? undefined,
@@ -110,7 +134,8 @@ export function CreateLlmProviderApiKeyDialog({
         awsSessionToken: isBedrockSigV4
           ? values.awsSessionToken || undefined
           : undefined,
-      });
+      };
+      await createMutation.mutateAsync(payload);
       onOpenChange(false);
       onSuccess?.();
     } catch {
@@ -171,6 +196,13 @@ function getDefaultFormValues(params: {
     name: "",
     provider: "anthropic",
     apiKey: null,
+    anthropicAuthMethod: "api-key",
+    anthropicFederationRuleId: null,
+    anthropicOrganizationId: null,
+    anthropicServiceAccountId: null,
+    anthropicWorkspaceId: null,
+    anthropicIdentityToken: null,
+    anthropicIdentityTokenFile: null,
     baseUrl: null,
     inferenceBaseUrl: null,
     extraHeaders: [],
@@ -198,6 +230,19 @@ function getIsCreateFormValid(params: {
     return Boolean(
       values.awsAccessKeyId &&
         values.awsSecretAccessKey &&
+        (values.scope !== "team" || values.teamId),
+    );
+  }
+
+  if (
+    values.provider === "anthropic" &&
+    values.anthropicAuthMethod === "workload-identity-federation"
+  ) {
+    return Boolean(
+      values.anthropicFederationRuleId &&
+        values.anthropicOrganizationId &&
+        values.anthropicServiceAccountId &&
+        (values.anthropicIdentityToken || values.anthropicIdentityTokenFile) &&
         (values.scope !== "team" || values.teamId),
     );
   }

@@ -3,6 +3,12 @@ import { ArchestraInternalErrorCode } from "@shared";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import {
+  createAnthropicWorkloadIdentityFetch,
+  hasAnthropicSdkStaticCredentialsConfigured,
+  isAnthropicWorkloadIdentityConfigured,
+  isAnthropicWorkloadIdentityMarker,
+} from "@/clients/anthropic-workload-identity";
+import {
   getAzureAiFoundryBearerTokenProvider,
   isAnthropicAzureFoundryEntraIdEnabled,
 } from "@/clients/azure-openai-credentials";
@@ -1158,6 +1164,24 @@ export const anthropicAdapterFactory: LLMProvider<
     const token = isAuthToken && apiKey ? apiKey.slice(7) : undefined;
     const regularApiKey = isAuthToken ? undefined : apiKey;
 
+    if (isAnthropicWorkloadIdentityMarker(apiKey)) {
+      return new AnthropicProvider({
+        apiKey: null,
+        authToken: null,
+        baseURL: options.baseUrl,
+        fetch: createAnthropicWorkloadIdentityFetch(
+          customFetch,
+          options.baseUrl,
+          apiKey,
+        ),
+        defaultHeaders: {
+          ...options.defaultHeaders,
+          // The fetch wrapper replaces this sentinel with a fresh WIF access token on every request.
+          Authorization: "Bearer <workload-identity-managed>",
+        },
+      });
+    }
+
     if (!apiKey && isAnthropicAzureFoundryEntraIdEnabled()) {
       return new AnthropicProvider({
         apiKey: null,
@@ -1168,6 +1192,27 @@ export const anthropicAdapterFactory: LLMProvider<
           ...options.defaultHeaders,
           // The fetch wrapper replaces this sentinel with a fresh Entra ID token on every request.
           Authorization: "Bearer <entra-id-managed>",
+        },
+      });
+    }
+
+    if (
+      !apiKey &&
+      !hasAnthropicSdkStaticCredentialsConfigured() &&
+      isAnthropicWorkloadIdentityConfigured()
+    ) {
+      return new AnthropicProvider({
+        apiKey: null,
+        authToken: null,
+        baseURL: options.baseUrl,
+        fetch: createAnthropicWorkloadIdentityFetch(
+          customFetch,
+          options.baseUrl,
+        ),
+        defaultHeaders: {
+          ...options.defaultHeaders,
+          // The fetch wrapper replaces this sentinel with a fresh WIF access token on every request.
+          Authorization: "Bearer <workload-identity-managed>",
         },
       });
     }

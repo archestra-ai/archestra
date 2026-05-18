@@ -9,6 +9,12 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { capitalize } from "lodash-es";
 import { z } from "zod";
 import { hasPermission, userHasPermission } from "@/auth";
+import {
+  ANTHROPIC_WORKLOAD_IDENTITY_MARKER,
+  encodeAnthropicWorkloadIdentityMarker,
+  hasAnthropicWorkloadIdentityTokenSourceConfigured,
+  isAnthropicWorkloadIdentityConfigured,
+} from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import {
   type BedrockSigV4Credentials,
@@ -99,6 +105,84 @@ function resolveRuntimeTestBaseUrl(params: {
   const effectiveBaseUrl =
     body.baseUrl !== undefined ? body.baseUrl : apiKey.baseUrl;
   return effectiveInferenceBaseUrl ?? effectiveBaseUrl;
+}
+
+function hasAnthropicWorkloadIdentityFields(data: {
+  provider: SupportedProvider;
+  anthropicFederationRuleId?: string;
+  anthropicOrganizationId?: string;
+  anthropicServiceAccountId?: string;
+  anthropicWorkspaceId?: string;
+  anthropicIdentityToken?: string;
+  anthropicIdentityTokenFile?: string;
+}): boolean {
+  return (
+    data.provider === "anthropic" &&
+    Boolean(
+      data.anthropicFederationRuleId ||
+        data.anthropicOrganizationId ||
+        data.anthropicServiceAccountId ||
+        data.anthropicWorkspaceId ||
+        data.anthropicIdentityToken ||
+        data.anthropicIdentityTokenFile,
+    )
+  );
+}
+
+function isAnthropicWorkloadIdentityRequest(data: {
+  provider: SupportedProvider;
+  anthropicFederationRuleId?: string;
+  anthropicOrganizationId?: string;
+  anthropicServiceAccountId?: string;
+  anthropicIdentityToken?: string;
+  anthropicIdentityTokenFile?: string;
+}): boolean {
+  return (
+    data.provider === "anthropic" &&
+    Boolean(
+      data.anthropicFederationRuleId &&
+        data.anthropicOrganizationId &&
+        data.anthropicServiceAccountId &&
+        (data.anthropicIdentityToken ||
+          data.anthropicIdentityTokenFile ||
+          hasAnthropicWorkloadIdentityTokenSourceConfigured()),
+    )
+  );
+}
+
+function isRuntimeKeylessProvider(params: {
+  provider: SupportedProvider;
+}): boolean {
+  return (
+    isProviderApiKeyOptional({
+      provider: params.provider,
+      azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+    }) ||
+    (params.provider === "anthropic" && isAnthropicWorkloadIdentityConfigured())
+  );
+}
+
+function isAnthropicWorkloadIdentityAvailable(
+  provider: SupportedProvider,
+): boolean {
+  return provider === "anthropic" && isAnthropicWorkloadIdentityConfigured();
+}
+
+function hasAnthropicWorkloadIdentityTokenSource(data: {
+  anthropicIdentityToken?: string;
+  anthropicIdentityTokenFile?: string;
+}): boolean {
+  return Boolean(
+    data.anthropicIdentityToken ||
+      data.anthropicIdentityTokenFile ||
+      hasAnthropicWorkloadIdentityTokenSourceConfigured(),
+  );
+}
+
+function getMissingCredentialsMessage(provider: SupportedProvider): string {
+  return provider === "anthropic"
+    ? "Either apiKey, both vaultSecretPath and vaultSecretKey, or Anthropic Workload Identity Federation must be provided"
+    : "Either apiKey, both vaultSecretPath and vaultSecretKey, or AWS SigV4 credentials (Bedrock only) must be provided";
 }
 
 const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -220,6 +304,12 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             name: z.string().min(1, "Name is required"),
             provider: SupportedProvidersSchema,
             apiKey: z.string().min(1).optional(),
+            anthropicFederationRuleId: z.string().min(1).optional(),
+            anthropicOrganizationId: z.string().min(1).optional(),
+            anthropicServiceAccountId: z.string().min(1).optional(),
+            anthropicWorkspaceId: z.string().min(1).optional(),
+            anthropicIdentityToken: z.string().min(1).optional(),
+            anthropicIdentityTokenFile: z.string().min(1).optional(),
             baseUrl: z.string().url().nullable().optional(),
             inferenceBaseUrl: z.string().url().nullable().optional(),
             extraHeaders: z
@@ -238,25 +328,82 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             /** Bedrock-only: optional AWS session token for STS/temporary creds */
             awsSessionToken: z.string().min(1).optional(),
           })
-          .refine(
-            (data) => {
-              const hasSigV4 = data.awsAccessKeyId && data.awsSecretAccessKey;
-              if (hasSigV4) return data.provider === "bedrock";
-              if (isByosEnabled()) {
-                return data.vaultSecretPath && data.vaultSecretKey;
+          .superRefine((data, ctx) => {
+            const hasSigV4 = Boolean(
+              data.awsAccessKeyId && data.awsSecretAccessKey,
+            );
+            const hasAnthropicWifFields =
+              hasAnthropicWorkloadIdentityFields(data);
+            const anthropicWorkloadIdentityRequested =
+              isAnthropicWorkloadIdentityRequest(data);
+            const anthropicWorkloadIdentityAvailable =
+              isAnthropicWorkloadIdentityAvailable(data.provider);
+
+            if (hasAnthropicWifFields && !anthropicWorkloadIdentityRequested) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message:
+                  "Anthropic Workload Identity Federation does not allow partial configuration. If provided, anthropicFederationRuleId, anthropicOrganizationId, anthropicServiceAccountId, and either anthropicIdentityTokenFile or anthropicIdentityToken must all be set; anthropicWorkspaceId is optional. The identity token source may also be configured with backend env vars ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE or ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN.",
+              });
+              return;
+            }
+
+            if (
+              anthropicWorkloadIdentityRequested &&
+              !anthropicWorkloadIdentityAvailable &&
+              !hasAnthropicWorkloadIdentityTokenSource(data)
+            ) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message:
+                  "Anthropic Workload Identity Federation requires anthropicIdentityTokenFile or anthropicIdentityToken, or backend env var ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE or ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN",
+              });
+              return;
+            }
+
+            if (hasSigV4) {
+              if (data.provider !== "bedrock") {
+                ctx.addIssue({
+                  code: z.ZodIssueCode.custom,
+                  message:
+                    "AWS SigV4 credentials are only supported for the Bedrock provider",
+                });
               }
-              return (
+              return;
+            }
+
+            if (anthropicWorkloadIdentityRequested) {
+              return;
+            }
+
+            if (anthropicWorkloadIdentityAvailable) {
+              return;
+            }
+
+            if (isByosEnabled()) {
+              if (!(data.vaultSecretPath && data.vaultSecretKey)) {
+                ctx.addIssue({
+                  code: z.ZodIssueCode.custom,
+                  message: getMissingCredentialsMessage(data.provider),
+                });
+              }
+              return;
+            }
+
+            if (
+              !(
                 isProviderApiKeyOptional({
                   provider: data.provider,
                   azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
                 }) || data.apiKey
-              );
-            },
-            {
-              message:
-                "Either apiKey, both vaultSecretPath and vaultSecretKey, or AWS SigV4 credentials (Bedrock only) must be provided",
-            },
-          ),
+              )
+            ) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: getMissingCredentialsMessage(data.provider),
+              });
+            }
+          }),
         response: constructResponseSchema(SelectLlmProviderApiKeySchema),
       },
     },
@@ -276,6 +423,16 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let secret: SelectSecret | null = null;
       let actualApiKeyValue: string | null = null;
       const runtimeTestBaseUrl = body.inferenceBaseUrl ?? body.baseUrl;
+      const anthropicWorkloadIdentityRequested =
+        isAnthropicWorkloadIdentityRequest(body);
+      const anthropicWorkloadIdentityAvailable =
+        isAnthropicWorkloadIdentityAvailable(body.provider);
+      const useAnthropicWorkloadIdentity =
+        anthropicWorkloadIdentityRequested ||
+        (anthropicWorkloadIdentityAvailable &&
+          !body.apiKey &&
+          !body.awsAccessKeyId &&
+          !body.awsSecretAccessKey);
 
       // Bedrock SigV4: store credentials as JSON in the secret payload, then
       // test using the marker-encoded form.
@@ -310,6 +467,65 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             userId: user.id,
           }),
         );
+      } else if (useAnthropicWorkloadIdentity) {
+        const anthropicWorkloadIdentityConfig =
+          anthropicWorkloadIdentityRequested &&
+          body.anthropicFederationRuleId &&
+          body.anthropicOrganizationId &&
+          body.anthropicServiceAccountId
+            ? {
+                federationRuleId: body.anthropicFederationRuleId,
+                organizationId: body.anthropicOrganizationId,
+                serviceAccountId: body.anthropicServiceAccountId,
+                workspaceId: body.anthropicWorkspaceId,
+                identityToken: body.anthropicIdentityToken,
+                identityTokenFile: body.anthropicIdentityTokenFile,
+              }
+            : null;
+        actualApiKeyValue = anthropicWorkloadIdentityConfig
+          ? encodeAnthropicWorkloadIdentityMarker(
+              anthropicWorkloadIdentityConfig,
+            )
+          : ANTHROPIC_WORKLOAD_IDENTITY_MARKER;
+        await testApiKeyOrThrow(
+          body.provider,
+          actualApiKeyValue,
+          runtimeTestBaseUrl,
+          body.extraHeaders,
+        );
+        if (anthropicWorkloadIdentityConfig) {
+          secret = await secretManager().createSecret(
+            {
+              anthropicWorkloadIdentity: {
+                federationRuleId:
+                  anthropicWorkloadIdentityConfig.federationRuleId,
+                organizationId: anthropicWorkloadIdentityConfig.organizationId,
+                serviceAccountId:
+                  anthropicWorkloadIdentityConfig.serviceAccountId,
+                ...(anthropicWorkloadIdentityConfig.workspaceId
+                  ? { workspaceId: anthropicWorkloadIdentityConfig.workspaceId }
+                  : {}),
+                ...(anthropicWorkloadIdentityConfig.identityToken
+                  ? {
+                      identityToken:
+                        anthropicWorkloadIdentityConfig.identityToken,
+                    }
+                  : {}),
+                ...(anthropicWorkloadIdentityConfig.identityTokenFile
+                  ? {
+                      identityTokenFile:
+                        anthropicWorkloadIdentityConfig.identityTokenFile,
+                    }
+                  : {}),
+              },
+            },
+            getChatApiKeySecretName({
+              scope: body.scope,
+              teamId: body.teamId ?? null,
+              userId: user.id,
+            }),
+          );
+        }
       } else if (isByosEnabled()) {
         if (!body.vaultSecretPath || !body.vaultSecretKey) {
           throw new ApiError(400, "Vault secret path and key are required");
@@ -384,6 +600,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (
         !secret &&
+        !useAnthropicWorkloadIdentity &&
         !isProviderApiKeyOptional({
           provider: body.provider,
           azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
@@ -415,6 +632,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // For optional-key providers (Ollama, vLLM), sync even without an API key value.
       const canSync =
         actualApiKeyValue ||
+        useAnthropicWorkloadIdentity ||
         isProviderApiKeyOptional({
           provider: body.provider,
           azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
@@ -724,9 +942,18 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             testExtraHeaders,
           );
         } else if (
-          !isProviderApiKeyOptional({
+          apiKeyFromDB.provider === "anthropic" &&
+          isAnthropicWorkloadIdentityConfigured()
+        ) {
+          await testApiKeyOrThrow(
+            apiKeyFromDB.provider,
+            ANTHROPIC_WORKLOAD_IDENTITY_MARKER,
+            testBaseUrl,
+            testExtraHeaders,
+          );
+        } else if (
+          !isRuntimeKeylessProvider({
             provider: apiKeyFromDB.provider,
-            azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
           })
         ) {
           throw new ApiError(

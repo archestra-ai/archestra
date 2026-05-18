@@ -124,4 +124,41 @@ describe("CreateLlmProviderApiKeyDialog", () => {
       expect.objectContaining({ scope: "org" }),
     );
   });
+
+  it("submits Anthropic workload identity fields when keyless auth is selected", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <CreateLlmProviderApiKeyDialog
+        open
+        onOpenChange={vi.fn()}
+        title="Add API Key"
+        description="Shared dialog"
+        defaultValues={{
+          provider: "anthropic",
+          anthropicAuthMethod: "workload-identity-federation",
+          anthropicFederationRuleId: "fdrl_test",
+          anthropicOrganizationId: "org_test",
+          anthropicServiceAccountId: "svcacct_test",
+          anthropicWorkspaceId: "ws_test",
+          anthropicIdentityToken: "jwt-test",
+        }}
+      />,
+    );
+
+    await user.type(screen.getByLabelText("Name"), "Anthropic WIF");
+    await user.click(screen.getByRole("button", { name: /test & create/i }));
+
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "anthropic",
+        apiKey: undefined,
+        anthropicFederationRuleId: "fdrl_test",
+        anthropicOrganizationId: "org_test",
+        anthropicServiceAccountId: "svcacct_test",
+        anthropicWorkspaceId: "ws_test",
+        anthropicIdentityToken: "jwt-test",
+      }),
+    );
+  });
 });

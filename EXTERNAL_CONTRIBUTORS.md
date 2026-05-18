@@ -372,3 +372,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @jeremyjh
 - @Maxi130
 - @EloquentZebra
+- @elliotf

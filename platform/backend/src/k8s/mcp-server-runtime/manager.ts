@@ -580,6 +580,75 @@ export class McpServerRuntimeManager {
   }
 
   /**
+   * Reinstall the shared K8s Deployment for a multi-tenant local catalog.
+   *
+   * Per-install `restartServer` is a no-op when siblings exist (the sibling
+   * guard in `stopServer` preserves the shared pod). This method is the
+   * catalog-level equivalent: it explicitly tears down and recreates the
+   * shared Deployment so catalog-scope spec edits (image, command, args,
+   * transport) actually roll out. Uses the same delete + create primitive
+   * single-tenant Reinstall uses; the sibling guard is intentionally
+   * bypassed because this is a catalog-level action, not a per-tenant one.
+   *
+   * Tool re-sync is the caller's responsibility (the endpoint runs it for
+   * every install attached to the catalog after the pod is Ready).
+   */
+  async reinstallSharedDeployment(catalogId: string): Promise<void> {
+    logger.info(`Reinstalling shared deployment for catalog: ${catalogId}`);
+
+    const installs = await McpServerModel.findByCatalogId(catalogId);
+    if (installs.length === 0) {
+      logger.info(
+        { catalogId },
+        "No installs attached to catalog; nothing to reinstall",
+      );
+      return;
+    }
+
+    // Pick any install as the representative — they all alias the same
+    // shared Deployment.
+    const representative = installs[0];
+
+    // Stale HTTP MCP sessions for ALL installs become invalid once the
+    // pod is recreated.
+    for (const install of installs) {
+      await McpHttpSessionModel.deleteByMcpServerId(install.id);
+    }
+
+    const k8sDeployment = await this.getOrLoadDeployment(representative.id);
+    if (k8sDeployment) {
+      // Unconditional teardown — explicitly bypasses the
+      // `isSharedMultitenantDeployment` guard that `stopServer` applies.
+      // That guard exists for per-tenant uninstalls; catalog-level
+      // reinstall is authorized to remove the shared pod.
+      await k8sDeployment.stopDeployment();
+      await k8sDeployment.deleteK8sService();
+      await k8sDeployment.deleteK8sSecret();
+      await k8sDeployment.deleteDockerRegistrySecrets();
+    }
+
+    // Clear every sibling's in-memory entry — the K8s objects are gone.
+    for (const install of installs) {
+      this.mcpServerIdToDeploymentMap.delete(install.id);
+    }
+
+    // Match single-tenant restart cadence: brief pause before recreate.
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    await this.startServer(representative);
+
+    const newDeployment = await this.getOrLoadDeployment(representative.id);
+    if (newDeployment) {
+      await newDeployment.waitForDeploymentReady(60, 2000);
+    }
+
+    logger.info(
+      { catalogId, representativeId: representative.id },
+      "Shared deployment reinstalled successfully",
+    );
+  }
+
+  /**
    * Restart a single MCP server deployment
    */
   async restartServer(mcpServerId: string): Promise<void> {

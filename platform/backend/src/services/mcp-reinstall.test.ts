@@ -418,6 +418,63 @@ describe("mcp-reinstall", () => {
         expect(result).toBe(true);
       });
 
+      test("returns false when docker image changes on a multi-tenant catalog (handled via catalogReinstallRequired)", () => {
+        // Multi-tenant local catalogs route execution-config drift through
+        // the catalog-level flag, not the per-install reinstall_required
+        // flag — so this branch must NOT fire for them.
+        const oldConfig = {
+          ...createLocalCatalog([]),
+          multitenant: true,
+          localConfig: {
+            command: "node",
+            arguments: ["server.js"],
+            dockerImage: "registry.example.com/mcp:1",
+            transportType: "stdio",
+            environment: [],
+          },
+        } as InternalMcpCatalog;
+        const newConfig = {
+          ...createLocalCatalog([]),
+          multitenant: true,
+          localConfig: {
+            command: "node",
+            arguments: ["server.js"],
+            dockerImage: "registry.example.com/mcp:2",
+            transportType: "stdio",
+            environment: [],
+          },
+        } as InternalMcpCatalog;
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("returns true when a prompted env var is added on a multi-tenant catalog (still install-scope)", () => {
+        // Multi-tenant gating is scoped to execution-config drift only —
+        // prompted env vars are install-scope and still need per-tenant
+        // input regardless of tenancy.
+        const oldConfig = {
+          ...createLocalCatalog([]),
+          multitenant: true,
+        } as InternalMcpCatalog;
+        const newConfig = {
+          ...createLocalCatalog([
+            {
+              key: "API_KEY",
+              type: "secret",
+              promptOnInstallation: true,
+              required: true,
+            },
+          ]),
+          multitenant: true,
+        } as InternalMcpCatalog;
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(true);
+      });
+
       test("returns false when only non-prompted env vars are added", () => {
         const oldEnvVars = [
           {

@@ -26,10 +26,13 @@ import {
   ToolModel,
 } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
+import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import {
   autoReinstallServer,
+  localExecutionConfigChanged,
   onlyForwardCompatibleEnvDiff,
   requiresNewUserInputForReinstall,
+  syncToolsForServer,
 } from "@/services/mcp-reinstall";
 import {
   ApiError,
@@ -1005,6 +1008,135 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.post(
+    "/api/internal_mcp_catalog/:id/reinstall",
+    {
+      schema: {
+        operationId: RouteId.ReinstallInternalMcpCatalogItem,
+        description:
+          "Reinstall the shared K8s Deployment for a multi-tenant local catalog and cascade tool sync to every install.",
+        tags: ["MCP Catalog"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+
+      const { success: isAdmin } = await hasPermission(
+        { mcpServerInstallation: ["admin"] },
+        request.headers,
+      );
+
+      const catalogItem = await InternalMcpCatalogModel.findById(id, {
+        userId: request.user.id,
+        isAdmin,
+        organizationId: request.organizationId,
+        expandSecrets: false,
+      });
+      if (!catalogItem) {
+        throw new ApiError(404, "Catalog item not found");
+      }
+
+      // Endpoint is meaningful only for multi-tenant local catalogs — these
+      // are the only ones whose execution-config edits set
+      // `catalogReinstallRequired`. Single-tenant / remote catalogs use the
+      // per-install `mcp_server.reinstall_required` flag.
+      if (!(catalogItem.multitenant && catalogItem.serverType === "local")) {
+        throw new ApiError(
+          400,
+          "Catalog reinstall is only supported for multi-tenant local catalogs",
+        );
+      }
+
+      if (!catalogItem.catalogReinstallRequired) {
+        throw new ApiError(409, "Catalog has no pending reinstall");
+      }
+
+      // Mirror the catalog-edit ownership check: only users who could have
+      // edited the catalog (admins, or the personal-scope owner) can
+      // trigger the reinstall.
+      if (
+        !isAdmin &&
+        (catalogItem.scope !== "personal" ||
+          catalogItem.authorId !== request.user.id)
+      ) {
+        throw new ApiError(
+          403,
+          "Only catalog editors can reinstall this catalog",
+        );
+      }
+
+      const installs = await McpServerModel.findByCatalogId(catalogItem.id);
+
+      // Flip every install pending up-front so each tenant's UI shows
+      // progress; per-install events are fanned out as each one's tool
+      // sync completes (matches existing reinstall UX).
+      for (const install of installs) {
+        await McpServerModel.update(install.id, {
+          localInstallationStatus: "pending",
+          localInstallationError: null,
+        });
+        broadcastMcpInstallationStatus(install.id, "pending", null);
+      }
+
+      // Phase 1 — recreate the shared pod with the current catalog spec
+      // (delete + create, bypassing the sibling guard).
+      try {
+        await McpServerRuntimeManager.reinstallSharedDeployment(catalogItem.id);
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
+        logger.error(
+          { err: error, catalogId: catalogItem.id },
+          "Catalog reinstall: shared deployment recreate failed",
+        );
+        for (const install of installs) {
+          await McpServerModel.update(install.id, {
+            localInstallationStatus: "error",
+            localInstallationError: errorMessage,
+          });
+          broadcastMcpInstallationStatus(install.id, "error", errorMessage);
+        }
+        throw new ApiError(500, errorMessage);
+      }
+
+      // Phase 2 — cascade tool sync to every install. Per-install errors
+      // are surfaced via WebSocket but don't abort the cascade; remaining
+      // installs still get a chance to sync.
+      for (const install of installs) {
+        try {
+          await syncToolsForServer(install, catalogItem);
+          await McpServerModel.update(install.id, {
+            localInstallationStatus: "success",
+            localInstallationError: null,
+          });
+          broadcastMcpInstallationStatus(install.id, "success", null);
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : "Unknown error";
+          logger.error(
+            { err: error, serverId: install.id, catalogId: catalogItem.id },
+            "Catalog reinstall: tool sync failed for install",
+          );
+          await McpServerModel.update(install.id, {
+            localInstallationStatus: "error",
+            localInstallationError: errorMessage,
+          });
+          broadcastMcpInstallationStatus(install.id, "error", errorMessage);
+        }
+      }
+
+      await InternalMcpCatalogModel.update(catalogItem.id, {
+        catalogReinstallRequired: false,
+      });
+
+      return reply.send({ success: true });
+    },
+  );
+
   fastify.delete(
     "/api/internal_mcp_catalog/:id",
     {
@@ -1926,6 +2058,32 @@ async function cascadeReinstallForCatalog(
   const installedServers = await McpServerModel.findByCatalogId(catalogItem.id);
   if (installedServers.length === 0) return;
 
+  // Multi-tenant local catalogs have one shared K8s Deployment across all
+  // installs. Execution-config drift (image, command, args, transport) on
+  // this kind of catalog is a catalog-level event — one rollout serves
+  // every tenant — so we flag it on the catalog row instead of marking
+  // each install reinstall-required. An admin/owner clears the flag via
+  // POST /api/internal-mcp-catalog/:id/reinstall, which does the actual
+  // pod recreate + tool cascade. Single-tenant catalogs continue to use
+  // the per-install flag (see `requiresNewUserInputForReinstall`).
+  const catalogScopeChangeOnMultitenant =
+    catalogItem.multitenant === true &&
+    catalogItem.serverType === "local" &&
+    localExecutionConfigChanged(originalCatalogItem, catalogItem);
+
+  if (catalogScopeChangeOnMultitenant) {
+    logger.info(
+      { catalogId: catalogItem.id, serverCount: installedServers.length },
+      "Catalog execution config changed on multi-tenant local catalog - setting catalogReinstallRequired",
+    );
+    await InternalMcpCatalogModel.update(catalogItem.id, {
+      catalogReinstallRequired: true,
+    });
+    // Fall through to also evaluate per-install marking: a prompt-input
+    // change could have landed in the same edit and still needs per-tenant
+    // input on top of the catalog-level rollout.
+  }
+
   // Manual path is authoritative: a re-prompt edit blocks both the
   // gate-decided auto path AND the forced auto path. Run it before any
   // override branching.
@@ -1937,6 +2095,21 @@ async function cascadeReinstallForCatalog(
     for (const server of installedServers) {
       await McpServerModel.update(server.id, { reinstallRequired: true });
     }
+    return;
+  }
+
+  // If we set the catalog-level flag and nothing else needs handling per
+  // install, skip the auto-cascade. The pod is still running the old
+  // spec; the catalog-reinstall endpoint will recreate it and cascade
+  // tool sync to every install in one shot. Without this short-circuit,
+  // every install would auto-cascade against the unchanged pod, flipping
+  // statuses to "success" while the catalog flag still says "reinstall
+  // required" — a confusing mixed signal.
+  if (catalogScopeChangeOnMultitenant) {
+    logger.info(
+      { catalogId: catalogItem.id },
+      "Catalog reinstall pending - skipping auto-cascade; admin clicks 'Reinstall catalog' to apply",
+    );
     return;
   }
 

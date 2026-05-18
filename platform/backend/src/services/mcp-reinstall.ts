@@ -51,7 +51,16 @@ export function requiresNewUserInputForReinstall(
       return true;
     }
 
-    if (localExecutionConfigChanged(oldCatalogItem, newCatalogItem)) {
+    // Multi-tenant catalogs handle execution-config drift via the
+    // catalog-level `catalogReinstallRequired` flag (one shared pod across
+    // all installs; the catalog-reinstall endpoint applies the change for
+    // everyone in one shot). Single-tenant: each install owns its own pod,
+    // so a silent auto-restart of others' pods would surprise them; mark
+    // every install reinstall-required and let owners reinstall explicitly.
+    if (
+      !newCatalogItem.multitenant &&
+      localExecutionConfigChanged(oldCatalogItem, newCatalogItem)
+    ) {
       logger.info(
         { catalogId: newCatalogItem.id },
         "Local execution config changed - manual reinstall required",
@@ -343,15 +352,42 @@ export async function autoReinstallServer(
     }
   }
 
-  // Fetch and sync tools
+  await syncToolsForServer(server, catalogItem, options);
+
+  // Clear reinstall flag
+  await McpServerModel.update(server.id, {
+    reinstallRequired: false,
+  });
+}
+
+/**
+ * Fetch tools from a running MCP server and reconcile the `tools` table
+ * for its catalog. Used by `autoReinstallServer` after a restart, and by
+ * the catalog-reinstall endpoint to cascade tools to every install
+ * attached to a multi-tenant catalog once the shared pod is back up.
+ */
+export async function syncToolsForServer(
+  server: McpServer,
+  catalogItem: InternalMcpCatalog,
+  options?: {
+    getTools?: (params: {
+      server: McpServer;
+      catalogItem: InternalMcpCatalog;
+    }) => Promise<
+      Array<{
+        name: string;
+        description: string;
+        inputSchema: Record<string, unknown>;
+        _meta?: Record<string, unknown>;
+        annotations?: Record<string, unknown>;
+      }>
+    >;
+  },
+): Promise<void> {
   const tools = options?.getTools
-    ? await options.getTools({
-        server,
-        catalogItem,
-      })
+    ? await options.getTools({ server, catalogItem })
     : await McpServerModel.getToolsFromServer(server);
 
-  // Use catalog item name for tool naming (consistent with install flow)
   const toolNamePrefix = catalogItem.name;
   const toolsToSync = tools.map((tool) => ({
     name: ToolModel.slugifyName(toolNamePrefix, tool.name),
@@ -359,8 +395,6 @@ export async function autoReinstallServer(
     parameters: tool.inputSchema,
     meta: { _meta: tool._meta, annotations: tool.annotations },
     catalogId: catalogItem.id,
-    // Pass the raw tool name from MCP server for accurate matching
-    // This handles cases where catalog name contains `__` (e.g., huggingface__remote-mcp)
     rawToolName: tool.name,
   }));
 
@@ -369,19 +403,14 @@ export async function autoReinstallServer(
   logger.info(
     {
       serverId: server.id,
-      serverName: reconstructedName,
+      serverName: server.name,
       created: syncResult.created.length,
       updated: syncResult.updated.length,
       unchanged: syncResult.unchanged.length,
       deleted: syncResult.deleted.length,
     },
-    "Auto-reinstall completed - tools synced",
+    "Tools synced for MCP server",
   );
-
-  // Clear reinstall flag
-  await McpServerModel.update(server.id, {
-    reinstallRequired: false,
-  });
 }
 
 // ===== Internal helpers =====
@@ -487,7 +516,7 @@ function promptedEnvVarsRuntimeChanged(
   return false;
 }
 
-function localExecutionConfigChanged(
+export function localExecutionConfigChanged(
   oldCatalog: InternalMcpCatalog,
   newCatalog: InternalMcpCatalog,
 ): boolean {

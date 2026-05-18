@@ -46,6 +46,7 @@ import { useFeature } from "@/lib/config/config.query";
 import {
   fetchCatalogTools,
   useCatalogPresets,
+  useReinstallInternalMcpCatalogItem,
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { usePresetEntityName } from "@/lib/organization.query";
@@ -428,6 +429,23 @@ export function McpServerCard({
       : false;
   const isRemoteVariant = variant === "remote";
   const isBuiltinVariant = variant === "builtin";
+
+  // Catalog-scope reinstall: surfaces a banner + button on multi-tenant
+  // local catalogs whose execution config (image, command, args, transport)
+  // was edited. One click recreates the shared pod for everyone and
+  // cascades tool sync. Visibility mirrors the catalog edit predicate
+  // (admin OR personal-scope owner) since only those users can apply
+  // catalog-scope changes.
+  const canEditCatalog =
+    userIsMcpServerAdmin ||
+    (item.scope === "personal" && item.authorId === currentUserId);
+  const needsCatalogReinstall =
+    variant === "local" &&
+    item.multitenant === true &&
+    item.catalogReinstallRequired === true;
+  const reinstallCatalogMutation = useReinstallInternalMcpCatalogItem();
+  const triggerCatalogReinstall = () =>
+    reinstallCatalogMutation.mutate(item.id);
 
   // Check if logs are available (local variant with at least one installation)
   const isLogsAvailable = variant === "local";
@@ -817,6 +835,19 @@ export function McpServerCard({
     <>
       <div className="flex flex-wrap gap-2">
         {chatButton}
+        {!isInstalling && needsCatalogReinstall && canEditCatalog && (
+          <PermissionButton
+            permissions={{ mcpRegistry: ["update"] }}
+            onClick={triggerCatalogReinstall}
+            disabled={reinstallCatalogMutation.isPending}
+            size="sm"
+            variant="outline"
+            className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Reinstall
+          </PermissionButton>
+        )}
         {!isInstalling && isCurrentUserAuthenticated && needsReinstall && (
           <PermissionButton
             permissions={{ mcpServerInstallation: ["update"] }}

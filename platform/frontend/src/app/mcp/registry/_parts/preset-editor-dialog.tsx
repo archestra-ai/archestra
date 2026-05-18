@@ -22,7 +22,9 @@ import { PresetFieldInput } from "./preset-field-input";
 import {
   type CatalogFieldEntry,
   type CatalogItem,
+  compileValidationRegex,
   listCatalogFields,
+  validateFieldAgainstRegex,
 } from "./preset-helpers";
 
 type FieldValue = string | number | boolean | string[];
@@ -66,6 +68,21 @@ export function PresetEditorDialog({
   const [fieldValues, setFieldValues] = useState<Record<string, FieldValue>>(
     {},
   );
+
+  const validationRegex = compileValidationRegex(entry?.validationRegex);
+
+  const fieldErrors: Record<string, string | null> = {};
+  for (const f of presetFields) {
+    const raw = fieldValues[f.key];
+    fieldErrors[f.key] = validateFieldAgainstRegex({
+      value:
+        typeof raw === "string" ? raw : raw === undefined ? "" : String(raw),
+      regex: validationRegex,
+      required: false,
+      valueType: f.valueType,
+    });
+  }
+  const hasErrors = Object.values(fieldErrors).some((err) => !!err);
 
   useEffect(() => {
     if (!open) return;
@@ -145,6 +162,7 @@ export function PresetEditorDialog({
               <PresetFieldSections
                 fields={presetFields}
                 values={fieldValues}
+                errors={fieldErrors}
                 hasStoredSecrets={isEdit && preset?.presetSecretId != null}
                 onChange={(key, v) =>
                   setFieldValues((prev) => {
@@ -167,7 +185,7 @@ export function PresetEditorDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isPending}>
+            <Button type="submit" disabled={isPending || hasErrors}>
               {isPending ? "Saving…" : isEdit ? "Save changes" : "Save"}
             </Button>
           </DialogFooter>
@@ -180,6 +198,7 @@ export function PresetEditorDialog({
 interface PresetFieldSectionsProps {
   fields: CatalogFieldEntry[];
   values: Record<string, FieldValue>;
+  errors: Record<string, string | null>;
   onChange: (key: string, v: FieldValue | undefined) => void;
   /** When true, secret-typed fields render a `••••••••` placeholder to signal there's a stored value the user can preserve by leaving the input empty. */
   hasStoredSecrets: boolean;
@@ -188,6 +207,7 @@ interface PresetFieldSectionsProps {
 function PresetFieldSections({
   fields,
   values,
+  errors,
   onChange,
   hasStoredSecrets,
 }: PresetFieldSectionsProps) {
@@ -211,6 +231,7 @@ function PresetFieldSections({
               value={asString(values[f.key])}
               onChange={(v) => onChange(f.key, v === "" ? undefined : v)}
               hasStoredSecret={hasStoredSecrets}
+              error={errors[f.key]}
             />
           ))}
         </div>
@@ -229,6 +250,7 @@ function PresetFieldSections({
               value={asString(values[f.key])}
               onChange={(v) => onChange(f.key, v === "" ? undefined : v)}
               hasStoredSecret={hasStoredSecrets}
+              error={errors[f.key]}
             />
           ))}
         </div>

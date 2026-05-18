@@ -858,6 +858,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateMcpPresetEntry]: {
     mcpServerInstallation: ["admin"],
   },
+  [RouteId.UpdateMcpPresetEntry]: {
+    mcpServerInstallation: ["admin"],
+  },
   [RouteId.DeleteMcpPresetEntry]: {
     mcpServerInstallation: ["admin"],
   },

@@ -1,8 +1,8 @@
 "use client";
 
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import pluralize from "pluralize";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,6 +23,7 @@ import {
   useCreateMcpPresetEntry,
   useDeleteMcpPresetEntry,
   useMcpPresetEntries,
+  useUpdateMcpPresetEntry,
 } from "@/lib/mcp/mcp-preset-entry.query";
 import {
   useOrganization,
@@ -259,6 +260,8 @@ function EntriesSection({ canEdit }: { canEdit: boolean }) {
   const [addingName, setAddingName] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] =
     useState<McpPresetEntryWithAssignedCount | null>(null);
+  const [regexTarget, setRegexTarget] =
+    useState<McpPresetEntryWithAssignedCount | null>(null);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameDefaultOpen, setRenameDefaultOpen] = useState(false);
 
@@ -348,8 +351,33 @@ function EntriesSection({ canEdit }: { canEdit: boolean }) {
             ) : (
               entries.map((entry) => (
                 <TableRow key={entry.id}>
-                  <TableCell className="font-medium">{entry.name}</TableCell>
+                  <TableCell className="font-medium">
+                    <div>{entry.name}</div>
+                    {entry.validationRegex && (
+                      <div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                        <ShieldCheck className="h-3 w-3" />
+                        <span className="font-mono">
+                          /{entry.validationRegex}/
+                        </span>
+                      </div>
+                    )}
+                  </TableCell>
                   <TableCell className="text-right">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      disabled={!canEdit}
+                      onClick={() => setRegexTarget(entry)}
+                      aria-label={`Edit ${entry.name} validation regex`}
+                      title={
+                        entry.validationRegex
+                          ? "Edit validation regex"
+                          : "Add validation regex"
+                      }
+                    >
+                      <ShieldCheck className="h-4 w-4" />
+                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -393,6 +421,11 @@ function EntriesSection({ canEdit }: { canEdit: boolean }) {
       <DeleteEntryDialog
         target={deleteTarget}
         onClose={() => setDeleteTarget(null)}
+      />
+
+      <ValidationRegexDialog
+        target={regexTarget}
+        onClose={() => setRegexTarget(null)}
       />
 
       <NameEditorDialog
@@ -472,6 +505,102 @@ function DefaultLabelDialog({
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
+            disabled={updateMutation.isPending}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={!canSave || updateMutation.isPending}
+          >
+            {updateMutation.isPending ? "Saving…" : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ValidationRegexDialog({
+  target,
+  onClose,
+}: {
+  target: McpPresetEntryWithAssignedCount | null;
+  onClose: () => void;
+}) {
+  const { singular } = usePresetEntityName();
+  const updateMutation = useUpdateMcpPresetEntry();
+  const [draft, setDraft] = useState<string>(target?.validationRegex ?? "");
+
+  // Sync the draft when a different entry is opened.
+  useEffect(() => {
+    setDraft(target?.validationRegex ?? "");
+  }, [target?.validationRegex]);
+
+  if (!target) return null;
+
+  const trimmed = draft.trim();
+  let regexError: string | null = null;
+  if (trimmed) {
+    try {
+      new RegExp(trimmed);
+    } catch (e) {
+      regexError =
+        e instanceof Error ? e.message : "Invalid regular expression";
+    }
+  }
+  const initial = target.validationRegex ?? "";
+  const canSave = !regexError && trimmed !== initial;
+
+  const handleSave = () => {
+    updateMutation.mutate(
+      {
+        id: target.id,
+        body: { validationRegex: trimmed === "" ? null : trimmed },
+      },
+      { onSuccess: () => onClose() },
+    );
+  };
+
+  return (
+    <Dialog
+      open
+      onOpenChange={(v) => {
+        if (!v) onClose();
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{singular} validation pattern</DialogTitle>
+          <DialogDescription>
+            JavaScript regular expression applied to every{" "}
+            {singular.toLowerCase()}-scoped field value and every prompted user
+            value when installing an MCP server in{" "}
+            <span className="font-medium">{target.name}</span>. Leave blank to
+            disable. Do not include delimiters or flags (e.g.{" "}
+            <code className="font-mono">^https://prod\.example\.com/</code>).
+          </DialogDescription>
+        </DialogHeader>
+        <DialogBody className="space-y-2">
+          <Label htmlFor="preset-validation-regex">Pattern</Label>
+          <Input
+            id="preset-validation-regex"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="e.g. ^https://prod\\.example\\.com/"
+            className="font-mono"
+            autoComplete="off"
+            spellCheck={false}
+            aria-invalid={regexError ? true : undefined}
+          />
+          {regexError && (
+            <p className="text-xs text-destructive">{regexError}</p>
+          )}
+        </DialogBody>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={onClose}
             disabled={updateMutation.isPending}
           >
             Cancel

@@ -361,6 +361,7 @@ export const RouteId = {
   // Org-level preset entries (Production / Staging / Development buckets)
   ListMcpPresetEntries: "listMcpPresetEntries",
   CreateMcpPresetEntry: "createMcpPresetEntry",
+  UpdateMcpPresetEntry: "updateMcpPresetEntry",
   DeleteMcpPresetEntry: "deleteMcpPresetEntry",
 
   // Knowledge Settings Routes (organization-level)

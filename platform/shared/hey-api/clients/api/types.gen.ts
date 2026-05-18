@@ -35590,6 +35590,7 @@ export type ListMcpPresetEntriesResponses = {
         organizationId: string;
         name: string;
         sortOrder: number;
+        validationRegex: string | null;
         createdAt: string;
         assignedCatalogCount: number;
     }>;
@@ -35600,6 +35601,7 @@ export type ListMcpPresetEntriesResponse = ListMcpPresetEntriesResponses[keyof L
 export type CreateMcpPresetEntryData = {
     body: {
         name: string;
+        validationRegex?: string | null;
     };
     path?: never;
     query?: never;
@@ -35680,6 +35682,7 @@ export type CreateMcpPresetEntryResponses = {
         organizationId: string;
         name: string;
         sortOrder: number;
+        validationRegex: string | null;
         createdAt: string;
     };
 };
@@ -35770,6 +35773,98 @@ export type DeleteMcpPresetEntryResponses = {
 };
 
 export type DeleteMcpPresetEntryResponse = DeleteMcpPresetEntryResponses[keyof DeleteMcpPresetEntryResponses];
+
+export type UpdateMcpPresetEntryData = {
+    body: {
+        validationRegex: string | null;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/organization/mcp-preset-entries/{id}';
+};
+
+export type UpdateMcpPresetEntryErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateMcpPresetEntryError = UpdateMcpPresetEntryErrors[keyof UpdateMcpPresetEntryErrors];
+
+export type UpdateMcpPresetEntryResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        sortOrder: number;
+        validationRegex: string | null;
+        createdAt: string;
+    };
+};
+
+export type UpdateMcpPresetEntryResponse = UpdateMcpPresetEntryResponses[keyof UpdateMcpPresetEntryResponses];
 
 export type McpProxyPostData = {
     body: {

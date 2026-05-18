@@ -10,13 +10,16 @@ import {
   useUpdateCatalogPreset,
   useUpdateInternalMcpCatalogItem,
 } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpPresetEntries } from "@/lib/mcp/mcp-preset-entry.query";
 import { usePresetEntityName } from "@/lib/organization.query";
 import { PresetFieldInput } from "./preset-field-input";
 import {
   type CatalogItem,
+  compileValidationRegex,
   listCatalogFields,
   presetHasUnfilledFields,
   useCanEditCatalogPresets,
+  validateFieldAgainstRegex,
 } from "./preset-helpers";
 
 interface FillPresetFieldsStepProps {
@@ -47,6 +50,7 @@ export function FillPresetFieldsStep({
   const { singular } = usePresetEntityName();
   const presetLower = singular.toLowerCase();
   const { data: children = [] } = useCatalogPresets(catalog.id);
+  const { data: entries = [] } = useMcpPresetEntries();
   const updatePreset = useUpdateCatalogPreset(catalog.id);
   const updateParentCatalog = useUpdateInternalMcpCatalogItem();
   const { canEdit } = useCanEditCatalogPresets(catalog);
@@ -55,6 +59,16 @@ export function FillPresetFieldsStep({
     selectedPresetId === catalog.id
       ? catalog
       : children.find((c) => c.id === selectedPresetId);
+
+  const validationRegex = useMemo(() => {
+    const entryId =
+      selectedPreset && "presetEntryId" in selectedPreset
+        ? selectedPreset.presetEntryId
+        : null;
+    if (!entryId) return null;
+    const entry = entries.find((e) => e.id === entryId);
+    return compileValidationRegex(entry?.validationRegex);
+  }, [entries, selectedPreset]);
 
   const unfilled = useMemo(() => {
     if (!selectedPreset) return [];
@@ -69,6 +83,19 @@ export function FillPresetFieldsStep({
   }, [catalog, selectedPreset]);
 
   const [values, setValues] = useState<Record<string, string>>({});
+
+  const fieldErrors = useMemo(() => {
+    const errors: Record<string, string | null> = {};
+    for (const f of unfilled) {
+      errors[f.key] = validateFieldAgainstRegex({
+        value: values[f.key] ?? "",
+        regex: validationRegex,
+        required: f.required,
+        valueType: f.valueType,
+      });
+    }
+    return errors;
+  }, [unfilled, values, validationRegex]);
 
   if (!selectedPreset || unfilled.length === 0) return null;
 
@@ -97,12 +124,13 @@ export function FillPresetFieldsStep({
       ? "Additional Headers"
       : "Connection Settings";
 
-  const isValid = unfilled.every((f) => {
-    if (!f.required) return true;
-    const v = values[f.key];
-    if (f.valueType === "boolean") return v === "true" || v === "false";
-    return !!v?.trim();
-  });
+  const isValid =
+    unfilled.every((f) => {
+      if (!f.required) return true;
+      const v = values[f.key];
+      if (f.valueType === "boolean") return v === "true" || v === "false";
+      return !!v?.trim();
+    }) && Object.values(fieldErrors).every((err) => !err);
 
   const isEditingDefaultPreset = selectedPreset.id === catalog.id;
 
@@ -155,6 +183,7 @@ export function FillPresetFieldsStep({
               value={values[f.key] ?? ""}
               onChange={(v) => setValues((prev) => ({ ...prev, [f.key]: v }))}
               disabled={isSaving}
+              error={fieldErrors[f.key]}
             />
           ))}
         </div>
@@ -173,6 +202,7 @@ export function FillPresetFieldsStep({
               value={values[f.key] ?? ""}
               onChange={(v) => setValues((prev) => ({ ...prev, [f.key]: v }))}
               disabled={isSaving}
+              error={fieldErrors[f.key]}
             />
           ))}
         </div>

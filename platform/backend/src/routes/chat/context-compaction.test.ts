@@ -71,6 +71,44 @@ describe("context compaction helpers", () => {
     expect(result[1].id).toBe("u2");
   });
 
+  test("uses latest compaction only when its boundary message exists", () => {
+    const messages = [
+      msg("u1", "user", "one"),
+      msg("a1", "assistant", "one reply"),
+      msg("u2", "user", "two"),
+    ];
+
+    const result = __test.resolveUsableCompaction(messages, {
+      summary: "Earlier work was about one.",
+      compactedThroughMessageId: "a1",
+    });
+
+    expect(result.compaction?.summary).toBe("Earlier work was about one.");
+    expect(result.boundaryIndex).toBe(1);
+    expect(result.messages).toHaveLength(2);
+    expect(result.messages[0].parts?.[0].text).toContain(
+      "Earlier work was about one.",
+    );
+    expect(result.messages[1].id).toBe("u2");
+  });
+
+  test("ignores latest compaction when its boundary message is missing", () => {
+    const messages = [
+      msg("u1", "user", "one"),
+      msg("a1", "assistant", "one reply"),
+      msg("u2", "user", "two"),
+    ];
+
+    const result = __test.resolveUsableCompaction(messages, {
+      summary: "Earlier work was about deleted messages.",
+      compactedThroughMessageId: "deleted-message",
+    });
+
+    expect(result.compaction).toBeNull();
+    expect(result.boundaryIndex).toBe(-1);
+    expect(result.messages).toBe(messages);
+  });
+
   test("compaction system prompt treats transcript as data", async () => {
     const prompt = await __test.buildCompactionPrompt({
       previousSummary: null,

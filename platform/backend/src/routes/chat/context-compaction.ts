@@ -58,9 +58,23 @@ export async function compactMessagesForChat(params: {
     await ConversationCompactionModel.findLatestByConversation(
       params.conversationId,
     );
-  const existingMessages = latestCompaction
-    ? applyCompactionToMessages(params.messages, latestCompaction)
-    : params.messages;
+  const latestCompactionState = resolveUsableCompaction(
+    params.messages,
+    latestCompaction,
+  );
+  const usableLatestCompaction = latestCompactionState.compaction;
+  const existingMessages = latestCompactionState.messages;
+
+  if (latestCompaction && !usableLatestCompaction) {
+    logger.warn(
+      {
+        conversationId: params.conversationId,
+        compactionId: latestCompaction.id,
+        compactedThroughMessageId: latestCompaction.compactedThroughMessageId,
+      },
+      "[ContextCompaction] ignoring stale compaction with missing boundary message",
+    );
+  }
 
   const shouldCreate =
     params.trigger === "manual" ||
@@ -74,16 +88,15 @@ export async function compactMessagesForChat(params: {
   if (!shouldCreate) {
     return {
       messages: existingMessages,
-      status: latestCompaction ? "existing" : "skipped",
-      compaction: latestCompaction,
-      reason: latestCompaction ? "using_existing_summary" : "below_threshold",
+      status: usableLatestCompaction ? "existing" : "skipped",
+      compaction: usableLatestCompaction,
+      reason: usableLatestCompaction
+        ? "using_existing_summary"
+        : "below_threshold",
     };
   }
 
-  const previousBoundaryIndex = findMessageIndexById(
-    params.messages,
-    latestCompaction?.compactedThroughMessageId ?? null,
-  );
+  const previousBoundaryIndex = latestCompactionState.boundaryIndex;
   const sourceMessages =
     previousBoundaryIndex >= 0
       ? params.messages.slice(previousBoundaryIndex + 1)
@@ -93,8 +106,8 @@ export async function compactMessagesForChat(params: {
   if (split.compactable.length === 0) {
     return {
       messages: existingMessages,
-      status: latestCompaction ? "existing" : "skipped",
-      compaction: latestCompaction,
+      status: usableLatestCompaction ? "existing" : "skipped",
+      compaction: usableLatestCompaction,
       reason: "nothing_to_compact",
     };
   }
@@ -109,7 +122,7 @@ export async function compactMessagesForChat(params: {
       provider: params.provider,
       agentLlmApiKeyId: params.agentLlmApiKeyId,
       trigger: params.trigger,
-      previousSummary: latestCompaction?.summary ?? null,
+      previousSummary: usableLatestCompaction?.summary ?? null,
       compactableMessages: split.compactable,
       fullMessages: params.messages,
       selectedModel: params.selectedModel,
@@ -134,7 +147,7 @@ export async function compactMessagesForChat(params: {
     return {
       messages: existingMessages,
       status: "failed",
-      compaction: latestCompaction,
+      compaction: usableLatestCompaction,
       reason: "summary_generation_failed",
     };
   }
@@ -165,6 +178,7 @@ export const __test = {
   buildInContextCompactionPrompt,
   buildCompactionPrompt,
   extractTaggedSummary,
+  resolveUsableCompaction,
   splitMessagesForCompaction,
   decodeDataUrl,
   getDataUrlMediaType,
@@ -454,6 +468,37 @@ function applyCompactionToMessages(
     buildSummaryMessage(compaction.summary),
     ...messages.slice(boundaryIndex + 1),
   ];
+}
+
+function resolveUsableCompaction<
+  T extends Pick<
+    ConversationCompaction,
+    "summary" | "compactedThroughMessageId"
+  >,
+>(
+  messages: ChatMessage[],
+  compaction: T | null,
+): { compaction: T | null; boundaryIndex: number; messages: ChatMessage[] } {
+  if (!compaction) {
+    return { compaction: null, boundaryIndex: -1, messages };
+  }
+
+  const boundaryIndex = findMessageIndexById(
+    messages,
+    compaction.compactedThroughMessageId,
+  );
+  if (boundaryIndex < 0) {
+    return { compaction: null, boundaryIndex: -1, messages };
+  }
+
+  return {
+    compaction,
+    boundaryIndex,
+    messages: [
+      buildSummaryMessage(compaction.summary),
+      ...messages.slice(boundaryIndex + 1),
+    ],
+  };
 }
 
 function buildSummaryMessage(summary: string): ChatMessage {

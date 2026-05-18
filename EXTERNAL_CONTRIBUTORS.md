@@ -357,3 +357,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @thewshii
 - @iiishop
 - @alaotla
+- @NguyenCong2k

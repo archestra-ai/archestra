@@ -1681,6 +1681,13 @@
       "when": 1779052587261,
       "tag": "0239_zippy_purple_man",
       "breakpoints": true
+    },
+    {
+      "idx": 240,
+      "version": "7",
+      "when": 1779089029604,
+      "tag": "0240_clear_whirlwind",
+      "breakpoints": true
     }
   ]
 }

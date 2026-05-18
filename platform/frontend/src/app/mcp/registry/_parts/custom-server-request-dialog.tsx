@@ -4,8 +4,31 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import type { archestraApiTypes } from "@shared";
 import { EnvironmentVariableSchema } from "@shared";
 import { Loader2 } from "lucide-react";
+import { useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { z } from "zod";
+
+function parseArgumentsString(value: string): string[] {
+  const trimmed = value.trim();
+  if (!trimmed) return [];
+  if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.filter(
+          (a: unknown) => typeof a === "string" && a.length > 0,
+        );
+      }
+    } catch {
+      // Fall through to line-by-line
+    }
+  }
+  return trimmed
+    .split("\n")
+    .map((arg) => arg.trim())
+    .filter((arg) => arg.length > 0);
+}
+
 import { EnvironmentVariablesFormField } from "@/components/environment-variables-form-field";
 import { Button } from "@/components/ui/button";
 import {
@@ -71,6 +94,38 @@ export function CustomServerRequestDialog({
   isOpen: boolean;
   onClose: () => void;
 }) {
+  const [argumentsMode, setArgumentsMode] = useState<"line" | "json">("line");
+
+  const switchArgumentsMode = (mode: "line" | "json") => {
+    const currentValue = form.getValues("arguments") || "";
+    if (mode === argumentsMode) return;
+
+    if (mode === "json" && currentValue.trim()) {
+      const lines = currentValue
+        .split("\n")
+        .map((arg: string) => arg.trim())
+        .filter((arg: string) => arg.length > 0);
+      form.setValue("arguments", JSON.stringify(lines, null, 2), {
+        shouldDirty: true,
+      });
+    } else if (mode === "line" && currentValue.trim()) {
+      try {
+        const parsed = JSON.parse(currentValue);
+        if (Array.isArray(parsed)) {
+          form.setValue(
+            "arguments",
+            parsed.filter((a: unknown) => typeof a === "string").join("\n"),
+            { shouldDirty: true },
+          );
+        }
+      } catch {
+        // If not valid JSON, keep as-is
+      }
+    }
+
+    setArgumentsMode(mode);
+  };
+
   const form = useForm<CustomServerRequestFormValues>({
     // biome-ignore lint/suspicious/noExplicitAny: Version mismatch between @hookform/resolvers and Zod
     resolver: zodResolver(customServerRequestSchema as any),
@@ -119,10 +174,7 @@ export function CustomServerRequestDialog({
             serverType: "local" as const,
             localConfig: {
               command: values.command,
-              arguments: values.arguments
-                .split("\n")
-                .map((arg) => arg.trim())
-                .filter((arg) => arg.length > 0),
+              arguments: parseArgumentsString(values.arguments),
               environment:
                 values.environment.length > 0 ? values.environment : undefined,
             },
@@ -276,10 +328,34 @@ export function CustomServerRequestDialog({
                     name="arguments"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Arguments (one per line)</FormLabel>
+                        <FormLabel>
+                          <div className="flex items-center gap-2">
+                            Arguments
+                            <div className="flex rounded-md border">
+                              <button
+                                type="button"
+                                className={`px-2 py-0.5 text-xs rounded-l-md ${argumentsMode === "line" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                                onClick={() => switchArgumentsMode("line")}
+                              >
+                                Line by line
+                              </button>
+                              <button
+                                type="button"
+                                className={`px-2 py-0.5 text-xs rounded-r-md ${argumentsMode === "json" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                                onClick={() => switchArgumentsMode("json")}
+                              >
+                                JSON
+                              </button>
+                            </div>
+                          </div>
+                        </FormLabel>
                         <FormControl>
                           <Textarea
-                            placeholder={`/path/to/server.js\n--verbose`}
+                            placeholder={
+                              argumentsMode === "json"
+                                ? `["--verbose", "--port", "3000"]`
+                                : `/path/to/server.js\n--verbose`
+                            }
                             rows={3}
                             {...field}
                           />

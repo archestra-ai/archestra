@@ -403,6 +403,39 @@ export function McpCatalogForm({
     }
   }, [authMethod, defaultIdentityProviderId, form, selectedIdentityProviderId]);
 
+  // Arguments input mode state (line-by-line or JSON)
+  const [argumentsMode, setArgumentsMode] = useState<"line" | "json">("line");
+
+  const switchArgumentsMode = (mode: "line" | "json") => {
+    const currentValue = form.getValues("localConfig.arguments") || "";
+    if (mode === argumentsMode) return;
+
+    if (mode === "json" && currentValue.trim()) {
+      const lines = currentValue
+        .split("\n")
+        .map((arg: string) => arg.trim())
+        .filter((arg: string) => arg.length > 0);
+      form.setValue("localConfig.arguments", JSON.stringify(lines, null, 2), {
+        shouldDirty: true,
+      });
+    } else if (mode === "line" && currentValue.trim()) {
+      try {
+        const parsed = JSON.parse(currentValue);
+        if (Array.isArray(parsed)) {
+          form.setValue(
+            "localConfig.arguments",
+            parsed.filter((a: unknown) => typeof a === "string").join("\n"),
+            { shouldDirty: true },
+          );
+        }
+      } catch {
+        // If not valid JSON, keep as-is
+      }
+    }
+
+    setArgumentsMode(mode);
+  };
+
   // BYOS (Bring Your Own Secrets) state for OAuth
   const [oauthVaultTeamId, setOauthVaultTeamId] = useState<string | null>(null);
   const [oauthVaultSecretPath, setOauthVaultSecretPath] = useState<
@@ -1005,12 +1038,34 @@ export function McpCatalogForm({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>
-                          Arguments (one per line)
-                          <ReinstallHint show={isArgumentsDirty} />
+                          <div className="flex items-center gap-2">
+                            Arguments
+                            <div className="flex rounded-md border">
+                              <button
+                                type="button"
+                                className={`px-2 py-0.5 text-xs rounded-l-md ${argumentsMode === "line" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                                onClick={() => switchArgumentsMode("line")}
+                              >
+                                Line by line
+                              </button>
+                              <button
+                                type="button"
+                                className={`px-2 py-0.5 text-xs rounded-r-md ${argumentsMode === "json" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                                onClick={() => switchArgumentsMode("json")}
+                              >
+                                JSON
+                              </button>
+                            </div>
+                            <ReinstallHint show={isArgumentsDirty} />
+                          </div>
                         </FormLabel>
                         <FormControl>
                           <Textarea
-                            placeholder={`/path/to/server.js\n--verbose`}
+                            placeholder={
+                              argumentsMode === "json"
+                                ? `["--verbose", "--port", "3000"]`
+                                : `/path/to/server.js\n--verbose`
+                            }
                             className="font-mono min-h-20"
                             {...field}
                           />

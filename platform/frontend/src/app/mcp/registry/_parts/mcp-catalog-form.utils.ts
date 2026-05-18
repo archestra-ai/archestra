@@ -34,13 +34,32 @@ export function transformFormToApiData(
 
   // Handle local configuration
   if (values.serverType === "local" && values.localConfig) {
-    // Parse arguments string into array
-    const argumentsArray = values.localConfig.arguments
-      ? values.localConfig.arguments
+    // Parse arguments string into array (supports both line-by-line and JSON format)
+    let argumentsArray: string[] = [];
+    if (values.localConfig.arguments) {
+      const trimmed = values.localConfig.arguments.trim();
+      if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed)) {
+            argumentsArray = parsed.filter(
+              (a: unknown) => typeof a === "string" && a.length > 0,
+            );
+          }
+        } catch {
+          // If JSON parse fails, fall back to line-by-line
+          argumentsArray = trimmed
+            .split("\n")
+            .map((arg) => arg.trim())
+            .filter((arg) => arg.length > 0);
+        }
+      } else {
+        argumentsArray = trimmed
           .split("\n")
           .map((arg) => arg.trim())
-          .filter((arg) => arg.length > 0)
-      : [];
+          .filter((arg) => arg.length > 0);
+      }
+    }
 
     data.localConfig = {
       command: values.localConfig.command || undefined,

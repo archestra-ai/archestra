@@ -38,6 +38,7 @@ import {
   UpdateConnectionSettingsSchema,
   UpdateKnowledgeSettingsSchema,
   UpdateLlmSettingsSchema,
+  UpdatePresetEntityNameSchema,
   UpdateSecuritySettingsSchema,
 } from "@/types";
 
@@ -250,6 +251,29 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      const organization = await OrganizationModel.patch(organizationId, body);
+
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
+      }
+
+      return reply.send(organization);
+    },
+  );
+
+  fastify.patch(
+    "/api/organization/preset-entity-name",
+    {
+      schema: {
+        operationId: RouteId.UpdatePresetEntityName,
+        description:
+          "Configure the org-wide display label for catalog presets (the per-item child-configuration entity). Both singular and plural must be set together, or both null to reset.",
+        tags: ["Organization"],
+        body: UpdatePresetEntityNameSchema,
+        response: constructResponseSchema(SelectOrganizationSchema),
+      },
+    },
+    async ({ organizationId, body }, reply) => {
       const organization = await OrganizationModel.patch(organizationId, body);
 
       if (!organization) {

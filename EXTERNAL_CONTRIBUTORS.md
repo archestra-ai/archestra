@@ -344,3 +344,17 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @funds0033-cmyk
 - @Rishikesh63
 - @antongordievsky
+- @dancarlstedt
+- @simpleprogrammer2
+- @afischh
+- @Exceluyi
+- @VenkateshValaboju
+- @Piyushdev-X
+- @suoyinjv
+- @lyhuuloi
+- @MightGainer
+- @holden-alt
+- @thewshii
+- @iiishop
+- @alaotla
+- @NguyenCong2k

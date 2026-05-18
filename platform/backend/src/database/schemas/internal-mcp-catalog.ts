@@ -19,6 +19,7 @@ import type {
   UserConfig,
   UserConfigFieldDefault,
 } from "@/types";
+import mcpPresetEntriesTable from "./mcp-preset-entry";
 import secretTable from "./secret";
 import usersTable from "./user";
 
@@ -94,6 +95,16 @@ const internalMcpCatalogTable = pgTable(
      * NULL for root catalog items.
      */
     childName: text("child_name"),
+    /**
+     * For child catalog items only: FK to the org-level preset entry this
+     * child configures (e.g. "Production", "Staging"). Cascade-deleted when
+     * the entry is removed at /mcp/registry/org-structure. NULL for root rows.
+     * Canonical link — `child_name` is just a denormalized display copy.
+     */
+    presetEntryId: uuid("preset_entry_id").references(
+      () => mcpPresetEntriesTable.id,
+      { onDelete: "cascade" },
+    ),
     /**
      * Values for fields the parent declared with promptOnPreset: true.
      * Meaningful on parent (= default preset values) AND child (= preset overlay).

@@ -9,6 +9,7 @@ import type {
 } from "react-hook-form";
 import type { FieldScopeValue } from "@/components/field-scope-select";
 import { Button } from "@/components/ui/button";
+import { usePresetEntityName } from "@/lib/organization.query";
 
 interface HeadersReadOnlyTableProps<TFieldValues extends FieldValues> {
   form: { watch: UseFormWatch<TFieldValues> };
@@ -144,11 +145,12 @@ function ValueCell({
   scope: FieldScopeValue;
   value: string | undefined;
 }) {
+  const { singular } = usePresetEntityName();
   if (scope === "installation") {
     return <span className="text-muted-foreground">per-installation</span>;
   }
   if (scope === "preset") {
-    return <span className="text-muted-foreground">per-preset</span>;
+    return <span className="text-muted-foreground">per-{singular}</span>;
   }
   if (!value) {
     return <span className="text-muted-foreground italic">not set</span>;

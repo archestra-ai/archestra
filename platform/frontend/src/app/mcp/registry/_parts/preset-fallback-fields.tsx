@@ -1,50 +1,94 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { useCatalogPresets } from "@/lib/mcp/internal-mcp-catalog.query";
+import {
+  useCatalogPresets,
+  useUpdateCatalogPreset,
+  useUpdateInternalMcpCatalogItem,
+} from "@/lib/mcp/internal-mcp-catalog.query";
+import { usePresetEntityName } from "@/lib/organization.query";
 import { PresetFieldInput } from "./preset-field-input";
-import { type CatalogItem, listCatalogFields } from "./preset-helpers";
+import {
+  type CatalogItem,
+  listCatalogFields,
+  presetHasUnfilledFields,
+  useCanEditCatalogPresets,
+} from "./preset-helpers";
 
-interface PresetFallbackFieldsProps {
+interface FillPresetFieldsStepProps {
   /** Parent catalog item. */
   catalog: CatalogItem;
   /** Currently selected preset's catalog id (parent.id for default, child.id for named preset). */
   selectedPresetId: string;
-  /** Map of field-key → user-entered value. */
-  values: Record<string, string>;
-  onChange: (key: string, value: string) => void;
+  /** Called after preset values are saved successfully — caller should advance to the install step. */
+  onSaved: () => void;
+  /** Called when the user cancels out of this step. */
+  onCancel: () => void;
 }
 
 /**
- * Renders inputs for any preset-scoped field that the selected preset
- * doesn't have a value for. Returns null if the catalog has no
- * preset-scoped fields or the selected preset fills them all.
+ * Sequential step that asks the caller to fill in any preset-scoped fields the
+ * selected preset doesn't yet have values for, then persists them onto the
+ * preset row before the install dialog continues to its main form.
+ *
+ * The parent dialog should render this only when `presetHasUnfilledFields`
+ * returns true; the component itself does not gate its own visibility.
  */
-export function PresetFallbackFields({
+export function FillPresetFieldsStep({
   catalog,
   selectedPresetId,
-  values,
-  onChange,
-}: PresetFallbackFieldsProps) {
+  onSaved,
+  onCancel,
+}: FillPresetFieldsStepProps) {
+  const { singular } = usePresetEntityName();
+  const presetLower = singular.toLowerCase();
   const { data: children = [] } = useCatalogPresets(catalog.id);
+  const updatePreset = useUpdateCatalogPreset(catalog.id);
+  const updateParentCatalog = useUpdateInternalMcpCatalogItem();
+  const { canEdit } = useCanEditCatalogPresets(catalog);
 
   const selectedPreset =
     selectedPresetId === catalog.id
       ? catalog
       : children.find((c) => c.id === selectedPresetId);
 
-  if (!selectedPreset) return null;
+  const unfilled = useMemo(() => {
+    if (!selectedPreset) return [];
+    const presetFields = listCatalogFields(catalog).filter(
+      (f) => f.scope === "preset",
+    );
+    const filled = selectedPreset.presetFieldValues ?? {};
+    const hasStoredSecrets = selectedPreset.presetSecretId != null;
+    return presetFields.filter(
+      (f) => !(f.key in filled) && !(f.secret && hasStoredSecrets),
+    );
+  }, [catalog, selectedPreset]);
 
-  const presetFields = listCatalogFields(catalog).filter(
-    (f) => f.scope === "preset",
-  );
-  const filled = selectedPreset.presetFieldValues ?? {};
-  const hasStoredSecrets = selectedPreset.presetSecretId != null;
-  const unfilled = presetFields.filter(
-    (f) => !(f.key in filled) && !(f.secret && hasStoredSecrets),
-  );
+  const [values, setValues] = useState<Record<string, string>>({});
 
-  if (unfilled.length === 0) return null;
+  if (!selectedPreset || unfilled.length === 0) return null;
+
+  if (!canEdit) {
+    return (
+      <div className="space-y-4">
+        <Alert>
+          <AlertDescription>
+            This {presetLower} is missing values required to install it. Ask
+            someone who can edit this catalog item to fill them in.
+          </AlertDescription>
+        </Alert>
+        <div className="flex justify-end">
+          <Button type="button" variant="outline" onClick={onCancel}>
+            Close
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   const envFields = unfilled.filter((f) => f.origin === "envVar");
   const userConfigFields = unfilled.filter((f) => f.origin === "userConfig");
@@ -53,28 +97,64 @@ export function PresetFallbackFields({
       ? "Additional Headers"
       : "Connection Settings";
 
+  const isValid = unfilled.every((f) => {
+    if (!f.required) return true;
+    const v = values[f.key];
+    if (f.valueType === "boolean") return v === "true" || v === "false";
+    return !!v?.trim();
+  });
+
+  const isEditingDefaultPreset = selectedPreset.id === catalog.id;
+
+  const handleSave = async () => {
+    const payload: Record<string, string> = {};
+    for (const f of unfilled) {
+      const v = values[f.key];
+      if (v === undefined || v === "") continue;
+      payload[f.key] = v;
+    }
+    if (isEditingDefaultPreset) {
+      // The "default preset" is the parent catalog row itself — it has no
+      // child row, so we update preset_field_values via the parent catalog
+      // update endpoint instead of the children endpoint (which would 404).
+      await updateParentCatalog.mutateAsync({
+        id: catalog.id,
+        data: { presetFieldValues: payload },
+      });
+    } else {
+      await updatePreset.mutateAsync({
+        presetId: selectedPreset.id,
+        data: { presetFieldValues: payload },
+      });
+    }
+    onSaved();
+  };
+
+  const isSaving = updatePreset.isPending || updateParentCatalog.isPending;
+
   return (
-    <div className="space-y-4">
-      <div>
-        <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Preset fields not filled
+    <div className="space-y-6">
+      <div className="space-y-1">
+        <h3 className="text-sm font-semibold">
+          Configure this {singular} before installing
         </h3>
         <p className="text-xs text-muted-foreground">
-          The selected preset doesn't set these. Fill them for this install, or
-          set them once on the preset.
+          This {presetLower} is missing values that every MCP server
+          installation in this {presetLower} will share.
         </p>
       </div>
 
       {envFields.length > 0 && (
         <div className="space-y-4">
-          <h3 className="text-sm font-medium">Environment Variables</h3>
+          <h4 className="text-sm font-medium">Environment Variables</h4>
           {envFields.map((f) => (
             <PresetFieldInput
               key={`envVar:${f.key}`}
               field={f}
               idPrefix="preset-fallback"
               value={values[f.key] ?? ""}
-              onChange={(v) => onChange(f.key, v)}
+              onChange={(v) => setValues((prev) => ({ ...prev, [f.key]: v }))}
+              disabled={isSaving}
             />
           ))}
         </div>
@@ -84,41 +164,40 @@ export function PresetFallbackFields({
 
       {userConfigFields.length > 0 && (
         <div className="space-y-4">
-          <h3 className="text-sm font-medium">{userConfigHeader}</h3>
+          <h4 className="text-sm font-medium">{userConfigHeader}</h4>
           {userConfigFields.map((f) => (
             <PresetFieldInput
               key={`userConfig:${f.key}`}
               field={f}
               idPrefix="preset-fallback"
               value={values[f.key] ?? ""}
-              onChange={(v) => onChange(f.key, v)}
+              onChange={(v) => setValues((prev) => ({ ...prev, [f.key]: v }))}
+              disabled={isSaving}
             />
           ))}
         </div>
       )}
+
+      <div className="flex justify-end gap-2 pt-2">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onCancel}
+          disabled={isSaving}
+        >
+          Cancel
+        </Button>
+        <Button
+          type="button"
+          onClick={handleSave}
+          disabled={!isValid || isSaving}
+        >
+          {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+          {isSaving ? "Saving..." : "Save and continue"}
+        </Button>
+      </div>
     </div>
   );
 }
 
-/**
- * Collect non-empty preset-scoped values from the install dialog's fallback
- * map. Returns a flat key→value record suitable for the install POST's
- * `presetFieldValues` field — the backend partitions secrets and persists
- * them on the targeted preset row, mirroring the preset editor's behavior.
- */
-export function collectPresetFallbackValues(
-  catalog: CatalogItem,
-  values: Record<string, string>,
-): Record<string, string> {
-  const presetFields = listCatalogFields(catalog).filter(
-    (f) => f.scope === "preset",
-  );
-  const presetKeys = new Set(presetFields.map((f) => f.key));
-  const result: Record<string, string> = {};
-  for (const [key, value] of Object.entries(values)) {
-    if (!value) continue;
-    if (!presetKeys.has(key)) continue;
-    result[key] = value;
-  }
-  return result;
-}
+export { presetHasUnfilledFields };

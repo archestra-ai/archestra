@@ -28,7 +28,6 @@ import {
   findExternalIdentityProviderByProviderId,
 } from "@/services/identity-providers/oidc";
 import { autoReinstallServer } from "@/services/mcp-reinstall";
-import { partitionPresetFieldValuesAndUpsertSecrets } from "@/services/preset-field-persistence";
 import {
   AgentScopeSchema,
   ApiError,
@@ -37,7 +36,6 @@ import {
   InsertMcpServerSchema,
   type InternalMcpCatalogServerType,
   LocalMcpServerInstallationStatusSchema,
-  PresetFieldValuesSchema,
   type ResourceVisibilityScope,
   ResourceVisibilityScopeSchema,
   SelectMcpServerSchema,
@@ -149,11 +147,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           isByosVault: z.boolean().optional(),
           // Kubernetes service account override for local MCP servers
           serviceAccount: z.string().optional(),
-          // Values for preset-scoped fields the targeted preset doesn't yet
-          // fill. Persisted onto the catalog row's preset_field_values (and
-          // preset_secret_id for secret-typed fields), mirroring the preset
-          // editor route.
-          presetFieldValues: PresetFieldValuesSchema.optional(),
         }),
         response: constructResponseSchema(SelectMcpServerSchema),
       },
@@ -167,7 +160,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userConfigValues,
         environmentValues,
         serviceAccount,
-        presetFieldValues,
         ...restDataFromRequestBody
       } = body;
       const serverData: typeof restDataFromRequestBody & {
@@ -306,60 +298,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (catalogItem.localConfig) {
             catalogItem.localConfig.serviceAccount = normalizedServiceAccount;
           }
-        }
-
-        // Persist incoming preset-scoped field values onto the targeted
-        // catalog row, mirroring the preset editor route. Non-secret values
-        // land on `preset_field_values`; secret-flagged values flow into the
-        // row's `preset_secret_id` bundle via the partitioner. We merge on
-        // top of any existing values because the install dialog only sends
-        // the subset of preset fields the user actually filled in.
-        if (presetFieldValues && Object.keys(presetFieldValues).length > 0) {
-          const parent = catalogItem.parentCatalogItemId
-            ? await InternalMcpCatalogModel.findById(
-                catalogItem.parentCatalogItemId,
-              )
-            : catalogItem;
-          if (!parent) {
-            throw new ApiError(
-              400,
-              "Parent catalog item not found for preset field values",
-            );
-          }
-          try {
-            InternalMcpCatalogModel.validateFieldValuesAgainstCatalog(
-              parent,
-              presetFieldValues,
-            );
-          } catch (e) {
-            throw new ApiError(400, (e as Error).message);
-          }
-
-          const { nonSecretFieldValues, presetSecretId } =
-            await partitionPresetFieldValuesAndUpsertSecrets({
-              parent,
-              catalogRow: {
-                name: catalogItem.name,
-                presetSecretId: catalogItem.presetSecretId,
-              },
-              incoming: presetFieldValues,
-            });
-
-          const mergedPresetFieldValues = {
-            ...(catalogItem.presetFieldValues ?? {}),
-            ...nonSecretFieldValues,
-          };
-          const catalogUpdates: Record<string, unknown> = {
-            presetFieldValues: mergedPresetFieldValues,
-          };
-          if (presetSecretId !== catalogItem.presetSecretId) {
-            catalogUpdates.presetSecretId = presetSecretId;
-          }
-          await InternalMcpCatalogModel.update(catalogItem.id, catalogUpdates);
-          // Refresh the in-memory catalogItem so downstream deployment logic
-          // sees the just-persisted preset values.
-          catalogItem.presetFieldValues = mergedPresetFieldValues;
-          catalogItem.presetSecretId = presetSecretId;
         }
 
         // Apply preset-scoped overlay from the catalog row onto the install

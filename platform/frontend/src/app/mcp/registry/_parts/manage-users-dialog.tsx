@@ -75,6 +75,7 @@ import {
   useInternalMcpCatalog,
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp/mcp-server.query";
+import { usePresetEntityName } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { type DeploymentState, DeploymentStatusDot } from "./deployment-status";
 
@@ -83,12 +84,16 @@ interface ManageUsersDialogProps {
   onClose: () => void;
   label?: string;
   catalogId: string;
-  /** Called when user wants to add a personal connection */
-  onAddPersonalConnection?: () => void;
+  /**
+   * Called when user wants to add a personal connection. `presetCatalogId`
+   * is set when the user clicked Install on a specific preset card; falls
+   * back to the parent catalog.
+   */
+  onAddPersonalConnection?: (presetCatalogId?: string) => void;
   /** Called when user wants to add a team connection for a specific team */
-  onAddSharedConnection?: (teamId: string) => void;
+  onAddSharedConnection?: (teamId: string, presetCatalogId?: string) => void;
   /** Called when user wants to add an organization-wide connection */
-  onAddOrgConnection?: () => void;
+  onAddOrgConnection?: (presetCatalogId?: string) => void;
   /** Deployment statuses keyed by server ID */
   deploymentStatuses?: Record<string, McpDeploymentStatusEntry>;
   /** Called when user clicks a pod name to open the debug dialog */
@@ -133,12 +138,19 @@ interface ManageUsersContentProps {
   onClose: () => void;
   label?: string;
   catalogId: string;
-  onAddPersonalConnection?: () => void;
-  onAddSharedConnection?: (teamId: string) => void;
-  onAddOrgConnection?: () => void;
+  onAddPersonalConnection?: (presetCatalogId?: string) => void;
+  onAddSharedConnection?: (teamId: string, presetCatalogId?: string) => void;
+  onAddOrgConnection?: (presetCatalogId?: string) => void;
   deploymentStatuses?: Record<string, McpDeploymentStatusEntry>;
   onOpenPodLogs?: (serverId: string) => void;
   hideHeader?: boolean;
+  /**
+   * Externally-controlled preset filter id ("all" or a presetId). When set,
+   * the internal preset Select is hidden and the parent owns the value
+   * (used by the settings dialog so the selector can live in its page header).
+   */
+  controlledPresetFilter?: string;
+  onControlledPresetFilterChange?: (value: string) => void;
 }
 
 export function ManageUsersContent({
@@ -152,7 +164,10 @@ export function ManageUsersContent({
   deploymentStatuses = {},
   onOpenPodLogs,
   hideHeader = false,
+  controlledPresetFilter,
+  onControlledPresetFilterChange,
 }: ManageUsersContentProps) {
+  const isPresetFilterControlled = controlledPresetFilter !== undefined;
   // Subscribe to live mcp-servers query to get fresh data. We fetch all
   // servers (no catalogId filter) and split by preset client-side so we can
   // group rows by the preset/default they were installed from.
@@ -160,6 +175,11 @@ export function ManageUsersContent({
     useMcpServers();
   const { data: catalogItems } = useInternalMcpCatalog({});
   const { data: childPresets = [] } = useCatalogPresets(catalogId);
+  const {
+    plural: presetPlural,
+    singular: presetSingular,
+    configured: presetTermConfigured,
+  } = usePresetEntityName();
 
   // Map of presetId → preset row. Parent is the "default" preset.
   const presetEntries = [
@@ -177,8 +197,15 @@ export function ManageUsersContent({
   );
 
   // Filter dropdown state — "all" or a specific presetId.
-  const [selectedPresetFilter, setSelectedPresetFilter] =
+  // When `controlledPresetFilter` is supplied, the parent owns this state.
+  const [internalSelectedPresetFilter, setInternalSelectedPresetFilter] =
     useState<string>("all");
+  const selectedPresetFilter = isPresetFilterControlled
+    ? (controlledPresetFilter ?? "all")
+    : internalSelectedPresetFilter;
+  const setSelectedPresetFilter = isPresetFilterControlled
+    ? (next: string) => onControlledPresetFilterChange?.(next)
+    : setInternalSelectedPresetFilter;
   const visiblePresets =
     selectedPresetFilter === "all"
       ? presetEntries
@@ -417,71 +444,28 @@ export function ManageUsersContent({
       )}
 
       <div className={hideHeader ? "space-y-4 px-4 py-4" : "space-y-4 pb-4"}>
-        {(() => {
-          const defaultPresetServers = allServers.filter(
-            (s) => s.catalogId === catalogId,
-          );
-          const defaultSplit = splitByScope(defaultPresetServers);
-          return (
-            <div className="flex items-center justify-end gap-2">
-              {presetEntries.length > 1 && (
-                <Select
-                  value={selectedPresetFilter}
-                  onValueChange={setSelectedPresetFilter}
-                >
-                  <SelectTrigger className="w-[200px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All presets</SelectItem>
-                    {presetEntries.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-              <InstallMenuButton
-                onAddPersonal={
-                  hasAddCallbacks &&
-                  onAddPersonalConnection &&
-                  !defaultSplit.myPersonalServer
-                    ? () => {
-                        onClose();
-                        onAddPersonalConnection();
-                      }
-                    : undefined
-                }
-                onAddForTeam={
-                  hasAddCallbacks && onAddSharedConnection
-                    ? (teamId) => {
-                        onClose();
-                        onAddSharedConnection(teamId);
-                      }
-                    : undefined
-                }
-                onAddForOrg={
-                  hasAddCallbacks &&
-                  onAddOrgConnection &&
-                  !defaultSplit.hasOrgConnection
-                    ? () => {
-                        onClose();
-                        onAddOrgConnection();
-                      }
-                    : undefined
-                }
-                availableTeamsForShared={defaultSplit.availableTeamsForShared}
-                addOrgDisabled={!hasMcpServerAdminPermission}
-                addOrgDisabledReason={
-                  !hasMcpServerAdminPermission
-                    ? "Only organization admins can install organization-wide"
-                    : undefined
-                }
-              />
-            </div>
-          );
-        })()}
+        {/* Legacy in-content preset filter — only shown when the standalone
+            dialog renders (no external page header to host the selector). */}
+        {presetEntries.length > 1 && !isPresetFilterControlled && (
+          <div className="flex items-center justify-end gap-2">
+            <Select
+              value={selectedPresetFilter}
+              onValueChange={setSelectedPresetFilter}
+            >
+              <SelectTrigger className="w-[200px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All {presetPlural}</SelectItem>
+                {presetEntries.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         {visiblePresets.map((preset) => {
           const presetServers = allServers.filter(
@@ -489,39 +473,100 @@ export function ManageUsersContent({
           );
           const split = splitByScope(presetServers);
           const hasContent = presetServers.length > 0;
+          // Annotate the card title with the configured preset term only
+          // when the org has set one AND non-default presets actually exist.
+          // Without both, the title row carries only the install button.
+          const showAnnotatedTitle =
+            presetTermConfigured && childPresets.length > 0;
+          // Pass undefined for default so the install flow targets the parent
+          // catalog directly (matches pre-preset behaviour).
+          const installPresetCatalogId = preset.isDefault
+            ? undefined
+            : preset.id;
+
+          const installMenu = (
+            <InstallMenuButton
+              onAddPersonal={
+                hasAddCallbacks &&
+                onAddPersonalConnection &&
+                !split.myPersonalServer
+                  ? () => {
+                      onClose();
+                      onAddPersonalConnection(installPresetCatalogId);
+                    }
+                  : undefined
+              }
+              onAddForTeam={
+                hasAddCallbacks && onAddSharedConnection
+                  ? (teamId) => {
+                      onClose();
+                      onAddSharedConnection(teamId, installPresetCatalogId);
+                    }
+                  : undefined
+              }
+              onAddForOrg={
+                hasAddCallbacks && onAddOrgConnection && !split.hasOrgConnection
+                  ? () => {
+                      onClose();
+                      onAddOrgConnection(installPresetCatalogId);
+                    }
+                  : undefined
+              }
+              availableTeamsForShared={split.availableTeamsForShared}
+              addOrgDisabled={!hasMcpServerAdminPermission}
+              addOrgDisabledReason={
+                !hasMcpServerAdminPermission
+                  ? "Only organization admins can install organization-wide"
+                  : undefined
+              }
+            />
+          );
 
           return (
-            <Card key={preset.id}>
-              <CardContent className="p-0">
-                <div className="flex items-center gap-2 border-b px-4 py-2.5">
-                  <span className="text-sm font-semibold">{preset.name}</span>
-                </div>
-                {hasContent ? (
-                  <UnifiedConnectionsTable
-                    myPersonalServer={split.myPersonalServer}
-                    otherPersonalServers={split.otherPersonalServers}
-                    teamServers={split.teamServers}
-                    orgServers={split.orgServers}
-                    isOAuthServer={isOAuthServer}
-                    getCredentialOwnerName={getCredentialOwnerName}
-                    canReauthenticate={canReauthenticate}
-                    getReauthTooltip={getReauthTooltip}
-                    canRevoke={canRevoke}
-                    getRevokeTooltip={getRevokeTooltip}
-                    handleReauthenticate={handleReauthenticate}
-                    handleRevoke={handleRevoke}
-                    isDeleting={deleteMcpServerMutation.isPending}
-                    deploymentStatuses={deploymentStatuses}
-                    onOpenPodLogs={onOpenPodLogs}
-                    availableTeamsForShared={split.availableTeamsForShared}
-                  />
-                ) : (
-                  <p className="text-sm text-muted-foreground px-4 py-3">
-                    No callers yet.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
+            <div key={preset.id} className="space-y-2">
+              {!showAnnotatedTitle && (
+                <div className="flex justify-end">{installMenu}</div>
+              )}
+              <Card>
+                <CardContent className="p-0">
+                  {showAnnotatedTitle && (
+                    <div className="flex items-center justify-between gap-2 border-b px-4 py-2.5">
+                      <span className="text-sm font-semibold">
+                        <span className="text-muted-foreground font-normal">
+                          {presetSingular}:{" "}
+                        </span>
+                        {preset.name}
+                      </span>
+                      {installMenu}
+                    </div>
+                  )}
+                  {hasContent ? (
+                    <UnifiedConnectionsTable
+                      myPersonalServer={split.myPersonalServer}
+                      otherPersonalServers={split.otherPersonalServers}
+                      teamServers={split.teamServers}
+                      orgServers={split.orgServers}
+                      isOAuthServer={isOAuthServer}
+                      getCredentialOwnerName={getCredentialOwnerName}
+                      canReauthenticate={canReauthenticate}
+                      getReauthTooltip={getReauthTooltip}
+                      canRevoke={canRevoke}
+                      getRevokeTooltip={getRevokeTooltip}
+                      handleReauthenticate={handleReauthenticate}
+                      handleRevoke={handleRevoke}
+                      isDeleting={deleteMcpServerMutation.isPending}
+                      deploymentStatuses={deploymentStatuses}
+                      onOpenPodLogs={onOpenPodLogs}
+                      availableTeamsForShared={split.availableTeamsForShared}
+                    />
+                  ) : (
+                    <p className="text-sm text-muted-foreground px-4 py-3">
+                      No callers yet.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           );
         })}
       </div>

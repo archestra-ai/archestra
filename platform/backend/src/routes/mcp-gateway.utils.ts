@@ -121,7 +121,6 @@ type ResolvedArchestraToken =
     };
 
 const TOKEN_AUTH_CACHE_TTL_MS = 30_000;
-const TOKEN_AUTH_CACHE_NULL_TTL_MS = 5_000;
 const TOKEN_AUTH_CACHE_MAX_ENTRIES = 1_000;
 const tokenAuthCache = new LRUCacheManager<TokenAuthResult | null>({
   maxSize: TOKEN_AUTH_CACHE_MAX_ENTRIES,
@@ -1210,22 +1209,41 @@ function cacheTokenAuthResult(
   cacheKey: string,
   result: TokenAuthResult | null,
 ): void {
-  tokenAuthCache.set(
-    cacheKey,
-    result,
-    result ? TOKEN_AUTH_CACHE_TTL_MS : TOKEN_AUTH_CACHE_NULL_TTL_MS,
-  );
+  // Negative results are intentionally NOT cached. Caching auth failures
+  // creates a "cache treadmill" where every retry refreshes the negative
+  // entry: a transient race during agent/IdP creation fails the first
+  // call, the failure is cached, the test/client retries within the cache
+  // TTL window, that retry finds (and refreshes) the cached `null`, and
+  // the cycle repeats forever (or until the polling budget is exhausted).
+  //
+  // This was the root cause of intermittent 401s in CI for the JWKS /
+  // enterprise-managed-credentials e2e suites — those tests create an
+  // identity provider + agent + IdP-binding within milliseconds of the
+  // first gateway call, and the negative cache kept the early failure
+  // sticky long after the underlying state stabilized.
+  //
+  // The defensive benefit of negative caching (less DB load on rejected
+  // tokens) is small: invalid-token requests already pay an upstream
+  // auth-rate-limit cost, and the validator's DB lookups are indexed and
+  // fast. Skipping the cache for failures lets every request re-evaluate
+  // against fresh state — eliminating the race entirely.
+  if (result === null) {
+    return;
+  }
+  tokenAuthCache.set(cacheKey, result, TOKEN_AUTH_CACHE_TTL_MS);
 }
 
 function cacheRawArchestraToken(
   rawTokenHash: string,
   result: ResolvedArchestraToken | null,
 ): void {
-  rawArchestraTokenCache.set(
-    rawTokenHash,
-    result,
-    result ? TOKEN_AUTH_CACHE_TTL_MS : TOKEN_AUTH_CACHE_NULL_TTL_MS,
-  );
+  // Same rationale as cacheTokenAuthResult: don't cache failures, to
+  // avoid the negative-cache treadmill that turns a transient creation
+  // race into a sticky 5-second window of 401s.
+  if (result === null) {
+    return;
+  }
+  rawArchestraTokenCache.set(rawTokenHash, result, TOKEN_AUTH_CACHE_TTL_MS);
 }
 
 function buildTokenHashes(profileId: string, tokenValue: string): TokenHashes {

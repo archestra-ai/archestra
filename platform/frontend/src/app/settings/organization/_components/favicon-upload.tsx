@@ -12,7 +12,7 @@ export function FaviconUpload({
   return (
     <ImageUpload
       title="Favicon"
-      description="Upload a custom favicon for your organization. PNG only, max 2 MB. Recommended: 32x32px or 64x64px."
+      description="PNG only, max 2 MB. Recommended: 32×32 or 64×64."
       fieldName="favicon"
       currentImage={currentFavicon}
       onImageChange={onFaviconChange}

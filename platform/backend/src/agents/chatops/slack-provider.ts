@@ -342,14 +342,16 @@ class SlackProvider implements ChatOpsProvider {
       });
     }
 
-    const result = await this.client.chat.postMessage({
+    const postArgs = {
       channel: options.originalMessage.channelId,
       text: options.footer
         ? `${options.text}\n\n${options.footer}`
         : options.text,
       blocks,
       thread_ts: options.originalMessage.threadId,
-    });
+    };
+    logger.debug({ postArgs }, "[SlackProvider] chat.postMessage (sendReply)");
+    const result = await this.client.chat.postMessage(postArgs);
 
     return (result.ts as string) || "";
   }
@@ -386,19 +388,19 @@ class SlackProvider implements ChatOpsProvider {
       };
     };
 
-    await this.client.chat.postMessage({
+    const postArgs = {
       channel: options.channelId,
       text: "",
       blocks: [
         {
-          type: "section",
+          type: "section" as const,
           text: {
-            type: "mrkdwn",
+            type: "mrkdwn" as const,
             text: `\`${options.toolName}\``,
           },
         },
         {
-          type: "actions",
+          type: "actions" as const,
           elements: [
             generateButton("Approve", "primary", true, "approve"),
             generateButton("Decline", "danger", false, "decline"),
@@ -406,7 +408,12 @@ class SlackProvider implements ChatOpsProvider {
         },
       ],
       thread_ts: options.threadId,
-    });
+    };
+    logger.debug(
+      { postArgs },
+      "[SlackProvider] chat.postMessage (addApprovalRequestForm)",
+    );
+    await this.client.chat.postMessage(postArgs);
   }
 
   async updateApprovalRequest(
@@ -508,7 +515,7 @@ class SlackProvider implements ChatOpsProvider {
     if (isDM) {
       // In DMs, thread the reply to the user's message so it appears in Chat tab.
       // Top-level postMessage without thread_ts goes to History.
-      await this.client.chat.postMessage({
+      const postArgs = {
         channel: params.message.channelId,
         text: fallbackText,
         // biome-ignore lint/suspicious/noExplicitAny: Block Kit types are complex; shape is correct
@@ -516,7 +523,12 @@ class SlackProvider implements ChatOpsProvider {
         ...(params.message.threadId
           ? { thread_ts: params.message.threadId }
           : {}),
-      });
+      };
+      logger.debug(
+        { postArgs },
+        "[SlackProvider] chat.postMessage (changeAgent DM)",
+      );
+      await this.client.chat.postMessage(postArgs);
     } else {
       await this.client.chat.postEphemeral({
         channel: params.message.channelId,
@@ -1041,12 +1053,17 @@ class SlackProvider implements ChatOpsProvider {
       });
     }
 
-    await this.client.chat.postMessage({
+    const postArgs = {
       channel: dmChannelId,
       text: params.text,
       blocks,
       ...(params.threadId ? { thread_ts: params.threadId } : {}),
-    });
+    };
+    logger.debug(
+      { postArgs },
+      "[SlackProvider] chat.postMessage (sendDmNotification)",
+    );
+    await this.client.chat.postMessage(postArgs);
   }
 
   async setTypingStatus(channelId: string, threadTs: string): Promise<void> {
@@ -1122,11 +1139,16 @@ class SlackProvider implements ChatOpsProvider {
     ].join("\n");
 
     try {
-      await this.client.chat.postMessage({
+      const postArgs = {
         channel: message.channelId,
         text,
         thread_ts: message.threadId,
-      });
+      };
+      logger.debug(
+        { postArgs },
+        "[SlackProvider] chat.postMessage (notifyMissingScopes)",
+      );
+      await this.client.chat.postMessage(postArgs);
 
       // Throttle: don't send again for 30 days
       cacheManager.set(cacheKey, true, TimeInMs.Day * 30).catch(() => {});

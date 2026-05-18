@@ -979,8 +979,23 @@ export function McpServerCard({
       </CardHeader>
       <CardContent className="flex flex-col gap-4 flex-grow">
         {variant === "local" &&
-          allServersAcrossPresets
-            .filter((s) => s.localInstallationStatus === "error")
+          (() => {
+            // Multi-tenant catalogs alias one K8s pod across many mcp_server
+            // rows, so every sibling install reports the same error. Collapse
+            // failed banners by podName (falling back to the error text) to
+            // avoid N copies of the same "Installation failed" row.
+            const seenPodKeys = new Set<string>();
+            return allServersAcrossPresets.filter((s) => {
+              if (s.localInstallationStatus !== "error") return false;
+              const podKey =
+                deploymentStatuses[s.id]?.podName ??
+                s.localInstallationError ??
+                s.id;
+              if (seenPodKeys.has(podKey)) return false;
+              seenPodKeys.add(podKey);
+              return true;
+            });
+          })()
             .map((failed) => {
               const isDefaultPreset = failed.catalogId === item.id;
               const presetLabel = isDefaultPreset

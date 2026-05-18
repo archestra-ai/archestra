@@ -86,6 +86,7 @@ function LogDetail({
   const requestMessages = new DynamicInteraction(
     dynamicInteraction,
   ).mapToUiMessages(allDualLlmAnalyses);
+  const chatErrors = dynamicInteraction.chatErrors ?? [];
   const authMethod = dynamicInteraction.authMethod
     ? formatAuthMethod(dynamicInteraction.authMethod)
     : null;
@@ -267,9 +268,13 @@ function LogDetail({
             <div className="border border-border rounded-lg bg-background overflow-hidden">
               <MessageThread
                 messages={requestMessages}
+                chatErrors={chatErrors}
+                conversationId={dynamicInteraction.sessionId ?? undefined}
                 containerClassName="h-auto"
                 hideDivider={true}
                 profileId={agent?.id}
+                agentName={agent?.name ?? undefined}
+                selectedModel={interaction.modelName}
                 unsafeContextBoundary={dynamicInteraction.unsafeContextBoundary}
               />
             </div>

@@ -14,6 +14,7 @@ import type {
   InsertConversation,
   UpdateConversation,
 } from "@/types";
+import { escapeLikePattern } from "@/utils/sql-search";
 import ConversationChatErrorModel from "./conversation-chat-error";
 import ConversationShareModel from "./conversation-share";
 
@@ -34,14 +35,6 @@ class ConversationModel {
     })) as Conversation;
 
     return conversationWithAgent;
-  }
-
-  /**
-   * Escape special characters in LIKE patterns.
-   * % and _ have special meaning in SQL LIKE patterns and need to be escaped.
-   */
-  private static escapeLikePattern(value: string): string {
-    return value.replace(/[%_\\]/g, "\\$&");
   }
 
   /**
@@ -85,7 +78,7 @@ class ConversationModel {
     // Add search filter if provided
     if (trimmedSearch) {
       // Escape LIKE special characters (%, _, \) to prevent unexpected pattern matching
-      const escapedSearch = ConversationModel.escapeLikePattern(trimmedSearch);
+      const escapedSearch = escapeLikePattern(trimmedSearch);
       const searchPattern = `%${escapedSearch}%`;
 
       // 1. Conversation title (text column) - uses conversations_title_trgm_idx
@@ -113,7 +106,7 @@ class ConversationModel {
     // Include messages only during search for preview snippets
     if (trimmedSearch) {
       // Escape search pattern for message subquery
-      const escapedSearch = ConversationModel.escapeLikePattern(trimmedSearch);
+      const escapedSearch = escapeLikePattern(trimmedSearch);
       const searchPattern = `%${escapedSearch}%`;
 
       // Use a lateral join to limit messages per conversation for preview

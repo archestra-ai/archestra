@@ -20,15 +20,8 @@ import {
   type PaginatedResult,
 } from "@/database/utils/pagination";
 import type { InsertMcpToolCall, McpToolCall, SortingQuery } from "@/types";
+import { escapeLikePattern } from "@/utils/sql-search";
 import AgentTeamModel from "./agent-team";
-
-/**
- * Escapes special LIKE pattern characters (%, _, \) to treat them as literals.
- * This prevents users from crafting searches that behave unexpectedly.
- */
-function escapeLikePattern(value: string): string {
-  return value.replace(/[%_\\]/g, "\\$&");
-}
 
 /**
  * Builds a search condition for MCP tool calls across server name, method, tool name, arguments, and result.

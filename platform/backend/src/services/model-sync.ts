@@ -236,10 +236,16 @@ function inferEmbeddingDimensions(
   provider: SupportedProvider,
 ): SupportedEmbeddingDimension | null {
   const id = modelId.toLowerCase();
-  if (provider === "openai" && id === "text-embedding-3-small") {
+  if (
+    (provider === "openai" || provider === "azure") &&
+    id === "text-embedding-3-small"
+  ) {
     return 1536;
   }
-  if (provider === "openai" && id === "text-embedding-3-large") {
+  if (
+    (provider === "openai" || provider === "azure") &&
+    id === "text-embedding-3-large"
+  ) {
     // Default to 1536 for backwards compatibility with existing OpenAI KB
     // embeddings; admins can opt into 3072 manually in the model editor.
     return 1536;
@@ -376,11 +382,28 @@ function inferModelCapabilities(params: {
 }): ProviderModelCapabilities {
   const { provider, modelId } = params;
 
+  if (provider === "azure") {
+    return inferAzureCapabilities(modelId);
+  }
+
   if (provider === "gemini") {
     return inferGeminiCapabilities(modelId);
   }
 
   return emptyCapabilities();
+}
+
+function inferAzureCapabilities(modelId: string): ProviderModelCapabilities {
+  if (!modelId.toLowerCase().includes("embedding")) {
+    return emptyCapabilities();
+  }
+
+  return {
+    ...emptyCapabilities(),
+    inputModalities: ["text"],
+    outputModalities: [],
+    supportsToolCalling: false,
+  };
 }
 
 function inferGeminiCapabilities(modelId: string): ProviderModelCapabilities {

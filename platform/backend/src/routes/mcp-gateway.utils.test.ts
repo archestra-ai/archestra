@@ -134,6 +134,47 @@ describe("validateMCPGatewayToken", () => {
       expect(result).toBeNull();
     });
 
+    test("does not cache negative per-profile auth results", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeAgent,
+    }) => {
+      // Regression coverage for the "negative cache treadmill": when a
+      // per-profile auth check returned null, the result used to be cached
+      // for several seconds. A retry inside that window would refresh the
+      // cached null, turning a transient race (e.g. a profile/team binding
+      // created milliseconds after the first call) into a sticky 401.
+      // The contract is now: failures bypass the cache, so each call
+      // re-evaluates against fresh DB state.
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team1 = await makeTeam(org.id, user.id, { name: "Team 1" });
+      const team2 = await makeTeam(org.id, user.id, { name: "Team 2" });
+      const agent = await makeAgent({ teams: [team2.id], scope: "team" });
+      const { value } = await TeamTokenModel.create({
+        organizationId: org.id,
+        name: "Team 1 Token",
+        teamId: team1.id,
+      });
+
+      const teamHasAgentAccessSpy = vi.spyOn(
+        AgentTeamModel,
+        "teamHasAgentAccess",
+      );
+
+      const firstResult = await validateMCPGatewayToken(agent.id, value);
+      const secondResult = await validateMCPGatewayToken(agent.id, value);
+
+      expect(firstResult).toBeNull();
+      expect(secondResult).toBeNull();
+      // Both calls must re-run the per-profile check; if negative caching
+      // were reintroduced this would drop to 1.
+      expect(teamHasAgentAccessSpy).toHaveBeenCalledTimes(2);
+
+      teamHasAgentAccessSpy.mockRestore();
+    });
+
     test("reuses resolved team tokens across profiles", async ({
       makeOrganization,
     }) => {

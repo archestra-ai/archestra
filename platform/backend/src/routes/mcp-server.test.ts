@@ -1255,7 +1255,7 @@ describe("mcp server inspect route", () => {
       method: "POST",
       url: "/api/mcp_server",
       payload: {
-        name: "Protected Resource",
+        name: catalog.name,
         catalogId: catalog.id,
         agentIds: [agent.id],
       },
@@ -1274,7 +1274,7 @@ describe("mcp server inspect route", () => {
     });
 
     const persistedTool = await ToolModel.findByName(
-      "protected_resource__read_resource_todos",
+      "protected_resource_remote__read_resource_todos",
     );
     expect(persistedTool).toMatchObject({
       catalogId: catalog.id,

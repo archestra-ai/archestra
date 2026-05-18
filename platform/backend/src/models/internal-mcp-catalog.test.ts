@@ -466,11 +466,11 @@ describe("InternalMcpCatalogModel", () => {
       });
 
       const updated = await InternalMcpCatalogModel.update(catalog.id, {
-        name: "catalog-update-no-labels-renamed",
+        description: "edited description",
       });
 
       expect(updated).not.toBeNull();
-      expect(updated?.name).toBe("catalog-update-no-labels-renamed");
+      expect(updated?.description).toBe("edited description");
       expect(updated?.labels).toHaveLength(1);
       expect(updated?.labels[0].key).toBe("keep");
       expect(updated?.labels[0].value).toBe("me");

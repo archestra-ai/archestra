@@ -47,6 +47,7 @@ export async function resolveProviderApiKey(params: {
     secretId: string | null;
     scope: string;
     baseUrl: string | null;
+    inferenceBaseUrl: string | null;
   } | null = null;
 
   if (userId) {
@@ -77,7 +78,7 @@ export async function resolveProviderApiKey(params: {
           apiKey: secretValue as string,
           source: resolvedApiKey.scope,
           chatApiKeyId: resolvedApiKey.id,
-          baseUrl: resolvedApiKey.baseUrl,
+          baseUrl: resolvedApiKey.inferenceBaseUrl ?? resolvedApiKey.baseUrl,
         };
       }
     }
@@ -92,7 +93,7 @@ export async function resolveProviderApiKey(params: {
         apiKey: undefined,
         source: resolvedApiKey.scope,
         chatApiKeyId: resolvedApiKey.id,
-        baseUrl: resolvedApiKey.baseUrl,
+        baseUrl: resolvedApiKey.inferenceBaseUrl ?? resolvedApiKey.baseUrl,
       };
     }
   }

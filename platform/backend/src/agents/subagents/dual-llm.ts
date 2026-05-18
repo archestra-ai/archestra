@@ -283,7 +283,7 @@ async function resolveBuiltInAgentSelection(params: {
         apiKey: secretValue,
         modelName:
           agent.llmModel ?? bestModel?.modelId ?? config.chat.defaultModel,
-        baseUrl: apiKey.baseUrl,
+        baseUrl: apiKey.inferenceBaseUrl ?? apiKey.baseUrl,
       };
     }
   }

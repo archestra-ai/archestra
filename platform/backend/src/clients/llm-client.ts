@@ -21,6 +21,7 @@ import {
   USER_ID_HEADER,
 } from "@shared";
 import type { streamText } from "ai";
+import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import {
   createAzureFetchWithApiVersion,
   normalizeAzureApiKey,
@@ -297,6 +298,8 @@ export async function createLLMModelForAgent(params: {
   // vLLM and Ollama typically don't require API keys
   const isVllm = provider === "vllm";
   const isOllama = provider === "ollama";
+  const isAzureWithEntra =
+    provider === "azure" && isAzureOpenAiEntraIdEnabled();
 
   logger.info(
     {
@@ -306,6 +309,7 @@ export async function createLLMModelForAgent(params: {
       isBedrockWithIamAuth,
       isVllm,
       isOllama,
+      isAzureWithEntra,
     },
     "Using LLM provider API key",
   );
@@ -315,7 +319,8 @@ export async function createLLMModelForAgent(params: {
     !isGeminiWithVertexAi &&
     !isBedrockWithIamAuth &&
     !isVllm &&
-    !isOllama
+    !isOllama &&
+    !isAzureWithEntra
   ) {
     throw new ApiError(
       400,
@@ -500,8 +505,13 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
         fetch: providedFetch,
       });
       const normalizedApiKey = normalizeAzureApiKey(apiKey);
+      const sdkApiKey =
+        normalizedApiKey ??
+        (isAzureOpenAiEntraIdEnabled()
+          ? KEYLESS_PROVIDER_API_KEY_PLACEHOLDER
+          : undefined);
       return createOpenAI({
-        apiKey: normalizedApiKey,
+        apiKey: sdkApiKey,
         baseURL,
         headers: normalizedApiKey
           ? { ...headers, "api-key": normalizedApiKey }

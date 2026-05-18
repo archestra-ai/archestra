@@ -73,7 +73,7 @@ export async function resolveSmartDefaultLlm(params: {
           provider,
           apiKey,
           modelName: bestModel.modelId,
-          baseUrl: systemKey.baseUrl,
+          baseUrl: systemKey.inferenceBaseUrl ?? systemKey.baseUrl,
         };
       }
     }
@@ -114,7 +114,7 @@ export async function resolveConfiguredAgentLlm(agent: {
       provider: apiKeyRecord.provider,
       apiKey,
       modelName,
-      baseUrl: apiKeyRecord.baseUrl,
+      baseUrl: apiKeyRecord.inferenceBaseUrl ?? apiKeyRecord.baseUrl,
     };
   }
 

@@ -14,6 +14,16 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_APP_VERSION: platformPkg.version,
   },
   output: "standalone",
+  // Version skew protection during rolling deployments.
+  // https://nextjs.org/docs/app/api-reference/config/next-config-js/deploymentId
+  // VERSION is set as a build arg by CI and baked into the
+  // client bundle here. On client navigation, a mismatch between
+  // the client's deployment id and the server's response header triggers a
+  // hard reload, fetching fresh assets that match the server build.
+  // Next.js restricts the id to [a-zA-Z0-9_-], so non-conforming characters
+  // (e.g. the dots in `v1.2.41`) are replaced with hyphens.
+  // https://nextjs.org/docs/messages/deploymentid-invalid-characters
+  deploymentId: process.env.VERSION?.replace(/[^a-zA-Z0-9_-]/g, "-"),
   transpilePackages: ["@shared"],
   // Disable dev indicators so they don't show up in docs automated screenshots
   devIndicators: false,

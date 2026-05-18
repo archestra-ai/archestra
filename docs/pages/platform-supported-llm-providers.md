@@ -74,6 +74,29 @@ Model Router translation is text-first. Anthropic, Gemini, and Cohere routes cur
 - **Authentication**: Pass your Anthropic API key in the `x-api-key` header
 - **Messages path**: `POST /v1/anthropic/{profile-id}/v1/messages`
 
+### Anthropic Workload Identity Federation (Keyless Auth)
+
+Anthropic supports [Workload Identity Federation](https://platform.claude.com/docs/en/manage-claude/workload-identity-federation) (WIF), allowing your applications to authenticate to the Claude API using short-lived OIDC tokens instead of static API keys. This is the most secure way to authenticate in environments like Kubernetes (GKE, EKS) or GitHub Actions.
+
+To use Anthropic WIF with Archestra:
+
+1. **Enable WIF in your Anthropic Console**: Follow the [official Anthropic guide](https://platform.claude.com/docs/en/manage-claude/workload-identity-federation) to create a Federation Rule and associate it with a service account.
+
+2. **Configure Archestra**: Set the following environment variables:
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ARCHESTRA_ANTHROPIC_WIF_ENABLED` | Yes | Set to `true` to enable WIF. |
+| `ARCHESTRA_ANTHROPIC_WIF_RULE_ID` | Yes | The ID of the federation rule created in the Anthropic Console. |
+| `ARCHESTRA_ANTHROPIC_WIF_ORGANIZATION_ID` | Yes | Your Anthropic Organization ID. |
+| `ARCHESTRA_ANTHROPIC_WIF_SERVICE_ACCOUNT_ID` | Yes | The ID of the Anthropic service account. |
+| `ARCHESTRA_ANTHROPIC_WIF_IDENTITY_TOKEN` | No | The raw OIDC JWT token. |
+| `ARCHESTRA_ANTHROPIC_WIF_IDENTITY_TOKEN_FILE` | No | Path to a file containing the OIDC JWT token. |
+
+When WIF is enabled, Archestra will automatically exchange your identity token for a short-lived Anthropic access token using the RFC 7523 `jwt-bearer` grant type.
+
+For **Kubernetes** deployments, we recommend using `ARCHESTRA_ANTHROPIC_WIF_IDENTITY_TOKEN_FILE` and pointing it to a projected service account token volume.
+
 ### Anthropic on Microsoft Foundry
 
 Claude models deployed in Microsoft Foundry use the Anthropic Messages API at `https://<resource>.services.ai.azure.com/anthropic`. Set `ARCHESTRA_ANTHROPIC_BASE_URL` to that `/anthropic` base URL. For keyless Microsoft Entra ID authentication, also set `ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED=true`; Archestra sends a bearer token scoped to `https://ai.azure.com/.default`.

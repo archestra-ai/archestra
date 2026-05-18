@@ -776,7 +776,26 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: `false`
   - Set `ARCHESTRA_ANTHROPIC_BASE_URL=https://<resource-name>.services.ai.azure.com/anthropic`
   - Uses Azure Identity `DefaultAzureCredential` with token scope `https://ai.azure.com/.default`
-  - Claude deployments must already exist in the Azure resource. Microsoft lists additional Claude prerequisites: paid eligible subscription, supported region, Azure Marketplace access for partner models, permission to subscribe to model offerings, and Contributor or Owner role on the resource group. Azure also requires Anthropic deployment metadata: `industry`, `organizationName`, and `countryCode`.
+
+- **`ARCHESTRA_ANTHROPIC_WIF_ENABLED`** - Enable Anthropic Workload Identity Federation (WIF) for keyless authentication.
+  - Default: `false`
+  - Set to `true` to use short-lived OIDC tokens instead of static API keys.
+  - See [Anthropic WIF Setup](/docs/platform-supported-llm-providers#anthropic-workload-identity-federation-keyless-auth) for configuration details.
+
+- **`ARCHESTRA_ANTHROPIC_WIF_RULE_ID`** - The rule ID for Anthropic Workload Identity Federation.
+  - Required when: `ARCHESTRA_ANTHROPIC_WIF_ENABLED=true`
+
+- **`ARCHESTRA_ANTHROPIC_WIF_ORGANIZATION_ID`** - Your Anthropic Organization ID.
+  - Required when: `ARCHESTRA_ANTHROPIC_WIF_ENABLED=true`
+
+- **`ARCHESTRA_ANTHROPIC_WIF_SERVICE_ACCOUNT_ID`** - The service account ID associated with the federation rule.
+  - Required when: `ARCHESTRA_ANTHROPIC_WIF_ENABLED=true`
+
+- **`ARCHESTRA_ANTHROPIC_WIF_IDENTITY_TOKEN`** - The raw OIDC identity token (JWT) to be exchanged for an Anthropic access token.
+  - Optional: Use this if you have the token available in an environment variable.
+
+- **`ARCHESTRA_ANTHROPIC_WIF_IDENTITY_TOKEN_FILE`** - Path to a file containing the OIDC identity token.
+  - Optional: Recommended for Kubernetes (e.g., service account token projection) or environments where the token is written to disk.
 
 - **`ARCHESTRA_GEMINI_BASE_URL`** - Override the Google Gemini API base URL.
   - Default: `https://generativelanguage.googleapis.com`

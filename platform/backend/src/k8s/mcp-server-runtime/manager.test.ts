@@ -886,18 +886,19 @@ describe("McpServerRuntimeManager", () => {
       mockK8sDeploymentInstances.length = 0;
 
       // Stage what was persisted at install time:
-      //   - install Secret bag holds every secret-typed prompted/preset value
-      //   - catalog row's presetFieldValues holds plain preset values
-      //   - plain prompted values have no persistence layer today; we stage
-      //     them in the bag to model the post-fix world. The fix can either
-      //     widen the bag or add a dedicated `mcp_server.environmentValues`
-      //     jsonb column — either satisfies these assertions.
+      //   - install Secret bag (secretManager mock below) holds every
+      //     secret-typed prompted/preset value (the only thing that
+      //     belongs in a Secret object — values referenced by
+      //     secretKeyRef from the pod spec).
+      //   - catalog row's presetFieldValues (catalogItem mock below)
+      //     holds plain preset values (per-catalog source of truth).
+      //   - mcp_server row's environmentValues (mcpServer mock below)
+      //     holds plain `promptOnInstallation` values (per-install source
+      //     of truth).
       const mockGetSecret = vi.fn().mockResolvedValue({
         secret: {
           USER_REQ_SECRET: "user-req-sec-stored",
           USER_OPT_SECRET: "user-opt-sec-stored",
-          USER_REQ_PLAIN: "user-req-plain-stored",
-          USER_OPT_PLAIN: "user-opt-plain-stored",
           PRESET_REQ_SECRET: "preset-req-sec-stored",
           PRESET_OPT_SECRET: "preset-opt-sec-stored",
         },
@@ -1015,6 +1016,15 @@ describe("McpServerRuntimeManager", () => {
         name: "test-server",
         catalogId: "catalog-1",
         secretId: "install-secret-bag",
+        // Plain (non-secret) `promptOnInstallation` env values persisted on
+        // the install row at install time. Recovered on restart via
+        // startServer's environmentValues overlay (the new fix). Compare
+        // with the install Secret bag mock above, which holds the
+        // secret-typed values.
+        environmentValues: {
+          USER_REQ_PLAIN: "user-req-plain-stored",
+          USER_OPT_PLAIN: "user-opt-plain-stored",
+        },
         ownerId: null,
         reinstallRequired: false,
         localInstallationStatus: "idle",
@@ -1025,7 +1035,7 @@ describe("McpServerRuntimeManager", () => {
         updatedAt: new Date(),
         serverType: "local",
         teamId: null,
-      } as McpServer;
+      } as unknown as McpServer;
 
       // Auto redeploy: startServer is invoked with no environmentValues,
       // exactly as McpServerRuntimeManager.restartServer does.
@@ -1050,10 +1060,12 @@ describe("McpServerRuntimeManager", () => {
       ${"STATIC_SECRET"}     | ${"static-secret-from-catalog"} | ${"catalog static-secret merge (manager.ts:259-277)"}
       ${"USER_REQ_SECRET"}   | ${"user-req-sec-stored"}        | ${"install Secret bag (prompted+secret, required)"}
       ${"USER_OPT_SECRET"}   | ${"user-opt-sec-stored"}        | ${"install Secret bag (prompted+secret, optional)"}
+      ${"USER_REQ_PLAIN"}    | ${"user-req-plain-stored"}      | ${"mcp_server.environmentValues overlay"}
+      ${"USER_OPT_PLAIN"}    | ${"user-opt-plain-stored"}      | ${"mcp_server.environmentValues overlay"}
       ${"PRESET_REQ_SECRET"} | ${"preset-req-sec-stored"}      | ${"install Secret bag (preset+secret, required)"}
       ${"PRESET_OPT_SECRET"} | ${"preset-opt-sec-stored"}      | ${"install Secret bag (preset+secret, optional)"}
-      ${"PRESET_REQ_PLAIN"}  | ${"preset-req-plain-stored"}    | ${"catalog.presetFieldValues overlay (this PR)"}
-      ${"PRESET_OPT_PLAIN"}  | ${"preset-opt-plain-stored"}    | ${"catalog.presetFieldValues overlay (this PR)"}
+      ${"PRESET_REQ_PLAIN"}  | ${"preset-req-plain-stored"}    | ${"catalog.presetFieldValues overlay"}
+      ${"PRESET_OPT_PLAIN"}  | ${"preset-opt-plain-stored"}    | ${"catalog.presetFieldValues overlay"}
     `(
       "auto redeploy preserves $key — $via",
       ({ key, expected }: { key: string; expected: string | undefined }) => {
@@ -1062,27 +1074,6 @@ describe("McpServerRuntimeManager", () => {
         } else {
           expect(envValues?.[key]).toBe(expected);
         }
-      },
-    );
-
-    // Pending Bug B (separate PR): plain `promptOnInstallation` env vars
-    // have no per-install persistence layer, so they're dropped from the
-    // pod spec on every auto-redeploy. The fix needs either a new
-    // `mcp_server.environment_values` jsonb column (cleanest) or a wider
-    // install Secret bag — both require a separate review surface.
-    //
-    // `test.fails.each` marks these as expected-to-fail. When Bug B is
-    // fixed, the assertions will pass, and vitest will report THESE
-    // marker tests as failing — forcing the developer to remove the
-    // `.fails` suffix and demote them into the table above.
-    test.fails.each`
-      key                 | expected                   | via
-      ${"USER_REQ_PLAIN"} | ${"user-req-plain-stored"} | ${"prompted+plain, required (BUG B: no persistence today)"}
-      ${"USER_OPT_PLAIN"} | ${"user-opt-plain-stored"} | ${"prompted+plain, optional (BUG B: no persistence today)"}
-    `(
-      "auto redeploy preserves $key — $via [PENDING FIX #2]",
-      ({ key, expected }: { key: string; expected: string }) => {
-        expect(envValues?.[key]).toBe(expected);
       },
     );
   });

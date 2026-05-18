@@ -37542,6 +37542,9 @@ export type GetMcpServersResponses = {
         catalogId: string;
         serverType: 'local' | 'remote' | 'builtin';
         secretId: string | null;
+        environmentValues: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
@@ -37576,6 +37579,9 @@ export type InstallMcpServerData = {
         name: string;
         catalogId: string;
         secretId?: string;
+        environmentValues?: {
+            [key: string]: string;
+        };
         ownerId?: string | null;
         teamId?: string | null;
         scope?: 'personal' | 'team' | 'org';
@@ -37586,9 +37592,6 @@ export type InstallMcpServerData = {
         oauthRefreshFailedAt?: unknown;
         userId?: string;
         userConfigValues?: {
-            [key: string]: string;
-        };
-        environmentValues?: {
             [key: string]: string;
         };
         agentIds?: Array<string>;
@@ -37676,6 +37679,9 @@ export type InstallMcpServerResponses = {
         catalogId: string;
         serverType: 'local' | 'remote' | 'builtin';
         secretId: string | null;
+        environmentValues: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
@@ -37874,6 +37880,9 @@ export type GetMcpServerResponses = {
         catalogId: string;
         serverType: 'local' | 'remote' | 'builtin';
         secretId: string | null;
+        environmentValues: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
@@ -37997,6 +38006,9 @@ export type ReauthenticateMcpServerResponses = {
         catalogId: string;
         serverType: 'local' | 'remote' | 'builtin';
         secretId: string | null;
+        environmentValues: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
@@ -38392,6 +38404,9 @@ export type ReinstallMcpServerResponses = {
         catalogId: string;
         serverType: 'local' | 'remote' | 'builtin';
         secretId: string | null;
+        environmentValues: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
@@ -42078,6 +42093,7 @@ export type GetOrganizationResponses = {
         }> | null;
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
+        presetEntityDefaultLabel: string | null;
     };
 };
 
@@ -42354,6 +42370,7 @@ export type UpdateAppearanceSettingsResponses = {
         }> | null;
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
+        presetEntityDefaultLabel: string | null;
     };
 };
 
@@ -42501,6 +42518,7 @@ export type UpdateSecuritySettingsResponses = {
         }> | null;
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
+        presetEntityDefaultLabel: string | null;
     };
 };
 
@@ -42651,6 +42669,7 @@ export type UpdateLlmSettingsResponses = {
         }> | null;
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
+        presetEntityDefaultLabel: string | null;
     };
 };
 
@@ -42800,6 +42819,7 @@ export type UpdateAgentSettingsResponses = {
         }> | null;
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
+        presetEntityDefaultLabel: string | null;
     };
 };
 
@@ -42956,6 +42976,7 @@ export type UpdateConnectionSettingsResponses = {
         }> | null;
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
+        presetEntityDefaultLabel: string | null;
     };
 };
 
@@ -43103,10 +43124,158 @@ export type UpdatePresetEntityNameResponses = {
         }> | null;
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
+        presetEntityDefaultLabel: string | null;
     };
 };
 
 export type UpdatePresetEntityNameResponse = UpdatePresetEntityNameResponses[keyof UpdatePresetEntityNameResponses];
+
+export type UpdatePresetEntityDefaultLabelData = {
+    body: {
+        presetEntityDefaultLabel: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/preset-entity-default-label';
+};
+
+export type UpdatePresetEntityDefaultLabelErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdatePresetEntityDefaultLabelError = UpdatePresetEntityDefaultLabelErrors[keyof UpdatePresetEntityDefaultLabelErrors];
+
+export type UpdatePresetEntityDefaultLabelResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        slug: string;
+        logo: string | null;
+        logoDark: string | null;
+        createdAt: string;
+        metadata: string | null;
+        onboardingComplete: boolean;
+        theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
+        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
+        convertToolResultsToToon: boolean;
+        compressionScope: 'organization' | 'team';
+        globalToolPolicy: 'permissive' | 'restrictive';
+        allowChatFileUploads: boolean;
+        embeddingModel: string | null;
+        embeddingDimensions: EmbeddingDimensions | null;
+        embeddingChatApiKeyId: string | null;
+        rerankerChatApiKeyId: string | null;
+        rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+        defaultLlmApiKeyId: string | null;
+        defaultUserLimitValue: number | null;
+        defaultUserLimitModel: Array<string> | null;
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatLinks: Array<{
+            label: string;
+            url: string;
+        }> | null;
+        onboardingWizard: {
+            label: string;
+            pages: Array<{
+                image?: string | null;
+                content: string;
+            }>;
+        } | null;
+        chatPlaceholders: Array<string> | null;
+        animateChatPlaceholders: boolean;
+        iconLogo: string | null;
+        iconLogoDark: string | null;
+        chatErrorSupportMessage: string | null;
+        slimChatErrorUi: boolean;
+        showTwoFactor: boolean;
+        oauthAccessTokenLifetimeSeconds: number;
+        connectionDefaultMcpGatewayId: string | null;
+        connectionDefaultLlmProxyId: string | null;
+        connectionDefaultClientId: string | null;
+        connectionShownClientIds: Array<string> | null;
+        connectionShownProviders: Array<string> | null;
+        connectionBaseUrls: Array<{
+            url: string;
+            description: string;
+            isDefault: boolean;
+            visible: boolean;
+        }> | null;
+        presetEntityName: string | null;
+        presetEntityNamePlural: string | null;
+        presetEntityDefaultLabel: string | null;
+    };
+};
+
+export type UpdatePresetEntityDefaultLabelResponse = UpdatePresetEntityDefaultLabelResponses[keyof UpdatePresetEntityDefaultLabelResponses];
 
 export type UpdateAuthSettingsData = {
     body: {
@@ -43250,6 +43419,7 @@ export type UpdateAuthSettingsResponses = {
         }> | null;
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
+        presetEntityDefaultLabel: string | null;
     };
 };
 
@@ -43399,6 +43569,7 @@ export type UpdateKnowledgeSettingsResponses = {
         }> | null;
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
+        presetEntityDefaultLabel: string | null;
     };
 };
 
@@ -43543,6 +43714,7 @@ export type DropEmbeddingConfigResponses = {
         }> | null;
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
+        presetEntityDefaultLabel: string | null;
     };
 };
 
@@ -43776,6 +43948,7 @@ export type CompleteOnboardingResponses = {
         }> | null;
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
+        presetEntityDefaultLabel: string | null;
     };
 };
 

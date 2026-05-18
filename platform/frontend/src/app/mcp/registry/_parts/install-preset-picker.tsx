@@ -26,7 +26,7 @@ export function InstallPresetPicker({
   disabled,
 }: InstallPresetPickerProps) {
   const { data: children = [] } = useCatalogPresets(parent.id);
-  const { singular } = usePresetEntityName();
+  const { singular, defaultLabel } = usePresetEntityName();
 
   if (children.length === 0) return null;
 
@@ -38,7 +38,9 @@ export function InstallPresetPicker({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={parent.id}>{parent.name} (default)</SelectItem>
+          <SelectItem value={parent.id}>
+            {parent.name} ({defaultLabel.toLowerCase()})
+          </SelectItem>
           {children.map((c) => (
             <SelectItem key={c.id} value={c.id}>
               {c.name}

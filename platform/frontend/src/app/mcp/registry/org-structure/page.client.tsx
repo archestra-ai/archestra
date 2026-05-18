@@ -7,6 +7,7 @@ import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -26,12 +27,13 @@ import {
 import {
   useOrganization,
   usePresetEntityName,
+  useUpdatePresetEntityDefaultLabel,
   useUpdatePresetEntityName,
 } from "@/lib/organization.query";
 
 export default function OrgStructurePageClient() {
   const { data: organization } = useOrganization();
-  const { configured, singular, plural } = usePresetEntityName();
+  const { configured } = usePresetEntityName();
   const { data: canEdit } = useHasPermissions({
     mcpServerInstallation: ["admin"],
   });
@@ -89,13 +91,7 @@ export default function OrgStructurePageClient() {
         </>
       )}
 
-      {configured && (
-        <EntriesSection
-          canEdit={canEdit ?? false}
-          singular={singular}
-          plural={plural}
-        />
-      )}
+      {configured && <EntriesSection canEdit={canEdit ?? false} />}
     </div>
   );
 }
@@ -224,7 +220,7 @@ function NameEditorDialog({
             Update the name used throughout the catalog.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-2">
+        <DialogBody className="space-y-2">
           <Label htmlFor="preset-entity-singular-dialog">
             Name <span className="text-destructive">*</span>
           </Label>
@@ -235,7 +231,7 @@ function NameEditorDialog({
             placeholder="e.g. Environment"
             maxLength={50}
           />
-        </div>
+        </DialogBody>
         <DialogFooter>
           <Button
             variant="outline"
@@ -256,21 +252,15 @@ function NameEditorDialog({
   );
 }
 
-function EntriesSection({
-  canEdit,
-  singular,
-  plural,
-}: {
-  canEdit: boolean;
-  singular: string;
-  plural: string;
-}) {
+function EntriesSection({ canEdit }: { canEdit: boolean }) {
+  const { singular, plural, defaultLabel } = usePresetEntityName();
   const { data: entries = [], isLoading } = useMcpPresetEntries();
   const createMutation = useCreateMcpPresetEntry();
   const [addingName, setAddingName] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] =
     useState<McpPresetEntryWithAssignedCount | null>(null);
   const [renameOpen, setRenameOpen] = useState(false);
+  const [renameDefaultOpen, setRenameDefaultOpen] = useState(false);
 
   const handleAdd = (name: string) => {
     if (!name.trim()) {
@@ -323,6 +313,29 @@ function EntriesSection({
       <div className="rounded-md border">
         <Table>
           <TableBody>
+            <TableRow className="bg-muted/40">
+              <TableCell>
+                <div className="font-medium text-muted-foreground">
+                  {defaultLabel}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Available for every MCP server, even without the per-
+                  {singular.toLowerCase()} configuration.
+                </div>
+              </TableCell>
+              <TableCell className="text-right">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                  disabled={!canEdit}
+                  onClick={() => setRenameDefaultOpen(true)}
+                  aria-label={`Rename ${defaultLabel}`}
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              </TableCell>
+            </TableRow>
             {isLoading ? (
               <TableRow>
                 <TableCell
@@ -330,15 +343,6 @@ function EntriesSection({
                   className="text-center text-sm text-muted-foreground"
                 >
                   Loading…
-                </TableCell>
-              </TableRow>
-            ) : entries.length === 0 && addingName === null ? (
-              <TableRow>
-                <TableCell
-                  colSpan={2}
-                  className="text-center text-sm text-muted-foreground"
-                >
-                  No {plural} yet.
                 </TableCell>
               </TableRow>
             ) : (
@@ -349,7 +353,7 @@ function EntriesSection({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
                       disabled={!canEdit}
                       onClick={() => setDeleteTarget(entry)}
                       aria-label={`Delete ${entry.name}`}
@@ -396,7 +400,91 @@ function EntriesSection({
         onOpenChange={setRenameOpen}
         initialSingular={singular}
       />
+
+      <DefaultLabelDialog
+        open={renameDefaultOpen}
+        onOpenChange={setRenameDefaultOpen}
+        initialLabel={defaultLabel}
+      />
     </div>
+  );
+}
+
+function DefaultLabelDialog({
+  open,
+  onOpenChange,
+  initialLabel,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  initialLabel: string;
+}) {
+  const updateMutation = useUpdatePresetEntityDefaultLabel(
+    "Default label saved",
+    "Failed to save default label",
+  );
+
+  const [draft, setDraft] = useState(initialLabel);
+
+  const trimmed = draft.trim();
+  const canSave = trimmed.length > 0 && trimmed !== initialLabel;
+
+  const handleSave = () => {
+    updateMutation.mutate(
+      { presetEntityDefaultLabel: trimmed },
+      {
+        onSuccess: () => onOpenChange(false),
+      },
+    );
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) {
+          setDraft(initialLabel);
+        }
+        onOpenChange(v);
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Rename default</DialogTitle>
+          <DialogDescription>
+            Update the label shown for the default preset row throughout the
+            catalog.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogBody className="space-y-2">
+          <Label htmlFor="preset-entity-default-label-dialog">
+            Label <span className="text-destructive">*</span>
+          </Label>
+          <Input
+            id="preset-entity-default-label-dialog"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="e.g. Default"
+            maxLength={50}
+          />
+        </DialogBody>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={updateMutation.isPending}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={!canSave || updateMutation.isPending}
+          >
+            {updateMutation.isPending ? "Saving…" : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

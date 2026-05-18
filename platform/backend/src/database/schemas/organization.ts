@@ -218,6 +218,12 @@ const organizationsTable = pgTable("organization", {
    */
   presetEntityName: text("preset_entity_name"),
   presetEntityNamePlural: text("preset_entity_name_plural"),
+
+  /**
+   * Custom display label for the implicit "default" preset row (parent catalog
+   * item). NULL falls back to "Default" in the UI.
+   */
+  presetEntityDefaultLabel: text("preset_entity_default_label"),
 });
 
 export default organizationsTable;

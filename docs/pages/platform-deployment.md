@@ -1023,11 +1023,11 @@ These environment variables set the default base URL for each LLM provider. Per-
 
 - **`ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS`** - Polling compatibility interval for replaying active chat runs after reconnect.
   - Default: `500`
-  - Only applies when `ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED=true`
+  - Also controls the fallback wait interval when Postgres `LISTEN/NOTIFY` wake-ups are enabled
 
 - **`ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS`** - Polling compatibility interval for detecting explicit Stop requests on active chat runs.
   - Default: `500`
-  - Only applies when `ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED=true`
+  - Also controls the fallback wait interval when Postgres `LISTEN/NOTIFY` wake-ups are enabled
 
 - **`ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED`** - Uses polling instead of the default Postgres `LISTEN/NOTIFY` wake-ups for active chat run replay and stop detection.
   - Default: `false`

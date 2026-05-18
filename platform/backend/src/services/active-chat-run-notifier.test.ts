@@ -2,17 +2,19 @@ import { vi } from "vitest";
 import { afterEach, beforeEach, expect, test } from "@/test";
 
 const pgMocks = vi.hoisted(() => ({
-  connect: vi.fn(),
-  end: vi.fn(),
-  on: vi.fn(),
-  query: vi.fn(),
+  Client: vi.fn(),
+  clients: [] as Array<{
+    connect: ReturnType<typeof vi.fn>;
+    end: ReturnType<typeof vi.fn>;
+    handlers: Record<string, (...args: unknown[]) => void>;
+    on: ReturnType<typeof vi.fn>;
+    query: ReturnType<typeof vi.fn>;
+  }>,
 }));
 
 vi.mock("pg", () => ({
   default: {
-    Client: vi.fn(function Client() {
-      return pgMocks;
-    }),
+    Client: pgMocks.Client,
   },
 }));
 
@@ -23,10 +25,10 @@ beforeEach(() => {
   process.env = { ...originalEnv };
   process.env.ARCHESTRA_DATABASE_URL =
     "postgresql://user:pass@localhost:5432/db";
-  pgMocks.connect.mockReset().mockResolvedValue(undefined);
-  pgMocks.end.mockReset().mockResolvedValue(undefined);
-  pgMocks.on.mockReset();
-  pgMocks.query.mockReset().mockResolvedValue({ rows: [] });
+  pgMocks.clients.length = 0;
+  pgMocks.Client.mockReset().mockImplementation(function Client() {
+    return createMockPgClient();
+  });
 });
 
 afterEach(() => {
@@ -44,23 +46,75 @@ test("PostgresActiveChatRunNotifier listens before publishing notifications", as
   await notifier.notifyEvent("run-1");
   await notifier.notifyStop("run-1");
 
-  expect(pgMocks.connect).toHaveBeenCalledTimes(1);
-  expect(pgMocks.query).toHaveBeenNthCalledWith(
+  const client = pgMocks.clients[0];
+  expect(client?.connect).toHaveBeenCalledTimes(1);
+  expect(client?.query).toHaveBeenNthCalledWith(
     1,
     "LISTEN chat_active_run_events",
   );
-  expect(pgMocks.query).toHaveBeenNthCalledWith(
+  expect(client?.query).toHaveBeenNthCalledWith(
     2,
     "LISTEN chat_active_run_stops",
   );
-  expect(pgMocks.query).toHaveBeenNthCalledWith(3, "select pg_notify($1, $2)", [
+  expect(client?.query).toHaveBeenNthCalledWith(3, "select pg_notify($1, $2)", [
     "chat_active_run_events",
     JSON.stringify({ runId: "run-1" }),
   ]);
-  expect(pgMocks.query).toHaveBeenNthCalledWith(4, "select pg_notify($1, $2)", [
+  expect(client?.query).toHaveBeenNthCalledWith(4, "select pg_notify($1, $2)", [
     "chat_active_run_stops",
     JSON.stringify({ runId: "run-1" }),
   ]);
+});
+
+test("PostgresActiveChatRunNotifier reconnects after initial listen failure", async () => {
+  const { PostgresActiveChatRunNotifier } = await import(
+    "./active-chat-run-notifier"
+  );
+  const notifier = new PostgresActiveChatRunNotifier(
+    "postgresql://user:pass@localhost:5432/db",
+  );
+
+  pgMocks.Client.mockImplementationOnce(function Client() {
+    return createMockPgClient({
+      query: vi
+        .fn()
+        .mockRejectedValueOnce(new Error("listen failed"))
+        .mockResolvedValue({ rows: [] }),
+    });
+  });
+
+  await notifier.notifyEvent("run-1");
+  await notifier.notifyEvent("run-2");
+
+  expect(pgMocks.clients).toHaveLength(2);
+  expect(pgMocks.clients[0]?.end).toHaveBeenCalledTimes(1);
+  expect(pgMocks.clients[1]?.connect).toHaveBeenCalledTimes(1);
+  expect(pgMocks.clients[1]?.query).toHaveBeenLastCalledWith(
+    "select pg_notify($1, $2)",
+    ["chat_active_run_events", JSON.stringify({ runId: "run-2" })],
+  );
+});
+
+test("PostgresActiveChatRunNotifier reconnects after client error", async () => {
+  const { PostgresActiveChatRunNotifier } = await import(
+    "./active-chat-run-notifier"
+  );
+  const notifier = new PostgresActiveChatRunNotifier(
+    "postgresql://user:pass@localhost:5432/db",
+  );
+
+  await notifier.notifyEvent("run-1");
+  pgMocks.clients[0]?.handlers.error?.(new Error("connection lost"));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await notifier.notifyStop("run-2");
+
+  expect(pgMocks.clients).toHaveLength(2);
+  expect(pgMocks.clients[0]?.end).toHaveBeenCalledTimes(1);
+  expect(pgMocks.clients[1]?.connect).toHaveBeenCalledTimes(1);
+  expect(pgMocks.clients[1]?.query).toHaveBeenLastCalledWith(
+    "select pg_notify($1, $2)",
+    ["chat_active_run_stops", JSON.stringify({ runId: "run-2" })],
+  );
 });
 
 test("createActiveChatRunNotifier uses Postgres notifier by default", async () => {
@@ -85,3 +139,18 @@ test("createActiveChatRunNotifier uses polling notifier in compatibility mode", 
     PollingActiveChatRunNotifier,
   );
 });
+
+function createMockPgClient(overrides?: { query?: ReturnType<typeof vi.fn> }) {
+  const handlers: Record<string, (...args: unknown[]) => void> = {};
+  const client = {
+    connect: vi.fn().mockResolvedValue(undefined),
+    end: vi.fn().mockResolvedValue(undefined),
+    handlers,
+    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+      handlers[event] = handler;
+    }),
+    query: overrides?.query ?? vi.fn().mockResolvedValue({ rows: [] }),
+  };
+  pgMocks.clients.push(client);
+  return client;
+}

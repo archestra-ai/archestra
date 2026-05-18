@@ -49,22 +49,11 @@ export class InMemoryActiveChatRunNotifier extends PollingActiveChatRunNotifier 
 }
 
 export class PostgresActiveChatRunNotifier extends InMemoryActiveChatRunNotifier {
-  private readonly client: pg.Client;
+  private client: pg.Client | null = null;
   private connectPromise: Promise<void> | null = null;
 
-  constructor(connectionString: string) {
+  constructor(private readonly connectionString: string) {
     super();
-    this.client = new pg.Client({
-      connectionString,
-      keepAlive: true,
-      keepAliveInitialDelayMillis: 10_000,
-    });
-    this.client.on("notification", (notification) => {
-      this.handleNotification(notification);
-    });
-    this.client.on("error", (error) => {
-      logger.warn({ error }, "Active chat run notify connection error");
-    });
   }
 
   override async notifyEvent(runId: string): Promise<void> {
@@ -76,24 +65,24 @@ export class PostgresActiveChatRunNotifier extends InMemoryActiveChatRunNotifier
   }
 
   async close(): Promise<void> {
-    if (!this.connectPromise) {
-      return;
-    }
-
-    await this.connectPromise.catch(() => undefined);
-    await this.client.end().catch((error) => {
-      logger.warn({ error }, "Failed to close active chat run notifier");
-    });
+    await this.connectPromise?.catch(() => undefined);
+    await this.resetClient(this.client);
   }
 
   private async notify(channel: string, runId: string): Promise<void> {
     try {
       await this.ensureConnected();
-      await this.client.query("select pg_notify($1, $2)", [
+      const client = this.client;
+      if (!client) {
+        return;
+      }
+
+      await client.query("select pg_notify($1, $2)", [
         channel,
         JSON.stringify({ runId }),
       ]);
     } catch (error) {
+      await this.resetClient(this.client);
       logger.warn(
         { error, channel, runId },
         "Failed to publish active chat run notification",
@@ -103,14 +92,59 @@ export class PostgresActiveChatRunNotifier extends InMemoryActiveChatRunNotifier
 
   private async ensureConnected(): Promise<void> {
     if (!this.connectPromise) {
-      this.connectPromise = (async () => {
-        await this.client.connect();
-        await this.client.query(`LISTEN ${EVENT_CHANNEL}`);
-        await this.client.query(`LISTEN ${STOP_CHANNEL}`);
-      })();
+      const client = this.createClient();
+      this.client = client;
+      this.connectPromise = this.connectClient(client);
     }
 
     await this.connectPromise;
+  }
+
+  private createClient(): pg.Client {
+    const client = new pg.Client({
+      connectionString: this.connectionString,
+      keepAlive: true,
+      keepAliveInitialDelayMillis: 10_000,
+    });
+
+    client.on("notification", (notification) => {
+      this.handleNotification(notification);
+    });
+    client.on("error", (error) => {
+      logger.warn({ error }, "Active chat run notify connection error");
+      void this.resetClient(client);
+    });
+    client.on("end", () => {
+      if (this.client === client) {
+        this.client = null;
+        this.connectPromise = null;
+      }
+    });
+
+    return client;
+  }
+
+  private async connectClient(client: pg.Client): Promise<void> {
+    try {
+      await client.connect();
+      await client.query(`LISTEN ${EVENT_CHANNEL}`);
+      await client.query(`LISTEN ${STOP_CHANNEL}`);
+    } catch (error) {
+      await this.resetClient(client);
+      throw error;
+    }
+  }
+
+  private async resetClient(client: pg.Client | null): Promise<void> {
+    if (!client || this.client !== client) {
+      return;
+    }
+
+    this.client = null;
+    this.connectPromise = null;
+    await client.end().catch((error) => {
+      logger.warn({ error }, "Failed to close active chat run notifier");
+    });
   }
 
   private handleNotification(notification: pg.Notification): void {

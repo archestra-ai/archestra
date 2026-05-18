@@ -1,3 +1,4 @@
+import { ConversationModel } from "@/models";
 import ActiveChatRunModel from "@/models/chat-active-run";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -19,9 +20,12 @@ describe("chat active-run routes", () => {
       const conversation = await makeConversation(agent.id, {
         userId: user.id,
         organizationId,
-        selectedModel: "gpt-4o",
+        selectedModel: "test-vllm-model",
       });
       conversationId = conversation.id;
+      await ConversationModel.update(conversationId, user.id, organizationId, {
+        selectedProvider: "vllm",
+      });
 
       app = createFastifyInstance();
       app.addHook("onRequest", async (request) => {

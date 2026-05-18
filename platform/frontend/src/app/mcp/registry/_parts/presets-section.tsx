@@ -97,7 +97,9 @@ export function PresetsSection({
             <EmptyMedia variant="icon">
               <SlidersHorizontal />
             </EmptyMedia>
-            <EmptyTitle>No {singular.toLowerCase()} fields configured</EmptyTitle>
+            <EmptyTitle>
+              No {singular.toLowerCase()} fields configured
+            </EmptyTitle>
             <EmptyDescription>
               {`To vary settings per ${singular}, add a ${singular}-scoped env variable or header in the Configuration tab.`}
             </EmptyDescription>

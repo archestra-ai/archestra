@@ -384,3 +384,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @schaelle
 - @k-kozika
 - @Yeetusbleetus
+- @pedropaulovc

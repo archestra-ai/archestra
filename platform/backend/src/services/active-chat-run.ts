@@ -149,6 +149,9 @@ export class ActiveChatRunService {
               return;
             }
 
+            // LISTEN/NOTIFY normally wakes reconnecting clients as soon as new
+            // events are written. The timeout is a fallback poll; in polling
+            // compatibility mode it becomes the only wake-up mechanism.
             await notifier.waitForEvent({
               runId,
               timeoutMs: replayPollIntervalMs,
@@ -174,6 +177,12 @@ export class ActiveChatRunService {
 
     void (async () => {
       while (!stopped && !params.abortController.signal.aborted) {
+        // Default mode wakes this loop with Postgres LISTEN/NOTIFY. The timeout
+        // is still a safety poll so missed notifications or broken listener
+        // connections do not leave Stop requests undetected forever. In polling
+        // compatibility mode, this wait always lasts until the interval expires,
+        // so each running chat stream performs roughly one stop-check read per
+        // interval.
         await this.notifier.waitForStop({
           runId: params.runId,
           timeoutMs: this.stopPollIntervalMs,

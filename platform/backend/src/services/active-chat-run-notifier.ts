@@ -165,6 +165,10 @@ export class PostgresActiveChatRunNotifier extends InMemoryActiveChatRunNotifier
 }
 
 export function createActiveChatRunNotifier(): ActiveChatRunNotifier {
+  // Prefer Postgres LISTEN/NOTIFY for active-run replay and Stop wake-ups. Use
+  // polling compatibility only when the database endpoint cannot keep a
+  // session-stable listener connection, for example PgBouncer transaction
+  // pooling or managed/serverless proxies that break long-lived listeners.
   if (config.chat.activeRun.pollingCompatibilityEnabled) {
     return new PollingActiveChatRunNotifier();
   }

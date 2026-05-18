@@ -1021,17 +1021,21 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Options: `anthropic`, `openai`, `gemini`
   - Used when no profile-specific provider is configured
 
-- **`ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS`** - Polling compatibility interval for replaying active chat runs after reconnect.
-  - Default: `500`
-  - Also controls the fallback wait interval when Postgres `LISTEN/NOTIFY` wake-ups are enabled
+Active chat run wake-ups use Postgres `LISTEN/NOTIFY` by default. This gives fast reconnect replay and Stop handling without waiting for the full poll interval. The poll interval remains as a safety fallback, so missed notifications or broken listener connections do not block progress forever.
 
-- **`ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS`** - Polling compatibility interval for detecting explicit Stop requests on active chat runs.
-  - Default: `500`
-  - Also controls the fallback wait interval when Postgres `LISTEN/NOTIFY` wake-ups are enabled
+Enable polling compatibility only when your database endpoint cannot keep session-stable listener connections, such as PgBouncer transaction pooling or some managed/serverless database proxies. In that mode, active run replay and Stop handling rely on periodic database reads. Lower intervals react faster but create more reads; higher intervals reduce database load but make replay and Stop slower. The default `500ms` favors interactive chat responsiveness.
 
-- **`ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED`** - Uses polling instead of the default Postgres `LISTEN/NOTIFY` wake-ups for active chat run replay and stop detection.
+- **`ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS`** - Fallback/poll interval for replaying active chat runs after reconnect.
+  - Default: `500`
+  - Load model: roughly one replay-check read per reconnecting client per interval while waiting for new events
+
+- **`ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS`** - Fallback/poll interval for detecting explicit Stop requests on active chat runs.
+  - Default: `500`
+  - Load model: roughly one stop-check read per running chat stream per interval
+
+- **`ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED`** - Uses polling only instead of the default Postgres `LISTEN/NOTIFY` wake-ups for active chat run replay and stop detection.
   - Default: `false`
-  - Enable this only when the database endpoint cannot support session-stable listeners, such as PgBouncer transaction pooling. Polling can increase database query load.
+  - Keep disabled when direct Postgres or session pooling is available
 
 - **`ARCHESTRA_CHAT_ACTIVE_RUN_NOTIFY_DATABASE_URL`** - Optional Postgres connection string for active chat run `LISTEN/NOTIFY`.
   - Default: Uses `ARCHESTRA_DATABASE_URL`

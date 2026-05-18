@@ -7,6 +7,7 @@ import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -224,7 +225,7 @@ function NameEditorDialog({
             Update the name used throughout the catalog.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-2">
+        <DialogBody className="space-y-2">
           <Label htmlFor="preset-entity-singular-dialog">
             Name <span className="text-destructive">*</span>
           </Label>
@@ -235,7 +236,7 @@ function NameEditorDialog({
             placeholder="e.g. Environment"
             maxLength={50}
           />
-        </div>
+        </DialogBody>
         <DialogFooter>
           <Button
             variant="outline"

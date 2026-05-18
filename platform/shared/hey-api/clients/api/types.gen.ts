@@ -34993,6 +34993,12 @@ export type CreateLlmProviderApiKeyData = {
         name: string;
         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         apiKey?: string;
+        anthropicFederationRuleId?: string;
+        anthropicOrganizationId?: string;
+        anthropicServiceAccountId?: string;
+        anthropicWorkspaceId?: string;
+        anthropicIdentityToken?: string;
+        anthropicIdentityTokenFile?: string;
         baseUrl?: string | null;
         inferenceBaseUrl?: string | null;
         extraHeaders?: {

@@ -1,8 +1,12 @@
+import { Buffer } from "node:buffer";
 import { readFile } from "node:fs/promises";
 
 const JWT_BEARER_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:jwt-bearer";
 const ADVISORY_REFRESH_MS = 120_000;
 const MANDATORY_REFRESH_MS = 30_000;
+export const ANTHROPIC_WORKLOAD_IDENTITY_MARKER =
+  "__archestra_anthropic_workload_identity__";
+const ANTHROPIC_WORKLOAD_IDENTITY_CONFIG_PREFIX = `${ANTHROPIC_WORKLOAD_IDENTITY_MARKER}:`;
 
 type FetchLike = typeof fetch;
 
@@ -27,10 +31,27 @@ interface TokenExchangeResponse {
   scope?: unknown;
 }
 
-let cachedToken: TokenCacheEntry | null = null;
+let cachedTokens = new Map<string, TokenCacheEntry>();
+
+export type AnthropicWorkloadIdentityStoredConfig = Pick<
+  AnthropicWorkloadIdentityConfig,
+  | "federationRuleId"
+  | "organizationId"
+  | "serviceAccountId"
+  | "workspaceId"
+  | "identityToken"
+  | "identityTokenFile"
+>;
 
 export function isAnthropicWorkloadIdentityConfigured(): boolean {
   return getAnthropicWorkloadIdentityConfig() !== null;
+}
+
+export function hasAnthropicWorkloadIdentityTokenSourceConfigured(): boolean {
+  return Boolean(
+    readOptionalEnv("ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE") ||
+      readOptionalEnv("ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN"),
+  );
 }
 
 export function hasAnthropicSdkStaticCredentialsConfigured(): boolean {
@@ -40,18 +61,39 @@ export function hasAnthropicSdkStaticCredentialsConfigured(): boolean {
   );
 }
 
+export function isAnthropicWorkloadIdentityMarker(
+  value: string | undefined,
+): boolean {
+  return Boolean(
+    value === ANTHROPIC_WORKLOAD_IDENTITY_MARKER ||
+      value?.startsWith(ANTHROPIC_WORKLOAD_IDENTITY_CONFIG_PREFIX),
+  );
+}
+
+export function encodeAnthropicWorkloadIdentityMarker(
+  config: AnthropicWorkloadIdentityStoredConfig,
+): string {
+  return `${ANTHROPIC_WORKLOAD_IDENTITY_CONFIG_PREFIX}${Buffer.from(
+    JSON.stringify(config),
+  ).toString("base64url")}`;
+}
+
 export function resetAnthropicWorkloadIdentityTokenCacheForTests(): void {
-  cachedToken = null;
+  cachedTokens = new Map();
 }
 
 export function createAnthropicWorkloadIdentityFetch(
   baseFetch: FetchLike | undefined,
   baseUrl: string | undefined,
+  marker?: string,
 ): FetchLike {
   const fetchFn = baseFetch ?? fetch;
 
   return (async (input, init) => {
-    const token = await getAnthropicWorkloadIdentityAccessToken(baseUrl);
+    const token = await getAnthropicWorkloadIdentityAccessToken(
+      baseUrl,
+      marker,
+    );
     const headers = buildHeaders(input, init);
     headers.delete("x-api-key");
     headers.set("authorization", `Bearer ${token}`);
@@ -65,15 +107,29 @@ export function createAnthropicWorkloadIdentityFetch(
 
 export async function getAnthropicWorkloadIdentityAccessToken(
   baseUrl: string | undefined,
+  marker?: string,
 ): Promise<string> {
   const now = Date.now();
+  const config = getAnthropicWorkloadIdentityConfig(marker);
+  if (!config) {
+    throw new Error(
+      "Anthropic Workload Identity Federation is not configured. Provide Federation Rule ID, Organization ID, Service Account ID, and either Identity Token File or Identity Token in the key configuration, or set ARCHESTRA_ANTHROPIC_FEDERATION_RULE_ID, ARCHESTRA_ANTHROPIC_ORGANIZATION_ID, ARCHESTRA_ANTHROPIC_SERVICE_ACCOUNT_ID, and ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE or ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN.",
+    );
+  }
+
+  const cacheKey = `${normalizeBaseUrl(baseUrl)}:${JSON.stringify(config)}`;
+  const cachedToken = cachedTokens.get(cacheKey) ?? null;
   if (cachedToken && now < cachedToken.expiresAtMs - ADVISORY_REFRESH_MS) {
     return cachedToken.accessToken;
   }
 
   try {
-    cachedToken = await exchangeAnthropicWorkloadIdentityToken(baseUrl);
-    return cachedToken.accessToken;
+    const refreshedToken = await exchangeAnthropicWorkloadIdentityToken(
+      baseUrl,
+      config,
+    );
+    cachedTokens.set(cacheKey, refreshedToken);
+    return refreshedToken.accessToken;
   } catch (error) {
     if (cachedToken && now < cachedToken.expiresAtMs - MANDATORY_REFRESH_MS) {
       return cachedToken.accessToken;
@@ -84,14 +140,8 @@ export async function getAnthropicWorkloadIdentityAccessToken(
 
 async function exchangeAnthropicWorkloadIdentityToken(
   baseUrl: string | undefined,
+  config: AnthropicWorkloadIdentityConfig,
 ): Promise<TokenCacheEntry> {
-  const config = getAnthropicWorkloadIdentityConfig();
-  if (!config) {
-    throw new Error(
-      "Anthropic Workload Identity Federation is not configured. Set ARCHESTRA_ANTHROPIC_FEDERATION_RULE_ID, ARCHESTRA_ANTHROPIC_ORGANIZATION_ID, ARCHESTRA_ANTHROPIC_SERVICE_ACCOUNT_ID, and ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE or ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN.",
-    );
-  }
-
   const assertion = await readIdentityToken(config);
   const body: Record<string, string> = {
     grant_type: JWT_BEARER_GRANT_TYPE,
@@ -140,18 +190,25 @@ async function exchangeAnthropicWorkloadIdentityToken(
   };
 }
 
-function getAnthropicWorkloadIdentityConfig(): AnthropicWorkloadIdentityConfig | null {
-  const federationRuleId = readRequiredEnv(
-    "ARCHESTRA_ANTHROPIC_FEDERATION_RULE_ID",
-  );
-  const organizationId = readRequiredEnv("ARCHESTRA_ANTHROPIC_ORGANIZATION_ID");
-  const serviceAccountId = readRequiredEnv(
-    "ARCHESTRA_ANTHROPIC_SERVICE_ACCOUNT_ID",
-  );
-  const identityTokenFile = readOptionalEnv(
-    "ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE",
-  );
-  const identityToken = readOptionalEnv("ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN");
+function getAnthropicWorkloadIdentityConfig(
+  marker?: string,
+): AnthropicWorkloadIdentityConfig | null {
+  const markerConfig = parseAnthropicWorkloadIdentityMarker(marker);
+  const federationRuleId =
+    markerConfig?.federationRuleId ??
+    readRequiredEnv("ARCHESTRA_ANTHROPIC_FEDERATION_RULE_ID");
+  const organizationId =
+    markerConfig?.organizationId ??
+    readRequiredEnv("ARCHESTRA_ANTHROPIC_ORGANIZATION_ID");
+  const serviceAccountId =
+    markerConfig?.serviceAccountId ??
+    readRequiredEnv("ARCHESTRA_ANTHROPIC_SERVICE_ACCOUNT_ID");
+  const identityTokenFile =
+    readOptionalEnv("ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE") ??
+    markerConfig?.identityTokenFile;
+  const identityToken =
+    readOptionalEnv("ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN") ??
+    markerConfig?.identityToken;
 
   if (
     !federationRuleId ||
@@ -166,10 +223,55 @@ function getAnthropicWorkloadIdentityConfig(): AnthropicWorkloadIdentityConfig |
     federationRuleId,
     organizationId,
     serviceAccountId,
-    workspaceId: readOptionalEnv("ARCHESTRA_ANTHROPIC_WORKSPACE_ID"),
+    workspaceId:
+      markerConfig?.workspaceId ??
+      readOptionalEnv("ARCHESTRA_ANTHROPIC_WORKSPACE_ID"),
     identityToken,
     identityTokenFile,
   };
+}
+
+function parseAnthropicWorkloadIdentityMarker(
+  marker: string | undefined,
+): AnthropicWorkloadIdentityStoredConfig | null {
+  if (!marker?.startsWith(ANTHROPIC_WORKLOAD_IDENTITY_CONFIG_PREFIX)) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(
+      Buffer.from(
+        marker.slice(ANTHROPIC_WORKLOAD_IDENTITY_CONFIG_PREFIX.length),
+        "base64url",
+      ).toString("utf8"),
+    ) as Partial<AnthropicWorkloadIdentityStoredConfig>;
+
+    if (
+      typeof parsed.federationRuleId !== "string" ||
+      typeof parsed.organizationId !== "string" ||
+      typeof parsed.serviceAccountId !== "string"
+    ) {
+      return null;
+    }
+
+    return {
+      federationRuleId: parsed.federationRuleId,
+      organizationId: parsed.organizationId,
+      serviceAccountId: parsed.serviceAccountId,
+      workspaceId:
+        typeof parsed.workspaceId === "string" ? parsed.workspaceId : undefined,
+      identityToken:
+        typeof parsed.identityToken === "string"
+          ? parsed.identityToken
+          : undefined,
+      identityTokenFile:
+        typeof parsed.identityTokenFile === "string"
+          ? parsed.identityTokenFile
+          : undefined,
+    };
+  } catch {
+    return null;
+  }
 }
 
 async function readIdentityToken(

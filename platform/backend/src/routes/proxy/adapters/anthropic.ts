@@ -6,6 +6,7 @@ import {
   createAnthropicWorkloadIdentityFetch,
   hasAnthropicSdkStaticCredentialsConfigured,
   isAnthropicWorkloadIdentityConfigured,
+  isAnthropicWorkloadIdentityMarker,
 } from "@/clients/anthropic-workload-identity";
 import {
   getAzureAiFoundryBearerTokenProvider,
@@ -1162,6 +1163,24 @@ export const anthropicAdapterFactory: LLMProvider<
     const isAuthToken = apiKey?.startsWith("Bearer:") ?? false;
     const token = isAuthToken && apiKey ? apiKey.slice(7) : undefined;
     const regularApiKey = isAuthToken ? undefined : apiKey;
+
+    if (isAnthropicWorkloadIdentityMarker(apiKey)) {
+      return new AnthropicProvider({
+        apiKey: null,
+        authToken: null,
+        baseURL: options.baseUrl,
+        fetch: createAnthropicWorkloadIdentityFetch(
+          customFetch,
+          options.baseUrl,
+          apiKey,
+        ),
+        defaultHeaders: {
+          ...options.defaultHeaders,
+          // The fetch wrapper replaces this sentinel with a fresh WIF access token on every request.
+          Authorization: "Bearer <workload-identity-managed>",
+        },
+      });
+    }
 
     if (!apiKey && isAnthropicAzureFoundryEntraIdEnabled()) {
       return new AnthropicProvider({

@@ -12,6 +12,16 @@ vi.mock("@/clients/gemini-client", () => ({
   isVertexAiEnabled: vi.fn(),
 }));
 
+vi.mock("@/clients/anthropic-workload-identity", () => ({
+  ANTHROPIC_WORKLOAD_IDENTITY_MARKER:
+    "__archestra_anthropic_workload_identity__",
+  encodeAnthropicWorkloadIdentityMarker: vi.fn(
+    () => "__archestra_anthropic_workload_identity__:encoded",
+  ),
+  hasAnthropicWorkloadIdentityTokenSourceConfigured: vi.fn(() => false),
+  isAnthropicWorkloadIdentityConfigured: vi.fn(() => false),
+}));
+
 vi.mock("@/clients/azure-openai-credentials", () => ({
   isAnthropicAzureFoundryEntraIdEnabled: vi.fn(() => false),
   isAzureOpenAiEntraIdEnabled: vi.fn(),
@@ -62,11 +72,26 @@ vi.mock("@/services/model-sync", () => ({
 }));
 
 import { hasPermission, userHasPermission } from "@/auth";
+import {
+  ANTHROPIC_WORKLOAD_IDENTITY_MARKER,
+  encodeAnthropicWorkloadIdentityMarker,
+  hasAnthropicWorkloadIdentityTokenSourceConfigured,
+  isAnthropicWorkloadIdentityConfigured,
+} from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { testProviderApiKey } from "@/routes/chat/model-fetchers/registry";
 import { validateProviderAllowed } from "./llm-provider-api-keys";
 
+const mockIsAnthropicWorkloadIdentityConfigured = vi.mocked(
+  isAnthropicWorkloadIdentityConfigured,
+);
+const mockHasAnthropicWorkloadIdentityTokenSourceConfigured = vi.mocked(
+  hasAnthropicWorkloadIdentityTokenSourceConfigured,
+);
+const mockEncodeAnthropicWorkloadIdentityMarker = vi.mocked(
+  encodeAnthropicWorkloadIdentityMarker,
+);
 const mockIsAzureOpenAiEntraIdEnabled = vi.mocked(isAzureOpenAiEntraIdEnabled);
 const mockIsVertexAiEnabled = vi.mocked(isVertexAiEnabled);
 const mockHasPermission = vi.mocked(hasPermission);
@@ -216,6 +241,13 @@ describe("LLM Provider API Keys CRUD", () => {
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     vi.clearAllMocks();
     setupAdminApp();
+    mockIsAnthropicWorkloadIdentityConfigured.mockReturnValue(false);
+    mockHasAnthropicWorkloadIdentityTokenSourceConfigured.mockReturnValue(
+      false,
+    );
+    mockEncodeAnthropicWorkloadIdentityMarker.mockReturnValue(
+      "__archestra_anthropic_workload_identity__:encoded",
+    );
     mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(false);
 
     const organization = await makeOrganization();
@@ -683,6 +715,123 @@ describe("LLM Provider API Keys CRUD", () => {
       "",
       "https://my-resource.openai.azure.com/openai",
       undefined,
+    );
+  });
+
+  test("allows Anthropic provider keys without API key when WIF is configured", async () => {
+    mockIsAnthropicWorkloadIdentityConfigured.mockReturnValue(true);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Anthropic WIF",
+        provider: "anthropic",
+        scope: "personal",
+        anthropicFederationRuleId: "fdrl_test",
+        anthropicOrganizationId: "org_test",
+        anthropicServiceAccountId: "svcacct_test",
+        anthropicWorkspaceId: "ws_test",
+        anthropicIdentityToken: "jwt-test",
+      },
+    });
+
+    expect(createResponse.statusCode).toBe(200);
+    expect(createResponse.json()).toMatchObject({
+      name: "Anthropic WIF",
+      provider: "anthropic",
+    });
+    expect(mockTestProviderApiKey).toHaveBeenCalledWith(
+      "anthropic",
+      "__archestra_anthropic_workload_identity__:encoded",
+      undefined,
+      undefined,
+    );
+  });
+
+  test("allows Anthropic provider keys without explicit WIF body fields when backend WIF is configured", async () => {
+    mockIsAnthropicWorkloadIdentityConfigured.mockReturnValue(true);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Anthropic WIF Env",
+        provider: "anthropic",
+        scope: "personal",
+      },
+    });
+
+    expect(createResponse.statusCode).toBe(200);
+    expect(createResponse.json()).toMatchObject({
+      name: "Anthropic WIF Env",
+      provider: "anthropic",
+      secretId: null,
+    });
+    expect(mockTestProviderApiKey).toHaveBeenCalledWith(
+      "anthropic",
+      ANTHROPIC_WORKLOAD_IDENTITY_MARKER,
+      undefined,
+      undefined,
+    );
+  });
+
+  test("rejects Anthropic WIF provider keys when identity token source is missing", async () => {
+    mockIsAnthropicWorkloadIdentityConfigured.mockReturnValue(false);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Anthropic WIF",
+        provider: "anthropic",
+        scope: "personal",
+        anthropicFederationRuleId: "fdrl_test",
+        anthropicOrganizationId: "org_test",
+        anthropicServiceAccountId: "svcacct_test",
+      },
+    });
+
+    expect(createResponse.statusCode).toBe(400);
+    expect(createResponse.json().error.message).toContain(
+      "Anthropic Workload Identity Federation does not allow partial configuration",
+    );
+  });
+
+  test("re-tests keyless Anthropic WIF provider key when runtime settings change", async () => {
+    mockIsAnthropicWorkloadIdentityConfigured.mockReturnValue(true);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Anthropic WIF",
+        provider: "anthropic",
+        scope: "personal",
+        anthropicFederationRuleId: "fdrl_test",
+        anthropicOrganizationId: "org_test",
+        anthropicServiceAccountId: "svcacct_test",
+        anthropicIdentityToken: "jwt-test",
+      },
+    });
+    expect(createResponse.statusCode).toBe(200);
+    const createdKey = createResponse.json();
+    mockTestProviderApiKey.mockClear();
+
+    const updateResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${createdKey.id}`,
+      payload: {
+        baseUrl: "https://api.anthropic.com",
+      },
+    });
+
+    expect(updateResponse.statusCode).toBe(200);
+    expect(mockTestProviderApiKey).toHaveBeenCalledWith(
+      "anthropic",
+      "__archestra_anthropic_workload_identity__:encoded",
+      "https://api.anthropic.com",
+      null,
     );
   });
 

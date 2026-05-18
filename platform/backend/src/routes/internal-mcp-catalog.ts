@@ -1,4 +1,9 @@
-import { isBuiltInCatalogId, isPlaywrightCatalogItem, RouteId } from "@shared";
+import {
+  isBuiltInCatalogId,
+  isMetadataOnlyEdit,
+  isPlaywrightCatalogItem,
+  RouteId,
+} from "@shared";
 import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -1669,6 +1674,25 @@ async function cascadeReinstallForCatalog(
 ): Promise<void> {
   const installedServers = await McpServerModel.findByCatalogId(catalogItem.id);
   if (installedServers.length === 0) return;
+
+  // Skip the cascade when only metadata fields changed. List in
+  // `shared/catalog-runtime-fields.ts`.
+  //
+  // Tradeoff: `originalCatalogItem` is fetched with `expandSecrets: true`
+  // (the route body needs expanded secrets downstream); `Model.update`
+  // returns the unexpanded row. For catalogs carrying any secret bag
+  // pointer, the expanded vs unexpanded shapes differ even with no real
+  // edit, so the predicate returns false and we cascade. That is the
+  // safe direction (pre-fix baseline) and `hasSecretBag` in
+  // `edit-catalog-dialog.tsx` mirrors it on the UI side. The
+  // optimization applies cleanly to non-bag catalogs.
+  if (isMetadataOnlyEdit(originalCatalogItem, catalogItem)) {
+    logger.info(
+      { catalogId: catalogItem.id, serverCount: installedServers.length },
+      "Catalog edit is metadata-only - skipping reinstall",
+    );
+    return;
+  }
 
   if (requiresNewUserInputForReinstall(originalCatalogItem, catalogItem)) {
     logger.info(

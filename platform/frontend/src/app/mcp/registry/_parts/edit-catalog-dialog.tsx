@@ -1,4 +1,4 @@
-import type { archestraApiTypes } from "@shared";
+import { type archestraApiTypes, isMetadataOnlyEdit } from "@shared";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +16,9 @@ import { CascadeReinstallConfirmDialog } from "./cascade-reinstall-confirm-dialo
 import { McpCatalogForm } from "./mcp-catalog-form";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import { transformFormToApiData } from "./mcp-catalog-form.utils";
+
+type McpCatalogApiData =
+  archestraApiTypes.CreateInternalMcpCatalogItemData["body"];
 
 interface EditCatalogDialogProps {
   item: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] | null;
@@ -50,8 +53,8 @@ export function EditCatalogContent({
   onDirtyChange,
   submitRef,
 }: EditCatalogContentProps) {
-  const [pendingValues, setPendingValues] =
-    useState<McpCatalogFormValues | null>(null);
+  const [pendingApiData, setPendingApiData] =
+    useState<McpCatalogApiData | null>(null);
   const updateMutation = useUpdateInternalMcpCatalogItem();
 
   const { data: presets = [] } = useCatalogPresets(item.id);
@@ -61,8 +64,7 @@ export function EditCatalogContent({
     s.catalogId ? affectedCatalogIds.has(s.catalogId) : false,
   ).length;
 
-  const performSave = async (values: McpCatalogFormValues) => {
-    const apiData = transformFormToApiData(values);
+  const performSave = async (apiData: McpCatalogApiData) => {
     const { multitenant: _multitenant, ...updateData } = apiData;
 
     await updateMutation.mutateAsync({
@@ -75,12 +77,24 @@ export function EditCatalogContent({
     }
   };
 
+  // The backend cascade gate compares `expandSecrets:true` original vs
+  // raw `Model.update` return; for bag-bearing rows the shapes diverge
+  // and it cascades anyway. Force the modal here so users still see the
+  // confirmation. Mirror in `routes/internal-mcp-catalog.ts`.
+  const hasSecretBag = Boolean(
+    item.presetSecretId ?? item.clientSecretId ?? item.localConfigSecretId,
+  );
+
   const onSubmit = async (values: McpCatalogFormValues) => {
-    if (affectedServerCount > 0) {
-      setPendingValues(values);
+    const apiData = transformFormToApiData(values);
+    const skipModal =
+      affectedServerCount === 0 ||
+      (!hasSecretBag && isMetadataOnlyEdit(item, apiData));
+    if (!skipModal) {
+      setPendingApiData(apiData);
       return;
     }
-    await performSave(values);
+    await performSave(apiData);
   };
 
   return (
@@ -119,13 +133,13 @@ export function EditCatalogContent({
       />
 
       <CascadeReinstallConfirmDialog
-        open={pendingValues !== null}
-        onOpenChange={(v) => !v && setPendingValues(null)}
+        open={pendingApiData !== null}
+        onOpenChange={(v) => !v && setPendingApiData(null)}
         onConfirm={async () => {
-          if (!pendingValues) return;
-          const values = pendingValues;
-          setPendingValues(null);
-          await performSave(values);
+          if (!pendingApiData) return;
+          const apiData = pendingApiData;
+          setPendingApiData(null);
+          await performSave(apiData);
         }}
         isPending={updateMutation.isPending}
         serverCount={affectedServerCount}

@@ -59,7 +59,7 @@ This will start the platform with:
 
 > **Need access from another device on your network?** Replace `127.0.0.1:3000:3000` with `0.0.0.0:3000:3000` in the Docker command.
 
-> This exposes the Admin UI to your local network, so only do this if you intentionally want it reachable beyond localhost.
+> This exposes the Admin UI to your local network. Note that the API is already published on all interfaces by default via `-p 9000:9000`. If you want a fully local-only deployment, bind the API to localhost as well, for example `-p 127.0.0.1:9000:9000 -p 127.0.0.1:3000:3000`.
 
 If you have Kubernetes installed locally, you can use it for the MCP orchestrator. Make sure `kubectl` points to the right cluster and run the container without the socket and without `ARCHESTRA_QUICKSTART`. The orchestrator will create a cluster in the current context. See [Development with Standalone Kubernetes](./platform-orchestrator#local-development-with-docker-and-standalone-kubernetes)
 

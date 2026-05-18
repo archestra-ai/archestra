@@ -113,6 +113,21 @@ describe("context compaction helpers", () => {
     );
   });
 
+  test("in-context compaction prompt reuses canonical compaction prompt", () => {
+    const prompt = __test.buildInContextCompactionPrompt();
+
+    expect(prompt).toContain(CONTEXT_COMPACTION_SYSTEM_PROMPT);
+    expect(prompt).toContain("<summary>");
+    expect(prompt).toContain("</summary>");
+  });
+
+  test("extracts tagged summary and rejects untagged output", () => {
+    expect(
+      __test.extractTaggedSummary("prefix <summary>\nKeep this.\n</summary>"),
+    ).toBe("Keep this.");
+    expect(__test.extractTaggedSummary("Keep this.")).toBeNull();
+  });
+
   test("compaction prompt extracts text from data URL file parts without mediaType metadata", async () => {
     const prompt = await __test.buildCompactionPrompt({
       previousSummary: null,

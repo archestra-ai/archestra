@@ -2,28 +2,51 @@ import * as Sentry from "@sentry/nextjs";
 import type { ApiError } from "@shared";
 import { toast } from "sonner";
 
-type ApiSdkError = { error: Partial<ApiError> | Error };
+type ApiSdkError =
+  | { error: Partial<ApiError> | Error | unknown }
+  | Partial<ApiError>
+  | Error
+  | unknown;
 
-export function getApiErrorMessage(error: unknown): string {
+function unwrapApiError(error: ApiSdkError): unknown {
   if (
     typeof error === "object" &&
     error !== null &&
     "error" in error &&
-    typeof error.error === "object" &&
-    error.error !== null &&
-    "message" in error.error &&
-    typeof error.error.message === "string"
+    error.error !== undefined
   ) {
-    return error.error.message;
+    return error.error;
+  }
+
+  return error;
+}
+
+export function getApiErrorMessage(error: unknown): string {
+  const unwrapped = unwrapApiError(error);
+
+  if (
+    typeof unwrapped === "object" &&
+    unwrapped !== null &&
+    "message" in unwrapped &&
+    typeof unwrapped.message === "string"
+  ) {
+    return unwrapped.message;
   }
 
   if (
-    typeof error === "object" &&
-    error !== null &&
-    "message" in error &&
-    typeof error.message === "string"
+    typeof unwrapped === "object" &&
+    unwrapped !== null &&
+    "error" in unwrapped &&
+    typeof unwrapped.error === "object" &&
+    unwrapped.error !== null &&
+    "message" in unwrapped.error &&
+    typeof unwrapped.error.message === "string"
   ) {
-    return error.message;
+    return unwrapped.error.message;
+  }
+
+  if (typeof unwrapped === "string" && unwrapped.trim().length > 0) {
+    return unwrapped;
   }
 
   return "API request failed";
@@ -35,19 +58,18 @@ export function getApiErrorMessage(error: unknown): string {
  * "Object captured as exception with keys: error" warning.
  */
 export function toApiError(error: ApiSdkError): Error {
-  if (error.error instanceof Error) return error.error;
+  const unwrapped = unwrapApiError(error);
+  if (unwrapped instanceof Error) return unwrapped;
   return new Error(getApiErrorMessage(error));
 }
 
 export function handleApiError(error: ApiSdkError) {
+  const sentryError = toApiError(error);
+
   if (typeof window !== "undefined") {
-    toast.error(getApiErrorMessage(error));
+    toast.error(sentryError.message);
   }
 
-  const sentryError =
-    error.error instanceof Error
-      ? error.error
-      : new Error(getApiErrorMessage(error));
   Sentry.captureException(sentryError, { extra: { originalError: error } });
-  console.error(error);
+  console.error(sentryError);
 }

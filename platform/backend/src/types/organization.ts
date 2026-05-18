@@ -314,6 +314,7 @@ const extendedFields = {
   connectionBaseUrls: z.array(ConnectionBaseUrlSchema).nullable(),
   presetEntityName: z.string().nullable(),
   presetEntityNamePlural: z.string().nullable(),
+  presetEntityDefaultLabel: z.string().nullable(),
 };
 
 export const SelectOrganizationSchema = createSelectSchema(
@@ -434,6 +435,10 @@ export const UpdatePresetEntityNameSchema = z
       });
     }
   });
+
+export const UpdatePresetEntityDefaultLabelSchema = z.object({
+  presetEntityDefaultLabel: z.string().trim().min(1).max(50).nullable(),
+});
 
 export const CompleteOnboardingSchema = z.object({
   onboardingComplete: z.literal(true),

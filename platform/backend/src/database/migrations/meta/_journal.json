@@ -1688,6 +1688,13 @@
       "when": 1779089029604,
       "tag": "0240_clear_whirlwind",
       "breakpoints": true
+    },
+    {
+      "idx": 241,
+      "version": "7",
+      "when": 1779100152176,
+      "tag": "0241_moaning_genesis",
+      "breakpoints": true
     }
   ]
 }

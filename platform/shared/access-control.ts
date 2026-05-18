@@ -849,6 +849,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdatePresetEntityName]: {
     mcpServerInstallation: ["admin"],
   },
+  [RouteId.UpdatePresetEntityDefaultLabel]: {
+    mcpServerInstallation: ["admin"],
+  },
   [RouteId.ListMcpPresetEntries]: {
     mcpRegistry: ["read"],
   },

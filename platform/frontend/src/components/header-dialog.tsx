@@ -240,16 +240,14 @@ export function HeaderDialog({
           title="Sensitive value"
           body={
             draft.scope === "static"
-              ? "Static header values are stored in the catalog row in plaintext and cannot be marked sensitive."
-              : draft.scope === "preset"
-                ? "Store the value in the row's secret bag instead of plaintext jsonb. Recommended for credentials."
-                : "Mask the value field in the install dialog. (Per-install values are always stored in the install's secret bag regardless of this flag.)"
+              ? `Only available for Installation and ${singular} headers. Static headers are always non-sensitive.`
+              : "Store this value securely. Use for API tokens, credentials, and other secrets."
           }
           checked={draft.sensitive}
           onChange={(sensitive) => updateDraft({ sensitive })}
           ariaLabel="Sensitive header value"
           disabled={draft.scope === "static"}
-          disabledReason="Static header values are stored in plaintext on the catalog row; the server rejects sensitive + static."
+          disabledReason={`Static headers are always non-sensitive. Use Installation or ${singular} scope for secrets.`}
         />
 
         <div className="space-y-2">

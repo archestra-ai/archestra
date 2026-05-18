@@ -410,6 +410,156 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       });
     });
 
+    test("enforces block policy when context starts untrusted", async () => {
+      await TrustedDataPolicyModel.create({
+        toolId,
+        conditions: [
+          { key: "emails[*].from", operator: "contains", value: "hacker" },
+        ],
+        action: "block_always",
+        description: "Block hacker emails",
+      });
+
+      const commonMessages: CommonMessage[] = [
+        { role: "user" },
+        { role: "assistant" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_456",
+              name: "get_emails",
+              content: {
+                emails: [
+                  { from: "hacker@company.com", subject: "Suspicious" },
+                ],
+              },
+              isError: false,
+            },
+          ],
+        },
+      ];
+
+      const result = await evaluateIfContextIsTrusted(
+        commonMessages,
+        agentId,
+        organizationId,
+        undefined,
+        true,
+        "restrictive",
+        { teamIds: [] },
+      );
+
+      // Context should remain untrusted and blocked results replaced
+      expect(result.contextIsTrusted).toBe(false);
+      expect(result.toolResultUpdates).toEqual({
+        call_456:
+          "[Content blocked by policy: Data blocked by policy: Block hacker emails]",
+      });
+      expect(result.unsafeContextBoundary).toEqual({
+        kind: "preexisting_untrusted",
+        reason: "agent_configured_untrusted",
+      });
+    });
+
+    test("skips dual-LLM sanitization when context starts untrusted", async () => {
+      await TrustedDataPolicyModel.create({
+        toolId,
+        conditions: [{ key: "source", operator: "equal", value: "external" }],
+        action: "sanitize_with_dual_llm",
+        description: "Sanitize external data",
+      });
+
+      const createSpy = vi.spyOn(DualLlmSubagent, "create").mockResolvedValue({
+        processWithMainAgent: vi.fn().mockResolvedValue({
+          toolCallId: "call_dual",
+          conversations: [],
+          result: "Sanitized summary",
+        }),
+      } as unknown as DualLlmSubagent);
+
+      const commonMessages: CommonMessage[] = [
+        { role: "user" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_dual",
+              name: "get_emails",
+              content: { source: "external", payload: "raw" },
+              isError: false,
+            },
+          ],
+        },
+      ];
+
+      const result = await evaluateIfContextIsTrusted(
+        commonMessages,
+        agentId,
+        organizationId,
+        undefined,
+        true,
+        "restrictive",
+        { teamIds: [] },
+      );
+
+      // Dual LLM should NOT be invoked — trust cannot be recovered
+      expect(createSpy).not.toHaveBeenCalled();
+      expect(result.contextIsTrusted).toBe(false);
+      expect(result.usedDualLlm).toBe(false);
+      expect(result.toolResultUpdates).toEqual({});
+
+      createSpy.mockRestore();
+    });
+
+    test("ignores mark_as_trusted policy when context starts untrusted", async () => {
+      await TrustedDataPolicyModel.create({
+        toolId,
+        conditions: [
+          {
+            key: "emails[*].from",
+            operator: "endsWith",
+            value: "@trusted.com",
+          },
+        ],
+        action: "mark_as_trusted",
+        description: "Allow trusted emails",
+      });
+
+      const commonMessages: CommonMessage[] = [
+        { role: "assistant" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_123",
+              name: "get_emails",
+              content: {
+                emails: [
+                  { from: "user@trusted.com", subject: "Hello" },
+                ],
+              },
+              isError: false,
+            },
+          ],
+        },
+      ];
+
+      const result = await evaluateIfContextIsTrusted(
+        commonMessages,
+        agentId,
+        organizationId,
+        undefined,
+        true,
+        "restrictive",
+        { teamIds: [] },
+      );
+
+      // Context should stay untrusted; no tool result updates applied
+      expect(result.contextIsTrusted).toBe(false);
+      expect(result.toolResultUpdates).toEqual({});
+    });
+
     test("handles multiple tool calls with mixed trust", async () => {
       // Create policies
       await TrustedDataPolicyModel.create({

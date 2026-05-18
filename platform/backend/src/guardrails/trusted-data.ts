@@ -64,23 +64,19 @@ export async function evaluateIfContextIsTrusted(
   let unsafeContextBoundary: UnsafeContextBoundary | undefined;
 
   // If agent configured to consider context untrusted from the beginning,
-  // mark context as untrusted immediately and skip evaluation
+  // mark context as untrusted but still evaluate tool result policies so
+  // blocked results are replaced before reaching the model.
   if (considerContextUntrusted) {
     logger.debug(
       { agentId },
       "[trustedData] evaluateIfContextIsTrusted: context marked untrusted by agent config",
     );
-    return {
-      toolResultUpdates: {},
-      contextIsTrusted: false,
-      usedDualLlm: false,
-      dualLlmAnalyses: [],
-      unsafeContextBoundary: {
-        kind: "preexisting_untrusted",
-        reason:
-          initialUntrustedReason ??
-          UNSAFE_CONTEXT_BOUNDARY_REASON.agentConfiguredUntrusted,
-      },
+    hasUntrustedData = true;
+    unsafeContextBoundary = {
+      kind: "preexisting_untrusted",
+      reason:
+        initialUntrustedReason ??
+        UNSAFE_CONTEXT_BOUNDARY_REASON.agentConfiguredUntrusted,
     };
   }
 
@@ -116,7 +112,7 @@ export async function evaluateIfContextIsTrusted(
     );
     return {
       toolResultUpdates,
-      contextIsTrusted: true,
+      contextIsTrusted: !hasUntrustedData,
       usedDualLlm: false,
       dualLlmAnalyses: [],
       unsafeContextBoundary,
@@ -169,7 +165,9 @@ export async function evaluateIfContextIsTrusted(
 
     const { isTrusted, isBlocked, shouldSanitizeWithDualLlm, reason } =
       evaluation;
-    let toolResultIsTrusted = isTrusted;
+    // When context starts untrusted, trust cannot be recovered — only block
+    // policies are enforced. Skip mark_as_trusted and sanitize_with_dual_llm.
+    let toolResultIsTrusted = considerContextUntrusted ? false : isTrusted;
     logger.debug(
       {
         agentId,
@@ -198,7 +196,7 @@ export async function evaluateIfContextIsTrusted(
         toolCallId,
         toolName,
       });
-    } else if (shouldSanitizeWithDualLlm) {
+    } else if (shouldSanitizeWithDualLlm && !considerContextUntrusted) {
       if (!usedDualLlm && onDualLlmStart) {
         logger.debug(
           { agentId, toolCallId },

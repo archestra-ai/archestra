@@ -504,10 +504,42 @@ export function useUpdatePresetEntityName(
 }
 
 /**
+ * Update the org-wide custom label for the implicit "default" preset row.
+ * Pass null to reset to the built-in "Default" label.
+ */
+export function useUpdatePresetEntityDefaultLabel(
+  onSuccessMessage: string,
+  onErrorMessage: string,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: archestraApiTypes.UpdatePresetEntityDefaultLabelData["body"],
+    ) => {
+      const { data: updatedOrganization, error } =
+        await archestraApiSdk.updatePresetEntityDefaultLabel({ body: data });
+
+      if (error) {
+        toast.error(onErrorMessage);
+        return null;
+      }
+
+      return updatedOrganization;
+    },
+    onSuccess: (updatedOrganization) => {
+      if (!updatedOrganization) return;
+      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      toast.success(onSuccessMessage);
+    },
+  });
+}
+
+/**
  * Returns the org-configured display label for catalog presets.
  * When unconfigured, `configured` is false and `singular`/`plural` fall back to
  * "Preset"/"Presets" — callers should use `configured` to gate UI that should
- * stay hidden until an admin has chosen a name.
+ * stay hidden until an admin has chosen a name. `defaultLabel` falls back to
+ * "Default" when admins have not customized it.
  */
 export function usePresetEntityName() {
   const { data: organization } = useOrganization();
@@ -518,6 +550,7 @@ export function usePresetEntityName() {
     configured,
     singular: configured ? singular : "Preset",
     plural: configured ? plural : "Presets",
+    defaultLabel: organization?.presetEntityDefaultLabel ?? "Default",
   };
 }
 

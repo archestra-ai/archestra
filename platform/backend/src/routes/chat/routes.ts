@@ -1924,7 +1924,7 @@ export async function generateConversationTitle(
   );
 
   // Create model for title generation (direct call, not through LLM Proxy)
-  const model = createDirectLLMModel({
+  const model = await createDirectLLMModel({
     provider,
     apiKey,
     modelName,

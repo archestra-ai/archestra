@@ -609,6 +609,14 @@ const config = {
       azureFoundryEntraIdEnabled:
         process.env.ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED ===
         "true",
+      wif: {
+        enabled: process.env.ARCHESTRA_ANTHROPIC_WIF_ENABLED === "true",
+        ruleId: process.env.ARCHESTRA_ANTHROPIC_WIF_RULE_ID || "",
+        organizationId: process.env.ARCHESTRA_ANTHROPIC_WIF_ORGANIZATION_ID || "",
+        serviceAccountId: process.env.ARCHESTRA_ANTHROPIC_WIF_SERVICE_ACCOUNT_ID || "",
+        identityToken: process.env.ARCHESTRA_ANTHROPIC_WIF_IDENTITY_TOKEN || "",
+        identityTokenFile: process.env.ARCHESTRA_ANTHROPIC_WIF_IDENTITY_TOKEN_FILE || "",
+      },
     },
     gemini: {
       baseUrl:

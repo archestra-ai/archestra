@@ -1,4 +1,8 @@
 import { isProviderApiKeyOptional, type SupportedProvider } from "@shared";
+import {
+  getAnthropicWifToken,
+  isAnthropicWifEnabled,
+} from "@/clients/anthropic-wif";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { getProviderEnvApiKey } from "@/config";
 import { LlmProviderApiKeyModel, TeamModel } from "@/models";
@@ -27,6 +31,16 @@ export async function resolveProviderApiKey(params: {
 }): Promise<ResolvedProviderApiKey> {
   const { organizationId, userId, provider, conversationId, agentLlmApiKeyId } =
     params;
+
+  if (provider === "anthropic" && isAnthropicWifEnabled()) {
+    const wifToken = await getAnthropicWifToken();
+    return {
+      apiKey: wifToken,
+      source: "wif",
+      chatApiKeyId: undefined,
+      baseUrl: null,
+    };
+  }
 
   let resolvedApiKey: {
     id: string;

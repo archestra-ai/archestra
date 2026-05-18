@@ -427,7 +427,7 @@ export class PolicyConfigurationService {
       );
     }
 
-    const model = createLLMModel({
+    const model = await createLLMModel({
       provider,
       apiKey,
       agentId: builtInAgent.id,

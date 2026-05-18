@@ -95,7 +95,7 @@ export async function resolveRerankerConfig(
   const modelName = org.rerankerModel;
 
   return {
-    llmModel: createDirectLLMModel({
+    llmModel: await createDirectLLMModel({
       provider: resolved.provider,
       apiKey: resolved.apiKey,
       modelName,

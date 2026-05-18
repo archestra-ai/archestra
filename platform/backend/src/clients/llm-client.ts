@@ -31,6 +31,10 @@ import {
   getBedrockRegion,
   isBedrockIamAuthEnabled,
 } from "@/clients/bedrock-credentials";
+import {
+  getAnthropicWifToken,
+  isAnthropicWifEnabled,
+} from "@/clients/anthropic-wif";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config from "@/config";
 import logger from "@/logging";
@@ -112,6 +116,8 @@ export function isApiKeyRequired(
   if (apiKey) return false;
   // Gemini with Vertex AI doesn't require an API key
   if (provider === "gemini" && isVertexAiEnabled()) return false;
+  // Anthropic with WIF doesn't require an API key
+  if (provider === "anthropic" && isAnthropicWifEnabled()) return false;
   return !!providerModelConfigs[provider].apiKeyRequiredMessage;
 }
 
@@ -119,7 +125,7 @@ export function isApiKeyRequired(
  * Create an LLM model that calls the provider API directly (not through LLM Proxy).
  * Use this for meta operations like title generation that don't need proxy features.
  */
-export function createDirectLLMModel({
+export async function createDirectLLMModel({
   provider,
   apiKey,
   modelName,
@@ -129,12 +135,12 @@ export function createDirectLLMModel({
   apiKey: string | undefined;
   modelName: string;
   baseUrl: string | null;
-}): LLMModel {
+}): Promise<LLMModel> {
   const cfg = providerModelConfigs[provider];
   if (!cfg) {
     throw new ApiError(400, `Unsupported provider: ${provider}`);
   }
-  if (cfg.apiKeyRequiredMessage && !apiKey) {
+  if (isApiKeyRequired(provider, apiKey)) {
     throw new ApiError(400, cfg.apiKeyRequiredMessage);
   }
   const resolvedBaseUrl = baseUrl ?? cfg.defaultBaseUrl;
@@ -142,7 +148,7 @@ export function createDirectLLMModel({
     resolvedBaseUrl && cfg.proxiedPathSuffix
       ? `${resolvedBaseUrl}${cfg.proxiedPathSuffix}`
       : resolvedBaseUrl;
-  return cfg.createModel({
+  return await cfg.createModel({
     apiKey,
     modelName,
     baseURL,
@@ -151,9 +157,10 @@ export function createDirectLLMModel({
 
 /**
  * Create an LLM model for the specified provider, pointing to the LLM Proxy
+ * Create an LLM model for the specified provider, pointing to the LLM Proxy
  * Returns a model instance ready to use with streamText/generateText
  */
-export function createLLMModel(params: {
+export async function createLLMModel(params: {
   provider: SupportedProvider;
   apiKey: string | undefined;
   agentId: string;
@@ -165,7 +172,7 @@ export function createLLMModel(params: {
   baseUrl: string | null;
   contextIsTrusted?: boolean;
   chatApiKeyId?: string;
-}): LLMModel {
+}): Promise<LLMModel> {
   const {
     provider,
     apiKey,
@@ -224,7 +231,7 @@ export function createLLMModel(params: {
     ? `${proxyBaseUrl}${cfg.proxiedPathSuffix}`
     : proxyBaseUrl;
 
-  return cfg.createModel({
+  return await cfg.createModel({
     apiKey,
     modelName,
     baseURL,
@@ -351,7 +358,7 @@ type ProviderModelConfig = {
     baseURL: string | undefined;
     headers?: Record<string, string>;
     fetch?: typeof globalThis.fetch;
-  }) => LLMModel;
+  }) => LLMModel | Promise<LLMModel>;
   /** Default base URL for direct calls (falls back to provider's built-in default when undefined) */
   defaultBaseUrl: string | undefined;
   /** Error message when API key is missing. Undefined = key is optional (vllm, ollama). */
@@ -370,8 +377,18 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   // --- Native SDK providers (use their own SDK, call client(modelName)) ---
 
   anthropic: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      createAnthropic({ apiKey, baseURL, headers, fetch })(modelName),
+    createModel: async ({ apiKey, modelName, baseURL, headers, fetch }) => {
+      let resolvedApiKey = apiKey;
+      if (!resolvedApiKey && isAnthropicWifEnabled()) {
+        resolvedApiKey = await getAnthropicWifToken();
+      }
+      return createAnthropic({
+        apiKey: resolvedApiKey,
+        baseURL,
+        headers,
+        fetch,
+      })(modelName);
+    },
     defaultBaseUrl: config.llm.anthropic.baseUrl,
     apiKeyRequiredMessage:
       "Anthropic API key is required. Please configure ANTHROPIC_API_KEY.",

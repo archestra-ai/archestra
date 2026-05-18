@@ -111,8 +111,8 @@ describe("detectProviderFromModel", () => {
 });
 
 describe("createDirectLLMModel", () => {
-  it("creates a model for anthropic provider", () => {
-    const model = createDirectLLMModel({
+  it("creates a model for anthropic provider", async () => {
+    const model = await createDirectLLMModel({
       provider: "anthropic",
       apiKey: "test-key",
       modelName: "claude-3-5-haiku-20241022",
@@ -121,8 +121,8 @@ describe("createDirectLLMModel", () => {
     expect(model).toBeDefined();
   });
 
-  it("creates a model for openai provider", () => {
-    const model = createDirectLLMModel({
+  it("creates a model for openai provider", async () => {
+    const model = await createDirectLLMModel({
       provider: "openai",
       apiKey: "test-key",
       modelName: "gpt-4o-mini",
@@ -131,8 +131,8 @@ describe("createDirectLLMModel", () => {
     expect(model).toBeDefined();
   });
 
-  it("creates a model for gemini provider", () => {
-    const model = createDirectLLMModel({
+  it("creates a model for gemini provider", async () => {
+    const model = await createDirectLLMModel({
       provider: "gemini",
       apiKey: "test-key",
       modelName: "gemini-1.5-flash",
@@ -141,8 +141,8 @@ describe("createDirectLLMModel", () => {
     expect(model).toBeDefined();
   });
 
-  it("creates a model for cerebras provider", () => {
-    const model = createDirectLLMModel({
+  it("creates a model for cerebras provider", async () => {
+    const model = await createDirectLLMModel({
       provider: "cerebras",
       apiKey: "test-key",
       modelName: "llama-3.3-70b",
@@ -151,8 +151,8 @@ describe("createDirectLLMModel", () => {
     expect(model).toBeDefined();
   });
 
-  it("creates a model for cohere provider", () => {
-    const model = createDirectLLMModel({
+  it("creates a model for cohere provider", async () => {
+    const model = await createDirectLLMModel({
       provider: "cohere",
       apiKey: "test-key",
       modelName: "command-light",
@@ -161,8 +161,8 @@ describe("createDirectLLMModel", () => {
     expect(model).toBeDefined();
   });
 
-  it("creates a model for vllm provider without API key", () => {
-    const model = createDirectLLMModel({
+  it("creates a model for vllm provider without API key", async () => {
+    const model = await createDirectLLMModel({
       provider: "vllm",
       apiKey: undefined,
       modelName: "default",
@@ -171,8 +171,8 @@ describe("createDirectLLMModel", () => {
     expect(model).toBeDefined();
   });
 
-  it("creates a model for ollama provider without API key", () => {
-    const model = createDirectLLMModel({
+  it("creates a model for ollama provider without API key", async () => {
+    const model = await createDirectLLMModel({
       provider: "ollama",
       apiKey: undefined,
       modelName: "llama3.2",
@@ -181,8 +181,8 @@ describe("createDirectLLMModel", () => {
     expect(model).toBeDefined();
   });
 
-  it("creates a model for zhipuai provider", () => {
-    const model = createDirectLLMModel({
+  it("creates a model for zhipuai provider", async () => {
+    const model = await createDirectLLMModel({
       provider: "zhipuai",
       apiKey: "test-key",
       modelName: "glm-4-flash",
@@ -191,56 +191,56 @@ describe("createDirectLLMModel", () => {
     expect(model).toBeDefined();
   });
 
-  it("throws ApiError for unsupported provider", () => {
-    expect(() =>
+  it("throws ApiError for unsupported provider", async () => {
+    await expect(
       createDirectLLMModel({
         provider: "unsupported" as never,
         apiKey: "test-key",
         modelName: "some-model",
         baseUrl: null,
       }),
-    ).toThrow("Unsupported provider: unsupported");
+    ).rejects.toThrow("Unsupported provider: unsupported");
   });
 
-  it("throws descriptive error for gemini provider without API key and Vertex AI disabled", () => {
-    expect(() =>
+  it("throws descriptive error for gemini provider without API key and Vertex AI disabled", async () => {
+    await expect(
       createDirectLLMModel({
         provider: "gemini",
         apiKey: undefined,
         modelName: "gemini-1.5-flash",
         baseUrl: null,
       }),
-    ).toThrow(
+    ).rejects.toThrow(
       "Gemini API key is required when Vertex AI is not enabled. Please configure GEMINI_API_KEY or enable Vertex AI.",
     );
   });
 
-  it("throws descriptive error for anthropic provider without API key", () => {
-    expect(() =>
+  it("throws descriptive error for anthropic provider without API key", async () => {
+    await expect(
       createDirectLLMModel({
         provider: "anthropic",
         apiKey: undefined,
         modelName: "claude-3-5-haiku-20241022",
         baseUrl: null,
       }),
-    ).toThrow(
+    ).rejects.toThrow(
       "Anthropic API key is required. Please configure ANTHROPIC_API_KEY.",
     );
   });
 
-  it("throws descriptive error for openai provider without API key", () => {
-    expect(() =>
+  it("throws descriptive error for openai provider without API key", async () => {
+    await expect(
       createDirectLLMModel({
         provider: "openai",
         apiKey: undefined,
         modelName: "gpt-4o-mini",
         baseUrl: null,
       }),
-    ).toThrow("OpenAI API key is required. Please configure OPENAI_API_KEY.");
+    ).rejects.toThrow("OpenAI API key is required. Please configure OPENAI_API_KEY.");
   });
 
-  it("creates a model for azure provider", () => {
-    const model = createDirectLLMModel({
+  it("creates a model for azure provider", async () => {
+    const model = await createDirectLLMModel({
       provider: "azure",
       apiKey: "test-key",
       modelName: "gpt-4o",
@@ -255,8 +255,8 @@ describe("createDirectLLMModel", () => {
     expect(capturedCreateOpenAIOptions.apiKey).toBe("test-key");
   });
 
-  it("strips a Bearer prefix before setting the azure api-key header", () => {
-    createDirectLLMModel({
+  it("strips a Bearer prefix before setting the azure api-key header", async () => {
+    await createDirectLLMModel({
       provider: "azure",
       apiKey: "Bearer test-key",
       modelName: "gpt-4o",
@@ -279,7 +279,7 @@ describe("createDirectLLMModel", () => {
       const mockFetch = vi.fn().mockResolvedValue(new Response("{}"));
       vi.stubGlobal("fetch", mockFetch);
 
-      createDirectLLMModel({
+      await createDirectLLMModel({
         provider: "azure",
         apiKey: "test-key",
         modelName: "gpt-4o",
@@ -310,7 +310,7 @@ describe("createDirectLLMModel", () => {
       const mockFetch = vi.fn().mockResolvedValue(new Response("{}"));
       vi.stubGlobal("fetch", mockFetch);
 
-      createDirectLLMModel({
+      await createDirectLLMModel({
         provider: "azure",
         apiKey: "test-key",
         modelName: "gpt-4o",
@@ -341,7 +341,7 @@ describe("createDirectLLMModel", () => {
       const mockFetch = vi.fn().mockResolvedValue(new Response("{}"));
       vi.stubGlobal("fetch", mockFetch);
 
-      createDirectLLMModel({
+      await createDirectLLMModel({
         provider: "azure",
         apiKey: "test-key",
         modelName: "gpt-4o",
@@ -372,7 +372,7 @@ describe("createDirectLLMModel", () => {
       const globalMockFetch = vi.fn().mockResolvedValue(new Response("{}"));
       vi.stubGlobal("fetch", globalMockFetch);
 
-      createDirectLLMModel({
+      await createDirectLLMModel({
         provider: "azure",
         apiKey: "test-key",
         modelName: "gpt-4o",
@@ -400,47 +400,47 @@ describe("createDirectLLMModel", () => {
     });
   });
 
-  it("throws descriptive error for cerebras provider without API key", () => {
-    expect(() =>
+  it("throws descriptive error for cerebras provider without API key", async () => {
+    await expect(
       createDirectLLMModel({
         provider: "cerebras",
         apiKey: undefined,
         modelName: "llama-3.3-70b",
         baseUrl: null,
       }),
-    ).toThrow(
+    ).rejects.toThrow(
       "Cerebras API key is required. Please configure CEREBRAS_API_KEY.",
     );
   });
 
-  it("throws descriptive error for cohere provider without API key", () => {
-    expect(() =>
+  it("throws descriptive error for cohere provider without API key", async () => {
+    await expect(
       createDirectLLMModel({
         provider: "cohere",
         apiKey: undefined,
         modelName: "command-light",
         baseUrl: null,
       }),
-    ).toThrow("Cohere API key is required. Please configure COHERE_API_KEY.");
+    ).rejects.toThrow("Cohere API key is required. Please configure COHERE_API_KEY.");
   });
 
-  it("throws descriptive error for zhipuai provider without API key", () => {
-    expect(() =>
+  it("throws descriptive error for zhipuai provider without API key", async () => {
+    await expect(
       createDirectLLMModel({
         provider: "zhipuai",
         apiKey: undefined,
         modelName: "glm-4-flash",
         baseUrl: null,
       }),
-    ).toThrow(
+    ).rejects.toThrow(
       "Zhipu AI API key is required. Please configure ZHIPUAI_API_KEY.",
     );
   });
 });
 
 describe("createLLMModel", () => {
-  test("sets the untrusted-context header only when contextIsTrusted is false", () => {
-    createLLMModel({
+  test("sets the untrusted-context header only when contextIsTrusted is false", async () => {
+    await createLLMModel({
       provider: "anthropic",
       apiKey: "test-key",
       agentId: "agent-1",
@@ -467,7 +467,7 @@ describe("createLLMModel", () => {
 
     mockCreateAnthropic.mockClear();
 
-    createLLMModel({
+    await createLLMModel({
       provider: "anthropic",
       apiKey: "test-key",
       agentId: "agent-1",

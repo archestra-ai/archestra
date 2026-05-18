@@ -246,7 +246,7 @@ async function resolveBuiltInAgentModel(params: {
   });
 
   return {
-    model: createDirectLLMModel({
+    model: await createDirectLLMModel({
       provider: resolved.provider,
       apiKey: resolved.apiKey,
       modelName: resolved.modelName,

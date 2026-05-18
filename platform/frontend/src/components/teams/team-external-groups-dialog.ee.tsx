@@ -1,12 +1,17 @@
 "use client";
 
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  DocsPage,
+  getDocsUrl,
+} from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, Link2, Plus, Trash2 } from "lucide-react";
+import { Link2, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { FormDialog } from "@/components/form-dialog";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { DialogStickyFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -99,7 +104,7 @@ export function TeamExternalGroupsDialog({
         open={open}
         onOpenChange={onOpenChange}
         title="External Group Sync"
-        description="Automatically sync team membership based on SSO groups"
+        description="Sync team membership from SSO groups."
         size="medium"
       >
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
@@ -119,7 +124,15 @@ export function TeamExternalGroupsDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="External Group Sync"
-      description={`Configure automatic team membership synchronization for "${team.name}" based on SSO groups. When users log in via SSO, they will be automatically added to or removed from this team based on their group memberships.`}
+      description={
+        <>
+          Map SSO group identifiers to "{team.name}". Matching users are added
+          to this team when they sign in.{" "}
+          <ExternalDocsLink href={getDocsUrl(DocsPage.PlatformSsoTeamSync)}>
+            Learn More
+          </ExternalDocsLink>
+        </>
+      }
       size="medium"
       className="sm:max-w-[600px]"
     >
@@ -148,9 +161,7 @@ export function TeamExternalGroupsDialog({
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Enter the group identifier exactly as it appears in your identity
-            provider. This is typically found in the "groups" claim of the SSO
-            token.
+            Use the exact group value emitted by your identity provider.
           </p>
         </div>
 
@@ -165,8 +176,7 @@ export function TeamExternalGroupsDialog({
             <div className="rounded-lg border border-dashed p-4 text-center">
               <Link2 className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">
-                No external groups linked yet. Add a group identifier above to
-                enable automatic team sync.
+                No external groups linked yet.
               </p>
             </div>
           ) : (
@@ -197,35 +207,6 @@ export function TeamExternalGroupsDialog({
             </div>
           )}
         </div>
-
-        {/* How it works */}
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>How Team Sync Works</AlertTitle>
-          <AlertDescription className="space-y-2 text-sm">
-            <p>
-              When a user logs in via SSO, their group memberships are checked
-              against the external groups linked to each team:
-            </p>
-            <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-              <li>
-                <strong>Added:</strong> Users in a linked group are
-                automatically added to the team
-              </li>
-              <li>
-                <strong>Removed:</strong> Users no longer in any linked group
-                are automatically removed (if they were added via sync)
-              </li>
-              <li>
-                <strong>Manual members preserved:</strong> Members added
-                manually are never removed by sync
-              </li>
-            </ul>
-            <p className="text-muted-foreground">
-              Group matching is case-insensitive.
-            </p>
-          </AlertDescription>
-        </Alert>
       </div>
 
       <DialogStickyFooter>

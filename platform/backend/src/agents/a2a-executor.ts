@@ -307,8 +307,7 @@ export async function executeA2AMessage(
     const uiMessageStreamConsumption = consumeReadableStream({
       stream: stream.toUIMessageStream<UIMessage>({
         originalMessages: params.originalUiMessages,
-        generateMessageId: () =>
-          `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        generateMessageId: () => crypto.randomUUID(),
         onFinish: ({ responseMessage }) => {
           responseUiMessage = responseMessage;
         },

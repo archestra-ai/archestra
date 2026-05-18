@@ -17,6 +17,7 @@ export enum A2AErrorKind {
   TaskIsNotInputRequired,
   ApprovalIdNotFound,
   ApprovalIdAlreadyResolved,
+  MessageIdAlreadyExists,
   NothingToExecute,
 }
 const A2A_ERRORS: Record<A2AErrorKind, { code: number; message: string }> = {
@@ -67,6 +68,10 @@ const A2A_ERRORS: Record<A2AErrorKind, { code: number; message: string }> = {
   [A2AErrorKind.ApprovalIdAlreadyResolved]: {
     code: -32602,
     message: "Approval ID already resolved",
+  },
+  [A2AErrorKind.MessageIdAlreadyExists]: {
+    code: -32602,
+    message: "A message with the given ID already exists",
   },
   [A2AErrorKind.NothingToExecute]: {
     code: -32602,

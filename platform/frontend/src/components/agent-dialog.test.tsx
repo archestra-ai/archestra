@@ -7,17 +7,41 @@ import { AgentDialog } from "./agent-dialog";
 const {
   pendingSaveChanges,
   useAvailableLlmProviderApiKeysMock,
+  useAgentDelegationsMock,
   useHasPermissionsMock,
   useInternalAgentsMock,
   useLlmModelsByProviderMock,
+  useProfileMock,
+  useSyncAgentDelegationsMock,
+  useUpdateProfileMock,
 } = vi.hoisted(() => ({
   pendingSaveChanges: vi.fn(
     () => new Promise<void>((resolve) => setTimeout(resolve, 50)),
   ),
-  useInternalAgentsMock: vi.fn(() => ({ data: [] })),
+  useInternalAgentsMock: vi.fn((): { data: unknown[] } => ({ data: [] })),
+  useProfileMock: vi.fn(
+    (): { data: unknown | null; refetch: ReturnType<typeof vi.fn> } => ({
+      data: null,
+      refetch: vi.fn(),
+    }),
+  ),
   useAvailableLlmProviderApiKeysMock: vi.fn(() => ({ data: [] })),
   useLlmModelsByProviderMock: vi.fn(() => ({ modelsByProvider: {} })),
   useHasPermissionsMock: vi.fn((..._args: unknown[]) => ({ data: true })),
+  useUpdateProfileMock: vi.fn(() => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  })),
+  useAgentDelegationsMock: vi.fn(
+    (): { data: unknown[]; isFetched: boolean } => ({
+      data: [],
+      isFetched: true,
+    }),
+  ),
+  useSyncAgentDelegationsMock: vi.fn(() => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  })),
 }));
 
 vi.mock("@tanstack/react-query", async () => {
@@ -38,19 +62,13 @@ vi.mock("@/lib/agent.query", () => ({
     isPending: false,
   }),
   useInternalAgents: useInternalAgentsMock,
-  useProfile: () => ({ data: null, refetch: vi.fn() }),
-  useUpdateProfile: () => ({
-    mutateAsync: vi.fn(),
-    isPending: false,
-  }),
+  useProfile: useProfileMock,
+  useUpdateProfile: useUpdateProfileMock,
 }));
 
 vi.mock("@/lib/agent-tools.query", () => ({
-  useAgentDelegations: () => ({ data: [] }),
-  useSyncAgentDelegations: () => ({
-    mutateAsync: vi.fn(),
-    isPending: false,
-  }),
+  useAgentDelegations: useAgentDelegationsMock,
+  useSyncAgentDelegations: useSyncAgentDelegationsMock,
 }));
 
 vi.mock("@/lib/auth/auth.query", () => ({
@@ -307,6 +325,92 @@ vi.mock("@/components/ui/tooltip", () => ({
     <div>{children}</div>
   ),
 }));
+
+const baseAgent = {
+  id: "00000000-0000-4000-8000-000000000001",
+  organizationId: "00000000-0000-4000-8000-000000000010",
+  name: "Existing Agent",
+  builtIn: false,
+  icon: null,
+  description: null,
+  systemPrompt: null,
+  agentType: "agent" as const,
+  toolExposureMode: "full" as const,
+  scope: "personal" as const,
+  isDefault: false,
+  isPersonalGateway: false,
+  teams: [],
+  tools: [],
+  labels: [],
+  authorId: "00000000-0000-4000-8000-000000000020",
+  authorName: "Test User",
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+  knowledgeBaseIds: [],
+  connectorIds: [],
+  suggestedPrompts: [],
+  llmApiKeyId: null,
+  llmModel: null,
+  considerContextUntrusted: false,
+  identityProviderId: null,
+  builtInAgentConfig: null,
+  passthroughHeaders: null,
+  toolAssignmentMode: "manual" as const,
+  incomingEmailEnabled: false,
+  incomingEmailSecurityMode: "public" as const,
+  incomingEmailAllowedDomain: null,
+  slug: null,
+};
+
+const targetAgent = {
+  ...baseAgent,
+  id: "00000000-0000-4000-8000-000000000002",
+  name: "Target Agent",
+};
+
+describe("AgentDialog delegation state", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useHasPermissionsMock.mockImplementation(() => ({ data: true }));
+    useProfileMock.mockReturnValue({ data: null, refetch: vi.fn() });
+    useInternalAgentsMock.mockReturnValue({ data: [targetAgent] });
+    useAgentDelegationsMock.mockReturnValue({
+      data: [targetAgent],
+      isFetched: true,
+    });
+  });
+
+  it("keeps selected subagents when fresh agent data refetches", async () => {
+    const { rerender } = render(
+      <AgentDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        agentType="agent"
+        agent={baseAgent}
+      />,
+    );
+
+    await screen.findByText("Subagents (1)");
+
+    useProfileMock.mockReturnValue({
+      data: { ...baseAgent, description: "Refetched description" },
+      refetch: vi.fn(),
+    });
+
+    rerender(
+      <AgentDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        agentType="agent"
+        agent={baseAgent}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Subagents (1)")).toBeInTheDocument();
+    });
+  });
+});
 
 describe.skip("AgentDialog", () => {
   beforeEach(() => {

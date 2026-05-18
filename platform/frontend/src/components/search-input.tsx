@@ -2,7 +2,7 @@
 
 import { Search } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback } from "react";
+import { forwardRef, useCallback } from "react";
 import { DebouncedInput } from "./debounced-input";
 
 type SearchInputProps = {
@@ -18,66 +18,73 @@ type SearchInputProps = {
   syncQueryParams?: boolean;
 };
 
-export function SearchInput({
-  placeholder = "Search...",
-  objectNamePlural,
-  searchFields,
-  paramName = "search",
-  debounceMs = 400,
-  className,
-  inputClassName,
-  onSearchChange,
-  value,
-  syncQueryParams = true,
-}: SearchInputProps) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const pathname = usePathname();
-
-  const searchValue = value ?? searchParams.get(paramName) ?? "";
-  const computedPlaceholder =
-    objectNamePlural && searchFields?.length
-      ? `Search ${objectNamePlural} by ${formatSearchFields(searchFields)}`
-      : placeholder;
-
-  const handleChange = useCallback(
-    (value: string) => {
-      onSearchChange?.(value);
-      if (!syncQueryParams) return;
-      const params = new URLSearchParams(searchParams.toString());
-      if (value) {
-        params.set(paramName, value);
-      } else {
-        params.delete(paramName);
-      }
-      params.set("page", "1");
-      router.push(`${pathname}?${params.toString()}`, { scroll: false });
-    },
-    [
+export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
+  function SearchInput(
+    {
+      placeholder = "Search...",
+      objectNamePlural,
+      searchFields,
+      paramName = "search",
+      debounceMs = 400,
+      className,
+      inputClassName,
       onSearchChange,
-      paramName,
-      pathname,
-      router,
-      searchParams,
-      syncQueryParams,
-    ],
-  );
+      value,
+      syncQueryParams = true,
+    }: SearchInputProps,
+    ref,
+  ) {
+    const router = useRouter();
+    const searchParams = useSearchParams();
+    const pathname = usePathname();
 
-  return (
-    <div
-      className={className ?? "relative w-full sm:w-[320px] sm:max-w-[320px]"}
-    >
-      <Search className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-      <DebouncedInput
-        initialValue={searchValue}
-        onChange={handleChange}
-        placeholder={computedPlaceholder}
-        className={inputClassName ?? "w-full pl-9"}
-        debounceMs={debounceMs}
-      />
-    </div>
-  );
-}
+    const searchValue = value ?? searchParams.get(paramName) ?? "";
+    const computedPlaceholder =
+      objectNamePlural && searchFields?.length
+        ? `Search ${objectNamePlural} by ${formatSearchFields(searchFields)}`
+        : placeholder;
+
+    const handleChange = useCallback(
+      (value: string) => {
+        onSearchChange?.(value);
+        if (!syncQueryParams) return;
+        const params = new URLSearchParams(searchParams.toString());
+        if (value) {
+          params.set(paramName, value);
+        } else {
+          params.delete(paramName);
+        }
+        params.set("page", "1");
+        router.push(`${pathname}?${params.toString()}`, { scroll: false });
+      },
+      [
+        onSearchChange,
+        paramName,
+        pathname,
+        router,
+        searchParams,
+        syncQueryParams,
+      ],
+    );
+
+    return (
+      <div
+        className={className ?? "relative w-full sm:w-[320px] sm:max-w-[320px]"}
+      >
+        <Search className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <DebouncedInput
+          ref={ref}
+          initialValue={searchValue}
+          onChange={handleChange}
+          placeholder={computedPlaceholder}
+          className={inputClassName ?? "w-full pl-9"}
+          debounceMs={debounceMs}
+        />
+      </div>
+    );
+  },
+);
+SearchInput.displayName = "SearchInput";
 
 function formatSearchFields(searchFields: string[]) {
   if (searchFields.length === 1) {

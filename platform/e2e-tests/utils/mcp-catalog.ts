@@ -49,23 +49,52 @@ export async function addCustomSelfHostedCatalogItem({
     .getByRole("textbox", { name: "Arguments (one per line)" })
     .fill(`-c\n${singleLineCommand}`);
   if (envVars) {
+    // Since #4696, env-var add/edit lives in its own <StandardDialog>
+    // (`environment-variable-dialog.tsx`) opened by the "Add Variable"
+    // button. All the env-var-specific inputs scope to that sub-dialog
+    // now — not the parent "Add MCP Server" dialog.
     await createDialog.getByRole("button", { name: "Add Variable" }).click();
-    await createDialog
-      .getByRole("textbox", { name: "API_KEY" })
-      .fill(envVars.key);
+    const envVarDialog = page.getByRole("dialog", {
+      name: /Add environment variable/i,
+    });
+    await expect(envVarDialog).toBeVisible({ timeout: 15_000 });
+
+    // The key input's accessible name is now "Key" (the Label) — the old
+    // "API_KEY" was placeholder text on the same input.
+    await envVarDialog.getByRole("textbox", { name: "Key" }).fill(envVars.key);
+
     if (envVars.isSecret) {
-      await createDialog
+      await envVarDialog
         .getByTestId(E2eTestId.SelectEnvironmentVariableType)
         .click();
       await page.getByRole("option", { name: "Secret" }).click();
     }
-    if (envVars.promptOnInstallation) {
-      await createDialog
+
+    // Scope is now a 3-option dropdown (installation/preset/static),
+    // defaulting to "installation". The PromptOnInstallationCheckbox
+    // testid is reused on the dropdown trigger for backwards compat.
+    //
+    // Logic inversion vs. the old checkbox: the old default was "not
+    // prompted" (checkbox unchecked) and the helper toggled IT ON for
+    // prompted envs. The new default is "Prompt at installation", so we
+    // only need to act when the caller wants something other than that
+    // — i.e. when promptOnInstallation is false (we want Static) or
+    // when a vault reference is being set (vault picker only appears
+    // for static-scoped secret values).
+    const wantsStaticScope =
+      !envVars.promptOnInstallation || !!envVars.vaultSecret;
+    if (wantsStaticScope) {
+      await envVarDialog
         .getByTestId(E2eTestId.PromptOnInstallationCheckbox)
-        .click({ force: true });
+        .click();
+      await page.getByRole("option", { name: "Static" }).click();
     }
+
     if (envVars.vaultSecret) {
-      await createDialog.getByText("Set Secret").click();
+      // Button text changed: "Set Secret" → "Set external secret".
+      await envVarDialog
+        .getByRole("button", { name: /Set external secret/i })
+        .click();
       const externalSecretDialog = page.getByRole("dialog", {
         name: /Set external secret/i,
       });
@@ -91,6 +120,11 @@ export async function addCustomSelfHostedCatalogItem({
         .click();
       await expect(externalSecretDialog).not.toBeVisible({ timeout: 15_000 });
     }
+
+    // Confirm and close the env-var sub-dialog so the parent "Add MCP
+    // Server" form re-takes focus before we click "Add Server".
+    await envVarDialog.getByRole("button", { name: "Add variable" }).click();
+    await expect(envVarDialog).not.toBeVisible({ timeout: 15_000 });
   }
   if (scope && scope !== "personal") {
     await createDialog
@@ -149,7 +183,7 @@ export async function addCustomSelfHostedCatalogItem({
   };
 }
 
-export async function findCatalogItem(
+async function findCatalogItem(
   request: APIRequestContext,
   name: string,
 ): Promise<{ id: string; name: string } | undefined> {
@@ -167,15 +201,78 @@ export async function findCatalogItem(
     );
   }
 
-  const catalog = await response.json();
+  const catalog = extractCatalogItems(await response.json());
 
-  if (!Array.isArray(catalog)) {
+  return catalog.find((item: { name: string }) => item.name === name);
+}
+
+export async function ensureInternalDevTestServerCatalogItem(
+  request: APIRequestContext,
+): Promise<{ id: string; name: string }> {
+  const existing = await findCatalogItem(request, "internal-dev-test-server");
+  if (existing) {
+    return existing;
+  }
+
+  const response = await request.post(
+    getE2eRequestUrl("/api/internal_mcp_catalog"),
+    {
+      headers: {
+        "Content-Type": "application/json",
+        Origin: UI_BASE_URL,
+      },
+      data: {
+        name: "internal-dev-test-server",
+        description:
+          "Simple test MCP server for e2e tests. Has one tool that prints an env var.",
+        serverType: "local",
+        localConfig: {
+          command: "sh",
+          arguments: ["-c", testMcpServerCommand],
+          transportType: "stdio",
+          environment: [
+            {
+              key: "ARCHESTRA_TEST",
+              type: "plain_text",
+              promptOnInstallation: true,
+              required: true,
+              description: "Test value to print",
+            },
+          ],
+        },
+      },
+    },
+  );
+
+  if (!response.ok()) {
     throw new Error(
-      `Expected catalog to be an array, got: ${JSON.stringify(catalog)}`,
+      `Failed to create internal-dev-test-server catalog item: ${response.status()} ${await response.text()}`,
     );
   }
 
-  return catalog.find((item: { name: string }) => item.name === name);
+  const created = await response.json();
+  return { id: created.id, name: created.name };
+}
+
+function extractCatalogItems(
+  data: unknown,
+): Array<{ id: string; name: string }> {
+  if (Array.isArray(data)) {
+    return data as Array<{ id: string; name: string }>;
+  }
+
+  if (
+    data &&
+    typeof data === "object" &&
+    "data" in data &&
+    Array.isArray(data.data)
+  ) {
+    return data.data as Array<{ id: string; name: string }>;
+  }
+
+  throw new Error(
+    `Expected catalog list response, got: ${JSON.stringify(data)}`,
+  );
 }
 
 export async function findInstalledServer(

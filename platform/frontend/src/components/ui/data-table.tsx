@@ -32,7 +32,6 @@ import { DataTablePagination } from "./data-table-pagination";
 
 const COMPACT_ICON_COLUMN_IDS = new Set(["icon", "avatar"]);
 const ACTIONS_COLUMN_ID = "actions";
-const ACTIONS_COLUMN_WIDTH = 288;
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -209,6 +208,7 @@ export function DataTable<TData, TValue>({
                         style={getColumnStyle({
                           columnId: header.column.id,
                           configuredSize: header.column.columnDef.size,
+                          minSize: header.column.columnDef.minSize,
                           renderedSize: header.getSize(),
                         })}
                       >
@@ -245,6 +245,7 @@ export function DataTable<TData, TValue>({
                         style={getColumnStyle({
                           columnId: cell.column.id,
                           configuredSize: cell.column.columnDef.size,
+                          minSize: cell.column.columnDef.minSize,
                           renderedSize: cell.column.getSize(),
                         })}
                       >
@@ -336,15 +337,15 @@ function getColumnClassName(columnId: string) {
 function getColumnStyle(params: {
   columnId: string;
   configuredSize?: number;
+  minSize?: number;
   renderedSize: number;
 }): React.CSSProperties | undefined {
-  if (params.columnId === ACTIONS_COLUMN_ID) {
-    return { width: ACTIONS_COLUMN_WIDTH };
-  }
-
+  const style: React.CSSProperties = {};
   if (params.configuredSize) {
-    return { width: params.renderedSize };
+    style.width = params.renderedSize;
   }
-
-  return undefined;
+  if (params.minSize) {
+    style.minWidth = params.minSize;
+  }
+  return Object.keys(style).length > 0 ? style : undefined;
 }

@@ -46,6 +46,40 @@ describe("A2AContextManager", () => {
       }),
     ).rejects.toMatchObject({ kind: A2AErrorKind.ContextNotFound });
   });
+
+  test("addMessageToContext throws when message id exists in the db", async () => {
+    const context = await A2AContextManager.createContext(actor);
+    const messageId = crypto.randomUUID();
+    await A2AContextManager.addMessageToContext({
+      context,
+      message: {
+        messageId,
+        role: A2AProtocolRole.Agent,
+        parts: [{ text: "Msg1" }],
+      },
+      uiMessage: {
+        id: messageId,
+        role: "assistant",
+        parts: [{ type: "text", text: "UI Msg1" }],
+      },
+    });
+
+    await expect(
+      A2AContextManager.addMessageToContext({
+        context,
+        message: {
+          messageId,
+          role: A2AProtocolRole.Agent,
+          parts: [{ text: "Msg1" }],
+        },
+        uiMessage: {
+          id: messageId,
+          role: "assistant",
+          parts: [{ type: "text", text: "UI Msg1" }],
+        },
+      }),
+    ).rejects.toMatchObject({ kind: A2AErrorKind.MessageIdAlreadyExists });
+  });
 });
 
 describe("A2ATaskManager", () => {
@@ -197,19 +231,21 @@ describe("A2ATaskManager", () => {
 
   test("addMessageToTask", async () => {
     let { context, task } = await createEmptyTask();
-    task = await A2ATaskManager.addMessageToTask({
+    const messageId = crypto.randomUUID();
+    const { task: updatedTask } = await A2ATaskManager.addMessageToTask({
       task,
       message: {
-        messageId: "message-1",
+        messageId: messageId,
         role: A2AProtocolRole.Agent,
         parts: [{ text: "Msg1" }],
       },
       uiMessage: {
-        id: "ui-message-1",
+        id: messageId,
         role: "assistant",
         parts: [{ type: "text", text: "UI Msg1" }],
       },
     });
+    task = updatedTask;
 
     expect(task.history).toEqual([
       {
@@ -219,7 +255,7 @@ describe("A2ATaskManager", () => {
         role: A2AProtocolRole.Agent,
         parts: [{ text: "Msg1" }],
         content: {
-          id: "ui-message-1",
+          id: messageId,
           role: "assistant",
           parts: [{ type: "text", text: "UI Msg1" }],
         },
@@ -239,15 +275,15 @@ describe("A2ATaskManager", () => {
     ).toEqual(task);
 
     // Replace
-    task = await A2ATaskManager.addMessageToTask({
+    const { task: updatedTask2 } = await A2ATaskManager.addMessageToTask({
       task,
       message: {
-        messageId: "message-1",
+        messageId: messageId,
         role: A2AProtocolRole.Agent,
         parts: [{ text: "Msg1" }, { text: "Msg1-UPD" }],
       },
       uiMessage: {
-        id: "ui-message-1",
+        id: messageId,
         role: "assistant",
         parts: [
           { type: "text", text: "UI Msg1" },
@@ -255,6 +291,7 @@ describe("A2ATaskManager", () => {
         ],
       },
     });
+    task = updatedTask2;
 
     expect(task.history).toEqual([
       {
@@ -264,7 +301,7 @@ describe("A2ATaskManager", () => {
         role: A2AProtocolRole.Agent,
         parts: [{ text: "Msg1" }, { text: "Msg1-UPD" }],
         content: {
-          id: "ui-message-1",
+          id: messageId,
           role: "assistant",
           parts: [
             { type: "text", text: "UI Msg1" },

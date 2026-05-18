@@ -9,9 +9,11 @@ export function buildAzureDeploymentsUrl(params: {
       return null;
     }
 
-    // Expected input is the Azure deployment base URL:
-    // https://<resource>.openai.azure.com/openai/deployments/<deployment>
-    const pathname = url.pathname.replace(/\/[^/]+\/?$/, "");
+    const pathname = getAzureDeploymentsPathname(url);
+    if (!pathname) {
+      return null;
+    }
+
     return `${url.origin}${pathname}?api-version=${params.apiVersion}`;
   } catch {
     return null;
@@ -31,6 +33,27 @@ export function buildAzureOpenAiV1ModelsUrl(baseUrl: string): string | null {
   }
 }
 
+export function buildAzureModelsUrl(params: {
+  apiVersion: string;
+  baseUrl: string;
+}): string | null {
+  try {
+    const url = new URL(params.baseUrl);
+    if (isAzureOpenAiV1Url(url)) {
+      return null;
+    }
+
+    const pathname = getAzureOpenAiPathname(url);
+    if (!pathname) {
+      return null;
+    }
+
+    return `${url.origin}${pathname}/models?api-version=${params.apiVersion}`;
+  } catch {
+    return null;
+  }
+}
+
 export function buildAzureResponsesBaseUrl(baseUrl: string): string | null {
   try {
     const url = new URL(baseUrl);
@@ -38,12 +61,41 @@ export function buildAzureResponsesBaseUrl(baseUrl: string): string | null {
       return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
     }
 
-    if (!/\/deployments\/[^/]+\/?$/.test(url.pathname)) {
+    const pathname = getAzureOpenAiPathname(url);
+    if (!pathname) {
       return null;
     }
 
-    const pathname = url.pathname.replace(/\/deployments\/[^/]+\/?$/, "");
     return `${url.origin}${pathname}`;
+  } catch {
+    return null;
+  }
+}
+
+export function buildAzureDeploymentBaseUrl(params: {
+  baseUrl: string | undefined;
+  deploymentName: string;
+}): string | null {
+  if (!params.baseUrl) {
+    return null;
+  }
+
+  try {
+    const url = new URL(params.baseUrl);
+    if (isAzureOpenAiV1Url(url)) {
+      return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
+    }
+
+    if (/\/openai\/deployments\/[^/]+\/?$/.test(url.pathname)) {
+      return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
+    }
+
+    const openAiPathname = getAzureOpenAiPathname(url);
+    if (!openAiPathname) {
+      return null;
+    }
+
+    return `${url.origin}${openAiPathname}/deployments/${encodeURIComponent(params.deploymentName)}`;
   } catch {
     return null;
   }
@@ -52,8 +104,8 @@ export function buildAzureResponsesBaseUrl(baseUrl: string): string | null {
 export function extractAzureDeploymentName(baseUrl: string): string | null {
   try {
     const url = new URL(baseUrl);
-    const segments = url.pathname.split("/").filter(Boolean);
-    return segments.at(-1) ?? null;
+    const match = url.pathname.match(/\/openai\/deployments\/([^/]+)\/?$/);
+    return match ? decodeURIComponent(match[1]) : null;
   } catch {
     return null;
   }
@@ -135,4 +187,40 @@ function getRequestUrl(input: URL | RequestInfo): string {
 
 function isAzureOpenAiV1Url(url: URL): boolean {
   return /\/openai\/v1\/?$/.test(url.pathname);
+}
+
+function getAzureDeploymentsPathname(url: URL): string | null {
+  const pathname = url.pathname.replace(/\/+$/, "");
+
+  if (/\/openai\/deployments\/[^/]+$/.test(pathname)) {
+    return pathname.replace(/\/[^/]+$/, "");
+  }
+
+  if (/\/openai\/deployments$/.test(pathname)) {
+    return pathname;
+  }
+
+  if (/\/openai$/.test(pathname)) {
+    return `${pathname}/deployments`;
+  }
+
+  return null;
+}
+
+function getAzureOpenAiPathname(url: URL): string | null {
+  const pathname = url.pathname.replace(/\/+$/, "");
+
+  if (/\/openai\/deployments\/[^/]+$/.test(pathname)) {
+    return pathname.replace(/\/deployments\/[^/]+$/, "");
+  }
+
+  if (/\/openai\/deployments$/.test(pathname)) {
+    return pathname.replace(/\/deployments$/, "");
+  }
+
+  if (/\/openai$/.test(pathname)) {
+    return pathname;
+  }
+
+  return null;
 }

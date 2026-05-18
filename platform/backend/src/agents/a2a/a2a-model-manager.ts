@@ -6,6 +6,7 @@ import {
   A2ATaskApprovalRequestModel,
   A2ATaskModel,
 } from "@/models";
+import { A2AMessageIdExistsError } from "@/models/a2a-message";
 import type { A2AContext, A2AMessage, A2ATask } from "@/types";
 import { type A2AActor, A2AError, A2AErrorKind } from "./a2a-base";
 import {
@@ -45,6 +46,63 @@ export class A2AContextManager {
     return await A2AContextModel.create({
       actorKind: actor.kind,
       actorId: actor.id,
+    });
+  }
+
+  static async addMessageToContext(params: {
+    context: A2AContext;
+    message: A2AProtocolMessage;
+    uiMessage: UIMessage;
+  }): Promise<{
+    context: A2AContext;
+    dbMessage: A2AMessage;
+    protocolMessage: A2AProtocolMessage;
+  }> {
+    const { context, message, uiMessage } = params;
+    if (message.contextId && message.contextId !== context.id) {
+      // This should never happen.
+      throw new Error(
+        "[A2AModelManager] Message contextId does not match the context",
+      );
+    }
+    message.contextId = context.id;
+    try {
+      const dbMessage = await A2AMessageModel.createWithId({
+        id: message.messageId,
+        contextId: context.id,
+        role: message.role,
+        parts: message.parts || [],
+        content: uiMessage,
+      });
+      return { context, dbMessage, protocolMessage: message };
+    } catch (error) {
+      if (error instanceof A2AMessageIdExistsError) {
+        throw new A2AError(A2AErrorKind.MessageIdAlreadyExists);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Return context messages from the db but override with the provided messages if there are id matches.
+   * This is required when some messages are recently updated and not yet reflected in the db,
+   * to avoid stale data reading.
+   */
+  static async getContextMessagesWithOverrides(params: {
+    context: A2AContext;
+    override: A2AMessage[];
+  }): Promise<A2AMessage[]> {
+    const { context, override } = params;
+    const messages = await A2AMessageModel.findByContextId(context.id);
+    const overrideMap: Record<string, A2AMessage> = {};
+    override.forEach((m) => {
+      overrideMap[m.id] = m;
+    });
+    return messages.map((m) => {
+      if (overrideMap[m.id]) {
+        return overrideMap[m.id];
+      }
+      return m;
     });
   }
 }
@@ -127,7 +185,7 @@ export class A2ATaskManager {
     if (context.actorKind !== actor.kind || context.actorId !== actor.id) {
       // This should never happen. Context is always validated or created for the same actor.
       throw new Error(
-        "Actor is not the owner of the context when creating task",
+        "[A2AModelManager] Actor is not the owner of the context when creating task",
       );
     }
 
@@ -147,8 +205,27 @@ export class A2ATaskManager {
     task: A2ATaskWithData;
     message: A2AProtocolMessage;
     uiMessage: UIMessage;
-  }): Promise<A2ATaskWithData> {
+  }): Promise<{
+    task: A2ATaskWithData;
+    dbMessage: A2AMessage;
+    protocolMessage: A2AProtocolMessage;
+  }> {
     const { task, message, uiMessage } = params;
+
+    if (message.taskId && message.taskId !== task.id) {
+      // This should never happen.
+      throw new Error(
+        "[A2AModelManager] Message taskId does not match the task",
+      );
+    }
+    message.taskId = task.id;
+    if (message.contextId && message.contextId !== task.contextId) {
+      // This should never happen.
+      throw new Error(
+        "[A2AModelManager] Message contextId does not match the task's contextId",
+      );
+    }
+    message.contextId = task.contextId;
 
     if (
       task.history.length > 0 &&
@@ -160,7 +237,7 @@ export class A2ATaskManager {
         ...task.history.slice(0, -1),
         {
           ...task.history[task.history.length - 1],
-          parts: message.parts,
+          parts: message.parts || [],
           content: uiMessage,
         },
       ];
@@ -171,24 +248,40 @@ export class A2ATaskManager {
       await A2AMessageModel.updateContentAndParts(
         task.history[task.history.length - 1].id,
         uiMessage,
-        message.parts,
+        message.parts || [],
       );
-      return { ...task, history, statusMessage };
+      return {
+        task: { ...task, history, statusMessage },
+        dbMessage: task.history[task.history.length - 1],
+        protocolMessage: message,
+      };
     }
 
-    const modelMessage = await A2AMessageModel.create({
-      contextId: task.contextId,
-      taskId: task.id,
-      role: message.role,
-      parts: message.parts,
-      content: uiMessage,
-    });
-    const statusMessage =
-      modelMessage.role === A2AProtocolRole.Agent
-        ? modelMessage
-        : task.statusMessage;
-    const history = [...task.history, modelMessage];
-    return { ...task, history, statusMessage };
+    try {
+      const modelMessage = await A2AMessageModel.createWithId({
+        id: message.messageId,
+        contextId: task.contextId,
+        taskId: task.id,
+        role: message.role,
+        parts: message.parts || [],
+        content: uiMessage,
+      });
+      const statusMessage =
+        modelMessage.role === A2AProtocolRole.Agent
+          ? modelMessage
+          : task.statusMessage;
+      const history = [...task.history, modelMessage];
+      return {
+        task: { ...task, history, statusMessage },
+        dbMessage: modelMessage,
+        protocolMessage: message,
+      };
+    } catch (error) {
+      if (error instanceof A2AMessageIdExistsError) {
+        throw new A2AError(A2AErrorKind.MessageIdAlreadyExists);
+      }
+      throw error;
+    }
   }
 
   static async addApprovalRequestsToTask(

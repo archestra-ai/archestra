@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useDeferredEnabled } from "@/lib/hooks/use-deferred-enabled";
 
 interface GitHubRelease {
   tag_name: string;
@@ -34,12 +35,27 @@ async function fetchLatestRelease(): Promise<GitHubRelease | null> {
   }
 }
 
-export function useLatestGitHubRelease() {
+/**
+ * Fetches latest release metadata for the footer upgrade hint.
+ *
+ * Callers can disable or defer this because it is noncritical external data and
+ * should not compete with authenticated shell API calls during initial load.
+ */
+export function useLatestGitHubRelease(params?: {
+  enabled?: boolean;
+  deferMs?: number;
+}) {
+  const enabled = useDeferredEnabled(
+    params?.enabled ?? true,
+    params?.deferMs ?? 0,
+  );
+
   return useQuery({
     queryKey: ["github-latest-release"],
     queryFn: fetchLatestRelease,
     staleTime: 60 * 60 * 1000, // 1 hour
     gcTime: 60 * 60 * 1000, // 1 hour cache
     retry: false,
+    enabled,
   });
 }

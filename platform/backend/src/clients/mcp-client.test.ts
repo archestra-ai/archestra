@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
 import {
+  LINKED_IDP_SSO_MODE,
   MCP_APPS_EXTENSION_ID,
   MCP_CATALOG_INSTALL_PATH,
   MCP_CATALOG_REAUTH_QUERY_PARAM,
   MCP_CATALOG_SERVER_QUERY_PARAM,
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
+  OAUTH_TOKEN_TYPE,
 } from "@shared";
 import { vi } from "vitest";
 import config from "@/config";
@@ -27,6 +29,7 @@ const mockCallTool = vi.fn();
 const mockConnect = vi.fn();
 const mockClose = vi.fn();
 const mockListTools = vi.fn();
+const mockListResources = vi.fn();
 const mockPing = vi.fn();
 
 vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
@@ -36,6 +39,7 @@ vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
     this.callTool = mockCallTool;
     this.close = mockClose;
     this.listTools = mockListTools;
+    this.listResources = mockListResources;
     this.ping = mockPing;
   }),
 }));
@@ -121,6 +125,7 @@ describe("McpClient", () => {
     mockConnect.mockReset();
     mockClose.mockReset();
     mockListTools.mockReset();
+    mockListResources.mockReset();
     mockPing.mockReset();
     mockUsesStreamableHttp.mockReset();
     mockGetHttpEndpointUrl.mockReset();
@@ -144,6 +149,7 @@ describe("McpClient", () => {
 
     // Default: listTools returns empty list (fallback to stripped name)
     mockListTools.mockResolvedValue({ tools: [] });
+    mockListResources.mockResolvedValue({ resources: [] });
   });
 
   test("invalidateConnectionsForServer closes cached active connections for the server", async () => {
@@ -191,6 +197,70 @@ describe("McpClient", () => {
     );
 
     expect(mockConnect).toHaveBeenCalledTimes(1);
+  });
+
+  test("connectAndGetTools synthesizes read-resource tools when upstream has no tools/list", async () => {
+    mockListTools.mockRejectedValueOnce(new Error("Method not found"));
+    mockListResources.mockResolvedValueOnce({
+      resources: [
+        {
+          uri: "todo://todos",
+          name: "Todos",
+          description: "Read todos",
+        },
+      ],
+    });
+
+    const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
+    if (!catalogItem) throw new Error("expected catalog item");
+
+    const tools = await mcpClient.connectAndGetTools({
+      catalogItem,
+      mcpServerId,
+      secrets: { access_token: "resource-token" },
+    });
+
+    expect(tools).toEqual([
+      {
+        name: "read_resource_todos",
+        description: "Read todos",
+        inputSchema: {
+          type: "object",
+          properties: {},
+          additionalProperties: false,
+        },
+        _meta: {
+          archestraResourceUri: "todo://todos",
+        },
+        annotations: undefined,
+      },
+    ]);
+    expect(mockListResources).toHaveBeenCalledTimes(1);
+  });
+
+  test("connectAndGetTools treats JSON-RPC method-not-found code as resource-only discovery", async () => {
+    mockListTools.mockRejectedValueOnce({ code: -32601 });
+    mockListResources.mockResolvedValueOnce({
+      resources: [
+        {
+          uri: "todo://todos",
+          name: "Todos",
+        },
+      ],
+    });
+
+    const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
+    if (!catalogItem) throw new Error("expected catalog item");
+
+    const tools = await mcpClient.connectAndGetTools({
+      catalogItem,
+      mcpServerId,
+      secrets: { access_token: "resource-token" },
+    });
+
+    expect(tools).toHaveLength(1);
+    expect(tools[0].name).toBe("read_resource_todos");
+    expect(mockListResources).toHaveBeenCalledTimes(1);
   });
 
   describe("executeToolCall", () => {
@@ -477,6 +547,45 @@ describe("McpClient", () => {
       expect(secondResult.isError).toBe(false);
       expect(mockClose).toHaveBeenCalledTimes(0);
       expect(mockConnect).toHaveBeenCalledTimes(1);
+    });
+
+    test("skips ping for recently validated active connections", async () => {
+      const tool = await ToolModel.createToolIfNotExists({
+        name: "github-mcp-server__recent_reuse",
+        description: "Recent active connection reuse",
+        parameters: {},
+        catalogId,
+      });
+
+      await AgentToolModel.create(agentId, tool.id, {
+        mcpServerId,
+        credentialResolutionMode: "static",
+      });
+
+      mockConnect.mockResolvedValue(undefined);
+      mockPing.mockResolvedValue(undefined);
+      mockCallTool.mockResolvedValue({
+        content: [{ type: "text", text: "ok" }],
+        isError: false,
+      });
+
+      const toolCall = {
+        id: "call_recent_reuse",
+        name: tool.name,
+        arguments: {},
+      };
+
+      const firstResult = await mcpClient.executeToolCall(toolCall, agentId);
+      expect(firstResult.isError).toBe(false);
+      expect(mockConnect).toHaveBeenCalledTimes(1);
+      expect(mockPing).not.toHaveBeenCalled();
+
+      mockPing.mockClear();
+
+      const secondResult = await mcpClient.executeToolCall(toolCall, agentId);
+      expect(secondResult.isError).toBe(false);
+      expect(mockConnect).toHaveBeenCalledTimes(1);
+      expect(mockPing).not.toHaveBeenCalled();
     });
 
     describe("Concurrency limiter", () => {
@@ -1052,7 +1161,8 @@ describe("McpClient", () => {
             type: "auth_required",
             catalogId: dynCatalog.id,
             catalogName: "jira-mcp-server",
-            installUrl: `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?install=${dynCatalog.id}`,
+            action: "install_mcp_credentials",
+            actionUrl: `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?install=${dynCatalog.id}`,
           },
         });
         expect(result?.structuredContent).toMatchObject({
@@ -1466,7 +1576,7 @@ describe("McpClient", () => {
               tokenEndpoint:
                 "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
               tokenEndpointAuthentication: "client_secret_post",
-              subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+              subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
             },
           },
         });
@@ -1478,7 +1588,6 @@ describe("McpClient", () => {
 
         await McpServerModel.update(mcpServerId, { secretId: null });
         await InternalMcpCatalogModel.update(catalogId, {
-          name: "enterprise external jwt demo",
           enterpriseManagedConfig: {
             identityProviderId: identityProvider.id,
             requestedCredentialType: "bearer_token",
@@ -1554,6 +1663,256 @@ describe("McpClient", () => {
         );
 
         fetchMock.mockRestore();
+      });
+
+      test("uses a linked secondary IdP token when the MCP gateway IdP differs from the tool IdP", async ({
+        makeIdentityProvider,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const organization = await makeOrganization();
+        const user = await makeUser({ email: "linked-entra@example.com" });
+        const oktaIdentityProvider = await makeIdentityProvider(
+          organization.id,
+          {
+            providerId: "Okta",
+            issuer: "https://example.okta.com",
+            oidcConfig: {
+              clientId: "okta-gateway-client-id",
+              tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+            },
+          },
+        );
+        const entraIdentityProvider = await makeIdentityProvider(
+          organization.id,
+          {
+            providerId: "EntraID",
+            issuer: "https://login.microsoftonline.com/test-tenant/v2.0",
+            ssoLoginEnabled: false,
+            oidcConfig: {
+              clientId: "archestra-entra-client-id",
+              clientSecret: "archestra-entra-client-secret",
+              tokenEndpoint:
+                "https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token",
+              enterpriseManagedCredentials: {
+                exchangeStrategy: "entra_obo",
+                clientId: "archestra-entra-client-id",
+                clientSecret: "archestra-entra-client-secret",
+                tokenEndpoint:
+                  "https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token",
+                tokenEndpointAuthentication: "client_secret_post",
+                subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+              },
+            },
+          },
+        );
+
+        await AgentModel.update(agentId, {
+          organizationId: organization.id,
+          identityProviderId: oktaIdentityProvider.id,
+        });
+
+        await db.insert(schema.accountsTable).values({
+          id: randomUUID(),
+          accountId: "acct-linked-entra",
+          providerId: entraIdentityProvider.providerId,
+          userId: user.id,
+          accessToken: "linked-entra-access-token",
+          accessTokenExpiresAt: new Date(Date.now() + 300_000),
+          idToken: createJwt({ exp: futureExpSeconds() }),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+
+        await McpServerModel.update(mcpServerId, { secretId: null });
+        await InternalMcpCatalogModel.update(catalogId, {
+          enterpriseManagedConfig: {
+            identityProviderId: entraIdentityProvider.id,
+            requestedCredentialType: "bearer_token",
+            resourceIdentifier: "api://downstream-app-id",
+            tokenInjectionMode: "authorization_bearer",
+          },
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "entra protected api__query_codebase",
+          description: "Query codebase",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "enterprise_managed",
+        });
+
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              access_token: "downstream-entra-token",
+              expires_in: 300,
+              token_type: "Bearer",
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        );
+
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Managed result" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_linked_secondary_idp",
+            name: "entra protected api__query_codebase",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: `external_idp:${oktaIdentityProvider.id}:okta-sub`,
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+            isExternalIdp: true,
+            rawToken: "okta-gateway-jwt",
+          },
+        );
+
+        expect(result.isError).toBe(false);
+
+        const [, requestInit] = fetchMock.mock.calls.at(0) ?? [];
+        expect(String(requestInit?.body)).toContain(
+          "requested_token_use=on_behalf_of",
+        );
+        expect(String(requestInit?.body)).toContain(
+          "assertion=linked-entra-access-token",
+        );
+        expect(String(requestInit?.body)).not.toContain("okta-gateway-jwt");
+
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        const [, options] =
+          vi.mocked(StreamableHTTPClientTransport).mock.calls.at(-1) ?? [];
+        const headers =
+          options?.requestInit?.headers instanceof Headers
+            ? options.requestInit.headers
+            : new Headers(options?.requestInit?.headers);
+        expect(headers.get("Authorization")).toBe(
+          "Bearer downstream-entra-token",
+        );
+
+        fetchMock.mockRestore();
+      });
+
+      test("returns a direct SSO link when a downstream IdP token is missing", async ({
+        makeIdentityProvider,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const organization = await makeOrganization();
+        const user = await makeUser({
+          email: "missing-downstream@example.com",
+        });
+        const oktaIdentityProvider = await makeIdentityProvider(
+          organization.id,
+          {
+            providerId: "Okta",
+            issuer: "https://example.okta.com",
+            oidcConfig: {
+              clientId: "okta-gateway-client-id",
+              tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+            },
+          },
+        );
+        const entraIdentityProvider = await makeIdentityProvider(
+          organization.id,
+          {
+            providerId: "EntraID",
+            issuer: "https://login.microsoftonline.com/test-tenant/v2.0",
+            ssoLoginEnabled: false,
+            oidcConfig: {
+              clientId: "archestra-entra-client-id",
+              tokenEndpoint:
+                "https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token",
+              enterpriseManagedCredentials: {
+                exchangeStrategy: "entra_obo",
+                tokenEndpoint:
+                  "https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token",
+                tokenEndpointAuthentication: "client_secret_post",
+                subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+              },
+            },
+          },
+        );
+
+        await AgentModel.update(agentId, {
+          organizationId: organization.id,
+          identityProviderId: oktaIdentityProvider.id,
+        });
+
+        await McpServerModel.update(mcpServerId, { secretId: null });
+        await InternalMcpCatalogModel.update(catalogId, {
+          enterpriseManagedConfig: {
+            identityProviderId: entraIdentityProvider.id,
+            requestedCredentialType: "bearer_token",
+            resourceIdentifier: "api://downstream-app-id",
+            tokenInjectionMode: "authorization_bearer",
+          },
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "entra protected api__query_codebase",
+          description: "Query codebase",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "enterprise_managed",
+        });
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_missing_downstream_idp",
+            name: "entra protected api__query_codebase",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: `external_idp:${oktaIdentityProvider.id}:okta-sub`,
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+            isExternalIdp: true,
+            rawToken: "okta-gateway-jwt",
+          },
+          { conversationId: "00000000-0000-4000-8000-000000000123" },
+        );
+
+        const connectUrl = `${config.frontendBaseUrl}/auth/sso/EntraID?redirectTo=%2Fchat%2F00000000-0000-4000-8000-000000000123&mode=${LINKED_IDP_SSO_MODE}`;
+        expect(result.isError).toBe(true);
+        expect(result.error).toContain(
+          'Authentication required for "github-mcp-server"',
+        );
+        expect(result.error).toContain(
+          "This tool needs a current EntraID session",
+        );
+        expect(result.error).toContain(connectUrl);
+        expect(result?._meta).toMatchObject({
+          archestraError: {
+            type: "auth_required",
+            catalogId,
+            catalogName: "github-mcp-server",
+            action: "connect_identity_provider",
+            actionUrl: connectUrl,
+            providerId: "EntraID",
+          },
+        });
+        expect(mockConnect).not.toHaveBeenCalled();
       });
 
       test("injects the brokered managed credential into the outgoing MCP request", async ({
@@ -1809,7 +2168,7 @@ describe("McpClient", () => {
               tokenEndpoint:
                 "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
               tokenEndpointAuthentication: "client_secret_post",
-              subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+              subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
             },
           },
         });
@@ -1820,7 +2179,6 @@ describe("McpClient", () => {
         });
 
         await InternalMcpCatalogModel.update(catalogId, {
-          name: "keycloak protected demo",
           enterpriseManagedConfig: {
             identityProviderId: identityProvider.id,
             requestedCredentialType: "bearer_token",
@@ -1857,17 +2215,22 @@ describe("McpClient", () => {
 
         expect(result.isError).toBe(true);
         expect(result.error).toContain(
-          'Expired or invalid authentication for "keycloak protected demo"',
+          'Authentication required for "github-mcp-server"',
         );
         expect(result.error).toContain(
-          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${catalogId}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServerId}`,
+          "This tool needs a current keycloak-managed-mcp session",
+        );
+        expect(result.error).toContain(
+          `${config.frontendBaseUrl}/auth/sso/keycloak-managed-mcp?redirectTo=%2Fchat&mode=${LINKED_IDP_SSO_MODE}`,
         );
         expect(result._meta).toMatchObject({
           archestraError: {
-            type: "auth_expired",
+            type: "auth_required",
             catalogId,
-            catalogName: "keycloak protected demo",
-            serverId: mcpServerId,
+            catalogName: "github-mcp-server",
+            action: "connect_identity_provider",
+            actionUrl: `${config.frontendBaseUrl}/auth/sso/keycloak-managed-mcp?redirectTo=%2Fchat&mode=${LINKED_IDP_SSO_MODE}`,
+            providerId: "keycloak-managed-mcp",
           },
         });
       });

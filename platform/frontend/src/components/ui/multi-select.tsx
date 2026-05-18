@@ -21,6 +21,8 @@ interface MultiSelectProps {
   showSelectedBadges?: boolean;
   selectedSuffix?: string | ((count: number) => string);
   triggerTestId?: string;
+  allValue?: string;
+  allLabel?: string;
 }
 
 export function MultiSelect({
@@ -34,6 +36,8 @@ export function MultiSelect({
   showSelectedBadges = true,
   selectedSuffix = "selected",
   triggerTestId,
+  allValue,
+  allLabel = "All",
 }: MultiSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -46,8 +50,14 @@ export function MultiSelect({
   }, [items, searchQuery]);
 
   const selectedItems = items.filter((item) => value.includes(item.value));
+  const isAllSelected = allValue !== undefined && value.length === 0;
 
   const handleToggleItem = (itemValue: string) => {
+    if (allValue !== undefined && itemValue === allValue) {
+      onValueChange([]);
+      return;
+    }
+
     if (value.includes(itemValue)) {
       onValueChange(value.filter((v) => v !== itemValue));
     } else {
@@ -85,7 +95,9 @@ export function MultiSelect({
           )}
         >
           <div className="flex flex-wrap gap-1 flex-1">
-            {selectedItems.length === 0 ? (
+            {isAllSelected ? (
+              <span>{allLabel}</span>
+            ) : selectedItems.length === 0 ? (
               <span className="text-muted-foreground">{placeholder}</span>
             ) : showSelectedBadges ? (
               selectedItems.map((item) => (
@@ -138,6 +150,27 @@ export function MultiSelect({
           </div>
         )}
         <div className="max-h-[300px] overflow-y-auto p-1">
+          {allValue !== undefined && (
+            <button
+              type="button"
+              onClick={() => handleToggleItem(allValue)}
+              className={cn(
+                "relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground",
+                isAllSelected && "bg-accent text-accent-foreground",
+              )}
+            >
+              <Check
+                className={cn(
+                  "mr-2 h-4 w-4",
+                  isAllSelected ? "opacity-100" : "opacity-0",
+                )}
+              />
+              <span className="truncate font-medium">{allLabel}</span>
+            </button>
+          )}
+          {allValue !== undefined && filteredItems.length > 0 && (
+            <div className="my-1 border-t" />
+          )}
           {filteredItems.length === 0 ? (
             <div className="py-6 text-center text-sm text-muted-foreground">
               No results found.

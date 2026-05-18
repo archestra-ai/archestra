@@ -1,6 +1,6 @@
 "use client";
 
-import { PROVIDERS_WITH_OPTIONAL_API_KEY } from "@shared";
+import { isProviderApiKeyOptional } from "@shared";
 import {
   ArrowUpRight,
   Info,
@@ -77,12 +77,17 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   provider: "openai",
   apiKey: null,
   baseUrl: null,
+  inferenceBaseUrl: null,
   extraHeaders: [],
   scope: "org",
   teamId: null,
   vaultSecretPath: null,
   vaultSecretKey: null,
   isPrimary: true,
+  bedrockAuthMethod: "api-key",
+  awsAccessKeyId: null,
+  awsSecretAccessKey: null,
+  awsSessionToken: null,
 };
 
 const EMBEDDING_DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
@@ -121,6 +126,7 @@ function AddApiKeyDialog({
 }) {
   const createMutation = useCreateLlmProviderApiKey();
   const byosEnabled = useFeature("byosEnabled");
+  const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
   const bedrockIamAuthEnabled = useFeature("bedrockIamAuthEnabled");
   const geminiVertexAiEnabled = useFeature("geminiVertexAiEnabled");
 
@@ -145,28 +151,42 @@ function AddApiKeyDialog({
     (formValues.scope !== "team" || formValues.teamId) &&
     (byosEnabled
       ? formValues.vaultSecretPath && formValues.vaultSecretKey
-      : PROVIDERS_WITH_OPTIONAL_API_KEY.has(formValues.provider) ||
-        formValues.apiKey);
+      : isProviderApiKeyOptional({
+          provider: formValues.provider,
+          azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
+        }) || formValues.apiKey);
 
   const handleCreate = form.handleSubmit(async (values) => {
+    const isBedrockSigV4 =
+      values.provider === "bedrock" && values.bedrockAuthMethod === "sigv4";
     try {
       await createMutation.mutateAsync({
         name: values.name,
         provider: values.provider,
-        apiKey: values.apiKey || undefined,
+        apiKey: isBedrockSigV4 ? undefined : values.apiKey || undefined,
         baseUrl: values.baseUrl || undefined,
+        inferenceBaseUrl: values.inferenceBaseUrl || undefined,
         scope: values.scope,
         teamId:
           values.scope === "team" && values.teamId ? values.teamId : undefined,
         isPrimary: values.isPrimary,
         vaultSecretPath:
-          byosEnabled && values.vaultSecretPath
+          !isBedrockSigV4 && byosEnabled && values.vaultSecretPath
             ? values.vaultSecretPath
             : undefined,
         vaultSecretKey:
-          byosEnabled && values.vaultSecretKey
+          !isBedrockSigV4 && byosEnabled && values.vaultSecretKey
             ? values.vaultSecretKey
             : undefined,
+        awsAccessKeyId: isBedrockSigV4
+          ? values.awsAccessKeyId || undefined
+          : undefined,
+        awsSecretAccessKey: isBedrockSigV4
+          ? values.awsSecretAccessKey || undefined
+          : undefined,
+        awsSessionToken: isBedrockSigV4
+          ? values.awsSessionToken || undefined
+          : undefined,
       });
       onOpenChange(false);
     } catch {
@@ -763,6 +783,22 @@ function KnowledgeSettingsContent() {
                       }
                     />
                   </CardRow>
+                  {(rerankerChatApiKeyId || rerankerModel) && (
+                    <div className="sm:pl-28">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={!hasPermission}
+                        onClick={() => {
+                          setRerankerChatApiKeyId(null);
+                          setRerankerModel(null);
+                        }}
+                      >
+                        Clear reranking configuration
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </WithPermissions>

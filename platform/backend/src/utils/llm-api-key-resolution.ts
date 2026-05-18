@@ -1,7 +1,5 @@
-import {
-  PROVIDERS_WITH_OPTIONAL_API_KEY,
-  type SupportedProvider,
-} from "@shared";
+import { isProviderApiKeyOptional, type SupportedProvider } from "@shared";
+import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { getProviderEnvApiKey } from "@/config";
 import { LlmProviderApiKeyModel, TeamModel } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
@@ -35,6 +33,7 @@ export async function resolveProviderApiKey(params: {
     secretId: string | null;
     scope: string;
     baseUrl: string | null;
+    inferenceBaseUrl: string | null;
   } | null = null;
 
   if (userId) {
@@ -65,17 +64,22 @@ export async function resolveProviderApiKey(params: {
           apiKey: secretValue as string,
           source: resolvedApiKey.scope,
           chatApiKeyId: resolvedApiKey.id,
-          baseUrl: resolvedApiKey.baseUrl,
+          baseUrl: resolvedApiKey.inferenceBaseUrl ?? resolvedApiKey.baseUrl,
         };
       }
     }
 
-    if (PROVIDERS_WITH_OPTIONAL_API_KEY.has(provider)) {
+    if (
+      isProviderApiKeyOptional({
+        provider,
+        azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+      })
+    ) {
       return {
         apiKey: undefined,
         source: resolvedApiKey.scope,
         chatApiKeyId: resolvedApiKey.id,
-        baseUrl: resolvedApiKey.baseUrl,
+        baseUrl: resolvedApiKey.inferenceBaseUrl ?? resolvedApiKey.baseUrl,
       };
     }
   }

@@ -20,7 +20,7 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
-import { hasAnyAgentTypeAdminPermission } from "@/auth";
+import { hasAnyAgentTypeAdminPermission, userHasPermission } from "@/auth";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import {
   fetchToolUiResource,
@@ -48,6 +48,8 @@ import {
   MemberModel,
   MessageModel,
   OrganizationModel,
+  ScheduleTriggerModel,
+  ScheduleTriggerRunModel,
   TeamModel,
 } from "@/models";
 import { startActiveChatSpan } from "@/observability/tracing";
@@ -904,10 +906,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
-      const conversation = await ConversationModel.findAccessibleById({
-        id: id,
+      const conversation = await findReadableConversationById({
+        conversationId: id,
         userId: user.id,
-        organizationId: organizationId,
+        organizationId,
       });
 
       if (!conversation) {
@@ -915,6 +917,41 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(conversation);
+    },
+  );
+
+  fastify.post(
+    "/api/chat/conversations/:id/fork",
+    {
+      schema: {
+        operationId: RouteId.ForkChatConversation,
+        description:
+          "Create a new conversation from an accessible conversation",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        body: z.object({
+          agentId: z.string().uuid(),
+        }),
+        response: constructResponseSchema(SelectConversationSchema),
+      },
+    },
+    async ({ params: { id }, body: { agentId }, user, organizationId }) => {
+      const sourceConversation = await findReadableConversationById({
+        conversationId: id,
+        userId: user.id,
+        organizationId,
+      });
+
+      if (!sourceConversation) {
+        throw new ApiError(404, "Conversation not found");
+      }
+
+      return await forkConversation({
+        sourceConversation,
+        agentId,
+        userId: user.id,
+        organizationId,
+      });
     },
   );
 
@@ -1417,46 +1454,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Shared conversation not found");
       }
 
-      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+      return await forkConversation({
+        sourceConversation: sharedConversation,
+        agentId,
         userId: user.id,
         organizationId,
       });
-      const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
-
-      if (!agent) {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      const newConversation = await ConversationModel.create({
-        userId: user.id,
-        organizationId,
-        agentId: agent.id,
-        selectedModel: sharedConversation.selectedModel,
-        selectedProvider: sharedConversation.selectedProvider ?? undefined,
-      });
-
-      if (sharedConversation.messages.length > 0) {
-        const messagesToCopy = sharedConversation.messages.map(
-          (message: { role: string; content: unknown }) => ({
-            conversationId: newConversation.id,
-            role: message.role,
-            content: message,
-          }),
-        );
-        await MessageModel.bulkCreate(messagesToCopy);
-      }
-
-      const result = await ConversationModel.findById({
-        id: newConversation.id,
-        userId: user.id,
-        organizationId,
-      });
-
-      if (!result) {
-        throw new ApiError(500, "Failed to create forked conversation");
-      }
-
-      return result;
     },
   );
 
@@ -2182,41 +2185,107 @@ function ensureBedrockUserMessageHasTextPart(
   };
 }
 
-// Bedrock also rejects messages whose content array is empty after the AI SDK
-// drops empty text blocks and reasoning blocks without a signature ("The
-// content field in the Message object at messages.N is empty"). Pad with
-// placeholder text so turn alternation is preserved.
+/**
+ * Workaround for AI SDK Bedrock conversion sending empty assistant content.
+ *
+ * The AI SDK can split assistant UI messages at `step-start` boundaries, then
+ * drop provider-invisible parts during Bedrock conversion and send
+ * `content: []`. Keep this until the upstream provider fix is released:
+ * https://github.com/vercel/ai/issues/15248
+ * https://github.com/vercel/ai/pull/15250
+ */
 function ensureBedrockMessageHasContent(message: ChatMessage): ChatMessage {
   if (message.role === "system" || message.role === "tool") {
     return message;
+  }
+  if (message.role === "assistant") {
+    return ensureBedrockAssistantMessageHasContent(message);
   }
   if (message.parts?.some(producesBedrockContentBlock)) {
     return message;
   }
 
-  const placeholder = {
-    type: "text",
-    text: BEDROCK_EMPTY_CONTENT_PLACEHOLDER_TEXT,
-  };
   return {
     ...message,
-    parts: message.parts ? [...message.parts, placeholder] : [placeholder],
+    parts: message.parts
+      ? [...message.parts, createBedrockEmptyContentPlaceholder()]
+      : [createBedrockEmptyContentPlaceholder()],
   };
 }
 
-// Mirrors the AI SDK's bedrock converter: text/reasoning blocks without usable
-// payload are silently dropped; everything else (tool-call, tool-result, file,
-// image) always produces a content block.
+function ensureBedrockAssistantMessageHasContent(
+  message: ChatMessage,
+): ChatMessage {
+  if (!message.parts?.length) {
+    return {
+      ...message,
+      parts: [createBedrockEmptyContentPlaceholder()],
+    };
+  }
+
+  let changed = false;
+  let blockHasAnyPart = false;
+  let blockHasContent = false;
+  const parts: ChatMessagePart[] = [];
+
+  const padCurrentBlockIfEmpty = () => {
+    if (blockHasAnyPart && !blockHasContent) {
+      parts.push(createBedrockEmptyContentPlaceholder());
+      changed = true;
+    }
+    blockHasAnyPart = false;
+    blockHasContent = false;
+  };
+
+  for (const part of message.parts) {
+    if (part.type === "step-start") {
+      padCurrentBlockIfEmpty();
+      parts.push(part);
+      continue;
+    }
+
+    parts.push(part);
+    blockHasAnyPart = true;
+    if (producesBedrockContentBlock(part)) {
+      blockHasContent = true;
+    }
+  }
+
+  padCurrentBlockIfEmpty();
+
+  return changed ? { ...message, parts } : message;
+}
+
+function createBedrockEmptyContentPlaceholder(): ChatMessagePart {
+  return {
+    type: "text",
+    text: BEDROCK_EMPTY_CONTENT_PLACEHOLDER_TEXT,
+  };
+}
+
+// Mirrors the AI SDK's UI-to-model conversion plus Bedrock's converter:
+// data/control parts are ignored without a converter, streaming tool inputs are
+// dropped, and empty text/reasoning blocks are not provider-visible content.
 function producesBedrockContentBlock(part: ChatMessagePart): boolean {
   if (part.type === "text") {
     return typeof part.text === "string" && part.text.trim().length > 0;
   }
+  if (part.type === "file") {
+    return true;
+  }
   if (part.type === "reasoning") {
-    const bedrock = (part.providerOptions as { bedrock?: unknown } | undefined)
-      ?.bedrock as { signature?: unknown; redactedData?: unknown } | undefined;
+    const providerMetadata =
+      (part.providerMetadata as { bedrock?: unknown } | undefined) ??
+      (part.providerOptions as { bedrock?: unknown } | undefined);
+    const bedrock = providerMetadata?.bedrock as
+      | { signature?: unknown; redactedData?: unknown }
+      | undefined;
     return Boolean(bedrock?.signature || bedrock?.redactedData);
   }
-  return true;
+  if (part.type.startsWith("tool-")) {
+    return part.state !== "input-streaming";
+  }
+  return false;
 }
 
 const BEDROCK_DOCUMENT_PLACEHOLDER_TEXT =
@@ -2334,6 +2403,109 @@ function attachRequestAbortListeners(params: {
   reply.raw.on("close", onConnectionClose);
 
   return cleanup;
+}
+
+async function findReadableConversationById(params: {
+  conversationId: string;
+  userId: string;
+  organizationId: string;
+}): Promise<z.infer<typeof SelectConversationSchema> | null> {
+  return (
+    (await ConversationModel.findAccessibleById({
+      id: params.conversationId,
+      userId: params.userId,
+      organizationId: params.organizationId,
+    })) ??
+    (await findScheduleRunConversationForAdmin({
+      conversationId: params.conversationId,
+      userId: params.userId,
+      organizationId: params.organizationId,
+    }))
+  );
+}
+
+async function findScheduleRunConversationForAdmin(params: {
+  conversationId: string;
+  userId: string;
+  organizationId: string;
+}): Promise<z.infer<typeof SelectConversationSchema> | null> {
+  const isScheduledTaskAdmin = await userHasPermission(
+    params.userId,
+    params.organizationId,
+    "scheduledTask",
+    "admin",
+  );
+  if (!isScheduledTaskAdmin) {
+    return null;
+  }
+
+  const run = await ScheduleTriggerRunModel.findByChatConversationId(
+    params.conversationId,
+  );
+  if (!run || run.organizationId !== params.organizationId) {
+    return null;
+  }
+
+  const trigger = await ScheduleTriggerModel.findById(run.triggerId);
+  if (!trigger || trigger.organizationId !== params.organizationId) {
+    return null;
+  }
+
+  return await ConversationModel.findByIdInOrganization({
+    id: params.conversationId,
+    organizationId: params.organizationId,
+  });
+}
+
+async function forkConversation(params: {
+  sourceConversation: z.infer<typeof SelectConversationSchema>;
+  agentId: string;
+  userId: string;
+  organizationId: string;
+}): Promise<z.infer<typeof SelectConversationSchema>> {
+  const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+    userId: params.userId,
+    organizationId: params.organizationId,
+  });
+  const agent = await AgentModel.findById(
+    params.agentId,
+    params.userId,
+    isAgentAdmin,
+  );
+
+  if (!agent) {
+    throw new ApiError(404, "Agent not found");
+  }
+
+  const newConversation = await ConversationModel.create({
+    userId: params.userId,
+    organizationId: params.organizationId,
+    agentId: agent.id,
+    selectedModel: params.sourceConversation.selectedModel,
+    selectedProvider: params.sourceConversation.selectedProvider ?? undefined,
+  });
+
+  if (params.sourceConversation.messages.length > 0) {
+    await MessageModel.bulkCreate(
+      params.sourceConversation.messages.map((message: { role: string }) => ({
+        conversationId: newConversation.id,
+        role: message.role,
+        content: message,
+      })),
+    );
+  }
+
+  const result = await ConversationModel.findById({
+    id: newConversation.id,
+    userId: params.userId,
+    organizationId: params.organizationId,
+  });
+
+  if (!result) {
+    throw new ApiError(500, "Failed to create forked conversation");
+  }
+
+  return result;
 }
 
 /**

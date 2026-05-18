@@ -151,10 +151,10 @@ const navigationItems = [
   },
   {
     icon: Key,
-    label: "Proxy Auth",
-    value: "proxy-auth",
+    label: "Credentials",
+    value: "credentials",
     keywords: "virtual keys oauth clients client credentials llm",
-    href: "/llm/proxy-auth/virtual-keys",
+    href: "/llm/credentials/virtual-keys",
   },
   {
     icon: MessagesSquare,
@@ -240,7 +240,7 @@ export function ConversationSearchPalette({
     isLoading,
     isFetching,
   } = useConversations({
-    enabled: isAuthenticated && canReadConversation === true,
+    enabled: open && isAuthenticated && canReadConversation === true,
     search: debouncedSearch,
   });
 

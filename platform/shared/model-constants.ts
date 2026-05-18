@@ -84,6 +84,36 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
 };
 
 /**
+ * Providers where an API key can be omitted when creating a provider key.
+ * Self-hosted providers are always optional. Azure is optional only when
+ * Microsoft Entra ID authentication is enabled in the backend environment.
+ */
+const PROVIDERS_WITH_OPTIONAL_API_KEY = new Set<SupportedProvider>([
+  "ollama",
+  "vllm",
+]);
+
+export function isProviderApiKeyOptional(params: {
+  provider: SupportedProvider;
+  azureEntraIdEnabled?: boolean;
+}): boolean {
+  return (
+    PROVIDERS_WITH_OPTIONAL_API_KEY.has(params.provider) ||
+    (params.provider === "azure" && params.azureEntraIdEnabled === true)
+  );
+}
+
+export function getProvidersWithOptionalApiKey(params?: {
+  azureEntraIdEnabled?: boolean;
+}): SupportedProvider[] {
+  const providers = [...PROVIDERS_WITH_OPTIONAL_API_KEY];
+  if (params?.azureEntraIdEnabled === true) {
+    providers.push("azure");
+  }
+  return providers;
+}
+
+/**
  * Perplexity model definitions — single source of truth.
  * Perplexity has no /models endpoint, so models are maintained here.
  * @see https://ai-sdk.dev/providers/ai-sdk-providers/perplexity#model-capabilities
@@ -130,7 +160,7 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
   zhipuai: "https://api.z.ai/api/paas/v4",
   deepseek: "https://api.deepseek.com",
   minimax: "https://api.minimax.io/v1",
-  azure: "https://<resource>.openai.azure.com/openai/deployments/<deployment>",
+  azure: "https://<resource>.openai.azure.com/openai",
 };
 
 /**
@@ -284,3 +314,37 @@ export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
   minimax: "MiniMax-M2.5",
   azure: "gpt-4o",
 };
+/**
+ * Maps models.dev provider IDs to Archestra provider names.
+ * This is the single source of truth for all synchronization logic.
+ *
+ * Providers mapped to `null` are explicitly skipped during models.dev sync.
+ * This includes providers that use custom authentication flows (e.g., Bedrock
+ * uses SigV4, Azure uses Azure-specific auth) and are therefore managed
+ * through their own dedicated sync pathways.
+ */
+export const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> =
+  {
+    openai: "openai",
+    openrouter: "openrouter",
+    anthropic: "anthropic",
+    google: "gemini",
+    "google-vertex": "gemini",
+    cohere: "cohere",
+    cerebras: "cerebras",
+    mistral: "mistral",
+    minimax: "minimax",
+    // These providers use OpenAI-compatible API in Archestra
+    llama: "openai",
+    deepseek: "deepseek",
+    groq: "groq",
+    "fireworks-ai": "openai",
+    togetherai: "openai",
+    xai: "xai",
+    // Explicitly unsupported providers (return null to skip during models.dev sync)
+    // Bedrock and Azure have dedicated auth flows and are not synced via models.dev
+    "amazon-bedrock": null,
+    azure: null,
+    perplexity: null,
+    nvidia: null,
+  };

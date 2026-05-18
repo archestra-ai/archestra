@@ -15,11 +15,13 @@ import {
   hasArchestraTokenPrefix,
   type InteractionSource,
   InteractionSourceSchema,
+  isProviderApiKeyOptional,
   SOURCE_HEADER,
   UNTRUSTED_CONTEXT_HEADER,
 } from "@shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { LRUCacheManager } from "@/cache-manager";
+import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -120,6 +122,7 @@ export interface LLMProxyContext<TRequest> {
   };
   userId?: string;
   resolvedUser?: { id: string; email: string; name: string } | null;
+  virtualKeyId?: string;
   sessionId?: string | null;
   sessionSource?: SessionSource;
   source: InteractionSource;
@@ -193,6 +196,7 @@ export async function handleLLMProxy<
   let userId = (await utils.headers.userId.getUser(headersForExtraction))
     ?.userId;
   let resolvedUser = userId ? await UserModel.getById(userId) : null;
+  let virtualKeyId: string | undefined;
 
   const { sessionId, sessionSource } =
     utils.headers.sessionId.extractSessionInfo(
@@ -280,6 +284,9 @@ export async function handleLLMProxy<
   // Authenticate and resolve API key (JWKS → virtual key → header extraction → keyless check)
   let apiKey: string | undefined;
   let perKeyBaseUrl: string | undefined;
+  let perKeyProviderApiKeyRow: Awaited<
+    ReturnType<typeof LlmProviderApiKeyModel.findById>
+  > = null;
   /**
    * The chat_api_key row ID for this call, if the call resolved through a
    * DB-managed key OR was forwarded by an internal loopback caller via
@@ -287,6 +294,7 @@ export async function handleLLMProxy<
    * extra HTTP headers. `undefined` for raw-bearer calls from external IPs.
    */
   let perKeyChatApiKeyId: string | undefined;
+  let perKeyChatApiKeyIdFromLoopbackHeader = false;
   let wasJwksAuthenticated = false;
   let wasVirtualKeyResolved = false;
   let wasOAuthAuthenticated = false;
@@ -371,6 +379,7 @@ export async function handleLLMProxy<
       perKeyBaseUrl = virtualResult.baseUrl;
       perKeyChatApiKeyId = virtualResult.chatApiKeyId;
       wasVirtualKeyResolved = true;
+      virtualKeyId = virtualResult.virtualKeyId;
       authMethod = "virtual_key";
     } catch (error) {
       if (error instanceof ApiError && error.statusCode === 401) {
@@ -393,6 +402,7 @@ export async function handleLLMProxy<
     if (isLoopbackAddress(request.ip)) {
       if (headerPresent) {
         perKeyChatApiKeyId = headerValue;
+        perKeyChatApiKeyIdFromLoopbackHeader = true;
         logger.info(
           { chatApiKeyId: perKeyChatApiKeyId },
           `[${providerName}Proxy] received provider-api-key-id header`,
@@ -402,6 +412,28 @@ export async function handleLLMProxy<
       logger.warn(
         { ip: request.ip },
         `[${providerName}Proxy] ignoring provider-api-key-id header from non-loopback request`,
+      );
+    }
+  }
+
+  if (perKeyChatApiKeyId && perKeyChatApiKeyIdFromLoopbackHeader) {
+    perKeyProviderApiKeyRow =
+      await LlmProviderApiKeyModel.findById(perKeyChatApiKeyId);
+
+    if (
+      shouldUseKeylessProviderApiKey({
+        row: perKeyProviderApiKeyRow,
+        providerName,
+      })
+    ) {
+      apiKey = undefined;
+      perKeyBaseUrl =
+        perKeyProviderApiKeyRow?.inferenceBaseUrl ??
+        perKeyProviderApiKeyRow?.baseUrl ??
+        perKeyBaseUrl;
+      logger.info(
+        { chatApiKeyId: perKeyChatApiKeyId },
+        `[${providerName}Proxy] using keyless stored provider key configuration`,
       );
     }
   }
@@ -425,7 +457,11 @@ export async function handleLLMProxy<
       `[${providerName}Proxy] Checking usage limits`,
     );
     const limitViolation =
-      await LimitValidationService.checkLimitsBeforeRequest(resolvedAgentId);
+      await LimitValidationService.checkLimitsBeforeRequest({
+        agentId: resolvedAgentId,
+        userId,
+        virtualKeyId,
+      });
 
     if (limitViolation) {
       const [_refusalMessage, contentMessage] = limitViolation;
@@ -657,7 +693,9 @@ export async function handleLLMProxy<
     // calls have no chat_api_key row, so no extra headers.
     let perKeyExtraHeaders: Record<string, string> | null = null;
     if (perKeyChatApiKeyId) {
-      const row = await LlmProviderApiKeyModel.findById(perKeyChatApiKeyId);
+      const row =
+        perKeyProviderApiKeyRow ??
+        (await LlmProviderApiKeyModel.findById(perKeyChatApiKeyId));
       perKeyExtraHeaders = row?.extraHeaders ?? null;
       if (!row) {
         logger.warn(
@@ -749,6 +787,7 @@ export async function handleLLMProxy<
       authenticatedApp,
       userId,
       resolvedUser,
+      virtualKeyId,
       sessionId,
       sessionSource,
       source,
@@ -783,6 +822,7 @@ export async function handleLLMProxy<
         externalAgentId,
         executionId,
         userId,
+        virtualKeyId,
         sessionId,
         sessionSource,
         source,
@@ -850,6 +890,7 @@ async function handleStreaming<
     authMethod,
     authenticatedApp,
     userId,
+    virtualKeyId,
     resolvedUser,
     sessionId,
     sessionSource,
@@ -1178,6 +1219,7 @@ async function handleStreaming<
             authenticatedApp,
             executionId,
             userId,
+            virtualKeyId,
             sessionId,
             sessionSource,
             source,
@@ -1238,6 +1280,7 @@ async function handleNonStreaming<
     authMethod,
     authenticatedApp,
     userId,
+    virtualKeyId,
     resolvedUser,
     sessionId,
     sessionSource,
@@ -1389,6 +1432,7 @@ async function handleNonStreaming<
           authenticatedApp,
           executionId,
           userId,
+          virtualKeyId,
           sessionId,
           sessionSource,
           source,
@@ -1454,6 +1498,7 @@ async function handleNonStreaming<
         authenticatedApp,
         executionId,
         userId,
+        virtualKeyId,
         sessionId,
         sessionSource,
         source,
@@ -1493,6 +1538,37 @@ function normalizeVirtualKeyCandidate(
   }
 
   return apiKey.replace(/^Bearer[:\s]+/i, "");
+}
+
+function shouldUseKeylessProviderApiKey(params: {
+  row: Awaited<ReturnType<typeof LlmProviderApiKeyModel.findById>>;
+  providerName: string;
+}): boolean {
+  const { row, providerName } = params;
+  if (!row) {
+    return false;
+  }
+
+  if (row.provider !== providerName) {
+    logger.warn(
+      {
+        providerApiKeyId: row.id,
+        providerApiKeyProvider: row.provider,
+        requestedProvider: providerName,
+      },
+      "Loopback provider API key provider mismatch",
+    );
+    return false;
+  }
+
+  if (row.secretId) {
+    return false;
+  }
+
+  return isProviderApiKeyOptional({
+    provider: row.provider,
+    azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+  });
 }
 
 function headerNamePeek(

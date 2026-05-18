@@ -1,3 +1,4 @@
+import { OAUTH_TOKEN_TYPE, type OAuthTokenType } from "@shared";
 import { jwtDecode } from "jwt-decode";
 import logger from "@/logging";
 import { AccountModel, AgentModel } from "@/models";
@@ -10,18 +11,24 @@ interface SessionExternalIdpToken {
   rawToken: string;
 }
 
+type SubjectTokenPreference = "access_token" | "id_token";
+
 export async function resolveSessionExternalIdpToken(params: {
-  agentId: string;
+  agentId?: string;
+  identityProviderId?: string;
   userId: string;
 }): Promise<SessionExternalIdpToken | null> {
-  const agent = await AgentModel.findById(params.agentId);
-  if (!agent?.identityProviderId) {
+  const identityProviderId =
+    params.identityProviderId ??
+    (params.agentId
+      ? (await AgentModel.findById(params.agentId))?.identityProviderId
+      : null);
+  if (!identityProviderId) {
     return null;
   }
 
-  const identityProvider = await findExternalIdentityProviderById(
-    agent.identityProviderId,
-  );
+  const identityProvider =
+    await findExternalIdentityProviderById(identityProviderId);
   if (!identityProvider?.oidcConfig) {
     return null;
   }
@@ -105,11 +112,15 @@ function resolveSubjectTokenPreference(identityProvider: {
       exchangeStrategy?: string;
     };
   } | null;
-}): "access_token" | "id_token" {
-  const subjectTokenType =
-    identityProvider.oidcConfig?.enterpriseManagedCredentials?.subjectTokenType;
-  if (subjectTokenType === "urn:ietf:params:oauth:token-type:access_token") {
+}): SubjectTokenPreference {
+  const subjectTokenType = parseEnterpriseSubjectTokenType(
+    identityProvider.oidcConfig?.enterpriseManagedCredentials?.subjectTokenType,
+  );
+  if (subjectTokenType === OAUTH_TOKEN_TYPE.AccessToken) {
     return "access_token";
+  }
+  if (subjectTokenType === OAUTH_TOKEN_TYPE.IdToken) {
+    return "id_token";
   }
 
   if (
@@ -124,11 +135,23 @@ function resolveSubjectTokenPreference(identityProvider: {
   return "id_token";
 }
 
+function parseEnterpriseSubjectTokenType(
+  value: string | undefined,
+): OAuthTokenType | null {
+  if (value === OAUTH_TOKEN_TYPE.AccessToken) {
+    return OAUTH_TOKEN_TYPE.AccessToken;
+  }
+  if (value === OAUTH_TOKEN_TYPE.IdToken) {
+    return OAUTH_TOKEN_TYPE.IdToken;
+  }
+  return null;
+}
+
 function isStoredSubjectTokenExpired(params: {
   account: {
     accessTokenExpiresAt: Date | null;
   };
-  tokenPreference: "access_token" | "id_token";
+  tokenPreference: SubjectTokenPreference;
   rawToken: string;
 }): boolean {
   if (params.tokenPreference === "access_token") {

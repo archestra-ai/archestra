@@ -20,11 +20,17 @@ import { ApiError, UuidIdSchema } from "@/types";
  * A2A (Agent-to-Agent) Protocol routes
  */
 
+const A2AAgentCardSupportedInterfaceSchema = z.object({
+  url: z.string(),
+  protocolBinding: z.string(),
+  protocolVersion: z.string(),
+});
+
 const A2AAgentCardSchema = z.object({
   name: z.string(),
   description: z.string(),
-  url: z.string(),
   version: z.string(),
+  supportedInterfaces: z.array(A2AAgentCardSupportedInterfaceSchema),
   capabilities: z.object({
     streaming: z.boolean(),
     pushNotifications: z.boolean(),
@@ -70,7 +76,7 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
   // GET AgentCard for an internal agent
   fastify.get(
-    `${endpoint}/:agentId/.well-known/agent.json`,
+    `${endpoint}/:agentId/.well-known/agent-card.json`,
     {
       schema: {
         description:
@@ -130,23 +136,29 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
           name: agent.name,
           description: agent.description || "",
           tags: [],
-          inputModes: ["text"],
-          outputModes: ["text"],
+          inputModes: ["application/json"],
+          outputModes: ["application/json"],
         },
       ];
 
       return reply.send({
         name: agent.name,
         description: agent.description || agent.systemPrompt || "",
-        url: `${baseUrl}${endpoint}/${agent.id}`,
         version: "1",
+        supportedInterfaces: [
+          {
+            url: `${baseUrl}${endpoint}/${agent.id}`,
+            protocolBinding: "JSONRPC",
+            protocolVersion: "1.0",
+          },
+        ],
         capabilities: {
           streaming: false,
           pushNotifications: false,
           stateTransitionHistory: false,
         },
-        defaultInputModes: ["text"],
-        defaultOutputModes: ["text"],
+        defaultInputModes: ["application/json"],
+        defaultOutputModes: ["application/json"],
         skills,
       });
     },
@@ -302,7 +314,7 @@ class A2AV2Router {
   private getRouteForMethod(method: string) {
     const mapper: Record<string, { func: A2ARouteFunc; schema: z.ZodSchema }> =
       {
-        "message/send": {
+        SendMessage: {
           func: async (params) =>
             this.manager.sendMessage({
               ...params,
@@ -310,7 +322,7 @@ class A2AV2Router {
             }),
           schema: A2AProtocolSendMessageRequestSchema,
         },
-        "task/get": {
+        GetTask: {
           func: async (params) =>
             this.manager.getTask({
               ...params,

@@ -1,9 +1,10 @@
 "use client";
 
 import {
+  type archestraApiTypes,
   E2eTestId,
   formatSecretStorageType,
-  PROVIDERS_WITH_OPTIONAL_API_KEY,
+  isProviderApiKeyOptional,
   type ResourceVisibilityScope,
 } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -20,6 +21,7 @@ import {
   Users,
 } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
@@ -60,12 +62,14 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useLlmOauthClients } from "@/lib/llm-oauth-clients.query";
 import {
   useDeleteLlmProviderApiKey,
   useLlmProviderApiKeys,
   useUpdateLlmProviderApiKey,
 } from "@/lib/llm-provider-api-keys.query";
 import { useOrganization } from "@/lib/organization.query";
+import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
 import { useSetModelProvidersAction } from "../layout";
 
 const SCOPE_ICONS: Record<ResourceVisibilityScope, React.ReactNode> = {
@@ -79,12 +83,17 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   provider: "anthropic",
   apiKey: null,
   baseUrl: null,
+  inferenceBaseUrl: null,
   extraHeaders: [],
   scope: "personal",
   teamId: null,
   vaultSecretPath: null,
   vaultSecretKey: null,
   isPrimary: false,
+  bedrockAuthMethod: "api-key",
+  awsAccessKeyId: null,
+  awsSecretAccessKey: null,
+  awsSessionToken: null,
 };
 
 export default function ApiKeysPage() {
@@ -111,6 +120,28 @@ export default function ApiKeysPage() {
   const updateMutation = useUpdateLlmProviderApiKey();
   const deleteMutation = useDeleteLlmProviderApiKey();
   const byosEnabled = useFeature("byosEnabled");
+  const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
+
+  // Dialog states
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [selectedApiKey, setSelectedApiKey] =
+    useState<LlmProviderApiKeyResponse | null>(null);
+
+  const selectedApiKeyId = selectedApiKey?.id ?? null;
+  const { data: blockingVirtualKeys, isPending: isLoadingVirtualKeys } =
+    useAllVirtualApiKeys({
+      providerApiKeyId: selectedApiKeyId ?? undefined,
+      limit: 100,
+      offset: 0,
+      enabled: !!selectedApiKeyId && isDeleteDialogOpen,
+    });
+  const { data: blockingOauthClients = [], isPending: isLoadingOauthClients } =
+    useLlmOauthClients({
+      providerApiKeyId: selectedApiKeyId ?? undefined,
+      enabled: !!selectedApiKeyId && isDeleteDialogOpen,
+    });
 
   const getKeyUsage = useCallback(
     (keyId: string): string | null => {
@@ -126,13 +157,6 @@ export default function ApiKeysPage() {
     [organization],
   );
 
-  // Dialog states
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [selectedApiKey, setSelectedApiKey] =
-    useState<LlmProviderApiKeyResponse | null>(null);
-
   // Forms
   const editForm = useForm<LlmProviderApiKeyFormValues>({
     defaultValues: DEFAULT_FORM_VALUES,
@@ -146,12 +170,17 @@ export default function ApiKeysPage() {
         provider: selectedApiKey.provider,
         apiKey: selectedApiKey.secretId ? LLM_PROVIDER_API_KEY_PLACEHOLDER : "",
         baseUrl: selectedApiKey.baseUrl ?? null,
+        inferenceBaseUrl: selectedApiKey.inferenceBaseUrl ?? null,
         extraHeaders: deserializeExtraHeaders(selectedApiKey.extraHeaders),
         scope: selectedApiKey.scope,
         teamId: selectedApiKey.teamId ?? "",
         vaultSecretPath: selectedApiKey.vaultSecretPath ?? null,
         vaultSecretKey: selectedApiKey.vaultSecretKey ?? null,
         isPrimary: selectedApiKey.isPrimary ?? false,
+        bedrockAuthMethod: "api-key",
+        awsAccessKeyId: null,
+        awsSecretAccessKey: null,
+        awsSessionToken: null,
       });
     }
   }, [isEditDialogOpen, selectedApiKey, editForm]);
@@ -167,13 +196,23 @@ export default function ApiKeysPage() {
     const scopeChanged = values.scope !== selectedApiKey.scope;
     const teamIdChanged = values.teamId !== (selectedApiKey.teamId ?? "");
 
+    const isBedrockSigV4 =
+      values.provider === "bedrock" && values.bedrockAuthMethod === "sigv4";
+    const sigV4Provided = Boolean(
+      isBedrockSigV4 && values.awsAccessKeyId && values.awsSecretAccessKey,
+    );
+
     try {
       await updateMutation.mutateAsync({
         id: selectedApiKey.id,
         data: {
           name: values.name || undefined,
-          apiKey: apiKeyChanged ? (values.apiKey ?? undefined) : undefined,
+          apiKey:
+            !isBedrockSigV4 && apiKeyChanged
+              ? (values.apiKey ?? undefined)
+              : undefined,
           baseUrl: values.baseUrl || null,
+          inferenceBaseUrl: values.inferenceBaseUrl || null,
           extraHeaders: serializeExtraHeaders(values.extraHeaders),
           scope: scopeChanged ? values.scope : undefined,
           teamId:
@@ -184,13 +223,22 @@ export default function ApiKeysPage() {
               : undefined,
           isPrimary: values.isPrimary,
           vaultSecretPath:
-            byosEnabled && values.vaultSecretPath
+            !isBedrockSigV4 && byosEnabled && values.vaultSecretPath
               ? values.vaultSecretPath
               : undefined,
           vaultSecretKey:
-            byosEnabled && values.vaultSecretKey
+            !isBedrockSigV4 && byosEnabled && values.vaultSecretKey
               ? values.vaultSecretKey
               : undefined,
+          awsAccessKeyId: sigV4Provided
+            ? (values.awsAccessKeyId ?? undefined)
+            : undefined,
+          awsSecretAccessKey: sigV4Provided
+            ? (values.awsSecretAccessKey ?? undefined)
+            : undefined,
+          awsSessionToken: sigV4Provided
+            ? (values.awsSessionToken ?? undefined)
+            : undefined,
         },
       });
 
@@ -203,6 +251,10 @@ export default function ApiKeysPage() {
 
   const handleDelete = useCallback(async () => {
     if (!selectedApiKey) return;
+    const hasBlockingAssociations =
+      (blockingVirtualKeys?.pagination.total ?? 0) > 0 ||
+      blockingOauthClients.length > 0;
+    if (hasBlockingAssociations) return;
     try {
       await deleteMutation.mutateAsync(selectedApiKey.id);
       setIsDeleteDialogOpen(false);
@@ -210,7 +262,12 @@ export default function ApiKeysPage() {
     } catch {
       // Error already handled by mutation's handleApiError
     }
-  }, [selectedApiKey, deleteMutation]);
+  }, [
+    selectedApiKey,
+    blockingVirtualKeys,
+    blockingOauthClients,
+    deleteMutation,
+  ]);
 
   const openEditDialog = useCallback((apiKey: LlmProviderApiKeyResponse) => {
     setSelectedApiKey(apiKey);
@@ -354,7 +411,10 @@ export default function ApiKeysPage() {
           <div className="flex items-center gap-2">
             {row.original.isSystem ||
             row.original.secretId ||
-            PROVIDERS_WITH_OPTIONAL_API_KEY.has(row.original.provider) ? (
+            isProviderApiKeyOptional({
+              provider: row.original.provider,
+              azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
+            }) ? (
               <>
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
                 <span className="text-sm text-muted-foreground">
@@ -416,7 +476,13 @@ export default function ApiKeysPage() {
         },
       },
     ],
-    [docsUrl, openEditDialog, openDeleteDialog, getKeyUsage],
+    [
+      docsUrl,
+      openEditDialog,
+      openDeleteDialog,
+      getKeyUsage,
+      azureOpenAiEntraIdEnabled,
+    ],
   );
 
   return (
@@ -492,6 +558,7 @@ export default function ApiKeysPage() {
         title="Edit API Key"
         description="Update the name, API key value, or scope"
         size="small"
+        className="sm:max-w-xl"
       >
         <DialogForm
           onSubmit={handleEdit}
@@ -535,12 +602,136 @@ export default function ApiKeysPage() {
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
         title="Delete API Key"
-        description={`Are you sure you want to delete "${selectedApiKey?.name}"? This action cannot be undone.`}
+        description={
+          <DeleteApiKeyDescription
+            apiKey={selectedApiKey}
+            virtualKeys={blockingVirtualKeys?.data ?? []}
+            totalVirtualKeys={blockingVirtualKeys?.pagination.total ?? 0}
+            oauthClients={blockingOauthClients}
+            isLoading={isLoadingVirtualKeys || isLoadingOauthClients}
+          />
+        }
         isPending={deleteMutation.isPending}
         onConfirm={handleDelete}
+        confirmDisabled={
+          isLoadingVirtualKeys ||
+          isLoadingOauthClients ||
+          (blockingVirtualKeys?.pagination.total ?? 0) > 0 ||
+          blockingOauthClients.length > 0
+        }
         confirmLabel="Delete API Key"
         pendingLabel="Deleting..."
       />
+    </div>
+  );
+}
+
+function DeleteApiKeyDescription({
+  apiKey,
+  virtualKeys,
+  totalVirtualKeys,
+  oauthClients,
+  isLoading,
+}: {
+  apiKey: LlmProviderApiKeyResponse | null;
+  virtualKeys: archestraApiTypes.GetAllVirtualApiKeysResponses["200"]["data"];
+  totalVirtualKeys: number;
+  oauthClients: archestraApiTypes.GetLlmOauthClientsResponses["200"];
+  isLoading: boolean;
+}) {
+  if (!apiKey) {
+    return null;
+  }
+
+  const hasBlockingAssociations =
+    totalVirtualKeys > 0 || oauthClients.length > 0;
+  const encodedApiKeyId = encodeURIComponent(apiKey.id);
+
+  if (!hasBlockingAssociations) {
+    return (
+      <span>
+        Are you sure you want to delete "{apiKey.name}"? This action cannot be
+        undone.
+      </span>
+    );
+  }
+
+  return (
+    <div className="space-y-4 text-sm">
+      <p>
+        "{apiKey.name}" cannot be deleted until it is removed from the
+        credentials below.
+      </p>
+
+      {isLoading && (
+        <p className="text-muted-foreground">Checking credential mappings...</p>
+      )}
+
+      {totalVirtualKeys > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <p className="font-medium">Virtual API keys</p>
+            <Link
+              className="text-primary underline-offset-4 hover:underline"
+              href={`/llm/credentials/virtual-keys?providerApiKeyId=${encodedApiKeyId}`}
+            >
+              View all
+            </Link>
+          </div>
+          <ul className="space-y-2">
+            {virtualKeys.slice(0, 5).map((key) => (
+              <li
+                key={key.id}
+                className="rounded-md border bg-muted/30 px-3 py-2"
+              >
+                <div className="font-medium">{key.name}</div>
+                <div className="text-muted-foreground">
+                  Token starts with {key.tokenStart}...
+                </div>
+              </li>
+            ))}
+          </ul>
+          {totalVirtualKeys > virtualKeys.length && (
+            <p className="text-muted-foreground">
+              {totalVirtualKeys - virtualKeys.length} more virtual API key
+              {totalVirtualKeys - virtualKeys.length === 1 ? "" : "s"} matched.
+            </p>
+          )}
+        </div>
+      )}
+
+      {oauthClients.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <p className="font-medium">OAuth clients</p>
+            <Link
+              className="text-primary underline-offset-4 hover:underline"
+              href={`/llm/credentials/oauth-clients?providerApiKeyId=${encodedApiKeyId}`}
+            >
+              View all
+            </Link>
+          </div>
+          <ul className="space-y-2">
+            {oauthClients.slice(0, 5).map((client) => (
+              <li
+                key={client.id}
+                className="rounded-md border bg-muted/30 px-3 py-2"
+              >
+                <div className="font-medium">{client.name}</div>
+                <div className="break-all text-muted-foreground">
+                  {client.clientId}
+                </div>
+              </li>
+            ))}
+          </ul>
+          {oauthClients.length > 5 && (
+            <p className="text-muted-foreground">
+              {oauthClients.length - 5} more OAuth client
+              {oauthClients.length - 5 === 1 ? "" : "s"} matched.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

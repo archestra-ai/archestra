@@ -6,7 +6,17 @@ vi.mock("@sentry/nextjs", () => ({
 
 describe("next config rewrites", () => {
   beforeEach(() => {
+    vi.resetModules();
     delete process.env.ARCHESTRA_INTERNAL_API_BASE_URL;
+    delete process.env.VERSION;
+  });
+
+  it("uses sanitized VERSION as the deployment id", async () => {
+    process.env.VERSION = "v1.2.41+build.5";
+
+    const { default: nextConfig } = await import("../next.config");
+
+    expect(nextConfig.deploymentId).toBe("v1-2-41-build-5");
   });
 
   it("proxies well-known oauth discovery routes to the backend by default", async () => {

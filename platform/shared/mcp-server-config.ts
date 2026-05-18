@@ -68,16 +68,34 @@ export const OAuthConfigSchema = z
     }
   });
 
-export const EnvironmentVariableSchema = z.object({
-  key: z.string().min(1, "Key is required"),
-  type: z.enum(["plain_text", "secret", "boolean", "number"]),
-  value: z.string().optional(),
-  promptOnInstallation: z.boolean(),
-  required: z.boolean().optional(),
-  description: z.string().optional(),
-  default: z.union([z.string(), z.number(), z.boolean()]).optional(),
-  mounted: z.boolean().optional(),
-});
+export const LocalConfigEnvironmentDefaultSchema = z
+  .union([z.string(), z.number(), z.boolean()])
+  .meta({
+    id: "LocalConfigEnvironmentDefault",
+  });
+
+export const EnvironmentVariableSchema = z
+  .object({
+    key: z.string().min(1, "Key is required"),
+    type: z.enum(["plain_text", "secret", "boolean", "number"]),
+    value: z.string().optional(),
+    promptOnInstallation: z.boolean(),
+    promptOnPreset: z.boolean().optional(),
+    required: z.boolean().optional(),
+    description: z.string().optional(),
+    default: LocalConfigEnvironmentDefaultSchema.optional(),
+    mounted: z.boolean().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.promptOnInstallation && value.promptOnPreset) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["promptOnPreset"],
+        message:
+          "promptOnInstallation and promptOnPreset are mutually exclusive",
+      });
+    }
+  });
 
 export const ImagePullSecretExistingSchema = z.object({
   source: z.literal("existing"),

@@ -3,7 +3,7 @@ import { PassThrough } from "node:stream";
 import * as k8s from "@kubernetes/client-node";
 import { vi } from "vitest";
 import type * as originalConfigModule from "@/config";
-import { beforeEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { McpServer } from "@/types";
 
 // Mock fs module first
@@ -126,6 +126,9 @@ vi.mock("./k8s-deployment", () => {
       }
       static collectImagePullSecretNames(): string[] {
         return [];
+      }
+      static constructDeploymentName(mcpServer: { name: string }): string {
+        return `mcp-${mcpServer.name.replaceAll(" ", "-")}`;
       }
     },
     fetchPlatformPodNodeSelector: vi.fn().mockResolvedValue(undefined),
@@ -843,6 +846,237 @@ describe("McpServerRuntimeManager", () => {
       cleanup();
     });
   });
+
+  describe("startServer - success auto redeploy", () => {
+    // Auto redeploy fires when a catalog edit doesn't require new user
+    // input — `cascadeReinstallForCatalog → autoReinstallServer →
+    // McpServerRuntimeManager.restartServer(id) → startServer(mcpServer)`
+    // (manager.ts:558). Crucially, `restartServer` calls `startServer`
+    // with NO `environmentValues`, so startServer must reconstruct every
+    // previously-supplied env value from persistent state alone.
+    //
+    // The 10 cases below cover the full env-var matrix:
+    //   scope    : static / promptOnInstallation / promptOnPreset
+    //   type     : plain_text / secret
+    //   required : true / false   (only meaningful for prompted/preset;
+    //                              for static the value is admin-set,
+    //                              required has no runtime effect)
+    //
+    // The user report ("Not required prompted envs missing after auto
+    // re-install") singled out the optional+plain+prompted cell — but
+    // the bug actually drops every plain prompted/preset value
+    // regardless of `required`. Per-row tests make it obvious which
+    // cells are red without requiring readers to scan a giant diff.
+    //
+    // STATIC_PLAIN is the one row whose contract is "must NOT be in
+    // environmentValues" — it bypasses the map entirely and reaches the
+    // pod via envDef.value at deployment-build time (k8s-deployment.ts:
+    // 1318). Encoded as `expected: undefined`.
+
+    let manager: import("./manager").McpServerRuntimeManager;
+    let mcpServer: McpServer;
+    let envValues: Record<string, string> | undefined;
+    let mockLoadFromDefault: ReturnType<typeof vi.spyOn>;
+    let mockMakeApiClient: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(async () => {
+      mockCreateK8sSecret.mockClear();
+      mockStartOrCreateDeployment.mockClear();
+      mockCreateDockerRegistrySecrets.mockClear();
+      mockK8sDeploymentInstances.length = 0;
+
+      // Stage what was persisted at install time:
+      //   - install Secret bag (secretManager mock below) holds every
+      //     secret-typed prompted/preset value (the only thing that
+      //     belongs in a Secret object — values referenced by
+      //     secretKeyRef from the pod spec).
+      //   - catalog row's presetFieldValues (catalogItem mock below)
+      //     holds plain preset values (per-catalog source of truth).
+      //   - mcp_server row's environmentValues (mcpServer mock below)
+      //     holds plain `promptOnInstallation` values (per-install source
+      //     of truth).
+      const mockGetSecret = vi.fn().mockResolvedValue({
+        secret: {
+          USER_REQ_SECRET: "user-req-sec-stored",
+          USER_OPT_SECRET: "user-opt-sec-stored",
+          PRESET_REQ_SECRET: "preset-req-sec-stored",
+          PRESET_OPT_SECRET: "preset-opt-sec-stored",
+        },
+      });
+      const { secretManager } = await import("@/secrets-manager");
+      vi.mocked(secretManager).mockReturnValue({
+        getSecret: mockGetSecret,
+      } as unknown as ReturnType<typeof secretManager>);
+
+      const InternalMcpCatalogModel = (
+        await import("@/models/internal-mcp-catalog")
+      ).default;
+      vi.mocked(InternalMcpCatalogModel.findById).mockResolvedValue({
+        id: "catalog-1",
+        serverType: "local",
+        localConfig: {
+          environment: [
+            // Static — admin-set on catalog row, `required` has no runtime
+            // effect (value isn't user-supplied).
+            {
+              key: "STATIC_PLAIN",
+              type: "plain_text",
+              promptOnInstallation: false,
+              value: "static-plain-from-catalog",
+            },
+            {
+              key: "STATIC_SECRET",
+              type: "secret",
+              promptOnInstallation: false,
+              value: "static-secret-from-catalog",
+            },
+            // promptOnInstallation × required × type
+            {
+              key: "USER_REQ_SECRET",
+              type: "secret",
+              promptOnInstallation: true,
+              required: true,
+            },
+            {
+              key: "USER_OPT_SECRET",
+              type: "secret",
+              promptOnInstallation: true,
+              required: false,
+            },
+            {
+              key: "USER_REQ_PLAIN",
+              type: "plain_text",
+              promptOnInstallation: true,
+              required: true,
+            },
+            {
+              key: "USER_OPT_PLAIN",
+              type: "plain_text",
+              promptOnInstallation: true,
+              required: false,
+            },
+            // promptOnPreset × required × type
+            {
+              key: "PRESET_REQ_SECRET",
+              type: "secret",
+              promptOnPreset: true,
+              required: true,
+            },
+            {
+              key: "PRESET_OPT_SECRET",
+              type: "secret",
+              promptOnPreset: true,
+              required: false,
+            },
+            {
+              key: "PRESET_REQ_PLAIN",
+              type: "plain_text",
+              promptOnPreset: true,
+              required: true,
+            },
+            {
+              key: "PRESET_OPT_PLAIN",
+              type: "plain_text",
+              promptOnPreset: true,
+              required: false,
+            },
+          ],
+        },
+        localConfigSecretId: null,
+        // Plain preset values live on the catalog row, not the install bag.
+        presetFieldValues: {
+          PRESET_REQ_PLAIN: "preset-req-plain-stored",
+          PRESET_OPT_PLAIN: "preset-opt-plain-stored",
+        },
+        presetSecretId: null,
+      } as unknown as Awaited<
+        ReturnType<typeof InternalMcpCatalogModel.findById>
+      >);
+
+      mockLoadFromDefault = vi
+        .spyOn(k8s.KubeConfig.prototype, "loadFromDefault")
+        .mockImplementation(() => {});
+      mockMakeApiClient = vi
+        .spyOn(k8s.KubeConfig.prototype, "makeApiClient")
+        .mockReturnValue({} as k8s.CoreV1Api);
+
+      const { McpServerRuntimeManager } = await import("./manager");
+      manager = new McpServerRuntimeManager();
+      const managerAny = manager as unknown as {
+        k8sAttach: unknown;
+        k8sLog: unknown;
+        k8sExec: unknown;
+      };
+      managerAny.k8sAttach = {};
+      managerAny.k8sLog = {};
+      managerAny.k8sExec = {};
+
+      mcpServer = {
+        id: "server-1",
+        name: "test-server",
+        catalogId: "catalog-1",
+        secretId: "install-secret-bag",
+        // Plain (non-secret) `promptOnInstallation` env values persisted on
+        // the install row at install time. Recovered on restart via
+        // startServer's environmentValues overlay (the new fix). Compare
+        // with the install Secret bag mock above, which holds the
+        // secret-typed values.
+        environmentValues: {
+          USER_REQ_PLAIN: "user-req-plain-stored",
+          USER_OPT_PLAIN: "user-opt-plain-stored",
+        },
+        ownerId: null,
+        reinstallRequired: false,
+        localInstallationStatus: "idle",
+        localInstallationError: null,
+        oauthRefreshError: null,
+        oauthRefreshFailedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        serverType: "local",
+        teamId: null,
+      } as unknown as McpServer;
+
+      // Auto redeploy: startServer is invoked with no environmentValues,
+      // exactly as McpServerRuntimeManager.restartServer does.
+      await manager.startServer(mcpServer);
+      envValues = mockK8sDeploymentInstances[0]?.options.environmentValues as
+        | Record<string, string>
+        | undefined;
+    });
+
+    afterEach(() => {
+      mockLoadFromDefault?.mockRestore();
+      mockMakeApiClient?.mockRestore();
+    });
+
+    // The `expected` column is `undefined` for cells whose contract is
+    // "must NOT be in environmentValues" (i.e. STATIC_PLAIN — flows via
+    // envDef.value, never touches the env-values map). All other cells
+    // assert their value is present and correct.
+    test.each`
+      key                    | expected                        | via
+      ${"STATIC_PLAIN"}      | ${undefined}                    | ${"bypasses env-values; flows via envDef.value"}
+      ${"STATIC_SECRET"}     | ${"static-secret-from-catalog"} | ${"catalog static-secret merge (manager.ts:259-277)"}
+      ${"USER_REQ_SECRET"}   | ${"user-req-sec-stored"}        | ${"install Secret bag (prompted+secret, required)"}
+      ${"USER_OPT_SECRET"}   | ${"user-opt-sec-stored"}        | ${"install Secret bag (prompted+secret, optional)"}
+      ${"USER_REQ_PLAIN"}    | ${"user-req-plain-stored"}      | ${"mcp_server.environmentValues overlay"}
+      ${"USER_OPT_PLAIN"}    | ${"user-opt-plain-stored"}      | ${"mcp_server.environmentValues overlay"}
+      ${"PRESET_REQ_SECRET"} | ${"preset-req-sec-stored"}      | ${"install Secret bag (preset+secret, required)"}
+      ${"PRESET_OPT_SECRET"} | ${"preset-opt-sec-stored"}      | ${"install Secret bag (preset+secret, optional)"}
+      ${"PRESET_REQ_PLAIN"}  | ${"preset-req-plain-stored"}    | ${"catalog.presetFieldValues overlay"}
+      ${"PRESET_OPT_PLAIN"}  | ${"preset-opt-plain-stored"}    | ${"catalog.presetFieldValues overlay"}
+    `(
+      "auto redeploy preserves $key — $via",
+      ({ key, expected }: { key: string; expected: string | undefined }) => {
+        if (expected === undefined) {
+          expect(envValues).not.toHaveProperty(key);
+        } else {
+          expect(envValues?.[key]).toBe(expected);
+        }
+      },
+    );
+  });
 });
 
 describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
@@ -1192,5 +1426,117 @@ describe("McpServerRuntimeManager.backfillRegcredTeamLabels", () => {
     const manager = new McpServerRuntimeManager();
     // k8sApi is undefined — should return without error
     await callBackfill(manager, [{ id: "srv-1", teamId: "team-x" }]);
+  });
+});
+
+describe("McpServerRuntimeManager.cleanupOrphanedDeployments", () => {
+  async function createManagerWithMockK8s(params: {
+    mockK8sApi: Record<string, unknown>;
+    mockK8sAppsApi: Record<string, unknown>;
+  }) {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+    (manager as unknown as { k8sApi: unknown }).k8sApi = params.mockK8sApi;
+    (manager as unknown as { k8sAppsApi: unknown }).k8sAppsApi =
+      params.mockK8sAppsApi;
+    return manager;
+  }
+
+  function callCleanup(
+    manager: unknown,
+    servers: Array<{ id: string; name: string; catalogId: string }>,
+  ) {
+    const castServers = servers.map((s) => ({
+      ...s,
+      secretId: null,
+      ownerId: null,
+      teamId: null,
+      scope: "org" as const,
+      reinstallRequired: false,
+      localInstallationStatus: "idle" as const,
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      serverType: "local" as const,
+    }));
+    return (
+      manager as { cleanupOrphanedDeployments: (s: unknown[]) => Promise<void> }
+    ).cleanupOrphanedDeployments(castServers);
+  }
+
+  test("deletes legacy name-derived deployments for existing servers", async () => {
+    const mockDeleteDeployment = vi.fn().mockResolvedValue({});
+    const mockDeleteService = vi.fn().mockResolvedValue({});
+    const manager = await createManagerWithMockK8s({
+      mockK8sApi: { deleteNamespacedService: mockDeleteService },
+      mockK8sAppsApi: {
+        listNamespacedDeployment: vi.fn().mockResolvedValue({
+          items: [
+            {
+              metadata: {
+                name: "mcp-legacy-name",
+                labels: {
+                  app: "mcp-server",
+                  "mcp-server-id": "123e4567-e89b-12d3-a456-426614174000",
+                },
+              },
+            },
+            {
+              metadata: {
+                name: "mcp-current-name",
+                labels: {
+                  app: "mcp-server",
+                  "mcp-server-id": "123e4567-e89b-12d3-a456-426614174000",
+                },
+              },
+            },
+          ],
+        }),
+        deleteNamespacedDeployment: mockDeleteDeployment,
+      },
+    });
+
+    await callCleanup(manager, [
+      {
+        id: "123e4567-e89b-12d3-a456-426614174000",
+        name: "current-name",
+        catalogId: "cat-1",
+      },
+    ]);
+
+    expect(mockDeleteDeployment).toHaveBeenCalledOnce();
+    expect(mockDeleteDeployment).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "mcp-legacy-name" }),
+    );
+    expect(mockDeleteService).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "mcp-legacy-name-service" }),
+    );
+  });
+
+  test("ignores deployments that do not belong to installed servers", async () => {
+    const mockDeleteDeployment = vi.fn().mockResolvedValue({});
+    const manager = await createManagerWithMockK8s({
+      mockK8sApi: { deleteNamespacedService: vi.fn().mockResolvedValue({}) },
+      mockK8sAppsApi: {
+        listNamespacedDeployment: vi.fn().mockResolvedValue({
+          items: [
+            {
+              metadata: {
+                name: "mcp-orphan",
+                labels: {
+                  app: "mcp-server",
+                  "mcp-server-id": "missing-server",
+                },
+              },
+            },
+          ],
+        }),
+        deleteNamespacedDeployment: mockDeleteDeployment,
+      },
+    });
+
+    await callCleanup(manager, []);
+
+    expect(mockDeleteDeployment).not.toHaveBeenCalled();
   });
 });

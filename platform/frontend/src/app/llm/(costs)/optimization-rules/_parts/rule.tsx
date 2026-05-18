@@ -5,11 +5,13 @@ import {
   type SupportedProvider,
   SupportedProviders,
 } from "@shared";
-import { AlertCircle, Plus } from "lucide-react";
-import Link from "next/link";
+import { Plus } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { Condition } from "@/app/llm/(costs)/optimization-rules/_parts/condition";
-import { LlmModelSearchableSelect } from "@/components/llm-model-select";
+import {
+  LlmModelPicker,
+  type ModelPricing,
+} from "@/components/llm-model-picker";
 import { LlmProviderSelectItems } from "@/components/llm-provider-options";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { Badge } from "@/components/ui/badge";
@@ -23,35 +25,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import type { OptimizationRule } from "@/lib/optimization-rule.query";
 import type { Team } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 
 type EntityType = OptimizationRule["entityType"];
 type Conditions = OptimizationRule["conditions"];
-type TokenPrices = Array<{
-  provider: string;
-  model: string;
-  pricePerMillionInput: string;
-  pricePerMillionOutput: string;
-}>;
-
-// Sort models by total cost (input + output price) ascending
-function sortModelsByPrice(tokenPrices: TokenPrices): TokenPrices {
-  return [...tokenPrices].sort((a, b) => {
-    const costA =
-      parseFloat(a.pricePerMillionInput) + parseFloat(a.pricePerMillionOutput);
-    const costB =
-      parseFloat(b.pricePerMillionInput) + parseFloat(b.pricePerMillionOutput);
-    return costA - costB;
-  });
-}
 
 // Helper to get entity display name
 function getEntityName(
@@ -100,120 +79,6 @@ export function ProviderSelect({
         />
       </SelectContent>
     </Select>
-  );
-}
-
-// Model Selector Component
-function ModelSelect({
-  model,
-  models,
-  onChange,
-  editable,
-}: {
-  model: string;
-  models: TokenPrices;
-  onChange: (model: string) => void;
-  editable?: boolean;
-}) {
-  // Check if current value has pricing
-  const isAvailable = models.some((m) => m.model === model);
-
-  // Auto-select first (cheapest) model if no value provided or provider changed
-  useEffect(() => {
-    if (!model && models.length > 0) {
-      onChange(models[0].model);
-    }
-  }, [models, model, onChange]);
-
-  // If no models available for this provider, show message
-  if (models.length === 0) {
-    return (
-      <div className="px-2 text-sm">
-        <span className="text-muted-foreground">
-          No pricing configured for models.
-        </span>{" "}
-        <Link
-          href="/llm/model-providers/models"
-          className="hover:text-foreground hover:underline"
-        >
-          Add pricing
-        </Link>
-      </div>
-    );
-  }
-
-  // If current value doesn't have pricing but exists, add it to the list
-  const modelsWithCurrent =
-    !isAvailable && model
-      ? [
-          {
-            provider: "openai",
-            model,
-            pricePerMillionInput: "0",
-            pricePerMillionOutput: "0",
-          },
-          ...models,
-        ]
-      : models;
-
-  // Check if model has pricing
-  const modelPricing = modelsWithCurrent.find((m) => m.model === model);
-  const hasPricing =
-    modelPricing &&
-    (modelPricing.pricePerMillionInput !== "0" ||
-      modelPricing.pricePerMillionOutput !== "0");
-
-  if (!editable) {
-    return (
-      <div className="flex items-center gap-1">
-        <Badge
-          variant="outline"
-          className={cn(
-            "text-sm",
-            !hasPricing && "bg-orange-100 border-orange-300",
-          )}
-        >
-          {model}
-        </Badge>
-        {!hasPricing && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <AlertCircle className="h-4 w-4 text-orange-600" />
-              </TooltipTrigger>
-              <TooltipContent>
-                <p className="text-sm">
-                  No pricing configured for this model.{" "}
-                  <Link
-                    href="/llm/model-providers/models"
-                    className="underline hover:text-foreground"
-                  >
-                    Add pricing
-                  </Link>
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <LlmModelSearchableSelect
-      value={model}
-      onValueChange={onChange}
-      options={modelsWithCurrent.map((price) => ({
-        value: price.model,
-        model: price.model,
-        provider: price.provider as SupportedProvider,
-        pricePerMillionInput: price.pricePerMillionInput,
-        pricePerMillionOutput: price.pricePerMillionOutput,
-      }))}
-      placeholder="Select target model..."
-      className="w-full"
-      showPricing
-    />
   );
 }
 
@@ -279,7 +144,7 @@ function EntitySelect({
 }
 
 type RuleProps = Omit<OptimizationRule, "createdAt" | "updatedAt"> & {
-  tokenPrices: TokenPrices;
+  tokenPrices: ModelPricing;
   teams?: Team[];
   editable?: boolean;
   onChange?: (
@@ -299,7 +164,7 @@ type OptimizationRuleFormProps = Pick<
   | "provider"
   | "targetModel"
 > & {
-  tokenPrices: TokenPrices;
+  tokenPrices: ModelPricing;
   teams?: Team[];
   onChange?: (
     data: Omit<OptimizationRule, "id" | "createdAt" | "updatedAt">,
@@ -345,7 +210,7 @@ export function OptimizationRuleForm({
     onChange?.(updated);
   };
 
-  const models = sortModelsByPrice(tokenPrices);
+  const models = tokenPrices;
 
   const addCondition = () => {
     const hasContentLength = formData.conditions.some((c) => "maxLength" in c);
@@ -397,10 +262,10 @@ export function OptimizationRuleForm({
 
       <div className="space-y-2">
         <Label>Target model</Label>
-        <ModelSelect
-          model={formData.targetModel}
+        <LlmModelPicker
+          value={formData.targetModel}
           models={models}
-          onChange={(value) => {
+          onValueChange={(value) => {
             const selectedModel = models.find(
               (modelOption) => modelOption.model === value,
             );
@@ -412,6 +277,8 @@ export function OptimizationRuleForm({
             });
           }}
           editable
+          autoSelectFirst
+          sortDirection="asc"
         />
       </div>
 
@@ -554,8 +421,8 @@ export function Rule({
     });
   };
 
-  const models = sortModelsByPrice(
-    tokenPrices.filter((price) => price.provider === formData.provider),
+  const models = tokenPrices.filter(
+    (price) => price.provider === formData.provider,
   );
 
   return (
@@ -589,11 +456,13 @@ export function Rule({
         editable={editable}
       />
       use{" "}
-      <ModelSelect
-        model={formData.targetModel}
+      <LlmModelPicker
+        value={formData.targetModel}
         models={models}
-        onChange={onModelChange}
+        onValueChange={onModelChange}
         editable={editable}
+        autoSelectFirst
+        sortDirection="asc"
       />
       if{" "}
       <div className="flex gap-2 flex-wrap items-center">

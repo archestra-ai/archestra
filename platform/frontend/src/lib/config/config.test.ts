@@ -85,6 +85,7 @@ describe("getBackendBaseUrl", () => {
 
 describe("getExternalProxyUrls", () => {
   const originalEnv = process.env;
+  const originalWindow = global.window;
 
   beforeEach(() => {
     process.env = { ...originalEnv };
@@ -93,22 +94,41 @@ describe("getExternalProxyUrls", () => {
 
   afterEach(() => {
     process.env = originalEnv;
+    global.window = originalWindow;
   });
 
-  it("should return empty array when env var is not set", () => {
+  it("should return empty array server-side when env var is not set", () => {
     delete process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL;
+    // @ts-expect-error - intentionally setting window to undefined for server-side test
+    global.window = undefined;
 
     const result = getExternalProxyUrls();
 
     expect(result).toEqual([]);
   });
 
-  it("should return empty array when env var is empty string", () => {
-    process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL = "";
+  it("should use browser origin client-side when env var is not set", () => {
+    delete process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL;
+    Object.defineProperty(window, "location", {
+      value: { origin: "https://gateway.example.com" },
+      writable: true,
+    });
 
     const result = getExternalProxyUrls();
 
-    expect(result).toEqual([]);
+    expect(result).toEqual(["https://gateway.example.com/v1"]);
+  });
+
+  it("should use browser origin client-side when env var is empty string", () => {
+    process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL = "";
+    Object.defineProperty(window, "location", {
+      value: { origin: "https://gateway.example.com" },
+      writable: true,
+    });
+
+    const result = getExternalProxyUrls();
+
+    expect(result).toEqual(["https://gateway.example.com/v1"]);
   });
 
   it("should return single URL with /v1 suffix when one URL is set", () => {

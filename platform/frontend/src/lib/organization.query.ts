@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Invitation } from "better-auth/plugins/organization";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { useSession } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { handleApiError } from "./utils";
 
@@ -61,18 +62,16 @@ export const organizationKeys = {
  * Fetch invitation details by ID
  */
 export function useInvitation(invitationId: string) {
-  const session = authClient.useSession();
+  const session = useSession();
   return useQuery({
     queryKey: organizationKeys.invitation(invitationId),
     queryFn: async () => {
-      if (!session) {
-        return undefined;
-      }
       const response = await authClient.organization.getInvitation({
         query: { id: invitationId },
       });
       return response.data;
     },
+    enabled: !!session.data?.user,
   });
 }
 
@@ -254,7 +253,7 @@ export function useCreateInvitation(organizationId: string | undefined) {
  * Get organization
  */
 export function useOrganization(enabled = true) {
-  const session = authClient.useSession();
+  const session = useSession();
 
   return useQuery({
     queryKey: organizationKeys.details(),
@@ -266,6 +265,10 @@ export function useOrganization(enabled = true) {
     enabled: enabled && !!session.data?.user,
     retry: false, // Don't retry on auth pages to avoid repeated 401 errors
     throwOnError: false, // Don't throw errors to prevent crashes
+    // Org settings (theme, app name, preset entity name, etc.) change rarely
+    // and all mutations imperatively setQueryData() this key, so a long stale
+    // time keeps re-mounts cheap (every usePresetEntityName caller shares this).
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -333,6 +336,7 @@ export function useUpdateAppearanceSettings(
         logoDark: updatedOrganization.logoDark,
         favicon: updatedOrganization.favicon,
         iconLogo: updatedOrganization.iconLogo,
+        iconLogoDark: updatedOrganization.iconLogoDark,
         appName: updatedOrganization.appName,
         ogDescription: updatedOrganization.ogDescription,
         footerText: updatedOrganization.footerText,
@@ -466,6 +470,88 @@ export function useUpdateConnectionSettings(
       toast.success(onSuccessMessage);
     },
   });
+}
+
+/**
+ * Update the org-wide custom label for catalog presets (internally "preset").
+ * Pass both singular and plural together, or both null to reset.
+ */
+export function useUpdatePresetEntityName(
+  onSuccessMessage: string,
+  onErrorMessage: string,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: archestraApiTypes.UpdatePresetEntityNameData["body"],
+    ) => {
+      const { data: updatedOrganization, error } =
+        await archestraApiSdk.updatePresetEntityName({ body: data });
+
+      if (error) {
+        toast.error(onErrorMessage);
+        return null;
+      }
+
+      return updatedOrganization;
+    },
+    onSuccess: (updatedOrganization) => {
+      if (!updatedOrganization) return;
+      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      toast.success(onSuccessMessage);
+    },
+  });
+}
+
+/**
+ * Update the org-wide custom label for the implicit "default" preset row.
+ * Pass null to reset to the built-in "Default" label.
+ */
+export function useUpdatePresetEntityDefaultLabel(
+  onSuccessMessage: string,
+  onErrorMessage: string,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: archestraApiTypes.UpdatePresetEntityDefaultLabelData["body"],
+    ) => {
+      const { data: updatedOrganization, error } =
+        await archestraApiSdk.updatePresetEntityDefaultLabel({ body: data });
+
+      if (error) {
+        toast.error(onErrorMessage);
+        return null;
+      }
+
+      return updatedOrganization;
+    },
+    onSuccess: (updatedOrganization) => {
+      if (!updatedOrganization) return;
+      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      toast.success(onSuccessMessage);
+    },
+  });
+}
+
+/**
+ * Returns the org-configured display label for catalog presets.
+ * When unconfigured, `configured` is false and `singular`/`plural` fall back to
+ * "Preset"/"Presets" — callers should use `configured` to gate UI that should
+ * stay hidden until an admin has chosen a name. `defaultLabel` falls back to
+ * "Default" when admins have not customized it.
+ */
+export function usePresetEntityName() {
+  const { data: organization } = useOrganization();
+  const singular = organization?.presetEntityName ?? null;
+  const plural = organization?.presetEntityNamePlural ?? null;
+  const configured = singular !== null && plural !== null;
+  return {
+    configured,
+    singular: configured ? singular : "Preset",
+    plural: configured ? plural : "Presets",
+    defaultLabel: organization?.presetEntityDefaultLabel ?? "Default",
+  };
 }
 
 /**

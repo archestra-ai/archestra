@@ -149,6 +149,10 @@ export class McpServerRuntimeManager {
           "Failed to backfill team-id labels on regcred secrets",
         );
       });
+
+      this.cleanupOrphanedDeployments(installedServers).catch((err) => {
+        logger.warn({ err }, "Failed to cleanup orphaned MCP deployments");
+      });
     } catch (error: unknown) {
       const errorMsg = error instanceof Error ? error.message : "Unknown error";
       logger.error(`Failed to initialize MCP Server Runtime: ${errorMsg}`);
@@ -268,6 +272,56 @@ export class McpServerRuntimeManager {
               effectiveEnvironmentValues = {};
             }
             effectiveEnvironmentValues[envDef.key] = envDef.value;
+          }
+        }
+      }
+
+      // Plain (non-secret) preset env values live on the catalog row's
+      // `presetFieldValues` jsonb — they have no per-install persistence
+      // layer because they're authoritative on the catalog itself. The
+      // install route reads them at install time and merges into
+      // `environmentValues`, but on restart that map is undefined; without
+      // overlaying them here the deployment env builder would emit no value
+      // for these env vars (only the secret-typed ones survive via the
+      // install Secret bag). Result: every cascade reinstall (admin edit
+      // OR child preset PATCH) silently drops plain preset env values
+      // from the rebuilt pod spec.
+      //
+      // Re-overlaying from the catalog row on every restart also means
+      // edits to the preset (or admin edits to default-preset values on
+      // the parent) propagate naturally on the next restart — no manual
+      // reinstall needed.
+      if (
+        catalogItem?.localConfig?.environment &&
+        catalogItem.presetFieldValues
+      ) {
+        for (const envDef of catalogItem.localConfig.environment) {
+          if (envDef.promptOnPreset && envDef.type !== "secret") {
+            const presetValue = catalogItem.presetFieldValues[envDef.key];
+            if (presetValue != null) {
+              if (!effectiveEnvironmentValues) {
+                effectiveEnvironmentValues = {};
+              }
+              effectiveEnvironmentValues[envDef.key] = String(presetValue);
+            }
+          }
+        }
+      }
+
+      // Overlay plain (non-secret) per-install env values from
+      // `mcp_server.environmentValues`. The Secret bag above covers
+      // secret-typed prompted values; this covers the plain-text
+      // complement so the full set of user-supplied install values is
+      // applied on every (re)deploy.
+      if (mcpServer.environmentValues) {
+        for (const [key, value] of Object.entries(
+          mcpServer.environmentValues,
+        )) {
+          if (value != null) {
+            if (!effectiveEnvironmentValues) {
+              effectiveEnvironmentValues = {};
+            }
+            effectiveEnvironmentValues[key] = String(value);
           }
         }
       }
@@ -909,6 +963,93 @@ export class McpServerRuntimeManager {
         { err: error },
         "Failed to list secrets for team-id backfill",
       );
+    }
+  }
+
+  /**
+   * Sweep deployments whose names no longer match the current name produced by
+   * K8sDeployment.constructDeploymentName for their owning server.
+   */
+  private async cleanupOrphanedDeployments(
+    installedServers: McpServer[],
+  ): Promise<void> {
+    if (!this.k8sApi || !this.k8sAppsApi) return;
+
+    const serverById = new Map<string, McpServer>();
+    for (const server of installedServers) {
+      serverById.set(server.id, server);
+    }
+
+    const catalogCache = new Map<
+      string,
+      Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>
+    >();
+    const getCatalog = async (catalogId: string | null | undefined) => {
+      if (!catalogId) return null;
+      if (catalogCache.has(catalogId)) {
+        return catalogCache.get(catalogId) ?? null;
+      }
+      const catalog = await InternalMcpCatalogModel.findById(catalogId);
+      catalogCache.set(catalogId, catalog);
+      return catalog;
+    };
+
+    try {
+      const deployments = await this.k8sAppsApi.listNamespacedDeployment({
+        namespace: this.namespace,
+        labelSelector: "app=mcp-server",
+      });
+
+      for (const deployment of deployments.items) {
+        const labels = deployment.metadata?.labels;
+        const deploymentName = deployment.metadata?.name;
+        if (!labels || !deploymentName) continue;
+
+        const serverId = labels["mcp-server-id"];
+        if (!serverId) continue;
+
+        const server = serverById.get(serverId);
+        if (!server) continue;
+
+        const catalog = await getCatalog(server.catalogId);
+        const expectedName = K8sDeployment.constructDeploymentName(
+          server,
+          catalog,
+        );
+
+        if (deploymentName === expectedName) continue;
+
+        logger.info(
+          { deploymentName, expectedName, serverId },
+          "Deleting orphaned MCP deployment with stale name",
+        );
+
+        try {
+          await this.k8sAppsApi.deleteNamespacedDeployment({
+            name: deploymentName,
+            namespace: this.namespace,
+          });
+        } catch (err) {
+          logger.warn(
+            { err, deploymentName },
+            "Failed to delete orphaned MCP deployment",
+          );
+        }
+
+        try {
+          await this.k8sApi.deleteNamespacedService({
+            name: `${deploymentName}-service`,
+            namespace: this.namespace,
+          });
+        } catch (err) {
+          logger.debug(
+            { err, deploymentName },
+            "No orphaned service to delete (or already gone)",
+          );
+        }
+      }
+    } catch (error) {
+      logger.warn({ err: error }, "Failed to sweep orphaned MCP deployments");
     }
   }
 

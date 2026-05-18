@@ -1,4 +1,4 @@
-import type { IdentityProviderFormValues } from "@shared";
+import { type IdentityProviderFormValues, OAUTH_TOKEN_TYPE } from "@shared";
 import { describe, expect, it } from "vitest";
 import { normalizeIdentityProviderFormValues } from "./identity-provider-form.utils";
 
@@ -119,7 +119,7 @@ describe("normalizeIdentityProviderFormValues", () => {
       expect.objectContaining({
         exchangeStrategy: "rfc8693",
         tokenEndpointAuthentication: "client_secret_post",
-        subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+        subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
       }),
     );
   });
@@ -167,7 +167,7 @@ describe("normalizeIdentityProviderFormValues", () => {
       expect.objectContaining({
         exchangeStrategy: "rfc8693",
         tokenEndpointAuthentication: "client_secret_post",
-        subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+        subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
       }),
     );
   });
@@ -182,6 +182,7 @@ describe("normalizeIdentityProviderFormValues", () => {
           pkce: true,
           clientId: "archestra-oidc",
           clientSecret: "archestra-oidc-secret",
+          userInfoEndpoint: "https://graph.microsoft.com/oidc/userinfo",
           discoveryEndpoint:
             "https://login.microsoftonline.com/test-tenant/v2.0/.well-known/openid-configuration",
           mapping: { id: "sub", email: "email", name: "name" },
@@ -199,8 +200,36 @@ describe("normalizeIdentityProviderFormValues", () => {
       expect.objectContaining({
         exchangeStrategy: "entra_obo",
         tokenEndpointAuthentication: "client_secret_post",
-        subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+        subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
       }),
     );
+    expect(normalized.oidcConfig?.userInfoEndpoint).toBeUndefined();
+    expect(normalized.oidcConfig?.mapping?.email).toBe("preferred_username");
+  });
+
+  it("preserves custom Entra OBO email mappings", () => {
+    const normalized = normalizeIdentityProviderFormValues(
+      makeOidcFormValues({
+        providerId: "EntraID",
+        issuer: "https://login.microsoftonline.com/test-tenant/v2.0",
+        oidcConfig: {
+          issuer: "https://login.microsoftonline.com/test-tenant/v2.0",
+          pkce: true,
+          clientId: "archestra-oidc",
+          clientSecret: "archestra-oidc-secret",
+          userInfoEndpoint: "https://graph.microsoft.com/oidc/userinfo",
+          discoveryEndpoint:
+            "https://login.microsoftonline.com/test-tenant/v2.0/.well-known/openid-configuration",
+          mapping: { id: "sub", email: "upn", name: "name" },
+          enterpriseManagedCredentials: {
+            exchangeStrategy: "entra_obo",
+            clientId: "archestra-oidc",
+          },
+        },
+      }),
+    );
+
+    expect(normalized.oidcConfig?.userInfoEndpoint).toBeUndefined();
+    expect(normalized.oidcConfig?.mapping?.email).toBe("upn");
   });
 });

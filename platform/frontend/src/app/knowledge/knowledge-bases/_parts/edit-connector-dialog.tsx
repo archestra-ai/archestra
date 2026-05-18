@@ -287,42 +287,46 @@ export function EditConnectorDialog({
             emailRequired={emailRequired}
           />
 
-          <FormField
-            control={form.control}
-            name="apiToken"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{apiTokenLabel}</FormLabel>
-                <FormControl>
-                  <Input
-                    type="password"
-                    placeholder={apiTokenPlaceholder}
-                    {...field}
-                  />
-                </FormControl>
-                <FormDescription>
-                  Leave empty to keep existing credentials unchanged.
-                </FormDescription>
-                {apiTokenHelpText}
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <Collapsible>
-            <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer group border-t pt-3">
-              <span className="text-sm font-medium">Advanced</span>
-              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
-            </CollapsibleTrigger>
-            <CollapsibleContent className="pt-4 space-y-4">
-              <SchedulePicker form={form} name="schedule" />
-              <ConnectorAdvancedConfigFields
-                connectorType={connectorType}
-                form={form}
-                mode="edit"
+          {Boolean(apiTokenLabel) && (
+            <>
+              <FormField
+                control={form.control}
+                name="apiToken"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{apiTokenLabel}</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="password"
+                        placeholder={apiTokenPlaceholder}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Leave empty to keep existing credentials unchanged.
+                    </FormDescription>
+                    {apiTokenHelpText}
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </CollapsibleContent>
-          </Collapsible>
+
+              <Collapsible>
+                <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer group border-t pt-3">
+                  <span className="text-sm font-medium">Advanced</span>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-4 space-y-4">
+                  <SchedulePicker form={form} name="schedule" />
+                  <ConnectorAdvancedConfigFields
+                    connectorType={connectorType}
+                    form={form}
+                    mode="edit"
+                  />
+                </CollapsibleContent>
+              </Collapsible>
+            </>
+          )}
         </div>
       </Form>
     </StandardFormDialog>

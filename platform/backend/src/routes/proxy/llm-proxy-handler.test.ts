@@ -74,14 +74,25 @@ vi.mock("@/observability/tracing", async (importOriginal) => {
   };
 });
 
+vi.mock("@/clients/azure-openai-credentials", async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import("@/clients/azure-openai-credentials")>();
+  return {
+    ...original,
+    isAzureOpenAiEntraIdEnabled: () => true,
+  };
+});
+
 // Import after mocks to ensure mocks are applied
 import { metrics } from "@/observability";
 import {
   anthropicAdapterFactory,
+  azureAdapterFactory,
   geminiAdapterFactory,
   openaiAdapterFactory,
 } from "./adapters";
 import anthropicProxyRoutes from "./routes/anthropic";
+import azureProxyRoutes from "./routes/azure";
 import geminiProxyRoutes from "./routes/gemini";
 import openAiProxyRoutes from "./routes/openai";
 
@@ -903,7 +914,7 @@ describe("LLM Proxy Handler — CHAT_API_KEY_ID_HEADER fallback", () => {
       },
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode, response.body).toBe(200);
     expect(createClientSpy).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
@@ -943,9 +954,74 @@ describe("LLM Proxy Handler — CHAT_API_KEY_ID_HEADER fallback", () => {
       },
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode, response.body).toBe(200);
     expect(createClientSpy).toHaveBeenCalled();
     const [, options] = createClientSpy.mock.calls[0];
     expect(options.defaultHeaders).toBeUndefined();
+  });
+
+  test("loopback request with keyless Azure provider key ignores extracted auth and uses inference URL", async ({
+    makeOrganization,
+  }) => {
+    vi.spyOn(azureAdapterFactory, "createClient").mockImplementation(
+      (apiKey, options) => {
+        createClientSpy(apiKey, options);
+        return {
+          apiKey,
+          baseUrl: options.baseUrl,
+          openai: createOpenAiTestClient({}),
+        } as never;
+      },
+    );
+
+    await app.register(azureProxyRoutes);
+
+    await ModelModel.upsert({
+      externalId: "azure/gpt-4o",
+      provider: "azure",
+      modelId: "gpt-4o",
+      inputModalities: null,
+      outputModalities: null,
+      customPricePerMillionInput: "2.50",
+      customPricePerMillionOutput: "10.00",
+      lastSyncedAt: new Date(),
+    });
+
+    const org = await makeOrganization();
+    const apiKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      secretId: null,
+      name: "Keyless Azure split endpoint",
+      provider: "azure",
+      scope: "org",
+      userId: null,
+      teamId: null,
+      baseUrl: "https://discovery.example.com/openai",
+      inferenceBaseUrl: "https://runtime.example.com/openai/v1",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/azure/${testAgent.id}/chat/completions`,
+      remoteAddress: "127.0.0.1",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer synthetic-internal-key",
+        [CHAT_API_KEY_ID_HEADER]: apiKey.id,
+      },
+      payload: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "Hello!" }],
+        stream: false,
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(createClientSpy).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({
+        baseUrl: "https://runtime.example.com/openai/v1",
+      }),
+    );
   });
 });

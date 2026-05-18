@@ -39,9 +39,13 @@ type DialogKey =
   | "no-auth"
   | "manage";
 
-export function useMcpInstallOrchestrator() {
-  const { data: catalogItems } = useInternalMcpCatalog({});
-  const { data: installedServers } = useMcpServers({});
+export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
+  const { data: catalogItems } = useInternalMcpCatalog({
+    enabled: options?.enabled,
+  });
+  const { data: installedServers } = useMcpServers({
+    enabled: options?.enabled,
+  });
   const installMutation = useInstallMcpServer();
   const reauthMutation = useReauthenticateMcpServer();
   const initiateOAuthMutation = useInitiateOAuth();
@@ -244,7 +248,7 @@ export function useMcpInstallOrchestrator() {
 
     await installMutation.mutateAsync({
       name: catalogItem.name,
-      catalogId: catalogItem.id,
+      catalogId: result.catalogId,
       ...credentialPayload,
       scope: result.scope,
       teamId:
@@ -315,7 +319,7 @@ export function useMcpInstallOrchestrator() {
 
     await installMutation.mutateAsync({
       name: localServerCatalogItem.name,
-      catalogId: localServerCatalogItem.id,
+      catalogId: installResult.catalogId,
       environmentValues: installResult.environmentValues,
       userConfigValues: installResult.userConfigValues,
       isByosVault: installResult.isByosVault,
@@ -336,7 +340,7 @@ export function useMcpInstallOrchestrator() {
 
     await installMutation.mutateAsync({
       name: noAuthCatalogItem.name,
-      catalogId: noAuthCatalogItem.id,
+      catalogId: result.catalogId,
       scope: result.scope,
       teamId:
         result.scope === "team" ? (result.teamId ?? undefined) : undefined,

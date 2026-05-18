@@ -20,6 +20,18 @@ export const InsertA2AMessageSchema = createInsertSchema(
   createdAt: true,
   updatedAt: true,
 });
+export const InsertA2AMessageWithIdSchema = createInsertSchema(
+  schema.a2aMessagesTable,
+  {
+    content: A2AMessageContentSchema,
+  },
+).omit({
+  createdAt: true,
+  updatedAt: true,
+});
 
 export type A2AMessage = z.infer<typeof SelectA2AMessageSchema>;
 export type InsertA2AMessage = z.infer<typeof InsertA2AMessageSchema>;
+export type InsertA2AMessageWithId = z.infer<
+  typeof InsertA2AMessageWithIdSchema
+>;

@@ -9,6 +9,8 @@ export const RouteId = {
   GetDefaultLlmProxy: "getDefaultLlmProxy",
   UpdateAgent: "updateAgent",
   DeleteAgent: "deleteAgent",
+  ExportAgent: "exportAgent",
+  ImportAgent: "importAgent",
   GetLabelKeys: "getLabelKeys",
   GetLabelValues: "getLabelValues",
 
@@ -63,6 +65,10 @@ export const RouteId = {
   ValidateDeploymentYaml: "validateDeploymentYaml",
   ResetDeploymentYaml: "resetDeploymentYaml",
   GetK8sImagePullSecrets: "getK8sImagePullSecrets",
+  // MCP Catalog Children (UI-named "presets") Routes
+  GetCatalogChildren: "getCatalogChildren",
+  CreateCatalogChild: "createCatalogChild",
+  UpdateCatalogChild: "updateCatalogChild",
 
   // MCP Server Routes
   GetMcpServers: "getMcpServers",
@@ -265,6 +271,7 @@ export const RouteId = {
   GetChatConversation: "getChatConversation",
   GetChatAgentMcpTools: "getChatAgentMcpTools",
   CreateChatConversation: "createChatConversation",
+  ForkChatConversation: "forkChatConversation",
   UpdateChatConversation: "updateChatConversation",
   DeleteChatConversation: "deleteChatConversation",
   GenerateChatConversationTitle: "generateChatConversationTitle",
@@ -347,6 +354,15 @@ export const RouteId = {
   // Connection Settings Routes (organization-level)
   UpdateConnectionSettings: "updateConnectionSettings",
 
+  // Preset Entity Name Routes (organization-level - configurable label for catalog presets)
+  UpdatePresetEntityName: "updatePresetEntityName",
+  UpdatePresetEntityDefaultLabel: "updatePresetEntityDefaultLabel",
+
+  // Org-level preset entries (Production / Staging / Development buckets)
+  ListMcpPresetEntries: "listMcpPresetEntries",
+  CreateMcpPresetEntry: "createMcpPresetEntry",
+  DeleteMcpPresetEntry: "deleteMcpPresetEntry",
+
   // Knowledge Settings Routes (organization-level)
   UpdateKnowledgeSettings: "updateKnowledgeSettings",
   DropEmbeddingConfig: "dropEmbeddingConfig",
@@ -356,6 +372,8 @@ export const RouteId = {
   GetPublicIdentityProviders: "getPublicIdentityProviders",
   GetIdentityProviders: "getIdentityProviders",
   GetIdentityProvider: "getIdentityProvider",
+  GetIdentityProviderLatestIdTokenClaims:
+    "getIdentityProviderLatestIdTokenClaims",
   CreateIdentityProvider: "createIdentityProvider",
   UpdateIdentityProvider: "updateIdentityProvider",
   DeleteIdentityProvider: "deleteIdentityProvider",
@@ -387,6 +405,7 @@ export const RouteId = {
 
   // Optimization Rule Routes
   GetOptimizationRules: "getOptimizationRules",
+  GetOptimizationRule: "getOptimizationRule",
   CreateOptimizationRule: "createOptimizationRule",
   UpdateOptimizationRule: "updateOptimizationRule",
   DeleteOptimizationRule: "deleteOptimizationRule",
@@ -440,6 +459,12 @@ export const RouteId = {
   // Connector Run Routes
   GetConnectorRuns: "getConnectorRuns",
   GetConnectorRun: "getConnectorRun",
+
+  // Connector File Upload Routes
+  UploadConnectorFiles: "uploadConnectorFiles",
+  GetConnectorFiles: "getConnectorFiles",
+  GetConnectorFile: "getConnectorFile",
+  DeleteConnectorFile: "deleteConnectorFile",
 
   // Invitation Routes
   CheckInvitation: "checkInvitation",

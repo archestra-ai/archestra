@@ -47,7 +47,7 @@ export function FillPresetFieldsStep({
   onSaved,
   onCancel,
 }: FillPresetFieldsStepProps) {
-  const { singular } = usePresetEntityName();
+  const { singular, defaultValidationRegex } = usePresetEntityName();
   const presetLower = singular.toLowerCase();
   const { data: children = [] } = useCatalogPresets(catalog.id);
   const { data: entries = [] } = useMcpPresetEntries();
@@ -60,7 +60,11 @@ export function FillPresetFieldsStep({
       ? catalog
       : children.find((c) => c.id === selectedPresetId);
 
+  // When the selected "preset" is actually the parent (the implicit default),
+  // there's no entry — fall back to the org-wide default validation regex.
   const validationRegex = useMemo(() => {
+    const isDefault = !!selectedPreset && selectedPreset.id === catalog.id;
+    if (isDefault) return compileValidationRegex(defaultValidationRegex);
     const entryId =
       selectedPreset && "presetEntryId" in selectedPreset
         ? selectedPreset.presetEntryId
@@ -68,7 +72,7 @@ export function FillPresetFieldsStep({
     if (!entryId) return null;
     const entry = entries.find((e) => e.id === entryId);
     return compileValidationRegex(entry?.validationRegex);
-  }, [entries, selectedPreset]);
+  }, [entries, selectedPreset, catalog.id, defaultValidationRegex]);
 
   const unfilled = useMemo(() => {
     if (!selectedPreset) return [];
@@ -92,10 +96,11 @@ export function FillPresetFieldsStep({
         regex: validationRegex,
         required: f.required,
         valueType: f.valueType,
+        presetTerm: singular,
       });
     }
     return errors;
-  }, [unfilled, values, validationRegex]);
+  }, [unfilled, values, validationRegex, singular]);
 
   if (!selectedPreset || unfilled.length === 0) return null;
 

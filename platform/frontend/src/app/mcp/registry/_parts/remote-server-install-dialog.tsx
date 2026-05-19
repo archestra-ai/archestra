@@ -24,6 +24,7 @@ import {
 import { useFeature } from "@/lib/config/config.query";
 import { useCatalogPresets } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpPresetEntries } from "@/lib/mcp/mcp-preset-entry.query";
+import { usePresetEntityName } from "@/lib/organization.query";
 import { useTeamsWithVaultFolders } from "@/lib/teams/team.query";
 import { InstallPresetPicker } from "./install-preset-picker";
 import { FillPresetFieldsStep } from "./preset-fallback-fields";
@@ -122,18 +123,19 @@ export function RemoteServerInstallDialog({
   );
   const { data: presets = [] } = useCatalogPresets(catalogItem?.id ?? null);
   const { data: presetEntries = [] } = useMcpPresetEntries();
+  const { singular, defaultValidationRegex } = usePresetEntityName();
   const hasPresets = presets.length > 0;
 
-  // Compile the regex once per selected preset. Looks up the preset entry
-  // associated with the selected child catalog (or null when the parent
-  // "default" preset is selected — that path has no entry).
+  // Compile the regex once per selected preset. Uses the preset entry's
+  // regex for child installs; for the implicit default row (no entry) falls
+  // back to the org-wide default validation regex.
   const selectedChild =
     catalogItem && selectedCatalogId && selectedCatalogId !== catalogItem.id
       ? presets.find((p) => p.id === selectedCatalogId)
       : null;
   const presetValidationRegex = (() => {
     const entryId = selectedChild?.presetEntryId ?? null;
-    if (!entryId) return null;
+    if (!entryId) return compileValidationRegex(defaultValidationRegex);
     const entry = presetEntries.find((e) => e.id === entryId);
     return compileValidationRegex(entry?.validationRegex);
   })();
@@ -350,7 +352,7 @@ export function RemoteServerInstallDialog({
       if (!v) continue;
       fieldRegexErrors[fieldName] = presetValidationRegex.test(v)
         ? null
-        : "Value does not match the preset validation pattern";
+        : `Value does not match the ${singular} Validation Rule`;
     }
   }
   const hasRegexErrors = Object.values(fieldRegexErrors).some((e) => !!e);

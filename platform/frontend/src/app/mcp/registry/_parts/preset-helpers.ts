@@ -119,20 +119,25 @@ export function compileValidationRegex(
  * preset's regex, or `null` if it passes. Only string-valued fields are
  * checked (numbers and booleans bypass — the regex is meant for free-text
  * values like URLs, hostnames, env names).
+ *
+ * `presetTerm` is the org-configured singular term — e.g. "Environment",
+ * "Tenant" — surfaced verbatim in the error message so the wording matches the
+ * admin's vocabulary instead of the hard-coded "preset".
  */
 export function validateFieldAgainstRegex(params: {
   value: string;
   regex: RegExp | null;
   required: boolean;
   valueType: FieldValueType;
+  presetTerm: string;
 }): string | null {
-  const { value, regex, required, valueType } = params;
+  const { value, regex, required, valueType, presetTerm } = params;
   if (!regex) return null;
   if (valueType !== "string") return null;
   if (!value) return required ? "Required" : null;
   return regex.test(value)
     ? null
-    : `Value does not match the preset validation pattern`;
+    : `Value does not match the ${presetTerm} Validation Rule`;
 }
 
 /**

@@ -35,6 +35,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useFeature } from "@/lib/config/config.query";
 import { useCatalogPresets } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpPresetEntries } from "@/lib/mcp/mcp-preset-entry.query";
+import { usePresetEntityName } from "@/lib/organization.query";
 import { useTeamsWithVaultFolders } from "@/lib/teams/team.query";
 import { InstallPresetPicker } from "./install-preset-picker";
 import { FillPresetFieldsStep } from "./preset-fallback-fields";
@@ -159,17 +160,18 @@ export function LocalServerInstallDialog({
   );
   const { data: presets = [] } = useCatalogPresets(catalogItem?.id ?? null);
   const { data: presetEntries = [] } = useMcpPresetEntries();
+  const { singular, defaultValidationRegex } = usePresetEntityName();
   const hasPresets = presets.length > 0;
 
-  // Compile the preset entry's validation regex (null when the default
-  // preset row, which has no entry, is selected).
+  // Compile the preset entry's validation regex for child installs; for the
+  // implicit default row (no entry) fall back to the org-wide default regex.
   const _selectedChildPreset =
     catalogItem && selectedCatalogId && selectedCatalogId !== catalogItem.id
       ? presets.find((p) => p.id === selectedCatalogId)
       : null;
   const presetValidationRegex = (() => {
     const entryId = _selectedChildPreset?.presetEntryId ?? null;
-    if (!entryId) return null;
+    if (!entryId) return compileValidationRegex(defaultValidationRegex);
     const entry = presetEntries.find((e) => e.id === entryId);
     return compileValidationRegex(entry?.validationRegex);
   })();
@@ -498,7 +500,7 @@ export function LocalServerInstallDialog({
       if (!v) continue;
       envRegexErrors[env.key] = presetValidationRegex.test(v)
         ? null
-        : "Value does not match the preset validation pattern";
+        : `Value does not match the ${singular} Validation Rule`;
     }
     if (!useVaultSecrets) {
       for (const env of allSecrets) {
@@ -506,7 +508,7 @@ export function LocalServerInstallDialog({
         if (!v) continue;
         envRegexErrors[env.key] = presetValidationRegex.test(v)
           ? null
-          : "Value does not match the preset validation pattern";
+          : `Value does not match the ${singular} Validation Rule`;
       }
     }
     for (const [fieldName, fieldConfig] of Object.entries(
@@ -520,7 +522,7 @@ export function LocalServerInstallDialog({
       if (!v) continue;
       userConfigRegexErrors[fieldName] = presetValidationRegex.test(v)
         ? null
-        : "Value does not match the preset validation pattern";
+        : `Value does not match the ${singular} Validation Rule`;
     }
   }
   const hasRegexErrors =

@@ -55,7 +55,7 @@ export function PresetEditorDialog({
 }: PresetEditorDialogProps) {
   const isEdit = preset !== null;
   const isEditingDefaultPreset = preset !== null && preset.id === cat.id;
-  const { singular } = usePresetEntityName();
+  const { singular, defaultValidationRegex } = usePresetEntityName();
 
   const presetFields = listCatalogFields(cat).filter(
     (f) => f.scope === "preset",
@@ -69,7 +69,12 @@ export function PresetEditorDialog({
     {},
   );
 
-  const validationRegex = compileValidationRegex(entry?.validationRegex);
+  // For the implicit default row (parent.id === preset.id), there's no preset
+  // entry — fall back to the org-wide `presetEntityDefaultValidationRegex`.
+  const activeRegexSource = isEditingDefaultPreset
+    ? defaultValidationRegex
+    : (entry?.validationRegex ?? null);
+  const validationRegex = compileValidationRegex(activeRegexSource);
 
   const fieldErrors: Record<string, string | null> = {};
   for (const f of presetFields) {
@@ -80,6 +85,7 @@ export function PresetEditorDialog({
       regex: validationRegex,
       required: false,
       valueType: f.valueType,
+      presetTerm: singular,
     });
   }
   const hasErrors = Object.values(fieldErrors).some((err) => !!err);

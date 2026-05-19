@@ -350,11 +350,11 @@ function EntriesSection({ canEdit }: { canEdit: boolean }) {
                       validationRegex: defaultValidationRegex,
                     })
                   }
-                  aria-label={`Edit ${defaultLabel} validation regex`}
+                  aria-label={`Edit ${defaultLabel} Validation Rule`}
                   title={
                     defaultValidationRegex
-                      ? "Edit validation regex"
-                      : "Add validation regex"
+                      ? "Edit Validation Rule"
+                      : "Add Validation Rule"
                   }
                 >
                   <ShieldCheck className="h-4 w-4" />
@@ -401,11 +401,11 @@ function EntriesSection({ canEdit }: { canEdit: boolean }) {
                       className="h-8 w-8 text-muted-foreground hover:text-foreground"
                       disabled={!canEdit}
                       onClick={() => setRegexTarget({ kind: "entry", entry })}
-                      aria-label={`Edit ${entry.name} validation regex`}
+                      aria-label={`Edit ${entry.name} Validation Rule`}
                       title={
                         entry.validationRegex
-                          ? "Edit validation regex"
-                          : "Add validation regex"
+                          ? "Edit Validation Rule"
+                          : "Add Validation Rule"
                       }
                     >
                       <ShieldCheck className="h-4 w-4" />
@@ -567,8 +567,8 @@ function ValidationRegexDialog({
   const { singular } = usePresetEntityName();
   const entryMutation = useUpdateMcpPresetEntry();
   const defaultMutation = useUpdatePresetEntityDefaultValidationRegex(
-    "Validation pattern saved",
-    "Failed to save validation pattern",
+    "Validation Rule saved",
+    "Failed to save Validation Rule",
   );
 
   const targetName =
@@ -627,7 +627,7 @@ function ValidationRegexDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{singular} validation pattern</DialogTitle>
+          <DialogTitle>{singular} Validation Rule</DialogTitle>
           <DialogDescription>
             Regex that every {singular.toLowerCase()}-scoped value must match
             when installing an MCP server in{" "}

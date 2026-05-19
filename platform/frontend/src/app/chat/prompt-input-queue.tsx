@@ -96,19 +96,18 @@ function QueuedPromptItem({
       )}
       {message.files.length > 0 && (
         <QueueItemAttachment>
-          {message.files.map((file) =>
-            file.mediaType?.startsWith("image/") && file.url ? (
+          {message.files.map((file, index) => {
+            const key = `${message.id}:${index}`;
+            return file.mediaType?.startsWith("image/") && file.url ? (
               <QueueItemImage
-                key={getFileKey(file)}
+                key={key}
                 src={file.url}
                 title={getFileLabel(file)}
               />
             ) : (
-              <QueueItemFile key={getFileKey(file)}>
-                {getFileLabel(file)}
-              </QueueItemFile>
-            ),
-          )}
+              <QueueItemFile key={key}>{getFileLabel(file)}</QueueItemFile>
+            );
+          })}
         </QueueItemAttachment>
       )}
     </QueueItem>
@@ -131,8 +130,4 @@ function getFileLabel(file: FileUIPart): string {
       filename: file.filename,
     })
   );
-}
-
-function getFileKey(file: FileUIPart): string {
-  return file.url || file.filename || file.mediaType || "attachment";
 }

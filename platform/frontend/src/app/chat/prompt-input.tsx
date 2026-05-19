@@ -334,7 +334,10 @@ const PromptInputContent = ({
   const selectedCommandIndex =
     visibleSlashCommands.length === 0
       ? 0
-      : Math.min(activeCommandIndex, visibleSlashCommands.length - 1);
+      : Math.max(
+          0,
+          Math.min(activeCommandIndex, visibleSlashCommands.length - 1),
+        );
 
   useEffect(() => {
     if (isSlashCommandOpen) {

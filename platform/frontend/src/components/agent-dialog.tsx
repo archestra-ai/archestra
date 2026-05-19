@@ -191,8 +191,11 @@ function AgentToolsList({ agentId }: { agentId: string }) {
   );
 }
 
+type BuiltInAgentId =
+  (typeof BUILT_IN_AGENT_IDS)[keyof typeof BUILT_IN_AGENT_IDS];
+
 function getBuiltInAgentConfigForSave(params: {
-  builtInAgentName?: string;
+  builtInAgentName: BuiltInAgentId;
   autoConfigureOnToolDiscovery: boolean;
   maxRounds: number;
 }) {
@@ -207,14 +210,19 @@ function getBuiltInAgentConfigForSave(params: {
         name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
         maxRounds: params.maxRounds,
       };
+    case BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE:
+      return {
+        name: BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
+      };
     case BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION:
       return {
         name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
       };
-    default:
-      return {
-        name: BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
-      };
+    default: {
+      // exhaustive check: a new BUILT_IN_AGENT_ID will fail the build here
+      const _exhaustive: never = params.builtInAgentName;
+      throw new Error(`Unsupported built-in agent: ${String(_exhaustive)}`);
+    }
   }
 }
 
@@ -938,7 +946,7 @@ export function AgentDialog({
         });
       }
 
-      if (agent && isBuiltIn) {
+      if (agent && isBuiltIn && builtInAgentName) {
         const builtInAgentConfig = getBuiltInAgentConfigForSave({
           builtInAgentName,
           autoConfigureOnToolDiscovery,

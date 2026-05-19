@@ -24,7 +24,6 @@ function makePayload(
       considerContextUntrusted: false,
       toolAssignmentMode: "manual",
       toolExposureMode: "full",
-      llmModel: "gpt-4o",
       incomingEmailEnabled: false,
       incomingEmailSecurityMode: "private",
       incomingEmailAllowedDomain: null,

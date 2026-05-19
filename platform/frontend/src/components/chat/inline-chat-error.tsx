@@ -239,6 +239,6 @@ function formatModelSource(source: ModelSource | null | undefined): string {
     case "user":
       return "user override";
     default:
-      return "no model selected";
+      return "auto-selected (best available)";
   }
 }

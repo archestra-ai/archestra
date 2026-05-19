@@ -399,6 +399,42 @@ describe("createFastifyInstance", () => {
       expect(body.error.type).toBe("api_validation_error");
       expect(typeof body.error.message).toBe("string");
     });
+
+    test("returns 413 with body-too-large message when payload exceeds limit", async () => {
+      const app = createFastifyInstance();
+      const loggerWarnSpy = vi.spyOn(app.log, "warn");
+
+      // Route-scoped bodyLimit keeps the test payload small while still
+      // exercising the FST_ERR_CTP_BODY_TOO_LARGE branch.
+      app.post("/test-413", { bodyLimit: 100 }, async () => ({ ok: true }));
+
+      const oversized = "x".repeat(500);
+      const response = await app.inject({
+        method: "POST",
+        url: "/test-413",
+        headers: { "content-type": "application/json" },
+        payload: JSON.stringify({ data: oversized }),
+      });
+
+      expect(response.statusCode).toBe(413);
+      const body = response.json();
+      expect(body.error.type).toBe("api_payload_too_large_error");
+      expect(body.error.message).toMatch(/Request body too large/);
+      expect(body.error.message).toMatch(/ARCHESTRA_API_BODY_LIMIT/);
+
+      expect(loggerWarnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          statusCode: 413,
+          code: "FST_ERR_CTP_BODY_TOO_LARGE",
+          bodyLimit: expect.any(Number),
+          method: "POST",
+          url: "/test-413",
+        }),
+        "HTTP 413 request body too large",
+      );
+
+      loggerWarnSpy.mockRestore();
+    });
   });
 
   describe("logging verification", () => {
@@ -418,7 +454,12 @@ describe("createFastifyInstance", () => {
       });
 
       expect(loggerErrorSpy).toHaveBeenCalledWith(
-        { error: "Server error", statusCode: 500 },
+        expect.objectContaining({
+          error: "Server error",
+          statusCode: 500,
+          method: "GET",
+          url: "/test-500-logging",
+        }),
         "HTTP 50x request error occurred",
       );
 
@@ -441,7 +482,12 @@ describe("createFastifyInstance", () => {
       });
 
       expect(loggerInfoSpy).toHaveBeenCalledWith(
-        { error: "Not found", statusCode: 404 },
+        expect.objectContaining({
+          error: "Not found",
+          statusCode: 404,
+          method: "GET",
+          url: "/test-400-logging",
+        }),
         "HTTP 40x request error occurred",
       );
 
@@ -485,17 +531,21 @@ describe("createFastifyInstance", () => {
       });
 
       expect(loggerErrorSpy).toHaveBeenCalledWith(
-        { error: "Success with error", statusCode: 200 },
+        expect.objectContaining({
+          error: "Success with error",
+          statusCode: 200,
+          method: "GET",
+          url: "/test-low-status-logging",
+        }),
         "HTTP request error occurred",
       );
 
       loggerErrorSpy.mockRestore();
     });
 
-    test("logs standard errors at error level", async () => {
+    test("logs standard errors at error level with request context", async () => {
       const app = createFastifyInstance();
 
-      // Mock the logger error method
       const loggerErrorSpy = vi.spyOn(app.log, "error");
 
       app.get("/test-standard-error-logging", async () => {
@@ -507,9 +557,14 @@ describe("createFastifyInstance", () => {
         url: "/test-standard-error-logging",
       });
 
-      // Standard errors should be logged at error level with 500 status
       expect(loggerErrorSpy).toHaveBeenCalledWith(
-        { error: "Standard error", statusCode: 500 },
+        expect.objectContaining({
+          error: "Standard error",
+          statusCode: 500,
+          method: "GET",
+          url: "/test-standard-error-logging",
+          stack: expect.any(String),
+        }),
         "HTTP 50x request error occurred",
       );
 

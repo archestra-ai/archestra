@@ -4,7 +4,7 @@ import { vi } from "vitest";
 import AgentModel from "@/models/agent";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
-import { resolveSmartDefaultLlm } from "@/utils/llm-resolution";
+import { resolveBestAvailableLlm } from "@/utils/llm-resolution";
 import { DualLlmSubagent } from "./dual-llm";
 
 vi.mock("ai", () => ({
@@ -14,12 +14,12 @@ vi.mock("ai", () => ({
 
 vi.mock("@/clients/llm-client", () => ({
   createDirectLLMModel: vi.fn(() => "mocked-model"),
-  detectProviderFromModel: vi.fn(() => "openai"),
   resolveProviderApiKey: vi.fn(),
 }));
 
 vi.mock("@/utils/llm-resolution", () => ({
-  resolveSmartDefaultLlm: vi.fn(),
+  resolveBestAvailableLlm: vi.fn(),
+  resolveConfiguredAgentLlm: vi.fn(),
 }));
 
 vi.mock("@/templating", () => ({
@@ -60,6 +60,7 @@ function makeBuiltInAgent(params: {
     incomingEmailAllowedDomain: null,
     llmApiKeyId: null,
     llmModel: null,
+    modelId: null,
     passthroughHeaders: null,
     toolAssignmentMode: "manual",
     identityProviderId: null,
@@ -93,7 +94,7 @@ function makeBuiltInAgent(params: {
 describe("DualLlmSubagent", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(resolveSmartDefaultLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
+    vi.mocked(resolveBestAvailableLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
   });
 
   test("throws when dual LLM built-in agents are missing", async () => {

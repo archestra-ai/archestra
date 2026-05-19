@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useDeleteMcpServer } from "@/lib/mcp/mcp-server.query";
+import { usePresetEntityName } from "@/lib/organization.query";
 
 export interface UninstallServerInstall {
   server: { id: string; name: string };
@@ -43,6 +44,7 @@ export function UninstallServerDialog({
   onCancelInstallation,
 }: UninstallServerDialogProps) {
   const uninstallMutation = useDeleteMcpServer();
+  const { singular: presetSingular } = usePresetEntityName();
 
   const defaultIdx = useMemo(() => {
     const idx = installs.findIndex((i) => i.isDefault);
@@ -115,7 +117,9 @@ export function UninstallServerDialog({
           <div className="flex flex-col gap-3 px-4 pb-4">
             {showPresetSelector && (
               <div className="flex flex-col gap-2">
-                <Label htmlFor="uninstall-preset-select">Preset</Label>
+                <Label htmlFor="uninstall-preset-select">
+                  {presetSingular}
+                </Label>
                 <Select
                   value={String(selectedIdx)}
                   onValueChange={(v) => setSelectedIdx(Number(v))}

@@ -13,6 +13,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { usePresetEntityName } from "@/lib/organization.query";
 
 export type FieldScopeValue = "installation" | "preset" | "static";
 
@@ -34,6 +35,8 @@ export function FieldScopeSelect({
   disableInstallation = false,
   disabledReason,
 }: FieldScopeSelectProps) {
+  const { singular, configured } = usePresetEntityName();
+  const showPresetScope = allowPresetScope && configured;
   const select = (
     <Select
       value={value}
@@ -47,9 +50,9 @@ export function FieldScopeSelect({
       </SelectTrigger>
       <SelectContent>
         <SelectItem value="installation" disabled={disableInstallation}>
-          Prompt at installation
+          Installation
         </SelectItem>
-        {allowPresetScope && <SelectItem value="preset">Per preset</SelectItem>}
+        {showPresetScope && <SelectItem value="preset">{singular}</SelectItem>}
         <SelectItem value="static">Static</SelectItem>
       </SelectContent>
     </Select>

@@ -1,6 +1,7 @@
 import {
   AUTO_PROVISIONED_INVITATION_STATUS,
   addNomicTaskPrefix,
+  isModelSelectionComplete,
   RouteId,
 } from "@shared";
 import { and, eq, inArray, like } from "drizzle-orm";
@@ -38,6 +39,9 @@ import {
   UpdateConnectionSettingsSchema,
   UpdateKnowledgeSettingsSchema,
   UpdateLlmSettingsSchema,
+  UpdatePresetEntityDefaultLabelSchema,
+  UpdatePresetEntityDefaultValidationRegexSchema,
+  UpdatePresetEntityNameSchema,
   UpdateSecuritySettingsSchema,
 } from "@/types";
 
@@ -193,6 +197,34 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      // The default model and its API key are a pair: persist both or neither.
+      // Validate the merged result only when this update touches either field.
+      if (
+        body.defaultModelId !== undefined ||
+        body.defaultLlmApiKeyId !== undefined
+      ) {
+        const currentOrg = await OrganizationModel.getById(organizationId);
+        const mergedModelId =
+          body.defaultModelId !== undefined
+            ? body.defaultModelId
+            : (currentOrg?.defaultModelId ?? null);
+        const mergedApiKeyId =
+          body.defaultLlmApiKeyId !== undefined
+            ? body.defaultLlmApiKeyId
+            : (currentOrg?.defaultLlmApiKeyId ?? null);
+        if (
+          !isModelSelectionComplete({
+            modelId: mergedModelId,
+            apiKeyId: mergedApiKeyId,
+          })
+        ) {
+          throw new ApiError(
+            400,
+            "The default model and API key must be set together",
+          );
+        }
+      }
+
       if (body.defaultAgentId) {
         const agent = await AgentModel.findById(body.defaultAgentId);
         if (!agent || agent.organizationId !== organizationId) {
@@ -250,6 +282,75 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      const organization = await OrganizationModel.patch(organizationId, body);
+
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
+      }
+
+      return reply.send(organization);
+    },
+  );
+
+  fastify.patch(
+    "/api/organization/preset-entity-name",
+    {
+      schema: {
+        operationId: RouteId.UpdatePresetEntityName,
+        description:
+          "Configure the org-wide display label for catalog presets (the per-item child-configuration entity). Both singular and plural must be set together, or both null to reset.",
+        tags: ["Organization"],
+        body: UpdatePresetEntityNameSchema,
+        response: constructResponseSchema(SelectOrganizationSchema),
+      },
+    },
+    async ({ organizationId, body }, reply) => {
+      const organization = await OrganizationModel.patch(organizationId, body);
+
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
+      }
+
+      return reply.send(organization);
+    },
+  );
+
+  fastify.patch(
+    "/api/organization/preset-entity-default-label",
+    {
+      schema: {
+        operationId: RouteId.UpdatePresetEntityDefaultLabel,
+        description:
+          "Configure the org-wide display label for the implicit default preset row (parent catalog item). Pass null to reset to the built-in 'Default' label.",
+        tags: ["Organization"],
+        body: UpdatePresetEntityDefaultLabelSchema,
+        response: constructResponseSchema(SelectOrganizationSchema),
+      },
+    },
+    async ({ organizationId, body }, reply) => {
+      const organization = await OrganizationModel.patch(organizationId, body);
+
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
+      }
+
+      return reply.send(organization);
+    },
+  );
+
+  fastify.patch(
+    "/api/organization/preset-entity-default-validation-regex",
+    {
+      schema: {
+        operationId: RouteId.UpdatePresetEntityDefaultValidationRegex,
+        description:
+          "Set the validation regex applied to default-scoped field values when installing an MCP server (mirrors mcp_preset_entries.validation_regex for the implicit default row). Stored without delimiters or flags. Pass null to disable.",
+        tags: ["Organization"],
+        body: UpdatePresetEntityDefaultValidationRegexSchema,
+        response: constructResponseSchema(SelectOrganizationSchema),
+      },
+    },
+    async ({ organizationId, body }, reply) => {
       const organization = await OrganizationModel.patch(organizationId, body);
 
       if (!organization) {

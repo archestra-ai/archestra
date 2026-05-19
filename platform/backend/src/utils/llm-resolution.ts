@@ -1,27 +1,26 @@
 import {
   DEFAULT_MODELS,
   FAST_MODELS,
+  type ModelSelection,
+  resolveModelSelection,
   type SupportedProvider,
   SupportedProvidersSchema,
 } from "@shared";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
-import { detectProviderFromModel } from "@/clients/llm-client";
 import config, { getProviderEnvApiKey } from "@/config";
 import logger from "@/logging";
 import {
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
+  MemberModel,
+  ModelModel,
   OrganizationModel,
+  TeamModel,
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 
-interface ConversationLlmSelection {
-  chatApiKeyId: string | null;
-  selectedModel: string;
-  selectedProvider: SupportedProvider;
-}
-
+/** A fully dereferenced selection ready for an LLM call. */
 export interface ResolvedLlmSelection {
   provider: SupportedProvider;
   apiKey: string | undefined;
@@ -30,17 +29,110 @@ export interface ResolvedLlmSelection {
 }
 
 /**
- * Resolve the best available LLM provider, API key, model, and base URL
- * by iterating through configured providers and checking DB-managed keys.
+ * The model resolved for a conversation.
  *
- * Resolution flow per provider:
- * 1. resolveProviderApiKey → if chatApiKeyId → getBestModel → return if found
- * 2. findSystemKey (e.g. Vertex AI with ADC) → getBestModel → return if found
- * 3. Next provider
- *
- * Returns null if no provider has both a key and a synced model in the DB.
+ * `modelId` is the models.id UUID to persist on the conversation; it is null
+ * only when no model is configured anywhere and no provider has a synced
+ * model (the env/Vertex/config fallback path). `selectedModel` /
+ * `selectedProvider` are the dereferenced values for the LLM proxy.
  */
-export async function resolveSmartDefaultLlm(params: {
+interface ConversationLlmSelection {
+  modelId: string | null;
+  chatApiKeyId: string | null;
+  selectedModel: string;
+  selectedProvider: SupportedProvider;
+}
+
+/**
+ * Resolve the model for a conversation using the priority chain:
+ *
+ *   explicit pick -> member default -> agent default -> organization default
+ *   -> best available model across the user's keys
+ *
+ * Each level is a foreign key, so a deleted model is simply NULL and the chain
+ * falls through. When the database has no models at all, falls back to
+ * environment / Vertex AI / config defaults (and `modelId` is null).
+ */
+export async function resolveConversationLlmSelectionForAgent(params: {
+  agent: { llmApiKeyId: string | null; modelId: string | null };
+  organizationId: string;
+  userId: string;
+  /** The model the user explicitly picked (highest priority). */
+  explicitModelId?: string | null;
+  /** The API key the user explicitly picked, alongside `explicitModelId`. */
+  explicitApiKeyId?: string | null;
+}): Promise<ConversationLlmSelection> {
+  const { agent, organizationId, userId } = params;
+
+  const member = await MemberModel.getByUserId(userId, organizationId);
+  const organization = await OrganizationModel.getById(organizationId);
+
+  const levels: ModelSelection[] = [
+    { modelId: params.explicitModelId, apiKeyId: params.explicitApiKeyId },
+    {
+      modelId: member?.defaultModelId,
+      apiKeyId: member?.defaultChatApiKeyId,
+    },
+    { modelId: agent.modelId, apiKeyId: agent.llmApiKeyId },
+    {
+      modelId: organization?.defaultModelId,
+      apiKeyId: organization?.defaultLlmApiKeyId,
+    },
+  ];
+
+  const availableModels = await getAvailableRankedModels({
+    organizationId,
+    userId,
+  });
+
+  const resolved = resolveModelSelection({ levels, availableModels });
+
+  if (resolved?.modelId) {
+    const model = await ModelModel.findById(resolved.modelId);
+    if (model) {
+      return {
+        modelId: model.id,
+        chatApiKeyId: resolved.apiKeyId ?? null,
+        selectedModel: model.modelId,
+        selectedProvider: model.provider,
+      };
+    }
+  }
+
+  // No synced model anywhere — fall back to env / Vertex / config defaults.
+  const fallback = resolveDefaultLlmFromEnv();
+  return {
+    modelId: null,
+    chatApiKeyId: null,
+    selectedModel: fallback.model,
+    selectedProvider: fallback.provider,
+  };
+}
+
+/**
+ * Dereference a conversation's stored `model_id` to the proxy-facing model
+ * string and provider. Falls back to env / Vertex / config defaults when the
+ * conversation has no model (e.g. created before any model was synced).
+ */
+export async function resolveConversationModel(
+  modelId: string | null,
+): Promise<{ model: string; provider: SupportedProvider }> {
+  if (modelId) {
+    const model = await ModelModel.findById(modelId);
+    if (model) {
+      return { model: model.modelId, provider: model.provider };
+    }
+  }
+  return resolveDefaultLlmFromEnv();
+}
+
+/**
+ * Resolve the best available LLM provider, API key, model, and base URL by
+ * iterating configured providers and checking DB-managed keys.
+ *
+ * Returns null if no provider has both a key and a synced model.
+ */
+export async function resolveBestAvailableLlm(params: {
   organizationId: string;
   userId?: string;
 }): Promise<ResolvedLlmSelection | null> {
@@ -82,9 +174,14 @@ export async function resolveSmartDefaultLlm(params: {
   return null;
 }
 
+/**
+ * Resolve an agent's explicitly configured LLM (its `modelId` FK and API key),
+ * including the API key secret. Returns null when the agent has no usable
+ * configuration.
+ */
 export async function resolveConfiguredAgentLlm(agent: {
   llmApiKeyId: string | null;
-  llmModel: string | null;
+  modelId: string | null;
 }): Promise<ResolvedLlmSelection | null> {
   if (agent.llmApiKeyId) {
     const apiKeyRecord = await LlmProviderApiKeyModel.findById(
@@ -102,8 +199,11 @@ export async function resolveConfiguredAgentLlm(agent: {
       apiKey = (secret as string) ?? undefined;
     }
 
+    const model = agent.modelId
+      ? await ModelModel.findById(agent.modelId)
+      : null;
     const modelName =
-      agent.llmModel ??
+      model?.modelId ??
       (await LlmProviderApiKeyModelLinkModel.getBestModel(apiKeyRecord.id))
         ?.modelId;
     if (!modelName) {
@@ -118,99 +218,18 @@ export async function resolveConfiguredAgentLlm(agent: {
     };
   }
 
-  if (!agent.llmModel) {
+  if (!agent.modelId) {
     return null;
   }
-
+  const model = await ModelModel.findById(agent.modelId);
+  if (!model) {
+    return null;
+  }
   return {
-    provider: detectProviderFromModel(agent.llmModel),
+    provider: model.provider,
     apiKey: undefined,
-    modelName: agent.llmModel,
+    modelName: model.modelId,
     baseUrl: null,
-  };
-}
-
-export async function resolveConversationLlmSelectionForAgent(params: {
-  agent: {
-    llmApiKeyId: string | null;
-    llmModel: string | null;
-  };
-  organizationId: string;
-  userId: string;
-}): Promise<ConversationLlmSelection> {
-  const { agent, organizationId, userId } = params;
-
-  const agentSelection = await resolveAgentLlmSelection(agent);
-  if (agentSelection) {
-    return agentSelection;
-  }
-
-  const organizationSelection =
-    await resolveOrganizationLlmSelection(organizationId);
-  if (organizationSelection) {
-    return organizationSelection;
-  }
-
-  const smartDefault = await resolveSmartDefaultLlmForChat({
-    organizationId,
-    userId,
-  });
-
-  return {
-    chatApiKeyId: null,
-    selectedModel: smartDefault.model,
-    selectedProvider: smartDefault.provider,
-  };
-}
-
-/**
- * Resolve the best LLM for chat with full fallback chain.
- * Extends `resolveSmartDefaultLlm` with chat-specific fallbacks:
- *
- * 1. DB-managed keys (via resolveSmartDefaultLlm)
- * 2. Organization-level default model (admin-configured)
- * 3. Environment variable API keys + hardcoded default models
- * 4. Vertex AI (Gemini without API key)
- * 5. Config defaults (ARCHESTRA_CHAT_DEFAULT_MODEL / ARCHESTRA_CHAT_DEFAULT_PROVIDER)
- *
- * Always returns a result — never null.
- */
-export async function resolveSmartDefaultLlmForChat(params: {
-  organizationId: string;
-  userId: string;
-}): Promise<{ model: string; provider: SupportedProvider }> {
-  // 1. Try DB-managed keys first
-  const dbResult = await resolveSmartDefaultLlm(params);
-  if (dbResult) {
-    return { model: dbResult.modelName, provider: dbResult.provider };
-  }
-
-  // 2. Check organization-level default model
-  const org = await OrganizationModel.getById(params.organizationId);
-  if (org?.defaultLlmModel && org?.defaultLlmProvider) {
-    return { model: org.defaultLlmModel, provider: org.defaultLlmProvider };
-  }
-
-  // 3. Check environment variable API keys as fallback
-  for (const provider of SupportedProvidersSchema.options) {
-    if (getProviderEnvApiKey(provider)) {
-      return { model: DEFAULT_MODELS[provider], provider };
-    }
-  }
-
-  // 4. Check if Vertex AI is enabled — use Gemini without API key
-  if (isVertexAiEnabled()) {
-    logger.info(
-      { model: DEFAULT_MODELS.gemini },
-      "resolveSmartDefaultLlmForChat: Vertex AI is enabled",
-    );
-    return { model: DEFAULT_MODELS.gemini, provider: "gemini" };
-  }
-
-  // 5. Ultimate fallback — use configured defaults
-  return {
-    model: config.chat.defaultModel,
-    provider: config.chat.defaultProvider,
   };
 }
 
@@ -255,67 +274,52 @@ export async function resolveFastModelName(
   return FAST_MODELS[provider];
 }
 
-async function resolveAgentLlmSelection(agent: {
-  llmApiKeyId: string | null;
-  llmModel: string | null;
-}): Promise<ConversationLlmSelection | null> {
-  if (agent.llmApiKeyId) {
-    const apiKey = await LlmProviderApiKeyModel.findById(agent.llmApiKeyId);
-    if (apiKey) {
-      const provider = apiKey.provider;
+// ===== Internal helpers =====
 
-      if (agent.llmModel) {
-        return {
-          chatApiKeyId: apiKey.id,
-          selectedModel: agent.llmModel,
-          selectedProvider: provider,
-        };
-      }
+/**
+ * Ranked (model, key) pairs across every API key the user can access — the
+ * "best available model" fallback for the resolution chain.
+ */
+async function getAvailableRankedModels(params: {
+  organizationId: string;
+  userId: string;
+}) {
+  const { organizationId, userId } = params;
+  const userTeamIds = await TeamModel.getUserTeamIds(userId);
+  const keys = await LlmProviderApiKeyModel.getAvailableKeysForUser(
+    organizationId,
+    userId,
+    userTeamIds,
+  );
+  return LlmProviderApiKeyModelLinkModel.getRankedModelsForApiKeys(
+    keys.map((key) => key.id),
+  );
+}
 
-      const bestModel = await LlmProviderApiKeyModelLinkModel.getBestModel(
-        apiKey.id,
-      );
-      if (bestModel) {
-        return {
-          chatApiKeyId: apiKey.id,
-          selectedModel: bestModel.modelId,
-          selectedProvider: provider,
-        };
-      }
+/**
+ * Last-resort default when the database has no synced models: an environment
+ * API key, then Vertex AI, then the configured chat default.
+ */
+function resolveDefaultLlmFromEnv(): {
+  model: string;
+  provider: SupportedProvider;
+} {
+  for (const provider of SupportedProvidersSchema.options) {
+    if (getProviderEnvApiKey(provider)) {
+      return { model: DEFAULT_MODELS[provider], provider };
     }
   }
 
-  if (!agent.llmModel) {
-    return null;
+  if (isVertexAiEnabled()) {
+    logger.info(
+      { model: DEFAULT_MODELS.gemini },
+      "resolveDefaultLlmFromEnv: Vertex AI is enabled",
+    );
+    return { model: DEFAULT_MODELS.gemini, provider: "gemini" };
   }
 
   return {
-    chatApiKeyId: null,
-    selectedModel: agent.llmModel,
-    selectedProvider: detectProviderFromModel(agent.llmModel),
-  };
-}
-
-async function resolveOrganizationLlmSelection(
-  organizationId: string,
-): Promise<ConversationLlmSelection | null> {
-  const organization = await OrganizationModel.getById(organizationId);
-  if (!organization?.defaultLlmModel) {
-    return null;
-  }
-
-  const apiKey = organization.defaultLlmApiKeyId
-    ? await LlmProviderApiKeyModel.findById(organization.defaultLlmApiKeyId)
-    : null;
-
-  const selectedProvider =
-    apiKey?.provider ??
-    organization.defaultLlmProvider ??
-    detectProviderFromModel(organization.defaultLlmModel);
-
-  return {
-    chatApiKeyId: apiKey?.id ?? null,
-    selectedModel: organization.defaultLlmModel,
-    selectedProvider,
+    model: config.chat.defaultModel,
+    provider: config.chat.defaultProvider,
   };
 }

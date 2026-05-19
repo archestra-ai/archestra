@@ -76,6 +76,28 @@ describe("organization routes", () => {
     });
   });
 
+  describe("PATCH /api/organization/agent-settings - model/key pair", () => {
+    test("rejects a default model with no API key", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/agent-settings",
+        payload: { defaultModelId: crypto.randomUUID() },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    test("allows clearing both the default model and API key together", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/agent-settings",
+        payload: { defaultModelId: null, defaultLlmApiKeyId: null },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+  });
+
   test("does not resync built-in MCP branding when appName is unchanged", async () => {
     const syncSpy = vi
       .spyOn(ToolModel, "syncArchestraBuiltInCatalog")
@@ -722,6 +744,35 @@ describe("organization routes", () => {
       });
 
       expect(response.statusCode).toBe(400);
+    });
+  });
+
+  describe("PATCH /api/organization/preset-entity-default-validation-regex", () => {
+    test("sets and clears the default validation regex", async () => {
+      const setRes = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/preset-entity-default-validation-regex",
+        payload: { presetEntityDefaultValidationRegex: "^[a-z]+$" },
+      });
+      expect(setRes.statusCode).toBe(200);
+      expect(setRes.json().presetEntityDefaultValidationRegex).toBe("^[a-z]+$");
+
+      const clearRes = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/preset-entity-default-validation-regex",
+        payload: { presetEntityDefaultValidationRegex: null },
+      });
+      expect(clearRes.statusCode).toBe(200);
+      expect(clearRes.json().presetEntityDefaultValidationRegex).toBeNull();
+    });
+
+    test("rejects an invalid regex", async () => {
+      const res = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/preset-entity-default-validation-regex",
+        payload: { presetEntityDefaultValidationRegex: "(" },
+      });
+      expect(res.statusCode).toBe(400);
     });
   });
 

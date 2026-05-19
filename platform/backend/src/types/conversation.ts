@@ -67,8 +67,7 @@ export const UpdateConversationSchema = createUpdateSchema(
 )
   .pick({
     title: true,
-    selectedModel: true,
-    selectedProvider: true,
+    modelId: true,
     chatApiKeyId: true,
     agentId: true,
     artifact: true,

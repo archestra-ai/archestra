@@ -49,8 +49,6 @@ describe("chat conversation and message routes", () => {
       url: "/api/chat/conversations",
       payload: {
         agentId: agent.id,
-        selectedModel: "gpt-4o",
-        selectedProvider: "openai",
       },
     });
 
@@ -58,8 +56,6 @@ describe("chat conversation and message routes", () => {
     expect(response.json()).toMatchObject({
       id: expect.any(String),
       agentId: agent.id,
-      selectedModel: "gpt-4o",
-      selectedProvider: "openai",
       pinnedAt: null,
     });
   });
@@ -74,8 +70,6 @@ describe("chat conversation and message routes", () => {
       userId: currentUser.id,
       organizationId,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
-      selectedProvider: "openai",
     });
 
     const pinnedAt = new Date().toISOString();
@@ -106,6 +100,29 @@ describe("chat conversation and message routes", () => {
     expect(unpinResponse.json().pinnedAt).toBeNull();
   });
 
+  test("rejects a conversation update that sets a model without an API key", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const conversation = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+    });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/chat/conversations/${conversation.id}`,
+      payload: { modelId: crypto.randomUUID() },
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
   test("allows scheduled task admins to view linked run conversations owned by another user", async ({
     makeAgent,
     makeMember,
@@ -133,8 +150,6 @@ describe("chat conversation and message routes", () => {
       userId: owner.id,
       organizationId,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
-      selectedProvider: "openai",
     });
     await MessageModel.create({
       conversationId: conversation.id,
@@ -195,8 +210,6 @@ describe("chat conversation and message routes", () => {
       userId: owner.id,
       organizationId,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
-      selectedProvider: "openai",
     });
     await MessageModel.create({
       conversationId: conversation.id,
@@ -223,8 +236,6 @@ describe("chat conversation and message routes", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
       agentId: agent.id,
-      selectedModel: "gpt-4o",
-      selectedProvider: "openai",
       userId: currentUser.id,
       messages: [
         expect.objectContaining({
@@ -264,8 +275,6 @@ describe("chat conversation and message routes", () => {
       userId: owner.id,
       organizationId,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
-      selectedProvider: "openai",
     });
     await ScheduleTriggerRunModel.setChatConversationId(
       run.id,
@@ -336,8 +345,6 @@ describe("chat conversation and message routes", () => {
       userId: owner.id,
       organizationId,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
-      selectedProvider: "openai",
     });
     await ScheduleTriggerRunModel.setChatConversationId(
       run.id,
@@ -371,8 +378,6 @@ describe("chat conversation and message routes", () => {
       userId: owner.id,
       organizationId,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
-      selectedProvider: "openai",
     });
 
     const response = await app.inject({
@@ -453,8 +458,6 @@ describe("chat conversation and message routes", () => {
       userId: currentUser.id,
       organizationId,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
-      selectedProvider: "openai",
     });
 
     const firstMessage = await MessageModel.create({

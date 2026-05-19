@@ -7,23 +7,13 @@ import { DialogStickyFooter } from "@/components/ui/dialog";
 import type { usePresetEntityName } from "@/lib/organization.query";
 
 /**
- * Inline confirmation surface that replaces a form/dialog footer when a
- * save would cascade-reinstall installed servers. Same surface as the
- * host dialog (no modal stacking), preserves spatial context with the
- * Save button the user just clicked.
+ * Inline confirm surface that replaces the host form's footer when a
+ * save would cascade-reinstall installed servers — avoids modal stacking.
  *
- * `mode` matches the backend cascade path that will actually fire:
- *   "manual" → `reinstallRequired: true` is set, servers keep running on
- *              the old config until the user clicks Reinstall on each;
- *   "auto"   → `setImmediate` background reinstall fires, pods restart
- *              and may briefly be unavailable.
- *
- * The title, body, and button label all align to the chosen path so the
- * user can't be misled by a CTA that says "reinstall" while the copy
- * says "flag for reinstall" (or vice versa).
- *
- * Used by both `mcp-catalog-form.tsx` (parent / standalone catalog
- * editing) and `preset-editor-dialog.tsx` (preset value editing).
+ * `mode` mirrors the backend cascade path: "manual" sets
+ * `reinstallRequired: true` (servers stay on old config until the user
+ * clicks Reinstall on each); "auto" fires a background reinstall now
+ * (pods briefly restart). Title, body, and CTA all align to the path.
  */
 export function ReinstallConfirmBar({
   mode,
@@ -50,33 +40,22 @@ export function ReinstallConfirmBar({
       ? presetEntityName.singular.toLowerCase()
       : presetEntityName.plural.toLowerCase();
 
-  // Pull the bar into view on appear. If the user clicked Save while
-  // scrolled mid-form, the footer transformation can otherwise sit
-  // off-screen — they'd see "nothing happened" instead of the warning.
+  // If Save was clicked while scrolled mid-form, the new footer would
+  // sit off-screen — user would read it as "nothing happened".
   const barRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     barRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
   }, []);
 
-  // Keyboard shortcuts: Esc cancels, Enter confirms. Register on
-  // `window` (not `document`) in the capture phase: capture order is
-  // window → document → … → target, so a window-capture listener fires
-  // BEFORE Radix's dialog-level Esc handler (which is on document in
-  // capture). Combined with `stopImmediatePropagation` this guarantees
-  // Esc cancels the bar without also closing the host dialog. Enter
-  // is suppressed while submitting to prevent double-fire on slow
-  // saves.
+  // Esc cancels, Enter confirms. Listen on `window` in capture phase so
+  // we fire BEFORE Radix's document-level Esc handler — otherwise Esc
+  // would also close the host dialog (losing the user's form work).
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key !== "Escape" && e.key !== "Enter") return;
-      // Always block both keys from propagating while the bar is up —
-      // otherwise Radix's dialog Esc handler closes the host dialog
-      // (losing the user's form work) and a stray Enter would re-fire
-      // the form's submit. During a save we additionally suppress the
-      // action itself so the user can't double-fire or cancel a save
-      // that's already past the point of no return.
       e.stopImmediatePropagation();
       e.preventDefault();
+      // Block actions while saving — no double-fire, no late cancel.
       if (isSubmitting) return;
       if (e.key === "Escape") {
         onCancel();
@@ -101,13 +80,8 @@ export function ReinstallConfirmBar({
     <>
       <strong>{affectedServerCount}</strong>{" "}
       {affectedServerCount === 1 ? "install" : "installs"}
-      {/*
-       * The "across N envs" suffix only makes sense when the install
-       * count > 1 AND the cascade actually spans multiple envs.
-       * Showing it for a single install is misleading — the install
-       * can only be in one place, so "across 2 environments" reads
-       * like the install spans both when it doesn't.
-       */}
+      {/* "across N" only makes sense with >1 install — a single
+          install only lives in one place, suffix would mislead. */}
       {presetCount > 0 && affectedServerCount > 1 ? (
         <>
           {" "}
@@ -117,9 +91,6 @@ export function ReinstallConfirmBar({
     </>
   );
 
-  // Grammar-match the pronoun and "on each" suffix to the subject. The
-  // multitenant subject is always singular ("The shared deployment");
-  // the per-server subject is singular when count===1, plural otherwise.
   const isPlural = !isMultitenant && affectedServerCount > 1;
   const pronoun = isPlural ? "They" : "It";
   const possessive = isPlural ? "their" : "its";

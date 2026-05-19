@@ -653,11 +653,9 @@ export function McpCatalogForm({
 
   const [pendingSubmit, setPendingSubmit] =
     useState<McpCatalogFormValues | null>(null);
-  // `form.formState.isSubmitting` is only true during the initial
-  // `handleSubmit` callback — once we `setPendingSubmit(values); return`,
-  // the form considers submission done. The actual save happens later
-  // from the bar's `onConfirm`, so we track it ourselves to drive the
-  // bar's spinner / disabled state / form-fields lock.
+  // `form.formState.isSubmitting` clears the moment `handleSubmit`
+  // returns (which we do early to show the bar), so it can't drive the
+  // bar's spinner — track the bar→save phase ourselves.
   const [isConfirming, setIsConfirming] = useState(false);
 
   const performSubmit = async (values: McpCatalogFormValues) => {
@@ -693,13 +691,8 @@ export function McpCatalogForm({
         autoComplete={MCP_CONFIG_AUTOCOMPLETE}
         data-1p-ignore="true"
       >
-        {/*
-         * Lock the form body during submission so the user can't mutate
-         * fields mid-save and create a visual mismatch with the snapshot
-         * the API call captured. Reset the fieldset's intrinsic styling
-         * (border/padding/margin/min-width) so it behaves like a
-         * transparent container.
-         */}
+        {/* Lock fields during the bar's save so the user can't drift
+            values away from the snapshot the API will see. */}
         <fieldset
           disabled={isConfirming}
           className="flex min-h-0 min-w-0 flex-1 flex-col m-0 p-0 border-0"
@@ -2165,11 +2158,8 @@ export function McpCatalogForm({
 
         {pendingSubmit !== null ? (
           <ReinstallConfirmBar
-            // Old form-level decision logic is the sole trigger here —
-            // the bar fires exactly when `willRequireManualReinstall`
-            // was true, which always maps to the manual reinstall path
-            // (servers stay on old config until the user clicks
-            // Reinstall on each).
+            // The form's 11-flag OR only fires for manual-path edits;
+            // auto-mode is reserved for `preset-editor-dialog`.
             mode="manual"
             isMultitenant={isMultitenant}
             affectedServerCount={affectedServerCount}

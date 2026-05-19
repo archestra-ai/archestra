@@ -67,12 +67,9 @@ export function PresetEditorDialog({
   const update = useUpdateCatalogPreset(cat.id);
   const updateParent = useUpdateInternalMcpCatalogItem();
 
-  // Count installs that the backend's `cascadeReinstallForCatalog` will
-  // touch. For default-preset edits the parent PUT cascades to the parent
-  // itself AND iterates each child preset; for child edits only that
-  // child's installs are affected. Preset value changes never trigger
-  // `requiresNewUserInputForReinstall` on the backend, so they always
-  // take the auto-reinstall path (pods restart immediately).
+  // Default-preset edits cascade to the parent AND every child preset;
+  // child edits only affect their own preset's installs. Preset value
+  // changes always take the backend's auto-reinstall path.
   const { data: childPresets = [] } = useCatalogPresets(cat.id);
   const { data: allServers = [] } = useMcpServers();
   const affectedCatalogIds = useMemo(() => {
@@ -89,17 +86,13 @@ export function PresetEditorDialog({
       ).length,
     [allServers, affectedCatalogIds],
   );
-  // "across N presets" suffix only makes sense when the edit spans more
-  // than one preset (default-preset edit). For a child edit the user
-  // already knows which preset they're editing from the dialog title.
+  // Suffix only matters for default-preset edits — child edits already
+  // name their preset in the dialog title.
   const otherPresetCount = isEditingDefaultPreset ? childPresets.length : 0;
 
   const [fieldValues, setFieldValues] = useState<Record<string, FieldValue>>(
     {},
   );
-  // `pendingConfirm` flips the footer into the inline confirm bar. We
-  // never show the bar for create-mode (no installs exist yet) or when
-  // there are no affected installs.
   const [pendingConfirm, setPendingConfirm] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
 
@@ -143,11 +136,7 @@ export function PresetEditorDialog({
     onOpenChange(false);
   }
 
-  // True when the user has actually changed at least one field value.
-  // JSON-stringify deep-equal is fine here — preset values are
-  // primitive (string/number/boolean/string[]) and the shape is
-  // small. The baseline is whatever the preset/parent currently holds;
-  // in create-mode the baseline is empty.
+  // JSON-stringify deep-equal — preset values are primitive and small.
   const baselineValues = useMemo(
     () => (preset?.presetFieldValues ?? {}) as Record<string, FieldValue>,
     [preset],
@@ -158,11 +147,9 @@ export function PresetEditorDialog({
   );
 
   async function handleClickSave() {
-    // Idempotent no-op save: nothing actually changed → skip both
-    // the bar AND the API call. The form's API call would otherwise
-    // hit the cascade gate which (currently) over-restarts pods on
-    // any successful PUT, so an unedited Save would silently restart
-    // pods. Just close the dialog.
+    // No-op save: backend cascade currently restarts pods on any
+    // successful PUT, so let an unedited Save just close the dialog
+    // instead of silently restarting.
     if (isEdit && !isDirty) {
       onOpenChange(false);
       return;
@@ -214,12 +201,8 @@ export function PresetEditorDialog({
             <DialogTitle>{title}</DialogTitle>
           </DialogHeader>
 
-          {/*
-           * Lock the field surface while the confirm bar is up (or while
-           * the save is in flight) so the user can't mutate values
-           * mid-confirm and create a mismatch with the snapshot the API
-           * call will receive.
-           */}
+          {/* Lock fields while the bar is up or the save is in flight
+              — same drift-prevention as in mcp-catalog-form. */}
           <fieldset
             disabled={pendingConfirm || isConfirming}
             className="contents"

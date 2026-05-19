@@ -220,6 +220,15 @@ describe("context compaction helpers", () => {
     expect(result.messages[1].id).toBe("client-u2");
   });
 
+  test("uses persisted message metadata when selecting a new compaction boundary", async () => {
+    const boundaryMessageId = await __test.resolveCompactionBoundaryMessageId({
+      ...msg("client-a1", "assistant", "one reply"),
+      metadata: { persistedMessageId: "db-a1" },
+    } as ChatMessage);
+
+    expect(boundaryMessageId).toBe("db-a1");
+  });
+
   test("detects non-beneficial compaction estimates", () => {
     expect(
       __test.isCompactionBeneficial({

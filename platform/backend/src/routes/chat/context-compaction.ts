@@ -208,7 +208,9 @@ async function runCompactMessagesForChat(
 
   // boundary id is the anchor used to align the summary with the live message
   // list later; without it, a compaction would be unrecoverable
-  const boundaryMessageId = split.compactable.at(-1)?.id;
+  const boundaryMessageId = await resolveCompactionBoundaryMessageId(
+    split.compactable.at(-1),
+  );
   if (!boundaryMessageId) {
     logger.warn(
       {
@@ -327,6 +329,7 @@ export const __test = {
   resolveUsableCompaction,
   splitMessagesForCompaction,
   isCompactionBeneficial,
+  resolveCompactionBoundaryMessageId,
   decodeDataUrl,
   getDataUrlMediaType,
 };
@@ -853,6 +856,26 @@ function isCompactionBeneficial(params: {
   return params.compactedTokenEstimate < params.originalTokenEstimate;
 }
 
+async function resolveCompactionBoundaryMessageId(
+  message: ChatMessage | undefined,
+): Promise<string | null> {
+  if (!message) {
+    return null;
+  }
+
+  const persistedMessageId = getPersistedMessageMetadataId(message);
+  if (persistedMessageId) {
+    return persistedMessageId;
+  }
+
+  if (!message.id) {
+    return null;
+  }
+
+  const persistedMessage = await MessageModel.findByAnyId(message.id);
+  return persistedMessage?.id ?? message.id;
+}
+
 function resolveUsableCompaction<
   T extends Pick<
     ConversationCompaction,
@@ -1330,13 +1353,22 @@ function getMessageIdentityIds(message: ChatMessage): string[] {
     ids.add(message.id);
   }
 
-  const metadata = getChatMessageMetadata(message);
-  const persistedMessageId = metadata?.persistedMessageId;
-  if (typeof persistedMessageId === "string") {
+  const persistedMessageId = getPersistedMessageMetadataId(message);
+  if (persistedMessageId) {
     ids.add(persistedMessageId);
   }
 
   return [...ids];
+}
+
+function getPersistedMessageMetadataId(message: ChatMessage): string | null {
+  const metadata = getChatMessageMetadata(message);
+  const persistedMessageId = metadata?.persistedMessageId;
+  if (typeof persistedMessageId === "string" && persistedMessageId.length > 0) {
+    return persistedMessageId;
+  }
+
+  return null;
 }
 
 function getChatMessageMetadata(

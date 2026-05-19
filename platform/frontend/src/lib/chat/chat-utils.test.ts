@@ -1,8 +1,11 @@
+import type { UIMessage } from "@ai-sdk/react";
 import { describe, expect, it } from "vitest";
 import {
   getChatExternalAgentId,
   getConversationDisplayTitle,
   getManualCompactionSkippedMessage,
+  mergePersistedMessageMetadata,
+  PERSISTED_MESSAGE_ID_METADATA_KEY,
 } from "./chat-utils";
 
 const DEFAULT_SESSION_NAME = "New Chat Session";
@@ -186,5 +189,82 @@ describe("getManualCompactionSkippedMessage", () => {
     expect(getManualCompactionSkippedMessage("other_reason")).toBe(
       "There is no completed earlier context to compact yet.",
     );
+  });
+});
+
+describe("mergePersistedMessageMetadata", () => {
+  it("adds persisted message ids to matching live messages", () => {
+    const liveMessages = [
+      {
+        id: "live-assistant-1",
+        role: "assistant",
+        metadata: { source: "live" },
+        parts: [{ type: "text", text: "already saved" }],
+      },
+    ] as UIMessage[];
+    const persistedMessages = [
+      {
+        id: "db-assistant-1",
+        role: "assistant",
+        metadata: { persisted: true },
+        parts: [{ type: "text", text: "already saved" }],
+      },
+    ] as UIMessage[];
+
+    const mergedMessages = mergePersistedMessageMetadata({
+      liveMessages,
+      persistedMessages,
+    });
+
+    expect(mergedMessages).not.toBe(liveMessages);
+    expect(mergedMessages[0]?.metadata).toMatchObject({
+      persisted: true,
+      source: "live",
+      [PERSISTED_MESSAGE_ID_METADATA_KEY]: "db-assistant-1",
+    });
+  });
+
+  it("returns the original array when no metadata changes are needed", () => {
+    const liveMessages = [
+      {
+        id: "live-assistant-1",
+        role: "assistant",
+        metadata: {
+          [PERSISTED_MESSAGE_ID_METADATA_KEY]: "db-assistant-1",
+        },
+        parts: [{ type: "text", text: "already saved" }],
+      },
+    ] as UIMessage[];
+
+    const mergedMessages = mergePersistedMessageMetadata({
+      liveMessages,
+      persistedMessages: [],
+    });
+
+    expect(mergedMessages).toBe(liveMessages);
+  });
+
+  it("does not merge messages with different renderable text", () => {
+    const liveMessages = [
+      {
+        id: "live-assistant-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "live text" }],
+      },
+    ] as UIMessage[];
+    const persistedMessages = [
+      {
+        id: "db-assistant-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "persisted text" }],
+      },
+    ] as UIMessage[];
+
+    const mergedMessages = mergePersistedMessageMetadata({
+      liveMessages,
+      persistedMessages,
+    });
+
+    expect(mergedMessages).toBe(liveMessages);
   });
 });

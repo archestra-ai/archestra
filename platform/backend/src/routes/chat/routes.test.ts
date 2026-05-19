@@ -28,6 +28,7 @@ vi.mock("@/models/llm-provider-api-key-model", () => ({
 
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { createDirectLLMModel } from "@/clients/llm-client";
+import type { ChatMessage } from "@/types";
 import {
   __test,
   buildChatStopConditions,
@@ -464,6 +465,39 @@ describe("getMessagesNotYetPersisted", () => {
 
     expect(newMessages).toHaveLength(1);
     expect(newMessages[0]?.id).toBe("assistant-1");
+  });
+
+  it("does not re-persist live messages linked by persisted message metadata", () => {
+    const newMessages = __test.getMessagesNotYetPersisted({
+      existingMessages: [
+        {
+          id: "22222222-2222-2222-2222-222222222222",
+          content: {
+            id: "",
+            role: "assistant",
+            parts: [{ type: "text", text: "already saved" }],
+          },
+        },
+      ],
+      uiMessages: [
+        {
+          id: "live-assistant-1",
+          role: "assistant",
+          metadata: {
+            persistedMessageId: "22222222-2222-2222-2222-222222222222",
+          },
+          parts: [{ type: "text", text: "already saved" }],
+        } as ChatMessage,
+        {
+          id: "new-user-1",
+          role: "user",
+          parts: [{ type: "text", text: "next" }],
+        },
+      ],
+    });
+
+    expect(newMessages).toHaveLength(1);
+    expect(newMessages[0]?.id).toBe("new-user-1");
   });
 });
 

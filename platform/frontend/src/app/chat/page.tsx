@@ -112,7 +112,7 @@ import {
   conversationStorageKeys,
   getConversationDisplayTitle,
   getManualCompactionSkippedMessage,
-  PERSISTED_MESSAGE_ID_METADATA_KEY,
+  mergePersistedMessageMetadata,
 } from "@/lib/chat/chat-utils";
 import { useChatSession } from "@/lib/chat/global-chat.context";
 import {
@@ -887,6 +887,34 @@ export function ChatPageContent({
   const contextCompaction = chatSession?.contextCompaction;
   const recordContextCompaction = chatSession?.recordContextCompaction;
 
+  const syncPersistedMessageMetadata = useCallback(
+    (persistedMessages: UIMessage[]) => {
+      if (!chatSession?.messages || !setMessages) {
+        return;
+      }
+
+      const mergedMessages = mergePersistedMessageMetadata({
+        liveMessages: chatSession.messages,
+        persistedMessages,
+      });
+
+      if (mergedMessages === chatSession.messages) {
+        return;
+      }
+
+      setMessages(mergedMessages);
+    },
+    [chatSession?.messages, setMessages],
+  );
+
+  useEffect(() => {
+    if (status !== "ready") {
+      return;
+    }
+
+    syncPersistedMessageMetadata(persistedConversationMessages);
+  }, [persistedConversationMessages, status, syncPersistedMessageMetadata]);
+
   const {
     conversationAgentId,
     activeAgentId,
@@ -979,6 +1007,10 @@ export function ChatPageContent({
       return;
     }
 
+    syncPersistedMessageMetadata(
+      (result.conversation.messages ?? []) as UIMessage[],
+    );
+
     if (result.status === "created") {
       if (result.compaction) {
         recordContextCompaction?.({
@@ -1031,6 +1063,7 @@ export function ChatPageContent({
     conversationId,
     isReadOnlyConversation,
     recordContextCompaction,
+    syncPersistedMessageMetadata,
   ]);
 
   useEffect(() => {
@@ -2298,70 +2331,6 @@ function clearUserPromptQueryParam(params: {
     ? `${params.pathname}?${nextSearchParams.toString()}`
     : params.pathname;
   params.router.replace(nextUrl);
-}
-
-function mergePersistedMessageMetadata(params: {
-  liveMessages: UIMessage[];
-  persistedMessages: UIMessage[];
-}): UIMessage[] {
-  const remainingPersistedMessages = [...params.persistedMessages];
-
-  return params.liveMessages.map((liveMessage) => {
-    const liveMetadata = getObjectMetadata(liveMessage);
-    if (typeof liveMetadata[PERSISTED_MESSAGE_ID_METADATA_KEY] === "string") {
-      return liveMessage;
-    }
-
-    const persistedIndex = remainingPersistedMessages.findIndex(
-      (persistedMessage) =>
-        messagesHaveSameRenderableContent({
-          liveMessage,
-          persistedMessage,
-        }),
-    );
-
-    if (persistedIndex === -1) {
-      return liveMessage;
-    }
-
-    const [persistedMessage] = remainingPersistedMessages.splice(
-      persistedIndex,
-      1,
-    );
-
-    return {
-      ...liveMessage,
-      metadata: {
-        ...getObjectMetadata(persistedMessage),
-        ...liveMetadata,
-        [PERSISTED_MESSAGE_ID_METADATA_KEY]: persistedMessage.id,
-      },
-    };
-  });
-}
-
-function messagesHaveSameRenderableContent(params: {
-  liveMessage: UIMessage;
-  persistedMessage: UIMessage;
-}) {
-  return (
-    params.liveMessage.role === params.persistedMessage.role &&
-    getMessageText(params.liveMessage) ===
-      getMessageText(params.persistedMessage)
-  );
-}
-
-function getMessageText(message: UIMessage) {
-  return message.parts
-    .filter((part) => part.type === "text")
-    .map((part) => part.text)
-    .join("\n");
-}
-
-function getObjectMetadata(message: UIMessage): Record<string, unknown> {
-  return typeof message.metadata === "object" && message.metadata !== null
-    ? { ...message.metadata }
-    : {};
 }
 
 // =========================================================================

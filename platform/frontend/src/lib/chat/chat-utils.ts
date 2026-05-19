@@ -1,3 +1,4 @@
+import type { UIMessage } from "@ai-sdk/react";
 import type { archestraApiTypes } from "@shared";
 
 const DEFAULT_SESSION_NAME = "New Chat Session";
@@ -94,4 +95,72 @@ export function getManualCompactionSkippedMessage(
     default:
       return "There is no completed earlier context to compact yet.";
   }
+}
+
+export function mergePersistedMessageMetadata(params: {
+  liveMessages: UIMessage[];
+  persistedMessages: UIMessage[];
+}): UIMessage[] {
+  const remainingPersistedMessages = [...params.persistedMessages];
+  let changed = false;
+
+  const mergedMessages = params.liveMessages.map((liveMessage) => {
+    const liveMetadata = getObjectMetadata(liveMessage);
+    if (typeof liveMetadata[PERSISTED_MESSAGE_ID_METADATA_KEY] === "string") {
+      return liveMessage;
+    }
+
+    const persistedIndex = remainingPersistedMessages.findIndex(
+      (persistedMessage) =>
+        messagesHaveSameRenderableContent({
+          liveMessage,
+          persistedMessage,
+        }),
+    );
+
+    if (persistedIndex === -1) {
+      return liveMessage;
+    }
+
+    const [persistedMessage] = remainingPersistedMessages.splice(
+      persistedIndex,
+      1,
+    );
+
+    changed = true;
+    return {
+      ...liveMessage,
+      metadata: {
+        ...getObjectMetadata(persistedMessage),
+        ...liveMetadata,
+        [PERSISTED_MESSAGE_ID_METADATA_KEY]: persistedMessage.id,
+      },
+    };
+  });
+
+  return changed ? mergedMessages : params.liveMessages;
+}
+
+function messagesHaveSameRenderableContent(params: {
+  liveMessage: UIMessage;
+  persistedMessage: UIMessage;
+}) {
+  return (
+    params.liveMessage.role === params.persistedMessage.role &&
+    getMessageText(params.liveMessage) ===
+      getMessageText(params.persistedMessage)
+  );
+}
+
+function getMessageText(message: UIMessage) {
+  return message.parts
+    .filter((part) => part.type === "text")
+    .map((part) => part.text)
+    .join("\n");
+}
+
+function getObjectMetadata(message: UIMessage): Record<string, unknown> {
+  return typeof message.metadata === "object" && message.metadata !== null
+    ? { ...message.metadata }
+    : {};
 }

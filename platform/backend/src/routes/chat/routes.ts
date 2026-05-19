@@ -2194,32 +2194,79 @@ function getMessagesNotYetPersisted(params: {
   const existingIds = new Set<string>();
 
   for (const message of params.existingMessages) {
-    existingIds.add(message.id);
-
-    // Persisted messages are re-keyed to DB UUIDs when conversations reload, but
-    // in-flight useChat requests can still carry the original temporary content
-    // ids. Track both forms so follow-up turns after swap_agent do not get
-    // dropped just because the incoming thread is shorter than the DB thread.
-    const contentId =
-      typeof message.content === "object" &&
-      message.content !== null &&
-      "id" in message.content &&
-      typeof message.content.id === "string"
-        ? message.content.id
-        : null;
-
-    if (contentId) {
-      existingIds.add(contentId);
+    for (const id of getPersistedMessageIdentityIds(message)) {
+      existingIds.add(id);
     }
   }
 
   return params.uiMessages.filter((message) => {
-    if (!message.id || typeof message.id !== "string") {
+    const messageIds = getUiMessageIdentityIds(message);
+    if (messageIds.length === 0) {
       return true;
     }
 
-    return !existingIds.has(message.id);
+    return messageIds.every((id) => !existingIds.has(id));
   });
+}
+
+function getPersistedMessageIdentityIds(message: {
+  id: string;
+  content: unknown;
+}): string[] {
+  const ids = new Set<string>();
+  if (message.id) {
+    ids.add(message.id);
+  }
+
+  const contentId = getContentMessageId(message.content);
+  if (contentId) {
+    ids.add(contentId);
+  }
+
+  return [...ids];
+}
+
+function getUiMessageIdentityIds(message: ChatMessage): string[] {
+  const ids = new Set<string>();
+  if (message.id && typeof message.id === "string") {
+    ids.add(message.id);
+  }
+
+  const persistedMessageId = getMessagePersistedMetadataId(message);
+  if (persistedMessageId) {
+    ids.add(persistedMessageId);
+  }
+
+  return [...ids];
+}
+
+function getContentMessageId(content: unknown): string | null {
+  if (
+    typeof content === "object" &&
+    content !== null &&
+    "id" in content &&
+    typeof content.id === "string" &&
+    content.id.length > 0
+  ) {
+    return content.id;
+  }
+
+  return null;
+}
+
+function getMessagePersistedMetadataId(message: ChatMessage): string | null {
+  if (
+    !("metadata" in message) ||
+    typeof message.metadata !== "object" ||
+    message.metadata === null ||
+    !("persistedMessageId" in message.metadata) ||
+    typeof message.metadata.persistedMessageId !== "string" ||
+    message.metadata.persistedMessageId.length === 0
+  ) {
+    return null;
+  }
+
+  return message.metadata.persistedMessageId;
 }
 
 function prepareMessagesForProvider(params: {

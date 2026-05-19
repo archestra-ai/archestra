@@ -58,6 +58,7 @@ export type ContextCompactionState = {
   isCompacting: boolean;
   trigger: "auto" | "manual" | null;
   lastCompaction: {
+    trigger?: "auto" | "manual";
     compactionId?: string;
     originalTokenEstimate?: number;
     compactedTokenEstimate?: number;
@@ -66,7 +67,9 @@ export type ContextCompactionState = {
 
 type ContextCompactionRecord = NonNullable<
   ContextCompactionState["lastCompaction"]
->;
+> & {
+  updateContextTokens?: boolean;
+};
 
 function isRetryableError(error: Error): boolean {
   const msg = error.message;
@@ -369,14 +372,18 @@ function ChatSessionHook({
 
   const recordContextCompaction = useCallback(
     (compaction: ContextCompactionRecord) => {
+      const { updateContextTokens = true, ...lastCompaction } = compaction;
       setContextCompaction({
         isCompacting: false,
         trigger: null,
-        lastCompaction: compaction,
+        lastCompaction,
       });
 
-      if (typeof compaction.compactedTokenEstimate === "number") {
-        setContextTokensUsed(compaction.compactedTokenEstimate);
+      if (
+        updateContextTokens &&
+        typeof lastCompaction.compactedTokenEstimate === "number"
+      ) {
+        setContextTokensUsed(lastCompaction.compactedTokenEstimate);
       }
     },
     [],
@@ -562,11 +569,15 @@ function ChatSessionHook({
 
       if (dataPart.type === "data-context-compaction-finish") {
         const data = dataPart.data as {
+          trigger?: "auto" | "manual";
           compactionId?: string;
           originalTokenEstimate?: number;
           compactedTokenEstimate?: number;
         };
-        recordContextCompaction(data);
+        recordContextCompaction({
+          ...data,
+          updateContextTokens: data.trigger !== "auto",
+        });
         queryClient.invalidateQueries({
           queryKey: ["conversation", conversationId],
         });

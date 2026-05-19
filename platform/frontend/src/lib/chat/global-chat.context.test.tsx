@@ -178,6 +178,64 @@ describe("ChatProvider retries", () => {
       compactedTokenEstimate: 35,
     });
   });
+
+  it("does not overwrite live context tokens from auto compaction estimates", async () => {
+    const latestSessionRef: { current: ChatSessionSnapshot } = {
+      current: undefined,
+    };
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+        <CaptureChatSession
+          onSession={(session) => {
+            latestSessionRef.current = session;
+          }}
+        />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-token-usage",
+        data: {
+          inputTokens: 100,
+          outputTokens: 20,
+          totalTokens: 120,
+        },
+      });
+    });
+
+    await waitFor(() =>
+      expect(latestSessionRef.current?.contextTokensUsed).toBe(120),
+    );
+
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-context-compaction-finish",
+        data: {
+          trigger: "auto",
+          compactionId: "compaction-1",
+          originalTokenEstimate: 1_652_781,
+          compactedTokenEstimate: 794_797,
+        },
+      });
+    });
+
+    await waitFor(() =>
+      expect(
+        latestSessionRef.current?.contextCompaction.lastCompaction,
+      ).toEqual({
+        trigger: "auto",
+        compactionId: "compaction-1",
+        originalTokenEstimate: 1_652_781,
+        compactedTokenEstimate: 794_797,
+      }),
+    );
+    expect(latestSessionRef.current?.contextTokensUsed).toBe(120);
+  });
 });
 
 function RegisterChatSession() {

@@ -255,6 +255,9 @@ describe("context compaction helpers", () => {
       provider: "openai",
       messages: [msg("u1", "user", "Use this file")],
     });
+    const filePayload = Buffer.from("a".repeat(1000), "utf8").toString(
+      "base64",
+    );
     const withInlineFile = __testEstimateChatMessagesTokens({
       provider: "openai",
       messages: [
@@ -267,7 +270,7 @@ describe("context compaction helpers", () => {
               type: "file",
               filename: "large.txt",
               mediaType: "text/plain",
-              url: `data:text/plain;base64,${"YQ==".repeat(1000)}`,
+              url: `data:text/plain;base64,${filePayload}`,
             },
           ],
         } as ChatMessage,
@@ -275,6 +278,31 @@ describe("context compaction helpers", () => {
     });
 
     expect(withInlineFile).toBeGreaterThan(small + 100);
+  });
+
+  test("token estimates count binary inline files by decoded bytes instead of raw data URL text", () => {
+    const pdfPayload = Buffer.alloc(12_000, 1).toString("base64");
+    const estimate = __testEstimateChatMessagesTokens({
+      provider: "openai",
+      messages: [
+        {
+          id: "u1",
+          role: "user",
+          parts: [
+            { type: "text", text: "Use this PDF" },
+            {
+              type: "file",
+              filename: "tax.pdf",
+              mediaType: "application/pdf",
+              url: `data:application/pdf;base64,${pdfPayload}`,
+            },
+          ],
+        } as ChatMessage,
+      ],
+    });
+
+    expect(estimate).toBeGreaterThan(900);
+    expect(estimate).toBeLessThan(1_500);
   });
 
   test("compaction system prompt treats transcript as data", async () => {

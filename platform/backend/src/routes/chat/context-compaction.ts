@@ -40,6 +40,8 @@ const CONTEXT_COMPACTION_RECENT_USER_REFERENCE_MAX_CHARS = 6_000;
 const CONTEXT_COMPACTION_SUMMARY_TAG = "summary";
 const CONTEXT_COMPACTION_CORRECTION_PROMPT =
   "Your previous response did not follow the required format. Reply with EXACTLY ONE <summary>...</summary> block and no text outside the tags.";
+const PDF_BYTES_PER_TOKEN_ESTIMATE = 12;
+const BINARY_BYTES_PER_TOKEN_ESTIMATE = 4;
 const CONTEXT_COMPACTION_TRACE_OPERATION = "context_compaction";
 const ATTR_CONTEXT_COMPACTION_TRIGGER = "archestra.context_compaction.trigger";
 const ATTR_CONTEXT_COMPACTION_STATUS = "archestra.context_compaction.status";
@@ -1145,10 +1147,16 @@ function estimateChatMessagesTokens(params: {
   messages: ChatMessage[];
 }): number {
   const tokenizer = getTokenizer(params.provider);
-  const providerMessages = params.messages.map((message) => ({
-    role: message.role,
-    content: getMessageTextForTokenEstimate(message),
-  }));
+  let extraTokens = 0;
+  const providerMessages = params.messages.map((message) => {
+    const estimate = getMessageTextForTokenEstimate(message);
+    extraTokens += estimate.extraTokens;
+
+    return {
+      role: message.role,
+      content: estimate.text,
+    };
+  });
   const messageTokens = tokenizer.countTokens(
     providerMessages as Parameters<typeof tokenizer.countTokens>[0],
   );
@@ -1156,15 +1164,19 @@ function estimateChatMessagesTokens(params: {
     ? Math.ceil(params.systemPrompt.length / 4)
     : 0;
 
-  return messageTokens + systemTokens;
+  return messageTokens + systemTokens + extraTokens;
 }
 
-function getMessageTextForTokenEstimate(message: ChatMessage): string {
+function getMessageTextForTokenEstimate(message: ChatMessage): {
+  text: string;
+  extraTokens: number;
+} {
   if (!message.parts?.length) {
-    return "";
+    return { text: "", extraTokens: 0 };
   }
 
-  return message.parts
+  let extraTokens = 0;
+  const text = message.parts
     .map((part) => {
       if (part.type === "text" && typeof part.text === "string") {
         return part.text;
@@ -1176,13 +1188,62 @@ function getMessageTextForTokenEstimate(message: ChatMessage): string {
         }`;
       }
       if (part.type === "file") {
-        const url = typeof part.url === "string" ? part.url : "";
-        const inlineData = url.startsWith("data:") ? `\n${url}` : "";
-        return `[file ${String(part.filename ?? "")} ${String(part.mediaType ?? "")}]${inlineData}`;
+        const fileEstimate = getFilePartTextForTokenEstimate(part);
+        extraTokens += fileEstimate.extraTokens;
+        return fileEstimate.text;
       }
       return `[${part.type}]`;
     })
     .join("\n");
+
+  return { text, extraTokens };
+}
+
+function getFilePartTextForTokenEstimate(part: ChatMessagePart): {
+  text: string;
+  extraTokens: number;
+} {
+  const filename = String(part.filename ?? "");
+  const fallbackMediaType = String(part.mediaType ?? "");
+  const header = `[file ${filename} ${fallbackMediaType}]`;
+  const url = typeof part.url === "string" ? part.url : "";
+  if (!url.startsWith("data:")) {
+    return { text: header, extraTokens: 0 };
+  }
+
+  const decoded = decodeDataUrl(url);
+  if (!decoded) {
+    return { text: header, extraTokens: 0 };
+  }
+
+  const mediaType = getFilePartMediaType(part, decoded.mediaType);
+  const mediaHeader = `[file ${filename} ${mediaType}]`;
+  if (isTextLikeMediaType(mediaType)) {
+    return {
+      text: `${mediaHeader}\n${decoded.buffer.toString("utf8")}`,
+      extraTokens: 0,
+    };
+  }
+
+  const estimatedTokens = estimateBinaryFileTokens({
+    mediaType,
+    byteLength: decoded.buffer.length,
+  });
+  return {
+    text: `${mediaHeader}\n[binary file payload: ${decoded.buffer.length} bytes]`,
+    extraTokens: estimatedTokens,
+  };
+}
+
+function estimateBinaryFileTokens(params: {
+  mediaType: string;
+  byteLength: number;
+}): number {
+  const bytesPerToken =
+    params.mediaType === "application/pdf"
+      ? PDF_BYTES_PER_TOKEN_ESTIMATE
+      : BINARY_BYTES_PER_TOKEN_ESTIMATE;
+  return Math.ceil(params.byteLength / bytesPerToken);
 }
 
 async function getMessageTextForSummary(message: ChatMessage): Promise<string> {

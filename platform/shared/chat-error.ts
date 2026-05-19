@@ -51,6 +51,7 @@ export const OpenAIErrorTypes = {
   INVALID_API_KEY_CODE: "invalid_api_key",
   MODEL_NOT_FOUND: "model_not_found",
   CONTEXT_LENGTH_EXCEEDED: "context_length_exceeded",
+  TOKEN_COST_LIMIT_EXCEEDED: "token_cost_limit_exceeded",
 } as const;
 
 /**
@@ -254,6 +255,8 @@ export const MinimaxErrorTypes = {
 export enum ChatErrorCode {
   /** Rate/quota exceeded - retryable after delay */
   RateLimit = "rate_limit",
+  /** Usage limit exceeded - organization/team/agent spend limit reached */
+  UsageLimitExceeded = "usage_limit_exceeded",
   /** Invalid or missing API key */
   Authentication = "authentication",
   /** API key lacks permissions for the requested resource */
@@ -280,6 +283,8 @@ export enum ChatErrorCode {
 export const ChatErrorMessages: Record<ChatErrorCode, string> = {
   [ChatErrorCode.RateLimit]:
     "Too many requests. Please wait a moment and try again.",
+  [ChatErrorCode.UsageLimitExceeded]:
+    "Usage limit exceeded. Your spending has reached the configured limit.",
   [ChatErrorCode.Authentication]:
     "Invalid API key. Please check your Chat Settings.",
   [ChatErrorCode.PermissionDenied]:
@@ -303,6 +308,7 @@ export const ChatErrorMessages: Record<ChatErrorCode, string> = {
  */
 export const RetryableErrorCodes: Set<ChatErrorCode> = new Set([
   ChatErrorCode.RateLimit,
+  ChatErrorCode.UsageLimitExceeded,
   ChatErrorCode.ServerError,
   ChatErrorCode.NetworkError,
 ]);

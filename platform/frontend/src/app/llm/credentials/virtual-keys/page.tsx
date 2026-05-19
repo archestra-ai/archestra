@@ -17,6 +17,7 @@ import {
   User,
   Users,
 } from "lucide-react";
+import { UsageStatusBadge } from "@/components/usage-status-badge";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CopyableCode } from "@/components/copyable-code";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -177,6 +178,18 @@ export default function VirtualKeysPage() {
           ) : (
             <span className="text-sm text-muted-foreground">Never</span>
           ),
+      },
+      {
+        id: "usage",
+        header: "Usage",
+        size: 80,
+        minSize: 60,
+        cell: ({ row }) => (
+          <UsageStatusBadge
+            entityType="virtual_key"
+            entityId={row.original.id}
+          />
+        ),
       },
       {
         id: "actions",

@@ -43,6 +43,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useTeams } from "@/lib/teams/team.query";
 import { AgentActions } from "./agent-actions";
+import { UsageStatusBadge } from "@/components/usage-status-badge";
 
 type AgentsInitialData = {
   agents: archestraApiTypes.GetAgentsResponses["200"] | null;
@@ -417,6 +418,21 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           } satisfies ColumnDef<AgentData>,
         ]
       : []),
+    {
+      id: "usage",
+      header: "Usage",
+      size: 80,
+      minSize: 60,
+      cell: ({ row }) => {
+        const agent = row.original;
+        return (
+          <UsageStatusBadge
+            entityType="agent"
+            entityId={agent.id}
+          />
+        );
+      },
+    },
     {
       id: "actions",
       header: "Actions",

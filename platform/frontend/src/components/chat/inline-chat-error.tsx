@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ChevronRight,
   Copy,
+  ExternalLink,
   RefreshCw,
 } from "lucide-react";
 import { useState } from "react";
@@ -17,6 +18,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { ChatErrorCode } from "@shared";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import {
   formatOriginalError,
@@ -136,6 +138,16 @@ export function InlineChatError({
               <p className="text-sm text-foreground">{supportMessage}</p>
             ) : (
               <p className="text-sm text-foreground">{chatError.message}</p>
+            )}
+
+            {chatError.code === ChatErrorCode.UsageLimitExceeded && (
+              <a
+                href="/llm/limits"
+                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+              >
+                View usage limits
+                <ExternalLink className="h-3 w-3" />
+              </a>
             )}
 
             <div className="flex items-center gap-1.5 flex-wrap">

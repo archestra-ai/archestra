@@ -687,6 +687,9 @@ function mapOpenAIErrorToCode(
     if (errorCode === OpenAIErrorTypes.MODEL_NOT_FOUND) {
       return ChatErrorCode.NotFound;
     }
+    if (errorCode === OpenAIErrorTypes.TOKEN_COST_LIMIT_EXCEEDED) {
+      return ChatErrorCode.UsageLimitExceeded;
+    }
   }
 
   // Then check error.type

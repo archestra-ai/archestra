@@ -332,3 +332,120 @@ describe("userConfigChangedBreakingly — forward-compat leaf predicate", () => 
     ).toBe(true);
   });
 });
+
+// Regression: `prev` comes from the catalog API (extra fields like id,
+// organizationId, createdAt, repository, ...) while `next` is built by
+// `transformFormToApiData` (smaller field set). The shape mismatch
+// must not be interpreted as a non-forward-compatible diff —
+// otherwise every description-only edit on a real catalog item
+// over-cascades.
+describe("API-shape prev vs transform-shape next — shape-mismatch regression", () => {
+  const apiPrev = {
+    // API-only fields the form's transform output never includes:
+    id: "00b04c99-3cc7-4431-ad85-b823662aada9",
+    organizationId: "org-1",
+    authorId: "user-1",
+    createdAt: "2026-05-01T00:00:00Z",
+    updatedAt: "2026-05-01T00:00:00Z",
+    repository: "https://example.com/repo",
+    instructions: "Use this for X",
+    version: "1.0.0",
+    requiresAuth: true,
+    toolCount: 3,
+    teams: [],
+    presetSecretId: null,
+    presetEntryId: null,
+    parentCatalogItemId: null,
+    presetFieldValues: {},
+    // Fields the transform output also has:
+    name: "Test1",
+    description: "old description",
+    serverType: "remote",
+    multitenant: false,
+    serverUrl: "https://api.example.com",
+    authMethod: "none",
+    authHeaderName: "",
+    includeBearerPrefix: false,
+    oauthConfig: null,
+    enterpriseManagedConfig: null,
+    localConfig: null,
+    userConfig: {},
+    icon: null,
+    labels: [],
+    scope: "org",
+  } as unknown as CascadeSnapshot;
+
+  test("description-only edit → skip (was 'auto' before fix)", () => {
+    // What transformFormToApiData would produce after the user changed
+    // only the description — strictly the API-input field set, missing
+    // all the API-only metadata.
+    const transformedNext: CascadeSnapshot = {
+      name: "Test1",
+      description: "new description",
+      serverType: "remote",
+      multitenant: false,
+      serverUrl: "https://api.example.com",
+      authMethod: "none",
+      authHeaderName: "",
+      includeBearerPrefix: false,
+      oauthConfig: null,
+      enterpriseManagedConfig: null,
+      localConfig: null,
+      userConfig: {},
+    };
+    expect(
+      computeCascadeOutcome(apiPrev, transformedNext, {
+        affectedServerCount: 3,
+        labelsChanged: false,
+      }),
+    ).toBe("skip");
+  });
+
+  test("icon-only edit → skip", () => {
+    const transformedNext: CascadeSnapshot = {
+      name: "Test1",
+      description: "old description",
+      serverType: "remote",
+      multitenant: false,
+      serverUrl: "https://api.example.com",
+      authMethod: "none",
+      authHeaderName: "",
+      includeBearerPrefix: false,
+      oauthConfig: null,
+      enterpriseManagedConfig: null,
+      localConfig: null,
+      userConfig: {},
+      // The icon picker is the only field that changed:
+      icon: "lucide:globe",
+    };
+    expect(
+      computeCascadeOutcome(apiPrev, transformedNext, {
+        affectedServerCount: 3,
+        labelsChanged: false,
+      }),
+    ).toBe("skip");
+  });
+
+  test("serverUrl edit still triggers auto (sanity check the projection isn't too loose)", () => {
+    const transformedNext: CascadeSnapshot = {
+      name: "Test1",
+      description: "old description",
+      serverType: "remote",
+      multitenant: false,
+      serverUrl: "https://NEW-api.example.com",
+      authMethod: "none",
+      authHeaderName: "",
+      includeBearerPrefix: false,
+      oauthConfig: null,
+      enterpriseManagedConfig: null,
+      localConfig: null,
+      userConfig: {},
+    };
+    expect(
+      computeCascadeOutcome(apiPrev, transformedNext, {
+        affectedServerCount: 3,
+        labelsChanged: false,
+      }),
+    ).toBe("auto");
+  });
+});

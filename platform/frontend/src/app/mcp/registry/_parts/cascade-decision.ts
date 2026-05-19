@@ -17,8 +17,6 @@
  * either the code or the scenario, not the test.
  */
 
-import { METADATA_ONLY_CATALOG_FIELDS } from "@shared";
-
 export type CascadeOutcome = "skip" | "manual" | "auto";
 
 /**
@@ -36,6 +34,8 @@ export type CascadeSnapshot = {
   includeBearerPrefix?: boolean;
   oauthConfig?: unknown;
   enterpriseManagedConfig?: unknown;
+  multitenant?: boolean;
+  icon?: string | null;
   localConfig?: {
     command?: string;
     arguments?: string[];
@@ -299,19 +299,33 @@ function anyNonForwardCompatChange(
   prev: CascadeSnapshot,
   next: CascadeSnapshot,
 ): boolean {
-  // Strip env + userConfig (classified above) and metadata, deep-compare
-  // what's left.
-  const strip = (cat: CascadeSnapshot): CascadeSnapshot => ({
-    ...cat,
-    description: "",
-    localConfig: cat.localConfig
-      ? { ...cat.localConfig, environment: [] }
-      : cat.localConfig,
-    userConfig: null,
-    labels: [],
-    ...Object.fromEntries(
-      METADATA_ONLY_CATALOG_FIELDS.map((k) => [k, ""] as const),
-    ),
-  });
-  return JSON.stringify(strip(prev)) !== JSON.stringify(strip(next));
+  // Project to the fields whose change is non-forward-compatible but
+  // doesn't need user re-prompt (the "auto"-path triggers). Re-prompt
+  // fields (name, command, etc.) and schema-evolution fields (env,
+  // userConfig) are classified by the predicates above and intentionally
+  // omitted here.
+  //
+  // Explicit projection — NOT a strip-then-stringify — because `prev`
+  // comes from the API (extra fields: id, organizationId, createdAt,
+  // updatedAt, repository, version, ...) while `next` is built fresh by
+  // `transformFormToApiData` (smaller field set). A stringify of the
+  // whole object would flag every edit as a diff because of the extra
+  // API-only keys on the prev side.
+  //
+  // METADATA_ONLY_CATALOG_FIELDS are intentionally excluded so they
+  // never trigger cascade — that's their contract.
+  const project = (cat: CascadeSnapshot) =>
+    JSON.stringify({
+      serverType: cat.serverType ?? "",
+      serverUrl: cat.serverUrl ?? "",
+      authMethod: cat.authMethod ?? "",
+      authHeaderName: cat.authHeaderName ?? "",
+      includeBearerPrefix: Boolean(cat.includeBearerPrefix),
+      oauthConfig: cat.oauthConfig ?? null,
+      enterpriseManagedConfig: cat.enterpriseManagedConfig ?? null,
+      multitenant: Boolean(cat.multitenant),
+      envFrom: cat.localConfig?.envFrom ?? null,
+      imagePullSecrets: cat.localConfig?.imagePullSecrets ?? null,
+    });
+  return project(prev) !== project(next);
 }

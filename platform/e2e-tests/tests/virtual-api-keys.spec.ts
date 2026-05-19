@@ -93,16 +93,18 @@ test.describe("Provider Settings - Virtual API Keys", () => {
 test.describe("Provider Settings - Virtual Keys for Keyless Provider", () => {
   test.describe.configure({ mode: "serial" });
 
+  let keylessVirtualKeyName: string;
+
   test("Can create a virtual key for a keyless (no API key) provider", async ({
     page,
     makeRandomString,
   }) => {
-    const virtualKeyName = makeRandomString(8, "Keyless VK");
+    keylessVirtualKeyName = makeRandomString(8, "Keyless VK");
 
     await goToVirtualKeysPage(page);
 
     await createVirtualKey(page, {
-      name: virtualKeyName,
+      name: keylessVirtualKeyName,
       parentProvider: "gemini",
     });
 
@@ -116,18 +118,22 @@ test.describe("Provider Settings - Virtual Keys for Keyless Provider", () => {
 
     await clickButton({ page, options: { name: "Close" }, first: true });
     await expect(
-      page.getByTestId(getVirtualKeyRowTestId(virtualKeyName)),
+      page.getByTestId(getVirtualKeyRowTestId(keylessVirtualKeyName)),
     ).toBeVisible();
   });
 
-  test("Cleanup keyless parent key", async ({ page }) => {
+  test("Cleanup keyless virtual key", async ({ page }) => {
+    if (!keylessVirtualKeyName) return;
+
     await goToVirtualKeysPage(page);
 
-    const deleteButton = page.getByRole("button", { name: /delete/i }).first();
-    if (await deleteButton.isVisible()) {
-      await deleteButton.click();
-      await clickButton({ page, options: { name: "Delete" } });
-      await page.waitForLoadState("domcontentloaded");
-    }
+    const rowTestId = getVirtualKeyRowTestId(keylessVirtualKeyName);
+    const deleteButton = page.getByTestId(
+      getDeleteVirtualKeyButtonTestId(keylessVirtualKeyName),
+    );
+    await expect(deleteButton).toBeVisible({ timeout: 15_000 });
+    await deleteButton.click();
+    await clickButton({ page, options: { name: "Delete" } });
+    await expect(page.getByTestId(rowTestId)).toBeHidden({ timeout: 15_000 });
   });
 });

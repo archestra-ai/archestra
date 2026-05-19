@@ -130,6 +130,9 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   run_tool: ToolGroup.Meta,
 
   create_scheduled_task: ToolGroup.ScheduledTasks,
+  list_scheduled_tasks: ToolGroup.ScheduledTasks,
+  update_scheduled_task: ToolGroup.ScheduledTasks,
+  delete_scheduled_task: ToolGroup.ScheduledTasks,
 };
 
 // === Script entry point ===

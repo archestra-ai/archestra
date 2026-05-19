@@ -7,12 +7,20 @@ import {
   SWAP_AGENT_POKE_PREFIX,
   SWAP_AGENT_POKE_TEXT,
   SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
+  TOOL_CREATE_SCHEDULED_TASK_FULL_NAME,
+  TOOL_CREATE_SCHEDULED_TASK_SHORT_NAME,
+  TOOL_DELETE_SCHEDULED_TASK_FULL_NAME,
+  TOOL_DELETE_SCHEDULED_TASK_SHORT_NAME,
+  TOOL_LIST_SCHEDULED_TASKS_FULL_NAME,
+  TOOL_LIST_SCHEDULED_TASKS_SHORT_NAME,
   TOOL_SWAP_AGENT_FULL_NAME,
   TOOL_SWAP_AGENT_SHORT_NAME,
   TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
   TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
   TOOL_TODO_WRITE_SHORT_NAME,
+  TOOL_UPDATE_SCHEDULED_TASK_FULL_NAME,
+  TOOL_UPDATE_SCHEDULED_TASK_SHORT_NAME,
 } from "@shared";
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
 import { BotIcon, CheckCircleIcon, ClockIcon } from "lucide-react";
@@ -108,6 +116,7 @@ import {
   UnsafeContextStartsHereDivider,
 } from "./message-boundary-divider";
 import { PolicyDeniedTool } from "./policy-denied-tool";
+import { ScheduleTaskTool } from "./schedule-task-tool";
 import {
   getSwapAgentBoundaryLabel,
   SwapAgentBoundaryDivider,
@@ -219,9 +228,17 @@ export function ChatMessages({
         TOOL_SWAP_AGENT_FULL_NAME,
         TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
         TOOL_TODO_WRITE_FULL_NAME,
+        TOOL_CREATE_SCHEDULED_TASK_FULL_NAME,
+        TOOL_LIST_SCHEDULED_TASKS_FULL_NAME,
+        TOOL_UPDATE_SCHEDULED_TASK_FULL_NAME,
+        TOOL_DELETE_SCHEDULED_TASK_FULL_NAME,
         getToolName(TOOL_SWAP_AGENT_SHORT_NAME),
         getToolName(TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME),
         getToolName(TOOL_TODO_WRITE_SHORT_NAME),
+        getToolName(TOOL_CREATE_SCHEDULED_TASK_SHORT_NAME),
+        getToolName(TOOL_LIST_SCHEDULED_TASKS_SHORT_NAME),
+        getToolName(TOOL_UPDATE_SCHEDULED_TASK_SHORT_NAME),
+        getToolName(TOOL_DELETE_SCHEDULED_TASK_SHORT_NAME),
       ]),
     [getToolName],
   );
@@ -1525,6 +1542,31 @@ const MessageTool = memo(
           toolResultPart={toolResultPart}
           errorText={errorText}
           onToolApprovalResponse={onToolApprovalResponse}
+        />
+      );
+    }
+
+    const scheduleTaskOperation = (() => {
+      switch (getToolShortName(toolName)) {
+        case TOOL_CREATE_SCHEDULED_TASK_SHORT_NAME:
+          return "create" as const;
+        case TOOL_LIST_SCHEDULED_TASKS_SHORT_NAME:
+          return "list" as const;
+        case TOOL_UPDATE_SCHEDULED_TASK_SHORT_NAME:
+          return "update" as const;
+        case TOOL_DELETE_SCHEDULED_TASK_SHORT_NAME:
+          return "delete" as const;
+        default:
+          return null;
+      }
+    })();
+    if (scheduleTaskOperation) {
+      return (
+        <ScheduleTaskTool
+          operation={scheduleTaskOperation}
+          part={part}
+          toolResultPart={toolResultPart}
+          errorText={errorText}
         />
       );
     }

@@ -128,6 +128,9 @@ export const TOOL_PERMISSIONS: Record<
 
   // Scheduled tasks
   create_scheduled_task: { resource: "scheduledTask", action: "create" },
+  list_scheduled_tasks: { resource: "scheduledTask", action: "read" },
+  update_scheduled_task: { resource: "scheduledTask", action: "update" },
+  delete_scheduled_task: { resource: "scheduledTask", action: "delete" },
 };
 
 /**

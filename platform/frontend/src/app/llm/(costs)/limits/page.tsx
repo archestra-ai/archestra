@@ -99,6 +99,32 @@ const DEFAULT_FORM_STATE: LimitFormState = {
   isAllModels: true,
 };
 
+const CLEANUP_INTERVAL_MS: Record<LimitCleanupInterval, number> = {
+  "1h": 3600000,
+  "12h": 43200000,
+  "24h": 86400000,
+  "1w": 604800000,
+  "1m": 2592000000,
+};
+
+function getResetsInLabel(
+  lastCleanup: string | null | undefined,
+  cleanupInterval: LimitCleanupInterval,
+): string | null {
+  if (!lastCleanup) return null;
+  const lastCleanupMs = new Date(lastCleanup).getTime();
+  const intervalMs = CLEANUP_INTERVAL_MS[cleanupInterval];
+  const nextResetMs = lastCleanupMs + intervalMs;
+  const remainingMs = nextResetMs - Date.now();
+  if (remainingMs <= 0) return "resets now";
+  const minutes = Math.floor(remainingMs / 60000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  if (days > 0) return `resets in ${days}d ${hours % 24}h`;
+  if (hours > 0) return `resets in ${hours}h ${minutes % 60}m`;
+  return `resets in ${minutes}m`;
+}
+
 const LIMITS_ENTITY_SELECTOR_PAGE_SIZE = 100;
 const MAX_VISIBLE_MODEL_BADGES = 3;
 
@@ -487,13 +513,24 @@ export default function LimitsPage() {
       {
         accessorKey: "cleanupInterval",
         header: "Cleanup",
-        size: 140,
-        minSize: 120,
+        size: 180,
+        minSize: 140,
         cell: ({ row }) => {
           const cleanupInterval =
             (row.original.cleanupInterval as LimitCleanupInterval | null) ??
             DEFAULT_LIMIT_CLEANUP_INTERVAL;
-          return CLEANUP_INTERVAL_LABELS[cleanupInterval];
+          const lastCleanup = row.original.lastCleanup;
+          const resetsIn = getResetsInLabel(lastCleanup, cleanupInterval);
+          return (
+            <div className="space-y-1">
+              <span>{CLEANUP_INTERVAL_LABELS[cleanupInterval]}</span>
+              {resetsIn && (
+                <Badge variant="outline" className="ml-1.5 text-[10px] font-normal">
+                  {resetsIn}
+                </Badge>
+              )}
+            </div>
+          );
         },
       },
       {

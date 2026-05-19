@@ -42,6 +42,7 @@ import {
 } from "@/lib/chat/swap-agent.utils";
 import appConfig from "@/lib/config/config";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useUsageLimitToasts } from "@/hooks/use-usage-limit-toasts";
 
 const SESSION_CLEANUP_TIMEOUT = 10 * 60 * 1000; // 10 min
 const MAX_AUTO_RETRIES = 2;
@@ -135,8 +136,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const cleanupTimersRef = useRef(new Map<string, NodeJS.Timeout>());
   const usageCountRef = useRef(new Map<string, number>());
   const [sessions, setSessions] = useState<Set<string>>(new Set());
-  // Version counter to trigger re-renders when sessions update
   const [sessionVersion, setSessionVersion] = useState(0);
+
+  useUsageLimitToasts();
 
   // Increment version when sessions change (triggers re-renders in consumers)
   const notifySessionUpdate = useCallback(() => {

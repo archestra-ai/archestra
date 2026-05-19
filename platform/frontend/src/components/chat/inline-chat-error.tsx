@@ -141,13 +141,37 @@ export function InlineChatError({
             )}
 
             {chatError.code === ChatErrorCode.UsageLimitExceeded && (
-              <a
-                href="/llm/limits"
-                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-              >
-                View usage limits
-                <ExternalLink className="h-3 w-3" />
-              </a>
+              <div className="space-y-1.5">
+                <a
+                  href="/llm/limits"
+                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                >
+                  View usage limits
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+                {chatError.originalError && (
+                  <div className="rounded-md bg-muted/50 p-2 text-xs space-y-1">
+                    {chatError.originalError.type && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-muted-foreground">Type:</span>
+                        <span className="font-mono">{chatError.originalError.type}</span>
+                      </div>
+                    )}
+                    {chatError.originalError.code && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-muted-foreground">Code:</span>
+                        <span className="font-mono">{chatError.originalError.code}</span>
+                      </div>
+                    )}
+                    {chatError.originalError.provider && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-muted-foreground">Provider:</span>
+                        <span>{chatError.originalError.provider}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
 
             <div className="flex items-center gap-1.5 flex-wrap">

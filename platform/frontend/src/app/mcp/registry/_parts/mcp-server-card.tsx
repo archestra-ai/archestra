@@ -448,6 +448,40 @@ export function McpServerCard({
   const triggerCatalogReinstall = () =>
     reinstallCatalogMutation.mutate(item.id);
 
+  // Show ONE Reinstall button. For admins on a multi-tenant local catalog,
+  // a single click drives both the per-install input collection (existing
+  // modal flow) and the shared-pod recreate. For tenants, a precedence
+  // rule hides the per-install button while the catalog flag is pending —
+  // there's nothing useful they can do until the admin recreates the pod.
+  const showAdminCatalogReinstall = needsCatalogReinstall && canEditCatalog;
+  const showCombinedReinstall =
+    showAdminCatalogReinstall ||
+    (needsReinstall && !needsCatalogReinstall && isCurrentUserAuthenticated);
+
+  const triggerCombinedReinstall = () => {
+    if (showAdminCatalogReinstall && needsReinstall) {
+      // Admin owes input AND catalog needs recreate: open the existing
+      // per-install modal; on submit, parent chains catalog reinstall.
+      return onReinstall(
+        userFlaggedInstalls.map((s) => ({
+          id: s.id,
+          name: s.name,
+          presetLabel:
+            s.catalogId === item.id
+              ? "default"
+              : (presetNameByCatalogId.get(s.catalogId) ?? null),
+        })),
+        { alsoReinstallCatalog: true },
+      );
+    }
+    if (showAdminCatalogReinstall) {
+      // Admin doesn't owe input — fire catalog reinstall directly.
+      return triggerCatalogReinstall();
+    }
+    // Tenant or admin without a catalog flag — existing per-install flow.
+    return triggerReinstall();
+  };
+
   // Check if logs are available (local variant with at least one installation)
   const isLogsAvailable = variant === "local";
 
@@ -836,23 +870,15 @@ export function McpServerCard({
     <>
       <div className="flex flex-wrap gap-2">
         {chatButton}
-        {!isInstalling && needsCatalogReinstall && canEditCatalog && (
+        {!isInstalling && showCombinedReinstall && (
           <PermissionButton
-            permissions={{ mcpRegistry: ["update"] }}
-            onClick={triggerCatalogReinstall}
+            permissions={
+              showAdminCatalogReinstall
+                ? { mcpRegistry: ["update"] }
+                : { mcpServerInstallation: ["update"] }
+            }
+            onClick={triggerCombinedReinstall}
             disabled={reinstallCatalogMutation.isPending}
-            size="sm"
-            variant="outline"
-            className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Reinstall
-          </PermissionButton>
-        )}
-        {!isInstalling && isCurrentUserAuthenticated && needsReinstall && (
-          <PermissionButton
-            permissions={{ mcpServerInstallation: ["update"] }}
-            onClick={triggerReinstall}
             size="sm"
             variant="outline"
             className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
@@ -996,66 +1022,65 @@ export function McpServerCard({
               seenPodKeys.add(podKey);
               return true;
             });
-          })()
-            .map((failed) => {
-              const isDefaultPreset = failed.catalogId === item.id;
-              const presetLabel = isDefaultPreset
-                ? "default"
-                : (presetNameByCatalogId.get(failed.catalogId) ?? failed.name);
-              const errorMsg =
-                failed.localInstallationError ?? "Installation failed";
-              return (
-                <div
-                  key={failed.id}
-                  className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-                  data-testid={`${E2eTestId.McpServerError}-${item.name}-${presetLabel}`}
-                >
-                  <div className="flex items-start gap-2">
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium">
-                        Installation failed
-                        {!isDefaultPreset && (
-                          <span className="ml-1 font-normal opacity-80">
-                            — preset “{presetLabel}”
-                          </span>
-                        )}
-                      </p>
-                      <p className="truncate text-xs" title={errorMsg}>
-                        {errorMsg}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 flex-col items-end gap-1">
-                      <Button
-                        variant="link"
-                        size="sm"
-                        className="h-auto p-0 text-destructive"
-                        data-testid={`${E2eTestId.McpLogsViewButton}-${item.name}-${presetLabel}`}
-                        onClick={() => {
-                          setSettingsInitialPage("debug-logs");
-                          setLogsInitialServerId(failed.id);
-                          setSettingsDialogOpen(true);
-                        }}
-                      >
-                        View logs
-                      </Button>
-                      <Button
-                        variant="link"
-                        size="sm"
-                        className="h-auto p-0 text-destructive"
-                        data-testid={`${E2eTestId.McpLogsEditConfigButton}-${item.name}-${presetLabel}`}
-                        onClick={() => {
-                          setSettingsInitialPage("configuration");
-                          setSettingsDialogOpen(true);
-                        }}
-                      >
-                        Edit config
-                      </Button>
-                    </div>
+          })().map((failed) => {
+            const isDefaultPreset = failed.catalogId === item.id;
+            const presetLabel = isDefaultPreset
+              ? "default"
+              : (presetNameByCatalogId.get(failed.catalogId) ?? failed.name);
+            const errorMsg =
+              failed.localInstallationError ?? "Installation failed";
+            return (
+              <div
+                key={failed.id}
+                className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                data-testid={`${E2eTestId.McpServerError}-${item.name}-${presetLabel}`}
+              >
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium">
+                      Installation failed
+                      {!isDefaultPreset && (
+                        <span className="ml-1 font-normal opacity-80">
+                          — preset “{presetLabel}”
+                        </span>
+                      )}
+                    </p>
+                    <p className="truncate text-xs" title={errorMsg}>
+                      {errorMsg}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="h-auto p-0 text-destructive"
+                      data-testid={`${E2eTestId.McpLogsViewButton}-${item.name}-${presetLabel}`}
+                      onClick={() => {
+                        setSettingsInitialPage("debug-logs");
+                        setLogsInitialServerId(failed.id);
+                        setSettingsDialogOpen(true);
+                      }}
+                    >
+                      View logs
+                    </Button>
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="h-auto p-0 text-destructive"
+                      data-testid={`${E2eTestId.McpLogsEditConfigButton}-${item.name}-${presetLabel}`}
+                      onClick={() => {
+                        setSettingsInitialPage("configuration");
+                        setSettingsDialogOpen(true);
+                      }}
+                    >
+                      Edit config
+                    </Button>
                   </div>
                 </div>
-              );
-            })}
+              </div>
+            );
+          })}
         {variant === "local" && isInstalling && (
           <div className="bg-muted/50 rounded-md overflow-hidden">
             <div className="px-3 py-2">

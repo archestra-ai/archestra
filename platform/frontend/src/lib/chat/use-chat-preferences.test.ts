@@ -438,12 +438,22 @@ describe("deriveModelSource", () => {
     ).toBe("agent");
   });
 
-  test("'user' when nothing is configured", () => {
+  test("null when nothing is configured (no default to override)", () => {
     expect(
       deriveModelSource({
         selectedModel: "gpt-4o",
         agentLlmModel: null,
         orgDefaultLlmModel: null,
+      }),
+    ).toBeNull();
+  });
+
+  test("'user' when an org default exists but the model differs", () => {
+    expect(
+      deriveModelSource({
+        selectedModel: "gpt-4o",
+        agentLlmModel: null,
+        orgDefaultLlmModel: "claude-3-5-sonnet",
       }),
     ).toBe("user");
   });

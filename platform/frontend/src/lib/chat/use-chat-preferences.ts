@@ -185,8 +185,12 @@ interface DeriveModelSourceParams {
 
 /**
  * Determine where the currently selected model came from, purely by
- * comparison — no stored state. If it isn't the agent's or the org's
- * configured default, the user must have picked it.
+ * comparison — no stored state.
+ *
+ * Returns null when there's nothing to compare against (no model, or no
+ * agent/org default configured) — there's no default to "override", so no
+ * badge is shown. Otherwise the model is the agent's, the org's, or, if it
+ * matches neither configured default, the user's own pick.
  */
 export function deriveModelSource(
   params: DeriveModelSourceParams,
@@ -197,6 +201,8 @@ export function deriveModelSource(
   if (orgDefaultLlmModel && selectedModel === orgDefaultLlmModel) {
     return "organization";
   }
+  // No configured default anywhere — nothing to override.
+  if (!agentLlmModel && !orgDefaultLlmModel) return null;
   return "user";
 }
 

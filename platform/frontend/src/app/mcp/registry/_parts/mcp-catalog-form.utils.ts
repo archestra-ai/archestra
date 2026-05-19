@@ -445,6 +445,7 @@ export function transformCatalogItemToFormValues(
       value: typeof config.default === "string" ? config.default : undefined,
       description: config.description ?? "",
       includeBearerPrefix: config.valuePrefix === "Bearer ",
+      sensitive: config.sensitive ?? false,
     }));
 
   return {
@@ -727,6 +728,7 @@ export function transformExternalCatalogToFormValues(
         value: typeof config.default === "string" ? config.default : undefined,
         description: config.description ?? "",
         includeBearerPrefix: config.valuePrefix === "Bearer ",
+        sensitive: config.sensitive ?? false,
       })),
     oauthConfig: oauthConfig ?? {
       client_id: "",
@@ -792,6 +794,12 @@ function buildStaticHeaderUserConfig(
     });
 
     usedFieldNames.add(fieldName);
+    // Static header fields cannot be sensitive (server validator rejects
+    // the combination, because `default` lives in plaintext jsonb on the
+    // catalog row). Fall back to non-sensitive for static regardless of
+    // what the form carries.
+    const isStaticHeader =
+      !header.promptOnInstallation && !header.promptOnPreset;
     userConfig[fieldName] = {
       type: "string",
       title: header.headerName,
@@ -805,7 +813,7 @@ function buildStaticHeaderUserConfig(
         (header.includeBearerPrefix
           ? `Sent as ${header.headerName} with a "Bearer " prefix`
           : `Sent as ${header.headerName}`),
-      sensitive: false,
+      sensitive: isStaticHeader ? false : (header.sensitive ?? false),
       headerName: header.headerName,
       valuePrefix: header.includeBearerPrefix ? "Bearer " : undefined,
     };
@@ -856,6 +864,7 @@ function getHeaderMappedUserConfigEntries(
     default?: string | number | boolean | Array<string>;
     description?: string;
     valuePrefix?: string;
+    sensitive?: boolean;
   }
 > {
   return Object.fromEntries(
@@ -875,6 +884,7 @@ function getHeaderMappedUserConfigEntries(
           default?: string | number | boolean | Array<string>;
           description?: string;
           valuePrefix?: string;
+          sensitive?: boolean;
         };
         return [
           fieldName,
@@ -887,6 +897,7 @@ function getHeaderMappedUserConfigEntries(
             default: userConfigField.default,
             description: userConfigField.description,
             valuePrefix: userConfigField.valuePrefix,
+            sensitive: userConfigField.sensitive,
           },
         ];
       }),

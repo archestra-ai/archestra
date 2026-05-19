@@ -327,15 +327,38 @@ function validateHeaderMappedUserConfig(
     }
     normalizedHeaderNames.set(normalizedHeaderName, fieldName);
 
-    if (
-      fieldConfig.sensitive === true &&
-      fieldConfig.promptOnInstallation === false
-    ) {
+    // A header value is "static" (= persisted in plaintext at
+    // `userConfig[field].default` on the catalog row) only when neither
+    // prompt flag is set. Preset-scoped fields (`promptOnPreset: true`)
+    // route sensitive values to `preset_secret_id`'s bag, so they're
+    // allowed to be sensitive even though `promptOnInstallation` is false.
+    const isStaticHeader =
+      fieldConfig.promptOnInstallation === false &&
+      fieldConfig.promptOnPreset !== true;
+    if (fieldConfig.sensitive === true && isStaticHeader) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["userConfig", fieldName, "sensitive"],
         message:
           "Static header-mapped userConfig fields cannot be marked sensitive.",
+      });
+    }
+
+    // Sensitive header-mapped fields must not carry a plaintext `default`.
+    // `default` is persisted as-is in the catalog row's userConfig jsonb;
+    // applyPresetHeaderMappings falls back to it whenever a preset row's
+    // overlay lacks the key, so a sensitive default would land in plaintext
+    // on the row AND be sent verbatim on every empty-overlay request.
+    if (
+      fieldConfig.sensitive === true &&
+      fieldConfig.default !== undefined &&
+      !isStaticHeader
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["userConfig", fieldName, "default"],
+        message:
+          "Sensitive header-mapped userConfig fields cannot carry a plaintext default. Supply the value via preset_secret_id (for preset scope) or the per-install Secret bag (for installation scope) instead.",
       });
     }
   }

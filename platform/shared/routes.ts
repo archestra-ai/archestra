@@ -356,10 +356,14 @@ export const RouteId = {
 
   // Preset Entity Name Routes (organization-level - configurable label for catalog presets)
   UpdatePresetEntityName: "updatePresetEntityName",
+  UpdatePresetEntityDefaultLabel: "updatePresetEntityDefaultLabel",
+  UpdatePresetEntityDefaultValidationRegex:
+    "updatePresetEntityDefaultValidationRegex",
 
   // Org-level preset entries (Production / Staging / Development buckets)
   ListMcpPresetEntries: "listMcpPresetEntries",
   CreateMcpPresetEntry: "createMcpPresetEntry",
+  UpdateMcpPresetEntry: "updateMcpPresetEntry",
   DeleteMcpPresetEntry: "deleteMcpPresetEntry",
 
   // Knowledge Settings Routes (organization-level)

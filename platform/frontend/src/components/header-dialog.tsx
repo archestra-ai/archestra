@@ -12,6 +12,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
 import { usePresetEntityName } from "@/lib/organization.query";
 
@@ -22,6 +27,18 @@ export interface HeaderDraft {
   value: string;
   description: string;
   includeBearerPrefix: boolean;
+  /**
+   * When true, the value is treated as credential material:
+   *   - Per-preset (`scope === "preset"`): persisted into the catalog row's
+   *     `preset_secret_id` bag instead of the plaintext
+   *     `preset_field_values` jsonb.
+   *   - Per-installation (`scope === "installation"`): the value input is
+   *     masked in install dialogs (storage already goes to the install's
+   *     secret bag for either flag value).
+   *   - Static: server-side validator rejects `sensitive: true` because the
+   *     value lives in `userConfig.default` plaintext.
+   */
+  sensitive: boolean;
 }
 
 export type HeaderDialogMode = "add" | "edit";
@@ -44,6 +61,7 @@ const EMPTY_DRAFT: HeaderDraft = {
   value: "",
   description: "",
   includeBearerPrefix: false,
+  sensitive: false,
 };
 
 export function HeaderDialog({
@@ -86,6 +104,15 @@ export function HeaderDialog({
       }
       if (patch.scope && patch.scope !== "static") {
         next.value = "";
+      }
+      // Server-side validator rejects sensitive + static, so force it off.
+      // When flipping *into* preset, default sensitive on — preset values
+      // otherwise land in plaintext jsonb and there's no other UI escape
+      // hatch. User can toggle it back off explicitly.
+      if (patch.scope === "static") {
+        next.sensitive = false;
+      } else if (patch.scope === "preset" && prev.scope !== "preset") {
+        next.sensitive = true;
       }
       return next;
     });
@@ -171,6 +198,7 @@ export function HeaderDialog({
             <Label htmlFor="header-value">Value</Label>
             <Input
               id="header-value"
+              type={draft.sensitive ? "password" : "text"}
               value={draft.value}
               onChange={(e) => updateDraft({ value: e.target.value })}
               placeholder="header value"
@@ -206,6 +234,20 @@ export function HeaderDialog({
             updateDraft({ includeBearerPrefix })
           }
           ariaLabel="Prepend Bearer prefix"
+        />
+
+        <ToggleCard
+          title="Sensitive value"
+          body={
+            draft.scope === "static"
+              ? `Only available for Installation and ${singular} headers. Static headers are always non-sensitive.`
+              : "Store this value securely. Use for API tokens, credentials, and other secrets."
+          }
+          checked={draft.sensitive}
+          onChange={(sensitive) => updateDraft({ sensitive })}
+          ariaLabel="Sensitive header value"
+          disabled={draft.scope === "static"}
+          disabledReason={`Static headers are always non-sensitive. Use Installation or ${singular} scope for secrets.`}
         />
 
         <div className="space-y-2">
@@ -247,14 +289,18 @@ function ToggleCard({
   checked,
   onChange,
   ariaLabel,
+  disabled = false,
+  disabledReason,
 }: {
   title: string;
   body: React.ReactNode;
   checked: boolean;
   onChange: (value: boolean) => void;
   ariaLabel: string;
+  disabled?: boolean;
+  disabledReason?: string;
 }) {
-  return (
+  const card = (
     <div className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
       <div className="space-y-0.5">
         <div className="text-sm font-medium">{title}</div>
@@ -264,7 +310,21 @@ function ToggleCard({
         checked={checked}
         onCheckedChange={onChange}
         aria-label={ariaLabel}
+        disabled={disabled}
       />
     </div>
   );
+  if (disabled && disabledReason) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="w-full">{card}</div>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p className="max-w-xs">{disabledReason}</p>
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+  return card;
 }

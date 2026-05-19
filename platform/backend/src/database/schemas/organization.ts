@@ -218,6 +218,21 @@ const organizationsTable = pgTable("organization", {
    */
   presetEntityName: text("preset_entity_name"),
   presetEntityNamePlural: text("preset_entity_name_plural"),
+
+  /**
+   * Custom display label for the implicit "default" preset row (parent catalog
+   * item). NULL falls back to "Default" in the UI.
+   */
+  presetEntityDefaultLabel: text("preset_entity_default_label"),
+
+  /**
+   * Validation regex applied to default-scoped field values when installing an
+   * MCP server (mirrors `mcp_preset_entries.validation_regex` for the implicit
+   * default row). Stored without delimiters or flags. NULL disables validation.
+   */
+  presetEntityDefaultValidationRegex: text(
+    "preset_entity_default_validation_regex",
+  ),
 });
 
 export default organizationsTable;

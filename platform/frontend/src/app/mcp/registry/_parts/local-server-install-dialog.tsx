@@ -34,10 +34,15 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { useFeature } from "@/lib/config/config.query";
 import { useCatalogPresets } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpPresetEntries } from "@/lib/mcp/mcp-preset-entry.query";
+import { usePresetEntityName } from "@/lib/organization.query";
 import { useTeamsWithVaultFolders } from "@/lib/teams/team.query";
 import { InstallPresetPicker } from "./install-preset-picker";
 import { FillPresetFieldsStep } from "./preset-fallback-fields";
-import { presetHasUnfilledFields } from "./preset-helpers";
+import {
+  compileValidationRegex,
+  presetHasUnfilledFields,
+} from "./preset-helpers";
 import {
   type McpServerInstallScope,
   SelectMcpServerCredentialTypeAndTeams,
@@ -154,7 +159,22 @@ export function LocalServerInstallDialog({
     preselectedCatalogId ?? catalogItem?.id ?? "",
   );
   const { data: presets = [] } = useCatalogPresets(catalogItem?.id ?? null);
+  const { data: presetEntries = [] } = useMcpPresetEntries();
+  const { singular, defaultValidationRegex } = usePresetEntityName();
   const hasPresets = presets.length > 0;
+
+  // Compile the preset entry's validation regex for child installs; for the
+  // implicit default row (no entry) fall back to the org-wide default regex.
+  const _selectedChildPreset =
+    catalogItem && selectedCatalogId && selectedCatalogId !== catalogItem.id
+      ? presets.find((p) => p.id === selectedCatalogId)
+      : null;
+  const presetValidationRegex = (() => {
+    const entryId = _selectedChildPreset?.presetEntryId ?? null;
+    if (!entryId) return compileValidationRegex(defaultValidationRegex);
+    const entry = presetEntries.find((e) => e.id === entryId);
+    return compileValidationRegex(entry?.validationRegex);
+  })();
 
   // Step 1 ("fill-preset") asks the caller to fill in any preset-scoped fields
   // the selected preset doesn't have values for, persists them onto the preset
@@ -467,7 +487,49 @@ export function LocalServerInstallDialog({
           return !!value?.trim();
         }));
 
-  const isValid = isNonSecretValid && isSecretsValid;
+  // Apply the preset entry's validation regex to all prompted free-text user
+  // values: non-secret env vars + non-sensitive userConfig fields. Skipped
+  // for booleans, numbers, and (in vault mode) for sensitive fields whose
+  // value is a vault reference rather than a free-text string.
+  const envRegexErrors: Record<string, string | null> = {};
+  const userConfigRegexErrors: Record<string, string | null> = {};
+  if (presetValidationRegex) {
+    for (const env of nonSecretEnvVars) {
+      if (env.type === "boolean" || env.type === "number") continue;
+      const v = environmentValues[env.key] ?? "";
+      if (!v) continue;
+      envRegexErrors[env.key] = presetValidationRegex.test(v)
+        ? null
+        : `Value does not match the ${singular} Validation Rule`;
+    }
+    if (!useVaultSecrets) {
+      for (const env of allSecrets) {
+        const v = environmentValues[env.key] ?? "";
+        if (!v) continue;
+        envRegexErrors[env.key] = presetValidationRegex.test(v)
+          ? null
+          : `Value does not match the ${singular} Validation Rule`;
+      }
+    }
+    for (const [fieldName, fieldConfig] of Object.entries(
+      promptableUserConfig,
+    )) {
+      if (fieldConfig.type === "boolean" || fieldConfig.type === "number") {
+        continue;
+      }
+      if (useVaultSecrets && fieldConfig.sensitive) continue;
+      const v = userConfigValues[fieldName] ?? "";
+      if (!v) continue;
+      userConfigRegexErrors[fieldName] = presetValidationRegex.test(v)
+        ? null
+        : `Value does not match the ${singular} Validation Rule`;
+    }
+  }
+  const hasRegexErrors =
+    Object.values(envRegexErrors).some((e) => !!e) ||
+    Object.values(userConfigRegexErrors).some((e) => !!e);
+
+  const isValid = isNonSecretValid && isSecretsValid && !hasRegexErrors;
   const sensitiveRequiredUserConfig = Object.entries(
     promptableUserConfig,
   ).filter(([_, cfg]) => cfg.required && cfg.sensitive);
@@ -719,7 +781,13 @@ export function LocalServerInstallDialog({
                       placeholder={`Enter value for ${env.key}`}
                       className="font-mono"
                       disabled={isInstalling}
+                      aria-invalid={envRegexErrors[env.key] ? true : undefined}
                     />
+                  )}
+                  {envRegexErrors[env.key] && (
+                    <p className="text-xs text-destructive">
+                      {envRegexErrors[env.key]}
+                    </p>
                   )}
                 </div>
               ))}
@@ -801,7 +869,15 @@ export function LocalServerInstallDialog({
                             placeholder={`Enter value for ${env.key}`}
                             className="font-mono"
                             disabled={isInstalling}
+                            aria-invalid={
+                              envRegexErrors[env.key] ? true : undefined
+                            }
                           />
+                        )}
+                        {envRegexErrors[env.key] && (
+                          <p className="text-xs text-destructive">
+                            {envRegexErrors[env.key]}
+                          </p>
                         )}
                       </div>
                     ))}
@@ -1005,6 +1081,9 @@ export function LocalServerInstallDialog({
                           placeholder={`Enter value for ${fieldConfig.title || fieldName}`}
                           className="font-mono"
                           disabled={isInstalling}
+                          aria-invalid={
+                            userConfigRegexErrors[fieldName] ? true : undefined
+                          }
                         />
                       ) : (
                         <Input
@@ -1017,7 +1096,15 @@ export function LocalServerInstallDialog({
                           placeholder={`Enter value for ${fieldConfig.title || fieldName}`}
                           className="font-mono"
                           disabled={isInstalling}
+                          aria-invalid={
+                            userConfigRegexErrors[fieldName] ? true : undefined
+                          }
                         />
+                      )}
+                      {userConfigRegexErrors[fieldName] && (
+                        <p className="text-xs text-destructive">
+                          {userConfigRegexErrors[fieldName]}
+                        </p>
                       )}
                     </div>
                   ),

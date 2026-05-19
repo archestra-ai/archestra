@@ -20,6 +20,7 @@ vi.mock("@/clients/llm-client", () => ({
 
 vi.mock("@/utils/llm-resolution", () => ({
   resolveSmartDefaultLlm: vi.fn(),
+  resolveConfiguredAgentLlm: vi.fn(),
 }));
 
 vi.mock("@/templating", () => ({

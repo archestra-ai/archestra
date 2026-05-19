@@ -4,6 +4,7 @@ import ConversationModel from "./conversation";
 import ConversationChatErrorModel from "./conversation-chat-error";
 import ConversationShareModel from "./conversation-share";
 import MessageModel from "./message";
+import ModelModel from "./model";
 
 describe("ConversationModel", () => {
   test("can create a conversation", async ({
@@ -178,7 +179,6 @@ describe("ConversationModel", () => {
       organizationId: org.id,
       agentId: agent.id,
       title: "Original Title",
-      selectedModel: "claude-3-haiku-20240307",
     });
 
     const updated = await ConversationModel.update(
@@ -187,13 +187,11 @@ describe("ConversationModel", () => {
       org.id,
       {
         title: "Updated Title",
-        selectedModel: "claude-3-opus-20240229",
       },
     );
 
     expect(updated).toBeDefined();
     expect(updated?.title).toBe("Updated Title");
-    expect(updated?.selectedModel).toBe("claude-3-opus-20240229");
     expect(updated?.id).toBe(created.id);
     expect(updated?.agent?.id).toBe(agent.id);
     expect(Array.isArray(updated?.messages)).toBe(true);
@@ -997,7 +995,7 @@ describe("ConversationModel", () => {
     expect(conversation.selectedProvider).toBeNull();
   });
 
-  test("can update conversation selectedProvider", async ({
+  test("can update conversation model", async ({
     makeUser,
     makeOrganization,
     makeAgent,
@@ -1005,17 +1003,23 @@ describe("ConversationModel", () => {
     const user = await makeUser();
     const org = await makeOrganization();
     const agent = await makeAgent({
-      name: "Update Provider Agent",
+      name: "Update Model Agent",
       teams: [],
+    });
+
+    const model = await ModelModel.create({
+      externalId: "anthropic/claude-3-5-sonnet",
+      provider: "anthropic",
+      modelId: "claude-3-5-sonnet",
+      inputModalities: null,
+      outputModalities: null,
     });
 
     const created = await ConversationModel.create({
       userId: user.id,
       organizationId: org.id,
       agentId: agent.id,
-      title: "Update Provider Test",
-      selectedModel: "claude-3-haiku-20240307",
-      selectedProvider: "anthropic",
+      title: "Update Model Test",
     });
 
     const updated = await ConversationModel.update(
@@ -1023,14 +1027,12 @@ describe("ConversationModel", () => {
       user.id,
       org.id,
       {
-        selectedModel: "gemini-2.5-pro",
-        selectedProvider: "gemini",
+        modelId: model.id,
       },
     );
 
     expect(updated).toBeDefined();
-    expect(updated?.selectedModel).toBe("gemini-2.5-pro");
-    expect(updated?.selectedProvider).toBe("gemini");
+    expect(updated?.modelId).toBe(model.id);
   });
 
   test("findById returns conversation with selectedProvider", async ({

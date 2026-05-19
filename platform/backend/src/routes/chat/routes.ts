@@ -75,8 +75,8 @@ import {
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import {
   resolveConversationLlmSelectionForAgent,
+  resolveConversationModel,
   resolveFastModelName,
-  resolveSmartDefaultLlmForChat,
 } from "@/utils/llm-resolution";
 import { estimateMessagesSize } from "@/utils/message-size";
 import {
@@ -269,12 +269,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           .filter(Boolean)
           .join("\n\n") || undefined;
 
-      // Use stored provider if available, otherwise detect from model name for backward compatibility
-      // At the moment of migration, all supported providers (anthropic, openai, gemini) serve different models,
-      // so we can safely use detectProviderFromModel for them.
-      const provider = isSupportedProvider(conversation.selectedProvider)
-        ? conversation.selectedProvider
-        : detectProviderFromModel(conversation.selectedModel);
+      // The conversation stores a model_id FK; dereference it to the
+      // proxy-facing model string + provider (env/config fallback if unset).
+      const { model: selectedModel, provider } = await resolveConversationModel(
+        conversation.modelId,
+      );
 
       logger.info(
         {
@@ -285,9 +284,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           toolCount: Object.keys(mcpTools).length,
           hasCustomToolSelection: hasCustomSelection,
           enabledToolCount: hasCustomSelection ? enabledToolIds.length : "all",
-          model: conversation.selectedModel,
+          model: selectedModel,
           provider,
-          providerSource: conversation.selectedProvider ? "stored" : "detected",
           hasSystemPrompt: !!systemPrompt,
           externalAgentId,
         },
@@ -309,7 +307,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             organizationId,
             userId: user.id,
             agentId,
-            model: conversation.selectedModel,
+            model: selectedModel,
             provider,
             conversationId,
             externalAgentId,
@@ -376,7 +374,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // pattern matching. The `models` table has capability info that would be more
           // reliable, but some models (e.g. gemini-3-pro-image-preview) currently report
           // "capabilities unknown", so that needs to be fixed first.
-          const modelLower = conversation.selectedModel.toLowerCase();
+          const modelLower = selectedModel.toLowerCase();
           const isGeminiImageModel =
             provider === "gemini" &&
             (modelLower.includes("image") ||
@@ -1020,26 +1018,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: InsertConversationSchema.pick({
           agentId: true,
           title: true,
-          selectedModel: true,
-          selectedProvider: true,
+          modelId: true,
           chatApiKeyId: true,
         })
           .required({ agentId: true })
           .partial({
             title: true,
-            selectedModel: true,
-            selectedProvider: true,
+            modelId: true,
             chatApiKeyId: true,
           }),
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
     async (
-      {
-        body: { agentId, title, selectedModel, selectedProvider, chatApiKeyId },
-        user,
-        organizationId,
-      },
+      { body: { agentId, title, modelId, chatApiKeyId }, user, organizationId },
       reply,
     ) => {
       // Check if user is an agent admin
@@ -1061,37 +1053,23 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await validateChatApiKeyAccess(chatApiKeyId, user.id, organizationId);
       }
 
-      // Determine model and provider to use
-      // If frontend provides both, use them; otherwise use smart defaults
-      let modelToUse = selectedModel;
-      let providerToUse = selectedProvider;
-
-      if (!selectedModel) {
-        // No model specified - use smart defaults for both model and provider
-        const smartDefault = await resolveSmartDefaultLlmForChat({
-          organizationId,
-          userId: user.id,
-        });
-        modelToUse = smartDefault.model;
-        providerToUse = smartDefault.provider;
-      } else if (!selectedProvider) {
-        // Model specified but no provider - detect provider from model name
-        // This handles older API clients that don't send selectedProvider
-        // It's a rare case which should happen only for a case when backend already has a provider selection logic, but frontend is stale.
-        // In other words, it's a backward compatibility case which should happen only for a very short period of time.
-        providerToUse = detectProviderFromModel(selectedModel);
-      }
+      // Resolve the model via the priority chain:
+      // explicit pick -> member -> agent -> organization -> best available.
+      const llmSelection = await resolveConversationLlmSelectionForAgent({
+        agent: { llmApiKeyId: agent.llmApiKeyId, modelId: agent.modelId },
+        organizationId,
+        userId: user.id,
+        explicitModelId: modelId,
+      });
 
       logger.info(
         {
           agentId,
           organizationId,
-          selectedModel,
-          selectedProvider,
-          modelToUse,
-          providerToUse,
+          explicitModelId: modelId,
+          resolvedModelId: llmSelection.modelId,
+          selectedModel: llmSelection.selectedModel,
           chatApiKeyId,
-          wasSmartDefault: !selectedModel,
         },
         "Creating conversation with model",
       );
@@ -1103,9 +1081,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
           agentId,
           title,
-          selectedModel: modelToUse,
-          selectedProvider: providerToUse,
-          chatApiKeyId,
+          modelId: llmSelection.modelId,
+          chatApiKeyId: chatApiKeyId ?? llmSelection.chatApiKeyId,
         }),
       );
     },
@@ -1161,22 +1138,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           throw new ApiError(404, "Agent not found");
         }
 
-        if (
-          body.selectedModel === undefined &&
-          body.selectedProvider === undefined &&
-          body.chatApiKeyId === undefined
-        ) {
+        if (body.modelId === undefined && body.chatApiKeyId === undefined) {
           const llmSelection = await resolveConversationLlmSelectionForAgent({
             agent: {
               llmApiKeyId: agent.llmApiKeyId ?? null,
-              llmModel: agent.llmModel ?? null,
+              modelId: agent.modelId ?? null,
             },
             organizationId,
             userId: user.id,
           });
 
-          body.selectedModel = llmSelection.selectedModel;
-          body.selectedProvider = llmSelection.selectedProvider;
+          body.modelId = llmSelection.modelId;
           body.chatApiKeyId = llmSelection.chatApiKeyId;
         }
       }
@@ -1522,20 +1494,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send(conversation);
       }
 
-      // Use the conversation's selected provider for title generation
-      // This ensures the title is generated using the same provider as the chat
-      // Fall back to detecting from model name for backward compatibility
-      const provider = isSupportedProvider(conversation.selectedProvider)
-        ? conversation.selectedProvider
-        : detectProviderFromModel(conversation.selectedModel);
+      // Use the conversation's model provider for title generation so the
+      // title is generated with the same provider as the chat.
+      const { provider } = await resolveConversationModel(conversation.modelId);
 
       logger.debug(
-        {
-          conversationId: id,
-          selectedProvider: conversation.selectedProvider,
-          selectedModel: conversation.selectedModel,
-          resolvedProvider: provider,
-        },
+        { conversationId: id, resolvedProvider: provider },
         "Title generation: resolved provider",
       );
 
@@ -2481,8 +2445,7 @@ async function forkConversation(params: {
     userId: params.userId,
     organizationId: params.organizationId,
     agentId: agent.id,
-    selectedModel: params.sourceConversation.selectedModel,
-    selectedProvider: params.sourceConversation.selectedProvider ?? undefined,
+    modelId: params.sourceConversation.modelId,
   });
 
   if (params.sourceConversation.messages.length > 0) {

@@ -10,6 +10,7 @@ import {
   ChatOpsThreadAgentOverrideModel,
   ConversationModel,
   LlmProviderApiKeyModel,
+  ModelModel,
   OrganizationModel,
 } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
@@ -197,12 +198,19 @@ describe("chat tool execution", () => {
       },
     );
 
+    const targetModel = await ModelModel.create({
+      externalId: "anthropic/claude-3-5-sonnet",
+      provider: "anthropic",
+      modelId: "claude-3-5-sonnet",
+      inputModalities: null,
+      outputModalities: null,
+    });
     const targetAgent = await makeAgent({
       name: "Swap Target Agent",
       agentType: "agent",
       organizationId: organizationId,
       llmApiKeyId: targetApiKey.id,
-      llmModel: "claude-3-5-sonnet",
+      modelId: targetModel.id,
     });
 
     const conversation = await makeConversation(testAgent.id, {
@@ -241,8 +249,7 @@ describe("chat tool execution", () => {
       organizationId,
     });
     expect(updatedConversation?.agentId).toBe(targetAgent.id);
-    expect(updatedConversation?.selectedModel).toBe("claude-3-5-sonnet");
-    expect(updatedConversation?.selectedProvider).toBe("anthropic");
+    expect(updatedConversation?.modelId).toBe(targetModel.id);
     expect(updatedConversation?.chatApiKeyId).toBe(targetApiKey.id);
   });
 
@@ -487,12 +494,19 @@ describe("chat tool execution", () => {
       },
     );
 
+    const defaultModel = await ModelModel.create({
+      externalId: "openai/gpt-4o",
+      provider: "openai",
+      modelId: "gpt-4o",
+      inputModalities: null,
+      outputModalities: null,
+    });
     const defaultAgent = await makeAgent({
       name: "Default Router Agent",
       agentType: "agent",
       organizationId: organizationId,
       llmApiKeyId: defaultApiKey.id,
-      llmModel: "gpt-4o",
+      modelId: defaultModel.id,
     });
     await OrganizationModel.patch(organizationId, {
       defaultAgentId: defaultAgent.id,
@@ -536,8 +550,7 @@ describe("chat tool execution", () => {
       organizationId,
     });
     expect(updatedConversation?.agentId).toBe(defaultAgent.id);
-    expect(updatedConversation?.selectedModel).toBe("gpt-4o");
-    expect(updatedConversation?.selectedProvider).toBe("openai");
+    expect(updatedConversation?.modelId).toBe(defaultModel.id);
     expect(updatedConversation?.chatApiKeyId).toBe(defaultApiKey.id);
   });
 

@@ -373,7 +373,7 @@ describe("executeA2AMessage model selection", () => {
       agentType: "agent",
       systemPrompt: "Handle the task.",
       llmApiKeyId: null,
-      llmModel: null,
+      modelId: null,
     } as never);
     vi.mocked(McpServerModel.getUserPersonalServerForCatalog).mockResolvedValue(
       null,
@@ -428,7 +428,7 @@ describe("executeA2AMessage model selection", () => {
     expect(mockResolveConversationLlmSelectionForAgent).toHaveBeenCalledWith({
       agent: {
         llmApiKeyId: null,
-        llmModel: null,
+        modelId: null,
       },
       organizationId: "org-1",
       userId: "user-1",

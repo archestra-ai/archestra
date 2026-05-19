@@ -894,7 +894,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ...(body.llmApiKeyId !== undefined && {
             llmApiKeyId: body.llmApiKeyId,
           }),
-          ...(body.llmModel !== undefined && { llmModel: body.llmModel }),
+          ...(body.modelId !== undefined && { modelId: body.modelId }),
           ...(body.scope !== undefined && { scope: body.scope }),
           ...(body.teams !== undefined && { teams: body.teams }),
         };

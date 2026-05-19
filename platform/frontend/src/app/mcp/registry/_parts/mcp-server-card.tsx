@@ -100,6 +100,7 @@ export type McpServerCardProps = {
       name: string;
       presetLabel: string | null;
     }>,
+    options?: { alsoReinstallCatalog?: boolean },
   ) => void | Promise<void>;
   onDetails: () => void;
   onEdit: () => void;

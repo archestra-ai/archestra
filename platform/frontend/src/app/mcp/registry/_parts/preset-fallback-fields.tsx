@@ -109,8 +109,10 @@ export function FillPresetFieldsStep({
       <div className="space-y-4">
         <Alert>
           <AlertDescription>
-            This {presetLower} is missing values required to install it. Ask
-            someone who can edit this catalog item to fill them in.
+            This MCP server isn't ready to install in the{" "}
+            <span className="font-medium">{selectedPreset.name}</span>{" "}
+            {presetLower} yet — some values still need to be filled in. Ask your
+            administrator to finish configuring it.
           </AlertDescription>
         </Alert>
         <div className="flex justify-end">

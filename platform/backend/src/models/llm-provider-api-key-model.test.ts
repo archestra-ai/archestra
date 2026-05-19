@@ -282,5 +282,65 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
       expect(linkedModels).toHaveLength(1);
       expect(linkedModels[0].id).toBe(model.id);
     });
+
+    test("marks a best model even when no name pattern matches", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const secret = await makeSecret();
+      const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+        provider: "openai",
+      });
+
+      // Model IDs that match neither the "fastest" nor "best" marker
+      // patterns (e.g. custom/fine-tuned models, unfamiliar Bedrock IDs).
+      const cheap = await ModelModel.create({
+        externalId: "openai/acme-chat-small",
+        provider: "openai",
+        modelId: "acme-chat-small",
+        description: "Acme Chat Small",
+        contextLength: 32000,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        promptPricePerToken: "0.0000002",
+        completionPricePerToken: "0.0000008",
+        lastSyncedAt: new Date(),
+      });
+      const pricey = await ModelModel.create({
+        externalId: "openai/acme-chat-large",
+        provider: "openai",
+        modelId: "acme-chat-large",
+        description: "Acme Chat Large",
+        contextLength: 200000,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        promptPricePerToken: "0.000003",
+        completionPricePerToken: "0.000015",
+        lastSyncedAt: new Date(),
+      });
+
+      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+        apiKey.id,
+        [
+          { id: cheap.id, modelId: cheap.modelId },
+          { id: pricey.id, modelId: pricey.modelId },
+        ],
+        "openai",
+      );
+
+      const models =
+        await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds([
+          apiKey.id,
+        ]);
+      const best = models.filter((m) => m.isBest);
+
+      // Exactly one model is marked best, and it's the priciest one.
+      expect(best).toHaveLength(1);
+      expect(best[0].model.id).toBe(pricey.id);
+    });
   });
 });

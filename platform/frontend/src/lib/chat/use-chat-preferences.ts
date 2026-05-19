@@ -104,9 +104,8 @@ export function resolveAutoSelectedModel(
   // Current model is available — no change needed
   if (availableModels.some((m) => m.id === selectedModel)) return null;
 
-  // Model is unavailable — pick the best or first available
-  const best = availableModels.find((m) => m.isBest);
-  const fallback = best ?? availableModels[0];
+  // Model is unavailable — pick the best (or first) available
+  const fallback = pickPreferredModel(availableModels);
 
   // Only return a change if it's actually different
   return fallback && fallback.id !== selectedModel ? fallback.id : null;
@@ -116,6 +115,7 @@ export function resolveAutoSelectedModel(
 
 interface ModelInfo {
   id: string;
+  isBest?: boolean;
 }
 
 interface AgentInfo {
@@ -211,18 +211,17 @@ export function resolveInitialModel(
     };
   }
 
-  // 3. First available model
-  const providers = Object.keys(modelsByProvider);
-  if (providers.length > 0) {
-    const firstProvider = providers[0];
-    const models = modelsByProvider[firstProvider];
-    if (models && models.length > 0) {
-      return {
-        modelId: models[0].id,
-        apiKeyId: findKeyForProvider(firstProvider),
-        source: "fallback",
-      };
-    }
+  // 3. Best available model (nothing explicitly configured).
+  // Prefer the model marked "best" over the alphabetically-first one,
+  // otherwise a cheap/fast model can silently become the default.
+  const chosen = pickPreferredModel(allModels);
+  if (chosen) {
+    const provider = findProviderForModel(chosen.id);
+    return {
+      modelId: chosen.id,
+      apiKeyId: provider ? findKeyForProvider(provider) : null,
+      source: "fallback",
+    };
   }
 
   return null;
@@ -245,4 +244,17 @@ export function resolveModelForAgent(params: {
     ...params.context,
     agent: params.agent,
   });
+}
+
+// ===== Internal helpers =====
+
+/**
+ * Pick the preferred model from a list: the one marked "best", else the first.
+ * Shared by initial resolution and auto-selection so both honor the "best"
+ * marker instead of falling back to whatever sorts first alphabetically.
+ */
+function pickPreferredModel<T extends { id: string; isBest?: boolean }>(
+  models: T[],
+): T | undefined {
+  return models.find((m) => m.isBest) ?? models[0];
 }

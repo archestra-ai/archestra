@@ -238,7 +238,11 @@ function formatModelSource(source: ModelSource | null | undefined): string {
       return "organization";
     case "user":
       return "user override";
+    // "fallback" is mapped to null upstream; both mean the model was
+    // auto-selected because nothing was explicitly configured.
+    case "fallback":
+      return "auto-selected (best available)";
     default:
-      return "no model selected";
+      return "auto-selected (best available)";
   }
 }

@@ -123,12 +123,35 @@ class LlmProviderApiKeyModelLinkModel {
           patterns.best,
         );
 
+        // Guarantee exactly one "best" model even when no marker pattern
+        // matches (custom Bedrock IDs, fine-tuned models, unfamiliar
+        // families). Without this, every row stays isBest=false and default
+        // model selection collapses to the alphabetically-first model.
+        // Output price is a strong, provider-agnostic quality proxy.
+        let bestModelId = bestModel?.id;
+        if (!bestModelId) {
+          const priced = await tx
+            .select({
+              id: schema.modelsTable.id,
+              completionPrice: schema.modelsTable.completionPricePerToken,
+              contextLength: schema.modelsTable.contextLength,
+            })
+            .from(schema.modelsTable)
+            .where(
+              inArray(
+                schema.modelsTable.id,
+                uniqueModels.map((m) => m.id),
+              ),
+            );
+          bestModelId = pickPriciestModelId(priced) ?? uniqueModels[0].id;
+        }
+
         // Build values with markers
         const values = uniqueModels.map((model) => ({
           apiKeyId,
           modelId: model.id,
           isFastest: model.id === fastestModel?.id,
-          isBest: model.id === bestModel?.id,
+          isBest: model.id === bestModelId,
         }));
 
         // Batch insert
@@ -515,4 +538,29 @@ function findFirstMatchByPatternPriority(
     }
   }
   return undefined;
+}
+
+/**
+ * Pick the highest-quality model by output price, then context window, then
+ * ID for stability. Used as the "best" marker fallback when no name pattern
+ * matched, so every API key still has a sensible default model.
+ */
+function pickPriciestModelId(
+  models: Array<{
+    id: string;
+    completionPrice: string | null;
+    contextLength: number | null;
+  }>,
+): string | undefined {
+  if (models.length === 0) {
+    return undefined;
+  }
+  return [...models].sort((a, b) => {
+    const priceDiff =
+      Number(b.completionPrice ?? 0) - Number(a.completionPrice ?? 0);
+    if (priceDiff !== 0) return priceDiff;
+    const contextDiff = (b.contextLength ?? 0) - (a.contextLength ?? 0);
+    if (contextDiff !== 0) return contextDiff;
+    return a.id.localeCompare(b.id);
+  })[0].id;
 }

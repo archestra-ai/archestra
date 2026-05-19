@@ -260,7 +260,7 @@ export const MODEL_MARKER_PATTERNS: Record<
   },
   bedrock: {
     fastest: ["nova-lite", "nova-micro", "haiku"],
-    best: ["nova-pro", "sonnet", "opus"],
+    best: ["opus", "sonnet", "nova-pro"],
   },
 };
 

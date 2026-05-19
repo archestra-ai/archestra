@@ -123,6 +123,27 @@ describe("resolveInitialModel", () => {
     });
   });
 
+  test("fallback prefers the model marked best over the first one", () => {
+    // The "best" model is listed second; without the isBest check the
+    // fallback would pick the (cheaper/faster) first model instead.
+    const result = resolveInitialModel({
+      modelsByProvider: {
+        anthropic: [
+          { id: "claude-haiku-4-5" },
+          { id: "claude-opus-4-6", isBest: true },
+        ],
+      },
+      agent: null,
+      chatApiKeys: [{ id: "key-anthropic", provider: "anthropic" }],
+      organization: null,
+    });
+    expect(result).toEqual({
+      modelId: "claude-opus-4-6",
+      apiKeyId: "key-anthropic",
+      source: "fallback",
+    });
+  });
+
   test("returns null apiKeyId when no matching key for provider", () => {
     const result = resolveInitialModel({
       modelsByProvider: baseModels,

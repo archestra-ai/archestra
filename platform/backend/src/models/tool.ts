@@ -8,7 +8,9 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   parseFullToolName,
   slugify,
+  TOOL_ACTIVATE_SKILL_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  TOOL_READ_SKILL_FILE_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@shared";
@@ -663,7 +665,7 @@ class ToolModel {
   static async seedArchestraTools(
     catalogId: string,
     organizationOverride?: Pick<Organization, "appName" | "iconLogo"> | null,
-  ): Promise<void> {
+  ): Promise<string[]> {
     const organization =
       organizationOverride ?? (await OrganizationModel.getFirst());
     archestraMcpBranding.syncFromOrganization(organization);
@@ -809,6 +811,46 @@ class ToolModel {
         "Removed stale Archestra tools",
       );
     }
+
+    // Names of tools created on this run — used by callers to trigger
+    // one-time backfills when a new built-in tool first appears.
+    return toolsToInsert.map((tool) => tool.name);
+  }
+
+  /**
+   * Assign the Agent Skill tools (activate_skill / read_skill_file) to every
+   * existing agent.
+   *
+   * Runs once, when the skill tools are first seeded — see the caller in
+   * `seedArchestraCatalogAndTools`. New agents pick the tools up automatically
+   * because they are listed in {@link DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES}.
+   */
+  static async backfillSkillToolsToAllAgents(): Promise<void> {
+    const organization = await OrganizationModel.getFirst();
+    archestraMcpBranding.syncFromOrganization(organization);
+    const skillToolNames = (
+      [TOOL_ACTIVATE_SKILL_SHORT_NAME, TOOL_READ_SKILL_FILE_SHORT_NAME] as const
+    ).map((shortName) => archestraMcpBranding.getToolName(shortName));
+
+    const skillTools = await db
+      .select({ id: schema.toolsTable.id })
+      .from(schema.toolsTable)
+      .where(inArray(schema.toolsTable.name, skillToolNames));
+    if (skillTools.length === 0) return;
+
+    const toolIds = skillTools.map((tool) => tool.id);
+    const agents = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable);
+
+    for (const agent of agents) {
+      await AgentToolModel.createManyIfNotExists(agent.id, toolIds);
+    }
+
+    logger.info(
+      { agentCount: agents.length },
+      "Backfilled Agent Skill tools to existing agents",
+    );
   }
 
   static async syncArchestraBuiltInCatalog(params: {

@@ -1068,6 +1068,15 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetConnectorFile]: { knowledgeSource: ["read"] },
   [RouteId.DeleteConnectorFile]: { knowledgeSource: ["delete"] },
 
+  // Agent Skill Routes - reuse the agent RBAC resource
+  [RouteId.GetSkills]: { agent: ["read"] },
+  [RouteId.CreateSkill]: { agent: ["create"] },
+  [RouteId.GetSkill]: { agent: ["read"] },
+  [RouteId.UpdateSkill]: { agent: ["update"] },
+  [RouteId.DeleteSkill]: { agent: ["delete"] },
+  [RouteId.DiscoverGithubSkills]: { agent: ["read"] },
+  [RouteId.ImportGithubSkills]: { agent: ["create"] },
+
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},
 
@@ -1092,6 +1101,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/agents/triggers/slack": { agentTrigger: ["read"] },
   "/agents/triggers/ms-teams": { agentTrigger: ["read"] },
   "/agents/triggers/email": { agentTrigger: ["read"] },
+  "/agents/skills": { agent: ["read"] },
   "/scheduled-tasks": { scheduledTask: ["read"] },
 
   // LLM

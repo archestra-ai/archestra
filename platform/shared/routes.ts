@@ -468,6 +468,15 @@ export const RouteId = {
 
   // Invitation Routes
   CheckInvitation: "checkInvitation",
+
+  // Agent Skill Routes
+  GetSkills: "getSkills",
+  CreateSkill: "createSkill",
+  GetSkill: "getSkill",
+  UpdateSkill: "updateSkill",
+  DeleteSkill: "deleteSkill",
+  DiscoverGithubSkills: "discoverGithubSkills",
+  ImportGithubSkills: "importGithubSkills",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

@@ -1,3 +1,8 @@
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  TOOL_ACTIVATE_SKILL_FULL_NAME,
+  TOOL_READ_SKILL_FILE_FULL_NAME,
+} from "@shared";
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
@@ -162,5 +167,38 @@ describe("Archestra Tools Dynamic Assignment", () => {
     // Should only have Archestra tools (proxy-discovered tools are excluded)
     const archestraToolCount = getArchestraMcpTools().length;
     expect(tools).toHaveLength(archestraToolCount);
+  });
+
+  test("backfillSkillToolsToAllAgents assigns the skill tools to every agent", async ({
+    makeAgent,
+  }) => {
+    const agentA = await makeAgent({ name: "Agent A" });
+    const agentB = await makeAgent({ name: "Agent B" });
+
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    await ToolModel.backfillSkillToolsToAllAgents();
+
+    const skillToolNames = [
+      TOOL_ACTIVATE_SKILL_FULL_NAME,
+      TOOL_READ_SKILL_FILE_FULL_NAME,
+    ];
+    for (const agentId of [agentA.id, agentB.id]) {
+      const tools = await ToolModel.getMcpToolsByAgent(agentId);
+      const names = tools.map((t) => t.name);
+      for (const skillTool of skillToolNames) {
+        expect(names).toContain(skillTool);
+      }
+    }
+  });
+
+  test("backfillSkillToolsToAllAgents is idempotent", async ({ makeAgent }) => {
+    const agent = await makeAgent({ name: "Agent" });
+
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    await ToolModel.backfillSkillToolsToAllAgents();
+    await ToolModel.backfillSkillToolsToAllAgents();
+
+    const toolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+    expect(new Set(toolIds).size).toBe(toolIds.length);
   });
 });

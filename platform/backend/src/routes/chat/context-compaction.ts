@@ -24,6 +24,10 @@ import {
 export const CONTEXT_COMPACTION_AUTO_THRESHOLD = 0.8;
 export const CONTEXT_COMPACTION_RECENT_USER_TURNS = 4;
 const CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS = 8_192;
+const CONTEXT_COMPACTION_LOW_USER_TURN_MIN_MESSAGES = 6;
+const CONTEXT_COMPACTION_LOW_USER_TURN_MIN_PARTS = 8;
+const CONTEXT_COMPACTION_LOW_USER_TURN_MIN_CHARS = 16_000;
+const CONTEXT_COMPACTION_RECENT_USER_REFERENCE_MAX_CHARS = 6_000;
 const CONTEXT_COMPACTION_SUMMARY_TAG = "summary";
 const CONTEXT_COMPACTION_CORRECTION_PROMPT =
   "Your previous response did not follow the required format. Reply with EXACTLY ONE <summary>...</summary> block and no text outside the tags.";
@@ -112,6 +116,25 @@ export async function compactMessagesForChat(params: {
     };
   }
 
+  // boundary id is the anchor used to align the summary with the live message
+  // list later; without it, a compaction would be unrecoverable
+  const boundaryMessageId = split.compactable.at(-1)?.id;
+  if (!boundaryMessageId) {
+    logger.warn(
+      {
+        conversationId: params.conversationId,
+        trigger: params.trigger,
+      },
+      "[ContextCompaction] last compactable message has no id; skipping compaction",
+    );
+    return {
+      messages: existingMessages,
+      status: usableLatestCompaction ? "existing" : "skipped",
+      compaction: usableLatestCompaction,
+      reason: "missing_boundary_message_id",
+    };
+  }
+
   try {
     params.onCompactionStart?.();
     const compaction = await createConversationCompaction({
@@ -124,7 +147,9 @@ export async function compactMessagesForChat(params: {
       trigger: params.trigger,
       previousSummary: usableLatestCompaction?.summary ?? null,
       compactableMessages: split.compactable,
-      fullMessages: params.messages,
+      recentMessages: split.recent,
+      boundaryMessageId,
+      originalMessages: params.messages,
       selectedModel: params.selectedModel,
       systemPrompt: params.systemPrompt,
     });
@@ -215,7 +240,9 @@ async function createConversationCompaction(params: {
   trigger: ConversationCompactionTrigger;
   previousSummary: string | null;
   compactableMessages: ChatMessage[];
-  fullMessages: ChatMessage[];
+  recentMessages: ChatMessage[];
+  boundaryMessageId: string;
+  originalMessages: ChatMessage[];
   systemPrompt?: string;
 }): Promise<ConversationCompaction> {
   if (params.trigger === "auto") {
@@ -292,11 +319,16 @@ async function createConversationCompaction(params: {
     model: modelName,
     trigger: params.trigger,
     summary,
-    compactableMessages: params.compactableMessages,
-    fullMessages: params.fullMessages,
+    boundaryMessageId: params.boundaryMessageId,
+    recentMessages: params.recentMessages,
+    originalMessages: params.originalMessages,
     tokenEstimateProvider: params.provider,
   });
 }
+
+// retry sends ~2× the first attempt's tokens; only retry while the doubled
+// request still fits comfortably in the model's context window
+const CONTEXT_COMPACTION_RETRY_MAX_CONTEXT_FRACTION = 0.7;
 
 async function tryCreateInContextCompaction(params: {
   conversationId: string;
@@ -309,7 +341,9 @@ async function tryCreateInContextCompaction(params: {
   trigger: ConversationCompactionTrigger;
   previousSummary: string | null;
   compactableMessages: ChatMessage[];
-  fullMessages: ChatMessage[];
+  recentMessages: ChatMessage[];
+  boundaryMessageId: string;
+  originalMessages: ChatMessage[];
   systemPrompt?: string;
 }): Promise<ConversationCompaction | null> {
   let summary: string;
@@ -356,6 +390,38 @@ async function tryCreateInContextCompaction(params: {
     summary = extractTaggedSummary(result.text) ?? "";
 
     if (!summary) {
+      // the retry resends the entire prior prompt plus the assistant reply
+      // and a correction turn, so it roughly doubles the token count.
+      // skip it if the model is already near its context limit — the outer
+      // fallback path will produce a summary instead.
+      const canRetry = await hasContextHeadroomForRetry({
+        provider: params.provider,
+        selectedModel: params.selectedModel,
+        compactionMessages,
+        systemPrompt: params.systemPrompt,
+      });
+
+      if (!canRetry) {
+        logger.info(
+          {
+            conversationId: params.conversationId,
+            provider: params.provider,
+            model: params.selectedModel,
+          },
+          "[ContextCompaction] in-context compaction missed summary tag; skipping retry due to insufficient context headroom",
+        );
+        return null;
+      }
+
+      logger.info(
+        {
+          conversationId: params.conversationId,
+          provider: params.provider,
+          model: params.selectedModel,
+        },
+        "[ContextCompaction] in-context compaction missed summary tag; retrying with correction prompt",
+      );
+
       const correctedMessages = await convertToModelMessages([
         ...(compactionMessages as unknown as Omit<UIMessage, "id">[]),
         {
@@ -408,10 +474,37 @@ async function tryCreateInContextCompaction(params: {
     model: params.selectedModel,
     trigger: params.trigger,
     summary,
-    compactableMessages: params.compactableMessages,
-    fullMessages: params.fullMessages,
+    boundaryMessageId: params.boundaryMessageId,
+    recentMessages: params.recentMessages,
+    originalMessages: params.originalMessages,
     tokenEstimateProvider: params.provider,
   });
+}
+
+async function hasContextHeadroomForRetry(params: {
+  provider: SupportedProvider;
+  selectedModel: string;
+  compactionMessages: ChatMessage[];
+  systemPrompt?: string;
+}): Promise<boolean> {
+  const model = await ModelModel.findByProviderAndModelId(
+    params.provider,
+    params.selectedModel,
+  );
+  if (!model?.contextLength) {
+    // unknown limit; assume retry is safe rather than always skipping
+    return true;
+  }
+
+  const estimate = estimateChatMessagesTokens({
+    provider: params.provider,
+    systemPrompt: params.systemPrompt,
+    messages: params.compactionMessages,
+  });
+  return (
+    estimate * 2 <
+    model.contextLength * CONTEXT_COMPACTION_RETRY_MAX_CONTEXT_FRACTION
+  );
 }
 
 async function createCompactionRecord(params: {
@@ -420,27 +513,26 @@ async function createCompactionRecord(params: {
   model: string;
   trigger: ConversationCompactionTrigger;
   summary: string;
-  compactableMessages: ChatMessage[];
-  fullMessages: ChatMessage[];
+  boundaryMessageId: string;
+  recentMessages: ChatMessage[];
+  originalMessages: ChatMessage[];
   tokenEstimateProvider: SupportedProvider;
 }): Promise<ConversationCompaction> {
   const originalTokenEstimate = estimateChatMessagesTokens({
     provider: params.tokenEstimateProvider,
-    messages: params.fullMessages,
+    messages: params.originalMessages,
   });
+  // mirrors the message list the caller will send to the model next turn:
+  // summary + the same "recent" slice that was kept verbatim
   const compactedTokenEstimate = estimateChatMessagesTokens({
     provider: params.tokenEstimateProvider,
-    messages: [
-      buildSummaryMessage(params.summary),
-      ...splitMessagesForCompaction(params.fullMessages).recent,
-    ],
+    messages: [buildSummaryMessage(params.summary), ...params.recentMessages],
   });
 
   return await ConversationCompactionModel.create({
     conversationId: params.conversationId,
     summary: params.summary,
-    compactedThroughMessageId:
-      params.compactableMessages.at(-1)?.id?.toString() ?? null,
+    compactedThroughMessageId: params.boundaryMessageId,
     trigger: params.trigger,
     provider: params.provider,
     model: params.model,
@@ -560,14 +652,70 @@ function splitMessagesForCompaction(messages: ChatMessage[]): {
     }
   }
 
-  if (userTurnsSeen < CONTEXT_COMPACTION_RECENT_USER_TURNS) {
+  if (userTurnsSeen >= CONTEXT_COMPACTION_RECENT_USER_TURNS) {
+    return {
+      compactable: messages.slice(0, recentStart),
+      recent: messages.slice(recentStart),
+    };
+  }
+
+  return splitLowUserTurnMessagesForCompaction(messages);
+}
+
+function splitLowUserTurnMessagesForCompaction(messages: ChatMessage[]): {
+  compactable: ChatMessage[];
+  recent: ChatMessage[];
+} {
+  const latestUserIndex = findLatestUserMessageIndex(messages);
+  if (latestUserIndex < 0) {
+    return { compactable: [], recent: messages };
+  }
+
+  const recentStart =
+    latestUserIndex === messages.length - 1 ? latestUserIndex : messages.length;
+  const compactable = messages.slice(0, recentStart);
+
+  if (!shouldCompactLowUserTurnRange(compactable)) {
     return { compactable: [], recent: messages };
   }
 
   return {
-    compactable: messages.slice(0, recentStart),
+    compactable,
     recent: messages.slice(recentStart),
   };
+}
+
+function shouldCompactLowUserTurnRange(messages: ChatMessage[]): boolean {
+  if (messages.length === 0) {
+    return false;
+  }
+
+  const partCount = messages.reduce(
+    (count, message) => count + (message.parts?.length ?? 0),
+    0,
+  );
+  if (
+    messages.length >= CONTEXT_COMPACTION_LOW_USER_TURN_MIN_MESSAGES ||
+    partCount >= CONTEXT_COMPACTION_LOW_USER_TURN_MIN_PARTS
+  ) {
+    return true;
+  }
+
+  const roughChars = messages.reduce(
+    (count, message) => count + getMessageTextForTokenEstimate(message).length,
+    0,
+  );
+  return roughChars >= CONTEXT_COMPACTION_LOW_USER_TURN_MIN_CHARS;
+}
+
+function findLatestUserMessageIndex(messages: ChatMessage[]): number {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    if (messages[index]?.role === "user") {
+      return index;
+    }
+  }
+
+  return -1;
 }
 
 /**
@@ -584,9 +732,58 @@ async function buildCompactionPrompt(params: {
   const previous = params.previousSummary
     ? `Existing summary to update:\n${params.previousSummary}\n\n`
     : "";
+  const recentUserReference = buildRecentUserMessagesReference(params.messages);
 
-  return `${previous}Transcript to compact:
+  return `${previous}${recentUserReference}Transcript to compact:
 ${transcript}`;
+}
+
+function buildRecentUserMessagesReference(messages: ChatMessage[]): string {
+  const userMessages = messages
+    .filter((message) => message.role === "user")
+    .slice(-CONTEXT_COMPACTION_RECENT_USER_TURNS);
+
+  if (userMessages.length === 0) {
+    return "";
+  }
+
+  const serialized = userMessages
+    .map((message, index) => {
+      const content = getUserMessageTextForReference(message);
+      return `${index + 1}. USER: ${content}`;
+    })
+    .join("\n\n");
+
+  return `Recent user messages to preserve in the summary as context, not active chat turns:
+${serialized}
+
+`;
+}
+
+function getUserMessageTextForReference(message: ChatMessage): string {
+  if (!message.parts?.length) {
+    return "";
+  }
+
+  const text = message.parts
+    .map((part) => {
+      if (part.type === "text" && typeof part.text === "string") {
+        return part.text;
+      }
+      if (part.type === "file") {
+        const url = typeof part.url === "string" ? part.url : "";
+        const mediaType = getFilePartMediaType(part, getDataUrlMediaType(url));
+        return `[file ${String(part.filename ?? "attached file")} ${mediaType}]`;
+      }
+      return `[${part.type}]`;
+    })
+    .join("\n");
+
+  if (text.length <= CONTEXT_COMPACTION_RECENT_USER_REFERENCE_MAX_CHARS) {
+    return text;
+  }
+
+  return `${text.slice(0, CONTEXT_COMPACTION_RECENT_USER_REFERENCE_MAX_CHARS)}\n[truncated ${text.length - CONTEXT_COMPACTION_RECENT_USER_REFERENCE_MAX_CHARS} characters from recent user message]`;
 }
 
 async function serializeMessagesForSummary(

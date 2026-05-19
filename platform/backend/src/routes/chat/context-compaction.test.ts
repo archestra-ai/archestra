@@ -13,6 +13,20 @@ const msg = (
   parts: [{ type: "text", text }],
 });
 
+const toolMsg = (id: string, output: unknown): ChatMessage =>
+  ({
+    id,
+    role: "assistant",
+    parts: [
+      {
+        type: "tool-search",
+        toolName: "search",
+        state: "output-available",
+        output,
+      },
+    ],
+  }) as ChatMessage;
+
 describe("context compaction helpers", () => {
   test("keeps the last four user turns verbatim", () => {
     const messages = [
@@ -41,7 +55,7 @@ describe("context compaction helpers", () => {
     ]);
   });
 
-  test("does not compact conversations with fewer than four user turns", () => {
+  test("does not compact short conversations with fewer than four user turns", () => {
     const split = __test.splitMessagesForCompaction([
       msg("u1", "user", "one"),
       msg("a1", "assistant", "one reply"),
@@ -50,6 +64,38 @@ describe("context compaction helpers", () => {
 
     expect(split.compactable).toEqual([]);
     expect(split.recent.map((m) => m.id)).toEqual(["u1", "a1", "u2"]);
+  });
+
+  test("compacts a huge completed assistant/tool trace with one user turn", () => {
+    const split = __test.splitMessagesForCompaction([
+      msg("u1", "user", "do the large investigation"),
+      toolMsg("a1", { logs: "x".repeat(20_000) }),
+    ]);
+
+    expect(split.compactable.map((m) => m.id)).toEqual(["u1", "a1"]);
+    expect(split.recent).toEqual([]);
+  });
+
+  test("keeps the latest unresolved user turn live while compacting prior low-turn work", () => {
+    const split = __test.splitMessagesForCompaction([
+      msg("u1", "user", "run the full workflow"),
+      msg("a1", "assistant", "step one"),
+      msg("a2", "assistant", "step two"),
+      msg("a3", "assistant", "step three"),
+      msg("a4", "assistant", "step four"),
+      msg("a5", "assistant", "step five"),
+      msg("u2", "user", "continue from the result"),
+    ]);
+
+    expect(split.compactable.map((m) => m.id)).toEqual([
+      "u1",
+      "a1",
+      "a2",
+      "a3",
+      "a4",
+      "a5",
+    ]);
+    expect(split.recent.map((m) => m.id)).toEqual(["u2"]);
   });
 
   test("replaces messages through the compaction boundary with a summary", () => {
@@ -148,6 +194,21 @@ describe("context compaction helpers", () => {
     );
     expect(CONTEXT_COMPACTION_SYSTEM_PROMPT).toContain(
       "private chain-of-thought",
+    );
+  });
+
+  test("compaction prompt preserves recent user messages outside the bounded transcript", async () => {
+    const prompt = await __test.buildCompactionPrompt({
+      previousSummary: null,
+      messages: [
+        msg("u1", "user", "Critical original request: keep this exact goal."),
+        msg("a1", "assistant", "x".repeat(130_000)),
+      ],
+    });
+
+    expect(prompt).toContain("Recent user messages to preserve in the summary");
+    expect(prompt).toContain(
+      "Critical original request: keep this exact goal.",
     );
   });
 

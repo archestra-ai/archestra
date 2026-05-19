@@ -331,45 +331,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const normalizedMessagesForLLM = normalizeChatMessages(
             messages as ChatMessage[],
           );
-          let providerPreparedMessages = prepareMessagesForProvider({
-            messages: normalizedMessagesForLLM,
-            provider,
-          });
-
-          // Stream with AI SDK
-          // Build streamText config conditionally
-          // Cast to UIMessage[] - ChatMessage is structurally compatible at runtime
-          let modelMessages = await convertToModelMessages(
-            providerPreparedMessages as unknown as Omit<UIMessage, "id">[],
-          );
 
           // Perplexity does NOT support tool calling - it has built-in web search instead
           // @see https://docs.perplexity.ai/api-reference/chat-completions-post
           const supportsToolCalling = provider !== "perplexity";
-
-          const streamTextConfig: Parameters<typeof streamText>[0] = {
-            model,
-            messages: modelMessages,
-            ...(supportsToolCalling && { tools: mcpTools }),
-            stopWhen: buildChatStopConditions(),
-            abortSignal: chatAbortController.signal,
-            onFinish: async ({ usage, finishReason }) => {
-              removeAbortListeners();
-              logger.info(
-                {
-                  conversationId,
-                  usage,
-                  finishReason,
-                },
-                "Chat stream finished",
-              );
-            },
-          };
-
-          // Only include system property if we have actual content
-          if (systemPrompt) {
-            streamTextConfig.system = systemPrompt;
-          }
 
           // For Gemini image generation models, enable image output via responseModalities
           // Known image-capable model patterns:
@@ -388,13 +353,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             provider === "gemini" &&
             (modelLower.includes("image") ||
               modelLower.includes("native-audio-dialog"));
-          if (isGeminiImageModel) {
-            streamTextConfig.providerOptions = {
-              google: {
-                responseModalities: ["TEXT", "IMAGE"],
-              },
-            };
-          }
 
           // Persist user's new messages immediately so they're visible on page reload.
           // Without this, a reload during streaming shows no messages because
@@ -557,7 +515,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
                 // Emit data-tool-ui-start synchronously in onChunk so it
                 // arrives right after tool-input-start, before any deltas.
-                streamTextConfig.onChunk = ({ chunk }) => {
+                const streamTextOnChunk: NonNullable<
+                  Parameters<typeof streamText>[0]["onChunk"]
+                > = ({ chunk }) => {
                   if (chunk.type === "tool-input-start" && chunk.toolName) {
                     const prefetched = prefetchedUiResources.get(
                       chunk.toolName,
@@ -617,28 +577,49 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
                 if (
                   compactionResult.status === "created" ||
-                  compactionResult.status === "existing"
-                ) {
-                  providerPreparedMessages = prepareMessagesForProvider({
-                    messages: compactionResult.messages,
-                    provider,
-                  });
-                  modelMessages = await convertToModelMessages(
-                    providerPreparedMessages as unknown as Omit<
-                      UIMessage,
-                      "id"
-                    >[],
-                  );
-                }
-
-                if (
-                  compactionResult.status === "created" ||
                   compactionResult.status === "failed"
                 ) {
                   writer.write({
                     type: "data-context-compaction-finish",
                     data: buildContextCompactionStreamData(compactionResult),
                   });
+                }
+
+                const modelMessages = await buildModelMessagesForProvider({
+                  messages: compactionResult.messages,
+                  provider,
+                });
+                const streamTextConfig: Parameters<typeof streamText>[0] = {
+                  model,
+                  messages: modelMessages,
+                  ...(supportsToolCalling && { tools: mcpTools }),
+                  stopWhen: buildChatStopConditions(),
+                  abortSignal: chatAbortController.signal,
+                  onChunk: streamTextOnChunk,
+                  onFinish: async ({ usage, finishReason }) => {
+                    removeAbortListeners();
+                    logger.info(
+                      {
+                        conversationId,
+                        usage,
+                        finishReason,
+                      },
+                      "Chat stream finished",
+                    );
+                  },
+                };
+
+                // Only include system property if we have actual content
+                if (systemPrompt) {
+                  streamTextConfig.system = systemPrompt;
+                }
+
+                if (isGeminiImageModel) {
+                  streamTextConfig.providerOptions = {
+                    google: {
+                      responseModalities: ["TEXT", "IMAGE"],
+                    },
+                  };
                 }
 
                 // Stream tokens to the client in real-time while also
@@ -2192,12 +2173,19 @@ function persistConversationChatError(params: {
 }
 
 function buildContextCompactionStreamData(result: ContextCompactionResult) {
+  // only report compaction details for "created"; on "failed",
+  // result.compaction holds the previously stored compaction and the client
+  // would otherwise treat that stale id as the new one
+  if (result.status !== "created" || !result.compaction) {
+    return { status: result.status };
+  }
+
   return {
     status: result.status,
-    compactionId: result.compaction?.id,
-    trigger: result.compaction?.trigger,
-    originalTokenEstimate: result.compaction?.originalTokenEstimate,
-    compactedTokenEstimate: result.compaction?.compactedTokenEstimate,
+    compactionId: result.compaction.id,
+    trigger: result.compaction.trigger,
+    originalTokenEstimate: result.compaction.originalTokenEstimate,
+    compactedTokenEstimate: result.compaction.compactedTokenEstimate,
   };
 }
 
@@ -2263,6 +2251,18 @@ function prepareMessagesForProvider(params: {
   }
 
   return messages;
+}
+
+async function buildModelMessagesForProvider(params: {
+  messages: ChatMessage[];
+  provider: SupportedProvider;
+}) {
+  const providerPreparedMessages = prepareMessagesForProvider(params);
+
+  // Cast to UIMessage[] - ChatMessage is structurally compatible at runtime.
+  return await convertToModelMessages(
+    providerPreparedMessages as unknown as Omit<UIMessage, "id">[],
+  );
 }
 
 function normalizeAnthropicMessageFileParts(message: ChatMessage): ChatMessage {

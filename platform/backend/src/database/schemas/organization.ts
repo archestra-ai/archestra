@@ -22,6 +22,7 @@ import type {
   OrganizationChatLink,
   OrganizationCompressionScope,
 } from "@/types";
+import modelsTable from "./model";
 
 const organizationsTable = pgTable("organization", {
   id: text("id").primaryKey(),
@@ -91,6 +92,11 @@ const organizationsTable = pgTable("organization", {
 
   /** Provider for the default LLM model (e.g. "openai") */
   defaultLlmProvider: text("default_llm_provider").$type<SupportedProvider>(),
+
+  /** Organization-wide default model. FK to models(id) ON DELETE SET NULL. */
+  defaultModelId: uuid("default_model_id").references(() => modelsTable.id, {
+    onDelete: "set null",
+  }),
 
   /**
    * Chat API key used for the default LLM model.

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   CHAT_STORAGE_KEYS,
+  deriveModelSource,
   getSavedAgent,
   resolveAutoSelectedModel,
   resolveInitialModel,
@@ -64,7 +65,6 @@ describe("resolveInitialModel", () => {
     expect(result).toEqual({
       modelId: "claude-3-5-sonnet",
       apiKeyId: "agent-key",
-      source: "agent",
     });
   });
 
@@ -81,7 +81,6 @@ describe("resolveInitialModel", () => {
     expect(result).toEqual({
       modelId: "gpt-4o",
       apiKeyId: "key-openai",
-      source: "organization",
     });
   });
 
@@ -95,18 +94,17 @@ describe("resolveInitialModel", () => {
     expect(result).toEqual({
       modelId: "claude-3-5-sonnet",
       apiKeyId: "agent-key",
-      source: "agent",
     });
   });
 
-  test("skips agent model when model is not in available models", () => {
+  test("falls back when the agent model is not in available models", () => {
     const result = resolveInitialModel({
       modelsByProvider: baseModels,
       agent: { llmModel: "deleted-model", llmApiKeyId: "agent-key" },
       chatApiKeys: baseChatApiKeys,
       organization: null,
     });
-    expect(result?.source).toBe("fallback");
+    expect(result?.modelId).toBe("gpt-4o");
   });
 
   test("falls back to first available model", () => {
@@ -119,7 +117,6 @@ describe("resolveInitialModel", () => {
     expect(result).toEqual({
       modelId: "gpt-4o",
       apiKeyId: "key-openai",
-      source: "fallback",
     });
   });
 
@@ -140,7 +137,6 @@ describe("resolveInitialModel", () => {
     expect(result).toEqual({
       modelId: "claude-opus-4-6",
       apiKeyId: "key-anthropic",
-      source: "fallback",
     });
   });
 
@@ -168,7 +164,6 @@ describe("resolveInitialModel", () => {
     expect(result).toEqual({
       modelId: "gpt-4o",
       apiKeyId: "key-openai",
-      source: "organization",
     });
   });
 
@@ -185,11 +180,10 @@ describe("resolveInitialModel", () => {
     expect(result).toEqual({
       modelId: "gpt-4o",
       apiKeyId: "key-openai",
-      source: "organization",
     });
   });
 
-  test("skips org default when model is not in available models", () => {
+  test("falls back when org default model is not in available models", () => {
     const result = resolveInitialModel({
       modelsByProvider: baseModels,
       agent: null,
@@ -199,7 +193,6 @@ describe("resolveInitialModel", () => {
         defaultLlmApiKeyId: "key-openai",
       },
     });
-    expect(result?.source).toBe("fallback");
     expect(result?.modelId).toBe("gpt-4o");
   });
 });
@@ -321,7 +314,6 @@ describe("resolveModelForAgent", () => {
     expect(result).toEqual({
       modelId: "claude-3-5-sonnet",
       apiKeyId: "key-anthropic",
-      source: "agent",
     });
   });
 
@@ -333,7 +325,6 @@ describe("resolveModelForAgent", () => {
     expect(result).toEqual({
       modelId: "gpt-4o",
       apiKeyId: "key-openai",
-      source: "organization",
     });
   });
 
@@ -354,7 +345,6 @@ describe("resolveModelForAgent", () => {
     });
     expect(first?.modelId).toBe("claude-3-5-sonnet");
     expect(first?.apiKeyId).toBe("key-anthropic");
-    expect(first?.source).toBe("agent");
 
     // Switching to second agent should resolve to org default, NOT keep the first agent's values
     const second = resolveModelForAgent({
@@ -363,7 +353,6 @@ describe("resolveModelForAgent", () => {
     });
     expect(second?.modelId).toBe("gpt-4o");
     expect(second?.apiKeyId).toBe("key-openai");
-    expect(second?.source).toBe("organization");
   });
 
   test("handles agent with non-string llmModel gracefully", () => {
@@ -371,7 +360,7 @@ describe("resolveModelForAgent", () => {
       agent: { llmModel: undefined, llmApiKeyId: undefined },
       context: baseContext,
     });
-    expect(result?.source).toBe("organization");
+    expect(result?.modelId).toBe("gpt-4o");
   });
 
   test("switching between two agents with different direct configs", () => {
@@ -395,5 +384,67 @@ describe("resolveModelForAgent", () => {
       context: baseContext,
     });
     expect(resultB?.modelId).toBe("claude-3-5-sonnet");
+  });
+});
+
+describe("deriveModelSource", () => {
+  test("returns null when no model is selected", () => {
+    expect(
+      deriveModelSource({
+        selectedModel: "",
+        agentLlmModel: "gpt-4o",
+        orgDefaultLlmModel: "claude-3-5-sonnet",
+      }),
+    ).toBeNull();
+  });
+
+  test("'agent' when the model matches the agent's configured model", () => {
+    expect(
+      deriveModelSource({
+        selectedModel: "gpt-4o",
+        agentLlmModel: "gpt-4o",
+        orgDefaultLlmModel: "claude-3-5-sonnet",
+      }),
+    ).toBe("agent");
+  });
+
+  test("'organization' when the model matches the org default", () => {
+    expect(
+      deriveModelSource({
+        selectedModel: "claude-3-5-sonnet",
+        agentLlmModel: null,
+        orgDefaultLlmModel: "claude-3-5-sonnet",
+      }),
+    ).toBe("organization");
+  });
+
+  test("'user' when the model matches neither default", () => {
+    expect(
+      deriveModelSource({
+        selectedModel: "gpt-4o-mini",
+        agentLlmModel: "gpt-4o",
+        orgDefaultLlmModel: "claude-3-5-sonnet",
+      }),
+    ).toBe("user");
+  });
+
+  test("agent takes precedence over the org default", () => {
+    expect(
+      deriveModelSource({
+        selectedModel: "gpt-4o",
+        agentLlmModel: "gpt-4o",
+        orgDefaultLlmModel: "gpt-4o",
+      }),
+    ).toBe("agent");
+  });
+
+  test("'user' when nothing is configured", () => {
+    expect(
+      deriveModelSource({
+        selectedModel: "gpt-4o",
+        agentLlmModel: null,
+        orgDefaultLlmModel: null,
+      }),
+    ).toBe("user");
   });
 });

@@ -118,12 +118,9 @@ import {
   getPendingActions,
 } from "@/lib/chat/pending-tool-state";
 import {
-  clearModelOverride,
+  deriveModelSource,
   getSavedAgent,
-  getSavedModelOverride,
-  type ModelSource,
   saveAgent,
-  saveModelOverride,
 } from "@/lib/chat/use-chat-preferences";
 import { useConfig } from "@/lib/config/config.query";
 import { useDialogs } from "@/lib/hooks/use-dialog";
@@ -279,8 +276,6 @@ export function ChatPageContent({
   const [initialAgentId, setInitialAgentId] = useState<string | null>(null);
   const [initialModel, setInitialModel] = useState<string>("");
   const [initialApiKeyId, setInitialApiKeyId] = useState<string | null>(null);
-  const [initialModelSource, setInitialModelSource] =
-    useState<ModelSource | null>(null);
   const previousRouteConversationIdRef = useRef<string | undefined>(
     routeConversationId,
   );
@@ -312,11 +307,9 @@ export function ChatPageContent({
       if (resolved) {
         setInitialModel(resolved.modelId);
         setInitialApiKeyId(resolved.apiKeyId);
-        setInitialModelSource(resolved.modelSource);
       } else {
         setInitialModel("");
         setInitialApiKeyId(null);
-        setInitialModelSource(null);
       }
     },
     [modelsByProvider, chatApiKeys, organization],
@@ -399,7 +392,6 @@ export function ChatPageContent({
     if (!resolved) return; // No models available yet
 
     setInitialModel(resolved.modelId);
-    setInitialModelSource(resolved.modelSource);
     if (resolved.apiKeyId) {
       setInitialApiKeyId(resolved.apiKeyId);
     }
@@ -413,27 +405,11 @@ export function ChatPageContent({
     organization,
   ]);
 
-  // Model change callback for the initial (no conversation) state.
-  // After init, only accept explicit user selections (dialog was opened).
-  // This prevents ModelSelector's auto-select (triggered by apiKeyId changes)
-  // from overwriting the agent default or org default.
-  const modelSelectorWasOpenRef = useRef(false);
-  const handleInitialModelChange = useCallback((modelId: string) => {
-    if (modelInitializedRef.current && !modelSelectorWasOpenRef.current) {
-      return;
-    }
-    setInitialModel(modelId);
-    if (modelSelectorWasOpenRef.current) {
-      setInitialModelSource("user");
-      saveModelOverride(modelId);
-    }
-    modelSelectorWasOpenRef.current = false;
-  }, []);
-  const handleInitialModelSelectorOpenChange = useCallback((open: boolean) => {
-    if (open) {
-      modelSelectorWasOpenRef.current = true;
-    }
-  }, []);
+  // Model change for the initial (no conversation) state.
+  const handleInitialModelChange = useCallback(
+    (modelId: string) => setInitialModel(modelId),
+    [],
+  );
 
   // Handle API key change - preselect best model for the new key's provider
   const handleInitialProviderChange = useCallback(
@@ -444,16 +420,13 @@ export function ChatPageContent({
       });
       if (preferredModel) {
         setInitialModel(preferredModel.modelId);
-        setInitialModelSource("user");
-        saveModelOverride(preferredModel.modelId);
       }
     },
     [modelsByProvider],
   );
 
-  // Reset model override: clear localStorage and re-resolve from agent/org defaults
+  // Reset to the agent/org default model (shown when on a custom model).
   const handleResetModelOverride = useCallback(() => {
-    clearModelOverride();
     modelInitializedRef.current = false;
 
     const resolved = resolveChatModelState({
@@ -471,7 +444,6 @@ export function ChatPageContent({
     if (resolved) {
       setInitialModel(resolved.modelId);
       setInitialApiKeyId(resolved.apiKeyId);
-      setInitialModelSource(resolved.modelSource);
     }
     modelInitializedRef.current = true;
   }, [modelsByProvider, chatApiKeys, organization]);
@@ -509,7 +481,6 @@ export function ChatPageContent({
       setInitialAgentId(null);
       setInitialModel("");
       setInitialApiKeyId(null);
-      setInitialModelSource(null);
       modelInitializedRef.current = false;
     }
 
@@ -633,36 +604,37 @@ export function ChatPageContent({
     return model?.provider;
   }, [conversation?.selectedModel, chatModels]);
 
-  // Derive model source for existing conversations by comparing with agent/org defaults.
-  // Check localStorage override first — if the user explicitly saved this model as their
-  // override, it's a user override even if it matches the agent or org default.
-  const conversationModelSource = useMemo((): ModelSource | null => {
-    if (!conversation?.selectedModel) return null;
-
-    const userOverride = getSavedModelOverride();
-    if (userOverride && conversation.selectedModel === userOverride) {
-      return "user";
-    }
-
-    const agentId = conversation?.agentId;
-    if (agentId) {
-      const agent = internalAgents.find((a) => a.id === agentId) as
-        | (Record<string, unknown> & { llmModel?: string })
-        | undefined;
-      if (agent?.llmModel && conversation.selectedModel === agent.llmModel) {
-        return "agent";
-      }
-    }
-    if (
-      organization?.defaultLlmModel &&
-      conversation.selectedModel === organization.defaultLlmModel
-    ) {
-      return "organization";
-    }
-    return null;
+  // Model source — derived purely by comparing the selected model against the
+  // agent's and org's configured defaults. No stored state, nothing to keep in sync.
+  const conversationModelSource = useMemo(() => {
+    const agent = internalAgents.find((a) => a.id === conversation?.agentId) as
+      | (Record<string, unknown> & { llmModel?: string })
+      | undefined;
+    return deriveModelSource({
+      selectedModel: conversation?.selectedModel,
+      agentLlmModel: agent?.llmModel,
+      orgDefaultLlmModel: organization?.defaultLlmModel,
+    });
   }, [
     conversation?.selectedModel,
     conversation?.agentId,
+    internalAgents,
+    organization?.defaultLlmModel,
+  ]);
+
+  // Same derivation for the initial (no conversation) chat.
+  const initialModelSource = useMemo(() => {
+    const agent = internalAgents.find((a) => a.id === initialAgentId) as
+      | (Record<string, unknown> & { llmModel?: string })
+      | undefined;
+    return deriveModelSource({
+      selectedModel: initialModel,
+      agentLlmModel: agent?.llmModel,
+      orgDefaultLlmModel: organization?.defaultLlmModel,
+    });
+  }, [
+    initialModel,
+    initialAgentId,
     internalAgents,
     organization?.defaultLlmModel,
   ]);
@@ -752,10 +724,8 @@ export function ChatPageContent({
     [conversation],
   );
 
-  // Reset model override for an existing conversation: clear localStorage,
-  // resolve default from the conversation's agent, and update the conversation.
+  // Reset an existing conversation to its agent/org default model.
   const handleConversationResetModelOverride = useCallback(() => {
-    clearModelOverride();
     if (!conversation) return;
 
     const agent = conversation.agentId
@@ -2043,9 +2013,6 @@ export function ChatPageContent({
                       }
                       selectedModel={initialModel}
                       onModelChange={handleInitialModelChange}
-                      onModelSelectorOpenChange={
-                        handleInitialModelSelectorOpenChange
-                      }
                       agentId={newChatAgentId}
                       currentProvider={initialProvider}
                       textareaRef={textareaRef}

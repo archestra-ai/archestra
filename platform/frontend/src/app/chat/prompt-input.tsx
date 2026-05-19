@@ -105,9 +105,7 @@ interface ArchestraPromptInputProps {
   selectorAgentName?: string;
   /** Callback when agent changes */
   onAgentChange?: (agentId: string) => void;
-  /** Callback when model selector opens/closes */
-  onModelSelectorOpenChange?: (open: boolean) => void;
-  /** Source of the currently selected model (agent, organization, user, or null for fallback) */
+  /** Source of the currently selected model (agent, organization, user, or null) */
   modelSource?: ModelSource | null;
   /** Callback to reset user model override back to agent/org default */
   onResetModelOverride?: () => void;
@@ -138,7 +136,6 @@ const PromptInputContent = ({
   selectorAgentId,
   selectorAgentName,
   onAgentChange,
-  onModelSelectorOpenChange,
   modelSource,
   onResetModelOverride,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
@@ -403,7 +400,6 @@ const PromptInputContent = ({
                           <ModelSelector
                             selectedModel={selectedModel}
                             onModelChange={onModelChange}
-                            onOpenChange={onModelSelectorOpenChange}
                             apiKeyId={
                               conversationId
                                 ? currentConversationChatApiKeyId
@@ -542,7 +538,6 @@ const PromptInputContent = ({
                     selectedModel={selectedModel}
                     onModelChange={onModelChange}
                     onOpenChange={(open) => {
-                      onModelSelectorOpenChange?.(open);
                       if (!open) {
                         setTimeout(() => {
                           textareaRef.current?.focus();
@@ -633,7 +628,6 @@ const ArchestraPromptInput = ({
   selectorAgentId,
   selectorAgentName,
   onAgentChange,
-  onModelSelectorOpenChange,
   modelSource,
   onResetModelOverride,
 }: ArchestraPromptInputProps) => {
@@ -664,7 +658,6 @@ const ArchestraPromptInput = ({
           selectorAgentId={selectorAgentId}
           selectorAgentName={selectorAgentName}
           onAgentChange={onAgentChange}
-          onModelSelectorOpenChange={onModelSelectorOpenChange}
           modelSource={modelSource}
           onResetModelOverride={onResetModelOverride}
         />

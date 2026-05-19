@@ -1,5 +1,4 @@
 import {
-  type ModelSource,
   resolveInitialModel,
   resolveModelForAgent,
 } from "@/lib/chat/use-chat-preferences";
@@ -26,13 +25,11 @@ export type ResolvedInitialAgentState = {
   agentId: string;
   modelId: string;
   apiKeyId: string | null;
-  modelSource: ModelSource | null;
 };
 
 export type ResolvedChatModelState = {
   modelId: string;
   apiKeyId: string | null;
-  modelSource: ModelSource | null;
   provider: SupportedProvider | undefined;
 };
 
@@ -100,7 +97,6 @@ export function resolveInitialAgentState(params: {
     agentId: params.agent.id,
     modelId: resolved.modelId,
     apiKeyId: resolved.apiKeyId,
-    modelSource: resolved.modelSource,
   };
 }
 
@@ -142,7 +138,6 @@ export function resolveChatModelState(params: {
   return {
     modelId: resolved.modelId,
     apiKeyId: resolved.apiKeyId,
-    modelSource: resolved.source === "fallback" ? null : resolved.source,
     provider:
       params.chatModels && params.chatModels.length > 0
         ? getProviderForModelId({

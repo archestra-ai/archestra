@@ -27,7 +27,6 @@ describe("resolveInitialAgentState", () => {
       agentId: "agent-1",
       modelId: "gpt-4.1",
       apiKeyId: "key-1",
-      modelSource: "organization",
     });
   });
 
@@ -54,7 +53,6 @@ describe("resolveInitialAgentState", () => {
       agentId: "agent-1",
       modelId: "claude-3-5-sonnet",
       apiKeyId: "key-2",
-      modelSource: "agent",
     });
   });
 });
@@ -154,7 +152,6 @@ describe("resolveChatModelState", () => {
     expect(result).toEqual({
       modelId: "gpt-4.1",
       apiKeyId: "key-1",
-      modelSource: "agent",
       provider: "openai",
     });
   });

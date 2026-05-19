@@ -2,7 +2,6 @@
 
 export const CHAT_STORAGE_KEYS = {
   selectedAgent: "selected-chat-agent",
-  userModelOverride: "chat-user-model-override",
 } as const;
 
 // ===== Pure functions (testable without React) =====
@@ -28,42 +27,6 @@ export function saveAgent(agentId: string): void {
     localStorage.setItem(CHAT_STORAGE_KEYS.selectedAgent, agentId);
   } catch {
     // QuotaExceededError or private browsing restriction
-  }
-}
-
-/**
- * Read the user's model override from localStorage.
- */
-export function getSavedModelOverride(): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return localStorage.getItem(CHAT_STORAGE_KEYS.userModelOverride);
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Save the user's model override to localStorage.
- */
-export function saveModelOverride(modelId: string): void {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(CHAT_STORAGE_KEYS.userModelOverride, modelId);
-  } catch {
-    // QuotaExceededError or private browsing restriction
-  }
-}
-
-/**
- * Clear the user's model override from localStorage.
- */
-export function clearModelOverride(): void {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.removeItem(CHAT_STORAGE_KEYS.userModelOverride);
-  } catch {
-    // ignore
   }
 }
 
@@ -138,17 +101,16 @@ interface ResolveInitialModelParams extends ChatContext {
   agent: AgentInfo | null;
 }
 
-export type ModelSource = "agent" | "organization" | "user" | "fallback";
+export type ModelSource = "agent" | "organization" | "user";
 
 interface ResolvedModel {
   modelId: string;
   apiKeyId: string | null;
-  source: ModelSource;
 }
 
 /**
  * Resolve which model to use on initial chat load.
- * Priority: user override > agent config > organization default > first available model.
+ * Priority: agent config > organization default > best available model.
  * Returns null if no model can be resolved (e.g., no models available).
  */
 export function resolveInitialModel(
@@ -170,23 +132,11 @@ export function resolveInitialModel(
     return null;
   };
 
-  // 0. User override from localStorage
-  const userOverride = getSavedModelOverride();
-  if (userOverride && allModels.some((m) => m.id === userOverride)) {
-    const provider = findProviderForModel(userOverride);
-    return {
-      modelId: userOverride,
-      apiKeyId: provider ? findKeyForProvider(provider) : null,
-      source: "user",
-    };
-  }
-
   // 1. Agent-configured model
   if (agent?.llmModel && allModels.some((m) => m.id === agent.llmModel)) {
     return {
       modelId: agent.llmModel,
       apiKeyId: agent.llmApiKeyId ?? null,
-      source: "agent",
     };
   }
 
@@ -207,7 +157,6 @@ export function resolveInitialModel(
     return {
       modelId: organization.defaultLlmModel,
       apiKeyId,
-      source: "organization",
     };
   }
 
@@ -220,11 +169,35 @@ export function resolveInitialModel(
     return {
       modelId: chosen.id,
       apiKeyId: provider ? findKeyForProvider(provider) : null,
-      source: "fallback",
     };
   }
 
   return null;
+}
+
+// ===== Model source =====
+
+interface DeriveModelSourceParams {
+  selectedModel: string | null | undefined;
+  agentLlmModel: string | null | undefined;
+  orgDefaultLlmModel: string | null | undefined;
+}
+
+/**
+ * Determine where the currently selected model came from, purely by
+ * comparison — no stored state. If it isn't the agent's or the org's
+ * configured default, the user must have picked it.
+ */
+export function deriveModelSource(
+  params: DeriveModelSourceParams,
+): ModelSource | null {
+  const { selectedModel, agentLlmModel, orgDefaultLlmModel } = params;
+  if (!selectedModel) return null;
+  if (agentLlmModel && selectedModel === agentLlmModel) return "agent";
+  if (orgDefaultLlmModel && selectedModel === orgDefaultLlmModel) {
+    return "organization";
+  }
+  return "user";
 }
 
 // ===== Agent switch helper =====

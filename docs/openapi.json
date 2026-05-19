@@ -35502,6 +35502,12 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "modelId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
                           "identityProviderId": {
                             "nullable": true,
                             "type": "string"
@@ -35832,6 +35838,7 @@
                           "incomingEmailAllowedDomain",
                           "llmApiKeyId",
                           "llmModel",
+                          "modelId",
                           "identityProviderId",
                           "passthroughHeaders",
                           "toolExposureMode",
@@ -36214,6 +36221,12 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "modelId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
                   "identityProviderId": {
                     "nullable": true,
                     "type": "string"
@@ -36472,6 +36485,12 @@
                     "llmModel": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "modelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "identityProviderId": {
                       "nullable": true,
@@ -36803,6 +36822,7 @@
                     "incomingEmailAllowedDomain",
                     "llmApiKeyId",
                     "llmModel",
+                    "modelId",
                     "identityProviderId",
                     "passthroughHeaders",
                     "toolExposureMode",
@@ -37226,6 +37246,12 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "modelId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
                       "identityProviderId": {
                         "nullable": true,
                         "type": "string"
@@ -37556,6 +37582,7 @@
                       "incomingEmailAllowedDomain",
                       "llmApiKeyId",
                       "llmModel",
+                      "modelId",
                       "identityProviderId",
                       "passthroughHeaders",
                       "toolExposureMode",
@@ -37910,6 +37937,12 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "modelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
@@ -38240,6 +38273,7 @@
                     "incomingEmailAllowedDomain",
                     "llmApiKeyId",
                     "llmModel",
+                    "modelId",
                     "identityProviderId",
                     "passthroughHeaders",
                     "toolExposureMode",
@@ -38594,6 +38628,12 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "modelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
@@ -38924,6 +38964,7 @@
                     "incomingEmailAllowedDomain",
                     "llmApiKeyId",
                     "llmModel",
+                    "modelId",
                     "identityProviderId",
                     "passthroughHeaders",
                     "toolExposureMode",
@@ -39262,11 +39303,6 @@
                           "search_and_run_only"
                         ]
                       },
-                      "llmModel": {
-                        "nullable": true,
-                        "description": "Informational; not auto-configured on import",
-                        "type": "string"
-                      },
                       "incomingEmailEnabled": {
                         "type": "boolean"
                       },
@@ -39304,7 +39340,6 @@
                       "considerContextUntrusted",
                       "toolAssignmentMode",
                       "toolExposureMode",
-                      "llmModel",
                       "incomingEmailEnabled",
                       "incomingEmailSecurityMode",
                       "incomingEmailAllowedDomain"
@@ -39625,6 +39660,12 @@
                         "llmModel": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "modelId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "identityProviderId": {
                           "nullable": true,
@@ -39956,6 +39997,7 @@
                         "incomingEmailAllowedDomain",
                         "llmApiKeyId",
                         "llmModel",
+                        "modelId",
                         "identityProviderId",
                         "passthroughHeaders",
                         "toolExposureMode",
@@ -40357,6 +40399,12 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "modelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
@@ -40687,6 +40735,7 @@
                     "incomingEmailAllowedDomain",
                     "llmApiKeyId",
                     "llmModel",
+                    "modelId",
                     "identityProviderId",
                     "passthroughHeaders",
                     "toolExposureMode",
@@ -41021,6 +41070,12 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "modelId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
                   "identityProviderId": {
                     "nullable": true,
                     "type": "string"
@@ -41284,6 +41339,12 @@
                     "llmModel": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "modelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "identityProviderId": {
                       "nullable": true,
@@ -41615,6 +41676,7 @@
                     "incomingEmailAllowedDomain",
                     "llmApiKeyId",
                     "llmModel",
+                    "modelId",
                     "identityProviderId",
                     "passthroughHeaders",
                     "toolExposureMode",
@@ -42253,6 +42315,12 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "modelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
@@ -42583,6 +42651,7 @@
                     "incomingEmailAllowedDomain",
                     "llmApiKeyId",
                     "llmModel",
+                    "modelId",
                     "identityProviderId",
                     "passthroughHeaders",
                     "toolExposureMode",
@@ -42933,11 +43002,6 @@
                             "search_and_run_only"
                           ]
                         },
-                        "llmModel": {
-                          "nullable": true,
-                          "description": "Informational; not auto-configured on import",
-                          "type": "string"
-                        },
                         "incomingEmailEnabled": {
                           "type": "boolean"
                         },
@@ -42970,7 +43034,6 @@
                         "considerContextUntrusted",
                         "toolAssignmentMode",
                         "toolExposureMode",
-                        "llmModel",
                         "incomingEmailEnabled",
                         "incomingEmailSecurityMode",
                         "incomingEmailAllowedDomain"
@@ -64906,6 +64969,12 @@
                           "azure"
                         ]
                       },
+                      "modelId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
                       "hasCustomToolSelection": {
                         "type": "boolean"
                       },
@@ -65142,6 +65211,7 @@
                       "title",
                       "selectedModel",
                       "selectedProvider",
+                      "modelId",
                       "hasCustomToolSelection",
                       "todoList",
                       "artifact",
@@ -65417,30 +65487,11 @@
                     "nullable": true,
                     "type": "string"
                   },
-                  "selectedModel": {
-                    "type": "string"
-                  },
-                  "selectedProvider": {
+                  "modelId": {
+                    "nullable": true,
                     "type": "string",
-                    "enum": [
-                      "openai",
-                      "gemini",
-                      "anthropic",
-                      "bedrock",
-                      "cohere",
-                      "cerebras",
-                      "mistral",
-                      "perplexity",
-                      "groq",
-                      "xai",
-                      "openrouter",
-                      "vllm",
-                      "ollama",
-                      "zhipuai",
-                      "deepseek",
-                      "minimax",
-                      "azure"
-                    ]
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
                   "chatApiKeyId": {
                     "nullable": true,
@@ -65516,6 +65567,12 @@
                         "minimax",
                         "azure"
                       ]
+                    },
+                    "modelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "hasCustomToolSelection": {
                       "type": "boolean"
@@ -65753,6 +65810,7 @@
                     "title",
                     "selectedModel",
                     "selectedProvider",
+                    "modelId",
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
@@ -66086,6 +66144,12 @@
                         "azure"
                       ]
                     },
+                    "modelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "hasCustomToolSelection": {
                       "type": "boolean"
                     },
@@ -66322,6 +66386,7 @@
                     "title",
                     "selectedModel",
                     "selectedProvider",
+                    "modelId",
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
@@ -66591,30 +66656,11 @@
                     "nullable": true,
                     "type": "string"
                   },
-                  "selectedModel": {
-                    "type": "string"
-                  },
-                  "selectedProvider": {
+                  "modelId": {
+                    "nullable": true,
                     "type": "string",
-                    "enum": [
-                      "openai",
-                      "gemini",
-                      "anthropic",
-                      "bedrock",
-                      "cohere",
-                      "cerebras",
-                      "mistral",
-                      "perplexity",
-                      "groq",
-                      "xai",
-                      "openrouter",
-                      "vllm",
-                      "ollama",
-                      "zhipuai",
-                      "deepseek",
-                      "minimax",
-                      "azure"
-                    ]
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
                   "chatApiKeyId": {
                     "nullable": true,
@@ -66714,6 +66760,12 @@
                         "minimax",
                         "azure"
                       ]
+                    },
+                    "modelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "hasCustomToolSelection": {
                       "type": "boolean"
@@ -66951,6 +67003,7 @@
                     "title",
                     "selectedModel",
                     "selectedProvider",
+                    "modelId",
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
@@ -67578,6 +67631,12 @@
                         "azure"
                       ]
                     },
+                    "modelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "hasCustomToolSelection": {
                       "type": "boolean"
                     },
@@ -67814,6 +67873,7 @@
                     "title",
                     "selectedModel",
                     "selectedProvider",
+                    "modelId",
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
@@ -69384,6 +69444,12 @@
                         "azure"
                       ]
                     },
+                    "modelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "hasCustomToolSelection": {
                       "type": "boolean"
                     },
@@ -69623,6 +69689,7 @@
                     "title",
                     "selectedModel",
                     "selectedProvider",
+                    "modelId",
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
@@ -69977,6 +70044,12 @@
                         "azure"
                       ]
                     },
+                    "modelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "hasCustomToolSelection": {
                       "type": "boolean"
                     },
@@ -70213,6 +70286,7 @@
                     "title",
                     "selectedModel",
                     "selectedProvider",
+                    "modelId",
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
@@ -70562,6 +70636,12 @@
                         "azure"
                       ]
                     },
+                    "modelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "hasCustomToolSelection": {
                       "type": "boolean"
                     },
@@ -70798,6 +70878,7 @@
                     "title",
                     "selectedModel",
                     "selectedProvider",
+                    "modelId",
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
@@ -71157,6 +71238,12 @@
                         "azure"
                       ]
                     },
+                    "modelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "hasCustomToolSelection": {
                       "type": "boolean"
                     },
@@ -71393,6 +71480,7 @@
                     "title",
                     "selectedModel",
                     "selectedProvider",
+                    "modelId",
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
@@ -128915,6 +129003,9 @@
                       "id": {
                         "type": "string"
                       },
+                      "dbId": {
+                        "type": "string"
+                      },
                       "displayName": {
                         "type": "string"
                       },
@@ -129031,6 +129122,7 @@
                     },
                     "required": [
                       "id",
+                      "dbId",
                       "displayName",
                       "provider"
                     ],
@@ -157717,6 +157809,12 @@
                         "azure"
                       ]
                     },
+                    "defaultModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "defaultLlmApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -157961,6 +158059,7 @@
                     "rerankerModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
+                    "defaultModelId",
                     "defaultLlmApiKeyId",
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
@@ -158554,6 +158653,12 @@
                         "azure"
                       ]
                     },
+                    "defaultModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "defaultLlmApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -158798,6 +158903,7 @@
                     "rerankerModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
+                    "defaultModelId",
                     "defaultLlmApiKeyId",
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
@@ -159663,6 +159769,12 @@
                         "azure"
                       ]
                     },
+                    "defaultModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "defaultLlmApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -159907,6 +160019,7 @@
                     "rerankerModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
+                    "defaultModelId",
                     "defaultLlmApiKeyId",
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
@@ -160382,6 +160495,12 @@
                         "azure"
                       ]
                     },
+                    "defaultModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "defaultLlmApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -160626,6 +160745,7 @@
                     "rerankerModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
+                    "defaultModelId",
                     "defaultLlmApiKeyId",
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
@@ -160911,32 +161031,11 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "defaultLlmModel": {
-                    "nullable": true,
-                    "type": "string"
-                  },
-                  "defaultLlmProvider": {
+                  "defaultModelId": {
                     "nullable": true,
                     "type": "string",
-                    "enum": [
-                      "openai",
-                      "gemini",
-                      "anthropic",
-                      "bedrock",
-                      "cohere",
-                      "cerebras",
-                      "mistral",
-                      "perplexity",
-                      "groq",
-                      "xai",
-                      "openrouter",
-                      "vllm",
-                      "ollama",
-                      "zhipuai",
-                      "deepseek",
-                      "minimax",
-                      "azure"
-                    ]
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
                   "defaultLlmApiKeyId": {
                     "nullable": true,
@@ -161105,6 +161204,12 @@
                         "minimax",
                         "azure"
                       ]
+                    },
+                    "defaultModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "defaultLlmApiKeyId": {
                       "nullable": true,
@@ -161350,6 +161455,7 @@
                     "rerankerModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
+                    "defaultModelId",
                     "defaultLlmApiKeyId",
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
@@ -161874,6 +161980,12 @@
                         "azure"
                       ]
                     },
+                    "defaultModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "defaultLlmApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -162118,6 +162230,7 @@
                     "rerankerModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
+                    "defaultModelId",
                     "defaultLlmApiKeyId",
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
@@ -162575,6 +162688,12 @@
                         "azure"
                       ]
                     },
+                    "defaultModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "defaultLlmApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -162819,6 +162938,7 @@
                     "rerankerModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
+                    "defaultModelId",
                     "defaultLlmApiKeyId",
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
@@ -163269,6 +163389,12 @@
                         "azure"
                       ]
                     },
+                    "defaultModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "defaultLlmApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -163513,6 +163639,7 @@
                     "rerankerModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
+                    "defaultModelId",
                     "defaultLlmApiKeyId",
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
@@ -163962,6 +164089,12 @@
                         "azure"
                       ]
                     },
+                    "defaultModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "defaultLlmApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -164206,6 +164339,7 @@
                     "rerankerModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
+                    "defaultModelId",
                     "defaultLlmApiKeyId",
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
@@ -164668,6 +164802,12 @@
                         "azure"
                       ]
                     },
+                    "defaultModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "defaultLlmApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -164912,6 +165052,7 @@
                     "rerankerModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
+                    "defaultModelId",
                     "defaultLlmApiKeyId",
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
@@ -165341,6 +165482,12 @@
                         "azure"
                       ]
                     },
+                    "defaultModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "defaultLlmApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -165585,6 +165732,7 @@
                     "rerankerModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
+                    "defaultModelId",
                     "defaultLlmApiKeyId",
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
@@ -166327,6 +166475,12 @@
                         "azure"
                       ]
                     },
+                    "defaultModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "defaultLlmApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -166571,6 +166725,7 @@
                     "rerankerModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
+                    "defaultModelId",
                     "defaultLlmApiKeyId",
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
@@ -172694,6 +172849,12 @@
                         "azure"
                       ]
                     },
+                    "modelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "hasCustomToolSelection": {
                       "type": "boolean"
                     },
@@ -172930,6 +173091,7 @@
                     "title",
                     "selectedModel",
                     "selectedProvider",
+                    "modelId",
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",

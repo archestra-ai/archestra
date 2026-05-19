@@ -11697,10 +11697,6 @@ export type ImportAgentData = {
             considerContextUntrusted: boolean;
             toolAssignmentMode: 'automatic' | 'manual';
             toolExposureMode: 'full' | 'search_and_run_only';
-            /**
-             * Informational; not auto-configured on import
-             */
-            llmModel: string | null;
             incomingEmailEnabled: boolean;
             incomingEmailSecurityMode: 'private' | 'internal' | 'public';
             incomingEmailAllowedDomain: string | null;
@@ -12660,10 +12656,6 @@ export type ExportAgentResponses = {
             considerContextUntrusted: boolean;
             toolAssignmentMode: 'automatic' | 'manual';
             toolExposureMode: 'full' | 'search_and_run_only';
-            /**
-             * Informational; not auto-configured on import
-             */
-            llmModel: string | null;
             incomingEmailEnabled: boolean;
             incomingEmailSecurityMode: 'private' | 'internal' | 'public';
             incomingEmailAllowedDomain: string | null;

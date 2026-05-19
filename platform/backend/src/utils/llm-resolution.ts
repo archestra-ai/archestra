@@ -57,8 +57,10 @@ export async function resolveConversationLlmSelectionForAgent(params: {
   agent: { llmApiKeyId: string | null; modelId: string | null };
   organizationId: string;
   userId: string;
-  /** A model the user explicitly picked (highest priority). */
+  /** The model the user explicitly picked (highest priority). */
   explicitModelId?: string | null;
+  /** The API key the user explicitly picked, alongside `explicitModelId`. */
+  explicitApiKeyId?: string | null;
 }): Promise<ConversationLlmSelection> {
   const { agent, organizationId, userId } = params;
 
@@ -66,7 +68,7 @@ export async function resolveConversationLlmSelectionForAgent(params: {
   const organization = await OrganizationModel.getById(organizationId);
 
   const levels: ModelSelection[] = [
-    { modelId: params.explicitModelId, apiKeyId: null },
+    { modelId: params.explicitModelId, apiKeyId: params.explicitApiKeyId },
     {
       modelId: member?.defaultModelId,
       apiKeyId: member?.defaultChatApiKeyId,

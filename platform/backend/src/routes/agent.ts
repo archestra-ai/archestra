@@ -1,5 +1,6 @@
 import {
   createPaginatedResponseSchema,
+  isModelSelectionComplete,
   LABELS_ENTRY_DELIMITER,
   LABELS_VALUE_DELIMITER,
   PaginationQuerySchema,
@@ -477,6 +478,19 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      // A model and its API key are a pair: persist both or neither.
+      if (
+        !isModelSelectionComplete({
+          modelId: body.modelId,
+          apiKeyId: body.llmApiKeyId,
+        })
+      ) {
+        throw new ApiError(
+          400,
+          "An agent's model and API key must be set together",
+        );
+      }
+
       // Omit teams if scope is not 'team' — scope takes precedence
       const createData = {
         ...body,
@@ -905,6 +919,29 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ...((body.scope ?? existingAgent.scope) !== "team" &&
             body.teams !== undefined && { teams: [] }),
         };
+      }
+
+      // A model and its API key are a pair: persist both or neither. Validate
+      // the merged result, but only when this update touches either field — an
+      // unrelated edit must not be blocked by a pre-existing half pair.
+      if (body.modelId !== undefined || body.llmApiKeyId !== undefined) {
+        const mergedModelId =
+          body.modelId !== undefined ? body.modelId : existingAgent.modelId;
+        const mergedApiKeyId =
+          body.llmApiKeyId !== undefined
+            ? body.llmApiKeyId
+            : existingAgent.llmApiKeyId;
+        if (
+          !isModelSelectionComplete({
+            modelId: mergedModelId,
+            apiKeyId: mergedApiKeyId,
+          })
+        ) {
+          throw new ApiError(
+            400,
+            "An agent's model and API key must be set together",
+          );
+        }
       }
 
       const agent = await AgentModel.update(id, updateData);

@@ -100,6 +100,29 @@ describe("chat conversation and message routes", () => {
     expect(unpinResponse.json().pinnedAt).toBeNull();
   });
 
+  test("rejects a conversation update that sets a model without an API key", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const conversation = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+    });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/chat/conversations/${conversation.id}`,
+      payload: { modelId: crypto.randomUUID() },
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
   test("allows scheduled task admins to view linked run conversations owned by another user", async ({
     makeAgent,
     makeMember,

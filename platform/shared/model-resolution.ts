@@ -20,6 +20,16 @@ export interface ModelSelection {
   apiKeyId: string | null | undefined;
 }
 
+/**
+ * A (model, key) selection is complete only when both ids are set or both are
+ * empty. A half-configured selection — a model with no key, or a key with no
+ * model — must never be persisted: the key cannot be inferred from the model
+ * (see `resolveModelSelection`), so a half pair is an unresolvable state.
+ */
+export function isModelSelectionComplete(selection: ModelSelection): boolean {
+  return Boolean(selection.modelId) === Boolean(selection.apiKeyId);
+}
+
 /** A model the actor can currently use, with the provider's "best" marker. */
 export interface RankedModel {
   modelId: string;
@@ -35,10 +45,16 @@ export type ModelSource = "agent" | "organization" | "user";
  * Resolve the effective model from the priority chain.
  *
  * `levels` must already be ordered most- to least-specific
- * (conversation -> member -> agent -> organization). The first level with a
- * non-null `modelId` wins; if that level has no `apiKeyId`, the key is derived
- * from `availableModels`. When no level has a model, falls back to the "best
- * available" model across every key the actor can use.
+ * (conversation -> member -> agent -> organization). A level wins only when it
+ * carries *both* a `modelId` and an `apiKeyId`: a model is meaningless without
+ * the key it runs through, so a half-configured level (e.g. a model pinned
+ * with no key) is skipped and the chain falls through to the next level. When
+ * no level is complete, falls back to the "best available" model across every
+ * key the actor can use.
+ *
+ * There is no key derivation: the key is never inferred from the model. The
+ * same model can be reached through many keys, so a `(model, key)` pair is the
+ * only unambiguous unit of selection.
  *
  * Returns null only when nothing is configured and no models are available.
  */
@@ -49,14 +65,9 @@ export function resolveModelSelection(params: {
   const { levels, availableModels } = params;
 
   for (const level of levels) {
-    if (!level.modelId) {
-      continue;
+    if (level.modelId && level.apiKeyId) {
+      return { modelId: level.modelId, apiKeyId: level.apiKeyId };
     }
-    const apiKeyId =
-      level.apiKeyId ??
-      availableModels.find((m) => m.modelId === level.modelId)?.apiKeyId ??
-      null;
-    return { modelId: level.modelId, apiKeyId };
   }
 
   const best = pickBestModel(availableModels);

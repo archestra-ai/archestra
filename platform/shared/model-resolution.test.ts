@@ -11,15 +11,20 @@ import {
 describe("resolveModelSelection", () => {
   // conversation -> member -> agent -> organization
   const conv: ModelSelection = { modelId: "conv-model", apiKeyId: "conv-key" };
-  const member: ModelSelection = { modelId: "member-model", apiKeyId: "mem-key" };
-  const agent: ModelSelection = { modelId: "agent-model", apiKeyId: "agent-key" };
+  const member: ModelSelection = {
+    modelId: "member-model",
+    apiKeyId: "mem-key",
+  };
+  const agent: ModelSelection = {
+    modelId: "agent-model",
+    apiKeyId: "agent-key",
+  };
   const org: ModelSelection = { modelId: "org-model", apiKeyId: "org-key" };
   const none: ModelSelection = { modelId: null, apiKeyId: null };
 
   const available: RankedModel[] = [
     { modelId: "cheap-model", apiKeyId: "key-a" },
     { modelId: "best-model", apiKeyId: "key-b", isBest: true },
-    { modelId: "agent-model", apiKeyId: "derived-key" },
   ];
 
   const cases: Array<{
@@ -74,16 +79,28 @@ describe("resolveModelSelection", () => {
       expected: null,
     },
     {
-      name: "derives the apiKeyId from availability when the winning level has none",
+      name: "a level with a model but no key is skipped (falls back, no derivation)",
       levels: [{ modelId: "agent-model", apiKeyId: null }],
       availableModels: available,
-      expected: { modelId: "agent-model", apiKeyId: "derived-key" },
+      expected: { modelId: "best-model", apiKeyId: "key-b" },
     },
     {
-      name: "apiKeyId is null when the winning level has no key and the model is unavailable",
+      name: "a level with a key but no model is skipped",
+      levels: [{ modelId: null, apiKeyId: "lonely-key" }],
+      availableModels: available,
+      expected: { modelId: "best-model", apiKeyId: "key-b" },
+    },
+    {
+      name: "a half-configured level wins for neither id when nothing is available",
       levels: [{ modelId: "agent-model", apiKeyId: null }],
       availableModels: [],
-      expected: { modelId: "agent-model", apiKeyId: null },
+      expected: null,
+    },
+    {
+      name: "a half-configured level falls through to a lower complete level",
+      levels: [{ modelId: "agent-model", apiKeyId: null }, org],
+      availableModels: available,
+      expected: { modelId: "org-model", apiKeyId: "org-key" },
     },
     {
       name: "a configured model is used as-is even when not in the available list",

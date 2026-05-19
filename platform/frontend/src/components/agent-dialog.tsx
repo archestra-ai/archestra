@@ -1817,7 +1817,7 @@ export function AgentDialog({
                                     </>
                                   ) : (
                                     <span className="text-muted-foreground">
-                                      Dynamic API key
+                                      Organization default
                                     </span>
                                   )}
                                 </Button>
@@ -1844,11 +1844,11 @@ export function AgentDialog({
                                       >
                                         <div className="flex flex-col min-w-0">
                                           <span className="text-muted-foreground">
-                                            Dynamic API key
+                                            Organization default
                                           </span>
                                           <span className="text-xs text-muted-foreground">
-                                            Resolved at runtime: org-wide → team
-                                            → personal
+                                            No model or key set — falls back to
+                                            the organization default
                                           </span>
                                         </div>
                                         {!llmApiKeyId && (

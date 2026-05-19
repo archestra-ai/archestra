@@ -667,13 +667,30 @@ export function ChatPageContent({
   // ModelSelector's auto-select effect on every chatModels refetch.
   const chatModelsRef = useRef(chatModels);
   chatModelsRef.current = chatModels;
+  const chatApiKeysRef = useRef(chatApiKeys);
+  chatApiKeysRef.current = chatApiKeys;
   const conversationRef = useRef(conversation);
   conversationRef.current = conversation;
+  // Picking a model also pins the API key it runs through: a conversation
+  // stores the (model, key) pair as a unit, so a model is never persisted
+  // without its key. Keep the conversation's current key when it serves the
+  // model's provider, otherwise use any key for that provider.
   const handleModelChange = useCallback((modelId: string) => {
-    if (!conversationRef.current) return;
+    const conv = conversationRef.current;
+    if (!conv) return;
+    const model = chatModelsRef.current.find((m) => m.dbId === modelId);
+    const currentKey = chatApiKeysRef.current.find(
+      (k) => k.id === conv.chatApiKeyId,
+    );
+    const chatApiKeyId =
+      currentKey && currentKey.provider === model?.provider
+        ? currentKey.id
+        : (chatApiKeysRef.current.find((k) => k.provider === model?.provider)
+            ?.id ?? null);
     updateConversationMutateRef.current({
-      id: conversationRef.current.id,
+      id: conv.id,
       modelId,
+      chatApiKeyId,
     });
   }, []);
 
@@ -748,6 +765,7 @@ export function ChatPageContent({
       updateConversationMutateRef.current({
         id: conversation.id,
         modelId: resolved.modelId,
+        chatApiKeyId: resolved.apiKeyId,
       });
     }
   }, [

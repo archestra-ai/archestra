@@ -352,7 +352,7 @@ describe("resolveConversationLlmSelectionForAgent", () => {
     });
   });
 
-  test("an explicit pick overrides the agent model", async () => {
+  test("an explicit (model, key) pick overrides the agent model", async () => {
     vi.spyOn(ModelModel, "findById").mockImplementation(async (id) => {
       if (id === "m-explicit") {
         return mockModel({
@@ -369,10 +369,35 @@ describe("resolveConversationLlmSelectionForAgent", () => {
       organizationId: "org-1",
       userId: "user-1",
       explicitModelId: "m-explicit",
+      explicitApiKeyId: "key-openai",
     });
 
     expect(result.modelId).toBe("m-explicit");
+    expect(result.chatApiKeyId).toBe("key-openai");
     expect(result.selectedModel).toBe("gpt-4o");
+  });
+
+  test("an explicit model with no key falls through to the agent", async () => {
+    vi.spyOn(ModelModel, "findById").mockImplementation(async (id) => {
+      if (id === "m-agent") {
+        return mockModel({
+          id: "m-agent",
+          modelId: "claude-3-5-sonnet",
+          provider: "anthropic",
+        });
+      }
+      return null;
+    });
+
+    const result = await resolveConversationLlmSelectionForAgent({
+      agent: { llmApiKeyId: "key-anthropic", modelId: "m-agent" },
+      organizationId: "org-1",
+      userId: "user-1",
+      explicitModelId: "m-explicit",
+    });
+
+    expect(result.modelId).toBe("m-agent");
+    expect(result.chatApiKeyId).toBe("key-anthropic");
   });
 
   test("falls back to the organization default when the agent has no model", async () => {
@@ -394,6 +419,37 @@ describe("resolveConversationLlmSelectionForAgent", () => {
 
     const result = await resolveConversationLlmSelectionForAgent({
       agent: { llmApiKeyId: null, modelId: null },
+      organizationId: "org-1",
+      userId: "user-1",
+    });
+
+    expect(result).toEqual({
+      modelId: "m-org",
+      chatApiKeyId: "org-key",
+      selectedModel: "gpt-4o",
+      selectedProvider: "openai",
+    });
+  });
+
+  test("an agent with a model but no key (dynamic key) falls through to the org default", async () => {
+    vi.spyOn(OrganizationModel, "getById").mockResolvedValue({
+      id: "org-1",
+      defaultModelId: "m-org",
+      defaultLlmApiKeyId: "org-key",
+    } as never);
+    vi.spyOn(ModelModel, "findById").mockImplementation(async (id) => {
+      if (id === "m-org") {
+        return mockModel({
+          id: "m-org",
+          modelId: "gpt-4o",
+          provider: "openai",
+        });
+      }
+      return null;
+    });
+
+    const result = await resolveConversationLlmSelectionForAgent({
+      agent: { llmApiKeyId: null, modelId: "m-agent" },
       organizationId: "org-1",
       userId: "user-1",
     });

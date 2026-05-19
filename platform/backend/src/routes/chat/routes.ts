@@ -1,6 +1,7 @@
 import {
   buildUserSystemPromptContext,
   type ChatErrorResponse,
+  isModelSelectionComplete,
   RouteId,
   type SupportedProvider,
   TimeInMs,
@@ -1053,11 +1054,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Resolve the model via the priority chain:
       // explicit pick -> member -> agent -> organization -> best available.
+      // The explicit pick is a (model, key) pair — both are carried so the
+      // chosen key is honored instead of being re-derived.
       const llmSelection = await resolveConversationLlmSelectionForAgent({
         agent: { llmApiKeyId: agent.llmApiKeyId, modelId: agent.modelId },
         organizationId,
         userId: user.id,
         explicitModelId: modelId,
+        explicitApiKeyId: chatApiKeyId,
       });
 
       logger.info(
@@ -1080,7 +1084,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId,
           title,
           modelId: llmSelection.modelId,
-          chatApiKeyId: chatApiKeyId ?? llmSelection.chatApiKeyId,
+          chatApiKeyId: llmSelection.chatApiKeyId,
         }),
       );
     },
@@ -1148,6 +1152,36 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           body.modelId = llmSelection.modelId;
           body.chatApiKeyId = llmSelection.chatApiKeyId;
+        }
+      }
+
+      // A conversation's model and API key are a pair: persist both or
+      // neither. Validate the merged result only when this update touches
+      // either field.
+      if (body.modelId !== undefined || body.chatApiKeyId !== undefined) {
+        const currentConversation = await ConversationModel.findById({
+          id,
+          userId: user.id,
+          organizationId,
+        });
+        const mergedModelId =
+          body.modelId !== undefined
+            ? body.modelId
+            : (currentConversation?.modelId ?? null);
+        const mergedApiKeyId =
+          body.chatApiKeyId !== undefined
+            ? body.chatApiKeyId
+            : (currentConversation?.chatApiKeyId ?? null);
+        if (
+          !isModelSelectionComplete({
+            modelId: mergedModelId,
+            apiKeyId: mergedApiKeyId,
+          })
+        ) {
+          throw new ApiError(
+            400,
+            "A conversation's model and API key must be set together",
+          );
         }
       }
 

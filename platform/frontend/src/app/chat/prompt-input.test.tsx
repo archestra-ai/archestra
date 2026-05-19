@@ -592,6 +592,42 @@ describe("ArchestraPromptInput", () => {
       );
     });
 
+    it("does not submit queued follow-ups after switching conversations", () => {
+      const onConversationASubmit = vi.fn();
+      const onConversationBSubmit = vi.fn();
+      mockControllerState.value = "Keep this in conversation A";
+
+      const { rerender } = render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          conversationId="conversation-a"
+          onSubmit={onConversationASubmit}
+          status="streaming"
+        />,
+      );
+
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(
+        screen.getByText("Keep this in conversation A"),
+      ).toBeInTheDocument();
+
+      rerender(
+        <ArchestraPromptInput
+          {...defaultProps}
+          conversationId="conversation-b"
+          onSubmit={onConversationBSubmit}
+          status="ready"
+        />,
+      );
+
+      expect(onConversationASubmit).not.toHaveBeenCalled();
+      expect(onConversationBSubmit).not.toHaveBeenCalled();
+      expect(
+        screen.queryByText("Keep this in conversation A"),
+      ).not.toBeInTheDocument();
+    });
+
     it("removes queued follow-ups from the prompt queue", () => {
       mockControllerState.value = "Remove this queued prompt";
 

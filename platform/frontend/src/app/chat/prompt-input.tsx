@@ -229,6 +229,14 @@ const PromptInputContent = ({
   const storageKey = conversationId
     ? conversationStorageKeys(conversationId).draft
     : `archestra_chat_draft_new_${agentId}`;
+  const queueScopeKey = conversationId
+    ? `conversation:${conversationId}`
+    : `new:${agentId}`;
+  const visibleQueuedMessages = useMemo(
+    () =>
+      queuedMessages.filter((message) => message.scopeKey === queueScopeKey),
+    [queuedMessages, queueScopeKey],
+  );
 
   const isRestored = useRef(false);
 
@@ -351,23 +359,32 @@ const PromptInputContent = ({
   );
 
   useEffect(() => {
+    isSendingQueuedMessageRef.current = false;
+    setQueuedMessages((current) =>
+      current.filter((message) => message.scopeKey === queueScopeKey),
+    );
+  }, [queueScopeKey]);
+
+  useEffect(() => {
     if (status !== "ready") {
       isSendingQueuedMessageRef.current = false;
       return;
     }
 
-    if (queuedMessages.length === 0) {
+    if (visibleQueuedMessages.length === 0) {
       return;
     }
     if (isSendingQueuedMessageRef.current) {
       return;
     }
 
-    const [nextMessage] = queuedMessages;
+    const [nextMessage] = visibleQueuedMessages;
     isSendingQueuedMessageRef.current = true;
-    setQueuedMessages((current) => current.slice(1));
+    setQueuedMessages((current) =>
+      current.filter((message) => message.id !== nextMessage.id),
+    );
     submitQueuedMessage(nextMessage);
-  }, [queuedMessages, status, submitQueuedMessage]);
+  }, [visibleQueuedMessages, status, submitQueuedMessage]);
 
   const selectSlashCommand = useCallback(
     (command: SlashCommand) => {
@@ -448,6 +465,7 @@ const PromptInputContent = ({
           ...current,
           {
             id: nanoid(),
+            scopeKey: queueScopeKey,
             text: message.text,
             files: message.files,
           },
@@ -458,7 +476,14 @@ const PromptInputContent = ({
       localStorage.removeItem(storageKey);
       onSubmit(message, e);
     },
-    [onSubmit, onCompactConversation, runCompactCommand, status, storageKey],
+    [
+      onSubmit,
+      onCompactConversation,
+      queueScopeKey,
+      runCompactCommand,
+      status,
+      storageKey,
+    ],
   );
 
   const removeQueuedMessage = useCallback((id: string) => {
@@ -488,7 +513,7 @@ const PromptInputContent = ({
     <div className="relative">
       <PromptInputQueue
         className="absolute inset-x-0 bottom-full z-40"
-        messages={queuedMessages}
+        messages={visibleQueuedMessages}
         onRemove={removeQueuedMessage}
       />
       {isSlashCommandOpen && (

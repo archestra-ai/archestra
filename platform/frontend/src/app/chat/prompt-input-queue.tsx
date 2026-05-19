@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 
 export type QueuedPromptInputMessage = {
   id: string;
+  scopeKey: string;
   text: string;
   files: FileUIPart[];
 };

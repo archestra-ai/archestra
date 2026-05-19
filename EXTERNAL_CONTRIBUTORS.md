@@ -396,3 +396,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @crftr
 - @StevenWanglolz
 - @SwathiMystery
+- @dennisoelkers

@@ -132,7 +132,6 @@ type SlashCommand = {
   value: string;
   name: string;
   description: string;
-  kind: "real" | "mock";
 };
 
 const SLASH_COMMANDS: SlashCommand[] = [
@@ -140,37 +139,6 @@ const SLASH_COMMANDS: SlashCommand[] = [
     value: "/compact",
     name: "compact",
     description: "summarize conversation to prevent hitting the context limit",
-    kind: "real",
-  },
-  {
-    value: "/search",
-    name: "search",
-    description: "mock command for testing command navigation",
-    kind: "mock",
-  },
-  {
-    value: "/agent",
-    name: "agent",
-    description: "mock command for testing command navigation",
-    kind: "mock",
-  },
-  {
-    value: "/model",
-    name: "model",
-    description: "mock command for testing command navigation",
-    kind: "mock",
-  },
-  {
-    value: "/tools",
-    name: "tools",
-    description: "mock command for testing command navigation",
-    kind: "mock",
-  },
-  {
-    value: "/help",
-    name: "help",
-    description: "mock command for testing command navigation",
-    kind: "mock",
   },
 ];
 
@@ -213,6 +181,9 @@ const PromptInputContent = ({
   const attachments = usePromptInputAttachments();
   const commandItemRefs = useRef<Array<HTMLDivElement | null>>([]);
   const [activeCommandIndex, setActiveCommandIndex] = useState(0);
+  const [dismissedSlashCommandValue, setDismissedSlashCommandValue] = useState<
+    string | null
+  >(null);
   const [queuedMessages, setQueuedMessages] = useState<
     QueuedPromptInputMessage[]
   >([]);
@@ -317,7 +288,19 @@ const PromptInputContent = ({
   const isSlashCommandOpen =
     !!conversationId &&
     !!onCompactConversation &&
-    controller.textInput.value.startsWith("/");
+    controller.textInput.value.startsWith("/") &&
+    controller.textInput.value !== dismissedSlashCommandValue;
+
+  // reset the Escape dismissal once the user edits the input — typing more
+  // produces a new query and the picker should re-open
+  useEffect(() => {
+    if (
+      dismissedSlashCommandValue !== null &&
+      controller.textInput.value !== dismissedSlashCommandValue
+    ) {
+      setDismissedSlashCommandValue(null);
+    }
+  }, [controller.textInput.value, dismissedSlashCommandValue]);
   const visibleSlashCommands = useMemo(() => {
     if (!isSlashCommandOpen) {
       return [];
@@ -388,12 +371,9 @@ const PromptInputContent = ({
 
   const selectSlashCommand = useCallback(
     (command: SlashCommand) => {
-      if (command.kind === "real") {
+      if (command.value === "/compact") {
         runCompactCommand();
-        return;
       }
-
-      toast.info(`${command.value} is a placeholder command.`);
     },
     [runCompactCommand],
   );
@@ -433,11 +413,11 @@ const PromptInputContent = ({
 
       if (event.key === "Escape") {
         event.preventDefault();
-        controller.textInput.clear();
+        setDismissedSlashCommandValue(controller.textInput.value);
       }
     },
     [
-      controller.textInput,
+      controller.textInput.value,
       isSlashCommandOpen,
       selectSlashCommand,
       selectedCommandIndex,
@@ -447,15 +427,23 @@ const PromptInputContent = ({
 
   const handleWrappedSubmit = useCallback(
     (message: PromptInputMessage, e: FormEvent<HTMLFormElement>) => {
+      const hasContent =
+        message.text.trim().length > 0 || message.files.length > 0;
+
+      // empty Enter during streaming would otherwise reach onSubmit; the
+      // textarea no longer blocks Enter so the parent must rely on this guard
+      if (!hasContent) {
+        e.preventDefault();
+        return;
+      }
+
       if (message.text.trim() === "/compact" && onCompactConversation) {
         e.preventDefault();
         runCompactCommand();
         return;
       }
 
-      const hasContent =
-        message.text.trim().length > 0 || message.files.length > 0;
-      if (hasContent && (status === "submitted" || status === "streaming")) {
+      if (status === "submitted" || status === "streaming") {
         setQueuedMessages((current) => [
           ...current,
           {
@@ -539,12 +527,7 @@ const PromptInputContent = ({
                         </div>
                       </div>
                     </div>
-                    {command.kind === "mock" && (
-                      <span className="text-xs text-muted-foreground">
-                        Mock
-                      </span>
-                    )}
-                    {command.kind === "real" && isContextCompacting && (
+                    {isContextCompacting && (
                       <span className="text-xs text-muted-foreground">
                         Running
                       </span>

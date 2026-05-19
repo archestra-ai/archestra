@@ -168,4 +168,86 @@ describe("PUT /api/internal_mcp_catalog/:id — default validation regex", () =>
 
     expect(res.statusCode).toBe(200);
   });
+
+  test("rejects parent PUT with default presetFieldValues for a SECRET env that violates the regex", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    await OrganizationModel.patch(organizationId, {
+      presetEntityDefaultValidationRegex: "^sk-",
+      presetEntityDefaultLabel: "Default",
+    });
+
+    const parent = await makeInternalMcpCatalog({
+      organizationId,
+      name: "parent-default-secret-regex",
+      serverType: "local",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [
+          {
+            key: "API_TOKEN",
+            type: "secret",
+            promptOnInstallation: false,
+            promptOnPreset: true,
+            required: false,
+          },
+        ],
+        transportType: "streamable-http",
+        httpPort: 8080,
+        httpPath: "/mcp",
+      },
+    });
+
+    const res = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${parent.id}`,
+      payload: {
+        ...parent,
+        presetFieldValues: { API_TOKEN: "not-a-real-token" },
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.message).toMatch(/"API_TOKEN".*"Default"/);
+  });
+
+  test("rejects parent PUT with default presetFieldValues for a HEADER (userConfig) that violates the regex", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    await OrganizationModel.patch(organizationId, {
+      presetEntityDefaultValidationRegex: "^acme-",
+      presetEntityDefaultLabel: "Default",
+    });
+
+    const parent = await makeInternalMcpCatalog({
+      organizationId,
+      name: "parent-default-header-regex",
+      serverType: "remote",
+      serverUrl: "https://api.example.com/mcp/",
+      userConfig: {
+        tenant_id: {
+          type: "string",
+          title: "Tenant",
+          description: "Per-caller tenant",
+          required: true,
+          sensitive: false,
+          headerName: "x-tenant-id",
+          promptOnPreset: true,
+        },
+      },
+    });
+
+    const res = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${parent.id}`,
+      payload: {
+        ...parent,
+        presetFieldValues: { tenant_id: "other-tenant" },
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.message).toMatch(/"tenant_id".*"Default"/);
+  });
 });

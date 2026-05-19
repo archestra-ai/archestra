@@ -250,4 +250,248 @@ describe("MCP Server Install — validationRegex enforcement", () => {
     expect(res.statusCode).toBe(400);
     expect(res.json().error.message).toMatch(/"API_URL"/);
   });
+
+  test("preset entry regex rejects mismatched SECRET-type env value", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const entry = await McpPresetEntryModel.create({
+      organizationId,
+      name: "context7",
+      validationRegex: "^sk-",
+    });
+
+    const parent = await makeInternalMcpCatalog({
+      name: "regex-secret-env-parent",
+      serverType: "local",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [
+          {
+            key: "API_TOKEN",
+            type: "secret",
+            promptOnInstallation: true,
+            required: true,
+          },
+        ],
+        transportType: "streamable-http",
+        httpPort: 8080,
+        httpPath: "/mcp",
+      },
+    });
+
+    const child = await InternalMcpCatalogModel.create(
+      {
+        name: `${parent.name}-context7`,
+        childName: "context7",
+        serverType: parent.serverType,
+        localConfig: parent.localConfig,
+        presetEntryId: entry.id,
+        parentCatalogItemId: parent.id,
+        scope: parent.scope,
+      },
+      { organizationId, authorId: user.id },
+    );
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: child.name,
+        catalogId: child.id,
+        environmentValues: { API_TOKEN: "not-a-real-token" },
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.message).toMatch(/"API_TOKEN".*"context7"/);
+  });
+
+  test("preset entry regex rejects mismatched HEADER (userConfig) value", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const entry = await McpPresetEntryModel.create({
+      organizationId,
+      name: "context7",
+      validationRegex: "^acme-",
+    });
+
+    const parent = await makeInternalMcpCatalog({
+      name: "regex-header-parent",
+      serverType: "remote",
+      serverUrl: "https://api.example.com/mcp/",
+      userConfig: {
+        tenant_id: {
+          type: "string",
+          title: "Tenant",
+          description: "Per-caller tenant",
+          required: true,
+          sensitive: false,
+          headerName: "x-tenant-id",
+          promptOnInstallation: true,
+        },
+      },
+    });
+
+    const child = await InternalMcpCatalogModel.create(
+      {
+        name: `${parent.name}-context7`,
+        childName: "context7",
+        serverType: parent.serverType,
+        serverUrl: parent.serverUrl,
+        userConfig: parent.userConfig,
+        presetEntryId: entry.id,
+        parentCatalogItemId: parent.id,
+        scope: parent.scope,
+      },
+      { organizationId, authorId: user.id },
+    );
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: child.name,
+        catalogId: child.id,
+        userConfigValues: { tenant_id: "other-tenant" },
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.message).toMatch(/"tenant_id".*"context7"/);
+  });
+
+  test("preset entry regex allows matching HEADER (userConfig) value through", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const entry = await McpPresetEntryModel.create({
+      organizationId,
+      name: "context7",
+      validationRegex: "^acme-",
+    });
+
+    const parent = await makeInternalMcpCatalog({
+      name: "regex-header-parent-pass",
+      serverType: "remote",
+      serverUrl: "https://api.example.com/mcp/",
+      userConfig: {
+        tenant_id: {
+          type: "string",
+          title: "Tenant",
+          description: "Per-caller tenant",
+          required: true,
+          sensitive: false,
+          headerName: "x-tenant-id",
+          promptOnInstallation: true,
+        },
+      },
+    });
+
+    const child = await InternalMcpCatalogModel.create(
+      {
+        name: `${parent.name}-context7`,
+        childName: "context7",
+        serverType: parent.serverType,
+        serverUrl: parent.serverUrl,
+        userConfig: parent.userConfig,
+        presetEntryId: entry.id,
+        parentCatalogItemId: parent.id,
+        scope: parent.scope,
+      },
+      { organizationId, authorId: user.id },
+    );
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: child.name,
+        catalogId: child.id,
+        userConfigValues: { tenant_id: "acme-prod" },
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+  });
+
+  test("org-wide default regex rejects parent-install mismatched SECRET env value", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    await OrganizationModel.patch(organizationId, {
+      presetEntityDefaultValidationRegex: "^sk-",
+      presetEntityDefaultLabel: "Default",
+    });
+
+    const parent = await makeInternalMcpCatalog({
+      name: "default-regex-secret-env",
+      serverType: "local",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [
+          {
+            key: "API_TOKEN",
+            type: "secret",
+            promptOnInstallation: true,
+            required: true,
+          },
+        ],
+        transportType: "streamable-http",
+        httpPort: 8080,
+        httpPath: "/mcp",
+      },
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: parent.name,
+        catalogId: parent.id,
+        environmentValues: { API_TOKEN: "not-a-real-token" },
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.message).toMatch(/"API_TOKEN".*"Default"/);
+  });
+
+  test("org-wide default regex rejects parent-install mismatched HEADER (userConfig) value", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    await OrganizationModel.patch(organizationId, {
+      presetEntityDefaultValidationRegex: "^acme-",
+      presetEntityDefaultLabel: "Default",
+    });
+
+    const parent = await makeInternalMcpCatalog({
+      name: "default-regex-header",
+      serverType: "remote",
+      serverUrl: "https://api.example.com/mcp/",
+      userConfig: {
+        tenant_id: {
+          type: "string",
+          title: "Tenant",
+          description: "Per-caller tenant",
+          required: true,
+          sensitive: false,
+          headerName: "x-tenant-id",
+          promptOnInstallation: true,
+        },
+      },
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: parent.name,
+        catalogId: parent.id,
+        userConfigValues: { tenant_id: "other-tenant" },
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.message).toMatch(/"tenant_id".*"Default"/);
+  });
 });

@@ -1239,6 +1239,7 @@ function estimateBinaryFileTokens(params: {
   mediaType: string;
   byteLength: number;
 }): number {
+  // todo: estimate PDFs from locally extracted text first, then use this byte fallback for scanned/failed parses.
   const bytesPerToken =
     params.mediaType === "application/pdf"
       ? PDF_BYTES_PER_TOKEN_ESTIMATE

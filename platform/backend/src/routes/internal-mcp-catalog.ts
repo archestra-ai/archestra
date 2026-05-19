@@ -9,6 +9,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import config from "@/config";
+import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import {
   generateDeploymentYamlTemplate,
   mergeLocalConfigIntoYaml,
@@ -26,7 +27,6 @@ import {
   ToolModel,
 } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
-import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import {
   autoReinstallServer,
   localExecutionConfigChanged,
@@ -2069,7 +2069,8 @@ async function cascadeReinstallForCatalog(
   const catalogScopeChangeOnMultitenant =
     catalogItem.multitenant === true &&
     catalogItem.serverType === "local" &&
-    localExecutionConfigChanged(originalCatalogItem, catalogItem);
+    (localExecutionConfigChanged(originalCatalogItem, catalogItem) ||
+      multitenantSharedEnvChanged(originalCatalogItem, catalogItem));
 
   if (catalogScopeChangeOnMultitenant) {
     logger.info(
@@ -2201,6 +2202,28 @@ async function cascadeReinstallForCatalog(
       );
     }
   });
+}
+
+/**
+ * Non-prompted env entries land directly in the shared K8s pod's env on a
+ * multi-tenant local catalog (as plain values or via the preset secret), so
+ * any change to one of them requires a pod recreate. Prompted entries are
+ * per-install secrets surfaced at request time — they don't live on the
+ * shared pod and are tracked separately by `promptedEnvVarsChanged`, so we
+ * exclude them here. Compared fields are `key + type + value` only;
+ * `description`, `required`, and other metadata don't reach the pod env.
+ */
+function multitenantSharedEnvChanged(
+  oldCatalog: InternalMcpCatalog,
+  newCatalog: InternalMcpCatalog,
+): boolean {
+  const project = (cat: InternalMcpCatalog) =>
+    (cat.localConfig?.environment ?? [])
+      .filter((e) => !e.promptOnInstallation)
+      .map((e) => ({ key: e.key, type: e.type, value: e.value }));
+  return (
+    JSON.stringify(project(oldCatalog)) !== JSON.stringify(project(newCatalog))
+  );
 }
 
 /**

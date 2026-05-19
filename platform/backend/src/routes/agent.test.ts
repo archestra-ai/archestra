@@ -1147,4 +1147,26 @@ describe("agent routes", () => {
       expect(response.statusCode).toBe(400);
     });
   });
+
+  describe("PUT /api/members/default-model", () => {
+    test("allows clearing both the model and key together", async () => {
+      const response = await app.inject({
+        method: "PUT",
+        url: "/api/members/default-model",
+        payload: { modelId: null, chatApiKeyId: null },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    test("rejects a model with no API key", async () => {
+      const response = await app.inject({
+        method: "PUT",
+        url: "/api/members/default-model",
+        payload: { modelId: crypto.randomUUID(), chatApiKeyId: null },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+  });
 });

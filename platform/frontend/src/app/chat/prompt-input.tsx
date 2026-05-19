@@ -154,6 +154,18 @@ const PromptInputContent = ({
     ? providerToLogoProvider[currentProvider]
     : null;
 
+  // Label for the model-source badge. A custom model is a "chat override" when
+  // it is scoped to an existing conversation, and a "user override" otherwise
+  // (the new-chat case, where it reflects the user's own default).
+  const modelSourceLabel =
+    modelSource === "agent"
+      ? "agent"
+      : modelSource === "organization"
+        ? "org"
+        : conversationId
+          ? "chat override"
+          : "user override";
+
   // Derive file upload capabilities from model input modalities
   const modelSupportsFiles = supportsFileUploads(inputModalities);
   const acceptedFileTypes = getAcceptedFileTypes(inputModalities);
@@ -354,11 +366,7 @@ const PromptInputContent = ({
                               variant="secondary"
                               className="gap-1 bg-slate-200/70 text-slate-600 dark:bg-slate-700/50 dark:text-slate-300 px-3 py-1 text-xs font-medium"
                             >
-                              {modelSource === "agent"
-                                ? "agent"
-                                : modelSource === "organization"
-                                  ? "org"
-                                  : "user override"}
+                              {modelSourceLabel}
                               {modelSource === "user" &&
                                 onResetModelOverride && (
                                   <button
@@ -555,11 +563,7 @@ const PromptInputContent = ({
                       variant="secondary"
                       className="ml-1 mr-2 gap-1 bg-slate-200/70 text-slate-600 dark:bg-slate-700/50 dark:text-slate-300 px-3 py-1 text-xs font-medium"
                     >
-                      {modelSource === "agent"
-                        ? "agent"
-                        : modelSource === "organization"
-                          ? "org"
-                          : "user override"}
+                      {modelSourceLabel}
                       {modelSource === "user" && onResetModelOverride && (
                         <button
                           type="button"

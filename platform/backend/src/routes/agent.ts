@@ -1104,6 +1104,77 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send({ defaultAgentId });
     },
   );
+
+  fastify.get(
+    "/api/members/default-model",
+    {
+      schema: {
+        operationId: RouteId.GetMemberDefaultModel,
+        description: "Get the current user's default model and API key",
+        tags: ["Members"],
+        response: constructResponseSchema(
+          z.object({
+            modelId: z.string().uuid().nullable(),
+            chatApiKeyId: z.string().uuid().nullable(),
+          }),
+        ),
+      },
+    },
+    async ({ user, organizationId }, reply) => {
+      const selection = await MemberModel.getDefaultModelSelection(
+        user.id,
+        organizationId,
+      );
+      return reply.send(selection);
+    },
+  );
+
+  fastify.put(
+    "/api/members/default-model",
+    {
+      schema: {
+        operationId: RouteId.UpdateMemberDefaultModel,
+        description: "Set the current user's default model and API key",
+        tags: ["Members"],
+        body: z.object({
+          modelId: z.string().uuid().nullable(),
+          chatApiKeyId: z.string().uuid().nullable(),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            modelId: z.string().uuid().nullable(),
+            chatApiKeyId: z.string().uuid().nullable(),
+          }),
+        ),
+      },
+    },
+    async ({ body, user, organizationId }, reply) => {
+      // The default model and its API key are a pair: persist both or neither.
+      if (
+        !isModelSelectionComplete({
+          modelId: body.modelId,
+          apiKeyId: body.chatApiKeyId,
+        })
+      ) {
+        throw new ApiError(
+          400,
+          "The default model and API key must be set together",
+        );
+      }
+
+      await MemberModel.setDefaultModelSelection({
+        userId: user.id,
+        organizationId,
+        modelId: body.modelId,
+        apiKeyId: body.chatApiKeyId,
+      });
+
+      return reply.send({
+        modelId: body.modelId,
+        chatApiKeyId: body.chatApiKeyId,
+      });
+    },
+  );
 };
 
 export default agentRoutes;

@@ -97,9 +97,11 @@ import {
   useConversation,
   useCreateConversation,
   useHasPlaywrightMcpTools,
+  useMemberDefaultModel,
   useStopChatStream,
   useUpdateConversation,
   useUpdateConversationEnabledTools,
+  useUpdateMemberDefaultModel,
 } from "@/lib/chat/chat.query";
 import { useChatAgentState } from "@/lib/chat/chat-agent-state.hook";
 import {
@@ -271,6 +273,9 @@ export function ChatPageContent({
   const { data: chatApiKeys = [], isLoading: isLoadingApiKeys } =
     useLlmProviderApiKeys({ enabled: hasChatAccess && canUseProviderSettings });
   const { data: organization, isPending: isOrgLoading } = useOrganization();
+  // The user's saved default (model, key) pair — top of the resolution chain
+  // for a new chat ("member" level).
+  const { data: memberDefault } = useMemberDefaultModel();
 
   // State for initial chat (when no conversation exists yet)
   const [initialAgentId, setInitialAgentId] = useState<string | null>(null);
@@ -302,6 +307,7 @@ export function ChatPageContent({
               defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
             }
           : null,
+        memberDefault: memberDefault ?? null,
       });
 
       if (resolved) {
@@ -312,7 +318,7 @@ export function ChatPageContent({
         setInitialApiKeyId(null);
       }
     },
-    [modelsByProvider, chatApiKeys, organization],
+    [modelsByProvider, chatApiKeys, organization, memberDefault],
   );
 
   useEffect(() => {
@@ -387,6 +393,7 @@ export function ChatPageContent({
             defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
           }
         : null,
+      memberDefault: memberDefault ?? null,
     });
 
     if (!resolved) return; // No models available yet
@@ -403,29 +410,59 @@ export function ChatPageContent({
     organization?.defaultModelId,
     organization?.defaultLlmApiKeyId,
     organization,
+    memberDefault,
   ]);
 
-  // Model change for the initial (no conversation) state.
-  const handleInitialModelChange = useCallback(
-    (modelId: string) => setInitialModel(modelId),
+  // Persist the user's (model, key) pick as their member default so the next
+  // new chat reuses it — the "member" level of the resolution chain. No-ops on
+  // an incomplete pair.
+  const updateMemberDefaultModelMutation = useUpdateMemberDefaultModel();
+  const updateMemberDefaultModelMutateRef = useRef(
+    updateMemberDefaultModelMutation.mutate,
+  );
+  updateMemberDefaultModelMutateRef.current =
+    updateMemberDefaultModelMutation.mutate;
+  const persistMemberDefaultModel = useCallback(
+    (modelId: string | null, apiKeyId: string | null) => {
+      if (!modelId || !apiKeyId) return;
+      updateMemberDefaultModelMutateRef.current({
+        modelId,
+        chatApiKeyId: apiKeyId,
+      });
+    },
     [],
+  );
+
+  // Model change for the initial (no conversation) state. The picked model is
+  // scoped to the selected key, so the pair is persisted as the member default.
+  const initialApiKeyIdRef = useRef(initialApiKeyId);
+  initialApiKeyIdRef.current = initialApiKeyId;
+  const handleInitialModelChange = useCallback(
+    (modelId: string) => {
+      setInitialModel(modelId);
+      persistMemberDefaultModel(modelId, initialApiKeyIdRef.current);
+    },
+    [persistMemberDefaultModel],
   );
 
   // Handle API key change - preselect best model for the new key's provider
   const handleInitialProviderChange = useCallback(
-    (newProvider: SupportedProvider, _apiKeyId: string) => {
+    (newProvider: SupportedProvider, apiKeyId: string) => {
       const preferredModel = resolvePreferredModelForProvider({
         provider: newProvider,
         modelsByProvider,
       });
       if (preferredModel) {
         setInitialModel(preferredModel.modelId);
+        persistMemberDefaultModel(preferredModel.modelId, apiKeyId);
       }
     },
-    [modelsByProvider],
+    [modelsByProvider, persistMemberDefaultModel],
   );
 
   // Reset to the agent/org default model (shown when on a custom model).
+  // Resolves without the member default — reset deliberately drops the user's
+  // personal override to fall back to the agent/org default.
   const handleResetModelOverride = useCallback(() => {
     modelInitializedRef.current = false;
 
@@ -439,6 +476,7 @@ export function ChatPageContent({
             defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
           }
         : null,
+      memberDefault: null,
     });
 
     if (resolved) {
@@ -446,6 +484,12 @@ export function ChatPageContent({
       setInitialApiKeyId(resolved.apiKeyId);
     }
     modelInitializedRef.current = true;
+
+    // Clear the saved member default so the reset sticks for future new chats.
+    updateMemberDefaultModelMutateRef.current({
+      modelId: null,
+      chatApiKeyId: null,
+    });
   }, [modelsByProvider, chatApiKeys, organization]);
 
   // Derive provider from initial model for API key filtering
@@ -675,24 +719,28 @@ export function ChatPageContent({
   // stores the (model, key) pair as a unit, so a model is never persisted
   // without its key. Keep the conversation's current key when it serves the
   // model's provider, otherwise use any key for that provider.
-  const handleModelChange = useCallback((modelId: string) => {
-    const conv = conversationRef.current;
-    if (!conv) return;
-    const model = chatModelsRef.current.find((m) => m.dbId === modelId);
-    const currentKey = chatApiKeysRef.current.find(
-      (k) => k.id === conv.chatApiKeyId,
-    );
-    const chatApiKeyId =
-      currentKey && currentKey.provider === model?.provider
-        ? currentKey.id
-        : (chatApiKeysRef.current.find((k) => k.provider === model?.provider)
-            ?.id ?? null);
-    updateConversationMutateRef.current({
-      id: conv.id,
-      modelId,
-      chatApiKeyId,
-    });
-  }, []);
+  const handleModelChange = useCallback(
+    (modelId: string) => {
+      const conv = conversationRef.current;
+      if (!conv) return;
+      const model = chatModelsRef.current.find((m) => m.dbId === modelId);
+      const currentKey = chatApiKeysRef.current.find(
+        (k) => k.id === conv.chatApiKeyId,
+      );
+      const chatApiKeyId =
+        currentKey && currentKey.provider === model?.provider
+          ? currentKey.id
+          : (chatApiKeysRef.current.find((k) => k.provider === model?.provider)
+              ?.id ?? null);
+      updateConversationMutateRef.current({
+        id: conv.id,
+        modelId,
+        chatApiKeyId,
+      });
+      persistMemberDefaultModel(modelId, chatApiKeyId);
+    },
+    [persistMemberDefaultModel],
+  );
 
   // Handle API key change - preselect best model for the new key's provider.
   // Combines chatApiKeyId + model selection in a single mutation to avoid
@@ -711,6 +759,7 @@ export function ChatPageContent({
           chatApiKeyId: apiKeyId,
           modelId: preferredModel.modelId,
         });
+        persistMemberDefaultModel(preferredModel.modelId, apiKeyId);
       } else {
         // No models for this provider yet, still update the key
         updateConversationMutateRef.current({
@@ -719,7 +768,7 @@ export function ChatPageContent({
         });
       }
     },
-    [conversation, modelsByProvider],
+    [conversation, modelsByProvider, persistMemberDefaultModel],
   );
 
   // Handle agent change in existing conversation
@@ -758,6 +807,8 @@ export function ChatPageContent({
             defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
           }
         : null,
+      // Reset deliberately drops the user's personal override.
+      memberDefault: null,
       chatModels,
     });
 
@@ -768,6 +819,13 @@ export function ChatPageContent({
         chatApiKeyId: resolved.apiKeyId,
       });
     }
+
+    // Clear the saved member default too — resetting the chat override also
+    // drops the user override it came from.
+    updateMemberDefaultModelMutateRef.current({
+      modelId: null,
+      chatApiKeyId: null,
+    });
   }, [
     conversation,
     internalAgents,

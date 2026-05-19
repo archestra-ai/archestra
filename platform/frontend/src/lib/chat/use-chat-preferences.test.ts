@@ -49,8 +49,29 @@ describe("resolveInitialModel", () => {
         agent: null,
         chatApiKeys: [],
         organization: null,
+        memberDefault: null,
       }),
     ).toBeNull();
+  });
+
+  test("prefers the member default over the agent and org defaults", () => {
+    const result = resolveInitialModel({
+      modelsByProvider: baseModels,
+      agent: { modelId: "uuid-sonnet", llmApiKeyId: "key-anthropic" },
+      chatApiKeys: baseChatApiKeys,
+      organization: {
+        defaultModelId: "uuid-gpt-4o",
+        defaultLlmApiKeyId: "key-openai",
+      },
+      memberDefault: {
+        modelId: "uuid-gpt-4o-mini",
+        chatApiKeyId: "key-openai",
+      },
+    });
+    expect(result).toEqual({
+      modelId: "uuid-gpt-4o-mini",
+      apiKeyId: "key-openai",
+    });
   });
 
   test("prefers the agent model over the org default", () => {
@@ -62,6 +83,7 @@ describe("resolveInitialModel", () => {
         defaultModelId: "uuid-gpt-4o",
         defaultLlmApiKeyId: "key-openai",
       },
+      memberDefault: null,
     });
     expect(result).toEqual({
       modelId: "uuid-sonnet",
@@ -78,8 +100,23 @@ describe("resolveInitialModel", () => {
         defaultModelId: "uuid-gpt-4o",
         defaultLlmApiKeyId: "key-openai",
       },
+      memberDefault: null,
     });
     expect(result).toEqual({ modelId: "uuid-gpt-4o", apiKeyId: "key-openai" });
+  });
+
+  test("a member default with no key falls through to the agent", () => {
+    const result = resolveInitialModel({
+      modelsByProvider: baseModels,
+      agent: { modelId: "uuid-sonnet", llmApiKeyId: "key-anthropic" },
+      chatApiKeys: baseChatApiKeys,
+      organization: null,
+      memberDefault: { modelId: "uuid-gpt-4o-mini", chatApiKeyId: null },
+    });
+    expect(result).toEqual({
+      modelId: "uuid-sonnet",
+      apiKeyId: "key-anthropic",
+    });
   });
 
   test("falls back to the best available model when nothing is configured", () => {
@@ -88,6 +125,7 @@ describe("resolveInitialModel", () => {
       agent: null,
       chatApiKeys: baseChatApiKeys,
       organization: null,
+      memberDefault: null,
     });
     // uuid-gpt-4o-mini is marked best.
     expect(result?.modelId).toBe("uuid-gpt-4o-mini");
@@ -105,6 +143,7 @@ describe("resolveModelForAgent", () => {
           defaultModelId: "uuid-gpt-4o",
           defaultLlmApiKeyId: "key-openai",
         },
+        memberDefault: null,
       },
     });
     expect(result).toEqual({ modelId: "uuid-gpt-4o", apiKeyId: "key-openai" });

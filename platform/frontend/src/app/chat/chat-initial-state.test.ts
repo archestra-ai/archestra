@@ -25,6 +25,7 @@ describe("resolveInitialAgentState", () => {
         defaultModelId: "uuid-gpt",
         defaultLlmApiKeyId: "key-1",
       },
+      memberDefault: null,
     });
 
     expect(result).toEqual({
@@ -49,12 +50,39 @@ describe("resolveInitialAgentState", () => {
         defaultModelId: "uuid-gpt",
         defaultLlmApiKeyId: "key-1",
       },
+      memberDefault: null,
     });
 
     expect(result).toEqual({
       agentId: "agent-1",
       modelId: "uuid-sonnet",
       apiKeyId: "key-2",
+    });
+  });
+
+  test("prefers the member default over the agent-configured model", () => {
+    const result = resolveInitialAgentState({
+      agent: {
+        id: "agent-1",
+        modelId: "uuid-sonnet",
+        llmApiKeyId: "key-2",
+      },
+      modelsByProvider: {
+        anthropic: [model("claude-3-5-sonnet", "uuid-sonnet", "anthropic")],
+        openai: [model("gpt-4.1", "uuid-gpt", "openai")],
+      },
+      chatApiKeys: [
+        { id: "key-1", provider: "openai" },
+        { id: "key-2", provider: "anthropic" },
+      ],
+      organization: null,
+      memberDefault: { modelId: "uuid-gpt", chatApiKeyId: "key-1" },
+    });
+
+    expect(result).toEqual({
+      agentId: "agent-1",
+      modelId: "uuid-gpt",
+      apiKeyId: "key-1",
     });
   });
 });
@@ -148,6 +176,7 @@ describe("resolveChatModelState", () => {
       },
       chatApiKeys: [{ id: "key-1", provider: "openai" }],
       organization: null,
+      memberDefault: null,
       chatModels: [model("gpt-4.1", "uuid-gpt", "openai")],
     });
 

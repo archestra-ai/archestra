@@ -21,6 +21,12 @@ type OrganizationInfo = {
   defaultLlmApiKeyId?: string | null;
 } | null;
 
+/** The current user's saved default (model, key) pair — the "member" level. */
+type MemberDefaultInfo = {
+  modelId?: string | null;
+  chatApiKeyId?: string | null;
+} | null;
+
 /** A model identifier is the models.id UUID throughout the chat model flow. */
 export type ResolvedInitialAgentState = {
   agentId: string;
@@ -81,12 +87,14 @@ export function resolveInitialAgentState(params: {
   modelsByProvider: Record<string, LlmModel[]>;
   chatApiKeys: ChatApiKeyInfo[];
   organization: OrganizationInfo;
+  memberDefault: MemberDefaultInfo;
 }): ResolvedInitialAgentState | null {
   const resolved = resolveChatModelState({
     agent: params.agent,
     modelsByProvider: params.modelsByProvider,
     chatApiKeys: params.chatApiKeys,
     organization: params.organization,
+    memberDefault: params.memberDefault,
   });
 
   if (!resolved) {
@@ -114,6 +122,7 @@ export function resolveChatModelState(params: {
   modelsByProvider: Record<string, LlmModel[]>;
   chatApiKeys: ChatApiKeyInfo[];
   organization: OrganizationInfo;
+  memberDefault: MemberDefaultInfo;
   chatModels?: LlmModel[];
 }): ResolvedChatModelState | null {
   // The resolver identifies models by their models.id UUID.
@@ -131,12 +140,14 @@ export function resolveChatModelState(params: {
           modelsByProvider,
           chatApiKeys: params.chatApiKeys,
           organization: params.organization,
+          memberDefault: params.memberDefault,
         },
       })
     : resolveInitialModel({
         modelsByProvider,
         chatApiKeys: params.chatApiKeys,
         organization: params.organization,
+        memberDefault: params.memberDefault,
         agent: null,
       });
 

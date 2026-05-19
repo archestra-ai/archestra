@@ -27,7 +27,7 @@ Type `/` in the prompt input to open available chat commands.
 
 #### Context Compaction
 
-Context compaction replaces older messages sent to the model with a structured handoff summary while keeping recent turns verbatim. If a short conversation has large assistant work or tool results, Chat can summarize that completed work instead of waiting for four user turns. The original chat history remains visible, and compaction events appear in the conversation timeline.
+Context compaction replaces older messages sent to the model with a structured handoff summary while keeping recent turns verbatim. In short conversations, Chat can summarize completed earlier work instead of waiting for four user turns. The original chat history remains visible, and compaction events appear in the conversation timeline.
 
 Compaction is handled by the built-in Context Compaction Subagent. Users with `agent:admin` permission can edit its instructions and model from the built-in agent settings. If no model is configured on the subagent, Chat uses the conversation's current provider with a fast model for that provider.
 

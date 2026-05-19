@@ -199,12 +199,14 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     | ((args: { messages: unknown[] }) => Promise<void> | void)
     | undefined;
   let executionPromise: Promise<void> | undefined;
+  let writerWrites: unknown[];
 
   beforeEach(
     async ({ makeAgent, makeConversation, makeOrganization, makeUser }) => {
       capturedInnerOnError = undefined;
       capturedInnerOnFinish = undefined;
       executionPromise = undefined;
+      writerWrites = [];
 
       user = await makeUser();
       const organization = await makeOrganization({ name: "Test Org" });
@@ -272,7 +274,7 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
           }) => Promise<void>;
         }) => {
           const writer = {
-            write: vi.fn(),
+            write: vi.fn((data: unknown) => writerWrites.push(data)),
             merge: vi.fn(),
           };
           executionPromise = execute({ writer }).catch(() => undefined);
@@ -407,5 +409,46 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(mockStreamText.mock.calls[0]?.[0].messages).toEqual(
       compactedMessages,
     );
+  });
+
+  test("emits compaction finish when compaction starts but is not beneficial", async () => {
+    mockCompactMessagesForChat.mockImplementation(
+      async ({ messages, onCompactionStart }) => {
+        onCompactionStart?.();
+        return {
+          messages,
+          status: "skipped",
+          compaction: null,
+          reason: "not_beneficial",
+        };
+      },
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: "msg-1",
+            role: "user",
+            parts: [{ type: "text", text: "hello" }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(writerWrites).toContainEqual({
+      type: "data-context-compaction-start",
+      data: { trigger: "auto" },
+    });
+    expect(writerWrites).toContainEqual({
+      type: "data-context-compaction-finish",
+      data: { status: "skipped", reason: "not_beneficial" },
+    });
   });
 });

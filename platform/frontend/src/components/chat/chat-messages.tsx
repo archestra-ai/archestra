@@ -65,6 +65,7 @@ import {
   getToolHeaderState,
   getToolNameFromPart,
 } from "@/lib/chat/chat-tools-display.utils";
+import { PERSISTED_MESSAGE_ID_METADATA_KEY } from "@/lib/chat/chat-utils";
 import { useGlobalChat } from "@/lib/chat/global-chat.context";
 import {
   hasToolPartsWithAuthErrors,
@@ -2416,8 +2417,10 @@ function buildMessageTimeline(params: {
     }
 
     timelineItems.push({ kind: "message", message, messageIndex });
-    for (const compaction of compactionsByBoundary.get(message.id) ?? []) {
-      timelineItems.push({ kind: "compaction", compaction });
+    for (const boundaryId of getMessageCompactionBoundaryIds(message)) {
+      for (const compaction of compactionsByBoundary.get(boundaryId) ?? []) {
+        timelineItems.push({ kind: "compaction", compaction });
+      }
     }
   });
 
@@ -2433,6 +2436,22 @@ function buildMessageTimeline(params: {
   }
 
   return timelineItems;
+}
+
+function getMessageCompactionBoundaryIds(message: UIMessage): string[] {
+  const ids = [message.id];
+  const metadata = message.metadata;
+  if (
+    typeof metadata === "object" &&
+    metadata !== null &&
+    PERSISTED_MESSAGE_ID_METADATA_KEY in metadata &&
+    typeof metadata[PERSISTED_MESSAGE_ID_METADATA_KEY] === "string" &&
+    metadata[PERSISTED_MESSAGE_ID_METADATA_KEY] !== message.id
+  ) {
+    ids.push(metadata[PERSISTED_MESSAGE_ID_METADATA_KEY]);
+  }
+
+  return ids;
 }
 
 function getMessageCreatedAt(message: UIMessage): number | null {

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getChatExternalAgentId,
   getConversationDisplayTitle,
+  getManualCompactionSkippedMessage,
 } from "./chat-utils";
 
 const DEFAULT_SESSION_NAME = "New Chat Session";
@@ -143,5 +144,47 @@ describe("getChatExternalAgentId", () => {
 
   it("handles mixed ASCII and non-ISO-8859-1 characters", () => {
     expect(getChatExternalAgentId("Hello 世界 App")).toBe("Hello App Chat");
+  });
+});
+
+describe("getManualCompactionSkippedMessage", () => {
+  it("explains when only the current user turn is available", () => {
+    expect(getManualCompactionSkippedMessage("nothing_to_compact")).toBe(
+      "Only the latest user turn is available, so there is no completed earlier context to compact yet.",
+    );
+  });
+
+  it("explains when the existing compaction already covers all older context", () => {
+    expect(
+      getManualCompactionSkippedMessage("nothing_to_compact", "existing"),
+    ).toBe(
+      "Conversation is already compacted; there is no new older context to compact yet.",
+    );
+  });
+
+  it("explains when message ids are missing", () => {
+    expect(
+      getManualCompactionSkippedMessage("missing_boundary_message_id"),
+    ).toBe(
+      "Older context exists, but it cannot be compacted because saved message IDs are missing.",
+    );
+  });
+
+  it("explains when the generated summary would not reduce context", () => {
+    expect(getManualCompactionSkippedMessage("not_beneficial")).toBe(
+      "Context compaction was skipped because the generated summary would not reduce context usage.",
+    );
+  });
+
+  it("explains when the latest summary is already being used", () => {
+    expect(getManualCompactionSkippedMessage("using_existing_summary")).toBe(
+      "Conversation is already using compacted context.",
+    );
+  });
+
+  it("falls back for unknown skip reasons", () => {
+    expect(getManualCompactionSkippedMessage("other_reason")).toBe(
+      "There is no completed earlier context to compact yet.",
+    );
   });
 });

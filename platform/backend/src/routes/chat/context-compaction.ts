@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { type Span, SpanKind, SpanStatusCode, trace } from "@opentelemetry/api";
 import {
   BUILT_IN_AGENT_IDS,
   CONTEXT_COMPACTION_SYSTEM_PROMPT,
@@ -7,7 +8,18 @@ import {
 import { convertToModelMessages, generateText, type UIMessage } from "ai";
 import { createLLMModel, isApiKeyRequired } from "@/clients/llm-client";
 import logger from "@/logging";
-import { AgentModel, ConversationCompactionModel, ModelModel } from "@/models";
+import {
+  AgentModel,
+  ConversationCompactionModel,
+  MessageModel,
+  ModelModel,
+} from "@/models";
+import {
+  ATTR_GENAI_CONVERSATION_ID,
+  ATTR_GENAI_OPERATION_NAME,
+  ATTR_GENAI_PROVIDER_NAME,
+  ATTR_GENAI_REQUEST_MODEL,
+} from "@/observability/tracing";
 import { renderSystemPrompt } from "@/templating";
 import { getTokenizer } from "@/tokenizers";
 import type { ChatMessage, ChatMessagePart } from "@/types";
@@ -24,13 +36,34 @@ import {
 export const CONTEXT_COMPACTION_AUTO_THRESHOLD = 0.8;
 export const CONTEXT_COMPACTION_RECENT_USER_TURNS = 4;
 const CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS = 8_192;
-const CONTEXT_COMPACTION_LOW_USER_TURN_MIN_MESSAGES = 6;
-const CONTEXT_COMPACTION_LOW_USER_TURN_MIN_PARTS = 8;
-const CONTEXT_COMPACTION_LOW_USER_TURN_MIN_CHARS = 16_000;
 const CONTEXT_COMPACTION_RECENT_USER_REFERENCE_MAX_CHARS = 6_000;
 const CONTEXT_COMPACTION_SUMMARY_TAG = "summary";
 const CONTEXT_COMPACTION_CORRECTION_PROMPT =
   "Your previous response did not follow the required format. Reply with EXACTLY ONE <summary>...</summary> block and no text outside the tags.";
+const CONTEXT_COMPACTION_TRACE_OPERATION = "context_compaction";
+const ATTR_CONTEXT_COMPACTION_TRIGGER = "archestra.context_compaction.trigger";
+const ATTR_CONTEXT_COMPACTION_STATUS = "archestra.context_compaction.status";
+const ATTR_CONTEXT_COMPACTION_REASON = "archestra.context_compaction.reason";
+const ATTR_CONTEXT_COMPACTION_INPUT_MESSAGE_COUNT =
+  "archestra.context_compaction.input_message_count";
+const ATTR_CONTEXT_COMPACTION_INPUT_USER_TURN_COUNT =
+  "archestra.context_compaction.input_user_turn_count";
+const ATTR_CONTEXT_COMPACTION_COMPACTION_ID =
+  "archestra.context_compaction.compaction_id";
+const ATTR_CONTEXT_COMPACTION_ORIGINAL_TOKEN_ESTIMATE =
+  "archestra.context_compaction.original_token_estimate";
+const ATTR_CONTEXT_COMPACTION_COMPACTED_TOKEN_ESTIMATE =
+  "archestra.context_compaction.compacted_token_estimate";
+
+export const CONTEXT_COMPACTION_REASONS = [
+  "below_threshold",
+  "using_existing_summary",
+  "nothing_to_compact",
+  "missing_boundary_message_id",
+  "not_beneficial",
+  "aborted",
+  "summary_generation_failed",
+] as const;
 
 export type ContextCompactionStatus =
   | "created"
@@ -38,14 +71,10 @@ export type ContextCompactionStatus =
   | "skipped"
   | "failed";
 
-export type ContextCompactionResult = {
-  messages: ChatMessage[];
-  status: ContextCompactionStatus;
-  compaction: ConversationCompaction | null;
-  reason?: string;
-};
+export type ContextCompactionReason =
+  (typeof CONTEXT_COMPACTION_REASONS)[number];
 
-export async function compactMessagesForChat(params: {
+export type ContextCompactionParams = {
   conversationId: string;
   organizationId: string;
   userId: string;
@@ -58,14 +87,74 @@ export async function compactMessagesForChat(params: {
   trigger: ConversationCompactionTrigger;
   onCompactionStart?: () => void;
   abortSignal?: AbortSignal;
-}): Promise<ContextCompactionResult> {
+};
+
+export type ContextCompactionResult = {
+  messages: ChatMessage[];
+  status: ContextCompactionStatus;
+  compaction: ConversationCompaction | null;
+  reason?: ContextCompactionReason;
+};
+
+export type ContextCompactionStreamData = {
+  status: ContextCompactionStatus;
+  reason?: ContextCompactionReason;
+  compactionId?: string;
+  trigger?: ConversationCompactionTrigger;
+  originalTokenEstimate?: number;
+  compactedTokenEstimate?: number;
+};
+
+type ContextCompactionPolicy = {
+  requireAutoThreshold: boolean;
+  allowInContextCompaction: boolean;
+};
+
+export async function compactMessagesForChat(
+  params: ContextCompactionParams,
+): Promise<ContextCompactionResult> {
+  return await startContextCompactionSpan(params, async (span) => {
+    const result = await runCompactMessagesForChat(params);
+    recordContextCompactionOutcome(span, params, result);
+    return result;
+  });
+}
+
+export function buildContextCompactionStreamData(
+  result: ContextCompactionResult,
+): ContextCompactionStreamData {
+  const base = {
+    status: result.status,
+    ...(result.reason ? { reason: result.reason } : {}),
+  };
+
+  if (result.status !== "created" || !result.compaction) {
+    return base;
+  }
+
+  return {
+    ...base,
+    compactionId: result.compaction.id,
+    trigger: result.compaction.trigger,
+    originalTokenEstimate: result.compaction.originalTokenEstimate,
+    compactedTokenEstimate: result.compaction.compactedTokenEstimate,
+  };
+}
+
+async function runCompactMessagesForChat(
+  params: ContextCompactionParams,
+): Promise<ContextCompactionResult> {
+  const policy = resolveContextCompactionPolicy(params.trigger);
   const latestCompaction =
     await ConversationCompactionModel.findLatestByConversation(
       params.conversationId,
     );
+  const latestCompactionBoundaryIds =
+    await getCompactionBoundaryIds(latestCompaction);
   const latestCompactionState = resolveUsableCompaction(
     params.messages,
     latestCompaction,
+    latestCompactionBoundaryIds,
   );
   const usableLatestCompaction = latestCompactionState.compaction;
   const existingMessages = latestCompactionState.messages;
@@ -82,7 +171,7 @@ export async function compactMessagesForChat(params: {
   }
 
   const shouldCreate =
-    params.trigger === "manual" ||
+    !policy.requireAutoThreshold ||
     (await shouldAutoCompact({
       provider: params.provider,
       selectedModel: params.selectedModel,
@@ -147,6 +236,10 @@ export async function compactMessagesForChat(params: {
 
   try {
     params.onCompactionStart?.();
+    const originalMessages = buildOriginalCompactionMessages({
+      previousSummary: usableLatestCompaction?.summary ?? null,
+      messages: sourceMessages,
+    });
     const compaction = await createConversationCompaction({
       conversationId: params.conversationId,
       organizationId: params.organizationId,
@@ -159,11 +252,21 @@ export async function compactMessagesForChat(params: {
       compactableMessages: split.compactable,
       recentMessages: split.recent,
       boundaryMessageId,
-      originalMessages: params.messages,
+      originalMessages,
       selectedModel: params.selectedModel,
       systemPrompt: params.systemPrompt,
+      allowInContextCompaction: policy.allowInContextCompaction,
       abortSignal: params.abortSignal,
     });
+
+    if (!compaction) {
+      return {
+        messages: existingMessages,
+        status: usableLatestCompaction ? "existing" : "skipped",
+        compaction: usableLatestCompaction,
+        reason: "not_beneficial",
+      };
+    }
 
     const compactedMessages = [
       buildSummaryMessage(compaction.summary),
@@ -223,9 +326,165 @@ export const __test = {
   extractTaggedSummary,
   resolveUsableCompaction,
   splitMessagesForCompaction,
+  isCompactionBeneficial,
   decodeDataUrl,
   getDataUrlMediaType,
 };
+
+function resolveContextCompactionPolicy(
+  trigger: ConversationCompactionTrigger,
+): ContextCompactionPolicy {
+  switch (trigger) {
+    case "manual":
+      return {
+        requireAutoThreshold: false,
+        allowInContextCompaction: false,
+      };
+    case "auto":
+      return {
+        requireAutoThreshold: true,
+        allowInContextCompaction: true,
+      };
+  }
+}
+
+async function startContextCompactionSpan<T>(
+  params: ContextCompactionParams,
+  callback: (span: Span) => Promise<T>,
+): Promise<T> {
+  const tracer = trace.getTracer("archestra");
+
+  return await tracer.startActiveSpan(
+    `${CONTEXT_COMPACTION_TRACE_OPERATION} ${params.trigger}`,
+    {
+      kind: SpanKind.INTERNAL,
+      attributes: {
+        [ATTR_GENAI_OPERATION_NAME]: CONTEXT_COMPACTION_TRACE_OPERATION,
+        [ATTR_GENAI_PROVIDER_NAME]: params.provider,
+        [ATTR_GENAI_REQUEST_MODEL]: params.selectedModel,
+        [ATTR_GENAI_CONVERSATION_ID]: params.conversationId,
+        [ATTR_CONTEXT_COMPACTION_TRIGGER]: params.trigger,
+        [ATTR_CONTEXT_COMPACTION_INPUT_MESSAGE_COUNT]: params.messages.length,
+        [ATTR_CONTEXT_COMPACTION_INPUT_USER_TURN_COUNT]: countUserTurns(
+          params.messages,
+        ),
+      },
+    },
+    async (span) => {
+      try {
+        return await callback(span);
+      } catch (error) {
+        recordContextCompactionError(span, params, error);
+        throw error;
+      } finally {
+        span.end();
+      }
+    },
+  );
+}
+
+function recordContextCompactionOutcome(
+  span: Span,
+  params: ContextCompactionParams,
+  result: ContextCompactionResult,
+): void {
+  span.setAttribute(ATTR_CONTEXT_COMPACTION_STATUS, result.status);
+
+  if (result.reason) {
+    span.setAttribute(ATTR_CONTEXT_COMPACTION_REASON, result.reason);
+  }
+  if (result.compaction) {
+    span.setAttribute(
+      ATTR_CONTEXT_COMPACTION_COMPACTION_ID,
+      result.compaction.id,
+    );
+    span.setAttribute(
+      ATTR_CONTEXT_COMPACTION_ORIGINAL_TOKEN_ESTIMATE,
+      result.compaction.originalTokenEstimate,
+    );
+    span.setAttribute(
+      ATTR_CONTEXT_COMPACTION_COMPACTED_TOKEN_ESTIMATE,
+      result.compaction.compactedTokenEstimate,
+    );
+  }
+
+  if (result.status === "failed") {
+    span.setStatus({
+      code: SpanStatusCode.ERROR,
+      message: result.reason ?? "context compaction failed",
+    });
+  } else {
+    span.setStatus({ code: SpanStatusCode.OK });
+  }
+
+  logContextCompactionOutcome(params, result);
+}
+
+function recordContextCompactionError(
+  span: Span,
+  params: ContextCompactionParams,
+  error: unknown,
+): void {
+  if (error instanceof Error) {
+    span.recordException(error);
+  }
+  span.setStatus({
+    code: SpanStatusCode.ERROR,
+    message:
+      error instanceof Error ? error.message : "context compaction error",
+  });
+  logger.error(
+    {
+      error,
+      conversationId: params.conversationId,
+      trigger: params.trigger,
+      provider: params.provider,
+      selectedModel: params.selectedModel,
+      messageCount: params.messages.length,
+      userTurnCount: countUserTurns(params.messages),
+    },
+    "[ContextCompaction] compaction attempt crashed",
+  );
+}
+
+function logContextCompactionOutcome(
+  params: ContextCompactionParams,
+  result: ContextCompactionResult,
+): void {
+  const fields = {
+    conversationId: params.conversationId,
+    trigger: params.trigger,
+    status: result.status,
+    reason: result.reason,
+    compactionId: result.compaction?.id,
+    originalTokenEstimate: result.compaction?.originalTokenEstimate,
+    compactedTokenEstimate: result.compaction?.compactedTokenEstimate,
+    messageCount: params.messages.length,
+    userTurnCount: countUserTurns(params.messages),
+    provider: params.provider,
+    selectedModel: params.selectedModel,
+  };
+
+  if (result.status === "failed") {
+    logger.warn(fields, "[ContextCompaction] compaction attempt finished");
+    return;
+  }
+
+  if (
+    params.trigger === "auto" &&
+    (result.reason === "below_threshold" ||
+      result.reason === "using_existing_summary")
+  ) {
+    logger.debug(fields, "[ContextCompaction] compaction attempt finished");
+    return;
+  }
+
+  logger.info(fields, "[ContextCompaction] compaction attempt finished");
+}
+
+function countUserTurns(messages: ChatMessage[]): number {
+  return messages.filter((message) => message.role === "user").length;
+}
 
 async function shouldAutoCompact(params: {
   provider: SupportedProvider;
@@ -262,9 +521,10 @@ async function createConversationCompaction(params: {
   boundaryMessageId: string;
   originalMessages: ChatMessage[];
   systemPrompt?: string;
+  allowInContextCompaction: boolean;
   abortSignal?: AbortSignal;
-}): Promise<ConversationCompaction> {
-  if (params.trigger === "auto") {
+}): Promise<ConversationCompaction | null> {
+  if (params.allowInContextCompaction) {
     const inContextCompaction = await tryCreateInContextCompaction(params);
     if (inContextCompaction) {
       return inContextCompaction;
@@ -547,7 +807,7 @@ async function createCompactionRecord(params: {
   recentMessages: ChatMessage[];
   originalMessages: ChatMessage[];
   tokenEstimateProvider: SupportedProvider;
-}): Promise<ConversationCompaction> {
+}): Promise<ConversationCompaction | null> {
   const originalTokenEstimate = estimateChatMessagesTokens({
     provider: params.tokenEstimateProvider,
     messages: params.originalMessages,
@@ -558,6 +818,21 @@ async function createCompactionRecord(params: {
     provider: params.tokenEstimateProvider,
     messages: [buildSummaryMessage(params.summary), ...params.recentMessages],
   });
+
+  if (
+    !isCompactionBeneficial({ originalTokenEstimate, compactedTokenEstimate })
+  ) {
+    logger.info(
+      {
+        conversationId: params.conversationId,
+        trigger: params.trigger,
+        originalTokenEstimate,
+        compactedTokenEstimate,
+      },
+      "[ContextCompaction] skipping non-beneficial compaction summary",
+    );
+    return null;
+  }
 
   return await ConversationCompactionModel.create({
     conversationId: params.conversationId,
@@ -571,6 +846,13 @@ async function createCompactionRecord(params: {
   });
 }
 
+function isCompactionBeneficial(params: {
+  originalTokenEstimate: number;
+  compactedTokenEstimate: number;
+}): boolean {
+  return params.compactedTokenEstimate < params.originalTokenEstimate;
+}
+
 function resolveUsableCompaction<
   T extends Pick<
     ConversationCompaction,
@@ -579,15 +861,18 @@ function resolveUsableCompaction<
 >(
   messages: ChatMessage[],
   compaction: T | null,
+  boundaryIds?: string[],
 ): { compaction: T | null; boundaryIndex: number; messages: ChatMessage[] } {
   if (!compaction) {
     return { compaction: null, boundaryIndex: -1, messages };
   }
 
-  const boundaryIndex = findMessageIndexById(
-    messages,
-    compaction.compactedThroughMessageId,
-  );
+  const compactionBoundaryIds = boundaryIds?.length
+    ? boundaryIds
+    : compaction.compactedThroughMessageId
+      ? [compaction.compactedThroughMessageId]
+      : [];
+  const boundaryIndex = findMessageIndexByIds(messages, compactionBoundaryIds);
   if (boundaryIndex < 0) {
     return { compaction: null, boundaryIndex: -1, messages };
   }
@@ -602,6 +887,40 @@ function resolveUsableCompaction<
   };
 }
 
+async function getCompactionBoundaryIds(
+  compaction: Pick<ConversationCompaction, "compactedThroughMessageId"> | null,
+): Promise<string[]> {
+  const boundaryId = compaction?.compactedThroughMessageId;
+  if (!boundaryId) {
+    return [];
+  }
+
+  const ids = new Set([boundaryId]);
+  const boundaryMessage = await MessageModel.findByAnyId(boundaryId);
+  if (boundaryMessage?.id) {
+    ids.add(boundaryMessage.id);
+  }
+  const contentId = getPersistedContentMessageId(boundaryMessage?.content);
+  if (contentId) {
+    ids.add(contentId);
+  }
+
+  return [...ids];
+}
+
+function getPersistedContentMessageId(content: unknown): string | null {
+  if (
+    typeof content === "object" &&
+    content !== null &&
+    "id" in content &&
+    typeof content.id === "string"
+  ) {
+    return content.id;
+  }
+
+  return null;
+}
+
 function buildSummaryMessage(summary: string): ChatMessage {
   return {
     role: "user",
@@ -614,13 +933,20 @@ function buildSummaryMessage(summary: string): ChatMessage {
   };
 }
 
+function buildOriginalCompactionMessages(params: {
+  previousSummary: string | null;
+  messages: ChatMessage[];
+}): ChatMessage[] {
+  return params.previousSummary
+    ? [buildSummaryMessage(params.previousSummary), ...params.messages]
+    : params.messages;
+}
+
 function buildInContextCompactionMessages(params: {
   previousSummary: string | null;
   messages: ChatMessage[];
 }): ChatMessage[] {
-  const messages = params.previousSummary
-    ? [buildSummaryMessage(params.previousSummary), ...params.messages]
-    : [...params.messages];
+  const messages = buildOriginalCompactionMessages(params);
 
   return [
     ...messages,
@@ -687,39 +1013,10 @@ function splitLowUserTurnMessagesForCompaction(messages: ChatMessage[]): {
   // turn will arrive after the summary on the following request.
   const recentStart =
     latestUserIndex === messages.length - 1 ? latestUserIndex : messages.length;
-  const compactable = messages.slice(0, recentStart);
-
-  if (!shouldCompactLowUserTurnRange(compactable)) {
-    return { compactable: [], recent: messages };
-  }
-
   return {
-    compactable,
+    compactable: messages.slice(0, recentStart),
     recent: messages.slice(recentStart),
   };
-}
-
-function shouldCompactLowUserTurnRange(messages: ChatMessage[]): boolean {
-  if (messages.length === 0) {
-    return false;
-  }
-
-  const partCount = messages.reduce(
-    (count, message) => count + (message.parts?.length ?? 0),
-    0,
-  );
-  if (
-    messages.length >= CONTEXT_COMPACTION_LOW_USER_TURN_MIN_MESSAGES ||
-    partCount >= CONTEXT_COMPACTION_LOW_USER_TURN_MIN_PARTS
-  ) {
-    return true;
-  }
-
-  const roughChars = messages.reduce(
-    (count, message) => count + getMessageTextForTokenEstimate(message).length,
-    0,
-  );
-  return roughChars >= CONTEXT_COMPACTION_LOW_USER_TURN_MIN_CHARS;
 }
 
 function findLatestUserMessageIndex(messages: ChatMessage[]): number {
@@ -856,7 +1153,9 @@ function getMessageTextForTokenEstimate(message: ChatMessage): string {
         }`;
       }
       if (part.type === "file") {
-        return `[file ${String(part.filename ?? "")} ${String(part.mediaType ?? "")}]`;
+        const url = typeof part.url === "string" ? part.url : "";
+        const inlineData = url.startsWith("data:") ? `\n${url}` : "";
+        return `[file ${String(part.filename ?? "")} ${String(part.mediaType ?? "")}]${inlineData}`;
       }
       return `[${part.type}]`;
     })
@@ -1014,12 +1313,44 @@ function isTextLikeMediaType(mediaType: string): boolean {
   );
 }
 
-function findMessageIndexById(messages: ChatMessage[], id: string | null) {
-  if (!id) {
+function findMessageIndexByIds(messages: ChatMessage[], ids: string[]) {
+  if (ids.length === 0) {
     return -1;
   }
 
-  return messages.findIndex((message) => message.id === id);
+  const idSet = new Set(ids);
+  return messages.findIndex((message) =>
+    getMessageIdentityIds(message).some((id) => idSet.has(id)),
+  );
+}
+
+function getMessageIdentityIds(message: ChatMessage): string[] {
+  const ids = new Set<string>();
+  if (message.id) {
+    ids.add(message.id);
+  }
+
+  const metadata = getChatMessageMetadata(message);
+  const persistedMessageId = metadata?.persistedMessageId;
+  if (typeof persistedMessageId === "string") {
+    ids.add(persistedMessageId);
+  }
+
+  return [...ids];
+}
+
+function getChatMessageMetadata(
+  message: ChatMessage,
+): Record<string, unknown> | null {
+  if (
+    "metadata" in message &&
+    typeof message.metadata === "object" &&
+    message.metadata !== null
+  ) {
+    return message.metadata as Record<string, unknown>;
+  }
+
+  return null;
 }
 
 function extractTaggedSummary(text: string): string | null {

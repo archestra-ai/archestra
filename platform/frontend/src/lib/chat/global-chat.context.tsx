@@ -64,6 +64,10 @@ export type ContextCompactionState = {
   } | null;
 };
 
+type ContextCompactionRecord = NonNullable<
+  ContextCompactionState["lastCompaction"]
+>;
+
 function isRetryableError(error: Error): boolean {
   const msg = error.message;
   // Structured backend chat errors already reached the server and should render
@@ -106,7 +110,9 @@ interface ChatSession {
   ) => void;
   /** Token usage for the current/last response */
   tokenUsage: TokenUsage | null;
+  contextTokensUsed: number | null;
   contextCompaction: ContextCompactionState;
+  recordContextCompaction: (compaction: ContextCompactionRecord) => void;
   /** Early UI data from data-tool-ui-start events (toolCallId → resource data incl. pre-fetched HTML) */
   earlyToolUiStarts: Record<
     string,
@@ -333,6 +339,9 @@ function ChatSessionHook({
     }>
   >([]);
   const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null);
+  const [contextTokensUsed, setContextTokensUsed] = useState<number | null>(
+    null,
+  );
   const [contextCompaction, setContextCompaction] =
     useState<ContextCompactionState>({
       isCompacting: false,
@@ -357,6 +366,21 @@ function ChatSessionHook({
   const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastUserMessageIdRef = useRef<string | null>(null);
   const previousMessagesRef = useRef<UIMessage[]>([]);
+
+  const recordContextCompaction = useCallback(
+    (compaction: ContextCompactionRecord) => {
+      setContextCompaction({
+        isCompacting: false,
+        trigger: null,
+        lastCompaction: compaction,
+      });
+
+      if (typeof compaction.compactedTokenEstimate === "number") {
+        setContextTokensUsed(compaction.compactedTokenEstimate);
+      }
+    },
+    [],
+  );
 
   // Track early UI data from data-tool-ui-start events (toolCallId → resource data)
   const [earlyToolUiStarts, setEarlyToolUiStarts] = useState<
@@ -522,6 +546,9 @@ function ChatSessionHook({
       if (dataPart.type === "data-token-usage") {
         const usage = dataPart.data as TokenUsage;
         setTokenUsage(usage);
+        if (typeof usage.totalTokens === "number") {
+          setContextTokensUsed(usage.totalTokens);
+        }
       }
 
       if (dataPart.type === "data-context-compaction-start") {
@@ -539,11 +566,7 @@ function ChatSessionHook({
           originalTokenEstimate?: number;
           compactedTokenEstimate?: number;
         };
-        setContextCompaction({
-          isCompacting: false,
-          trigger: null,
-          lastCompaction: data,
-        });
+        recordContextCompaction(data);
         queryClient.invalidateQueries({
           queryKey: ["conversation", conversationId],
         });
@@ -666,7 +689,9 @@ function ChatSessionHook({
     optimisticToolCalls,
     setPendingCustomServerToolCall,
     tokenUsage,
+    contextTokensUsed,
     contextCompaction,
+    recordContextCompaction,
     earlyToolUiStarts,
   };
 
@@ -690,7 +715,9 @@ function ChatSessionHook({
     pendingCustomServerToolCall,
     optimisticToolCalls,
     tokenUsage,
+    contextTokensUsed,
     contextCompaction,
+    recordContextCompaction,
     earlyToolUiStarts,
     sessionsRef,
     notifySessionUpdate,

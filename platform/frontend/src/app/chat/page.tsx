@@ -111,6 +111,8 @@ import {
 import {
   conversationStorageKeys,
   getConversationDisplayTitle,
+  getManualCompactionSkippedMessage,
+  PERSISTED_MESSAGE_ID_METADATA_KEY,
 } from "@/lib/chat/chat-utils";
 import { useChatSession } from "@/lib/chat/global-chat.context";
 import {
@@ -881,7 +883,9 @@ export function ChatPageContent({
   const setPendingCustomServerToolCall =
     chatSession?.setPendingCustomServerToolCall;
   const tokenUsage = chatSession?.tokenUsage;
+  const contextTokensUsed = chatSession?.contextTokensUsed;
   const contextCompaction = chatSession?.contextCompaction;
+  const recordContextCompaction = chatSession?.recordContextCompaction;
 
   const {
     conversationAgentId,
@@ -949,8 +953,8 @@ export function ChatPageContent({
   const isPlaywrightSetupVisible =
     !!canUpdateAgent && (isPlaywrightSetupRequired || isPlaywrightCheckLoading);
 
-  // Use actual token usage when available from the stream (no fallback to estimation)
-  const tokensUsed = tokenUsage?.totalTokens;
+  // Stream usage and compaction results both update this live context estimate.
+  const tokensUsed = contextTokensUsed ?? tokenUsage?.totalTokens;
   const isContextCompacting =
     !!contextCompaction?.isCompacting || compactConversationMutation.isPending;
 
@@ -975,10 +979,34 @@ export function ChatPageContent({
       return;
     }
 
-    if (result.status === "created" || result.status === "existing") {
+    if (result.status === "created") {
+      if (result.compaction) {
+        recordContextCompaction?.({
+          compactionId: result.compaction.id,
+          originalTokenEstimate: result.compaction.originalTokenEstimate,
+          compactedTokenEstimate: result.compaction.compactedTokenEstimate,
+        });
+      }
+
+      setManualCompactionFeedback(null);
+      return;
+    }
+
+    if (result.status === "existing") {
+      if (result.compaction) {
+        recordContextCompaction?.({
+          compactionId: result.compaction.id,
+          originalTokenEstimate: result.compaction.originalTokenEstimate,
+          compactedTokenEstimate: result.compaction.compactedTokenEstimate,
+        });
+      }
+
       setManualCompactionFeedback({
-        status: "success",
-        message: "Conversation context compacted.",
+        status: "skipped",
+        message: getManualCompactionSkippedMessage(
+          result.reason,
+          result.status,
+        ),
       });
       return;
     }
@@ -986,7 +1014,10 @@ export function ChatPageContent({
     if (result.status === "skipped") {
       setManualCompactionFeedback({
         status: "skipped",
-        message: "There is not enough older context to compact yet.",
+        message: getManualCompactionSkippedMessage(
+          result.reason,
+          result.status,
+        ),
       });
       return;
     }
@@ -995,7 +1026,12 @@ export function ChatPageContent({
       status: "failed",
       message: "Context compaction failed.",
     });
-  }, [compactConversationMutation, conversationId, isReadOnlyConversation]);
+  }, [
+    compactConversationMutation,
+    conversationId,
+    isReadOnlyConversation,
+    recordContextCompaction,
+  ]);
 
   useEffect(() => {
     if (
@@ -2271,7 +2307,8 @@ function mergePersistedMessageMetadata(params: {
   const remainingPersistedMessages = [...params.persistedMessages];
 
   return params.liveMessages.map((liveMessage) => {
-    if (hasCreatedAtMetadata(liveMessage)) {
+    const liveMetadata = getObjectMetadata(liveMessage);
+    if (typeof liveMetadata[PERSISTED_MESSAGE_ID_METADATA_KEY] === "string") {
       return liveMessage;
     }
 
@@ -2296,7 +2333,8 @@ function mergePersistedMessageMetadata(params: {
       ...liveMessage,
       metadata: {
         ...getObjectMetadata(persistedMessage),
-        ...getObjectMetadata(liveMessage),
+        ...liveMetadata,
+        [PERSISTED_MESSAGE_ID_METADATA_KEY]: persistedMessage.id,
       },
     };
   });
@@ -2318,11 +2356,6 @@ function getMessageText(message: UIMessage) {
     .filter((part) => part.type === "text")
     .map((part) => part.text)
     .join("\n");
-}
-
-function hasCreatedAtMetadata(message: UIMessage) {
-  const metadata = getObjectMetadata(message);
-  return typeof metadata.createdAt === "string";
 }
 
 function getObjectMetadata(message: UIMessage): Record<string, unknown> {

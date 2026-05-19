@@ -4,6 +4,10 @@ import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ChatProvider, useGlobalChat } from "./global-chat.context";
 
+type ChatSessionSnapshot = ReturnType<
+  ReturnType<typeof useGlobalChat>["getSession"]
+>;
+
 const mocks = vi.hoisted(() => ({
   addToolApprovalResponse: vi.fn(),
   addToolResult: vi.fn(),
@@ -120,6 +124,60 @@ describe("ChatProvider retries", () => {
 
     expect(mocks.regenerate).toHaveBeenCalledTimes(1);
   });
+
+  it("updates live context token estimate from usage and compaction data", async () => {
+    const latestSessionRef: { current: ChatSessionSnapshot } = {
+      current: undefined,
+    };
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+        <CaptureChatSession
+          onSession={(session) => {
+            latestSessionRef.current = session;
+          }}
+        />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-token-usage",
+        data: {
+          inputTokens: 100,
+          outputTokens: 20,
+          totalTokens: 120,
+        },
+      });
+    });
+
+    await waitFor(() =>
+      expect(latestSessionRef.current?.contextTokensUsed).toBe(120),
+    );
+
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-context-compaction-finish",
+        data: {
+          compactionId: "compaction-1",
+          originalTokenEstimate: 120,
+          compactedTokenEstimate: 35,
+        },
+      });
+    });
+
+    await waitFor(() =>
+      expect(latestSessionRef.current?.contextTokensUsed).toBe(35),
+    );
+    expect(latestSessionRef.current?.contextCompaction.lastCompaction).toEqual({
+      compactionId: "compaction-1",
+      originalTokenEstimate: 120,
+      compactedTokenEstimate: 35,
+    });
+  });
 });
 
 function RegisterChatSession() {
@@ -128,6 +186,21 @@ function RegisterChatSession() {
   useEffect(() => {
     registerSession({ conversationId: "conversation-1" });
   }, [registerSession]);
+
+  return null;
+}
+
+function CaptureChatSession({
+  onSession,
+}: {
+  onSession: (session: ChatSessionSnapshot) => void;
+}) {
+  const { getSession } = useGlobalChat();
+  const session = getSession("conversation-1");
+
+  useEffect(() => {
+    onSession(session);
+  }, [onSession, session]);
 
   return null;
 }

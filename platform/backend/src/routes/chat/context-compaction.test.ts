@@ -1,7 +1,12 @@
 import { CONTEXT_COMPACTION_SYSTEM_PROMPT } from "@shared";
 import { describe, expect, test } from "vitest";
 import type { ChatMessage } from "@/types";
-import { __test } from "./context-compaction";
+import type { ConversationCompaction } from "@/types/conversation-compaction";
+import {
+  __test,
+  __testEstimateChatMessagesTokens,
+  buildContextCompactionStreamData,
+} from "./context-compaction";
 
 const msg = (
   id: string,
@@ -12,20 +17,6 @@ const msg = (
   role,
   parts: [{ type: "text", text }],
 });
-
-const toolMsg = (id: string, output: unknown): ChatMessage =>
-  ({
-    id,
-    role: "assistant",
-    parts: [
-      {
-        type: "tool-search",
-        toolName: "search",
-        state: "output-available",
-        output,
-      },
-    ],
-  }) as ChatMessage;
 
 describe("context compaction helpers", () => {
   test("keeps the last four user turns verbatim", () => {
@@ -55,25 +46,74 @@ describe("context compaction helpers", () => {
     ]);
   });
 
-  test("does not compact short conversations with fewer than four user turns", () => {
+  test("compacts short older work while keeping the latest user turn live", () => {
     const split = __test.splitMessagesForCompaction([
       msg("u1", "user", "one"),
       msg("a1", "assistant", "one reply"),
       msg("u2", "user", "two"),
     ]);
 
-    expect(split.compactable).toEqual([]);
-    expect(split.recent.map((m) => m.id)).toEqual(["u1", "a1", "u2"]);
+    expect(split.compactable.map((m) => m.id)).toEqual(["u1", "a1"]);
+    expect(split.recent.map((m) => m.id)).toEqual(["u2"]);
   });
 
-  test("compacts a huge completed assistant/tool trace with one user turn", () => {
+  test("compacts completed low-turn conversations without a size gate", () => {
     const split = __test.splitMessagesForCompaction([
-      msg("u1", "user", "do the large investigation"),
-      toolMsg("a1", { logs: "x".repeat(20_000) }),
+      msg("u1", "user", "one"),
+      msg("a1", "assistant", "one reply"),
     ]);
 
     expect(split.compactable.map((m) => m.id)).toEqual(["u1", "a1"]);
     expect(split.recent).toEqual([]);
+  });
+
+  test("does not compact a single unresolved user turn", () => {
+    const split = __test.splitMessagesForCompaction([
+      msg("u1", "user", "start this work"),
+    ]);
+
+    expect(split.compactable).toEqual([]);
+    expect(split.recent.map((m) => m.id)).toEqual(["u1"]);
+  });
+
+  test("serializes skipped compaction stream data with reason", () => {
+    expect(
+      buildContextCompactionStreamData({
+        messages: [],
+        status: "skipped",
+        compaction: null,
+        reason: "nothing_to_compact",
+      }),
+    ).toEqual({ status: "skipped", reason: "nothing_to_compact" });
+  });
+
+  test("serializes created compaction stream data without summary", () => {
+    const compaction = {
+      id: "compaction-1",
+      conversationId: "conversation-1",
+      summary: "summary text",
+      compactedThroughMessageId: "a1",
+      trigger: "manual",
+      provider: "openai",
+      model: "gpt-4o-mini",
+      originalTokenEstimate: 1000,
+      compactedTokenEstimate: 100,
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    } satisfies ConversationCompaction;
+
+    expect(
+      buildContextCompactionStreamData({
+        messages: [],
+        status: "created",
+        compaction,
+      }),
+    ).toEqual({
+      status: "created",
+      compactionId: "compaction-1",
+      trigger: "manual",
+      originalTokenEstimate: 1000,
+      compactedTokenEstimate: 100,
+    });
   });
 
   test("keeps the latest unresolved user turn live while compacting prior low-turn work", () => {
@@ -134,6 +174,98 @@ describe("context compaction helpers", () => {
     expect(result.compaction).toBeNull();
     expect(result.boundaryIndex).toBe(-1);
     expect(result.messages).toBe(messages);
+  });
+
+  test("uses compaction boundary aliases for live temporary message ids", () => {
+    const messages = [
+      msg("client-u1", "user", "one"),
+      msg("client-a1", "assistant", "one reply"),
+      msg("client-u2", "user", "two"),
+    ];
+
+    const result = __test.resolveUsableCompaction(
+      messages,
+      {
+        summary: "Earlier work was about one.",
+        compactedThroughMessageId: "db-a1",
+      },
+      ["db-a1", "client-a1"],
+    );
+
+    expect(result.compaction?.summary).toBe("Earlier work was about one.");
+    expect(result.boundaryIndex).toBe(1);
+    expect(result.messages[1].id).toBe("client-u2");
+  });
+
+  test("uses persisted message metadata as a compaction boundary", () => {
+    const messages = [
+      msg("client-u1", "user", "one"),
+      {
+        ...msg("client-a1", "assistant", "one reply"),
+        metadata: { persistedMessageId: "db-a1" },
+      } as ChatMessage,
+      msg("client-u2", "user", "two"),
+    ];
+
+    const result = __test.resolveUsableCompaction(
+      messages,
+      {
+        summary: "Earlier work was about one.",
+        compactedThroughMessageId: "db-a1",
+      },
+      ["db-a1"],
+    );
+
+    expect(result.boundaryIndex).toBe(1);
+    expect(result.messages[1].id).toBe("client-u2");
+  });
+
+  test("detects non-beneficial compaction estimates", () => {
+    expect(
+      __test.isCompactionBeneficial({
+        originalTokenEstimate: 100,
+        compactedTokenEstimate: 99,
+      }),
+    ).toBe(true);
+    expect(
+      __test.isCompactionBeneficial({
+        originalTokenEstimate: 100,
+        compactedTokenEstimate: 100,
+      }),
+    ).toBe(false);
+    expect(
+      __test.isCompactionBeneficial({
+        originalTokenEstimate: 100,
+        compactedTokenEstimate: 120,
+      }),
+    ).toBe(false);
+  });
+
+  test("token estimates include inline file payloads", () => {
+    const small = __testEstimateChatMessagesTokens({
+      provider: "openai",
+      messages: [msg("u1", "user", "Use this file")],
+    });
+    const withInlineFile = __testEstimateChatMessagesTokens({
+      provider: "openai",
+      messages: [
+        {
+          id: "u1",
+          role: "user",
+          parts: [
+            { type: "text", text: "Use this file" },
+            {
+              type: "file",
+              filename: "large.txt",
+              mediaType: "text/plain",
+              url: `data:text/plain;base64,${"YQ==".repeat(1000)}`,
+            },
+          ],
+        } as ChatMessage,
+      ],
+    });
+
+    expect(withInlineFile).toBeGreaterThan(small + 100);
   });
 
   test("compaction system prompt treats transcript as data", async () => {

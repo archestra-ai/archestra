@@ -82,7 +82,7 @@ import {
 } from "@/utils/llm-resolution";
 import { estimateMessagesSize } from "@/utils/message-size";
 import {
-  type ContextCompactionResult,
+  buildContextCompactionStreamData,
   compactMessagesForChat,
   invalidateConversationCompactions,
 } from "./context-compaction";
@@ -556,6 +556,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   );
                 }
 
+                let compactionStarted = false;
                 const compactionResult = await compactMessagesForChat({
                   conversationId,
                   organizationId,
@@ -569,6 +570,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   trigger: "auto",
                   abortSignal: chatAbortController.signal,
                   onCompactionStart: () => {
+                    compactionStarted = true;
                     writer.write({
                       type: "data-context-compaction-start",
                       data: { trigger: "auto" },
@@ -577,6 +579,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 });
 
                 if (
+                  compactionStarted ||
                   compactionResult.status === "created" ||
                   compactionResult.status === "failed"
                 ) {
@@ -1316,6 +1319,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const provider = isSupportedProvider(conversation.selectedProvider)
         ? conversation.selectedProvider
         : detectProviderFromModel(conversation.selectedModel);
+      const normalizedMessages = normalizeChatMessages(
+        conversation.messages as ChatMessage[],
+      );
       const result = await compactMessagesForChat({
         conversationId: id,
         organizationId,
@@ -1324,7 +1330,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         provider,
         selectedModel: conversation.selectedModel,
         agentLlmApiKeyId: conversation.agent.llmApiKeyId,
-        messages: normalizeChatMessages(conversation.messages as ChatMessage[]),
+        messages: normalizedMessages,
         systemPrompt: conversation.agent.systemPrompt ?? undefined,
         trigger: "manual",
       });
@@ -2171,23 +2177,6 @@ function persistConversationChatError(params: {
       "Failed to persist chat error event on conversation",
     );
   });
-}
-
-function buildContextCompactionStreamData(result: ContextCompactionResult) {
-  // only report compaction details for "created"; on "failed",
-  // result.compaction holds the previously stored compaction and the client
-  // would otherwise treat that stale id as the new one
-  if (result.status !== "created" || !result.compaction) {
-    return { status: result.status };
-  }
-
-  return {
-    status: result.status,
-    compactionId: result.compaction.id,
-    trigger: result.compaction.trigger,
-    originalTokenEstimate: result.compaction.originalTokenEstimate,
-    compactedTokenEstimate: result.compaction.compactedTokenEstimate,
-  };
 }
 
 function getSerializableChatError(error: ChatErrorResponse): ChatErrorResponse {

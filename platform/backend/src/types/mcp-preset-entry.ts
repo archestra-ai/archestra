@@ -20,7 +20,7 @@ export const McpPresetEntryWithAssignedCountSchema =
  * Validates that a string is a valid JavaScript regex source. Stored without
  * delimiters or flags.
  */
-const ValidationRegexSchema = z
+export const ValidationRegexSchema = z
   .string()
   .max(1000)
   .refine(

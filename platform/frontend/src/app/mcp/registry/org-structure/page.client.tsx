@@ -29,6 +29,7 @@ import {
   useOrganization,
   usePresetEntityName,
   useUpdatePresetEntityDefaultLabel,
+  useUpdatePresetEntityDefaultValidationRegex,
   useUpdatePresetEntityName,
 } from "@/lib/organization.query";
 
@@ -254,14 +255,16 @@ function NameEditorDialog({
 }
 
 function EntriesSection({ canEdit }: { canEdit: boolean }) {
-  const { singular, plural, defaultLabel } = usePresetEntityName();
+  const { singular, plural, defaultLabel, defaultValidationRegex } =
+    usePresetEntityName();
   const { data: entries = [], isLoading } = useMcpPresetEntries();
   const createMutation = useCreateMcpPresetEntry();
   const [addingName, setAddingName] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] =
     useState<McpPresetEntryWithAssignedCount | null>(null);
-  const [regexTarget, setRegexTarget] =
-    useState<McpPresetEntryWithAssignedCount | null>(null);
+  const [regexTarget, setRegexTarget] = useState<ValidationRegexTarget | null>(
+    null,
+  );
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameDefaultOpen, setRenameDefaultOpen] = useState(false);
 
@@ -325,8 +328,37 @@ function EntriesSection({ canEdit }: { canEdit: boolean }) {
                   Available for every MCP server, even without the per-
                   {singular.toLowerCase()} configuration.
                 </div>
+                {defaultValidationRegex && (
+                  <div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                    <ShieldCheck className="h-3 w-3" />
+                    <span className="font-mono">
+                      /{defaultValidationRegex}/
+                    </span>
+                  </div>
+                )}
               </TableCell>
               <TableCell className="text-right">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                  disabled={!canEdit}
+                  onClick={() =>
+                    setRegexTarget({
+                      kind: "default",
+                      name: defaultLabel,
+                      validationRegex: defaultValidationRegex,
+                    })
+                  }
+                  aria-label={`Edit ${defaultLabel} validation regex`}
+                  title={
+                    defaultValidationRegex
+                      ? "Edit validation regex"
+                      : "Add validation regex"
+                  }
+                >
+                  <ShieldCheck className="h-4 w-4" />
+                </Button>
                 <Button
                   variant="ghost"
                   size="icon"
@@ -368,7 +400,7 @@ function EntriesSection({ canEdit }: { canEdit: boolean }) {
                       size="icon"
                       className="h-8 w-8 text-muted-foreground hover:text-foreground"
                       disabled={!canEdit}
-                      onClick={() => setRegexTarget(entry)}
+                      onClick={() => setRegexTarget({ kind: "entry", entry })}
                       aria-label={`Edit ${entry.name} validation regex`}
                       title={
                         entry.validationRegex
@@ -521,21 +553,37 @@ function DefaultLabelDialog({
   );
 }
 
+type ValidationRegexTarget =
+  | { kind: "entry"; entry: McpPresetEntryWithAssignedCount }
+  | { kind: "default"; name: string; validationRegex: string | null };
+
 function ValidationRegexDialog({
   target,
   onClose,
 }: {
-  target: McpPresetEntryWithAssignedCount | null;
+  target: ValidationRegexTarget | null;
   onClose: () => void;
 }) {
   const { singular } = usePresetEntityName();
-  const updateMutation = useUpdateMcpPresetEntry();
-  const [draft, setDraft] = useState<string>(target?.validationRegex ?? "");
+  const entryMutation = useUpdateMcpPresetEntry();
+  const defaultMutation = useUpdatePresetEntityDefaultValidationRegex(
+    "Validation pattern saved",
+    "Failed to save validation pattern",
+  );
 
-  // Sync the draft when a different entry is opened.
+  const targetName =
+    target?.kind === "entry" ? target.entry.name : (target?.name ?? "");
+  const targetRegex =
+    target?.kind === "entry"
+      ? (target.entry.validationRegex ?? "")
+      : (target?.validationRegex ?? "");
+
+  const [draft, setDraft] = useState<string>(targetRegex);
+
+  // Sync the draft when a different target is opened.
   useEffect(() => {
-    setDraft(target?.validationRegex ?? "");
-  }, [target?.validationRegex]);
+    setDraft(targetRegex);
+  }, [targetRegex]);
 
   if (!target) return null;
 
@@ -549,17 +597,25 @@ function ValidationRegexDialog({
         e instanceof Error ? e.message : "Invalid regular expression";
     }
   }
-  const initial = target.validationRegex ?? "";
-  const canSave = !regexError && trimmed !== initial;
+  const canSave = !regexError && trimmed !== targetRegex;
+  const isPending = entryMutation.isPending || defaultMutation.isPending;
+  const valueToSave = trimmed === "" ? null : trimmed;
 
   const handleSave = () => {
-    updateMutation.mutate(
-      {
-        id: target.id,
-        body: { validationRegex: trimmed === "" ? null : trimmed },
-      },
-      { onSuccess: () => onClose() },
-    );
+    if (target.kind === "entry") {
+      entryMutation.mutate(
+        {
+          id: target.entry.id,
+          body: { validationRegex: valueToSave },
+        },
+        { onSuccess: () => onClose() },
+      );
+    } else {
+      defaultMutation.mutate(
+        { presetEntityDefaultValidationRegex: valueToSave },
+        { onSuccess: () => onClose() },
+      );
+    }
   };
 
   return (
@@ -573,15 +629,39 @@ function ValidationRegexDialog({
         <DialogHeader>
           <DialogTitle>{singular} validation pattern</DialogTitle>
           <DialogDescription>
-            JavaScript regular expression applied to every{" "}
-            {singular.toLowerCase()}-scoped field value and every prompted user
-            value when installing an MCP server in{" "}
-            <span className="font-medium">{target.name}</span>. Leave blank to
-            disable. Do not include delimiters or flags (e.g.{" "}
-            <code className="font-mono">^https://prod\.example\.com/</code>).
+            Regex that every {singular.toLowerCase()}-scoped value must match
+            when installing an MCP server in{" "}
+            <span className="font-medium">{targetName}</span>.
           </DialogDescription>
         </DialogHeader>
-        <DialogBody className="space-y-2">
+        <DialogBody className="space-y-4">
+          <div className="space-y-2 text-sm text-foreground">
+            <p className="font-medium">Examples:</p>
+            <ol className="list-decimal space-y-2 pl-5">
+              <li>
+                Allow only HTTPS URLs on the corporate domain{" "}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+                  *.acme.internal
+                </code>
+                :{" "}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+                  {"^https://[a-z0-9-]+\\.acme\\.internal(/.*)?$"}
+                </code>
+              </li>
+              <li>
+                Restrict to approved EU AWS regions (data residency):{" "}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+                  ^eu-(west|central|north)-[1-3]$
+                </code>
+              </li>
+              <li>
+                Block production resources from non-prod environments:{" "}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+                  ^(?!.*(prod|production)).*$
+                </code>
+              </li>
+            </ol>
+          </div>
           <Label htmlFor="preset-validation-regex">Pattern</Label>
           <Input
             id="preset-validation-regex"
@@ -598,18 +678,18 @@ function ValidationRegexDialog({
           )}
         </DialogBody>
         <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={onClose}
-            disabled={updateMutation.isPending}
-          >
+          <Button variant="outline" onClick={onClose} disabled={isPending}>
             Cancel
           </Button>
           <Button
-            onClick={handleSave}
-            disabled={!canSave || updateMutation.isPending}
+            variant="ghost"
+            onClick={() => setDraft("")}
+            disabled={draft === "" || isPending}
           >
-            {updateMutation.isPending ? "Saving…" : "Save"}
+            Reset
+          </Button>
+          <Button onClick={handleSave} disabled={!canSave || isPending}>
+            {isPending ? "Saving…" : "Save"}
           </Button>
         </DialogFooter>
       </DialogContent>

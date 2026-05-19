@@ -390,3 +390,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @luwinter111
 - @adamjacobmuller
 - @falkirks
+- @fernando-aguilar-coro

@@ -76,6 +76,28 @@ describe("organization routes", () => {
     });
   });
 
+  describe("PATCH /api/organization/agent-settings - model/key pair", () => {
+    test("rejects a default model with no API key", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/agent-settings",
+        payload: { defaultModelId: crypto.randomUUID() },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    test("allows clearing both the default model and API key together", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/agent-settings",
+        payload: { defaultModelId: null, defaultLlmApiKeyId: null },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+  });
+
   test("does not resync built-in MCP branding when appName is unchanged", async () => {
     const syncSpy = vi
       .spyOn(ToolModel, "syncArchestraBuiltInCatalog")

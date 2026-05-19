@@ -36,6 +36,8 @@ const {
   getInternalMcpCatalogTools,
   bulkAssignTools,
   stopChatStream,
+  getMemberDefaultModel,
+  updateMemberDefaultModel,
 } = archestraApiSdk;
 
 export function mergeUpdatedConversationIntoCache(
@@ -56,17 +58,8 @@ export function mergeUpdatedConversationIntoCache(
   if (variables.title !== undefined) {
     merged.title = updatedConversation.title;
   }
-  if (
-    variables.selectedModel !== undefined ||
-    variables.agentId !== undefined
-  ) {
-    merged.selectedModel = updatedConversation.selectedModel;
-  }
-  if (
-    variables.selectedProvider !== undefined ||
-    variables.agentId !== undefined
-  ) {
-    merged.selectedProvider = updatedConversation.selectedProvider;
+  if (variables.modelId !== undefined || variables.agentId !== undefined) {
+    merged.modelId = updatedConversation.modelId;
   }
   if (variables.chatApiKeyId !== undefined || variables.agentId !== undefined) {
     merged.chatApiKeyId = updatedConversation.chatApiKeyId;
@@ -144,15 +137,13 @@ export function useCreateConversation() {
   return useMutation({
     mutationFn: async ({
       agentId,
-      selectedModel,
-      selectedProvider,
+      modelId,
       chatApiKeyId,
     }: NonNullable<archestraApiTypes.CreateChatConversationData["body"]>) => {
       const { data, error } = await createChatConversation({
         body: {
           agentId,
-          selectedModel,
-          selectedProvider,
+          modelId,
           chatApiKeyId: chatApiKeyId ?? undefined,
         },
       });
@@ -183,8 +174,7 @@ export function useUpdateConversation() {
     mutationFn: async ({
       id,
       title,
-      selectedModel,
-      selectedProvider,
+      modelId,
       chatApiKeyId,
       agentId,
       pinnedAt,
@@ -195,8 +185,7 @@ export function useUpdateConversation() {
         path: { id },
         body: {
           title,
-          selectedModel,
-          selectedProvider,
+          modelId,
           chatApiKeyId,
           agentId,
           pinnedAt,
@@ -230,6 +219,52 @@ export function useUpdateConversation() {
         queryClient.invalidateQueries({
           queryKey: ["conversation", variables.id, "enabled-tools"],
         });
+      }
+    },
+  });
+}
+
+/**
+ * The current user's default (model, key) pair — the "member" level of the
+ * model-resolution chain. Used to preselect the model when opening a new chat.
+ */
+export function useMemberDefaultModel() {
+  return useQuery({
+    queryKey: ["member-default-model"],
+    queryFn: async () => {
+      const response = await getMemberDefaultModel();
+      if (response.error) {
+        handleApiError(response.error);
+        return { modelId: null, chatApiKeyId: null };
+      }
+      return response.data;
+    },
+  });
+}
+
+/**
+ * Persist the current user's default (model, key) pair. Fired whenever the
+ * user changes the model in chat so the next new chat reuses their choice
+ * (the "member" level of the model-resolution chain).
+ */
+export function useUpdateMemberDefaultModel() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (body: {
+      modelId: string | null;
+      chatApiKeyId: string | null;
+    }) => {
+      const { data, error } = await updateMemberDefaultModel({ body });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (data) {
+        queryClient.setQueryData(["member-default-model"], data);
       }
     },
   });

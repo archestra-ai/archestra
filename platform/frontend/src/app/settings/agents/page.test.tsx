@@ -140,6 +140,7 @@ vi.mock("@/lib/llm-models.query", () => ({
     data: [
       {
         id: "gemini-2.5-pro",
+        dbId: "gemini-2.5-pro",
         provider: "vertex_ai",
         displayName: "Gemini 2.5 Pro",
       },
@@ -192,8 +193,7 @@ function renderPage() {
 beforeEach(() => {
   vi.clearAllMocks();
   mockOrganization = {
-    defaultLlmModel: "gemini-2.5-pro",
-    defaultLlmProvider: "vertex_ai",
+    defaultModelId: "gemini-2.5-pro",
     defaultLlmApiKeyId: "key-1",
     defaultAgentId: null,
     globalToolPolicy: "permissive",

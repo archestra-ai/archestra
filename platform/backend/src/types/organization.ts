@@ -361,8 +361,7 @@ export const UpdateLlmSettingsSchema = z.object({
 });
 
 export const UpdateAgentSettingsSchema = z.object({
-  defaultLlmModel: z.string().nullable().optional(),
-  defaultLlmProvider: SupportedProvidersSchema.nullable().optional(),
+  defaultModelId: z.string().uuid().nullable().optional(),
   defaultLlmApiKeyId: z.string().uuid().nullable().optional(),
   defaultAgentId: z.string().uuid().nullable().optional(),
 });

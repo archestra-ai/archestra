@@ -23,6 +23,7 @@ export * from "./mcp-orchestrator";
 export * from "./mcp-server-config";
 export * from "./mcp-tool-error";
 export * from "./model-constants";
+export * from "./model-resolution";
 export * from "./oauth";
 export * from "./organization-appearance";
 export * from "./pagination";

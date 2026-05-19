@@ -72,10 +72,6 @@ const ExportAgentConfigSchema = z.object({
   considerContextUntrusted: z.boolean(),
   toolAssignmentMode: ToolAssignmentModeSchema,
   toolExposureMode: ToolExposureModeSchema,
-  llmModel: z
-    .string()
-    .nullable()
-    .describe("Informational; not auto-configured on import"),
   incomingEmailEnabled: z.boolean(),
   incomingEmailSecurityMode: IncomingEmailSecurityModeSchema,
   incomingEmailAllowedDomain: z.string().nullable(),

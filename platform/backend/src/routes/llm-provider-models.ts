@@ -32,6 +32,8 @@ import {
 
 const LlmModelSchema = z.object({
   id: z.string(),
+  /** The models.id UUID — used as the model_id FK on conversations/agents. */
+  dbId: z.string(),
   displayName: z.string(),
   provider: SupportedProvidersSchema,
   createdAt: z.string().optional(),
@@ -134,6 +136,7 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         )
         .map(({ model, isBest, isFastest }) => ({
           id: model.modelId,
+          dbId: model.id,
           displayName: model.description || model.modelId,
           provider: model.provider,
           capabilities: ModelModel.toCapabilities(model),

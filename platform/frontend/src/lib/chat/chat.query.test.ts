@@ -15,8 +15,7 @@ describe("mergeUpdatedConversationIntoCache", () => {
         agentType: "agent",
         llmApiKeyId: "key-anthropic",
       },
-      selectedModel: "claude-3-5-sonnet",
-      selectedProvider: "anthropic",
+      modelId: "model-claude",
       chatApiKeyId: "key-anthropic",
     } satisfies archestraApiTypes.UpdateChatConversationResponses["200"];
 
@@ -31,8 +30,7 @@ describe("mergeUpdatedConversationIntoCache", () => {
 
     expect(merged.agentId).toBe("agent-b");
     expect(merged.agent?.id).toBe("agent-b");
-    expect(merged.selectedModel).toBe("claude-3-5-sonnet");
-    expect(merged.selectedProvider).toBe("anthropic");
+    expect(merged.modelId).toBe("model-claude");
     expect(merged.chatApiKeyId).toBe("key-anthropic");
   });
 
@@ -40,8 +38,7 @@ describe("mergeUpdatedConversationIntoCache", () => {
     const oldConversation = makeConversation();
     const updatedConversation = {
       ...oldConversation,
-      selectedModel: "gpt-4.1",
-      selectedProvider: "openai",
+      modelId: "model-gpt41",
     } satisfies archestraApiTypes.UpdateChatConversationResponses["200"];
 
     const merged = mergeUpdatedConversationIntoCache(
@@ -49,14 +46,13 @@ describe("mergeUpdatedConversationIntoCache", () => {
       updatedConversation,
       {
         id: "conversation-1",
-        selectedModel: "gpt-4.1",
-        selectedProvider: "openai",
+        modelId: "model-gpt41",
       },
     );
 
     expect(merged.agentId).toBe("agent-a");
     expect(merged.chatApiKeyId).toBe("key-openai");
-    expect(merged.selectedModel).toBe("gpt-4.1");
+    expect(merged.modelId).toBe("model-gpt41");
   });
 });
 
@@ -70,6 +66,7 @@ function makeConversation(): archestraApiTypes.GetChatConversationResponses["200
     title: "Test",
     selectedModel: "gpt-4o",
     selectedProvider: "openai",
+    modelId: null,
     hasCustomToolSelection: false,
     todoList: null,
     artifact: null,

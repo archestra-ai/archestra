@@ -11,6 +11,7 @@ import {
   useMissingPermissions,
 } from "@/lib/auth/auth.query";
 import { formatMissingPermissions } from "@/lib/auth/auth.utils";
+import { cn } from "@/lib/utils";
 
 type PermissionButtonProps = ButtonProps & {
   permissions: Permissions;
@@ -44,6 +45,7 @@ export function PermissionButton({
   tooltip,
   children,
   noPermissionHandle = "tooltip",
+  className,
   ...props
 }: PermissionButtonProps) {
   const { data: hasPermission } = useHasPermissions(permissions);
@@ -53,15 +55,21 @@ export function PermissionButton({
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <span>
-            <Button {...props}>{children}</Button>
+          <span className={className}>
+            <Button {...props} className={cn(className, "w-full")}>
+              {children}
+            </Button>
           </span>
         </TooltipTrigger>
         <TooltipContent className="max-w-60">{tooltip}</TooltipContent>
       </Tooltip>
     );
   } else if (hasPermission) {
-    return <Button {...props}>{children}</Button>;
+    return (
+      <Button {...props} className={className}>
+        {children}
+      </Button>
+    );
   }
 
   if (noPermissionHandle === "hide") {
@@ -71,7 +79,7 @@ export function PermissionButton({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="cursor-not-allowed">
+        <span className={cn("cursor-not-allowed", className)}>
           <Button
             onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
               // Prevent action when disabled
@@ -79,6 +87,7 @@ export function PermissionButton({
               e.stopPropagation();
             }}
             {...props}
+            className={cn(className, "w-full")}
             disabled
           >
             {children}

@@ -403,3 +403,5 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @sypham98-prog
 - @pk-vyshak
 - @rohit-Jung
+- @tolik518
+- @daxshonly

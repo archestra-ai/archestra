@@ -173,7 +173,7 @@ export function McpServerCard({
   const defaultPresetNeedsFill =
     variant !== "builtin" && presetHasUnfilledFields(item, item);
   const installBlockedByPresetFill = defaultPresetNeedsFill && !canEditPresets;
-  const installBlockedByPresetFillTooltip = `This ${presetSingularLower} is missing values required to install it. Ask someone who can edit this catalog item to fill them in.`;
+  const installBlockedByPresetFillTooltip = `This MCP server isn't ready to install in the default ${presetSingularLower} yet — some values still need to be filled in. Ask your administrator to finish configuring it.`;
 
   // Fetch all MCP servers to get installations for logs dropdown
   const { data: allMcpServers } = useMcpServers();

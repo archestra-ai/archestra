@@ -39,14 +39,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogHeader,
-  DialogStickyFooter,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
   Form,
   FormControl,
   FormDescription,
@@ -89,6 +81,7 @@ import {
   MCP_CONFIG_AUTOCOMPLETE,
   MCP_SECRET_AUTOCOMPLETE,
 } from "@/lib/mcp/mcp-form-autocomplete";
+import { usePresetEntityName } from "@/lib/organization.query";
 import { useGetSecret } from "@/lib/secrets.query";
 import { useTeams } from "@/lib/teams/team.query";
 import {
@@ -96,6 +89,7 @@ import {
   type McpCatalogFormValues,
 } from "./mcp-catalog-form.types";
 import { transformCatalogItemToFormValues } from "./mcp-catalog-form.utils";
+import { ReinstallConfirmBar } from "./reinstall-confirm-bar";
 
 const { useIdentityProviders } = config.enterpriseFeatures.core
   ? // biome-ignore lint/style/noRestrictedImports: conditional EE query import for IdP selector
@@ -132,6 +126,17 @@ interface McpCatalogFormProps {
   /** Ref to imperatively trigger form submission */
   submitRef?: React.MutableRefObject<(() => Promise<void>) | null>;
   embedded?: boolean;
+  /**
+   * Number of installed servers that would be affected by a cascade
+   * reinstall. Drives the inline confirm bar copy in edit mode. Defaults
+   * to 0 (no bar — used for create mode and standalone previews).
+   */
+  affectedServerCount?: number;
+  /**
+   * Number of preset children alongside the parent catalog. Used in the
+   * confirm bar to say "across N <presets>". Defaults to 0.
+   */
+  presetCount?: number;
 }
 
 export function McpCatalogForm({
@@ -145,6 +150,8 @@ export function McpCatalogForm({
   onDirtyChange,
   submitRef,
   embedded = false,
+  affectedServerCount = 0,
+  presetCount = 0,
 }: McpCatalogFormProps) {
   const localConfigSecretId =
     initialValues?.serverType === "local"
@@ -173,6 +180,7 @@ export function McpCatalogForm({
     useFeature("advancedToolFeaturesEnabled") === true;
   const isEnterpriseCoreEnabled = useEnterpriseFeature("core");
   const appName = useAppName();
+  const presetEntityName = usePresetEntityName();
   const mcpAuthDocsUrl = getFrontendDocsUrl(
     DocsPage.McpAuthentication,
     "upstream-mcp-server-authentication",
@@ -645,6 +653,10 @@ export function McpCatalogForm({
 
   const [pendingSubmit, setPendingSubmit] =
     useState<McpCatalogFormValues | null>(null);
+  // `form.formState.isSubmitting` clears the moment `handleSubmit`
+  // returns (which we do early to show the bar), so it can't drive the
+  // bar's spinner — track the bar→save phase ourselves.
+  const [isConfirming, setIsConfirming] = useState(false);
 
   const performSubmit = async (values: McpCatalogFormValues) => {
     // Save any unsaved label before submitting
@@ -672,13 +684,18 @@ export function McpCatalogForm({
   };
 
   return (
-    <>
-      <Form {...form}>
-        <form
-          onSubmit={form.handleSubmit(handleSubmit)}
-          className="flex min-h-0 flex-1 flex-col"
-          autoComplete={MCP_CONFIG_AUTOCOMPLETE}
-          data-1p-ignore="true"
+    <Form {...form}>
+      <form
+        onSubmit={form.handleSubmit(handleSubmit)}
+        className="flex min-h-0 flex-1 flex-col"
+        autoComplete={MCP_CONFIG_AUTOCOMPLETE}
+        data-1p-ignore="true"
+      >
+        {/* Lock fields during the bar's save so the user can't drift
+            values away from the snapshot the API will see. */}
+        <fieldset
+          disabled={isConfirming}
+          className="flex min-h-0 min-w-0 flex-1 flex-col m-0 p-0 border-0"
         >
           <div
             className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-6 ${embedded ? "space-y-6 pt-6 pb-0" : "space-y-6 py-6"}`}
@@ -2137,78 +2154,43 @@ export function McpCatalogForm({
               </div>
             </div>
           </div>
+        </fieldset>
 
-          {typeof footer === "function"
-            ? footer({
-                isDirty,
-                onReset: () => {
-                  form.reset();
-                  setLabels(labelsBaseline);
-                },
-              })
-            : footer}
-        </form>
-      </Form>
-      <ConfirmReinstallFanoutDialog
-        open={pendingSubmit !== null}
-        isMultitenant={isMultitenant}
-        onCancel={() => setPendingSubmit(null)}
-        onConfirm={async () => {
-          const values = pendingSubmit;
-          setPendingSubmit(null);
-          if (values) await performSubmit(values);
-        }}
-      />
-    </>
-  );
-}
-
-function ConfirmReinstallFanoutDialog({
-  open,
-  isMultitenant,
-  onCancel,
-  onConfirm,
-}: {
-  open: boolean;
-  isMultitenant: boolean;
-  onCancel: () => void;
-  onConfirm: () => void | Promise<void>;
-}) {
-  return (
-    <Dialog open={open} onOpenChange={(o) => !o && onCancel()}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>
-            {isMultitenant
-              ? "Shared deployment will be flagged for reinstall"
-              : "Existing installations will need to reinstall"}
-          </DialogTitle>
-        </DialogHeader>
-        <DialogBody className="text-sm">
-          {isMultitenant ? (
-            <p>
-              The shared deployment will keep running with its current config
-              until someone clicks <strong>Reinstall</strong> — expect a brief
-              restart then.
-            </p>
-          ) : (
-            <p>
-              Every existing install will be flagged for reinstall. Owners keep
-              running on their current config until they click{" "}
-              <strong>Reinstall</strong>. Nothing restarts automatically.
-            </p>
-          )}
-        </DialogBody>
-        <DialogStickyFooter>
-          <Button type="button" variant="outline" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button type="button" onClick={() => onConfirm()}>
-            Save and flag for reinstall
-          </Button>
-        </DialogStickyFooter>
-      </DialogContent>
-    </Dialog>
+        {pendingSubmit !== null ? (
+          <ReinstallConfirmBar
+            // Only manual-path edits (those needing user re-prompt)
+            // trigger the bar from this form; auto-mode is reserved for
+            // `preset-editor-dialog` (preset value changes).
+            mode="manual"
+            isMultitenant={isMultitenant}
+            affectedServerCount={affectedServerCount}
+            presetCount={presetCount}
+            presetEntityName={presetEntityName}
+            isSubmitting={isConfirming}
+            onCancel={() => setPendingSubmit(null)}
+            onConfirm={async () => {
+              setIsConfirming(true);
+              try {
+                await performSubmit(pendingSubmit);
+              } finally {
+                setIsConfirming(false);
+                setPendingSubmit(null);
+              }
+            }}
+          />
+        ) : typeof footer === "function" ? (
+          footer({
+            isDirty,
+            onReset: () => {
+              form.reset();
+              setLabels(labelsBaseline);
+            },
+          })
+        ) : (
+          footer
+        )}
+      </form>
+    </Form>
   );
 }
 

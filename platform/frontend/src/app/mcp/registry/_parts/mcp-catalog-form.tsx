@@ -2344,6 +2344,7 @@ function readHeaderRowAsDraft(
     value: row?.value ?? "",
     description: row?.description ?? "",
     includeBearerPrefix: Boolean(row?.includeBearerPrefix),
+    sensitive: Boolean(row?.sensitive),
   };
 }
 
@@ -2371,6 +2372,9 @@ function headerDraftToRow(draft: HeaderDraft) {
     value: draft.scope === "static" ? draft.value : "",
     description: draft.description,
     includeBearerPrefix: draft.includeBearerPrefix,
+    // Static fields can't be sensitive (server rejects the combination);
+    // force false even if the draft somehow carries it (defense in depth).
+    sensitive: draft.scope === "static" ? false : draft.sensitive,
   };
 }
 
@@ -2393,4 +2397,5 @@ function applyHeaderDraftToRow(
   set("value", draft.scope === "static" ? draft.value : "");
   set("description", draft.description);
   set("includeBearerPrefix", draft.includeBearerPrefix);
+  set("sensitive", draft.scope === "static" ? false : draft.sensitive);
 }

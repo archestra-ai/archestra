@@ -66,7 +66,6 @@ describe("InteractionModel", () => {
         userId: user.id,
         organizationId: org.id,
         agentId: agent.id,
-        selectedModel: "gpt-4",
       });
       await ConversationChatErrorModel.create({
         conversationId: conversation.id,
@@ -1663,7 +1662,6 @@ describe("InteractionModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "UniqueConversationTitle789 about quantum physics",
-        selectedModel: "gpt-4",
       });
 
       // Create an interaction linked to the conversation via sessionId
@@ -1701,7 +1699,6 @@ describe("InteractionModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Discussion about cooking",
-        selectedModel: "gpt-4",
       });
 
       await InteractionModel.create({
@@ -1756,7 +1753,6 @@ describe("InteractionModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Discussion about SharedSearchTerm",
-        selectedModel: "gpt-4",
       });
 
       await InteractionModel.create({
@@ -1782,7 +1778,6 @@ describe("InteractionModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Another discussion",
-        selectedModel: "gpt-4",
       });
 
       await InteractionModel.create({
@@ -1810,7 +1805,6 @@ describe("InteractionModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Unrelated conversation",
-        selectedModel: "gpt-4",
       });
 
       await InteractionModel.create({
@@ -1869,7 +1863,6 @@ describe("InteractionModel", () => {
           organizationId: org.id,
           agentId: agent.id,
           title: `${searchTerm} conversation ${i}`,
-          selectedModel: "gpt-4",
         });
 
         await InteractionModel.create({
@@ -1896,7 +1889,6 @@ describe("InteractionModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Unrelated title",
-        selectedModel: "gpt-4",
       });
 
       await InteractionModel.create({

@@ -76,8 +76,6 @@ describe("schedule trigger routes", () => {
       userId: owner.id,
       organizationId,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
-      selectedProvider: "openai",
     });
     await MessageModel.create({
       conversationId: conversation.id,

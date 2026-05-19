@@ -199,7 +199,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const apiKeysWithBestModel = apiKeys.map((key) => ({
         ...key,
-        bestModelId: bestModelsByApiKeyId.get(key.id)?.modelId ?? null,
+        bestModelId: bestModelsByApiKeyId.get(key.id)?.id ?? null,
       }));
 
       return reply.send(apiKeysWithBestModel);

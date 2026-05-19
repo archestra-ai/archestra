@@ -201,6 +201,7 @@ function makeConversation(
     title: "Test",
     selectedModel: "gpt-4o",
     selectedProvider: "openai",
+    modelId: null,
     hasCustomToolSelection: false,
     todoList: null,
     artifact: null,

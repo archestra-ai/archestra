@@ -1,5 +1,5 @@
 {
-  "id": "117067a2-4ba3-4851-bf48-7f92ec93269f",
+  "id": "3a5c61d0-b6e0-42f7-a54d-38063b71e7f4",
   "prevId": "82b78b0e-f9a7-46d6-9e46-21e891ae302a",
   "version": "7",
   "dialect": "postgresql",
@@ -1207,6 +1207,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "model_id": {
+          "name": "model_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "identity_provider_id": {
           "name": "identity_provider_id",
           "type": "text",
@@ -1399,6 +1405,19 @@
           "tableTo": "chat_api_keys",
           "columnsFrom": [
             "llm_api_key_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "agents_model_id_models_id_fk": {
+          "name": "agents_model_id_models_id_fk",
+          "tableFrom": "agents",
+          "tableTo": "models",
+          "columnsFrom": [
+            "model_id"
           ],
           "columnsTo": [
             "id"
@@ -2306,117 +2325,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.conversation_compactions": {
-      "name": "conversation_compactions",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "conversation_id": {
-          "name": "conversation_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "summary": {
-          "name": "summary",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "compacted_through_message_id": {
-          "name": "compacted_through_message_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "trigger": {
-          "name": "trigger",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "provider": {
-          "name": "provider",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "model": {
-          "name": "model",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "original_token_estimate": {
-          "name": "original_token_estimate",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "compacted_token_estimate": {
-          "name": "compacted_token_estimate",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "conversation_compactions_conversation_id_created_at_idx": {
-          "name": "conversation_compactions_conversation_id_created_at_idx",
-          "columns": [
-            {
-              "expression": "conversation_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "conversation_compactions_conversation_id_conversations_id_fk": {
-          "name": "conversation_compactions_conversation_id_conversations_id_fk",
-          "tableFrom": "conversation_compactions",
-          "tableTo": "conversations",
-          "columnsFrom": [
-            "conversation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.conversation_enabled_tools": {
       "name": "conversation_enabled_tools",
       "schema": "",
@@ -2740,6 +2648,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "model_id": {
+          "name": "model_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "has_custom_tool_selection": {
           "name": "has_custom_tool_selection",
           "type": "boolean",
@@ -2801,6 +2715,19 @@
           "tableTo": "chat_api_keys",
           "columnsFrom": [
             "chat_api_key_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "conversations_model_id_models_id_fk": {
+          "name": "conversations_model_id_models_id_fk",
+          "tableFrom": "conversations",
+          "tableTo": "models",
+          "columnsFrom": [
+            "model_id"
           ],
           "columnsTo": [
             "id"
@@ -6147,6 +6074,18 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
+        },
+        "default_model_id": {
+          "name": "default_model_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "default_chat_api_key_id": {
+          "name": "default_chat_api_key_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -6205,6 +6144,32 @@
           "tableTo": "agents",
           "columnsFrom": [
             "default_agent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "member_default_model_id_models_id_fk": {
+          "name": "member_default_model_id_models_id_fk",
+          "tableFrom": "member",
+          "tableTo": "models",
+          "columnsFrom": [
+            "default_model_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "member_default_chat_api_key_id_chat_api_keys_id_fk": {
+          "name": "member_default_chat_api_key_id_chat_api_keys_id_fk",
+          "tableFrom": "member",
+          "tableTo": "chat_api_keys",
+          "columnsFrom": [
+            "default_chat_api_key_id"
           ],
           "columnsTo": [
             "id"
@@ -7351,6 +7316,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "default_model_id": {
+          "name": "default_model_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "default_llm_api_key_id": {
           "name": "default_llm_api_key_id",
           "type": "uuid",
@@ -7531,7 +7502,21 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {},
+      "foreignKeys": {
+        "organization_default_model_id_models_id_fk": {
+          "name": "organization_default_model_id_models_id_fk",
+          "tableFrom": "organization",
+          "tableTo": "models",
+          "columnsFrom": [
+            "default_model_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "organization_slug_unique": {

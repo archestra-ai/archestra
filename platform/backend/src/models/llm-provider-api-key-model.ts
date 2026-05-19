@@ -1,5 +1,5 @@
 import { MODEL_MARKER_PATTERNS, type SupportedProvider } from "@shared";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { LlmProviderApiKey, Model } from "@/types";
 
@@ -350,6 +350,37 @@ class LlmProviderApiKeyModelLinkModel {
    * Get the "best" model for a specific API key.
    * Returns the model marked with is_best=true, or falls back to the first model.
    */
+  /**
+   * Ranked (model, key) pairs across the given API keys — the "best available
+   * model" fallback for resolution. Rows are ordered is_best first, then by
+   * provider and model id, so the first row is a deterministic best pick.
+   * `modelId` is the models.id UUID (matches the model_id FK columns).
+   */
+  static async getRankedModelsForApiKeys(
+    apiKeyIds: string[],
+  ): Promise<Array<{ modelId: string; apiKeyId: string; isBest: boolean }>> {
+    if (apiKeyIds.length === 0) {
+      return [];
+    }
+    return db
+      .select({
+        modelId: schema.llmProviderApiKeyModelsTable.modelId,
+        apiKeyId: schema.llmProviderApiKeyModelsTable.apiKeyId,
+        isBest: schema.llmProviderApiKeyModelsTable.isBest,
+      })
+      .from(schema.llmProviderApiKeyModelsTable)
+      .innerJoin(
+        schema.modelsTable,
+        eq(schema.llmProviderApiKeyModelsTable.modelId, schema.modelsTable.id),
+      )
+      .where(inArray(schema.llmProviderApiKeyModelsTable.apiKeyId, apiKeyIds))
+      .orderBy(
+        desc(schema.llmProviderApiKeyModelsTable.isBest),
+        asc(schema.modelsTable.provider),
+        asc(schema.modelsTable.modelId),
+      );
+  }
+
   static async getBestModel(apiKeyId: string): Promise<Model | null> {
     const [result] = await db
       .select({ model: schema.modelsTable })

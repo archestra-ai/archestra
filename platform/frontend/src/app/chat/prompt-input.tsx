@@ -120,9 +120,7 @@ interface ArchestraPromptInputProps {
   selectorAgentName?: string;
   /** Callback when agent changes */
   onAgentChange?: (agentId: string) => void;
-  /** Callback when model selector opens/closes */
-  onModelSelectorOpenChange?: (open: boolean) => void;
-  /** Source of the currently selected model (agent, organization, user, or null for fallback) */
+  /** Source of the currently selected model (agent, organization, user, or null) */
   modelSource?: ModelSource | null;
   /** Callback to reset user model override back to agent/org default */
   onResetModelOverride?: () => void;
@@ -169,7 +167,6 @@ const PromptInputContent = ({
   selectorAgentId,
   selectorAgentName,
   onAgentChange,
-  onModelSelectorOpenChange,
   modelSource,
   onResetModelOverride,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
@@ -196,6 +193,18 @@ const PromptInputContent = ({
   const logoProvider = currentProvider
     ? providerToLogoProvider[currentProvider]
     : null;
+
+  // Label for the model-source badge. A custom model is a "chat override" when
+  // it is scoped to an existing conversation, and a "user override" otherwise
+  // (the new-chat case, where it reflects the user's own default).
+  const modelSourceLabel =
+    modelSource === "agent"
+      ? "agent"
+      : modelSource === "organization"
+        ? "org"
+        : conversationId
+          ? "chat override"
+          : "user override";
 
   // Derive file upload capabilities from model input modalities
   const modelSupportsFiles = supportsFileUploads(inputModalities);
@@ -659,11 +668,7 @@ const PromptInputContent = ({
                                 variant="secondary"
                                 className="gap-1 bg-slate-200/70 text-slate-600 dark:bg-slate-700/50 dark:text-slate-300 px-3 py-1 text-xs font-medium"
                               >
-                                {modelSource === "agent"
-                                  ? "agent"
-                                  : modelSource === "organization"
-                                    ? "org"
-                                    : "user override"}
+                                {modelSourceLabel}
                                 {modelSource === "user" &&
                                   onResetModelOverride && (
                                     <button
@@ -705,7 +710,6 @@ const PromptInputContent = ({
                             <ModelSelector
                               selectedModel={selectedModel}
                               onModelChange={onModelChange}
-                              onOpenChange={onModelSelectorOpenChange}
                               apiKeyId={
                                 conversationId
                                   ? currentConversationChatApiKeyId
@@ -845,7 +849,6 @@ const PromptInputContent = ({
                       selectedModel={selectedModel}
                       onModelChange={onModelChange}
                       onOpenChange={(open) => {
-                        onModelSelectorOpenChange?.(open);
                         if (!open) {
                           setTimeout(() => {
                             textareaRef.current?.focus();
@@ -863,11 +866,7 @@ const PromptInputContent = ({
                         variant="secondary"
                         className="ml-1 mr-2 gap-1 bg-slate-200/70 text-slate-600 dark:bg-slate-700/50 dark:text-slate-300 px-3 py-1 text-xs font-medium"
                       >
-                        {modelSource === "agent"
-                          ? "agent"
-                          : modelSource === "organization"
-                            ? "org"
-                            : "user override"}
+                        {modelSourceLabel}
                         {modelSource === "user" && onResetModelOverride && (
                           <button
                             type="button"
@@ -939,7 +938,6 @@ const ArchestraPromptInput = ({
   selectorAgentId,
   selectorAgentName,
   onAgentChange,
-  onModelSelectorOpenChange,
   modelSource,
   onResetModelOverride,
 }: ArchestraPromptInputProps) => {
@@ -972,7 +970,6 @@ const ArchestraPromptInput = ({
           selectorAgentId={selectorAgentId}
           selectorAgentName={selectorAgentName}
           onAgentChange={onAgentChange}
-          onModelSelectorOpenChange={onModelSelectorOpenChange}
           modelSource={modelSource}
           onResetModelOverride={onResetModelOverride}
         />

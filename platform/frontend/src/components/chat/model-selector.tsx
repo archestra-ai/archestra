@@ -622,7 +622,7 @@ export function ModelSelector({
   // Find the provider for a given model
   const getProviderForModel = (model: string): SupportedProvider | null => {
     for (const provider of availableProviders) {
-      if (modelsByProvider[provider]?.some((m) => m.id === model)) {
+      if (modelsByProvider[provider]?.some((m) => m.dbId === model)) {
         return provider;
       }
     }
@@ -639,7 +639,7 @@ export function ModelSelector({
   const selectedModelDisplayName = useMemo(() => {
     for (const provider of availableProviders) {
       const model = modelsByProvider[provider]?.find(
-        (m) => m.id === selectedModel,
+        (m) => m.dbId === selectedModel,
       );
       if (model) return model.displayName;
     }
@@ -670,7 +670,7 @@ export function ModelSelector({
     [availableProviders, modelsByProvider],
   );
   const allAvailableModelIds = useMemo(
-    () => allAvailableModels.map((m) => m.id),
+    () => allAvailableModels.map((m) => m.dbId),
     [allAvailableModels],
   );
   const isModelAvailable = allAvailableModelIds.includes(selectedModel);
@@ -685,7 +685,10 @@ export function ModelSelector({
     if (isPlaceholderData) return;
     const modelToSelect = resolveAutoSelectedModel({
       selectedModel,
-      availableModels: allAvailableModels,
+      availableModels: allAvailableModels.map((m) => ({
+        id: m.dbId,
+        isBest: m.isBest,
+      })),
       isLoading,
     });
     if (modelToSelect) {
@@ -853,7 +856,7 @@ export function ModelSelector({
                 {filteredModelsByProvider[provider]?.map((model) => {
                   // Use provider:modelId format for unique keys/values
                   // This prevents issues when different providers have models with the same ID
-                  const modelValue = createModelValue(provider, model.id);
+                  const modelValue = createModelValue(provider, model.dbId);
                   return (
                     <ModelSelectorItem
                       key={modelValue}
@@ -886,7 +889,7 @@ export function ModelSelector({
                             model.capabilities?.pricePerMillionOutput
                           }
                         />
-                        {selectedModel === model.id ? (
+                        {selectedModel === model.dbId ? (
                           <CheckIcon className="size-4" />
                         ) : (
                           <div className="size-4" />

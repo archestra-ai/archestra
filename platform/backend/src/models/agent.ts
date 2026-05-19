@@ -1856,7 +1856,7 @@ class AgentModel {
           incomingEmailSecurityMode: sourceAgent.incomingEmailSecurityMode,
           incomingEmailAllowedDomain: sourceAgent.incomingEmailAllowedDomain,
           llmApiKeyId: null,
-          llmModel: sourceAgent.llmModel,
+          modelId: sourceAgent.modelId,
           identityProviderId: null,
           passthroughHeaders: null,
         },

@@ -21,7 +21,6 @@ describe("ConversationEnabledToolModel", () => {
       organizationId: org.id,
       agentId: agent.id,
       title: "Test Conversation",
-      selectedModel: "claude-3-haiku-20240307",
     });
 
     const enabledTools = await ConversationEnabledToolModel.findByConversation(
@@ -56,7 +55,6 @@ describe("ConversationEnabledToolModel", () => {
       organizationId: org.id,
       agentId: agent.id,
       title: "Test Conversation",
-      selectedModel: "claude-3-haiku-20240307",
     });
 
     await ConversationEnabledToolModel.setEnabledTools(conversation.id, [
@@ -89,7 +87,6 @@ describe("ConversationEnabledToolModel", () => {
       organizationId: org.id,
       agentId: agent.id,
       title: "Test Conversation",
-      selectedModel: "claude-3-haiku-20240307",
     });
 
     await ConversationEnabledToolModel.setEnabledTools(conversation.id, [
@@ -121,7 +118,6 @@ describe("ConversationEnabledToolModel", () => {
       organizationId: org.id,
       agentId: agent.id,
       title: "Test Conversation",
-      selectedModel: "claude-3-haiku-20240307",
     });
 
     // First set
@@ -162,7 +158,6 @@ describe("ConversationEnabledToolModel", () => {
       organizationId: org.id,
       agentId: agent.id,
       title: "Test Conversation",
-      selectedModel: "claude-3-haiku-20240307",
     });
 
     await ConversationEnabledToolModel.setEnabledTools(conversation.id, [
@@ -206,7 +201,6 @@ describe("ConversationEnabledToolModel", () => {
       organizationId: org.id,
       agentId: agent.id,
       title: "Test Conversation",
-      selectedModel: "claude-3-haiku-20240307",
     });
 
     await ConversationEnabledToolModel.setEnabledTools(conversation.id, [
@@ -240,7 +234,6 @@ describe("ConversationEnabledToolModel", () => {
       organizationId: org.id,
       agentId: agent.id,
       title: "Conversation 1",
-      selectedModel: "claude-3-haiku-20240307",
     });
 
     const conversation2 = await ConversationModel.create({
@@ -248,7 +241,6 @@ describe("ConversationEnabledToolModel", () => {
       organizationId: org.id,
       agentId: agent.id,
       title: "Conversation 2",
-      selectedModel: "claude-3-haiku-20240307",
     });
 
     // Set different tools for each conversation
@@ -288,7 +280,6 @@ describe("ConversationEnabledToolModel", () => {
       organizationId: org.id,
       agentId: agent.id,
       title: "Conversation 1",
-      selectedModel: "claude-3-haiku-20240307",
     });
 
     const conversation2 = await ConversationModel.create({
@@ -296,7 +287,6 @@ describe("ConversationEnabledToolModel", () => {
       organizationId: org.id,
       agentId: agent.id,
       title: "Conversation 2",
-      selectedModel: "claude-3-haiku-20240307",
     });
 
     const toolsMap = await ConversationEnabledToolModel.findByConversations([
@@ -336,7 +326,6 @@ describe("ConversationEnabledToolModel", () => {
       organizationId: org.id,
       agentId: agent.id,
       title: "Conversation 1",
-      selectedModel: "claude-3-haiku-20240307",
     });
 
     const conversation2 = await ConversationModel.create({
@@ -344,7 +333,6 @@ describe("ConversationEnabledToolModel", () => {
       organizationId: org.id,
       agentId: agent.id,
       title: "Conversation 2",
-      selectedModel: "claude-3-haiku-20240307",
     });
 
     // Set tools for conversation 1 only

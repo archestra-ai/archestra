@@ -23,8 +23,8 @@ import {
 } from "@/types";
 import {
   type ResolvedLlmSelection,
+  resolveBestAvailableLlm,
   resolveConfiguredAgentLlm,
-  resolveSmartDefaultLlm,
 } from "@/utils/llm-resolution";
 
 interface AutoPolicyResult {
@@ -49,7 +49,8 @@ interface BulkAutoPolicyResult {
 export class PolicyConfigurationService {
   /**
    * Resolve the LLM provider/key using the built-in agent's configured
-   * llmApiKeyId/llmModel, falling back to the org-wide smart default.
+   * llmApiKeyId/llmModel, falling back to the best available LLM across the
+   * org's keys.
    */
   async resolveLlm(params: {
     organizationId: string;
@@ -68,7 +69,7 @@ export class PolicyConfigurationService {
       if (agentLlm) return agentLlm;
     }
 
-    return resolveSmartDefaultLlm(params);
+    return resolveBestAvailableLlm(params);
   }
 
   /**
@@ -90,7 +91,8 @@ export class PolicyConfigurationService {
 
     // Use pre-resolved LLM or resolve now
     const resolved =
-      resolvedLlm ?? (await resolveSmartDefaultLlm({ organizationId, userId }));
+      resolvedLlm ??
+      (await resolveBestAvailableLlm({ organizationId, userId }));
     if (!resolved) {
       logger.warn(
         { toolId, organizationId },

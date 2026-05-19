@@ -113,7 +113,6 @@ export function useConversations({
   return useQuery({
     queryKey: ["conversations", search],
     queryFn: async () => {
-      if (!enabled) return [];
       const trimmedSearch = search?.trim();
 
       const { data, error } = await getChatConversations({
@@ -126,6 +125,7 @@ export function useConversations({
       }
       return data;
     },
+    enabled,
     staleTime: search ? 0 : 2_000, // No stale time for searches, 2 seconds otherwise
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,

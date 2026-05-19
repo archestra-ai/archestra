@@ -682,7 +682,7 @@ function ValidationRegexDialog({
             Cancel
           </Button>
           <Button
-            variant="ghost"
+            variant="outline"
             onClick={() => setDraft("")}
             disabled={draft === "" || isPending}
           >

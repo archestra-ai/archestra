@@ -87,6 +87,11 @@ const organizationsTable = pgTable("organization", {
   /** LLM model used for reranking (e.g. "gpt-4o") */
   rerankerModel: text("reranker_model"),
 
+  /** @deprecated Superseded by `defaultModelId` (FK). Retained, no longer read or written. */
+  defaultLlmModel: text("default_llm_model"),
+  /** @deprecated Superseded by `defaultModelId` (FK). Retained, no longer read or written. */
+  defaultLlmProvider: text("default_llm_provider").$type<SupportedProvider>(),
+
   /** Organization-wide default model. FK to models(id) ON DELETE SET NULL. */
   defaultModelId: uuid("default_model_id").references(() => modelsTable.id, {
     onDelete: "set null",

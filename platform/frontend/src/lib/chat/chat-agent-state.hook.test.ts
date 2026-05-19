@@ -199,6 +199,8 @@ function makeConversation(
     agentId: "agent-a",
     chatApiKeyId: null,
     title: "Test",
+    selectedModel: "gpt-4o",
+    selectedProvider: "openai",
     modelId: null,
     hasCustomToolSelection: false,
     todoList: null,

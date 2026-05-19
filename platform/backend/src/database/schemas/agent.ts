@@ -91,6 +91,8 @@ const agentsTable = pgTable(
         onDelete: "set null",
       },
     ),
+    /** @deprecated Superseded by `modelId` (FK). Retained, no longer read or written. */
+    llmModel: text("llm_model"),
     /** FK to models(id) — the agent's default model. ON DELETE SET NULL. */
     modelId: uuid("model_id").references(() => modelsTable.id, {
       onDelete: "set null",

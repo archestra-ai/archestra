@@ -1,3 +1,4 @@
+import type { SupportedProvider } from "@shared";
 import {
   boolean,
   jsonb,
@@ -28,6 +29,10 @@ const conversationsTable = pgTable("conversations", {
     },
   ),
   title: text("title"),
+  /** @deprecated Superseded by `modelId` (FK). Retained, no longer read or written. */
+  selectedModel: text("selected_model").notNull().default("gpt-4o"),
+  /** @deprecated Superseded by `modelId` (FK). Retained, no longer read or written. */
+  selectedProvider: text("selected_provider").$type<SupportedProvider>(),
   /** FK to models(id) — the resolved model for this conversation. */
   modelId: uuid("model_id").references(() => modelsTable.id, {
     onDelete: "set null",

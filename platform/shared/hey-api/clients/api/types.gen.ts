@@ -10859,6 +10859,7 @@ export type GetAgentsResponses = {
             incomingEmailSecurityMode: 'private' | 'internal' | 'public';
             incomingEmailAllowedDomain: string | null;
             llmApiKeyId: string | null;
+            llmModel: string | null;
             modelId: string | null;
             identityProviderId: string | null;
             passthroughHeaders: Array<string> | null;
@@ -10954,6 +10955,7 @@ export type CreateAgentData = {
         incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain?: string | null;
         llmApiKeyId?: string | null;
+        llmModel?: string | null;
         modelId?: string | null;
         identityProviderId?: string | null;
         passthroughHeaders?: Array<string> | null;
@@ -11074,6 +11076,7 @@ export type CreateAgentResponses = {
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
+        llmModel: string | null;
         modelId: string | null;
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
@@ -11260,6 +11263,7 @@ export type GetAllAgentsResponses = {
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
+        llmModel: string | null;
         modelId: string | null;
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
@@ -11425,6 +11429,7 @@ export type GetDefaultMcpGatewayResponses = {
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
+        llmModel: string | null;
         modelId: string | null;
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
@@ -11590,6 +11595,7 @@ export type GetDefaultLlmProxyResponses = {
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
+        llmModel: string | null;
         modelId: string | null;
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
@@ -11691,6 +11697,10 @@ export type ImportAgentData = {
             considerContextUntrusted: boolean;
             toolAssignmentMode: 'automatic' | 'manual';
             toolExposureMode: 'full' | 'search_and_run_only';
+            /**
+             * Informational; not auto-configured on import
+             */
+            llmModel: string | null;
             incomingEmailEnabled: boolean;
             incomingEmailSecurityMode: 'private' | 'internal' | 'public';
             incomingEmailAllowedDomain: string | null;
@@ -11834,6 +11844,7 @@ export type ImportAgentResponses = {
             incomingEmailSecurityMode: 'private' | 'internal' | 'public';
             incomingEmailAllowedDomain: string | null;
             llmApiKeyId: string | null;
+            llmModel: string | null;
             modelId: string | null;
             identityProviderId: string | null;
             passthroughHeaders: Array<string> | null;
@@ -12092,6 +12103,7 @@ export type GetAgentResponses = {
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
+        llmModel: string | null;
         modelId: string | null;
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
@@ -12178,6 +12190,7 @@ export type UpdateAgentData = {
         incomingEmailSecurityMode?: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain?: string | null;
         llmApiKeyId?: string | null;
+        llmModel?: string | null;
         modelId?: string | null;
         identityProviderId?: string | null;
         passthroughHeaders?: Array<string> | null;
@@ -12300,6 +12313,7 @@ export type UpdateAgentResponses = {
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
+        llmModel: string | null;
         modelId: string | null;
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
@@ -12467,6 +12481,7 @@ export type CloneAgentResponses = {
         incomingEmailSecurityMode: 'private' | 'internal' | 'public';
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
+        llmModel: string | null;
         modelId: string | null;
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
@@ -12645,6 +12660,10 @@ export type ExportAgentResponses = {
             considerContextUntrusted: boolean;
             toolAssignmentMode: 'automatic' | 'manual';
             toolExposureMode: 'full' | 'search_and_run_only';
+            /**
+             * Informational; not auto-configured on import
+             */
+            llmModel: string | null;
             incomingEmailEnabled: boolean;
             incomingEmailSecurityMode: 'private' | 'internal' | 'public';
             incomingEmailAllowedDomain: string | null;
@@ -18895,6 +18914,8 @@ export type GetChatConversationsResponses = {
         agentId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         modelId: string | null;
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
@@ -19029,6 +19050,8 @@ export type CreateChatConversationResponses = {
         agentId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         modelId: string | null;
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
@@ -19245,6 +19268,8 @@ export type GetChatConversationResponses = {
         agentId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         modelId: string | null;
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
@@ -19383,6 +19408,8 @@ export type UpdateChatConversationResponses = {
         agentId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         modelId: string | null;
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
@@ -19516,6 +19543,8 @@ export type ForkChatConversationResponses = {
         agentId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         modelId: string | null;
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
@@ -20009,6 +20038,8 @@ export type GetSharedConversationResponses = {
         agentId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         modelId: string | null;
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
@@ -20143,6 +20174,8 @@ export type ForkSharedConversationResponses = {
         agentId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         modelId: string | null;
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
@@ -20279,6 +20312,8 @@ export type GenerateChatConversationTitleResponses = {
         agentId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         modelId: string | null;
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
@@ -20414,6 +20449,8 @@ export type UpdateChatMessageResponses = {
         agentId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         modelId: string | null;
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {
@@ -41891,6 +41928,8 @@ export type GetOrganizationResponses = {
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -42167,6 +42206,8 @@ export type UpdateAppearanceSettingsResponses = {
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -42314,6 +42355,8 @@ export type UpdateSecuritySettingsResponses = {
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -42464,6 +42507,8 @@ export type UpdateLlmSettingsResponses = {
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -42612,6 +42657,8 @@ export type UpdateAgentSettingsResponses = {
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -42768,6 +42815,8 @@ export type UpdateConnectionSettingsResponses = {
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -42915,6 +42964,8 @@ export type UpdatePresetEntityNameResponses = {
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -43061,6 +43112,8 @@ export type UpdatePresetEntityDefaultLabelResponses = {
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -43208,6 +43261,8 @@ export type UpdateAuthSettingsResponses = {
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -43357,6 +43412,8 @@ export type UpdateKnowledgeSettingsResponses = {
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -43501,6 +43558,8 @@ export type DropEmbeddingConfigResponses = {
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -43734,6 +43793,8 @@ export type CompleteOnboardingResponses = {
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
         rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -45534,6 +45595,8 @@ export type CreateScheduleTriggerRunConversationResponses = {
         agentId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         modelId: string | null;
         hasCustomToolSelection: boolean;
         todoList: string | number | boolean | null | {

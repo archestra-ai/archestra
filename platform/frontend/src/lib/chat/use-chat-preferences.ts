@@ -1,14 +1,21 @@
+import {
+  deriveModelSource as deriveModelSourceShared,
+  type ModelSelection,
+  type ModelSource,
+  pickBestModel,
+  type RankedModel,
+  resolveModelSelection,
+} from "@shared";
+
+export type { ModelSource };
+
 // ===== LocalStorage Keys =====
 
 export const CHAT_STORAGE_KEYS = {
   selectedAgent: "selected-chat-agent",
 } as const;
 
-// ===== Pure functions (testable without React) =====
-
-/**
- * Read the saved agent ID from localStorage.
- */
+/** Read the saved agent ID from localStorage. */
 export function getSavedAgent(): string | null {
   if (typeof window === "undefined") return null;
   try {
@@ -18,9 +25,7 @@ export function getSavedAgent(): string | null {
   }
 }
 
-/**
- * Save the selected agent ID to localStorage.
- */
+/** Save the selected agent ID to localStorage. */
 export function saveAgent(agentId: string): void {
   if (typeof window === "undefined") return;
   try {
@@ -30,64 +35,49 @@ export function saveAgent(agentId: string): void {
   }
 }
 
-// ===== Model auto-selection logic =====
+// ===== Model auto-selection =====
 
 interface AutoSelectableModel {
+  /** The models.id UUID. */
   id: string;
   isBest?: boolean;
 }
 
-interface ResolveAutoSelectParams {
+/**
+ * Determine whether the model selector should auto-select a different model.
+ * Returns the model UUID to switch to, or null if no change is needed.
+ *
+ * Auto-selection only triggers when the selected model is genuinely
+ * unavailable (e.g. the API key changed and the model is no longer offered).
+ */
+export function resolveAutoSelectedModel(params: {
   selectedModel: string;
   availableModels: AutoSelectableModel[];
   isLoading: boolean;
-}
-
-/**
- * Determine whether the model selector should auto-select a different model.
- * Returns the model ID to switch to, or null if no change is needed.
- *
- * Auto-selection only triggers when the selected model is genuinely unavailable
- * (e.g., the API key changed and the model isn't offered by the new provider).
- * It does NOT trigger just because the API key changed — this prevents a race
- * condition during initialization where the null→keyId transition was
- * incorrectly treated as a "key change" and overwrote the user's saved model.
- */
-export function resolveAutoSelectedModel(
-  params: ResolveAutoSelectParams,
-): string | null {
+}): string | null {
   const { selectedModel, availableModels, isLoading } = params;
-
-  // Not ready yet — wait for models to load
   if (isLoading || availableModels.length === 0) return null;
-
-  // Parent hasn't resolved the model yet (empty string during init)
   if (!selectedModel) return null;
-
-  // Current model is available — no change needed
   if (availableModels.some((m) => m.id === selectedModel)) return null;
-
-  // Model is unavailable — pick the best (or first) available
-  const fallback = pickPreferredModel(availableModels);
-
-  // Only return a change if it's actually different
+  const fallback = pickBestModel(availableModels);
   return fallback && fallback.id !== selectedModel ? fallback.id : null;
 }
 
-// ===== Model resolution logic =====
+// ===== Model resolution =====
 
 interface ModelInfo {
+  /** The models.id UUID. */
   id: string;
   isBest?: boolean;
 }
 
 interface AgentInfo {
-  llmModel?: string | null;
+  modelId?: string | null;
   llmApiKeyId?: string | null;
 }
 
 interface OrganizationInfo {
-  defaultLlmModel?: string | null;
+  defaultModelId?: string | null;
   defaultLlmApiKeyId?: string | null;
 }
 
@@ -101,8 +91,6 @@ interface ResolveInitialModelParams extends ChatContext {
   agent: AgentInfo | null;
 }
 
-export type ModelSource = "agent" | "organization" | "user";
-
 interface ResolvedModel {
   modelId: string;
   apiKeyId: string | null;
@@ -110,130 +98,77 @@ interface ResolvedModel {
 
 /**
  * Resolve which model to use on initial chat load.
- * Priority: agent config > organization default > best available model.
- * Returns null if no model can be resolved (e.g., no models available).
+ * Priority: agent default -> organization default -> best available model.
+ * Returns null when no model can be resolved (no models available).
+ *
+ * Delegates to the shared `resolveModelSelection` so the client and the
+ * server resolve identically.
  */
 export function resolveInitialModel(
   params: ResolveInitialModelParams,
 ): ResolvedModel | null {
   const { modelsByProvider, agent, chatApiKeys, organization } = params;
-  const allModels = Object.values(modelsByProvider).flat();
-  if (allModels.length === 0) return null;
 
-  const findKeyForProvider = (provider: string): string | null => {
-    const key = chatApiKeys.find((k) => k.provider === provider);
-    return key?.id ?? null;
-  };
+  const findKeyForProvider = (provider: string): string | null =>
+    chatApiKeys.find((k) => k.provider === provider)?.id ?? null;
 
-  const findProviderForModel = (modelId: string): string | null => {
-    for (const [provider, models] of Object.entries(modelsByProvider)) {
-      if (models.some((m) => m.id === modelId)) return provider;
-    }
+  if (Object.values(modelsByProvider).flat().length === 0) {
     return null;
-  };
-
-  // 1. Agent-configured model
-  if (agent?.llmModel && allModels.some((m) => m.id === agent.llmModel)) {
-    return {
-      modelId: agent.llmModel,
-      apiKeyId: agent.llmApiKeyId ?? null,
-    };
   }
 
-  // 2. Organization default model
-  if (
-    organization?.defaultLlmModel &&
-    allModels.some((m) => m.id === organization.defaultLlmModel)
-  ) {
-    const provider = findProviderForModel(organization.defaultLlmModel);
-    const orgKeyId = organization.defaultLlmApiKeyId ?? null;
-    const orgKeyAvailable =
-      orgKeyId && chatApiKeys.some((k) => k.id === orgKeyId);
-    const apiKeyId = orgKeyAvailable
-      ? orgKeyId
-      : provider
-        ? findKeyForProvider(provider)
-        : null;
-    return {
-      modelId: organization.defaultLlmModel,
-      apiKeyId,
-    };
+  // Flatten the catalog into RankedModel[], pairing each model with a key for
+  // its provider so the shared resolver can attach an apiKeyId.
+  const availableModels: RankedModel[] = [];
+  for (const [provider, models] of Object.entries(modelsByProvider)) {
+    const apiKeyId = findKeyForProvider(provider);
+    if (!apiKeyId) {
+      continue;
+    }
+    for (const m of models) {
+      availableModels.push({ modelId: m.id, apiKeyId, isBest: m.isBest });
+    }
   }
 
-  // 3. Best available model (nothing explicitly configured).
-  // Prefer the model marked "best" over the alphabetically-first one,
-  // otherwise a cheap/fast model can silently become the default.
-  const chosen = pickPreferredModel(allModels);
-  if (chosen) {
-    const provider = findProviderForModel(chosen.id);
-    return {
-      modelId: chosen.id,
-      apiKeyId: provider ? findKeyForProvider(provider) : null,
-    };
-  }
+  const levels: ModelSelection[] = [
+    { modelId: agent?.modelId, apiKeyId: agent?.llmApiKeyId },
+    {
+      modelId: organization?.defaultModelId,
+      apiKeyId: organization?.defaultLlmApiKeyId,
+    },
+  ];
 
-  return null;
+  const resolved = resolveModelSelection({ levels, availableModels });
+  if (!resolved?.modelId) {
+    // Catalog has models but none are linked to an accessible key — fall back
+    // to the best model regardless of key.
+    const allModels = Object.values(modelsByProvider).flat();
+    const best = pickBestModel(allModels);
+    return best ? { modelId: best.id, apiKeyId: null } : null;
+  }
+  return { modelId: resolved.modelId, apiKeyId: resolved.apiKeyId ?? null };
 }
-
-// ===== Model source =====
-
-interface DeriveModelSourceParams {
-  selectedModel: string | null | undefined;
-  agentLlmModel: string | null | undefined;
-  orgDefaultLlmModel: string | null | undefined;
-}
-
-/**
- * Determine where the currently selected model came from, purely by
- * comparison — no stored state.
- *
- * Returns null when there's nothing to compare against (no model, or no
- * agent/org default configured) — there's no default to "override", so no
- * badge is shown. Otherwise the model is the agent's, the org's, or, if it
- * matches neither configured default, the user's own pick.
- */
-export function deriveModelSource(
-  params: DeriveModelSourceParams,
-): ModelSource | null {
-  const { selectedModel, agentLlmModel, orgDefaultLlmModel } = params;
-  if (!selectedModel) return null;
-  if (agentLlmModel && selectedModel === agentLlmModel) return "agent";
-  if (orgDefaultLlmModel && selectedModel === orgDefaultLlmModel) {
-    return "organization";
-  }
-  // No configured default anywhere — nothing to override.
-  if (!agentLlmModel && !orgDefaultLlmModel) return null;
-  return "user";
-}
-
-// ===== Agent switch helper =====
 
 /**
  * Resolve the model and API key to use when switching to a given agent.
- * Delegates to resolveInitialModel with the agent's LLM config.
- *
- * This ensures the same priority chain (agent config → org default → fallback)
- * is applied both on initial load and when the user switches agents.
+ * Applies the same priority chain as initial load.
  */
 export function resolveModelForAgent(params: {
   agent: AgentInfo;
   context: ChatContext;
 }): ResolvedModel | null {
-  return resolveInitialModel({
-    ...params.context,
-    agent: params.agent,
-  });
+  return resolveInitialModel({ ...params.context, agent: params.agent });
 }
 
-// ===== Internal helpers =====
+// ===== Model source =====
 
 /**
- * Pick the preferred model from a list: the one marked "best", else the first.
- * Shared by initial resolution and auto-selection so both honor the "best"
- * marker instead of falling back to whatever sorts first alphabetically.
+ * Determine where the selected model came from, by comparison with the
+ * configured defaults. See the shared `deriveModelSource`.
  */
-function pickPreferredModel<T extends { id: string; isBest?: boolean }>(
-  models: T[],
-): T | undefined {
-  return models.find((m) => m.isBest) ?? models[0];
+export function deriveModelSource(params: {
+  selectedModelId: string | null | undefined;
+  agentModelId: string | null | undefined;
+  orgModelId: string | null | undefined;
+}): ModelSource | null {
+  return deriveModelSourceShared(params);
 }

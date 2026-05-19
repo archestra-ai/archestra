@@ -298,7 +298,7 @@ export function ChatPageContent({
         chatApiKeys,
         organization: organization
           ? {
-              defaultLlmModel: organization.defaultLlmModel,
+              defaultModelId: organization.defaultModelId,
               defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
             }
           : null,
@@ -383,7 +383,7 @@ export function ChatPageContent({
       chatApiKeys,
       organization: organization
         ? {
-            defaultLlmModel: organization.defaultLlmModel,
+            defaultModelId: organization.defaultModelId,
             defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
           }
         : null,
@@ -400,7 +400,7 @@ export function ChatPageContent({
     initialAgentId,
     modelsByProvider,
     chatApiKeys,
-    organization?.defaultLlmModel,
+    organization?.defaultModelId,
     organization?.defaultLlmApiKeyId,
     organization,
   ]);
@@ -435,7 +435,7 @@ export function ChatPageContent({
       chatApiKeys,
       organization: organization
         ? {
-            defaultLlmModel: organization.defaultLlmModel,
+            defaultModelId: organization.defaultModelId,
             defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
           }
         : null,
@@ -452,7 +452,7 @@ export function ChatPageContent({
   const initialProvider = useMemo((): SupportedProvider | undefined => {
     if (!initialModel) return undefined;
     for (const [provider, models] of Object.entries(modelsByProvider)) {
-      if (models?.some((m) => m.id === initialModel)) {
+      if (models?.some((m) => m.dbId === initialModel)) {
         return provider as SupportedProvider;
       }
     }
@@ -597,63 +597,63 @@ export function ChatPageContent({
     }
   }, [conversationId, conversation?.artifact, isLoadingConversation]);
 
-  // Derive current provider from selected model
+  // Derive current provider from the selected model
   const currentProvider = useMemo((): SupportedProvider | undefined => {
-    if (!conversation?.selectedModel) return undefined;
-    const model = chatModels.find((m) => m.id === conversation.selectedModel);
+    if (!conversation?.modelId) return undefined;
+    const model = chatModels.find((m) => m.dbId === conversation.modelId);
     return model?.provider;
-  }, [conversation?.selectedModel, chatModels]);
+  }, [conversation?.modelId, chatModels]);
 
   // Model source — derived purely by comparing the selected model against the
   // agent's and org's configured defaults. No stored state, nothing to keep in sync.
   const conversationModelSource = useMemo(() => {
     const agent = internalAgents.find((a) => a.id === conversation?.agentId) as
-      | (Record<string, unknown> & { llmModel?: string })
+      | (Record<string, unknown> & { modelId?: string | null })
       | undefined;
     return deriveModelSource({
-      selectedModel: conversation?.selectedModel,
-      agentLlmModel: agent?.llmModel,
-      orgDefaultLlmModel: organization?.defaultLlmModel,
+      selectedModelId: conversation?.modelId,
+      agentModelId: agent?.modelId,
+      orgModelId: organization?.defaultModelId,
     });
   }, [
-    conversation?.selectedModel,
+    conversation?.modelId,
     conversation?.agentId,
     internalAgents,
-    organization?.defaultLlmModel,
+    organization?.defaultModelId,
   ]);
 
   // Same derivation for the initial (no conversation) chat.
   const initialModelSource = useMemo(() => {
     const agent = internalAgents.find((a) => a.id === initialAgentId) as
-      | (Record<string, unknown> & { llmModel?: string })
+      | (Record<string, unknown> & { modelId?: string | null })
       | undefined;
     return deriveModelSource({
-      selectedModel: initialModel,
-      agentLlmModel: agent?.llmModel,
-      orgDefaultLlmModel: organization?.defaultLlmModel,
+      selectedModelId: initialModel,
+      agentModelId: agent?.modelId,
+      orgModelId: organization?.defaultModelId,
     });
   }, [
     initialModel,
     initialAgentId,
     internalAgents,
-    organization?.defaultLlmModel,
+    organization?.defaultModelId,
   ]);
 
   // Get selected model's context length for the context indicator
   const selectedModelContextLength = useMemo((): number | null => {
-    const modelId = conversation?.selectedModel ?? initialModel;
+    const modelId = conversation?.modelId ?? initialModel;
     if (!modelId) return null;
-    const model = chatModels.find((m) => m.id === modelId);
+    const model = chatModels.find((m) => m.dbId === modelId);
     return model?.capabilities?.contextLength ?? null;
-  }, [conversation?.selectedModel, initialModel, chatModels]);
+  }, [conversation?.modelId, initialModel, chatModels]);
 
   // Get selected model's input modalities for file upload filtering
   const selectedModelInputModalities = useMemo(() => {
-    const modelId = conversation?.selectedModel ?? initialModel;
+    const modelId = conversation?.modelId ?? initialModel;
     if (!modelId) return null;
-    const model = chatModels.find((m) => m.id === modelId);
+    const model = chatModels.find((m) => m.dbId === modelId);
     return model?.capabilities?.inputModalities ?? null;
-  }, [conversation?.selectedModel, initialModel, chatModels]);
+  }, [conversation?.modelId, initialModel, chatModels]);
 
   // Mutation for updating conversation model
   // Use a ref so callbacks don't recreate when mutation state changes (isPending etc.),
@@ -669,17 +669,11 @@ export function ChatPageContent({
   chatModelsRef.current = chatModels;
   const conversationRef = useRef(conversation);
   conversationRef.current = conversation;
-  const handleModelChange = useCallback((model: string) => {
+  const handleModelChange = useCallback((modelId: string) => {
     if (!conversationRef.current) return;
-
-    // Find the provider for this model
-    const modelInfo = chatModelsRef.current.find((m) => m.id === model);
-    const provider = modelInfo?.provider;
-
     updateConversationMutateRef.current({
       id: conversationRef.current.id,
-      selectedModel: model,
-      selectedProvider: provider,
+      modelId,
     });
   }, []);
 
@@ -698,8 +692,7 @@ export function ChatPageContent({
         updateConversationMutateRef.current({
           id: conversation.id,
           chatApiKeyId: apiKeyId,
-          selectedModel: preferredModel.modelId,
-          selectedProvider: preferredModel.provider,
+          modelId: preferredModel.modelId,
         });
       } else {
         // No models for this provider yet, still update the key
@@ -732,8 +725,8 @@ export function ChatPageContent({
       ? (internalAgents.find((a) => a.id === conversation.agentId) as
           | (Record<string, unknown> & {
               id: string;
-              llmModel?: string;
-              llmApiKeyId?: string;
+              modelId?: string | null;
+              llmApiKeyId?: string | null;
             })
           | undefined)
       : null;
@@ -744,7 +737,7 @@ export function ChatPageContent({
       chatApiKeys,
       organization: organization
         ? {
-            defaultLlmModel: organization.defaultLlmModel,
+            defaultModelId: organization.defaultModelId,
             defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
           }
         : null,
@@ -754,8 +747,7 @@ export function ChatPageContent({
     if (resolved) {
       updateConversationMutateRef.current({
         id: conversation.id,
-        selectedModel: resolved.modelId,
-        selectedProvider: resolved.provider,
+        modelId: resolved.modelId,
       });
     }
   }, [
@@ -1175,7 +1167,6 @@ export function ChatPageContent({
         agentId: initialAgentId,
         modelId: initialModel,
         chatApiKeyId: initialApiKeyId,
-        chatModels,
       });
       if (!input) {
         return false;
@@ -1190,13 +1181,7 @@ export function ChatPageContent({
       });
       return true;
     },
-    [
-      initialAgentId,
-      initialModel,
-      initialApiKeyId,
-      chatModels,
-      createConversationMutation,
-    ],
+    [initialAgentId, initialModel, initialApiKeyId, createConversationMutation],
   );
 
   const handleCreateConversationWithUrl = useCallback(
@@ -1769,7 +1754,7 @@ export function ChatPageContent({
                     hideDivider
                     profileId={conversation?.agent?.id}
                     agentName={conversation?.agent?.name}
-                    selectedModel={conversation?.selectedModel ?? undefined}
+                    selectedModel={conversation?.modelId ?? undefined}
                   />
                 ) : (
                   <ChatMessages
@@ -1786,7 +1771,7 @@ export function ChatPageContent({
                         : internalAgents.find((a) => a.id === initialAgentId)
                       )?.name
                     }
-                    selectedModel={conversation?.selectedModel ?? initialModel}
+                    selectedModel={conversation?.modelId ?? initialModel}
                     modelSource={conversationModelSource ?? initialModelSource}
                     chatErrors={conversation?.chatErrors ?? []}
                     onUserMessageEdit={(
@@ -1896,7 +1881,7 @@ export function ChatPageContent({
                       <ArchestraPromptInput
                         onSubmit={handleSubmit}
                         status={status}
-                        selectedModel={conversation?.selectedModel ?? ""}
+                        selectedModel={conversation?.modelId ?? ""}
                         onModelChange={handleModelChange}
                         agentId={promptAgentId ?? activeAgentId}
                         conversationId={conversationId}

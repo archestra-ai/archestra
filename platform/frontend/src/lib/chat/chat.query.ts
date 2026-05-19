@@ -56,17 +56,8 @@ export function mergeUpdatedConversationIntoCache(
   if (variables.title !== undefined) {
     merged.title = updatedConversation.title;
   }
-  if (
-    variables.selectedModel !== undefined ||
-    variables.agentId !== undefined
-  ) {
-    merged.selectedModel = updatedConversation.selectedModel;
-  }
-  if (
-    variables.selectedProvider !== undefined ||
-    variables.agentId !== undefined
-  ) {
-    merged.selectedProvider = updatedConversation.selectedProvider;
+  if (variables.modelId !== undefined || variables.agentId !== undefined) {
+    merged.modelId = updatedConversation.modelId;
   }
   if (variables.chatApiKeyId !== undefined || variables.agentId !== undefined) {
     merged.chatApiKeyId = updatedConversation.chatApiKeyId;
@@ -144,15 +135,13 @@ export function useCreateConversation() {
   return useMutation({
     mutationFn: async ({
       agentId,
-      selectedModel,
-      selectedProvider,
+      modelId,
       chatApiKeyId,
     }: NonNullable<archestraApiTypes.CreateChatConversationData["body"]>) => {
       const { data, error } = await createChatConversation({
         body: {
           agentId,
-          selectedModel,
-          selectedProvider,
+          modelId,
           chatApiKeyId: chatApiKeyId ?? undefined,
         },
       });
@@ -183,8 +172,7 @@ export function useUpdateConversation() {
     mutationFn: async ({
       id,
       title,
-      selectedModel,
-      selectedProvider,
+      modelId,
       chatApiKeyId,
       agentId,
       pinnedAt,
@@ -195,8 +183,7 @@ export function useUpdateConversation() {
         path: { id },
         body: {
           title,
-          selectedModel,
-          selectedProvider,
+          modelId,
           chatApiKeyId,
           agentId,
           pinnedAt,

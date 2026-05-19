@@ -7,7 +7,7 @@ import type { SupportedProvider } from "@/lib/llm-provider-api-keys.query";
 
 type AgentInfo = {
   id: string;
-  llmModel?: string | null;
+  modelId?: string | null;
   llmApiKeyId?: string | null;
 };
 
@@ -17,10 +17,11 @@ type ChatApiKeyInfo = {
 };
 
 type OrganizationInfo = {
-  defaultLlmModel?: string | null;
+  defaultModelId?: string | null;
   defaultLlmApiKeyId?: string | null;
 } | null;
 
+/** A model identifier is the models.id UUID throughout the chat model flow. */
 export type ResolvedInitialAgentState = {
   agentId: string;
   modelId: string;
@@ -35,8 +36,7 @@ export type ResolvedChatModelState = {
 
 export type CreateConversationInput = {
   agentId: string;
-  selectedModel?: string;
-  selectedProvider?: SupportedProvider;
+  modelId?: string;
   chatApiKeyId?: string | null;
 };
 
@@ -100,11 +100,12 @@ export function resolveInitialAgentState(params: {
   };
 }
 
+/** Resolve the provider for a model UUID. */
 export function getProviderForModelId(params: {
   modelId: string;
   chatModels: LlmModel[];
 }): SupportedProvider | undefined {
-  return params.chatModels.find((model) => model.id === params.modelId)
+  return params.chatModels.find((model) => model.dbId === params.modelId)
     ?.provider;
 }
 
@@ -115,17 +116,25 @@ export function resolveChatModelState(params: {
   organization: OrganizationInfo;
   chatModels?: LlmModel[];
 }): ResolvedChatModelState | null {
+  // The resolver identifies models by their models.id UUID.
+  const modelsByProvider = Object.fromEntries(
+    Object.entries(params.modelsByProvider).map(([provider, models]) => [
+      provider,
+      models.map((m) => ({ id: m.dbId, isBest: m.isBest })),
+    ]),
+  );
+
   const resolved = params.agent
     ? resolveModelForAgent({
         agent: params.agent,
         context: {
-          modelsByProvider: params.modelsByProvider,
+          modelsByProvider,
           chatApiKeys: params.chatApiKeys,
           organization: params.organization,
         },
       })
     : resolveInitialModel({
-        modelsByProvider: params.modelsByProvider,
+        modelsByProvider,
         chatApiKeys: params.chatApiKeys,
         organization: params.organization,
         agent: null,
@@ -160,7 +169,7 @@ export function resolvePreferredModelForProvider(params: {
   const bestModel = providerModels.find((model) => model.isBest);
 
   return {
-    modelId: bestModel?.id ?? providerModels[0].id,
+    modelId: bestModel?.dbId ?? providerModels[0].dbId,
     provider: params.provider,
   };
 }
@@ -169,23 +178,14 @@ export function buildCreateConversationInput(params: {
   agentId: string | null;
   modelId: string;
   chatApiKeyId: string | null;
-  chatModels: LlmModel[];
 }): CreateConversationInput | null {
   if (!params.agentId) {
     return null;
   }
 
-  const selectedProvider = params.modelId
-    ? getProviderForModelId({
-        modelId: params.modelId,
-        chatModels: params.chatModels,
-      })
-    : undefined;
-
   return {
     agentId: params.agentId,
-    selectedModel: params.modelId || undefined,
-    selectedProvider,
+    modelId: params.modelId || undefined,
     chatApiKeyId: params.chatApiKeyId ?? undefined,
   };
 }

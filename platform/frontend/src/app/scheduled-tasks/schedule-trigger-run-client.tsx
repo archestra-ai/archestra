@@ -265,15 +265,12 @@ export function ScheduleTriggerRunPage({
   const handleModelChange = useCallback(
     (modelId: string) => {
       if (!conversation) return;
-
-      const provider = chatModels.find((item) => item.id === modelId)?.provider;
       updateConversationMutation.mutate({
         id: conversation.id,
-        selectedModel: modelId,
-        selectedProvider: provider,
+        modelId,
       });
     },
-    [chatModels, conversation, updateConversationMutation],
+    [conversation, updateConversationMutation],
   );
 
   const handleProviderChange = useCallback(
@@ -287,8 +284,7 @@ export function ScheduleTriggerRunPage({
       updateConversationMutation.mutate({
         id: conversation.id,
         chatApiKeyId,
-        selectedModel: bestModel?.id,
-        selectedProvider: bestModel ? provider : undefined,
+        modelId: bestModel?.dbId,
       });
     },
     [conversation, modelsByProvider, updateConversationMutation],

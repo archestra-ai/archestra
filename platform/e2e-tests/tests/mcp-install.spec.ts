@@ -96,6 +96,10 @@ test.describe("MCP Install", () => {
     const HF_CATALOG_ITEM_NAME = "huggingface__mcp";
 
     test("No auth required", async ({ adminPage, extractCookieHeaders }) => {
+      test.skip(
+        true,
+        "Flaky in CI: depends on real https://huggingface.co/mcp; install lands in 'error' state intermittently (mcp-install.spec.ts:98 Custom remote No auth required)",
+      );
       await deleteCatalogItem(
         adminPage,
         extractCookieHeaders,

@@ -50,6 +50,7 @@ import {
   useInternalMcpCatalog,
   useMcpCatalogLabelKeys,
   useMcpCatalogLabelValues,
+  useReinstallInternalMcpCatalogItem,
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
   useInstallMcpServer,
@@ -115,6 +116,13 @@ export function InternalMCPCatalog({
   useMcpInstallationStatusCacheSync();
   const installMutation = useInstallMcpServer();
   const reinstallMutation = useReinstallMcpServer();
+  // When the card requests an admin combined reinstall, remember which
+  // catalog id needs its shared pod recreated *after* the per-install
+  // mutation finishes. Cleared in finally blocks below.
+  const [pendingCatalogReinstallId, setPendingCatalogReinstallId] = useState<
+    string | null
+  >(null);
+  const reinstallCatalogMutation = useReinstallInternalMcpCatalogItem();
   const reauthMutation = useReauthenticateMcpServer();
   const initiateOAuthMutation = useInitiateOAuth();
   const deploymentStatuses = useMcpDeploymentStatuses();
@@ -761,6 +769,14 @@ export function InternalMCPCatalog({
             }),
           ),
         );
+        if (pendingCatalogReinstallId) {
+          // Per-install mutation persisted the admin's new prompted
+          // values; now recreate the shared pod and cascade tool sync
+          // to every tenant. If this step fails, the catalog flag stays
+          // set and the next click will retry it directly (no modal,
+          // since the admin's reinstall_required is already cleared).
+          await reinstallCatalogMutation.mutateAsync(pendingCatalogReinstallId);
+        }
       } finally {
         setInstallingItemId(null);
         setInstallingServerIds((prev) => {
@@ -769,6 +785,7 @@ export function InternalMCPCatalog({
           return next;
         });
         setReinstallFlaggedTargets([]);
+        setPendingCatalogReinstallId(null);
       }
       return;
     }
@@ -949,6 +966,7 @@ export function InternalMCPCatalog({
       name: string;
       presetLabel: string | null;
     }>,
+    options?: { alsoReinstallCatalog?: boolean },
   ) => {
     // Preset-aware: the card passes every flagged install (parent + presets)
     // so the confirm step can fan out. If the caller didn't supply any (e.g.
@@ -980,6 +998,10 @@ export function InternalMCPCatalog({
     if (!installedServer) {
       toast.error("Server not found, cannot reinstall");
       return;
+    }
+
+    if (options?.alsoReinstallCatalog) {
+      setPendingCatalogReinstallId(catalogItem.id);
     }
 
     setReinstallFlaggedTargets(
@@ -1075,6 +1097,9 @@ export function InternalMCPCatalog({
           }),
         ),
       );
+      if (pendingCatalogReinstallId) {
+        await reinstallCatalogMutation.mutateAsync(pendingCatalogReinstallId);
+      }
     } finally {
       setInstallingItemId(null);
       setInstallingServerIds((prev) => {
@@ -1082,10 +1107,10 @@ export function InternalMCPCatalog({
         for (const t of targets) next.delete(t.id);
         return next;
       });
+      setCatalogItemForReinstall(null);
+      setReinstallFlaggedTargets([]);
+      setPendingCatalogReinstallId(null);
     }
-
-    setCatalogItemForReinstall(null);
-    setReinstallFlaggedTargets([]);
   };
 
   const handleCancelInstallation = (serverId: string) => {
@@ -1281,7 +1306,9 @@ export function InternalMCPCatalog({
                         ? handleInstallPlaywright(item)
                         : handleInstallLocalServer(item)
                     }
-                    onReinstall={(flagged) => handleReinstall(item, flagged)}
+                    onReinstall={(flagged, options) =>
+                      handleReinstall(item, flagged, options)
+                    }
                     onEdit={() => setEditingItem(item)}
                     onDetails={() => {
                       setDetailsServerName(item.name);
@@ -1341,7 +1368,9 @@ export function InternalMCPCatalog({
                         ? handleInstallPlaywright(item)
                         : handleInstallLocalServer(item)
                     }
-                    onReinstall={(flagged) => handleReinstall(item, flagged)}
+                    onReinstall={(flagged, options) =>
+                      handleReinstall(item, flagged, options)
+                    }
                     onEdit={() => setEditingItem(item)}
                     onDetails={() => {
                       setDetailsServerName(item.name);

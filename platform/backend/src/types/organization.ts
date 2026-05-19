@@ -291,8 +291,6 @@ const extendedFields = {
   globalToolPolicy: GlobalToolPolicySchema,
   embeddingModel: z.string().nullable(),
   embeddingDimensions: EmbeddingDimensionsSchema.nullable(),
-  defaultLlmModel: z.string().nullable(),
-  defaultLlmProvider: SupportedProvidersSchema.nullable(),
   defaultUserLimitValue: z.number().int().positive().nullable(),
   defaultUserLimitModel: z.array(z.string()).nullable(),
   defaultUserLimitCleanupInterval: LimitCleanupIntervalSchema.nullable(),

@@ -491,8 +491,6 @@ describe("createLLMModel", () => {
       userId: user.id,
       organizationId: org.id,
       title: "Azure Chat Conversation",
-      selectedModel: "gpt-4o",
-      selectedProvider: "azure",
       chatApiKeyId: selectedKey.id,
     });
 

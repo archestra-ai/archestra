@@ -91,8 +91,6 @@ const agentsTable = pgTable(
         onDelete: "set null",
       },
     ),
-    /** Model ID for LLM calls */
-    llmModel: text("llm_model"),
     /** FK to models(id) — the agent's default model. ON DELETE SET NULL. */
     modelId: uuid("model_id").references(() => modelsTable.id, {
       onDelete: "set null",

@@ -693,7 +693,7 @@ export function AgentDialog({
         setSuggestedPrompts(agentData.suggestedPrompts);
         setSuggestedPromptsOpen(false);
         setLlmApiKeyId(agentData.llmApiKeyId);
-        setLlmModel(agentData.llmModel);
+        setLlmModel(agentData.modelId);
         setAssignedTeamIds(agentData.teams.map((t) => t.id));
         setLabels(agentData.labels);
         setConsiderContextUntrusted(agentData.considerContextUntrusted);
@@ -780,7 +780,7 @@ export function AgentDialog({
   const currentLlmProvider = useMemo((): SupportedProvider | null => {
     if (!llmModel) return null;
     for (const [provider, models] of Object.entries(modelsByProvider)) {
-      if (models?.some((m) => m.id === llmModel)) {
+      if (models?.some((m) => m.dbId === llmModel)) {
         return provider as SupportedProvider;
       }
     }
@@ -849,7 +849,7 @@ export function AgentDialog({
         // Only fall back to first model when switching providers (no bestModelId available)
         const providerModels = modelsByProvider[key.provider];
         if (providerModels?.length) {
-          setLlmModel(providerModels[0].id);
+          setLlmModel(providerModels[0].dbId);
         }
       }
     },
@@ -932,7 +932,7 @@ export function AgentDialog({
             builtInAgentConfig,
             systemPrompt: trimmedSystemPrompt || null,
             llmApiKeyId: llmApiKeyId || null,
-            llmModel: llmModel || null,
+            modelId: llmModel || null,
           },
         });
         savedAgentId = updated?.id ?? agent.id;
@@ -953,7 +953,7 @@ export function AgentDialog({
             ...(isInternalAgent && {
               systemPrompt: trimmedSystemPrompt || null,
               llmApiKeyId: llmApiKeyId || null,
-              llmModel: llmModel || null,
+              modelId: llmModel || null,
               suggestedPrompts: validSuggestedPrompts,
             }),
             ...(supportsIdentityProvider && {
@@ -993,7 +993,7 @@ export function AgentDialog({
           ...(isInternalAgent && {
             systemPrompt: trimmedSystemPrompt || null,
             llmApiKeyId: llmApiKeyId || null,
-            llmModel: llmModel || null,
+            modelId: llmModel || null,
             suggestedPrompts: validSuggestedPrompts,
           }),
           ...(supportsIdentityProvider && {

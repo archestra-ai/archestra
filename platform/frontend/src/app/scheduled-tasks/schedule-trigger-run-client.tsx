@@ -138,10 +138,10 @@ export function ScheduleTriggerRunPage({
 
   const selectedModel = useMemo(
     () =>
-      conversation?.selectedModel
-        ? chatModels.find((item) => item.id === conversation.selectedModel)
+      conversation?.modelId
+        ? chatModels.find((item) => item.dbId === conversation.modelId)
         : undefined,
-    [conversation?.selectedModel, chatModels],
+    [conversation?.modelId, chatModels],
   );
 
   const currentProvider = selectedModel?.provider;
@@ -586,7 +586,7 @@ export function ScheduleTriggerRunPage({
                     error={error}
                     chatErrors={conversation?.chatErrors ?? []}
                     agentName={activeAgentName}
-                    selectedModel={conversation?.selectedModel ?? ""}
+                    selectedModel={conversation?.modelId ?? ""}
                     onToolApprovalResponse={
                       addToolApprovalResponse
                         ? ({ id, approved, reason }) => {
@@ -614,7 +614,7 @@ export function ScheduleTriggerRunPage({
                         <ArchestraPromptInput
                           onSubmit={handleSubmit}
                           status={status}
-                          selectedModel={conversation.selectedModel ?? ""}
+                          selectedModel={conversation.modelId ?? ""}
                           onModelChange={handleModelChange}
                           agentId={activeAgentId}
                           conversationId={conversationId}

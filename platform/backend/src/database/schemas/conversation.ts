@@ -1,4 +1,3 @@
-import type { SupportedProvider } from "@shared";
 import {
   boolean,
   jsonb,
@@ -29,8 +28,6 @@ const conversationsTable = pgTable("conversations", {
     },
   ),
   title: text("title"),
-  selectedModel: text("selected_model").notNull().default("gpt-4o"),
-  selectedProvider: text("selected_provider").$type<SupportedProvider>(),
   /** FK to models(id) — the resolved model for this conversation. */
   modelId: uuid("model_id").references(() => modelsTable.id, {
     onDelete: "set null",

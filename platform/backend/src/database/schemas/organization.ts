@@ -87,12 +87,6 @@ const organizationsTable = pgTable("organization", {
   /** LLM model used for reranking (e.g. "gpt-4o") */
   rerankerModel: text("reranker_model"),
 
-  /** Organization-wide default LLM model ID (e.g. "gpt-4o") */
-  defaultLlmModel: text("default_llm_model"),
-
-  /** Provider for the default LLM model (e.g. "openai") */
-  defaultLlmProvider: text("default_llm_provider").$type<SupportedProvider>(),
-
   /** Organization-wide default model. FK to models(id) ON DELETE SET NULL. */
   defaultModelId: uuid("default_model_id").references(() => modelsTable.id, {
     onDelete: "set null",

@@ -1,7 +1,6 @@
 import {
   buildUserSystemPromptContext,
   type ChatErrorResponse,
-  isSupportedProvider,
   RouteId,
   type SupportedProvider,
   TimeInMs,
@@ -31,7 +30,6 @@ import {
 import {
   createDirectLLMModel,
   createLLMModelForAgent,
-  detectProviderFromModel,
   isApiKeyRequired,
 } from "@/clients/llm-client";
 import config from "@/config";

@@ -1702,6 +1702,13 @@
       "when": 1779196499361,
       "tag": "0242_grey_liz_osborn",
       "breakpoints": true
+    },
+    {
+      "idx": 243,
+      "version": "7",
+      "when": 1779200540312,
+      "tag": "0243_tiresome_stranger",
+      "breakpoints": true
     }
   ]
 }

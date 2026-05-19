@@ -93,7 +93,6 @@ describe("POST /api/chat slim error payload", () => {
       const conversation = await makeConversation(agent.id, {
         userId: user.id,
         organizationId,
-        selectedModel: "gpt-4o",
       });
       conversationId = conversation.id;
 
@@ -201,7 +200,6 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
       const conversation = await makeConversation(agent.id, {
         userId: user.id,
         organizationId,
-        selectedModel: "gpt-4o",
       });
       conversationId = conversation.id;
 

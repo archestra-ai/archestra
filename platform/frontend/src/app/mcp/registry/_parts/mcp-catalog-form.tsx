@@ -2158,8 +2158,9 @@ export function McpCatalogForm({
 
         {pendingSubmit !== null ? (
           <ReinstallConfirmBar
-            // The form's 11-flag OR only fires for manual-path edits;
-            // auto-mode is reserved for `preset-editor-dialog`.
+            // Only manual-path edits (those needing user re-prompt)
+            // trigger the bar from this form; auto-mode is reserved for
+            // `preset-editor-dialog` (preset value changes).
             mode="manual"
             isMultitenant={isMultitenant}
             affectedServerCount={affectedServerCount}

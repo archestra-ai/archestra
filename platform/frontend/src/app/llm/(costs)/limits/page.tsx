@@ -71,6 +71,11 @@ import {
   useOrganizationMembers,
 } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
+import {
+  formatLocalDateTime,
+  formatRelativeTimeFromNow,
+  getNextCleanupTime,
+} from "@/lib/utils/date-time";
 import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
 
 type LimitData = archestraApiTypes.GetLimitsResponses["200"][number];
@@ -150,6 +155,14 @@ function formatCurrencyWhole(value: number) {
     style: "currency",
     currency: "USD",
     maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function formatCurrencyFraction(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
   }).format(value);
 }
 
@@ -493,7 +506,35 @@ export default function LimitsPage() {
           const cleanupInterval =
             (row.original.cleanupInterval as LimitCleanupInterval | null) ??
             DEFAULT_LIMIT_CLEANUP_INTERVAL;
-          return CLEANUP_INTERVAL_LABELS[cleanupInterval];
+          const nextCleanup = getNextCleanupTime(
+            row.original.lastCleanup,
+            row.original.cleanupInterval,
+          );
+          const timeRemainingWithSuffix = nextCleanup
+            ? formatRelativeTimeFromNow(nextCleanup)
+            : null;
+          const localResetTime = nextCleanup
+            ? formatLocalDateTime(nextCleanup)
+            : null;
+          return (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex flex-col">
+                  <span>{CLEANUP_INTERVAL_LABELS[cleanupInterval]}</span>
+                  {timeRemainingWithSuffix && (
+                    <span className="text-xs text-muted-foreground">
+                      Resets {timeRemainingWithSuffix}
+                    </span>
+                  )}
+                </div>
+              </TooltipTrigger>
+              {localResetTime && (
+                <TooltipContent>
+                  <p>Resets on {localResetTime}</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          );
         },
       },
       {
@@ -516,7 +557,7 @@ export default function LimitsPage() {
                 }
               />
               <p className="mt-1 text-left text-xs text-muted-foreground">
-                {`${formatCurrencyWhole(usage.actualUsage)} / ${formatCurrencyWhole(usage.actualLimit)} (${usage.percentage.toFixed(1)}%)`}
+                {`${formatCurrencyFraction(usage.actualUsage)} / ${formatCurrencyWhole(usage.actualLimit)} (${usage.percentage.toFixed(1)}%)`}
               </p>
             </div>
           );

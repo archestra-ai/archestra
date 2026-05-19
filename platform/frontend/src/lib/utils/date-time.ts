@@ -1,4 +1,11 @@
-import { format, formatDistanceToNow } from "date-fns";
+import {
+  addHours,
+  addMonths,
+  addWeeks,
+  format,
+  formatDistanceToNow,
+} from "date-fns";
+import type { LimitCleanupInterval } from "@/components/limit-cleanup-interval-select";
 
 export function formatDate({
   date,
@@ -36,6 +43,26 @@ export function formatRelativeTime(
   return formatDistanceToNow(parsedDate, { addSuffix: true });
 }
 
+export function getNextCleanupTime(
+  lastCleanup: string | null,
+  cleanupInterval: LimitCleanupInterval | null | undefined,
+): Date | null {
+  if (!lastCleanup || !cleanupInterval) return null;
+
+  const lastCleanupDate = new Date(lastCleanup);
+  if (Number.isNaN(lastCleanupDate.getTime())) return null;
+
+  const intervalMap: Record<LimitCleanupInterval, (date: Date) => Date> = {
+    "1h": (date) => addHours(date, 1),
+    "12h": (date) => addHours(date, 12),
+    "24h": (date) => addHours(date, 24),
+    "1w": (date) => addWeeks(date, 1),
+    "1m": (date) => addMonths(date, 1),
+  };
+
+  return intervalMap[cleanupInterval](lastCleanupDate);
+}
+
 export function formatRelativeTimeFromNow(
   date: Date | string | null,
   options?: {
@@ -54,4 +81,22 @@ export function formatRelativeTimeFromNow(
   }
 
   return formatDistanceToNow(parsedDate, { addSuffix: true });
+}
+
+export function formatLocalDateTime(date: Date | string | null): string | null {
+  if (!date) return null;
+
+  const parsedDate = typeof date === "string" ? new Date(date) : date;
+  if (Number.isNaN(parsedDate.getTime())) return null;
+
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  return `${parsedDate.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZoneName: "short",
+  })} (${timeZone})`;
 }

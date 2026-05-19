@@ -400,16 +400,20 @@ rl.on("line", (line) => {
       .first()
       .click({ force: true });
 
-    // Save changes (dialog stays open with keepOpenOnSave)
+    // Save changes (dialog stays open with keepOpenOnSave). The form's
+    // footer transforms into an inline confirm bar when the save would
+    // cascade — same surface, no stacked dialog. The CTA matches the
+    // backend path: this edit (command + prompted env var) takes the
+    // manual reinstall path, so the button is "Save and mark for
+    // reinstall". An auto-path edit would show "Save and reinstall"
+    // instead — match either to keep the test robust.
     await clickButton({ page: adminPage, options: { name: "Save Changes" } });
-    const reinstallRequiredDialog = adminPage.getByRole("dialog", {
-      name: "Existing installations will need to reinstall",
+    const confirmReinstallButton = settingsDialog.getByRole("button", {
+      name: /Save and (mark for )?reinstall/,
     });
-    if (await reinstallRequiredDialog.isVisible().catch(() => false)) {
-      await reinstallRequiredDialog
-        .getByRole("button", { name: "Save and flag for reinstall" })
-        .click();
-      await reinstallRequiredDialog.waitFor({
+    if (await confirmReinstallButton.isVisible().catch(() => false)) {
+      await confirmReinstallButton.click();
+      await confirmReinstallButton.waitFor({
         state: "hidden",
         timeout: 15_000,
       });

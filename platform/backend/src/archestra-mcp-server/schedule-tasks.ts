@@ -8,7 +8,12 @@ import {
 import { z } from "zod";
 import { hasAnyAgentTypeAdminPermission, userHasPermission } from "@/auth";
 import logger from "@/logging";
-import { AgentModel, AgentTeamModel, ScheduleTriggerModel } from "@/models";
+import {
+  AgentModel,
+  AgentTeamModel,
+  ConversationModel,
+  ScheduleTriggerModel,
+} from "@/models";
 import {
   type Agent,
   type ScheduleTrigger,
@@ -202,10 +207,21 @@ const registry = defineArchestraTools([
         );
       }
 
-      // Pick the target agent. The chat runtime persists `conversations.agentId`
-      // to the swap target inside handleSwapAgent (chat.ts), so `context.agentId`
-      // already reflects the active agent after any mid-conversation swap.
-      const targetAgentId = args.agentId ?? context.agentId ?? contextAgent.id;
+      // Re-read conversations.agentId in case swap_agent fired earlier in 
+      // this same tool round; context.agentId is captured at turn start and 
+      // stays stale until the next turn.
+      let targetAgentId = args.agentId;
+      if (!targetAgentId && context.conversationId) {
+        const conversation = await ConversationModel.findById({
+          id: context.conversationId,
+          userId,
+          organizationId,
+        });
+        if (conversation) {
+          targetAgentId = conversation.agentId ?? undefined;
+        }
+      }
+      targetAgentId ??= context.agentId ?? contextAgent.id;
       if (!targetAgentId) {
         return errorResult(
           "No agent is associated with this chat — cannot create a scheduled task.",
@@ -422,7 +438,13 @@ const registry = defineArchestraTools([
         });
         if ("error" in existing) return existing.error;
 
-        await ScheduleTriggerModel.delete(args.id);
+        const deleted = await ScheduleTriggerModel.delete(args.id);
+        if (!deleted) {
+          const stillExists = await ScheduleTriggerModel.findById(args.id);
+          if (stillExists) {
+            return errorResult("Scheduled task not found.");
+          }
+        }
 
         return structuredSuccessResult({
           success: true,

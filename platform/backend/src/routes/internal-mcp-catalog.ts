@@ -21,6 +21,7 @@ import {
   McpCatalogLabelModel,
   McpPresetEntryModel,
   McpServerModel,
+  OrganizationModel,
   TeamModel,
   ToolModel,
 } from "@/models";
@@ -45,6 +46,7 @@ import {
   type UserConfigFieldDefault,
   UuidIdSchema,
 } from "@/types";
+import { validateValuesAgainstRegex } from "@/utils/validate-values-against-regex";
 import { broadcastMcpInstallationStatus } from "@/websocket";
 
 /**
@@ -790,6 +792,28 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           originalCatalogItem.userConfig,
           restBody.userConfig,
         );
+      // Enforce the org-wide default validation regex against incoming
+      // default-scoped values. Symmetric to the entry-regex check on the
+      // child PATCH route — without it, hitting this endpoint directly (curl,
+      // stale frontend, scripts) bypasses the inline UI guard and persists
+      // forbidden values into the parent's `presetFieldValues`.
+      if (restBody.presetFieldValues !== undefined) {
+        const org = await OrganizationModel.getById(request.organizationId);
+        const defaultRegex = org?.presetEntityDefaultValidationRegex ?? null;
+        if (defaultRegex) {
+          const defaultLabel = org?.presetEntityDefaultLabel ?? "Default";
+          try {
+            validateValuesAgainstRegex(
+              restBody.presetFieldValues,
+              defaultRegex,
+              defaultLabel,
+            );
+          } catch (e) {
+            throw new ApiError(400, (e as Error).message);
+          }
+        }
+      }
+
       if (restBody.presetFieldValues !== undefined || secretKeysChanged) {
         const repartitioned = await repartitionStoredPresetValues({
           row: {
@@ -1269,6 +1293,11 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           parent,
           presetFieldValues,
         );
+        validateValuesAgainstRegex(
+          presetFieldValues,
+          entry.validationRegex,
+          entry.name,
+        );
       } catch (e) {
         throw new ApiError(400, (e as Error).message);
       }
@@ -1362,6 +1391,24 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             parent,
             presetFieldValues,
           );
+
+        if (originalChild.presetEntryId) {
+          const entry = await McpPresetEntryModel.findByIdForOrganization(
+            originalChild.presetEntryId,
+            request.organizationId,
+          );
+          if (entry?.validationRegex) {
+            try {
+              validateValuesAgainstRegex(
+                sanitized,
+                entry.validationRegex,
+                entry.name,
+              );
+            } catch (e) {
+              throw new ApiError(400, (e as Error).message);
+            }
+          }
+        }
 
         const { nonSecretFieldValues, presetSecretId } =
           await partitionPresetFieldValuesAndUpsertSecrets({

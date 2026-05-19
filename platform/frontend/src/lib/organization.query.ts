@@ -535,6 +535,39 @@ export function useUpdatePresetEntityDefaultLabel(
 }
 
 /**
+ * Update the validation regex for the implicit "default" preset row. Pass null
+ * to disable.
+ */
+export function useUpdatePresetEntityDefaultValidationRegex(
+  onSuccessMessage: string,
+  onErrorMessage: string,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: archestraApiTypes.UpdatePresetEntityDefaultValidationRegexData["body"],
+    ) => {
+      const { data: updatedOrganization, error } =
+        await archestraApiSdk.updatePresetEntityDefaultValidationRegex({
+          body: data,
+        });
+
+      if (error) {
+        toast.error(onErrorMessage);
+        return null;
+      }
+
+      return updatedOrganization;
+    },
+    onSuccess: (updatedOrganization) => {
+      if (!updatedOrganization) return;
+      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      toast.success(onSuccessMessage);
+    },
+  });
+}
+
+/**
  * Returns the org-configured display label for catalog presets.
  * When unconfigured, `configured` is false and `singular`/`plural` fall back to
  * "Preset"/"Presets" — callers should use `configured` to gate UI that should
@@ -551,6 +584,8 @@ export function usePresetEntityName() {
     singular: configured ? singular : "Preset",
     plural: configured ? plural : "Presets",
     defaultLabel: organization?.presetEntityDefaultLabel ?? "Default",
+    defaultValidationRegex:
+      organization?.presetEntityDefaultValidationRegex ?? null,
   };
 }
 

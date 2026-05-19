@@ -14,6 +14,8 @@ interface PresetFieldInputProps {
   disabled?: boolean;
   /** When true and field.secret, render `••••••••` placeholder. Leaving the input empty preserves the stored secret; typing replaces it. */
   hasStoredSecret?: boolean;
+  /** Inline validation error to render under the input (e.g. preset regex mismatch). */
+  error?: string | null;
 }
 
 /**
@@ -31,6 +33,7 @@ export function PresetFieldInput({
   idPrefix,
   disabled,
   hasStoredSecret,
+  error,
 }: PresetFieldInputProps) {
   const id = `${idPrefix}-${field.origin}-${field.key}`;
   const label = field.title || field.key;
@@ -84,6 +87,7 @@ export function PresetFieldInput({
         }
         className="font-mono"
         disabled={disabled}
+        aria-invalid={error ? true : undefined}
         // Suppress browser/password-manager autofill. For type="password"
         // fields specifically, "new-password" is the standard hint that
         // tells Chrome/Safari/Firefox not to attempt credential fill —
@@ -92,6 +96,7 @@ export function PresetFieldInput({
         // saved Archestra login here instead of the actual stored value.
         autoComplete={field.secret ? "new-password" : "off"}
       />
+      {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );
 }

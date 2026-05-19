@@ -24,7 +24,9 @@ import { PresetFieldInput } from "./preset-field-input";
 import {
   type CatalogFieldEntry,
   type CatalogItem,
+  compileValidationRegex,
   listCatalogFields,
+  validateFieldAgainstRegex,
 } from "./preset-helpers";
 import { ReinstallConfirmBar } from "./reinstall-confirm-bar";
 
@@ -57,7 +59,7 @@ export function PresetEditorDialog({
   const isEdit = preset !== null;
   const isEditingDefaultPreset = preset !== null && preset.id === cat.id;
   const presetEntityName = usePresetEntityName();
-  const { singular } = presetEntityName;
+  const { singular, defaultValidationRegex } = presetEntityName;
 
   const presetFields = listCatalogFields(cat).filter(
     (f) => f.scope === "preset",
@@ -95,6 +97,27 @@ export function PresetEditorDialog({
   );
   const [pendingConfirm, setPendingConfirm] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
+
+  // For the implicit default row (parent.id === preset.id), there's no preset
+  // entry — fall back to the org-wide `presetEntityDefaultValidationRegex`.
+  const activeRegexSource = isEditingDefaultPreset
+    ? defaultValidationRegex
+    : (entry?.validationRegex ?? null);
+  const validationRegex = compileValidationRegex(activeRegexSource);
+
+  const fieldErrors: Record<string, string | null> = {};
+  for (const f of presetFields) {
+    const raw = fieldValues[f.key];
+    fieldErrors[f.key] = validateFieldAgainstRegex({
+      value:
+        typeof raw === "string" ? raw : raw === undefined ? "" : String(raw),
+      regex: validationRegex,
+      required: false,
+      valueType: f.valueType,
+      presetTerm: singular,
+    });
+  }
+  const hasErrors = Object.values(fieldErrors).some((err) => !!err);
 
   useEffect(() => {
     if (!open) return;
@@ -217,6 +240,7 @@ export function PresetEditorDialog({
                 <PresetFieldSections
                   fields={presetFields}
                   values={fieldValues}
+                  errors={fieldErrors}
                   hasStoredSecrets={isEdit && preset?.presetSecretId != null}
                   onChange={(key, v) =>
                     setFieldValues((prev) => {
@@ -253,7 +277,7 @@ export function PresetEditorDialog({
               </Button>
               <Button
                 type="submit"
-                disabled={isPending || (isEdit && !isDirty)}
+                disabled={isPending || hasErrors || (isEdit && !isDirty)}
               >
                 {isPending ? "Saving…" : isEdit ? "Save changes" : "Save"}
               </Button>
@@ -268,6 +292,7 @@ export function PresetEditorDialog({
 interface PresetFieldSectionsProps {
   fields: CatalogFieldEntry[];
   values: Record<string, FieldValue>;
+  errors: Record<string, string | null>;
   onChange: (key: string, v: FieldValue | undefined) => void;
   /** When true, secret-typed fields render a `••••••••` placeholder to signal there's a stored value the user can preserve by leaving the input empty. */
   hasStoredSecrets: boolean;
@@ -276,6 +301,7 @@ interface PresetFieldSectionsProps {
 function PresetFieldSections({
   fields,
   values,
+  errors,
   onChange,
   hasStoredSecrets,
 }: PresetFieldSectionsProps) {
@@ -299,6 +325,7 @@ function PresetFieldSections({
               value={asString(values[f.key])}
               onChange={(v) => onChange(f.key, v === "" ? undefined : v)}
               hasStoredSecret={hasStoredSecrets}
+              error={errors[f.key]}
             />
           ))}
         </div>
@@ -317,6 +344,7 @@ function PresetFieldSections({
               value={asString(values[f.key])}
               onChange={(v) => onChange(f.key, v === "" ? undefined : v)}
               hasStoredSecret={hasStoredSecrets}
+              error={errors[f.key]}
             />
           ))}
         </div>

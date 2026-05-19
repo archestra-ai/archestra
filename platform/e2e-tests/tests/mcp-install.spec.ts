@@ -320,7 +320,7 @@ rl.on("line", (line) => {
     await adminPage.waitForLoadState("domcontentloaded");
 
     const errorBanner = adminPage.getByTestId(
-      `${E2eTestId.McpServerError}-${CATALOG_ITEM_NAME}`,
+      `${E2eTestId.McpServerError}-${CATALOG_ITEM_NAME}-default`,
     );
     await errorBanner.waitFor({ state: "visible", timeout: 30_000 });
 
@@ -329,7 +329,7 @@ rl.on("line", (line) => {
     // ========================================
     // Click "view the logs" link in the error banner
     const viewLogsButton = adminPage.getByTestId(
-      `${E2eTestId.McpLogsViewButton}-${CATALOG_ITEM_NAME}`,
+      `${E2eTestId.McpLogsViewButton}-${CATALOG_ITEM_NAME}-default`,
     );
     await viewLogsButton.click();
 
@@ -361,7 +361,7 @@ rl.on("line", (line) => {
     // ========================================
     // Click "edit your config" link in the error banner (opens settings dialog to Configuration page)
     const editConfigButton = adminPage.getByTestId(
-      `${E2eTestId.McpLogsEditConfigButton}-${CATALOG_ITEM_NAME}`,
+      `${E2eTestId.McpLogsEditConfigButton}-${CATALOG_ITEM_NAME}-default`,
     );
     await editConfigButton.click();
 
@@ -392,13 +392,20 @@ rl.on("line", (line) => {
     await argumentsInput.clear();
     await argumentsInput.fill(`-e\n${FIXED_MCP_SCRIPT}`);
 
-    // Force manual reinstall by adding a prompted env var
+    // Force manual reinstall by adding a prompted env var.
+    // Since #4696, the "Add Variable" button opens its own sub-dialog
+    // ("Add environment variable") and all env-var inputs scope to it.
+    // The new scope dropdown defaults to "Prompt at installation" — which
+    // is exactly what this test wants to force a manual reinstall — so we
+    // only need to fill the key and confirm; no scope toggle required.
     await settingsDialog.getByRole("button", { name: "Add Variable" }).click();
-    await settingsDialog.getByPlaceholder("API_KEY").first().fill("E2E_PROMPT");
-    await settingsDialog
-      .getByTestId(E2eTestId.PromptOnInstallationCheckbox)
-      .first()
-      .click({ force: true });
+    const envVarDialog = adminPage.getByRole("dialog", {
+      name: /Add environment variable/i,
+    });
+    await envVarDialog.waitFor({ state: "visible", timeout: 15_000 });
+    await envVarDialog.getByRole("textbox", { name: "Key" }).fill("E2E_PROMPT");
+    await envVarDialog.getByRole("button", { name: "Add variable" }).click();
+    await envVarDialog.waitFor({ state: "hidden", timeout: 15_000 });
 
     // Save changes (dialog stays open with keepOpenOnSave). The form's
     // footer transforms into an inline confirm bar when the save would
@@ -455,7 +462,7 @@ rl.on("line", (line) => {
       await refreshedServerCard.waitFor({ state: "visible", timeout: 30_000 });
 
       const refreshedErrorBanner = adminPage.getByTestId(
-        `${E2eTestId.McpServerError}-${CATALOG_ITEM_NAME}`,
+        `${E2eTestId.McpServerError}-${CATALOG_ITEM_NAME}-default`,
       );
       await expect(refreshedErrorBanner).not.toBeVisible({ timeout: 5000 });
 

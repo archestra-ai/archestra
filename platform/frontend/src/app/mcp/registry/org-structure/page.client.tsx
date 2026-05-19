@@ -629,9 +629,9 @@ function ValidationRegexDialog({
         <DialogHeader>
           <DialogTitle>{singular} Validation Rule</DialogTitle>
           <DialogDescription>
-            Regex that every {singular.toLowerCase()}-scoped value must match
-            when installing an MCP server in{" "}
-            <span className="font-medium">{targetName}</span>.
+            Every value configured in the{" "}
+            <span className="font-medium">{targetName}</span>{" "}
+            {singular.toLowerCase()} must match this regex.
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="space-y-4">

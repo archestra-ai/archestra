@@ -5,6 +5,7 @@ import {
 } from "@shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
+import logger from "@/logging";
 import type {
   ConversationChatError,
   InsertConversationChatError,
@@ -65,6 +66,18 @@ function normalizeChatErrorResponse(
       return reparsed.data;
     }
   }
+
+  // surfaces unexpected shapes so a producer regression doesn't stay invisible
+  logger.warn(
+    {
+      parseError: parsed.error.flatten(),
+      errorCode:
+        typeof error?.code === "string" || typeof error?.code === "number"
+          ? error.code
+          : undefined,
+    },
+    "[ConversationChatError] coercing malformed chat error to minimal response",
+  );
 
   return {
     code: ChatErrorCode.Unknown,

@@ -404,6 +404,8 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     await executionPromise;
 
     expect(mockStreamText).toHaveBeenCalledTimes(1);
-    expect(mockStreamText.mock.calls[0]?.[0].messages).toBe(compactedMessages);
+    expect(mockStreamText.mock.calls[0]?.[0].messages).toEqual(
+      compactedMessages,
+    );
   });
 });

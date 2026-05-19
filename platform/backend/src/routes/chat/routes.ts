@@ -567,6 +567,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   messages: normalizedMessagesForLLM,
                   systemPrompt,
                   trigger: "auto",
+                  abortSignal: chatAbortController.signal,
                   onCompactionStart: () => {
                     writer.write({
                       type: "data-context-compaction-start",

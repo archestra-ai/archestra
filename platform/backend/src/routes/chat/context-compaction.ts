@@ -57,6 +57,7 @@ export async function compactMessagesForChat(params: {
   systemPrompt?: string;
   trigger: ConversationCompactionTrigger;
   onCompactionStart?: () => void;
+  abortSignal?: AbortSignal;
 }): Promise<ContextCompactionResult> {
   const latestCompaction =
     await ConversationCompactionModel.findLatestByConversation(
@@ -135,6 +136,15 @@ export async function compactMessagesForChat(params: {
     };
   }
 
+  if (params.abortSignal?.aborted) {
+    return {
+      messages: existingMessages,
+      status: "skipped",
+      compaction: usableLatestCompaction,
+      reason: "aborted",
+    };
+  }
+
   try {
     params.onCompactionStart?.();
     const compaction = await createConversationCompaction({
@@ -152,6 +162,7 @@ export async function compactMessagesForChat(params: {
       originalMessages: params.messages,
       selectedModel: params.selectedModel,
       systemPrompt: params.systemPrompt,
+      abortSignal: params.abortSignal,
     });
 
     const compactedMessages = [
@@ -165,6 +176,14 @@ export async function compactMessagesForChat(params: {
       compaction,
     };
   } catch (error) {
+    if (params.abortSignal?.aborted) {
+      return {
+        messages: existingMessages,
+        status: "skipped",
+        compaction: usableLatestCompaction,
+        reason: "aborted",
+      };
+    }
     logger.warn(
       { error, conversationId: params.conversationId, trigger: params.trigger },
       "[ContextCompaction] failed to compact chat history",
@@ -199,7 +218,6 @@ export function __testEstimateChatMessagesTokens(params: {
 }
 
 export const __test = {
-  applyCompactionToMessages,
   buildInContextCompactionPrompt,
   buildCompactionPrompt,
   extractTaggedSummary,
@@ -244,12 +262,17 @@ async function createConversationCompaction(params: {
   boundaryMessageId: string;
   originalMessages: ChatMessage[];
   systemPrompt?: string;
+  abortSignal?: AbortSignal;
 }): Promise<ConversationCompaction> {
   if (params.trigger === "auto") {
     const inContextCompaction = await tryCreateInContextCompaction(params);
     if (inContextCompaction) {
       return inContextCompaction;
     }
+  }
+
+  if (params.abortSignal?.aborted) {
+    throw new Error("Compaction aborted before fallback transcript request");
   }
 
   const compactionAgent = await AgentModel.getBuiltInAgent(
@@ -307,6 +330,7 @@ async function createConversationCompaction(params: {
     prompt,
     temperature: 0,
     maxOutputTokens: CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS,
+    abortSignal: params.abortSignal,
   });
   const summary = extractTaggedSummary(result.text) ?? result.text.trim();
   if (!summary) {
@@ -345,6 +369,7 @@ async function tryCreateInContextCompaction(params: {
   boundaryMessageId: string;
   originalMessages: ChatMessage[];
   systemPrompt?: string;
+  abortSignal?: AbortSignal;
 }): Promise<ConversationCompaction | null> {
   let summary: string;
 
@@ -386,6 +411,7 @@ async function tryCreateInContextCompaction(params: {
       messages: modelMessages,
       temperature: 0,
       maxOutputTokens: CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS,
+      abortSignal: params.abortSignal,
     });
     summary = extractTaggedSummary(result.text) ?? "";
 
@@ -439,6 +465,7 @@ async function tryCreateInContextCompaction(params: {
         messages: correctedMessages,
         temperature: 0,
         maxOutputTokens: CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS,
+        abortSignal: params.abortSignal,
       });
       summary = extractTaggedSummary(corrected.text) ?? "";
     }
@@ -447,6 +474,9 @@ async function tryCreateInContextCompaction(params: {
       throw new Error("In-context compaction response missing summary tag");
     }
   } catch (error) {
+    if (params.abortSignal?.aborted) {
+      return null;
+    }
     logger.warn(
       {
         error,
@@ -539,27 +569,6 @@ async function createCompactionRecord(params: {
     originalTokenEstimate,
     compactedTokenEstimate,
   });
-}
-
-function applyCompactionToMessages(
-  messages: ChatMessage[],
-  compaction: Pick<
-    ConversationCompaction,
-    "summary" | "compactedThroughMessageId"
-  >,
-): ChatMessage[] {
-  const boundaryIndex = findMessageIndexById(
-    messages,
-    compaction.compactedThroughMessageId,
-  );
-  if (boundaryIndex < 0) {
-    return messages;
-  }
-
-  return [
-    buildSummaryMessage(compaction.summary),
-    ...messages.slice(boundaryIndex + 1),
-  ];
 }
 
 function resolveUsableCompaction<
@@ -671,6 +680,11 @@ function splitLowUserTurnMessagesForCompaction(messages: ChatMessage[]): {
     return { compactable: [], recent: messages };
   }
 
+  // when the latest message IS the user turn (mid-conversation auto-compact),
+  // keep it live as the "recent" anchor. when it isn't (manual compact after
+  // an assistant reply has landed), there's no in-flight user turn to anchor
+  // on, so everything becomes compactable and recent is empty — the next user
+  // turn will arrive after the summary on the following request.
   const recentStart =
     latestUserIndex === messages.length - 1 ? latestUserIndex : messages.length;
   const compactable = messages.slice(0, recentStart);
@@ -910,11 +924,7 @@ async function extractFileTextForCompaction(
     }
 
     if (mediaType === "application/pdf") {
-      const require = createRequire(import.meta.url);
-      const pdfParse = require("pdf-parse/lib/pdf-parse.js") as (
-        buffer: Buffer,
-      ) => Promise<{ text: string }>;
-      const parsed = await pdfParse(data.buffer);
+      const parsed = await loadPdfParser()(data.buffer);
       return truncateForCompaction(parsed.text);
     }
   } catch (error) {
@@ -1036,4 +1046,17 @@ function safeJson(value: unknown): string {
   } catch {
     return String(value);
   }
+}
+
+type PdfParser = (buffer: Buffer) => Promise<{ text: string }>;
+let pdfParserCache: PdfParser | null = null;
+
+// pdf-parse's public entry runs test code on import; the internal path is the
+// standard workaround. cache the require so we don't repeat it per file part.
+function loadPdfParser(): PdfParser {
+  if (!pdfParserCache) {
+    const require = createRequire(import.meta.url);
+    pdfParserCache = require("pdf-parse/lib/pdf-parse.js") as PdfParser;
+  }
+  return pdfParserCache;
 }

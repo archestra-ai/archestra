@@ -98,25 +98,6 @@ describe("context compaction helpers", () => {
     expect(split.recent.map((m) => m.id)).toEqual(["u2"]);
   });
 
-  test("replaces messages through the compaction boundary with a summary", () => {
-    const result = __test.applyCompactionToMessages(
-      [
-        msg("u1", "user", "one"),
-        msg("a1", "assistant", "one reply"),
-        msg("u2", "user", "two"),
-      ],
-      {
-        summary: "Earlier work was about one.",
-        compactedThroughMessageId: "a1",
-      },
-    );
-
-    expect(result).toHaveLength(2);
-    expect(result[0].role).toBe("user");
-    expect(result[0].parts?.[0].text).toContain("Earlier work was about one.");
-    expect(result[1].id).toBe("u2");
-  });
-
   test("uses latest compaction only when its boundary message exists", () => {
     const messages = [
       msg("u1", "user", "one"),

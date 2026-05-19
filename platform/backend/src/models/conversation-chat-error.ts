@@ -75,6 +75,12 @@ function normalizeChatErrorResponse(
         typeof error?.code === "string" || typeof error?.code === "number"
           ? error.code
           : undefined,
+      errorKeys:
+        error && typeof error === "object" ? Object.keys(error) : undefined,
+      originalErrorKeys:
+        error?.originalError && typeof error.originalError === "object"
+          ? Object.keys(error.originalError)
+          : undefined,
     },
     "[ConversationChatError] coercing malformed chat error to minimal response",
   );

@@ -27,7 +27,7 @@ import {
   LocalConfigEnvironmentDefaultSchema,
   SUPPORTED_EMBEDDING_DIMENSIONS,
 } from "@shared";
-import Fastify from "fastify";
+import Fastify, { type FastifyRequest } from "fastify";
 import metricsPlugin from "fastify-metrics";
 import {
   createJsonSchemaTransformObject,
@@ -298,6 +298,54 @@ export async function registerWorkerRoutes(fastify: FastifyInstanceWithZod) {
   fastify.register(routes.mcpGatewayRoutes);
 }
 
+/** Fastify code emitted when a request body exceeds the configured limit. */
+const BODY_TOO_LARGE_CODE = "FST_ERR_CTP_BODY_TOO_LARGE";
+
+/**
+ * Extract the route, URL, method, and a sample of headers we want correlated
+ * with every error log line. Without these, "HTTP 50x request error occurred"
+ * is unactionable — you can't tell which endpoint failed or how big the payload
+ * was.
+ */
+function buildRequestErrorContext(request: FastifyRequest) {
+  return {
+    method: request.method,
+    url: request.url,
+    route: request.routeOptions?.url,
+    routeId:
+      (request.routeOptions?.config as { operationId?: string } | undefined)
+        ?.operationId ?? undefined,
+    reqId: request.id,
+    contentLength: parseContentLength(request),
+    contentType: request.headers["content-type"],
+  };
+}
+
+function parseContentLength(request: FastifyRequest): number | undefined {
+  const raw = request.headers["content-length"];
+  if (typeof raw !== "string") return undefined;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function isBodyTooLargeError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const e = error as { code?: string; statusCode?: number };
+  return e.code === BODY_TOO_LARGE_CODE || e.statusCode === 413;
+}
+
+function formatBodyTooLargeMessage(params: {
+  limit: number;
+  contentLength?: number;
+}): string {
+  const limitMb = (params.limit / (1024 * 1024)).toFixed(0);
+  if (params.contentLength !== undefined) {
+    const gotMb = (params.contentLength / (1024 * 1024)).toFixed(1);
+    return `Request body too large: ${gotMb} MB (limit ${limitMb} MB). Use a smaller attachment, or raise ARCHESTRA_API_BODY_LIMIT.`;
+  }
+  return `Request body too large (limit ${limitMb} MB). Use a smaller attachment, or raise ARCHESTRA_API_BODY_LIMIT.`;
+}
+
 /**
  * Sets up logging and zod type provider + request validation & response serialization
  */
@@ -312,7 +360,9 @@ export const createFastifyInstance = () =>
     .setValidatorCompiler(validatorCompiler)
     .setSerializerCompiler(serializerCompiler)
     // https://fastify.dev/docs/latest/Reference/Server/#seterrorhandler
-    .setErrorHandler<ApiError | Error>(function (error, _request, reply) {
+    .setErrorHandler<ApiError | Error>(function (error, request, reply) {
+      const requestContext = buildRequestErrorContext(request);
+
       // Handle response serialization errors (when response doesn't match schema)
       if (isResponseSerializationError(error)) {
         const issues = error.cause?.issues ?? [];
@@ -324,6 +374,7 @@ export const createFastifyInstance = () =>
 
         this.log.error(
           {
+            ...requestContext,
             statusCode: 500,
             method: error.method,
             url: error.url,
@@ -356,7 +407,7 @@ export const createFastifyInstance = () =>
       if (hasZodFastifySchemaValidationErrors(error)) {
         const message = error.message || "Validation error";
         this.log.info(
-          { error: message, statusCode: 400 },
+          { ...requestContext, error: message, statusCode: 400 },
           "HTTP 400 validation error occurred",
         );
 
@@ -368,25 +419,50 @@ export const createFastifyInstance = () =>
         });
       }
 
+      // Handle Fastify "body too large" before the generic Error branch so it
+      // returns 413 (not 500) with a message that names the limit and observed
+      // size. The frontend chat-error mapper picks up `error.message`, so a
+      // useful text here flows straight into the UI.
+      if (isBodyTooLargeError(error)) {
+        const limit = config.api.bodyLimit;
+        const contentLength = parseContentLength(request);
+        const message = formatBodyTooLargeMessage({ limit, contentLength });
+
+        this.log.warn(
+          {
+            ...requestContext,
+            statusCode: 413,
+            code: (error as { code?: string }).code ?? BODY_TOO_LARGE_CODE,
+            bodyLimit: limit,
+            contentLength,
+          },
+          "HTTP 413 request body too large",
+        );
+
+        return reply.status(413).send({
+          error: {
+            message,
+            type: "api_payload_too_large_error",
+          },
+        });
+      }
+
       // Handle ApiError objects
       if (error instanceof ApiError) {
         const { statusCode, message, type, internalCode } = error;
+        const logPayload = {
+          ...requestContext,
+          error: message,
+          statusCode,
+          ...(internalCode && { internalCode }),
+        };
 
         if (statusCode >= 500) {
-          this.log.error(
-            { error: message, statusCode },
-            "HTTP 50x request error occurred",
-          );
+          this.log.error(logPayload, "HTTP 50x request error occurred");
         } else if (statusCode >= 400) {
-          this.log.info(
-            { error: message, statusCode },
-            "HTTP 40x request error occurred",
-          );
+          this.log.info(logPayload, "HTTP 40x request error occurred");
         } else {
-          this.log.error(
-            { error: message, statusCode },
-            "HTTP request error occurred",
-          );
+          this.log.error(logPayload, "HTTP request error occurred");
         }
 
         return reply.status(statusCode).send({
@@ -401,9 +477,16 @@ export const createFastifyInstance = () =>
       // Handle standard Error objects
       const message = error.message || "Internal server error";
       const statusCode = 500;
+      const errorCode = (error as { code?: string }).code;
 
       this.log.error(
-        { error: message, statusCode },
+        {
+          ...requestContext,
+          error: message,
+          statusCode,
+          ...(errorCode && { code: errorCode }),
+          stack: error.stack,
+        },
         "HTTP 50x request error occurred",
       );
 

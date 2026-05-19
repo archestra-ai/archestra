@@ -14,7 +14,9 @@ import {
   AgentModel,
   AgentToolModel,
   InternalMcpCatalogModel,
+  McpPresetEntryModel,
   McpServerModel,
+  OrganizationModel,
   TeamModel,
   ToolModel,
 } from "@/models";
@@ -41,6 +43,7 @@ import {
   SelectMcpServerSchema,
   UuidIdSchema,
 } from "@/types";
+import { validateValuesAgainstRegex } from "@/utils/validate-values-against-regex";
 import { broadcastMcpInstallationStatus } from "@/websocket";
 
 const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -185,6 +188,43 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         if (!catalogItem) {
           throw new ApiError(400, "Catalog item not found");
+        }
+
+        // Enforce the preset entry's validation regex (child install) or the
+        // org-wide default regex (parent install) against every prompted user
+        // value. Vault-reference paths (isByosVault) are pre-validated lookups,
+        // not user-entered strings — skip them.
+        if (!isByosVault) {
+          let applicableRegex: string | null = null;
+          let applicableName = "Default";
+          if (catalogItem.presetEntryId) {
+            const entry = await McpPresetEntryModel.findByIdForOrganization(
+              catalogItem.presetEntryId,
+              organizationId,
+            );
+            applicableRegex = entry?.validationRegex ?? null;
+            applicableName = entry?.name ?? "Default";
+          } else {
+            const org = await OrganizationModel.getById(organizationId);
+            applicableRegex = org?.presetEntityDefaultValidationRegex ?? null;
+            applicableName = org?.presetEntityDefaultLabel ?? "Default";
+          }
+          if (applicableRegex) {
+            try {
+              validateValuesAgainstRegex(
+                userConfigValues,
+                applicableRegex,
+                applicableName,
+              );
+              validateValuesAgainstRegex(
+                environmentValues,
+                applicableRegex,
+                applicableName,
+              );
+            } catch (e) {
+              throw new ApiError(400, (e as Error).message);
+            }
+          }
         }
 
         // Playwright browser preview can only be installed as a personal server

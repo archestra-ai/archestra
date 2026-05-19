@@ -7,6 +7,7 @@ interface PresetEntryWithAssignedCount {
   organizationId: string;
   name: string;
   sortOrder: number;
+  validationRegex: string | null;
   createdAt: Date;
   assignedCatalogCount: number;
 }
@@ -21,6 +22,7 @@ class McpPresetEntryModel {
         organizationId: schema.mcpPresetEntriesTable.organizationId,
         name: schema.mcpPresetEntriesTable.name,
         sortOrder: schema.mcpPresetEntriesTable.sortOrder,
+        validationRegex: schema.mcpPresetEntriesTable.validationRegex,
         createdAt: schema.mcpPresetEntriesTable.createdAt,
         assignedCatalogCount: sql<number>`(
           SELECT COUNT(*)::int
@@ -58,17 +60,38 @@ class McpPresetEntryModel {
   static async create(params: {
     organizationId: string;
     name: string;
+    validationRegex?: string | null;
   }): Promise<typeof schema.mcpPresetEntriesTable.$inferSelect> {
-    const { organizationId, name } = params;
+    const { organizationId, name, validationRegex } = params;
     const [row] = await db
       .insert(schema.mcpPresetEntriesTable)
       .values({
         organizationId,
         name,
+        validationRegex: validationRegex ?? null,
         sortOrder: await McpPresetEntryModel.nextSortOrder(organizationId),
       })
       .returning();
     return row;
+  }
+
+  static async update(params: {
+    id: string;
+    organizationId: string;
+    validationRegex: string | null;
+  }): Promise<typeof schema.mcpPresetEntriesTable.$inferSelect | null> {
+    const { id, organizationId, validationRegex } = params;
+    const [row] = await db
+      .update(schema.mcpPresetEntriesTable)
+      .set({ validationRegex })
+      .where(
+        and(
+          eq(schema.mcpPresetEntriesTable.id, id),
+          eq(schema.mcpPresetEntriesTable.organizationId, organizationId),
+        ),
+      )
+      .returning();
+    return row ?? null;
   }
 
   static async delete(id: string, organizationId: string): Promise<boolean> {

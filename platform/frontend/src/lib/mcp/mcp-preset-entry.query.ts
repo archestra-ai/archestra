@@ -50,6 +50,31 @@ export function useCreateMcpPresetEntry() {
   });
 }
 
+export function useUpdateMcpPresetEntry() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: {
+      id: string;
+      body: archestraApiTypes.UpdateMcpPresetEntryData["body"];
+    }) => {
+      const { data, error } = await archestraApiSdk.updateMcpPresetEntry({
+        path: { id: params.id },
+        body: params.body,
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (entry) => {
+      if (!entry) return;
+      queryClient.invalidateQueries({ queryKey: mcpPresetEntryKeys.list() });
+      toast.success(`${entry.name} updated`);
+    },
+  });
+}
+
 export function useDeleteMcpPresetEntry() {
   const queryClient = useQueryClient();
   return useMutation({

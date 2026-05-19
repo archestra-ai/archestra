@@ -1,5 +1,5 @@
 {
-  "id": "42893065-30fc-4cf5-8e54-99860f58e2f1",
+  "id": "7007e1f4-802b-409a-b289-ce18a049d756",
   "prevId": "78bedb87-c35b-47d5-a1ba-80f1474b386a",
   "version": "7",
   "dialect": "postgresql",
@@ -1207,12 +1207,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "model_id": {
-          "name": "model_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "identity_provider_id": {
           "name": "identity_provider_id",
           "type": "text",
@@ -1405,19 +1399,6 @@
           "tableTo": "chat_api_keys",
           "columnsFrom": [
             "llm_api_key_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "agents_model_id_models_id_fk": {
-          "name": "agents_model_id_models_id_fk",
-          "tableFrom": "agents",
-          "tableTo": "models",
-          "columnsFrom": [
-            "model_id"
           ],
           "columnsTo": [
             "id"
@@ -2648,12 +2629,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "model_id": {
-          "name": "model_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "has_custom_tool_selection": {
           "name": "has_custom_tool_selection",
           "type": "boolean",
@@ -2715,19 +2690,6 @@
           "tableTo": "chat_api_keys",
           "columnsFrom": [
             "chat_api_key_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "conversations_model_id_models_id_fk": {
-          "name": "conversations_model_id_models_id_fk",
-          "tableFrom": "conversations",
-          "tableTo": "models",
-          "columnsFrom": [
-            "model_id"
           ],
           "columnsTo": [
             "id"
@@ -5475,6 +5437,12 @@
           "notNull": true,
           "default": 0
         },
+        "validation_regex": {
+          "name": "validation_regex",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -6068,18 +6036,6 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
-        },
-        "default_model_id": {
-          "name": "default_model_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "default_chat_api_key_id": {
-          "name": "default_chat_api_key_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
@@ -6138,32 +6094,6 @@
           "tableTo": "agents",
           "columnsFrom": [
             "default_agent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "member_default_model_id_models_id_fk": {
-          "name": "member_default_model_id_models_id_fk",
-          "tableFrom": "member",
-          "tableTo": "models",
-          "columnsFrom": [
-            "default_model_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "member_default_chat_api_key_id_chat_api_keys_id_fk": {
-          "name": "member_default_chat_api_key_id_chat_api_keys_id_fk",
-          "tableFrom": "member",
-          "tableTo": "chat_api_keys",
-          "columnsFrom": [
-            "default_chat_api_key_id"
           ],
           "columnsTo": [
             "id"
@@ -7310,12 +7240,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "default_model_id": {
-          "name": "default_model_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "default_llm_api_key_id": {
           "name": "default_llm_api_key_id",
           "type": "uuid",
@@ -7490,21 +7414,7 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {
-        "organization_default_model_id_models_id_fk": {
-          "name": "organization_default_model_id_models_id_fk",
-          "tableFrom": "organization",
-          "tableTo": "models",
-          "columnsFrom": [
-            "default_model_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "organization_slug_unique": {

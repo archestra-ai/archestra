@@ -1,6 +1,7 @@
 export * from "./agents";
 export * from "./archestra-mcp-server";
 export * from "./built-in-agents";
+export * from "./catalog-runtime-fields";
 export * from "./chat";
 export * from "./chat-error";
 export * from "./consts";

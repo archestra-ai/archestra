@@ -1,4 +1,9 @@
-import { isBuiltInCatalogId, isPlaywrightCatalogItem, RouteId } from "@shared";
+import {
+  isBuiltInCatalogId,
+  isMetadataOnlyEdit,
+  isPlaywrightCatalogItem,
+  RouteId,
+} from "@shared";
 import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -16,6 +21,7 @@ import {
   McpCatalogLabelModel,
   McpPresetEntryModel,
   McpServerModel,
+  OrganizationModel,
   TeamModel,
   ToolModel,
 } from "@/models";
@@ -40,6 +46,7 @@ import {
   type UserConfigFieldDefault,
   UuidIdSchema,
 } from "@/types";
+import { validateValuesAgainstRegex } from "@/utils/validate-values-against-regex";
 import { broadcastMcpInstallationStatus } from "@/websocket";
 
 /**
@@ -785,6 +792,28 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           originalCatalogItem.userConfig,
           restBody.userConfig,
         );
+      // Enforce the org-wide default validation regex against incoming
+      // default-scoped values. Symmetric to the entry-regex check on the
+      // child PATCH route — without it, hitting this endpoint directly (curl,
+      // stale frontend, scripts) bypasses the inline UI guard and persists
+      // forbidden values into the parent's `presetFieldValues`.
+      if (restBody.presetFieldValues !== undefined) {
+        const org = await OrganizationModel.getById(request.organizationId);
+        const defaultRegex = org?.presetEntityDefaultValidationRegex ?? null;
+        if (defaultRegex) {
+          const defaultLabel = org?.presetEntityDefaultLabel ?? "Default";
+          try {
+            validateValuesAgainstRegex(
+              restBody.presetFieldValues,
+              defaultRegex,
+              defaultLabel,
+            );
+          } catch (e) {
+            throw new ApiError(400, (e as Error).message);
+          }
+        }
+      }
+
       if (restBody.presetFieldValues !== undefined || secretKeysChanged) {
         const repartitioned = await repartitionStoredPresetValues({
           row: {
@@ -1264,6 +1293,11 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           parent,
           presetFieldValues,
         );
+        validateValuesAgainstRegex(
+          presetFieldValues,
+          entry.validationRegex,
+          entry.name,
+        );
       } catch (e) {
         throw new ApiError(400, (e as Error).message);
       }
@@ -1357,6 +1391,24 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             parent,
             presetFieldValues,
           );
+
+        if (originalChild.presetEntryId) {
+          const entry = await McpPresetEntryModel.findByIdForOrganization(
+            originalChild.presetEntryId,
+            request.organizationId,
+          );
+          if (entry?.validationRegex) {
+            try {
+              validateValuesAgainstRegex(
+                sanitized,
+                entry.validationRegex,
+                entry.name,
+              );
+            } catch (e) {
+              throw new ApiError(400, (e as Error).message);
+            }
+          }
+        }
 
         const { nonSecretFieldValues, presetSecretId } =
           await partitionPresetFieldValuesAndUpsertSecrets({
@@ -1669,6 +1721,25 @@ async function cascadeReinstallForCatalog(
 ): Promise<void> {
   const installedServers = await McpServerModel.findByCatalogId(catalogItem.id);
   if (installedServers.length === 0) return;
+
+  // Skip the cascade when only metadata fields changed. List in
+  // `shared/catalog-runtime-fields.ts`.
+  //
+  // Tradeoff: `originalCatalogItem` is fetched with `expandSecrets: true`
+  // (the route body needs expanded secrets downstream); `Model.update`
+  // returns the unexpanded row. For catalogs carrying any secret bag
+  // pointer, the expanded vs unexpanded shapes differ even with no real
+  // edit, so the predicate returns false and we cascade. That is the
+  // safe direction (pre-fix baseline) and `hasSecretBag` in
+  // `edit-catalog-dialog.tsx` mirrors it on the UI side. The
+  // optimization applies cleanly to non-bag catalogs.
+  if (isMetadataOnlyEdit(originalCatalogItem, catalogItem)) {
+    logger.info(
+      { catalogId: catalogItem.id, serverCount: installedServers.length },
+      "Catalog edit is metadata-only - skipping reinstall",
+    );
+    return;
+  }
 
   if (requiresNewUserInputForReinstall(originalCatalogItem, catalogItem)) {
     logger.info(

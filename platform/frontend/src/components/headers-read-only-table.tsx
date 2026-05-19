@@ -21,7 +21,7 @@ interface HeadersReadOnlyTableProps<TFieldValues extends FieldValues> {
 }
 
 const GRID_CLASS =
-  "grid grid-cols-[1.6fr_0.6fr_1.4fr_0.5fr_2.5fr_auto] gap-3 px-4";
+  "grid grid-cols-[1.6fr_1.4fr_0.6fr_0.5fr_0.7fr_2.2fr_auto] gap-3 px-4";
 
 export function HeadersReadOnlyTable<TFieldValues extends FieldValues>({
   form,
@@ -36,9 +36,10 @@ export function HeadersReadOnlyTable<TFieldValues extends FieldValues>({
         className={`${GRID_CLASS} border-b py-2.5 text-xs font-medium text-foreground`}
       >
         <div>Header name</div>
-        <div>Required</div>
         <div>Value</div>
+        <div>Required</div>
         <div>Bearer</div>
+        <div>Sensitive</div>
         <div>Description</div>
         <div className="w-9" />
       </div>
@@ -74,6 +75,11 @@ export function HeadersReadOnlyTable<TFieldValues extends FieldValues>({
             `${fieldNamePrefix}.${index}.includeBearerPrefix` as FieldPath<TFieldValues>,
           ),
         );
+        const sensitive = Boolean(
+          form.watch(
+            `${fieldNamePrefix}.${index}.sensitive` as FieldPath<TFieldValues>,
+          ),
+        );
         const description = form.watch(
           `${fieldNamePrefix}.${index}.description` as FieldPath<TFieldValues>,
         ) as string | undefined;
@@ -98,6 +104,9 @@ export function HeadersReadOnlyTable<TFieldValues extends FieldValues>({
                 <span className="text-muted-foreground italic">unnamed</span>
               )}
             </div>
+            <div className="min-w-0">
+              <ValueCell scope={scope} value={value} />
+            </div>
             <div>
               {scope === "installation" && required ? (
                 <Check className="h-3.5 w-3.5 text-foreground" />
@@ -105,11 +114,15 @@ export function HeadersReadOnlyTable<TFieldValues extends FieldValues>({
                 <span className="text-muted-foreground">—</span>
               )}
             </div>
-            <div className="min-w-0">
-              <ValueCell scope={scope} value={value} />
-            </div>
             <div>
               {includeBearerPrefix ? (
+                <Check className="h-3.5 w-3.5 text-foreground" />
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              )}
+            </div>
+            <div>
+              {sensitive ? (
                 <Check className="h-3.5 w-3.5 text-foreground" />
               ) : (
                 <span className="text-muted-foreground">—</span>

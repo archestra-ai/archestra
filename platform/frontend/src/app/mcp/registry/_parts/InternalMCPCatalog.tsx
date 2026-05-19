@@ -1453,7 +1453,21 @@ export function InternalMCPCatalog({
               serverInfo.installedServer?.reinstallRequired &&
               !isInErrorState
             ) {
-              handleReinstall(item);
+              // If the same edit also set catalogReinstallRequired (multi-tenant
+              // local catalog whose execution config changed), chain the catalog
+              // reinstall after the per-install one — otherwise the admin would
+              // see the catalog Reinstall button reappear and have to click it
+              // separately.
+              const alsoReinstallCatalog =
+                item.multitenant === true &&
+                item.catalogReinstallRequired === true;
+              handleReinstall(
+                item,
+                undefined,
+                alsoReinstallCatalog
+                  ? { alsoReinstallCatalog: true }
+                  : undefined,
+              );
             }
           }
         }}

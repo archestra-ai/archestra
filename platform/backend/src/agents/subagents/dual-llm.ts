@@ -14,7 +14,7 @@ import type {
 } from "@/types";
 import {
   resolveConfiguredAgentLlm,
-  resolveSmartDefaultLlm,
+  resolveBestAvailableLlm,
 } from "@/utils/llm-resolution";
 
 export class DualLlmSubagent {
@@ -262,7 +262,8 @@ async function resolveBuiltInAgentSelection(params: {
 }> {
   const { agent, organizationId, userId } = params;
 
-  // Agent's explicitly configured model/key, then the org-wide smart default.
+  // Agent's explicitly configured model/key, then the best available LLM
+  // across the org's keys.
   const configured = await resolveConfiguredAgentLlm({
     llmApiKeyId: agent.llmApiKeyId,
     modelId: agent.modelId,
@@ -271,9 +272,12 @@ async function resolveBuiltInAgentSelection(params: {
     return configured;
   }
 
-  const smartDefault = await resolveSmartDefaultLlm({ organizationId, userId });
-  if (smartDefault) {
-    return smartDefault;
+  const bestAvailable = await resolveBestAvailableLlm({
+    organizationId,
+    userId,
+  });
+  if (bestAvailable) {
+    return bestAvailable;
   }
 
   return {

@@ -132,7 +132,7 @@ export async function resolveConversationModel(
  *
  * Returns null if no provider has both a key and a synced model.
  */
-export async function resolveSmartDefaultLlm(params: {
+export async function resolveBestAvailableLlm(params: {
   organizationId: string;
   userId?: string;
 }): Promise<ResolvedLlmSelection | null> {

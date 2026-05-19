@@ -15,7 +15,7 @@ import {
   resolveConfiguredAgentLlm,
   resolveConversationLlmSelectionForAgent,
   resolveFastModelName,
-  resolveSmartDefaultLlm,
+  resolveBestAvailableLlm,
 } from "./llm-resolution";
 
 vi.mock("@/clients/gemini-client", () => ({
@@ -57,7 +57,7 @@ function mockModel(
   return { ...MOCK_MODEL, ...over };
 }
 
-describe("resolveSmartDefaultLlm", () => {
+describe("resolveBestAvailableLlm", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     // Default: no provider has a key
@@ -73,7 +73,7 @@ describe("resolveSmartDefaultLlm", () => {
   }) => {
     const org = await makeOrganization();
 
-    const result = await resolveSmartDefaultLlm({ organizationId: org.id });
+    const result = await resolveBestAvailableLlm({ organizationId: org.id });
 
     expect(result).toBeNull();
   });
@@ -104,7 +104,7 @@ describe("resolveSmartDefaultLlm", () => {
       return null;
     });
 
-    const result = await resolveSmartDefaultLlm({ organizationId: org.id });
+    const result = await resolveBestAvailableLlm({ organizationId: org.id });
 
     expect(result).toEqual({
       provider: "anthropic",
@@ -148,7 +148,7 @@ describe("resolveSmartDefaultLlm", () => {
       return null;
     });
 
-    const result = await resolveSmartDefaultLlm({ organizationId: org.id });
+    const result = await resolveBestAvailableLlm({ organizationId: org.id });
 
     expect(result).toEqual({
       provider: "gemini",
@@ -202,7 +202,7 @@ describe("resolveSmartDefaultLlm", () => {
       return null;
     });
 
-    const result = await resolveSmartDefaultLlm({ organizationId: org.id });
+    const result = await resolveBestAvailableLlm({ organizationId: org.id });
 
     // Should skip anthropic (no models) and return openai
     expect(result).toEqual({
@@ -235,7 +235,7 @@ describe("resolveSmartDefaultLlm", () => {
       MOCK_MODEL,
     );
 
-    const result = await resolveSmartDefaultLlm({ organizationId: org.id });
+    const result = await resolveBestAvailableLlm({ organizationId: org.id });
 
     expect(result).not.toBeNull();
     // Verify resolveProviderApiKey was called without userId
@@ -250,7 +250,7 @@ describe("resolveSmartDefaultLlm", () => {
   test("passes userId when provided", async ({ makeOrganization }) => {
     const org = await makeOrganization();
 
-    await resolveSmartDefaultLlm({
+    await resolveBestAvailableLlm({
       organizationId: org.id,
       userId: "user-123",
     });
@@ -276,7 +276,7 @@ describe("resolveSmartDefaultLlm", () => {
       baseUrl: null,
     });
 
-    const result = await resolveSmartDefaultLlm({ organizationId: org.id });
+    const result = await resolveBestAvailableLlm({ organizationId: org.id });
 
     expect(result).toBeNull();
   });
@@ -304,7 +304,7 @@ describe("resolveSmartDefaultLlm", () => {
       null,
     );
 
-    const result = await resolveSmartDefaultLlm({ organizationId: org.id });
+    const result = await resolveBestAvailableLlm({ organizationId: org.id });
 
     expect(result).toBeNull();
   });

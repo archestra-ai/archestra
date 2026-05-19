@@ -725,6 +725,35 @@ describe("organization routes", () => {
     });
   });
 
+  describe("PATCH /api/organization/preset-entity-default-validation-regex", () => {
+    test("sets and clears the default validation regex", async () => {
+      const setRes = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/preset-entity-default-validation-regex",
+        payload: { presetEntityDefaultValidationRegex: "^[a-z]+$" },
+      });
+      expect(setRes.statusCode).toBe(200);
+      expect(setRes.json().presetEntityDefaultValidationRegex).toBe("^[a-z]+$");
+
+      const clearRes = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/preset-entity-default-validation-regex",
+        payload: { presetEntityDefaultValidationRegex: null },
+      });
+      expect(clearRes.statusCode).toBe(200);
+      expect(clearRes.json().presetEntityDefaultValidationRegex).toBeNull();
+    });
+
+    test("rejects an invalid regex", async () => {
+      const res = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/preset-entity-default-validation-regex",
+        payload: { presetEntityDefaultValidationRegex: "(" },
+      });
+      expect(res.statusCode).toBe(400);
+    });
+  });
+
   describe("POST /api/organization/knowledge-settings/test-embedding", () => {
     test("passes configured embedding dimensions to callEmbedding", async ({
       makeSecret,

@@ -25,6 +25,13 @@ const mcpPresetEntriesTable = pgTable(
       .references(() => organizationsTable.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     sortOrder: integer("sort_order").notNull().default(0),
+    /**
+     * Optional JavaScript-compatible regex source applied to every
+     * preset-scoped field value and every prompted user field value when an
+     * MCP server is installed against this preset. The pattern is stored
+     * without delimiters or flags. NULL means no preset-level validation.
+     */
+    validationRegex: text("validation_regex"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [

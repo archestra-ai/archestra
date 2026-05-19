@@ -1,0 +1,1 @@
+ALTER TABLE "mcp_preset_entry" ADD COLUMN "validation_regex" text;

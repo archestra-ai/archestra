@@ -35731,6 +35731,7 @@ export type ListMcpPresetEntriesResponses = {
         organizationId: string;
         name: string;
         sortOrder: number;
+        validationRegex: string | null;
         createdAt: string;
         assignedCatalogCount: number;
     }>;
@@ -35741,6 +35742,7 @@ export type ListMcpPresetEntriesResponse = ListMcpPresetEntriesResponses[keyof L
 export type CreateMcpPresetEntryData = {
     body: {
         name: string;
+        validationRegex?: string | null;
     };
     path?: never;
     query?: never;
@@ -35821,6 +35823,7 @@ export type CreateMcpPresetEntryResponses = {
         organizationId: string;
         name: string;
         sortOrder: number;
+        validationRegex: string | null;
         createdAt: string;
     };
 };
@@ -35911,6 +35914,98 @@ export type DeleteMcpPresetEntryResponses = {
 };
 
 export type DeleteMcpPresetEntryResponse = DeleteMcpPresetEntryResponses[keyof DeleteMcpPresetEntryResponses];
+
+export type UpdateMcpPresetEntryData = {
+    body: {
+        validationRegex: string | null;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/organization/mcp-preset-entries/{id}';
+};
+
+export type UpdateMcpPresetEntryErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateMcpPresetEntryError = UpdateMcpPresetEntryErrors[keyof UpdateMcpPresetEntryErrors];
+
+export type UpdateMcpPresetEntryResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        sortOrder: number;
+        validationRegex: string | null;
+        createdAt: string;
+    };
+};
+
+export type UpdateMcpPresetEntryResponse = UpdateMcpPresetEntryResponses[keyof UpdateMcpPresetEntryResponses];
 
 export type McpProxyPostData = {
     body: {
@@ -42094,6 +42189,7 @@ export type GetOrganizationResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -42371,6 +42467,7 @@ export type UpdateAppearanceSettingsResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -42519,6 +42616,7 @@ export type UpdateSecuritySettingsResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -42670,6 +42768,7 @@ export type UpdateLlmSettingsResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -42820,6 +42919,7 @@ export type UpdateAgentSettingsResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -42977,6 +43077,7 @@ export type UpdateConnectionSettingsResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -43125,6 +43226,7 @@ export type UpdatePresetEntityNameResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -43272,10 +43374,159 @@ export type UpdatePresetEntityDefaultLabelResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
 export type UpdatePresetEntityDefaultLabelResponse = UpdatePresetEntityDefaultLabelResponses[keyof UpdatePresetEntityDefaultLabelResponses];
+
+export type UpdatePresetEntityDefaultValidationRegexData = {
+    body: {
+        presetEntityDefaultValidationRegex: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/preset-entity-default-validation-regex';
+};
+
+export type UpdatePresetEntityDefaultValidationRegexErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdatePresetEntityDefaultValidationRegexError = UpdatePresetEntityDefaultValidationRegexErrors[keyof UpdatePresetEntityDefaultValidationRegexErrors];
+
+export type UpdatePresetEntityDefaultValidationRegexResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        slug: string;
+        logo: string | null;
+        logoDark: string | null;
+        createdAt: string;
+        metadata: string | null;
+        onboardingComplete: boolean;
+        theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
+        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
+        convertToolResultsToToon: boolean;
+        compressionScope: 'organization' | 'team';
+        globalToolPolicy: 'permissive' | 'restrictive';
+        allowChatFileUploads: boolean;
+        embeddingModel: string | null;
+        embeddingDimensions: EmbeddingDimensions | null;
+        embeddingChatApiKeyId: string | null;
+        rerankerChatApiKeyId: string | null;
+        rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+        defaultLlmApiKeyId: string | null;
+        defaultUserLimitValue: number | null;
+        defaultUserLimitModel: Array<string> | null;
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatLinks: Array<{
+            label: string;
+            url: string;
+        }> | null;
+        onboardingWizard: {
+            label: string;
+            pages: Array<{
+                image?: string | null;
+                content: string;
+            }>;
+        } | null;
+        chatPlaceholders: Array<string> | null;
+        animateChatPlaceholders: boolean;
+        iconLogo: string | null;
+        iconLogoDark: string | null;
+        chatErrorSupportMessage: string | null;
+        slimChatErrorUi: boolean;
+        showTwoFactor: boolean;
+        oauthAccessTokenLifetimeSeconds: number;
+        connectionDefaultMcpGatewayId: string | null;
+        connectionDefaultLlmProxyId: string | null;
+        connectionDefaultClientId: string | null;
+        connectionShownClientIds: Array<string> | null;
+        connectionShownProviders: Array<string> | null;
+        connectionBaseUrls: Array<{
+            url: string;
+            description: string;
+            isDefault: boolean;
+            visible: boolean;
+        }> | null;
+        presetEntityName: string | null;
+        presetEntityNamePlural: string | null;
+        presetEntityDefaultLabel: string | null;
+        presetEntityDefaultValidationRegex: string | null;
+    };
+};
+
+export type UpdatePresetEntityDefaultValidationRegexResponse = UpdatePresetEntityDefaultValidationRegexResponses[keyof UpdatePresetEntityDefaultValidationRegexResponses];
 
 export type UpdateAuthSettingsData = {
     body: {
@@ -43420,6 +43671,7 @@ export type UpdateAuthSettingsResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -43570,6 +43822,7 @@ export type UpdateKnowledgeSettingsResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -43715,6 +43968,7 @@ export type DropEmbeddingConfigResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -43949,6 +44203,7 @@ export type CompleteOnboardingResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        presetEntityDefaultValidationRegex: string | null;
     };
 };
 

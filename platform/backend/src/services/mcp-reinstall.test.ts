@@ -25,12 +25,14 @@ vi.mock("@/models", async (importOriginal) => {
   };
 });
 
+import { CASCADE_SCENARIOS, CATALOG_SHAPES, isMetadataOnlyEdit } from "@shared";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import { McpServerModel, ToolModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { InternalMcpCatalog, McpServer } from "@/types";
 import {
   autoReinstallServer,
+  onlyForwardCompatibleEnvDiff,
   requiresNewUserInputForReinstall,
 } from "./mcp-reinstall";
 
@@ -99,19 +101,41 @@ describe("mcp-reinstall", () => {
         expect(result).toBe(false);
       });
 
-      test("returns true when prompted env var is ADDED", () => {
+      test("returns true when a REQUIRED prompted env var is ADDED", () => {
+        // Existing installs are missing a value they're now required to
+        // provide → reinstall so the user can be re-prompted.
         const oldConfig = createLocalCatalog([]);
         const newConfig = createLocalCatalog([
           {
             key: "API_KEY",
             type: "secret" as const,
             promptOnInstallation: true,
+            required: true,
           },
         ]);
 
         const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
 
         expect(result).toBe(true);
+      });
+
+      test("returns false when an OPTIONAL prompted env var is ADDED", () => {
+        // Schema-evolution: existing installs without the new optional
+        // var are still valid. They can adopt it on the next manual
+        // reinstall but shouldn't be force-flagged.
+        const oldConfig = createLocalCatalog([]);
+        const newConfig = createLocalCatalog([
+          {
+            key: "OPTIONAL_HINT",
+            type: "plain_text" as const,
+            promptOnInstallation: true,
+            required: false,
+          },
+        ]);
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
       });
 
       test("returns false when prompted env var is UNCHANGED", () => {
@@ -130,7 +154,7 @@ describe("mcp-reinstall", () => {
         expect(result).toBe(false);
       });
 
-      test("returns true when new prompted env var is ADDED to existing ones", () => {
+      test("returns true when a new REQUIRED prompted env var is ADDED to existing ones", () => {
         const oldConfig = createLocalCatalog([
           {
             key: "API_KEY",
@@ -148,12 +172,91 @@ describe("mcp-reinstall", () => {
             key: "NEW_SECRET",
             type: "secret" as const,
             promptOnInstallation: true,
+            required: true,
           },
         ]);
 
         const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
 
         expect(result).toBe(true);
+      });
+
+      test("returns false when an OPTIONAL prompted env var is ADDED to existing ones", () => {
+        const oldConfig = createLocalCatalog([
+          {
+            key: "API_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+          },
+        ]);
+        const newConfig = createLocalCatalog([
+          {
+            key: "API_KEY",
+            type: "secret" as const,
+            promptOnInstallation: true,
+          },
+          {
+            key: "NEW_OPTIONAL",
+            type: "plain_text" as const,
+            promptOnInstallation: true,
+            required: false,
+          },
+        ]);
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("returns true when prompted env var required flag flips false → true", () => {
+        // An optional var becoming required invalidates installs that
+        // didn't fill it.
+        const oldConfig = createLocalCatalog([
+          {
+            key: "TOKEN",
+            type: "secret" as const,
+            promptOnInstallation: true,
+            required: false,
+          },
+        ]);
+        const newConfig = createLocalCatalog([
+          {
+            key: "TOKEN",
+            type: "secret" as const,
+            promptOnInstallation: true,
+            required: true,
+          },
+        ]);
+
+        expect(requiresNewUserInputForReinstall(oldConfig, newConfig)).toBe(
+          true,
+        );
+      });
+
+      test("returns false when prompted env var required flag flips true → false", () => {
+        // A required var becoming optional doesn't invalidate any
+        // existing install (the value they already provided is still
+        // valid, it's just no longer mandatory).
+        const oldConfig = createLocalCatalog([
+          {
+            key: "TOKEN",
+            type: "secret" as const,
+            promptOnInstallation: true,
+            required: true,
+          },
+        ]);
+        const newConfig = createLocalCatalog([
+          {
+            key: "TOKEN",
+            type: "secret" as const,
+            promptOnInstallation: true,
+            required: false,
+          },
+        ]);
+
+        expect(requiresNewUserInputForReinstall(oldConfig, newConfig)).toBe(
+          false,
+        );
       });
 
       test("returns true when prompted env var is REMOVED", () => {
@@ -1017,5 +1120,103 @@ describe("mcp-reinstall", () => {
         reinstallRequired: false,
       });
     });
+  });
+});
+
+/**
+ * Scenario-matrix sweep — runs every entry in `CASCADE_SCENARIOS` (the
+ * shared cross-layer cascade behavior contract) against the backend's
+ * cascade decision logic.
+ *
+ *   • Individual predicate checks — `isMetadataOnlyEdit`,
+ *     `requiresNewUserInputForReinstall`. Catches algebra changes in a
+ *     single predicate.
+ *
+ *   • Full-cascade-outcome — simulates the route's gate decision tree
+ *     (`isMetadataOnlyEdit` → `onlyForwardCompatibleEnvDiff` →
+ *     `requiresNewUserInputForReinstall` → auto), maps to a
+ *     `CascadeOutcome`, and asserts it equals the scenario's intent.
+ *     This is the authoritative end-to-end check the user actually
+ *     experiences.
+ *
+ * Adding a scenario to `shared/cascade-scenarios.ts` automatically
+ * extends both sweeps. Failures here mean the backend's behavior has
+ * diverged from the contract — either the code needs a fix, or the
+ * scenario's expectation needs an update with reviewer sign-off.
+ */
+
+/**
+ * Pure simulator of `cascadeReinstallForCatalog`'s gate decision tree
+ * (`backend/src/routes/internal-mcp-catalog.ts:1722-1739` at the time
+ * of writing). Returns the cascade outcome a real catalog edit would
+ * produce, without touching the DB, running setImmediate, or doing the
+ * actual pod restart. Keep in sync with the route's gate or this test
+ * will go quiet on real regressions.
+ */
+function simulateCascadeOutcome(
+  prev: InternalMcpCatalog,
+  next: InternalMcpCatalog,
+): "skip" | "auto" | "manual" {
+  if (
+    isMetadataOnlyEdit(
+      prev as unknown as Record<string, unknown>,
+      next as unknown as Record<string, unknown>,
+    )
+  ) {
+    return "skip";
+  }
+  if (onlyForwardCompatibleEnvDiff(prev, next)) {
+    return "skip";
+  }
+  if (requiresNewUserInputForReinstall(prev, next)) {
+    return "manual";
+  }
+  return "auto";
+}
+
+describe("cascade scenarios — backend predicate sweep", () => {
+  test.each(CASCADE_SCENARIOS)("$id ($expected): $userAction", (scenario) => {
+    const prev = CATALOG_SHAPES[
+      scenario.shape
+    ] as unknown as InternalMcpCatalog;
+    const next = scenario.edit(
+      CATALOG_SHAPES[scenario.shape],
+    ) as unknown as InternalMcpCatalog;
+
+    // 1. Shared predicate agreement (sanity — backend uses the same
+    //    predicate the shared baseline test verifies).
+    const isMetadataOnly = isMetadataOnlyEdit(
+      prev as unknown as Record<string, unknown>,
+      next as unknown as Record<string, unknown>,
+    );
+    const sharedExpected: Record<string, boolean> = {
+      "metadata-only-diff": true,
+      "non-metadata-diff": false,
+      "no-diff": false,
+    };
+    expect(isMetadataOnly).toBe(sharedExpected[scenario.sharedPredicate]);
+
+    // 2. Manual-vs-auto branch agreement (individual predicate level).
+    const needsManual = requiresNewUserInputForReinstall(prev, next);
+    const backendExpected =
+      scenario.knownBackendOverride?.actual ?? scenario.expected;
+    expect(needsManual).toBe(backendExpected === "manual");
+  });
+});
+
+describe("cascade scenarios — backend full-outcome sweep", () => {
+  test.each(
+    CASCADE_SCENARIOS,
+  )("$id full cascade decision ($expected): $userAction", (scenario) => {
+    const prev = CATALOG_SHAPES[
+      scenario.shape
+    ] as unknown as InternalMcpCatalog;
+    const next = scenario.edit(
+      CATALOG_SHAPES[scenario.shape],
+    ) as unknown as InternalMcpCatalog;
+    const outcome = simulateCascadeOutcome(prev, next);
+    const backendExpected =
+      scenario.knownBackendOverride?.actual ?? scenario.expected;
+    expect(outcome).toBe(backendExpected);
   });
 });

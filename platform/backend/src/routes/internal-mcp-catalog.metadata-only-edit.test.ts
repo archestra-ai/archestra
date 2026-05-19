@@ -226,6 +226,242 @@ describe("PUT /api/internal_mcp_catalog/:id — metadata-only edit cascade", () 
     expect(childInstallRow.reinstallRequired).toBe(false);
   });
 
+  test("description-only PUT on a secret-bag catalog does not cascade (expandSecrets asymmetry regression)", async ({
+    makeMcpServer,
+  }) => {
+    // Regression: the parent PUT used to fetch `originalCatalogItem`
+    // with the default `expandSecrets: true`, then compared against
+    // `Model.update`'s raw return. For rows whose `localConfig` carries
+    // a populated env secret bag, the expanded plaintext vs stored
+    // ID-ref diff tripped `isMetadataOnlyEdit` and the cascade fired
+    // for description-only edits — exactly what this optimization is
+    // supposed to skip.
+    //
+    // We bait the bag by creating a local catalog with a `vault`-typed
+    // env var so the create route writes to `localConfigSecretId`. Then
+    // we send a desc-only PUT and assert no install was touched.
+    const catalog = await createCatalog({
+      name: "bag-cascade-regression",
+      serverType: "local",
+      description: "original",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [
+          {
+            key: "MY_SECRET",
+            type: "secret",
+            value: "secret-value-123",
+            sensitive: true,
+            promptOnInstallation: false,
+          },
+        ],
+      },
+    });
+
+    // Sanity: the create route must have allocated a secret bag for this
+    // env var. If it didn't, this test isn't actually exercising the
+    // expanded-vs-raw asymmetry it claims to regression-cover.
+    const [catalogRow] = await db
+      .select()
+      .from(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.id, catalog.id));
+    expect(catalogRow.localConfigSecretId).not.toBeNull();
+
+    const installedServer = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: user.id,
+      scope: "personal",
+    });
+
+    const updateSpy = vi.spyOn(McpServerModel, "update");
+
+    const putResponse = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${catalog.id}`,
+      payload: {
+        name: "bag-cascade-regression",
+        serverType: "local",
+        description: "rewritten",
+        localConfig: {
+          command: "node",
+          arguments: ["server.js"],
+          environment: [
+            {
+              key: "MY_SECRET",
+              type: "secret",
+              value: "secret-value-123",
+              sensitive: true,
+              promptOnInstallation: false,
+            },
+          ],
+        },
+      },
+    });
+
+    if (putResponse.statusCode !== 200) {
+      throw new Error(
+        `PUT failed: ${putResponse.statusCode} ${putResponse.body}`,
+      );
+    }
+
+    await assertCascadeDidNotFire(updateSpy);
+
+    const [serverRow] = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.id, installedServer.id));
+    expect(serverRow.localInstallationStatus).toBe("idle");
+    expect(serverRow.reinstallRequired).toBe(false);
+  });
+
+  test("PUT that adds an OPTIONAL prompted env var does not cascade-reinstall installs", async ({
+    makeMcpServer,
+  }) => {
+    // User-reported regression: adding a per-installation, optional env
+    // var to a catalog used to trigger a backend auto-restart even
+    // though the change is forward-compatible (existing installs can
+    // ignore the new optional field). `cascadeReinstallForCatalog`'s
+    // `onlyForwardCompatibleEnvDiff` gate should now short-circuit.
+    const catalog = await createCatalog({
+      name: "fwd-compat-env-add",
+      serverType: "local",
+      description: "original",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [],
+      },
+    });
+
+    const installedServer = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: user.id,
+      scope: "personal",
+    });
+
+    const updateSpy = vi.spyOn(McpServerModel, "update");
+
+    const putResponse = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${catalog.id}`,
+      payload: {
+        name: "fwd-compat-env-add",
+        serverType: "local",
+        description: "original",
+        localConfig: {
+          command: "node",
+          arguments: ["server.js"],
+          environment: [
+            {
+              key: "OPTIONAL_HINT",
+              type: "plain_text",
+              promptOnInstallation: true,
+              required: false,
+            },
+          ],
+        },
+      },
+    });
+
+    if (putResponse.statusCode !== 200) {
+      throw new Error(
+        `PUT failed: ${putResponse.statusCode} ${putResponse.body}`,
+      );
+    }
+
+    await assertCascadeDidNotFire(updateSpy);
+
+    const [serverRow] = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.id, installedServer.id));
+    expect(serverRow.localInstallationStatus).toBe("idle");
+    expect(serverRow.reinstallRequired).toBe(false);
+  });
+
+  test("PUT that adds an OPTIONAL userConfig header does not cascade-reinstall installs", async ({
+    makeMcpServer,
+  }) => {
+    // User-reported regression: adding a per-installation optional
+    // HEADER via the form's Add Header dialog used to trigger backend
+    // auto-restart even though the change is forward-compatible. Same
+    // class as the optional env-var case; the gate's
+    // `onlyForwardCompatibleEnvDiff` now also covers `userConfig`
+    // schema evolution.
+    const catalog = await createCatalog({
+      name: "fwd-compat-header-add",
+      serverType: "remote",
+      description: "original",
+      serverUrl: "https://example.test/mcp",
+      userConfig: {
+        existing_header: {
+          type: "string",
+          title: "x-existing",
+          description: "",
+          headerName: "x-existing",
+          promptOnInstallation: true,
+          required: false,
+          sensitive: false,
+        },
+      },
+    });
+
+    const installedServer = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: user.id,
+      scope: "personal",
+    });
+
+    const updateSpy = vi.spyOn(McpServerModel, "update");
+
+    const putResponse = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${catalog.id}`,
+      payload: {
+        name: "fwd-compat-header-add",
+        serverType: "remote",
+        description: "original",
+        serverUrl: "https://example.test/mcp",
+        userConfig: {
+          existing_header: {
+            type: "string",
+            title: "x-existing",
+            description: "",
+            headerName: "x-existing",
+            promptOnInstallation: true,
+            required: false,
+            sensitive: false,
+          },
+          new_optional_header: {
+            type: "string",
+            title: "x-new-optional",
+            description: "",
+            headerName: "x-new-optional",
+            promptOnInstallation: true,
+            required: false,
+            sensitive: false,
+          },
+        },
+      },
+    });
+
+    if (putResponse.statusCode !== 200) {
+      throw new Error(
+        `PUT failed: ${putResponse.statusCode} ${putResponse.body}`,
+      );
+    }
+
+    await assertCascadeDidNotFire(updateSpy);
+
+    const [serverRow] = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.id, installedServer.id));
+    expect(serverRow.localInstallationStatus).toBe("idle");
+    expect(serverRow.reinstallRequired).toBe(false);
+  });
+
   async function createCatalog(payload: Record<string, unknown>): Promise<{
     id: string;
   }> {

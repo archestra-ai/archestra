@@ -28,6 +28,7 @@ import {
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import {
   autoReinstallServer,
+  onlyForwardCompatibleEnvDiff,
   requiresNewUserInputForReinstall,
 } from "@/services/mcp-reinstall";
 import {
@@ -522,6 +523,29 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Catalog item not found");
       }
 
+      // A second copy of the same row WITHOUT expanded secret values, used
+      // solely for the cascade-reinstall gate's snapshot comparison. The
+      // expanded `originalCatalogItem` above is needed by the route body
+      // downstream (env-vault construction, userConfig diffing). But the
+      // gate compares `original` vs `Model.update`'s return, and
+      // `Model.update` returns the raw row. Without this unexpanded
+      // fetch, every PUT on a bag-bearing catalog would diff on
+      // `localConfig.environment[*].value` (expanded plaintext vs stored
+      // ID-ref) and cascade-reinstall on edits that didn't actually
+      // touch any runtime field — including pure description edits.
+      const originalCatalogItemForGate = await InternalMcpCatalogModel.findById(
+        id,
+        {
+          userId: request.user.id,
+          isAdmin,
+          organizationId: request.organizationId,
+          expandSecrets: false,
+        },
+      );
+      if (!originalCatalogItemForGate) {
+        throw new ApiError(404, "Catalog item not found");
+      }
+
       if (!isAdmin) {
         // Non-admins can only edit their own personal items
         if (
@@ -840,8 +864,11 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Catalog item not found");
       }
 
-      // Cascade reinstall for the parent's own installs.
-      await cascadeReinstallForCatalog(originalCatalogItem, catalogItem);
+      // Cascade reinstall for the parent's own installs. Use the
+      // unexpanded snapshot so the gate's diff isn't fooled by
+      // expanded-vs-raw asymmetry on bag-bearing rows (see comment
+      // above on `originalCatalogItemForGate`).
+      await cascadeReinstallForCatalog(originalCatalogItemForGate, catalogItem);
 
       // Cascade syncable fields to children, then trigger reinstall for each
       // child's installs. Note: this snapshots children BEFORE updating them
@@ -1365,7 +1392,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       await assertCanEditCatalogPresets(parent, request);
 
-      const originalChild = await InternalMcpCatalogModel.findById(childId);
+      // Unexpanded snapshot — same reason as `originalCatalogItemForGate`
+      // in the parent PUT route: comparing an `expandSecrets: true`
+      // snapshot against `Model.update`'s raw return would diff on
+      // expanded secret values and cascade-reinstall on edits that
+      // didn't touch any runtime field.
+      const originalChild = await InternalMcpCatalogModel.findById(childId, {
+        expandSecrets: false,
+      });
       if (!originalChild || originalChild.parentCatalogItemId !== parent.id) {
         throw new ApiError(404, "Child catalog item not found");
       }
@@ -1737,6 +1771,22 @@ async function cascadeReinstallForCatalog(
     logger.info(
       { catalogId: catalogItem.id, serverCount: installedServers.length },
       "Catalog edit is metadata-only - skipping reinstall",
+    );
+    return;
+  }
+
+  // Refinement gate: `isMetadataOnlyEdit` is too blunt for env-var
+  // schema evolution. Adding an optional prompted env var, demoting
+  // required → optional, etc. legitimately changes `localConfig.environment`
+  // but doesn't invalidate any install (the existing pod's env-var
+  // bindings are still valid). Without this check, a forward-compatible
+  // edit would fall through to the auto-cascade path and silently restart
+  // every pod. Mirrors the frontend's `envChangeRequiresReinstall` so
+  // bar silence and backend behavior agree.
+  if (onlyForwardCompatibleEnvDiff(originalCatalogItem, catalogItem)) {
+    logger.info(
+      { catalogId: catalogItem.id, serverCount: installedServers.length },
+      "Catalog edit is a forward-compatible env-var change - skipping reinstall",
     );
     return;
   }

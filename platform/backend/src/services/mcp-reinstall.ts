@@ -114,6 +114,121 @@ export function requiresNewUserInputForReinstall(
 }
 
 /**
+ * Returns true iff the catalog diff is JUST forward-compatible schema
+ * evolution that doesn't actually invalidate any install. Used as a
+ * refinement gate on top of `isMetadataOnlyEdit`: when that predicate
+ * says "non-metadata diff exists" but the diff is purely
+ * forward-compatible (added optional env var, added optional header,
+ * demoted required → optional, etc.), there's nothing for the
+ * auto-cascade to restart.
+ *
+ * The two dimensions checked are:
+ *   • `localConfig.environment` — prompted env-var schema evolution
+ *   • `userConfig` — header / non-header userConfig schema evolution
+ *
+ * Mirrors the frontend's `envChangeRequiresReinstall` and
+ * `additionalHeadersChangeRequiresReinstall` in `mcp-catalog-form.tsx`
+ * so frontend silence and backend behavior agree.
+ */
+export function onlyForwardCompatibleEnvDiff(
+  oldCatalogItem: InternalMcpCatalog,
+  newCatalogItem: InternalMcpCatalog,
+): boolean {
+  // 1. Prompted env-var changes are schema-evolution compatible.
+  const oldPrompted = getPromptedEnvVars(oldCatalogItem);
+  const newPrompted = getPromptedEnvVars(newCatalogItem);
+  if (promptedEnvVarsChanged(oldPrompted, newPrompted)) return false;
+
+  // 2. Non-prompted env vars are unchanged (their values are part of
+  //    the catalog template; any change must propagate to pods).
+  const stripPromptOnInstall = (env: NonNullable<LocalConfig["environment"]>) =>
+    env.filter((e) => !e.promptOnInstallation);
+  const oldNonPrompted = stripPromptOnInstall(
+    oldCatalogItem.localConfig?.environment ?? [],
+  );
+  const newNonPrompted = stripPromptOnInstall(
+    newCatalogItem.localConfig?.environment ?? [],
+  );
+  if (JSON.stringify(oldNonPrompted) !== JSON.stringify(newNonPrompted)) {
+    return false;
+  }
+
+  // 3. userConfig schema evolution. Same rules as env vars: added
+  //    required = breaking, added optional = compatible, removed = breaking,
+  //    type/required-flip/headerName/etc. = breaking. Covers both header-
+  //    mapped userConfig fields (the form's `additionalHeaders` section)
+  //    and non-header userConfig.
+  if (
+    userConfigChangedBreakingly(
+      oldCatalogItem.userConfig ?? null,
+      newCatalogItem.userConfig ?? null,
+    )
+  ) {
+    return false;
+  }
+
+  // 4. No OTHER non-metadata catalog field changed. Strip env +
+  //    userConfig + metadata fields and compare what remains. JSON.stringify
+  //    is fine — both sides are DB-shape rows that round-trip stably
+  //    through the model layer.
+  const strip = (cat: InternalMcpCatalog): InternalMcpCatalog => ({
+    ...cat,
+    localConfig: cat.localConfig
+      ? { ...cat.localConfig, environment: [] }
+      : cat.localConfig,
+    userConfig: null,
+    // Metadata-only fields that legitimately differ on every PUT but
+    // don't invalidate installs.
+    description: "",
+    createdAt: oldCatalogItem.createdAt,
+    updatedAt: oldCatalogItem.updatedAt,
+  });
+  return (
+    JSON.stringify(strip(oldCatalogItem)) ===
+    JSON.stringify(strip(newCatalogItem))
+  );
+}
+
+/**
+ * userConfig schema-evolution check. Returns true (breaking) if any
+ * field change invalidates an existing install's stored credentials/
+ * values. Returns false (compatible) for: added optional field, demoted
+ * required → optional, pure description/title cosmetic changes that
+ * don't affect storage or routing.
+ *
+ * Mirror in `additionalHeadersChangeRequiresReinstall` on the frontend
+ * (`mcp-catalog-form.tsx`).
+ */
+function userConfigChangedBreakingly(
+  oldConfig: Record<string, unknown> | null,
+  newConfig: Record<string, unknown> | null,
+): boolean {
+  const prev = (oldConfig ?? {}) as Record<string, Record<string, unknown>>;
+  const next = (newConfig ?? {}) as Record<string, Record<string, unknown>>;
+
+  // Removed any field, modified existing in a breaking way.
+  for (const [key, p] of Object.entries(prev)) {
+    const n = next[key];
+    if (!n) return true; // Removed
+    if (!p.required && Boolean(n.required)) return true; // Became required
+    if (String(p.type ?? "") !== String(n.type ?? "")) return true; // Type changed
+    if (String(p.headerName ?? "") !== String(n.headerName ?? "")) return true; // Routing changed
+    if (Boolean(p.sensitive) !== Boolean(n.sensitive)) return true; // Storage moved
+    // Note: deliberately NOT checking `default`, `description`, `title`,
+    // `valuePrefix` etc. — those are cosmetic / template defaults that
+    // don't affect install validity. If a default value matters to your
+    // pod, change it via a runtime field (env value) instead.
+  }
+
+  // Added required field → existing installs are missing it.
+  for (const [key, n] of Object.entries(next)) {
+    if (key in prev) continue;
+    if (n.required) return true;
+  }
+  return false;
+}
+
+/**
  * Auto-reinstall an MCP server without requiring user input.
  * Used when catalog is edited but no new user-prompted values are needed.
  *
@@ -250,24 +365,41 @@ function getPromptedEnvVars(
 }
 
 /**
- * Check if prompted env vars changed between old and new catalog items.
- * Returns true if any prompted env var was added, removed, or had its type/required status changed.
+ * Check if prompted env vars changed in a way that invalidates existing
+ * installs. Returns true only when an existing install can no longer be
+ * considered valid under the new schema — i.e. the user needs to be re-
+ * prompted before the install will work again.
+ *
+ * Schema-evolution rules:
+ *   - Added OPTIONAL var       → existing installs stay valid (no reinstall)
+ *   - Added REQUIRED var       → existing installs are missing a required
+ *                                value (reinstall)
+ *   - Removed var (any kind)   → existing installs hold a stored value for
+ *                                a var the catalog no longer accepts
+ *                                (reinstall to clean up)
+ *   - Type change (e.g.
+ *     plain ↔ secret)          → stored value lives in a different bucket
+ *                                (reinstall)
+ *   - required false → true    → existing installs that didn't fill the
+ *                                var are now invalid (reinstall)
+ *   - required true → false    → existing installs that did fill the var
+ *                                are still valid; the var just became
+ *                                optional (no reinstall)
  */
 function promptedEnvVarsChanged(
   oldMap: Map<string, PromptedEnvVarInfo>,
   newMap: Map<string, PromptedEnvVarInfo>,
 ): boolean {
-  // Check for removals or changes
   for (const [key, oldVal] of oldMap) {
     const newVal = newMap.get(key);
     if (!newVal) return true; // Removed
-    if (newVal.required !== oldVal.required) return true; // Required changed
-    if (newVal.type !== oldVal.type) return true; // Type changed
+    if (newVal.type !== oldVal.type) return true; // Type changed (e.g. plain ↔ secret)
+    if (!oldVal.required && newVal.required) return true; // Became required
   }
 
-  // Check for additions
-  for (const key of newMap.keys()) {
-    if (!oldMap.has(key)) return true; // Added
+  for (const [key, newVal] of newMap) {
+    if (oldMap.has(key)) continue;
+    if (newVal.required) return true; // Added required var
   }
 
   return false;

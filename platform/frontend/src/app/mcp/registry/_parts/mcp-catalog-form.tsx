@@ -1,8 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { archestraApiTypes } from "@shared";
-import { DocsPage } from "@shared";
+import { type archestraApiTypes, DocsPage } from "@shared";
 import {
   Ban,
   Code,
@@ -85,10 +84,17 @@ import { usePresetEntityName } from "@/lib/organization.query";
 import { useGetSecret } from "@/lib/secrets.query";
 import { useTeams } from "@/lib/teams/team.query";
 import {
+  type CascadeSnapshot,
+  computeCascadeOutcome,
+} from "./cascade-decision";
+import {
   formSchema,
   type McpCatalogFormValues,
 } from "./mcp-catalog-form.types";
-import { transformCatalogItemToFormValues } from "./mcp-catalog-form.utils";
+import {
+  transformCatalogItemToFormValues,
+  transformFormToApiData,
+} from "./mcp-catalog-form.utils";
 import { ReinstallConfirmBar } from "./reinstall-confirm-bar";
 
 const { useIdentityProviders } = config.enterpriseFeatures.core
@@ -129,7 +135,7 @@ interface McpCatalogFormProps {
   /**
    * Number of installed servers that would be affected by a cascade
    * reinstall. Drives the inline confirm bar copy in edit mode. Defaults
-   * to 0 (no bar — used for create mode and standalone previews).
+   * to 0 (no confirm bar — used for create mode and standalone previews).
    */
   affectedServerCount?: number;
   /**
@@ -420,6 +426,16 @@ export function McpCatalogForm({
     null,
   );
 
+  // Baseline `additionalHeaders` derived from `initialValues.userConfig`.
+  // Used by `isHeadersDirty`'s schema-evolution check — RHF's
+  // `dirtyFields.additionalHeaders` only tells us SOMETHING in the
+  // array changed; we need the actual prev shape to classify what kind
+  // of change (forward-compatible vs breaking).
+  const initialAdditionalHeaders = useMemo(
+    () => deriveAdditionalHeaders(initialValues?.userConfig),
+    [initialValues?.userConfig],
+  );
+
   // Labels state (managed separately from react-hook-form)
   const initialLabelsFromProps = useMemo(
     () =>
@@ -439,19 +455,49 @@ export function McpCatalogForm({
   // Granular dirty flags used to show contextual reinstall hints in edit mode.
   // Editing any of these on a deployed catalog item invalidates existing install
   // credentials or redeploys the pod — admins must reinstall + re-enter creds.
-  const isNameDirty = mode === "edit" && Boolean(dirtyFields.name);
-  const isServerUrlDirty = mode === "edit" && Boolean(dirtyFields.serverUrl);
+  //
+  // CAVEAT — react-hook-form's `dirtyFields` representation: for ARRAYS
+  // (additionalHeaders, localConfig.environment), it allocates an entry per
+  // array index with every leaf as a boolean. A form initialized with
+  // `additionalHeaders: [{...}]` (e.g., one header derived from userConfig)
+  // produces `dirtyFields.additionalHeaders = [{...all leaves false}]` —
+  // a NON-EMPTY ARRAY that is `Boolean(...)`-truthy even though nothing
+  // was actually edited. `isReallyDirty` walks the tree and only returns
+  // true when SOME leaf is actually true.
+  const isNameDirty = mode === "edit" && isReallyDirty(dirtyFields.name);
+  const isServerUrlDirty =
+    mode === "edit" && isReallyDirty(dirtyFields.serverUrl);
   const isAuthDirty =
     mode === "edit" &&
-    (Boolean(dirtyFields.authMethod) ||
-      Boolean(dirtyFields.authHeaderName) ||
-      Boolean(dirtyFields.includeBearerPrefix) ||
-      Boolean(dirtyFields.oauthConfig) ||
-      Boolean(dirtyFields.enterpriseManagedConfig));
+    (isReallyDirty(dirtyFields.authMethod) ||
+      isReallyDirty(dirtyFields.authHeaderName) ||
+      isReallyDirty(dirtyFields.includeBearerPrefix) ||
+      isReallyDirty(dirtyFields.oauthConfig) ||
+      isReallyDirty(dirtyFields.enterpriseManagedConfig));
+  // Env-var dirtiness alone isn't enough to require reinstall — adding an
+  // OPTIONAL prompted env var leaves existing installs valid (they just
+  // don't fill the new var). Mirror the backend's `promptedEnvVarsChanged`
+  // schema-evolution rules in `backend/src/services/mcp-reinstall.ts` so
+  // the bar's prediction matches what the backend will actually do.
   const isEnvDirty =
-    mode === "edit" && Boolean(dirtyFields.localConfig?.environment);
+    mode === "edit" &&
+    isReallyDirty(dirtyFields.localConfig?.environment) &&
+    envChangeRequiresReinstall(
+      initialValues?.localConfig?.environment,
+      form.watch("localConfig.environment"),
+    );
+  // Same shape as `isEnvDirty` — `additionalHeaders` array dirty is too
+  // coarse on its own (adding an OPTIONAL per-install header is forward-
+  // compatible — existing installs that don't fill it stay valid).
+  // Mirror of backend's userConfig schema-evolution semantics, see
+  // `additionalHeadersChangeRequiresReinstall` below.
   const isHeadersDirty =
-    mode === "edit" && Boolean(dirtyFields.additionalHeaders);
+    mode === "edit" &&
+    isReallyDirty(dirtyFields.additionalHeaders) &&
+    additionalHeadersChangeRequiresReinstall(
+      initialAdditionalHeaders,
+      form.watch("additionalHeaders"),
+    );
   // Per-field deployment dirty flags. Each of these maps to a field in the
   // backend's `localExecutionConfigChanged` heuristic
   // (backend/src/services/mcp-reinstall.ts).
@@ -459,7 +505,7 @@ export function McpCatalogForm({
     | Record<string, unknown>
     | undefined;
   const deploymentField = (key: string) =>
-    mode === "edit" && Boolean(localConfigDirty?.[key]);
+    mode === "edit" && isReallyDirty(localConfigDirty?.[key]);
   const isCommandDirty = deploymentField("command");
   const isArgumentsDirty = deploymentField("arguments");
   const isDockerImageDirty = deploymentField("dockerImage");
@@ -467,21 +513,13 @@ export function McpCatalogForm({
   const isHttpPortDirty = deploymentField("httpPort");
   const isHttpPathDirty = deploymentField("httpPath");
 
-  // True when any field that triggers `requiresNewUserInputForReinstall=true`
-  // on the backend is dirty. Saving with this true will flag every existing
-  // installation as requiring a manual reinstall.
-  const willRequireManualReinstall =
-    isNameDirty ||
-    isServerUrlDirty ||
-    isAuthDirty ||
-    isEnvDirty ||
-    isHeadersDirty ||
-    isCommandDirty ||
-    isArgumentsDirty ||
-    isDockerImageDirty ||
-    isTransportTypeDirty ||
-    isHttpPortDirty ||
-    isHttpPathDirty;
+  // NOTE: the cascade decision (manual vs auto vs skip) used to live
+  // here as a hand-rolled OR of the per-field dirty flags above. That
+  // logic moved into the pure `computeCascadeOutcome` in
+  // `cascade-decision.ts`, which mirrors the backend gate and is
+  // matrix-tested against the shared scenarios fixture. The per-field
+  // `is*Dirty` flags below are still consumed to render `ReinstallHint`
+  // badges next to individual inputs.
   const areLabelsChanged = useMemo(() => {
     if (labels.length !== labelsBaseline.length) return true;
     return labels.some(
@@ -651,8 +689,13 @@ export function McpCatalogForm({
     }
   }, [initialValues, localConfigSecret, form]);
 
-  const [pendingSubmit, setPendingSubmit] =
-    useState<McpCatalogFormValues | null>(null);
+  // The bar's mode is captured at submit-time so the bar stays consistent
+  // even if the form state drifts during the confirm step. `null` means
+  // no bar.
+  const [pendingSubmit, setPendingSubmit] = useState<{
+    values: McpCatalogFormValues;
+    mode: "manual" | "auto";
+  } | null>(null);
   // `form.formState.isSubmitting` clears the moment `handleSubmit`
   // returns (which we do early to show the bar), so it can't drive the
   // bar's spinner — track the bar→save phase ourselves.
@@ -672,13 +715,19 @@ export function McpCatalogForm({
   };
 
   const handleSubmit = async (values: McpCatalogFormValues) => {
-    // In edit mode, if any change will trigger a reinstall on existing
-    // installations, surface a confirmation step so the admin understands the
-    // consequences before fan-out (single-tenant) or shared-pod restart
-    // (multitenant).
-    if (mode === "edit" && willRequireManualReinstall) {
-      setPendingSubmit(values);
-      return;
+    // Cascade-confirm decision delegated to a pure function so it can be
+    // matrix-tested without rendering, and so frontend + backend share
+    // the same decision tree shape. See `cascade-decision.ts`.
+    if (mode === "edit") {
+      const outcome = computeCascadeOutcome(
+        (initialValues ?? {}) as CascadeSnapshot,
+        transformFormToApiData(values) as CascadeSnapshot,
+        { affectedServerCount, labelsChanged: areLabelsChanged },
+      );
+      if (outcome !== "skip") {
+        setPendingSubmit({ values, mode: outcome });
+        return;
+      }
     }
     await performSubmit(values);
   };
@@ -2158,10 +2207,10 @@ export function McpCatalogForm({
 
         {pendingSubmit !== null ? (
           <ReinstallConfirmBar
-            // Only manual-path edits (those needing user re-prompt)
-            // trigger the bar from this form; auto-mode is reserved for
-            // `preset-editor-dialog` (preset value changes).
-            mode="manual"
+            // Mode was captured at submit-time by `computeCascadeOutcome`;
+            // we honor that decision even if dirty state shifts while
+            // the bar is up (e.g., user tweaks labels mid-confirm).
+            mode={pendingSubmit.mode}
             isMultitenant={isMultitenant}
             affectedServerCount={affectedServerCount}
             presetCount={presetCount}
@@ -2169,9 +2218,12 @@ export function McpCatalogForm({
             isSubmitting={isConfirming}
             onCancel={() => setPendingSubmit(null)}
             onConfirm={async () => {
+              // Keep `pendingSubmit` set during the await so the bar
+              // stays visible (spinner + disabled buttons) until the
+              // mutation completes.
               setIsConfirming(true);
               try {
-                await performSubmit(pendingSubmit);
+                await performSubmit(pendingSubmit.values);
               } finally {
                 setIsConfirming(false);
                 setPendingSubmit(null);
@@ -2194,6 +2246,24 @@ export function McpCatalogForm({
   );
 }
 
+/**
+ * Recursively check whether a `react-hook-form` dirtyFields branch
+ * actually has any dirty leaf. Necessary because RHF's dirty-tracking
+ * for arrays allocates an entry per index with per-leaf booleans even
+ * when nothing changed — so a `Boolean(dirtyFields.someArray)` check
+ * misfires on every form that has any non-empty array (e.g.,
+ * additionalHeaders, localConfig.environment).
+ */
+function isReallyDirty(value: unknown): boolean {
+  if (value === undefined || value === null || value === false) return false;
+  if (value === true) return true;
+  if (Array.isArray(value)) return value.some(isReallyDirty);
+  if (typeof value === "object") {
+    return Object.values(value as Record<string, unknown>).some(isReallyDirty);
+  }
+  return Boolean(value);
+}
+
 function ReinstallHint({ show }: { show: boolean }) {
   if (!show) return null;
   return (
@@ -2201,6 +2271,179 @@ function ReinstallHint({ show }: { show: boolean }) {
       requires reinstall
     </Badge>
   );
+}
+
+type PromptedEnvVarInfo = { required: boolean; type: string };
+
+/**
+ * Mirror of `promptedEnvVarsChanged` in
+ * `backend/src/services/mcp-reinstall.ts`. Returns true only when an env
+ * array change actually invalidates existing installs:
+ *
+ *   - Added OPTIONAL prompted var → existing installs stay valid (false)
+ *   - Added REQUIRED prompted var → existing installs missing required → true
+ *   - Removed prompted var        → stored value for removed var → true
+ *   - Type change                 → storage moved (e.g. plain ↔ secret) → true
+ *   - required false → true       → existing installs invalid → true
+ *   - required true → false       → existing installs still valid → false
+ *
+ * For NON-prompted env vars (the catalog-template ones whose values ARE
+ * part of the catalog), any change to value, key, type, or membership is
+ * a real catalog-spec change that the pod needs to pick up → true.
+ *
+ * Keep the two implementations in sync — they're the user-visible warning
+ * and the authoritative gate respectively. Mismatch is a silent UX bug.
+ */
+function envChangeRequiresReinstall(prev: unknown, next: unknown): boolean {
+  const prevArr = Array.isArray(prev) ? (prev as RawEnvVar[]) : [];
+  const nextArr = Array.isArray(next) ? (next as RawEnvVar[]) : [];
+
+  // Non-prompted vars: catalog-template, full value comparison.
+  const prevNonPrompted = nonPromptedSnapshot(prevArr);
+  const nextNonPrompted = nonPromptedSnapshot(nextArr);
+  if (JSON.stringify(prevNonPrompted) !== JSON.stringify(nextNonPrompted)) {
+    return true;
+  }
+
+  // Prompted vars: schema-evolution rules (see comment above).
+  const prevMap = promptedMap(prevArr);
+  const nextMap = promptedMap(nextArr);
+  for (const [key, prevVal] of prevMap) {
+    const nextVal = nextMap.get(key);
+    if (!nextVal) return true;
+    if (nextVal.type !== prevVal.type) return true;
+    if (!prevVal.required && nextVal.required) return true;
+  }
+  for (const [key, nextVal] of nextMap) {
+    if (prevMap.has(key)) continue;
+    if (nextVal.required) return true;
+  }
+  return false;
+}
+
+type RawEnvVar = {
+  key?: string;
+  type?: string;
+  value?: unknown;
+  required?: boolean;
+  promptOnInstallation?: boolean;
+  sensitive?: boolean;
+};
+
+function promptedMap(arr: RawEnvVar[]): Map<string, PromptedEnvVarInfo> {
+  const m = new Map<string, PromptedEnvVarInfo>();
+  for (const v of arr) {
+    if (!v?.key || !v.promptOnInstallation) continue;
+    m.set(v.key, { required: Boolean(v.required), type: String(v.type ?? "") });
+  }
+  return m;
+}
+
+function nonPromptedSnapshot(arr: RawEnvVar[]): RawEnvVar[] {
+  // Sorted by key so a reorder isn't read as a change.
+  return arr
+    .filter((v) => v && !v.promptOnInstallation && v.key)
+    .map((v) => ({
+      key: v.key,
+      type: v.type,
+      value: v.value,
+      required: Boolean(v.required),
+      sensitive: Boolean(v.sensitive),
+    }))
+    .sort((a, b) => (a.key ?? "").localeCompare(b.key ?? ""));
+}
+
+type AdditionalHeader = {
+  fieldName?: string;
+  headerName?: string;
+  required?: boolean;
+  sensitive?: boolean;
+  value?: unknown;
+  description?: string;
+  includeBearerPrefix?: boolean;
+  promptOnInstallation?: boolean;
+};
+
+/**
+ * Reconstruct the form's `additionalHeaders` shape from a catalog's
+ * `userConfig`. Mirrors the equivalent transform in
+ * `mcp-catalog-form.utils.ts → transformCatalogItemToFormValues`. Used
+ * to produce a stable baseline for `additionalHeadersChangeRequiresReinstall`.
+ */
+function deriveAdditionalHeaders(userConfig: unknown): AdditionalHeader[] {
+  if (!userConfig || typeof userConfig !== "object") return [];
+  const out: AdditionalHeader[] = [];
+  for (const [fieldName, raw] of Object.entries(
+    userConfig as Record<string, unknown>,
+  )) {
+    if (fieldName === "access_token" || fieldName === "raw_access_token") {
+      continue;
+    }
+    if (!raw || typeof raw !== "object") continue;
+    const cfg = raw as Record<string, unknown>;
+    if (typeof cfg.headerName !== "string") continue;
+    out.push({
+      fieldName,
+      headerName: cfg.headerName,
+      required: Boolean(cfg.required),
+      sensitive: Boolean(cfg.sensitive),
+      value: typeof cfg.default === "string" ? cfg.default : undefined,
+      description: typeof cfg.description === "string" ? cfg.description : "",
+      includeBearerPrefix: cfg.valuePrefix === "Bearer ",
+      promptOnInstallation:
+        cfg.promptOnInstallation === undefined
+          ? true
+          : Boolean(cfg.promptOnInstallation),
+    });
+  }
+  return out;
+}
+
+/**
+ * Same schema-evolution semantics as `envChangeRequiresReinstall`, but
+ * for `additionalHeaders`. Returns true only when the change
+ * invalidates existing installs:
+ *
+ *   - Added OPTIONAL header        → existing installs stay valid (false)
+ *   - Added REQUIRED header        → existing installs are missing it → true
+ *   - Removed header               → stored value for removed field → true
+ *   - required false → true        → installs that didn't fill it → true
+ *   - required true → false        → installs still valid → false
+ *   - headerName change            → routing changes → true
+ *   - sensitive flag flip          → storage bucket moved → true
+ *   - default value change         → catalog default changed, propagated → true
+ *   - bearer-prefix flag flip      → auth header semantic change → true
+ *
+ * Keep in sync with the backend equivalent in
+ * `backend/src/services/mcp-reinstall.ts`.
+ */
+function additionalHeadersChangeRequiresReinstall(
+  prev: AdditionalHeader[],
+  next: unknown,
+): boolean {
+  const nextArr = Array.isArray(next) ? (next as AdditionalHeader[]) : [];
+  const prevMap = new Map(
+    prev.filter((h) => h.fieldName).map((h) => [h.fieldName as string, h]),
+  );
+  const nextMap = new Map(
+    nextArr.filter((h) => h.fieldName).map((h) => [h.fieldName as string, h]),
+  );
+  for (const [key, p] of prevMap) {
+    const n = nextMap.get(key);
+    if (!n) return true; // Removed
+    if (!p.required && Boolean(n.required)) return true; // Became required
+    if ((p.headerName ?? "") !== (n.headerName ?? "")) return true; // Routing
+    if (Boolean(p.sensitive) !== Boolean(n.sensitive)) return true; // Storage
+    if (Boolean(p.includeBearerPrefix) !== Boolean(n.includeBearerPrefix)) {
+      return true; // Auth semantics
+    }
+    if ((p.value ?? "") !== (n.value ?? "")) return true; // Default value
+  }
+  for (const [key, n] of nextMap) {
+    if (prevMap.has(key)) continue;
+    if (n.required) return true; // Added required
+  }
+  return false;
 }
 
 function EnterpriseIdentityProviderField(params: {

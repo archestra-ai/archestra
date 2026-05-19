@@ -21,6 +21,17 @@ import ToolModel from "./tool";
 // Alias for users table to avoid conflict with the owner LEFT JOIN
 const assignedUsersTable = alias(schema.usersTable, "assigned_users");
 
+/**
+ * Data-access layer for `mcp_server` — an installation of an
+ * `internal_mcp_catalog` row (root template or child **preset**) by a
+ * specific principal. A single catalog item can back many installs across
+ * different scopes (personal/team/org); each install carries its own
+ * per-install env values, secret bundle, and lifecycle state.
+ *
+ * Owns CRUD, scope-aware K8s-safe server-name construction, secret-bundle
+ * linkage, agent-tool fan-out, and coordination with
+ * `McpServerRuntimeManager` for pod (re)deploys and teardown.
+ */
 class McpServerModel {
   /**
    * Construct the full server name. Local servers append a scope-specific

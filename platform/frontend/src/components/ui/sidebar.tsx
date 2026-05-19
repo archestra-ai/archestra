@@ -2,7 +2,12 @@
 
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
-import { PanelLeftIcon } from "lucide-react";
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  Loader2Icon,
+  PanelLeftIcon,
+} from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
@@ -298,6 +303,77 @@ function SidebarTrigger({
             {modLabel} + {SHORTCUT_SIDEBAR.label}
           </span>
         )}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function SidebarCircleToggle({
+  className,
+  loading = false,
+  ...props
+}: React.ComponentProps<"button"> & { loading?: boolean }) {
+  const { toggleSidebar, state, isMobile } = useSidebar();
+  const isCollapsed = state === "collapsed";
+  const isMac =
+    typeof navigator !== "undefined" &&
+    navigator.userAgent.toLowerCase().includes("mac");
+  const modLabel = isMac ? "⌘" : "Ctrl";
+
+  if (isMobile) return null;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          data-sidebar="circle-toggle"
+          data-slot="sidebar-circle-toggle"
+          aria-label="Toggle Sidebar"
+          onClick={toggleSidebar}
+          style={{
+            left: isCollapsed
+              ? "var(--sidebar-width-icon)"
+              : "var(--sidebar-width)",
+          }}
+          className={cn(
+            "group/circle-toggle hidden md:flex items-center justify-center",
+            "fixed top-1/2 z-30 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full",
+            "bg-background border border-sidebar-border cursor-pointer",
+            "transition-[left,background-color] duration-200 ease-in-out",
+            "hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-1",
+            className,
+          )}
+          {...props}
+        >
+          <Loader2Icon
+            className={cn(
+              "pointer-events-none absolute inset-0 m-auto size-3 animate-spin transition-opacity duration-200",
+              loading ? "opacity-80" : "opacity-0",
+            )}
+          />
+          {isCollapsed ? (
+            <ChevronRightIcon
+              className={cn(
+                "absolute inset-0 m-auto size-3 opacity-0 transition-opacity duration-200",
+                !loading && "group-hover/circle-toggle:opacity-80",
+              )}
+            />
+          ) : (
+            <ChevronLeftIcon
+              className={cn(
+                "absolute inset-0 m-auto size-3 opacity-0 transition-opacity duration-200",
+                !loading && "group-hover/circle-toggle:opacity-80",
+              )}
+            />
+          )}
+          <span className="sr-only">Toggle Sidebar</span>
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="right">
+        <span className="text-[11px] font-mono">
+          {modLabel} + {SHORTCUT_SIDEBAR.label}
+        </span>
       </TooltipContent>
     </Tooltip>
   );
@@ -716,6 +792,7 @@ function SidebarMenuSubButton({
 
 export {
   Sidebar,
+  SidebarCircleToggle,
   SidebarContent,
   SidebarFooter,
   SidebarGroup,

@@ -144,8 +144,11 @@ const organizationsTable = pgTable("organization", {
     .notNull()
     .default(true),
 
-  /** Square icon logo (28x28px recommended) for collapsed sidebar and chat loading indicator */
+  /** Square icon logo (28x28px recommended) for collapsed sidebar and chat loading indicator. PNG or SVG. */
   iconLogo: text("icon_logo"),
+
+  /** Dark-mode variant of the icon logo. Falls back to `iconLogo` when not set. */
+  iconLogoDark: text("icon_logo_dark"),
 
   /** Support contact message shown in chat error cards */
   chatErrorSupportMessage: text("chat_error_support_message"),
@@ -205,6 +208,31 @@ const organizationsTable = pgTable("organization", {
   connectionBaseUrls: jsonb("connection_base_urls").$type<
     ConnectionBaseUrl[]
   >(),
+
+  /**
+   * Custom label admins choose for the child-configuration entity of every
+   * catalog item (internally still called "preset"). When both singular and
+   * plural are set, the catalog UI exposes the per-item presets section and
+   * replaces "Preset"/"presets" copy. Both must be set together — partial
+   * values are rejected at the API.
+   */
+  presetEntityName: text("preset_entity_name"),
+  presetEntityNamePlural: text("preset_entity_name_plural"),
+
+  /**
+   * Custom display label for the implicit "default" preset row (parent catalog
+   * item). NULL falls back to "Default" in the UI.
+   */
+  presetEntityDefaultLabel: text("preset_entity_default_label"),
+
+  /**
+   * Validation regex applied to default-scoped field values when installing an
+   * MCP server (mirrors `mcp_preset_entries.validation_regex` for the implicit
+   * default row). Stored without delimiters or flags. NULL disables validation.
+   */
+  presetEntityDefaultValidationRegex: text(
+    "preset_entity_default_validation_regex",
+  ),
 });
 
 export default organizationsTable;

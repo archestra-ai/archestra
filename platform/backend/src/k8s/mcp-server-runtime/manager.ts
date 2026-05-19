@@ -308,6 +308,24 @@ export class McpServerRuntimeManager {
         }
       }
 
+      // Overlay plain (non-secret) per-install env values from
+      // `mcp_server.environmentValues`. The Secret bag above covers
+      // secret-typed prompted values; this covers the plain-text
+      // complement so the full set of user-supplied install values is
+      // applied on every (re)deploy.
+      if (mcpServer.environmentValues) {
+        for (const [key, value] of Object.entries(
+          mcpServer.environmentValues,
+        )) {
+          if (value != null) {
+            if (!effectiveEnvironmentValues) {
+              effectiveEnvironmentValues = {};
+            }
+            effectiveEnvironmentValues[key] = String(value);
+          }
+        }
+      }
+
       const k8sDeployment = new K8sDeployment({
         mcpServer,
         k8sApi: this.k8sApi,

@@ -221,17 +221,13 @@ export const PartialUpdateInternalMcpCatalogSchema =
     validateInternalMcpCatalog,
   );
 
-const CHILD_CATALOG_NAME = z
-  .string()
-  .min(1, "Name is required")
-  .max(63, "Name must be 63 characters or fewer")
-  .regex(
-    /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/,
-    "Name must be a DNS-1123 label: lowercase alphanumeric and hyphens, starting and ending with alphanumeric",
-  );
-
 export const CreateChildCatalogSchema = z.object({
-  childName: CHILD_CATALOG_NAME,
+  /**
+   * The org-level preset entry (from /mcp/registry/org-structure) being
+   * configured for this catalog. The server derives the child's name from
+   * the entry.
+   */
+  presetEntryId: z.string().uuid(),
   presetFieldValues: PresetFieldValuesSchema.optional(),
 });
 
@@ -331,15 +327,38 @@ function validateHeaderMappedUserConfig(
     }
     normalizedHeaderNames.set(normalizedHeaderName, fieldName);
 
-    if (
-      fieldConfig.sensitive === true &&
-      fieldConfig.promptOnInstallation === false
-    ) {
+    // A header value is "static" (= persisted in plaintext at
+    // `userConfig[field].default` on the catalog row) only when neither
+    // prompt flag is set. Preset-scoped fields (`promptOnPreset: true`)
+    // route sensitive values to `preset_secret_id`'s bag, so they're
+    // allowed to be sensitive even though `promptOnInstallation` is false.
+    const isStaticHeader =
+      fieldConfig.promptOnInstallation === false &&
+      fieldConfig.promptOnPreset !== true;
+    if (fieldConfig.sensitive === true && isStaticHeader) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["userConfig", fieldName, "sensitive"],
         message:
           "Static header-mapped userConfig fields cannot be marked sensitive.",
+      });
+    }
+
+    // Sensitive header-mapped fields must not carry a plaintext `default`.
+    // `default` is persisted as-is in the catalog row's userConfig jsonb;
+    // applyPresetHeaderMappings falls back to it whenever a preset row's
+    // overlay lacks the key, so a sensitive default would land in plaintext
+    // on the row AND be sent verbatim on every empty-overlay request.
+    if (
+      fieldConfig.sensitive === true &&
+      fieldConfig.default !== undefined &&
+      !isStaticHeader
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["userConfig", fieldName, "default"],
+        message:
+          "Sensitive header-mapped userConfig fields cannot carry a plaintext default. Supply the value via preset_secret_id (for preset scope) or the per-install Secret bag (for installation scope) instead.",
       });
     }
   }

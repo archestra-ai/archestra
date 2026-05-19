@@ -3329,8 +3329,10 @@ function formatActionableAuthError(params: {
  * `presetFieldValues` lives on the catalog row itself: parent catalog rows
  * carry the default-preset values, child catalog rows ("presets" in UI)
  * carry their own overlay.
+ *
+ * @public — exported for testability
  */
-function applyPresetHeaderMappings(
+export function applyPresetHeaderMappings(
   headers: Record<string, string>,
   catalogItem: InternalMcpCatalog,
 ): void {

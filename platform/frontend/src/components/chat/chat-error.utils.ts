@@ -118,9 +118,24 @@ const CLIENT_ERROR_PATTERNS: Array<{
 ];
 
 /**
+ * Map backend ApiError `type` values to normalized ChatErrorCodes so the inline
+ * error card shows the right badge (code, retryable) regardless of which API
+ * route bounced the request. The backend message is shown verbatim — it's
+ * already user-friendly (e.g. "Request body too large: 65 MB (limit 50 MB)").
+ */
+const BACKEND_ERROR_TYPE_TO_CODE: Record<string, ChatErrorCode> = {
+  api_payload_too_large_error: ChatErrorCode.InvalidRequest,
+  api_validation_error: ChatErrorCode.InvalidRequest,
+  api_authentication_error: ChatErrorCode.Authentication,
+  api_authorization_error: ChatErrorCode.PermissionDenied,
+  api_not_found_error: ChatErrorCode.NotFound,
+  api_internal_server_error: ChatErrorCode.ServerError,
+};
+
+/**
  * Map unstructured errors to a ChatErrorResponse so they display with the
  * same styled error card. Recognizes known client-side patterns (network errors,
- * aborts) and falls back to a generic error for anything else.
+ * aborts), known backend error envelopes, and falls back to a generic error.
  */
 export function mapClientError(error: Error): ChatErrorResponse {
   const msg = error.message;
@@ -135,20 +150,28 @@ export function mapClientError(error: Error): ChatErrorResponse {
     }
   }
 
-  // Try to extract message from backend's { error: { message } } format
+  // Try to extract message + type from backend's { error: { message, type } } format
   let displayMessage = msg;
+  let backendType: string | undefined;
   try {
     const parsed = JSON.parse(msg);
     if (parsed?.error?.message) {
       displayMessage = parsed.error.message;
     }
+    if (typeof parsed?.error?.type === "string") {
+      backendType = parsed.error.type;
+    }
   } catch {
     // Not JSON, use as-is
   }
 
+  const mappedCode = backendType
+    ? BACKEND_ERROR_TYPE_TO_CODE[backendType]
+    : undefined;
+  const code = mappedCode ?? ChatErrorCode.Unknown;
   return {
-    code: ChatErrorCode.Unknown,
-    message: displayMessage || ChatErrorMessages[ChatErrorCode.Unknown],
-    isRetryable: RetryableErrorCodes.has(ChatErrorCode.Unknown),
+    code,
+    message: displayMessage || ChatErrorMessages[code],
+    isRetryable: RetryableErrorCodes.has(code),
   };
 }

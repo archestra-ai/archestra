@@ -69,7 +69,6 @@ export const RouteId = {
   GetCatalogChildren: "getCatalogChildren",
   CreateCatalogChild: "createCatalogChild",
   UpdateCatalogChild: "updateCatalogChild",
-  DeleteCatalogChild: "deleteCatalogChild",
 
   // MCP Server Routes
   GetMcpServers: "getMcpServers",
@@ -354,6 +353,18 @@ export const RouteId = {
 
   // Connection Settings Routes (organization-level)
   UpdateConnectionSettings: "updateConnectionSettings",
+
+  // Preset Entity Name Routes (organization-level - configurable label for catalog presets)
+  UpdatePresetEntityName: "updatePresetEntityName",
+  UpdatePresetEntityDefaultLabel: "updatePresetEntityDefaultLabel",
+  UpdatePresetEntityDefaultValidationRegex:
+    "updatePresetEntityDefaultValidationRegex",
+
+  // Org-level preset entries (Production / Staging / Development buckets)
+  ListMcpPresetEntries: "listMcpPresetEntries",
+  CreateMcpPresetEntry: "createMcpPresetEntry",
+  UpdateMcpPresetEntry: "updateMcpPresetEntry",
+  DeleteMcpPresetEntry: "deleteMcpPresetEntry",
 
   // Knowledge Settings Routes (organization-level)
   UpdateKnowledgeSettings: "updateKnowledgeSettings",

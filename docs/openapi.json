@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.48"
+    "version": "1.2.50"
   },
   "components": {
     "schemas": {
@@ -105307,6 +105307,12 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "presetEntryId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
                       "presetFieldValues": {
                         "default": {},
                         "type": "object",
@@ -105409,6 +105415,7 @@
                       "scope",
                       "parentCatalogItemId",
                       "childName",
+                      "presetEntryId",
                       "presetFieldValues",
                       "presetSecretId",
                       "createdAt",
@@ -106162,6 +106169,12 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "presetEntryId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
                   "presetFieldValues": {
                     "type": "object",
                     "additionalProperties": {
@@ -106738,6 +106751,12 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "presetEntryId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "presetFieldValues": {
                       "default": {},
                       "type": "object",
@@ -106834,6 +106853,7 @@
                     "scope",
                     "parentCatalogItemId",
                     "childName",
+                    "presetEntryId",
                     "presetFieldValues",
                     "presetSecretId",
                     "createdAt",
@@ -107619,6 +107639,12 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "presetEntryId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "presetFieldValues": {
                       "default": {},
                       "type": "object",
@@ -107715,6 +107741,7 @@
                     "scope",
                     "parentCatalogItemId",
                     "childName",
+                    "presetEntryId",
                     "presetFieldValues",
                     "presetSecretId",
                     "createdAt",
@@ -108452,6 +108479,12 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "presetEntryId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
                   "presetFieldValues": {
                     "type": "object",
                     "additionalProperties": {
@@ -109036,6 +109069,12 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "presetEntryId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "presetFieldValues": {
                       "default": {},
                       "type": "object",
@@ -109132,6 +109171,7 @@
                     "scope",
                     "parentCatalogItemId",
                     "childName",
+                    "presetEntryId",
                     "presetFieldValues",
                     "presetSecretId",
                     "createdAt",
@@ -112164,6 +112204,12 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "presetEntryId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
                       "presetFieldValues": {
                         "default": {},
                         "type": "object",
@@ -112260,6 +112306,7 @@
                       "scope",
                       "parentCatalogItemId",
                       "childName",
+                      "presetEntryId",
                       "presetFieldValues",
                       "presetSecretId",
                       "createdAt",
@@ -112522,11 +112569,10 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "childName": {
+                  "presetEntryId": {
                     "type": "string",
-                    "minLength": 1,
-                    "maxLength": 63,
-                    "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
                   "presetFieldValues": {
                     "type": "object",
@@ -112536,7 +112582,7 @@
                   }
                 },
                 "required": [
-                  "childName"
+                  "presetEntryId"
                 ]
               }
             }
@@ -113071,6 +113117,12 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "presetEntryId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "presetFieldValues": {
                       "default": {},
                       "type": "object",
@@ -113167,6 +113219,7 @@
                     "scope",
                     "parentCatalogItemId",
                     "childName",
+                    "presetEntryId",
                     "presetFieldValues",
                     "presetSecretId",
                     "createdAt",
@@ -113980,6 +114033,12 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "presetEntryId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "presetFieldValues": {
                       "default": {},
                       "type": "object",
@@ -114076,6 +114135,7 @@
                     "scope",
                     "parentCatalogItemId",
                     "childName",
+                    "presetEntryId",
                     "presetFieldValues",
                     "presetSecretId",
                     "createdAt",
@@ -114321,290 +114381,6 @@
           "kind": "static",
           "permissions": [
             "mcpRegistry:update"
-          ]
-        }
-      },
-      "delete": {
-        "operationId": "deleteCatalogChild",
-        "tags": [
-          "MCP Catalog"
-        ],
-        "description": "Delete a child catalog item (\"preset\" in UI)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:delete`: Remove servers from the MCP registry",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
-            },
-            "in": "path",
-            "name": "catalogId",
-            "required": true
-          },
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
-            },
-            "in": "path",
-            "name": "childId",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "success"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "mcpRegistry:delete"
           ]
         }
       }
@@ -135111,6 +134887,1214 @@
         }
       }
     },
+    "/api/organization/mcp-preset-entries": {
+      "get": {
+        "operationId": "listMcpPresetEntries",
+        "tags": [
+          "Organization"
+        ],
+        "description": "List org-level preset entries (e.g. Production, Staging). Includes an assignedCatalogCount so the UI can render a delete-confirmation count.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:read`: Browse the MCP server registry",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "organizationId": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "sortOrder": {
+                        "type": "integer",
+                        "minimum": -2147483648,
+                        "maximum": 2147483647
+                      },
+                      "validationRegex": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "assignedCatalogCount": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "organizationId",
+                      "name",
+                      "sortOrder",
+                      "validationRegex",
+                      "createdAt",
+                      "assignedCatalogCount"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "mcpRegistry:read"
+          ]
+        }
+      },
+      "post": {
+        "operationId": "createMcpPresetEntry",
+        "tags": [
+          "Organization"
+        ],
+        "description": "Create an org-level preset entry. Name is immutable after creation — there is no update endpoint.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:admin`: Approve or manage all MCP server installations",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 50
+                  },
+                  "validationRegex": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "organizationId": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "sortOrder": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
+                    "validationRegex": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "organizationId",
+                    "name",
+                    "sortOrder",
+                    "validationRegex",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "mcpServerInstallation:admin"
+          ]
+        }
+      }
+    },
+    "/api/organization/mcp-preset-entries/{id}": {
+      "patch": {
+        "operationId": "updateMcpPresetEntry",
+        "tags": [
+          "Organization"
+        ],
+        "description": "Update a preset entry's validation regex. Name is immutable.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:admin`: Approve or manage all MCP server installations",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "validationRegex": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "validationRegex"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "organizationId": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "sortOrder": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
+                    "validationRegex": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "organizationId",
+                    "name",
+                    "sortOrder",
+                    "validationRegex",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "mcpServerInstallation:admin"
+          ]
+        }
+      },
+      "delete": {
+        "operationId": "deleteMcpPresetEntry",
+        "tags": [
+          "Organization"
+        ],
+        "description": "Delete an org-level preset entry. Cascade-deletes every per-catalog child that references it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:admin`: Approve or manage all MCP server installations",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "mcpServerInstallation:admin"
+          ]
+        }
+      }
+    },
     "/api/mcp/{agentId}": {
       "post": {
         "operationId": "mcpProxyPost",
@@ -141304,6 +142288,38 @@
                         "format": "uuid",
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       },
+                      "environmentValues": {
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "boolean"
+                              },
+                              {
+                                "type": "string",
+                                "nullable": true,
+                                "enum": [
+                                  null
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "array",
+                            "items": {}
+                          }
+                        ]
+                      },
                       "ownerId": {
                         "nullable": true,
                         "type": "string"
@@ -141434,6 +142450,7 @@
                       "catalogId",
                       "serverType",
                       "secretId",
+                      "environmentValues",
                       "ownerId",
                       "teamId",
                       "scope",
@@ -141713,6 +142730,12 @@
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
                   },
+                  "environmentValues": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
                   "ownerId": {
                     "nullable": true,
                     "type": "string"
@@ -141767,12 +142790,6 @@
                       "type": "string"
                     }
                   },
-                  "environmentValues": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "string"
-                    }
-                  },
                   "agentIds": {
                     "type": "array",
                     "items": {
@@ -141789,12 +142806,6 @@
                   },
                   "serviceAccount": {
                     "type": "string"
-                  },
-                  "presetFieldValues": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "$ref": "#/components/schemas/UserConfigFieldDefaultInput"
-                    }
                   }
                 },
                 "required": [
@@ -141839,6 +142850,38 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "environmentValues": {
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "array",
+                          "items": {}
+                        }
+                      ]
                     },
                     "ownerId": {
                       "nullable": true,
@@ -141970,6 +143013,7 @@
                     "catalogId",
                     "serverType",
                     "secretId",
+                    "environmentValues",
                     "ownerId",
                     "teamId",
                     "scope",
@@ -142277,6 +143321,38 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "environmentValues": {
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "array",
+                          "items": {}
+                        }
+                      ]
+                    },
                     "ownerId": {
                       "nullable": true,
                       "type": "string"
@@ -142407,6 +143483,7 @@
                     "catalogId",
                     "serverType",
                     "secretId",
+                    "environmentValues",
                     "ownerId",
                     "teamId",
                     "scope",
@@ -143023,6 +144100,38 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "environmentValues": {
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "array",
+                          "items": {}
+                        }
+                      ]
+                    },
                     "ownerId": {
                       "nullable": true,
                       "type": "string"
@@ -143153,6 +144262,7 @@
                     "catalogId",
                     "serverType",
                     "secretId",
+                    "environmentValues",
                     "ownerId",
                     "teamId",
                     "scope",
@@ -144397,6 +145507,38 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "environmentValues": {
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "array",
+                          "items": {}
+                        }
+                      ]
+                    },
                     "ownerId": {
                       "nullable": true,
                       "type": "string"
@@ -144527,6 +145669,7 @@
                     "catalogId",
                     "serverType",
                     "secretId",
+                    "environmentValues",
                     "ownerId",
                     "teamId",
                     "scope",
@@ -157035,6 +158178,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "iconLogoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
@@ -157113,6 +158260,22 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "presetEntityName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityNamePlural": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityDefaultLabel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityDefaultValidationRegex": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -157151,6 +158314,7 @@
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
+                    "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
@@ -157160,7 +158324,11 @@
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
                     "connectionShownProviders",
-                    "connectionBaseUrls"
+                    "connectionBaseUrls",
+                    "presetEntityName",
+                    "presetEntityNamePlural",
+                    "presetEntityDefaultLabel",
+                    "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
                 }
@@ -157470,6 +158638,10 @@
                     "type": "string"
                   },
                   "iconLogo": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "iconLogoDark": {
                     "nullable": true,
                     "type": "string"
                   },
@@ -157848,6 +159020,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "iconLogoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
@@ -157926,6 +159102,22 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "presetEntityName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityNamePlural": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityDefaultLabel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityDefaultValidationRegex": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -157964,6 +159156,7 @@
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
+                    "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
@@ -157973,7 +159166,11 @@
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
                     "connectionShownProviders",
-                    "connectionBaseUrls"
+                    "connectionBaseUrls",
+                    "presetEntityName",
+                    "presetEntityNamePlural",
+                    "presetEntityDefaultLabel",
+                    "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
                 }
@@ -158286,6 +159483,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "iconLogoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "appName": {
                       "nullable": true,
                       "type": "string"
@@ -158376,6 +159577,7 @@
                     "logoDark",
                     "favicon",
                     "iconLogo",
+                    "iconLogoDark",
                     "appName",
                     "ogDescription",
                     "footerText",
@@ -158932,6 +160134,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "iconLogoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
@@ -159010,6 +160216,22 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "presetEntityName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityNamePlural": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityDefaultLabel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityDefaultValidationRegex": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -159048,6 +160270,7 @@
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
+                    "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
@@ -159057,7 +160280,11 @@
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
                     "connectionShownProviders",
-                    "connectionBaseUrls"
+                    "connectionBaseUrls",
+                    "presetEntityName",
+                    "presetEntityNamePlural",
+                    "presetEntityDefaultLabel",
+                    "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
                 }
@@ -159631,6 +160858,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "iconLogoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
@@ -159709,6 +160940,22 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "presetEntityName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityNamePlural": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityDefaultLabel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityDefaultValidationRegex": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -159747,6 +160994,7 @@
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
+                    "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
@@ -159756,7 +161004,11 @@
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
                     "connectionShownProviders",
-                    "connectionBaseUrls"
+                    "connectionBaseUrls",
+                    "presetEntityName",
+                    "presetEntityNamePlural",
+                    "presetEntityDefaultLabel",
+                    "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
                 }
@@ -160335,6 +161587,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "iconLogoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
@@ -160413,6 +161669,22 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "presetEntityName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityNamePlural": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityDefaultLabel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityDefaultValidationRegex": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -160451,6 +161723,7 @@
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
+                    "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
@@ -160460,7 +161733,11 @@
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
                     "connectionShownProviders",
-                    "connectionBaseUrls"
+                    "connectionBaseUrls",
+                    "presetEntityName",
+                    "presetEntityNamePlural",
+                    "presetEntityDefaultLabel",
+                    "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
                 }
@@ -161083,6 +162360,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "iconLogoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
@@ -161161,6 +162442,22 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "presetEntityName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityNamePlural": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityDefaultLabel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityDefaultValidationRegex": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -161199,6 +162496,7 @@
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
+                    "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
@@ -161208,7 +162506,11 @@
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
                     "connectionShownProviders",
-                    "connectionBaseUrls"
+                    "connectionBaseUrls",
+                    "presetEntityName",
+                    "presetEntityNamePlural",
+                    "presetEntityDefaultLabel",
+                    "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
                 }
@@ -161448,6 +162750,2109 @@
           "kind": "static",
           "permissions": [
             "organizationSettings:update"
+          ]
+        }
+      }
+    },
+    "/api/organization/preset-entity-name": {
+      "patch": {
+        "operationId": "updatePresetEntityName",
+        "tags": [
+          "Organization"
+        ],
+        "description": "Configure the org-wide display label for catalog presets (the per-item child-configuration entity). Both singular and plural must be set together, or both null to reset.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:admin`: Approve or manage all MCP server installations",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "presetEntityName": {
+                    "nullable": true,
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 50
+                  },
+                  "presetEntityNamePlural": {
+                    "nullable": true,
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 50
+                  }
+                },
+                "required": [
+                  "presetEntityName",
+                  "presetEntityNamePlural"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "logo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "logoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "metadata": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "onboardingComplete": {
+                      "type": "boolean"
+                    },
+                    "theme": {
+                      "type": "string",
+                      "enum": [
+                        "modern-minimal",
+                        "clean-slate",
+                        "mono",
+                        "twitter",
+                        "tangerine",
+                        "bubblegum",
+                        "caffeine",
+                        "amber-minimal",
+                        "cosmic-night",
+                        "doom-64",
+                        "mocha-mousse",
+                        "nature",
+                        "sunset-horizon",
+                        "neo-brutalism",
+                        "vercel",
+                        "claude",
+                        "vintage-paper",
+                        "boxy-minimalistic",
+                        "catppuccin",
+                        "solarized-dark",
+                        "gruvbox-dark",
+                        "dracula-dark",
+                        "monokai-dark",
+                        "moonlight-dark"
+                      ]
+                    },
+                    "customFont": {
+                      "type": "string",
+                      "enum": [
+                        "lato",
+                        "inter",
+                        "open-sans",
+                        "roboto",
+                        "source-sans-pro",
+                        "jetbrains-mono"
+                      ]
+                    },
+                    "convertToolResultsToToon": {
+                      "type": "boolean"
+                    },
+                    "compressionScope": {
+                      "type": "string",
+                      "enum": [
+                        "organization",
+                        "team"
+                      ]
+                    },
+                    "globalToolPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "permissive",
+                        "restrictive"
+                      ]
+                    },
+                    "allowChatFileUploads": {
+                      "type": "boolean"
+                    },
+                    "embeddingModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "embeddingDimensions": {
+                      "nullable": true,
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/EmbeddingDimensions"
+                        }
+                      ]
+                    },
+                    "embeddingChatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "rerankerChatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "rerankerModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "defaultLlmModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "defaultLlmProvider": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "openai",
+                        "gemini",
+                        "anthropic",
+                        "bedrock",
+                        "cohere",
+                        "cerebras",
+                        "mistral",
+                        "perplexity",
+                        "groq",
+                        "xai",
+                        "openrouter",
+                        "vllm",
+                        "ollama",
+                        "zhipuai",
+                        "deepseek",
+                        "minimax",
+                        "azure"
+                      ]
+                    },
+                    "defaultLlmApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultUserLimitValue": {
+                      "nullable": true,
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    },
+                    "defaultUserLimitModel": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "defaultUserLimitCleanupInterval": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
+                    },
+                    "defaultAgentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "favicon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "appName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "ogDescription": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "footerText": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatLinks": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 25
+                          },
+                          "url": {
+                            "type": "string",
+                            "maxLength": 2000
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "url"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "onboardingWizard": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 25
+                        },
+                        "pages": {
+                          "minItems": 1,
+                          "maxItems": 10,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "image": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "pages"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "chatPlaceholders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "animateChatPlaceholders": {
+                      "type": "boolean"
+                    },
+                    "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "iconLogoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatErrorSupportMessage": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
+                    "showTwoFactor": {
+                      "type": "boolean"
+                    },
+                    "oauthAccessTokenLifetimeSeconds": {
+                      "type": "integer",
+                      "minimum": 300,
+                      "maximum": 31536000
+                    },
+                    "connectionDefaultMcpGatewayId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "connectionDefaultLlmProxyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "connectionDefaultClientId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "connectionShownClientIds": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "connectionShownProviders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "connectionBaseUrls": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          },
+                          "description": {
+                            "default": "",
+                            "type": "string",
+                            "maxLength": 500
+                          },
+                          "isDefault": {
+                            "default": false,
+                            "type": "boolean"
+                          },
+                          "visible": {
+                            "default": true,
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "description",
+                          "isDefault",
+                          "visible"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "presetEntityName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityNamePlural": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityDefaultLabel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityDefaultValidationRegex": {
+                      "nullable": true,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "slug",
+                    "logo",
+                    "logoDark",
+                    "createdAt",
+                    "metadata",
+                    "onboardingComplete",
+                    "theme",
+                    "customFont",
+                    "convertToolResultsToToon",
+                    "compressionScope",
+                    "globalToolPolicy",
+                    "allowChatFileUploads",
+                    "embeddingModel",
+                    "embeddingDimensions",
+                    "embeddingChatApiKeyId",
+                    "rerankerChatApiKeyId",
+                    "rerankerModel",
+                    "defaultLlmModel",
+                    "defaultLlmProvider",
+                    "defaultLlmApiKeyId",
+                    "defaultUserLimitValue",
+                    "defaultUserLimitModel",
+                    "defaultUserLimitCleanupInterval",
+                    "defaultAgentId",
+                    "favicon",
+                    "appName",
+                    "ogDescription",
+                    "footerText",
+                    "chatLinks",
+                    "onboardingWizard",
+                    "chatPlaceholders",
+                    "animateChatPlaceholders",
+                    "iconLogo",
+                    "iconLogoDark",
+                    "chatErrorSupportMessage",
+                    "slimChatErrorUi",
+                    "showTwoFactor",
+                    "oauthAccessTokenLifetimeSeconds",
+                    "connectionDefaultMcpGatewayId",
+                    "connectionDefaultLlmProxyId",
+                    "connectionDefaultClientId",
+                    "connectionShownClientIds",
+                    "connectionShownProviders",
+                    "connectionBaseUrls",
+                    "presetEntityName",
+                    "presetEntityNamePlural",
+                    "presetEntityDefaultLabel",
+                    "presetEntityDefaultValidationRegex"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "mcpServerInstallation:admin"
+          ]
+        }
+      }
+    },
+    "/api/organization/preset-entity-default-label": {
+      "patch": {
+        "operationId": "updatePresetEntityDefaultLabel",
+        "tags": [
+          "Organization"
+        ],
+        "description": "Configure the org-wide display label for the implicit default preset row (parent catalog item). Pass null to reset to the built-in 'Default' label.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:admin`: Approve or manage all MCP server installations",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "presetEntityDefaultLabel": {
+                    "nullable": true,
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 50
+                  }
+                },
+                "required": [
+                  "presetEntityDefaultLabel"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "logo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "logoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "metadata": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "onboardingComplete": {
+                      "type": "boolean"
+                    },
+                    "theme": {
+                      "type": "string",
+                      "enum": [
+                        "modern-minimal",
+                        "clean-slate",
+                        "mono",
+                        "twitter",
+                        "tangerine",
+                        "bubblegum",
+                        "caffeine",
+                        "amber-minimal",
+                        "cosmic-night",
+                        "doom-64",
+                        "mocha-mousse",
+                        "nature",
+                        "sunset-horizon",
+                        "neo-brutalism",
+                        "vercel",
+                        "claude",
+                        "vintage-paper",
+                        "boxy-minimalistic",
+                        "catppuccin",
+                        "solarized-dark",
+                        "gruvbox-dark",
+                        "dracula-dark",
+                        "monokai-dark",
+                        "moonlight-dark"
+                      ]
+                    },
+                    "customFont": {
+                      "type": "string",
+                      "enum": [
+                        "lato",
+                        "inter",
+                        "open-sans",
+                        "roboto",
+                        "source-sans-pro",
+                        "jetbrains-mono"
+                      ]
+                    },
+                    "convertToolResultsToToon": {
+                      "type": "boolean"
+                    },
+                    "compressionScope": {
+                      "type": "string",
+                      "enum": [
+                        "organization",
+                        "team"
+                      ]
+                    },
+                    "globalToolPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "permissive",
+                        "restrictive"
+                      ]
+                    },
+                    "allowChatFileUploads": {
+                      "type": "boolean"
+                    },
+                    "embeddingModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "embeddingDimensions": {
+                      "nullable": true,
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/EmbeddingDimensions"
+                        }
+                      ]
+                    },
+                    "embeddingChatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "rerankerChatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "rerankerModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "defaultLlmModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "defaultLlmProvider": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "openai",
+                        "gemini",
+                        "anthropic",
+                        "bedrock",
+                        "cohere",
+                        "cerebras",
+                        "mistral",
+                        "perplexity",
+                        "groq",
+                        "xai",
+                        "openrouter",
+                        "vllm",
+                        "ollama",
+                        "zhipuai",
+                        "deepseek",
+                        "minimax",
+                        "azure"
+                      ]
+                    },
+                    "defaultLlmApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultUserLimitValue": {
+                      "nullable": true,
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    },
+                    "defaultUserLimitModel": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "defaultUserLimitCleanupInterval": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
+                    },
+                    "defaultAgentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "favicon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "appName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "ogDescription": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "footerText": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatLinks": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 25
+                          },
+                          "url": {
+                            "type": "string",
+                            "maxLength": 2000
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "url"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "onboardingWizard": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 25
+                        },
+                        "pages": {
+                          "minItems": 1,
+                          "maxItems": 10,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "image": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "pages"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "chatPlaceholders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "animateChatPlaceholders": {
+                      "type": "boolean"
+                    },
+                    "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "iconLogoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatErrorSupportMessage": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
+                    "showTwoFactor": {
+                      "type": "boolean"
+                    },
+                    "oauthAccessTokenLifetimeSeconds": {
+                      "type": "integer",
+                      "minimum": 300,
+                      "maximum": 31536000
+                    },
+                    "connectionDefaultMcpGatewayId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "connectionDefaultLlmProxyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "connectionDefaultClientId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "connectionShownClientIds": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "connectionShownProviders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "connectionBaseUrls": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          },
+                          "description": {
+                            "default": "",
+                            "type": "string",
+                            "maxLength": 500
+                          },
+                          "isDefault": {
+                            "default": false,
+                            "type": "boolean"
+                          },
+                          "visible": {
+                            "default": true,
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "description",
+                          "isDefault",
+                          "visible"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "presetEntityName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityNamePlural": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityDefaultLabel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityDefaultValidationRegex": {
+                      "nullable": true,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "slug",
+                    "logo",
+                    "logoDark",
+                    "createdAt",
+                    "metadata",
+                    "onboardingComplete",
+                    "theme",
+                    "customFont",
+                    "convertToolResultsToToon",
+                    "compressionScope",
+                    "globalToolPolicy",
+                    "allowChatFileUploads",
+                    "embeddingModel",
+                    "embeddingDimensions",
+                    "embeddingChatApiKeyId",
+                    "rerankerChatApiKeyId",
+                    "rerankerModel",
+                    "defaultLlmModel",
+                    "defaultLlmProvider",
+                    "defaultLlmApiKeyId",
+                    "defaultUserLimitValue",
+                    "defaultUserLimitModel",
+                    "defaultUserLimitCleanupInterval",
+                    "defaultAgentId",
+                    "favicon",
+                    "appName",
+                    "ogDescription",
+                    "footerText",
+                    "chatLinks",
+                    "onboardingWizard",
+                    "chatPlaceholders",
+                    "animateChatPlaceholders",
+                    "iconLogo",
+                    "iconLogoDark",
+                    "chatErrorSupportMessage",
+                    "slimChatErrorUi",
+                    "showTwoFactor",
+                    "oauthAccessTokenLifetimeSeconds",
+                    "connectionDefaultMcpGatewayId",
+                    "connectionDefaultLlmProxyId",
+                    "connectionDefaultClientId",
+                    "connectionShownClientIds",
+                    "connectionShownProviders",
+                    "connectionBaseUrls",
+                    "presetEntityName",
+                    "presetEntityNamePlural",
+                    "presetEntityDefaultLabel",
+                    "presetEntityDefaultValidationRegex"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "mcpServerInstallation:admin"
+          ]
+        }
+      }
+    },
+    "/api/organization/preset-entity-default-validation-regex": {
+      "patch": {
+        "operationId": "updatePresetEntityDefaultValidationRegex",
+        "tags": [
+          "Organization"
+        ],
+        "description": "Set the validation regex applied to default-scoped field values when installing an MCP server (mirrors mcp_preset_entries.validation_regex for the implicit default row). Stored without delimiters or flags. Pass null to disable.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:admin`: Approve or manage all MCP server installations",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "presetEntityDefaultValidationRegex": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "presetEntityDefaultValidationRegex"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "logo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "logoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "metadata": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "onboardingComplete": {
+                      "type": "boolean"
+                    },
+                    "theme": {
+                      "type": "string",
+                      "enum": [
+                        "modern-minimal",
+                        "clean-slate",
+                        "mono",
+                        "twitter",
+                        "tangerine",
+                        "bubblegum",
+                        "caffeine",
+                        "amber-minimal",
+                        "cosmic-night",
+                        "doom-64",
+                        "mocha-mousse",
+                        "nature",
+                        "sunset-horizon",
+                        "neo-brutalism",
+                        "vercel",
+                        "claude",
+                        "vintage-paper",
+                        "boxy-minimalistic",
+                        "catppuccin",
+                        "solarized-dark",
+                        "gruvbox-dark",
+                        "dracula-dark",
+                        "monokai-dark",
+                        "moonlight-dark"
+                      ]
+                    },
+                    "customFont": {
+                      "type": "string",
+                      "enum": [
+                        "lato",
+                        "inter",
+                        "open-sans",
+                        "roboto",
+                        "source-sans-pro",
+                        "jetbrains-mono"
+                      ]
+                    },
+                    "convertToolResultsToToon": {
+                      "type": "boolean"
+                    },
+                    "compressionScope": {
+                      "type": "string",
+                      "enum": [
+                        "organization",
+                        "team"
+                      ]
+                    },
+                    "globalToolPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "permissive",
+                        "restrictive"
+                      ]
+                    },
+                    "allowChatFileUploads": {
+                      "type": "boolean"
+                    },
+                    "embeddingModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "embeddingDimensions": {
+                      "nullable": true,
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/EmbeddingDimensions"
+                        }
+                      ]
+                    },
+                    "embeddingChatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "rerankerChatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "rerankerModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "defaultLlmModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "defaultLlmProvider": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "openai",
+                        "gemini",
+                        "anthropic",
+                        "bedrock",
+                        "cohere",
+                        "cerebras",
+                        "mistral",
+                        "perplexity",
+                        "groq",
+                        "xai",
+                        "openrouter",
+                        "vllm",
+                        "ollama",
+                        "zhipuai",
+                        "deepseek",
+                        "minimax",
+                        "azure"
+                      ]
+                    },
+                    "defaultLlmApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultUserLimitValue": {
+                      "nullable": true,
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    },
+                    "defaultUserLimitModel": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "defaultUserLimitCleanupInterval": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
+                    },
+                    "defaultAgentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "favicon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "appName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "ogDescription": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "footerText": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatLinks": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 25
+                          },
+                          "url": {
+                            "type": "string",
+                            "maxLength": 2000
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "url"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "onboardingWizard": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 25
+                        },
+                        "pages": {
+                          "minItems": 1,
+                          "maxItems": 10,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "image": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "pages"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "chatPlaceholders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "animateChatPlaceholders": {
+                      "type": "boolean"
+                    },
+                    "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "iconLogoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatErrorSupportMessage": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
+                    "showTwoFactor": {
+                      "type": "boolean"
+                    },
+                    "oauthAccessTokenLifetimeSeconds": {
+                      "type": "integer",
+                      "minimum": 300,
+                      "maximum": 31536000
+                    },
+                    "connectionDefaultMcpGatewayId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "connectionDefaultLlmProxyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "connectionDefaultClientId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "connectionShownClientIds": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "connectionShownProviders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "connectionBaseUrls": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          },
+                          "description": {
+                            "default": "",
+                            "type": "string",
+                            "maxLength": 500
+                          },
+                          "isDefault": {
+                            "default": false,
+                            "type": "boolean"
+                          },
+                          "visible": {
+                            "default": true,
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "description",
+                          "isDefault",
+                          "visible"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "presetEntityName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityNamePlural": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityDefaultLabel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityDefaultValidationRegex": {
+                      "nullable": true,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "slug",
+                    "logo",
+                    "logoDark",
+                    "createdAt",
+                    "metadata",
+                    "onboardingComplete",
+                    "theme",
+                    "customFont",
+                    "convertToolResultsToToon",
+                    "compressionScope",
+                    "globalToolPolicy",
+                    "allowChatFileUploads",
+                    "embeddingModel",
+                    "embeddingDimensions",
+                    "embeddingChatApiKeyId",
+                    "rerankerChatApiKeyId",
+                    "rerankerModel",
+                    "defaultLlmModel",
+                    "defaultLlmProvider",
+                    "defaultLlmApiKeyId",
+                    "defaultUserLimitValue",
+                    "defaultUserLimitModel",
+                    "defaultUserLimitCleanupInterval",
+                    "defaultAgentId",
+                    "favicon",
+                    "appName",
+                    "ogDescription",
+                    "footerText",
+                    "chatLinks",
+                    "onboardingWizard",
+                    "chatPlaceholders",
+                    "animateChatPlaceholders",
+                    "iconLogo",
+                    "iconLogoDark",
+                    "chatErrorSupportMessage",
+                    "slimChatErrorUi",
+                    "showTwoFactor",
+                    "oauthAccessTokenLifetimeSeconds",
+                    "connectionDefaultMcpGatewayId",
+                    "connectionDefaultLlmProxyId",
+                    "connectionDefaultClientId",
+                    "connectionShownClientIds",
+                    "connectionShownProviders",
+                    "connectionBaseUrls",
+                    "presetEntityName",
+                    "presetEntityNamePlural",
+                    "presetEntityDefaultLabel",
+                    "presetEntityDefaultValidationRegex"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "mcpServerInstallation:admin"
           ]
         }
       }
@@ -161756,6 +165161,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "iconLogoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
@@ -161834,6 +165243,22 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "presetEntityName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityNamePlural": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityDefaultLabel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityDefaultValidationRegex": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -161872,6 +165297,7 @@
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
+                    "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
@@ -161881,7 +165307,11 @@
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
                     "connectionShownProviders",
-                    "connectionBaseUrls"
+                    "connectionBaseUrls",
+                    "presetEntityName",
+                    "presetEntityNamePlural",
+                    "presetEntityDefaultLabel",
+                    "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
                 }
@@ -162442,6 +165872,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "iconLogoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
@@ -162520,6 +165954,22 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "presetEntityName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityNamePlural": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityDefaultLabel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityDefaultValidationRegex": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -162558,6 +166008,7 @@
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
+                    "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
@@ -162567,7 +166018,11 @@
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
                     "connectionShownProviders",
-                    "connectionBaseUrls"
+                    "connectionBaseUrls",
+                    "presetEntityName",
+                    "presetEntityNamePlural",
+                    "presetEntityDefaultLabel",
+                    "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
                 }
@@ -163095,6 +166550,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "iconLogoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
@@ -163173,6 +166632,22 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "presetEntityName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityNamePlural": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityDefaultLabel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityDefaultValidationRegex": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -163211,6 +166686,7 @@
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
+                    "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
@@ -163220,7 +166696,11 @@
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
                     "connectionShownProviders",
-                    "connectionBaseUrls"
+                    "connectionBaseUrls",
+                    "presetEntityName",
+                    "presetEntityNamePlural",
+                    "presetEntityDefaultLabel",
+                    "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
                 }
@@ -164061,6 +167541,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "iconLogoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
@@ -164139,6 +167623,22 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "presetEntityName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityNamePlural": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityDefaultLabel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "presetEntityDefaultValidationRegex": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -164177,6 +167677,7 @@
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
+                    "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
@@ -164186,7 +167687,11 @@
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
                     "connectionShownProviders",
-                    "connectionBaseUrls"
+                    "connectionBaseUrls",
+                    "presetEntityName",
+                    "presetEntityNamePlural",
+                    "presetEntityDefaultLabel",
+                    "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
                 }

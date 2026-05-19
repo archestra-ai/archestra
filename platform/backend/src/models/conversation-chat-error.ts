@@ -108,5 +108,3 @@ function stringifyUnknown(value: unknown): string {
 }
 
 export default ConversationChatErrorModel;
-
-export const __test = { normalizeChatErrorResponse };

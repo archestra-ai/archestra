@@ -386,3 +386,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @Yeetusbleetus
 - @pedropaulovc
 - @is3ka1
+- @akhildevelops

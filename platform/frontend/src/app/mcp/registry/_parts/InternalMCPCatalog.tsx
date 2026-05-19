@@ -1016,17 +1016,29 @@ export function InternalMCPCatalog({
           ],
     );
 
-    // For local servers: check if there are prompted env vars that require user input
-    // If so, open the install dialog directly in reinstall mode
-    // For remote servers: show confirmation dialog (since they may need OAuth re-auth)
+    // For local servers: open the install dialog (reinstall mode) when the
+    // dialog will actually render an input — prompted env var on a single-
+    // tenant catalog, or a promptable userConfig (header) field. Filters
+    // mirror the dialog's own render filters so the two stay in sync; if
+    // they drift again, the user can be left clicking a confirm dialog
+    // when they actually owe credentials.
+    // For remote servers: show confirmation dialog (may need OAuth re-auth).
     if (catalogItem.serverType === "local") {
-      const promptedEnvVars =
-        catalogItem.localConfig?.environment?.filter(
-          (env) => env.promptOnInstallation === true,
-        ) || [];
+      const hasPromptedEnv =
+        !catalogItem.multitenant &&
+        (catalogItem.localConfig?.environment?.some(
+          (env) => env.promptOnInstallation !== false && !env.promptOnPreset,
+        ) ??
+          false);
 
-      if (promptedEnvVars.length > 0) {
-        // Has prompted env vars - open dialog to collect values (reinstall mode)
+      const hasPromptedUserConfig = Object.values(
+        catalogItem.userConfig ?? {},
+      ).some(
+        (field) =>
+          field.promptOnInstallation !== false && !field.promptOnPreset,
+      );
+
+      if (hasPromptedEnv || hasPromptedUserConfig) {
         setLocalServerCatalogItem(catalogItem);
         setReinstallServerId(installedServer.id);
         setReinstallServerTeamId(installedServer.teamId ?? null);
@@ -1036,7 +1048,6 @@ export function InternalMCPCatalog({
         );
         openDialog("local-install");
       } else {
-        // No prompted env vars - still confirm before reinstalling
         setCatalogItemForReinstall(catalogItem);
         openDialog("reinstall");
       }

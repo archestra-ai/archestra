@@ -23,8 +23,8 @@ import {
 } from "@/types";
 import {
   type ResolvedLlmSelection,
-  resolveConfiguredAgentLlm,
   resolveBestAvailableLlm,
+  resolveConfiguredAgentLlm,
 } from "@/utils/llm-resolution";
 
 interface AutoPolicyResult {
@@ -91,7 +91,8 @@ export class PolicyConfigurationService {
 
     // Use pre-resolved LLM or resolve now
     const resolved =
-      resolvedLlm ?? (await resolveBestAvailableLlm({ organizationId, userId }));
+      resolvedLlm ??
+      (await resolveBestAvailableLlm({ organizationId, userId }));
     if (!resolved) {
       logger.warn(
         { toolId, organizationId },

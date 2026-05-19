@@ -12,10 +12,10 @@ import {
 import { beforeEach, describe, expect, test } from "@/test";
 import * as llmApiKeyResolution from "@/utils/llm-api-key-resolution";
 import {
+  resolveBestAvailableLlm,
   resolveConfiguredAgentLlm,
   resolveConversationLlmSelectionForAgent,
   resolveFastModelName,
-  resolveBestAvailableLlm,
 } from "./llm-resolution";
 
 vi.mock("@/clients/gemini-client", () => ({

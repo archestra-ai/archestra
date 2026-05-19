@@ -13,8 +13,8 @@ import type {
   DualLlmMessage,
 } from "@/types";
 import {
-  resolveConfiguredAgentLlm,
   resolveBestAvailableLlm,
+  resolveConfiguredAgentLlm,
 } from "@/utils/llm-resolution";
 
 export class DualLlmSubagent {

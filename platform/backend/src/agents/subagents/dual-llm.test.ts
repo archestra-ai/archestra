@@ -14,7 +14,6 @@ vi.mock("ai", () => ({
 
 vi.mock("@/clients/llm-client", () => ({
   createDirectLLMModel: vi.fn(() => "mocked-model"),
-  detectProviderFromModel: vi.fn(() => "openai"),
   resolveProviderApiKey: vi.fn(),
 }));
 

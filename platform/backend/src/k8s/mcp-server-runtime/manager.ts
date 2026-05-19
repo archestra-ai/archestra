@@ -662,6 +662,35 @@ export class McpServerRuntimeManager {
         throw new Error(`MCP server with id ${mcpServerId} not found`);
       }
 
+      // Multi-tenant catalogs share one K8s deployment across all installs.
+      // A per-install restart has nothing to actually restart here: the
+      // sibling guard in `stopServer` correctly preserves the shared pod,
+      // but `startServer` would then try to create the deployment/service
+      // again and get a 409 from K8s ("already exists"), surfacing as a
+      // bogus "Installation failed" on the install row even though the
+      // pod is healthy.
+      //
+      // For multi-tenant catalogs the authorized path to recreate the
+      // shared pod is `reinstallSharedDeployment` (catalog-level, invoked
+      // by POST /api/internal_mcp_catalog/:id/reinstall). It bypasses the
+      // sibling guard and tears down + recreates the pod for everyone in
+      // one shot. Per-install reinstall on a multi-tenant catalog is a
+      // bookkeeping operation (persist new prompted secrets + tool resync
+      // against the existing pod) and must not touch K8s state.
+      // TODO: ideally it all should live in a single method, and not be split
+      const isShared =
+        await McpServerRuntimeManager.isSharedMultitenantDeployment(
+          mcpServerId,
+        );
+      if (isShared) {
+        await this.getOrLoadDeployment(mcpServerId);
+        logger.info(
+          { mcpServerId },
+          "Skipping K8s deployment restart: multi-tenant catalog has other callers; use reinstallSharedDeployment for catalog-level rollouts",
+        );
+        return;
+      }
+
       // Clean up stored HTTP session IDs before stopping the server.
       // After a restart, existing session IDs become stale and would cause
       // "Session not found" errors for in-flight conversations.

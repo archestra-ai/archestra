@@ -9,7 +9,6 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import config from "@/config";
-import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import {
   generateDeploymentYamlTemplate,
   mergeLocalConfigIntoYaml,
@@ -31,8 +30,8 @@ import {
   autoReinstallServer,
   localExecutionConfigChanged,
   onlyForwardCompatibleEnvDiff,
+  reinstallMultitenantCatalog,
   requiresNewUserInputForReinstall,
-  syncToolsForServer,
 } from "@/services/mcp-reinstall";
 import {
   ApiError,
@@ -1069,69 +1068,13 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      const installs = await McpServerModel.findByCatalogId(catalogItem.id);
-
-      // Flip every install pending up-front so each tenant's UI shows
-      // progress; per-install events are fanned out as each one's tool
-      // sync completes (matches existing reinstall UX).
-      for (const install of installs) {
-        await McpServerModel.update(install.id, {
-          localInstallationStatus: "pending",
-          localInstallationError: null,
-        });
-        broadcastMcpInstallationStatus(install.id, "pending", null);
-      }
-
-      // Phase 1 — recreate the shared pod with the current catalog spec
-      // (delete + create, bypassing the sibling guard).
       try {
-        await McpServerRuntimeManager.reinstallSharedDeployment(catalogItem.id);
+        await reinstallMultitenantCatalog(catalogItem);
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : "Unknown error";
-        logger.error(
-          { err: error, catalogId: catalogItem.id },
-          "Catalog reinstall: shared deployment recreate failed",
-        );
-        for (const install of installs) {
-          await McpServerModel.update(install.id, {
-            localInstallationStatus: "error",
-            localInstallationError: errorMessage,
-          });
-          broadcastMcpInstallationStatus(install.id, "error", errorMessage);
-        }
         throw new ApiError(500, errorMessage);
       }
-
-      // Phase 2 — cascade tool sync to every install. Per-install errors
-      // are surfaced via WebSocket but don't abort the cascade; remaining
-      // installs still get a chance to sync.
-      for (const install of installs) {
-        try {
-          await syncToolsForServer(install, catalogItem);
-          await McpServerModel.update(install.id, {
-            localInstallationStatus: "success",
-            localInstallationError: null,
-          });
-          broadcastMcpInstallationStatus(install.id, "success", null);
-        } catch (error) {
-          const errorMessage =
-            error instanceof Error ? error.message : "Unknown error";
-          logger.error(
-            { err: error, serverId: install.id, catalogId: catalogItem.id },
-            "Catalog reinstall: tool sync failed for install",
-          );
-          await McpServerModel.update(install.id, {
-            localInstallationStatus: "error",
-            localInstallationError: errorMessage,
-          });
-          broadcastMcpInstallationStatus(install.id, "error", errorMessage);
-        }
-      }
-
-      await InternalMcpCatalogModel.update(catalogItem.id, {
-        catalogReinstallRequired: false,
-      });
 
       return reply.send({ success: true });
     },
@@ -2205,6 +2148,11 @@ async function cascadeReinstallForCatalog(
 }
 
 /**
+ * Coerce an org-level preset entry name (e.g. "Production EU") into a DNS-1123
+ * label suitable for use as a K8s resource name component. The display name on
+ * the org-structure page still uses the original entry value.
+ */
+/**
  * Non-prompted env entries land directly in the shared K8s pod's env on a
  * multi-tenant local catalog (as plain values or via the preset secret), so
  * any change to one of them requires a pod recreate. Prompted entries are
@@ -2226,11 +2174,6 @@ function multitenantSharedEnvChanged(
   );
 }
 
-/**
- * Coerce an org-level preset entry name (e.g. "Production EU") into a DNS-1123
- * label suitable for use as a K8s resource name component. The display name on
- * the org-structure page still uses the original entry value.
- */
 function toDns1123Label(name: string): string {
   return name
     .toLowerCase()

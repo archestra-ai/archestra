@@ -1,7 +1,8 @@
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
-import { McpServerModel, ToolModel } from "@/models";
+import { InternalMcpCatalogModel, McpServerModel, ToolModel } from "@/models";
 import type { InternalMcpCatalog, LocalConfig, McpServer } from "@/types";
+import { broadcastMcpInstallationStatus } from "@/websocket";
 
 /**
  * Checks if a catalog edit requires new user input for reinstallation.
@@ -411,6 +412,94 @@ export async function syncToolsForServer(
     },
     "Tools synced for MCP server",
   );
+}
+
+/**
+ * Reinstall a multi-tenant local catalog: recreate the shared K8s
+ * Deployment and cascade tool sync to every install attached to the
+ * catalog, broadcasting per-install status the whole way.
+ *
+ * Phase 1 — recreate the shared pod (delete + create, bypassing the
+ * per-install sibling guard). If this step fails every install is marked
+ * `error` and the function throws so the caller can surface an HTTP 500.
+ *
+ * Phase 2 — fan out `syncToolsForServer` to every install. Per-install
+ * errors are surfaced via WebSocket but don't abort the cascade —
+ * remaining installs still get a chance to sync.
+ *
+ * On full success `catalog_reinstall_required` is cleared.
+ *
+ * Callers are expected to have validated:
+ *   - catalog exists
+ *   - catalog is multi-tenant + local
+ *   - caller has edit rights on the catalog
+ *   - `catalog_reinstall_required` is true
+ * The route handler `/api/internal_mcp_catalog/:id/reinstall` performs
+ * those checks before delegating here.
+ */
+export async function reinstallMultitenantCatalog(
+  catalogItem: InternalMcpCatalog,
+): Promise<void> {
+  const installs = await McpServerModel.findByCatalogId(catalogItem.id);
+
+  // Flip every install pending up-front so each tenant's UI shows
+  // progress; per-install events are fanned out as each one's tool
+  // sync completes (matches existing reinstall UX).
+  for (const install of installs) {
+    await McpServerModel.update(install.id, {
+      localInstallationStatus: "pending",
+      localInstallationError: null,
+    });
+    broadcastMcpInstallationStatus(install.id, "pending", null);
+  }
+
+  // Phase 1 — recreate the shared pod.
+  try {
+    await McpServerRuntimeManager.reinstallSharedDeployment(catalogItem.id);
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    logger.error(
+      { err: error, catalogId: catalogItem.id },
+      "Catalog reinstall: shared deployment recreate failed",
+    );
+    for (const install of installs) {
+      await McpServerModel.update(install.id, {
+        localInstallationStatus: "error",
+        localInstallationError: errorMessage,
+      });
+      broadcastMcpInstallationStatus(install.id, "error", errorMessage);
+    }
+    throw error;
+  }
+
+  // Phase 2 — cascade tool sync to every install.
+  for (const install of installs) {
+    try {
+      await syncToolsForServer(install, catalogItem);
+      await McpServerModel.update(install.id, {
+        localInstallationStatus: "success",
+        localInstallationError: null,
+      });
+      broadcastMcpInstallationStatus(install.id, "success", null);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      logger.error(
+        { err: error, serverId: install.id, catalogId: catalogItem.id },
+        "Catalog reinstall: tool sync failed for install",
+      );
+      await McpServerModel.update(install.id, {
+        localInstallationStatus: "error",
+        localInstallationError: errorMessage,
+      });
+      broadcastMcpInstallationStatus(install.id, "error", errorMessage);
+    }
+  }
+
+  await InternalMcpCatalogModel.update(catalogItem.id, {
+    catalogReinstallRequired: false,
+  });
 }
 
 // ===== Internal helpers =====

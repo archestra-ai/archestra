@@ -1008,18 +1008,24 @@ export function McpServerCard({
         {variant === "local" &&
           (() => {
             // Multi-tenant catalogs alias one K8s pod across many mcp_server
-            // rows, so every sibling install reports the same error. Collapse
-            // failed banners by podName (falling back to the error text) to
-            // avoid N copies of the same "Installation failed" row.
-            const seenPodKeys = new Set<string>();
+            // rows, so every sibling install reports the same error.
+            // Collapse failed banners per (catalog) for multi-tenant —
+            // the failure is catalog-scope by construction. Single-tenant
+            // installs each own their own pod; dedup by podName falling
+            // back to error text. The previous pod-name-only dedup was
+            // brittle: `deploymentStatuses` is keyed per install id and
+            // the WS handler may have delivered podName for some
+            // siblings but not others, leaving N-1 banners showing.
+            const seenKeys = new Set<string>();
             return allServersAcrossPresets.filter((s) => {
               if (s.localInstallationStatus !== "error") return false;
-              const podKey =
-                deploymentStatuses[s.id]?.podName ??
-                s.localInstallationError ??
-                s.id;
-              if (seenPodKeys.has(podKey)) return false;
-              seenPodKeys.add(podKey);
+              const dedupKey = item.multitenant
+                ? `catalog:${s.catalogId}`
+                : (deploymentStatuses[s.id]?.podName ??
+                  s.localInstallationError ??
+                  s.id);
+              if (seenKeys.has(dedupKey)) return false;
+              seenKeys.add(dedupKey);
               return true;
             });
           })().map((failed) => {

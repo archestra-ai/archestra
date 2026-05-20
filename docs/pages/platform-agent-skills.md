@@ -10,34 +10,84 @@ lastUpdated: 2026-05-18
 Check ../docs_writer_prompt.md before changing this file.
 -->
 
-Skills are reusable instruction sets — a `SKILL.md` file plus optional resource files — that an agent loads only when a task needs them. They follow the open [Agent Skills specification](https://agentskills.io/specification).
+Agent Skills are markdown instruction sets an agent loads on demand. A skill is a `SKILL.md` file plus optional resource files, following the [Agent Skills specification](https://agentskills.io/specification).
 
-A skill keeps specialized knowledge out of every system prompt. Instead of pasting PDF-extraction steps into one agent and Slack-digest steps into another, you author each as a skill once. Every agent in the organization can then load any skill mid-conversation, paying its token cost only when it is actually used.
+This keeps specialized knowledge out of every system prompt. Write the steps for parsing a PDF or drafting a release note once; any agent in the org can pull it in mid-chat and pay the token cost only when the skill actually runs.
 
-## Skill tools
+## Progressive disclosure via two tools
 
-Skills are reached through two Archestra built-in tools, `activate_skill` and `read_skill_file`. They are assigned to every agent by default — including newly created agents — and, like any tool, can be deselected per agent in the agent's tool picker.
+Skills are off until an admin enables them for the organization. Enabling assigns `activate_skill` and `read_skill_file` to every existing agent and to every agent created afterwards, and exposes both tools on each agent's MCP gateway so external clients see them too. Either tool can still be dropped from an individual agent's tool picker.
 
-The tools disclose skill content progressively, so a chat pays only for what it uses:
+The two tools reveal a skill in three steps:
 
-1. **Catalog** — calling `activate_skill` with no arguments lists every skill's `name` and `description` for the organization.
-2. **Instructions** — calling `activate_skill` with a skill name returns the full `SKILL.md` body.
-3. **Resources** — bundled files under `references/`, `scripts/`, and `assets/` are listed on activation and loaded individually, on demand, via `read_skill_file`.
+- `activate_skill` with no arguments returns the catalog — one line per skill (`name` + `description`).
+- `activate_skill` with a name returns that skill's `SKILL.md` and the list of bundled resource paths.
+- `read_skill_file` fetches one resource at a time.
 
-Scripts are returned as readable text — Archestra is cloud-hosted and does not execute them.
+> **No runtime in Archestra (yet).** Archestra only reads skill files — `read_skill_file` returns scripts as text and binaries as base64, never executes them. They are stored intact so external clients that have their own runtime (Claude Code, n8n, etc.) can pull them down and run them.
 
-## Authoring a skill
+## Writing a skill
 
-Open **Agents → Skills** and choose **New Skill**. A skill is authored as a raw `SKILL.md`: YAML frontmatter (`name` and `description` are required; `license`, `compatibility`, and `metadata` are optional) followed by markdown instructions. Resource files are added as a flat list of paths — the `references/`, `scripts/`, or `assets/` prefix sets each file's role.
+A skill is a `SKILL.md` plus optional resource files.
 
-The skill name must be unique within the organization.
+```text
+skill-name/
+├── SKILL.md          # required: frontmatter + instructions
+├── references/       # optional: docs the model reads on demand
+├── scripts/          # optional: code, served as readable text (not executed)
+└── assets/           # optional: templates, images, fonts
+```
+
+Names have to be unique in the organization — that is the key `activate_skill` looks up.
+
+```markdown
+---
+name: pdf-to-markdown
+description: Extract text from a PDF and convert it to clean markdown.
+compatibility: Requires python 3.10+ with pdfplumber installed.
+---
+
+# PDF to Markdown
+
+When the user asks to convert a PDF:
+
+1. Read `references/HEURISTICS.md` for column-detection rules.
+2. Run `scripts/extract.py <path>` to get the raw text.
+3. Apply the cleanup steps below before returning the result.
+```
+
+Paired with that you would upload `references/HEURISTICS.md` and `scripts/extract.py` as resource files; both show up in the `<skill_resources>` list when the skill is activated and load on demand through `read_skill_file`.
 
 ## Importing from GitHub
 
-**Import from GitHub** discovers skills in any repository — every directory containing a `SKILL.md` is a skill. Enter a repository URL, optionally restrict the scan to a subpath, and supply a token for private repositories. The token is used for that single request and never stored.
+Paste a repository URL. Any of these work: `owner/repo`, a full https URL, or a `tree/<branch>/<path>` deep link. For private repos, paste a token — it is used for the request and never stored.
 
-Import is a one-time snapshot: the files are copied into Archestra, which then owns the editable copy. There is no background sync — to pick up upstream changes, delete the skill and import it again. Binary assets are not imported.
+For anything bigger than a small repo, narrow the scan with the `path` field and supply a GitHub token. Archestra walks the whole tree by default, and anonymous GitHub calls share a 60-requests/hour limit — discovery on a large monorepo is slow without a path and will rate-limit without a token.
 
-## Compatibility warnings
+Every directory with a `SKILL.md` shows up in the result; pick which ones to import — it is not all-or-nothing. Importing many skills at once, or skills with many resource files, can take a while: each file is fetched sequentially.
 
-If a skill's frontmatter declares a `compatibility` requirement (for example, a runtime it expects), the skill list and the import dialog show a **runtime** badge. The requirement is also surfaced to the model on activation so it can tell the user when the environment cannot meet it.
+Each import records the source (`owner/repo@ref:path`) and the resolved commit SHA, so you can later filter the catalog by repo and see exactly which revision landed.
+
+A few behaviors worth knowing:
+
+- **Duplicates are skipped.** Importing a skill whose name already exists leaves the local copy alone — no silent overwrite.
+- **One snapshot per session.** The repo tree is cached for five minutes, so what you previewed is what you import even if upstream moves in between.
+- **Per-file 10 MB cap, 500 files per skill.** Binary assets are preserved (base64-encoded), so images and fonts round-trip.
+- **No background sync.** Re-import to pull in upstream changes; your edits are never overwritten.
+
+## Compatibility
+
+Some skills only work in specific environments — a Python interpreter, a particular OS, a tool that has to be installed first. The spec captures that as a `compatibility` field in the frontmatter. Archestra shows it as a **compatibility** badge in the skill list and import dialog, and includes the value in the `activate_skill` response so the model can tell the user when the environment cannot meet the requirement instead of failing halfway through the task.
+
+## Distribution to External Clients
+
+The two skill tools are plain MCP tools. Any external client — Claude Code, Cursor, Codex, n8n — that connects to an agent's MCP gateway sees them alongside the rest of that agent's tools and gets the same progressive-disclosure flow. A skill authored once in Archestra is reachable from everywhere the agent is plugged in, with no SKILL.md copies to keep in sync.
+
+## Skills vs agents vs routing
+
+| Primitive        | What it is                                                                              | When to use                                  |
+| ---------------- | --------------------------------------------------------------------------------------- | -------------------------------------------- |
+| **Agent**        | System prompt + tools + knowledge                                                       | Default building block                       |
+| **Sub-agent**    | Agent called by another agent as a helper                                               | Compose specialists under one orchestrator   |
+| **Router agent** | Default agent that hands off via `swap_agent` and returns via `swap_to_default_agent`   | Pick the right specialist at runtime         |
+| **Skill**        | Markdown loaded on demand via `activate_skill` / `read_skill_file`                      | Keep agents generic; attach many specializations      |

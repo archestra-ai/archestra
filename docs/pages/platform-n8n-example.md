@@ -143,7 +143,7 @@ N8N is not able to execute the second call once the untrusted content got inject
 
 ![N8N](/docs/platfrom/n8n-3.webp)
 
-Here, Archestra's AI tool guardrails reduce the context trustworthiness and prevent the following tool calls. Read about them [here](/docs/platform-ai-tool-guardrails).
+Here, [Archestra's AI tool guardrails](/docs/platform-ai-tool-guardrails) reduce the context trustworthiness and prevent the following tool calls.
 
 ### 5. Tracking N8N Executions (Optional)
 

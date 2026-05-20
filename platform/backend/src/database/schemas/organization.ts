@@ -129,7 +129,7 @@ const organizationsTable = pgTable("organization", {
   /** Custom browser tab title */
   appName: text("app_name"),
 
-  /** OpenGraph description for link previews */
+  /** Open Graph description for link previews */
   ogDescription: text("og_description"),
 
   /** Custom footer text (replaces version display) */

@@ -279,7 +279,7 @@ export default function OrganizationSettingsPage() {
           <Card>
             <SettingsCardHeader
               title="Branding"
-              description="Customize your organization's browser tab title, OpenGraph description, footer text, chat links, and chat placeholders."
+              description="Customize your organization's browser tab title, Open Graph description, footer text, chat links, and chat placeholders."
             />
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -297,7 +297,7 @@ export default function OrganizationSettingsPage() {
                 </p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="ogDescription">OpenGraph Description</Label>
+                <Label htmlFor="ogDescription">Open Graph Description</Label>
                 <Textarea
                   id="ogDescription"
                   placeholder={DEFAULT_APP_DESCRIPTION}

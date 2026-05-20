@@ -287,8 +287,8 @@ describe("OrganizationModel", () => {
       expect(updated?.logoDark).toBeNull();
     });
 
-    test("should return null for non-existent organization", async () => {
-      const updated = await OrganizationModel.patch("non-existent-id", {
+    test("should return null for nonexistent organization", async () => {
+      const updated = await OrganizationModel.patch("nonexistent-id", {
         theme: "twitter",
       });
 
@@ -308,8 +308,8 @@ describe("OrganizationModel", () => {
       expect(updated?.theme).toBe(org.theme);
     });
 
-    test("should return null when patching non-existent org with empty data", async () => {
-      const updated = await OrganizationModel.patch("non-existent-id", {});
+    test("should return null when patching nonexistent org with empty data", async () => {
+      const updated = await OrganizationModel.patch("nonexistent-id", {});
 
       expect(updated).toBeNull();
     });
@@ -661,8 +661,8 @@ describe("OrganizationModel", () => {
       expect(found?.name).toBe(org.name);
     });
 
-    test("should return null for non-existent id", async () => {
-      const found = await OrganizationModel.getById("non-existent-id");
+    test("should return null for nonexistent id", async () => {
+      const found = await OrganizationModel.getById("nonexistent-id");
 
       expect(found).toBeNull();
     });

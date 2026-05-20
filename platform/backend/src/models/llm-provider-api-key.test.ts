@@ -204,7 +204,7 @@ describe("LlmProviderApiKeyModel", () => {
       expect(found?.name).toBe("Test Key");
     });
 
-    test("returns null for non-existent ID", async () => {
+    test("returns null for nonexistent ID", async () => {
       const found = await LlmProviderApiKeyModel.findById(
         "00000000-0000-0000-0000-000000000000",
       );

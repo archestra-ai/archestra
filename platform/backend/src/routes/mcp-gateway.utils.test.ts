@@ -1036,7 +1036,7 @@ describe("buildKnowledgeSourcesDescription", () => {
     expect(result).toBeNull();
   });
 
-  test("returns null for non-existent agent id", async () => {
+  test("returns null for nonexistent agent id", async () => {
     const result = await buildKnowledgeSourcesDescription(crypto.randomUUID());
     expect(result).toBeNull();
   });

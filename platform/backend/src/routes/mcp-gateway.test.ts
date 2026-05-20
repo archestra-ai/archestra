@@ -656,10 +656,10 @@ describe("MCP Gateway (stateless mode)", () => {
     expect(initResponse.statusCode).toBe(200);
   });
 
-  test("returns 401 for non-existent slug", async () => {
+  test("returns 401 for nonexistent slug", async () => {
     const response = await app.inject({
       method: "POST",
-      url: "/v1/mcp/non-existent-slug",
+      url: "/v1/mcp/nonexistent-slug",
       headers: makeMcpHeaders("archestra_some_token"),
       payload: {
         jsonrpc: "2.0",

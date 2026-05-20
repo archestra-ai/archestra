@@ -383,7 +383,7 @@ describe("LLM Provider API Keys CRUD", () => {
     expect(getResponse.statusCode).toBe(404);
   });
 
-  test("should return 404 for non-existent LLM provider API key", async () => {
+  test("should return 404 for nonexistent LLM provider API key", async () => {
     const response = await app.inject({
       method: "GET",
       url: "/api/llm-provider-api-keys/00000000-0000-0000-0000-000000000000",

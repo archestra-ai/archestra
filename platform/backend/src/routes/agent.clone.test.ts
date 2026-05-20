@@ -402,7 +402,7 @@ describe("clone agent route", () => {
     }
   });
 
-  test("returns 404 for non-existent agent", async () => {
+  test("returns 404 for nonexistent agent", async () => {
     // Use a valid, non-nil UUID so the request passes params validation and
     // reaches the handler (nil UUIDs may be rejected as invalid).
     const fakeId = "11111111-1111-4111-8111-111111111111";

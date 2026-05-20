@@ -82,7 +82,7 @@ describe("SessionModel", () => {
       expect(session[0]?.userAgent).toBeNull();
     });
 
-    test("should handle non-existent session gracefully", async () => {
+    test("should handle nonexistent session gracefully", async () => {
       const nonExistentSessionId = crypto.randomUUID();
 
       // Should not throw an error
@@ -104,7 +104,7 @@ describe("SessionModel", () => {
       expect(otherUserSessions[0]?.id).toBe(testSession3Id);
     });
 
-    test("should handle non-existent session ID gracefully", async () => {
+    test("should handle nonexistent session ID gracefully", async () => {
       await expect(
         SessionModel.deleteById(crypto.randomUUID()),
       ).resolves.not.toThrow();
@@ -134,7 +134,7 @@ describe("SessionModel", () => {
       expect(otherUserSessions[0]?.id).toBe(testSession3Id);
     });
 
-    test("should handle non-existent user gracefully", async () => {
+    test("should handle nonexistent user gracefully", async () => {
       const nonExistentUserId = crypto.randomUUID();
 
       // Should not throw an error

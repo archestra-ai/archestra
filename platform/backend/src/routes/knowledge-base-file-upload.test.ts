@@ -222,7 +222,7 @@ describe("connector file upload routes", () => {
       expect(response.statusCode).toBe(400);
     });
 
-    test("returns 404 for a non-existent connector", async () => {
+    test("returns 404 for a nonexistent connector", async () => {
       const { payload } = buildJsonBody([
         {
           name: "test.txt",

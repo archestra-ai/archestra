@@ -5,7 +5,7 @@ describe("McpHttpSessionModel", () => {
   describe("findByConnectionKey", () => {
     test("returns null for missing key", async () => {
       const result =
-        await McpHttpSessionModel.findByConnectionKey("non-existent-key");
+        await McpHttpSessionModel.findByConnectionKey("nonexistent-key");
       expect(result).toBeNull();
     });
 
@@ -103,9 +103,9 @@ describe("McpHttpSessionModel", () => {
       expect(result).toBeNull();
     });
 
-    test("does not throw for non-existent key", async () => {
+    test("does not throw for nonexistent key", async () => {
       await expect(
-        McpHttpSessionModel.deleteByConnectionKey("non-existent"),
+        McpHttpSessionModel.deleteByConnectionKey("nonexistent"),
       ).resolves.not.toThrow();
     });
 

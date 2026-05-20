@@ -445,7 +445,7 @@ describe("websocket MCP logs", () => {
     expect(service.mcpLogsSubscriptions.has(ws)).toBe(true);
   });
 
-  test("returns error for non-existent MCP server", async ({
+  test("returns error for nonexistent MCP server", async ({
     makeOrganization,
     makeUser,
   }) => {
@@ -462,7 +462,7 @@ describe("websocket MCP logs", () => {
     service.clientContexts.set(ws, {
       userId: user.id,
       organizationId: org.id,
-      userIsMcpServerAdmin: true, // Even admin can't access non-existent server
+      userIsMcpServerAdmin: true, // Even admin can't access nonexistent server
     });
 
     const nonExistentServerId = "00000000-0000-0000-0000-000000000000";
@@ -1046,7 +1046,7 @@ describe("websocket MCP exec", () => {
     expect(service.mcpExecSubscriptions.has(ws)).toBe(false);
   });
 
-  test("returns error for non-existent MCP server", async ({
+  test("returns error for nonexistent MCP server", async ({
     makeOrganization,
     makeUser,
   }) => {

@@ -825,18 +825,18 @@ test.describe("Identity Provider Role Mapping E2E", () => {
     await fillOidcProviderForm(page, providerName);
 
     // STEP 3: Configure Role Mapping with TWO rules
-    // The first rule will NOT match (looks for a non-existent group)
+    // The first rule will NOT match (looks for a nonexistent group)
     // The second rule WILL match (looks for archestra-admins group)
     await openIdentityProviderDialogSection(page, "role-mapping");
 
     const addRuleButton = page.getByTestId(E2eTestId.IdpRoleMappingAddRule);
     await expect(addRuleButton).toBeVisible();
 
-    // Add FIRST rule - will NOT match (non-existent group -> editor role)
+    // Add FIRST rule - will NOT match (nonexistent group -> editor role)
     await addRuleButton.click();
     await getRoleMappingRuleRow(page, 0)
       .getByTestId(E2eTestId.IdpRoleMappingRuleTemplate)
-      .fill('{{#includes groups "non-existent-group"}}true{{/includes}}');
+      .fill('{{#includes groups "nonexistent-group"}}true{{/includes}}');
     await getRoleMappingRuleRow(page, 0)
       .getByTestId(E2eTestId.IdpRoleMappingRuleRole)
       .click();

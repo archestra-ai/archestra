@@ -60,7 +60,7 @@ describe("TeamTokenModel", () => {
       expect(found?.name).toBe("Test Token");
     });
 
-    test("returns null for non-existent ID", async () => {
+    test("returns null for nonexistent ID", async () => {
       const found = await TeamTokenModel.findById(crypto.randomUUID());
       expect(found).toBeNull();
     });
@@ -167,7 +167,7 @@ describe("TeamTokenModel", () => {
       expect(updated?.tokenStart).toBe(result?.value.substring(0, 14));
     });
 
-    test("returns null for non-existent token", async () => {
+    test("returns null for nonexistent token", async () => {
       const result = await TeamTokenModel.rotate(crypto.randomUUID());
       expect(result).toBeNull();
     });
@@ -321,7 +321,7 @@ describe("TeamTokenModel", () => {
       expect(retrievedValue).toBe(value);
     });
 
-    test("returns null for non-existent token", async () => {
+    test("returns null for nonexistent token", async () => {
       const value = await TeamTokenModel.getTokenValue(crypto.randomUUID());
       expect(value).toBeNull();
     });
@@ -344,7 +344,7 @@ describe("TeamTokenModel", () => {
       expect(found).toBeNull();
     });
 
-    test("returns false for non-existent token", async () => {
+    test("returns false for nonexistent token", async () => {
       const deleted = await TeamTokenModel.delete(crypto.randomUUID());
       expect(deleted).toBe(false);
     });

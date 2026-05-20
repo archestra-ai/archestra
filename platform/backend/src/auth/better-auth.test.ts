@@ -180,7 +180,7 @@ describe("handleBeforeHook", () => {
         method: "POST",
         body: {
           email: "user@example.com",
-          callbackURL: "http://example.com?invitationId=non-existent-id",
+          callbackURL: "http://example.com?invitationId=nonexistent-id",
         },
       });
 

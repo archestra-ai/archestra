@@ -310,7 +310,7 @@ describe("InteractionModel", () => {
       expect(found?.id).toBe(created.id);
     });
 
-    test("returns null for non-existent id", async () => {
+    test("returns null for nonexistent id", async () => {
       const found = await InteractionModel.findById(
         "00000000-0000-0000-0000-000000000000",
       );
@@ -2804,7 +2804,7 @@ describe("InteractionModel", () => {
   describe("existsByExecutionId", () => {
     test("returns false when no interaction has the execution id", async () => {
       const exists = await InteractionModel.existsByExecutionId(
-        "non-existent-exec-id",
+        "nonexistent-exec-id",
       );
       expect(exists).toBe(false);
     });

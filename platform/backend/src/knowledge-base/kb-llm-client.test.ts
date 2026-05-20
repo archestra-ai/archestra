@@ -190,7 +190,7 @@ describe("resolveEmbeddingConfig", () => {
     expect(result).toBeNull();
   });
 
-  test("returns null for non-existent organization", async () => {
+  test("returns null for nonexistent organization", async () => {
     const result = await resolveEmbeddingConfig(
       "00000000-0000-0000-0000-000000000000",
     );

@@ -54,7 +54,7 @@ describe("KnowledgeBaseModel", () => {
       expect(found?.name).toBe("Find Me KB");
     });
 
-    test("returns null for non-existent id", async () => {
+    test("returns null for nonexistent id", async () => {
       const found = await KnowledgeBaseModel.findById(
         "00000000-0000-0000-0000-000000000000",
       );
@@ -254,7 +254,7 @@ describe("KnowledgeBaseModel", () => {
       expect(updated?.status).toBe("inactive");
     });
 
-    test("returns null for non-existent id", async () => {
+    test("returns null for nonexistent id", async () => {
       const updated = await KnowledgeBaseModel.update(
         "00000000-0000-0000-0000-000000000000",
         { name: "Does not exist" },
@@ -278,7 +278,7 @@ describe("KnowledgeBaseModel", () => {
       expect(found).toBeNull();
     });
 
-    test("returns false for non-existent id", async () => {
+    test("returns false for nonexistent id", async () => {
       const deleted = await KnowledgeBaseModel.delete(
         "00000000-0000-0000-0000-000000000000",
       );

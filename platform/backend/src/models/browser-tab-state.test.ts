@@ -141,7 +141,7 @@ describe("BrowserTabStateModel", () => {
       expect(result).toBeNull();
     });
 
-    test("does not throw for non-existent state", async ({
+    test("does not throw for nonexistent state", async ({
       makeAgent,
       makeUser,
     }) => {
@@ -149,7 +149,7 @@ describe("BrowserTabStateModel", () => {
       const user = await makeUser();
 
       await expect(
-        BrowserTabStateModel.delete(agent.id, user.id, "non-existent"),
+        BrowserTabStateModel.delete(agent.id, user.id, "nonexistent"),
       ).resolves.not.toThrow();
     });
 

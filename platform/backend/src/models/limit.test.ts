@@ -340,7 +340,7 @@ describe("LimitModel", () => {
       expect(found?.limitValue).toBe(1000000);
     });
 
-    test("returns null for non-existent limit", async () => {
+    test("returns null for nonexistent limit", async () => {
       const found = await LimitModel.findById(
         "00000000-0000-0000-0000-000000000000",
       );
@@ -369,7 +369,7 @@ describe("LimitModel", () => {
       expect(updated?.model).toEqual(["claude-3-5-sonnet-20241022"]); // Other fields unchanged
     });
 
-    test("returns null for non-existent limit", async () => {
+    test("returns null for nonexistent limit", async () => {
       const updated = await LimitModel.patch(
         "00000000-0000-0000-0000-000000000000",
         {
@@ -439,7 +439,7 @@ describe("LimitModel", () => {
       expect(found).toBeNull();
     });
 
-    test("returns false for non-existent limit", async () => {
+    test("returns false for nonexistent limit", async () => {
       const deleted = await LimitModel.delete(
         "00000000-0000-0000-0000-000000000000",
       );
@@ -485,7 +485,7 @@ describe("LimitModel", () => {
       expect(usage.totalTokens).toBe(700);
     });
 
-    test("returns zero usage for non-existent agent", async () => {
+    test("returns zero usage for nonexistent agent", async () => {
       const usage = await LimitModel.getAgentTokenUsage(
         "00000000-0000-0000-0000-000000000000",
       );
@@ -2277,7 +2277,7 @@ describe("cleanupLimitsIfNeeded", () => {
   test("handles unknown organization gracefully", async () => {
     await expect(
       LimitModel.cleanupLimitsIfNeeded({
-        entities: { organization: "non-existent-org-id" },
+        entities: { organization: "nonexistent-org-id" },
       }),
     ).resolves.toBeUndefined();
   });

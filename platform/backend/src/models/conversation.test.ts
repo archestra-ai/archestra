@@ -526,7 +526,7 @@ describe("ConversationModel", () => {
     expect(found).toBeNull();
   });
 
-  test("returns null when updating non-existent conversation", async ({
+  test("returns null when updating nonexistent conversation", async ({
     makeUser,
     makeOrganization,
   }) => {

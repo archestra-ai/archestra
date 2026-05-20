@@ -94,7 +94,7 @@ describe("McpServerModel", () => {
       expect(results).toEqual([]);
     });
 
-    test("returns empty array for non-existent IDs", async () => {
+    test("returns empty array for nonexistent IDs", async () => {
       const results = await McpServerModel.findByIdsBasic([
         crypto.randomUUID(),
       ]);

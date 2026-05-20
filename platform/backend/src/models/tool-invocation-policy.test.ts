@@ -1867,9 +1867,9 @@ describe("ToolInvocationPolicyModel", () => {
       expect(result).toBe(false);
     });
 
-    test("returns false for non-existent tool", async () => {
+    test("returns false for nonexistent tool", async () => {
       const result = await ToolInvocationPolicyModel.hasBlockingPolicy(
-        "non-existent-tool",
+        "nonexistent-tool",
         true,
       );
       expect(result).toBe(false);

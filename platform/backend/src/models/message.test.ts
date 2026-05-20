@@ -216,7 +216,7 @@ describe("MessageModel", () => {
       expect(found?.content).toEqual(message.content);
     });
 
-    test("returns null for non-existent ID", async () => {
+    test("returns null for nonexistent ID", async () => {
       const found = await MessageModel.findById(
         "00000000-0000-0000-0000-000000000000",
       );
@@ -311,7 +311,7 @@ describe("MessageModel", () => {
       expect(found?.content.id).toBe("nanoid-abc123");
     });
 
-    test("returns null for non-existent content ID", async () => {
+    test("returns null for nonexistent content ID", async () => {
       const found = await MessageModel.findByContentId(
         "nonexistent-content-id",
       );
@@ -546,7 +546,7 @@ describe("MessageModel", () => {
       ).rejects.toThrow("Invalid part index");
     });
 
-    test("throws error for non-existent message", async () => {
+    test("throws error for nonexistent message", async () => {
       await expect(
         MessageModel.updateTextPart(
           "00000000-0000-0000-0000-000000000000",
@@ -820,7 +820,7 @@ describe("MessageModel", () => {
       expect(remaining).toHaveLength(3);
     });
 
-    test("throws error for non-existent message", async ({
+    test("throws error for nonexistent message", async ({
       makeUser,
       makeOrganization,
       makeAgent,
@@ -828,7 +828,7 @@ describe("MessageModel", () => {
       const user = await makeUser();
       const org = await makeOrganization();
       const agent = await makeAgent({
-        name: "Non-existent Message Agent",
+        name: "Nonexistent Message Agent",
         teams: [],
       });
 
@@ -836,7 +836,7 @@ describe("MessageModel", () => {
         userId: user.id,
         organizationId: org.id,
         agentId: agent.id,
-        title: "Non-existent Message Test",
+        title: "Nonexistent Message Test",
       });
 
       await expect(

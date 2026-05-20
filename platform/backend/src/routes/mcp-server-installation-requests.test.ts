@@ -202,7 +202,7 @@ describe("MCP server installation request routes", () => {
       expect(body.externalCatalogId).toBe(created.externalCatalogId);
     });
 
-    test("returns 404 for non-existent request", async () => {
+    test("returns 404 for nonexistent request", async () => {
       const response = await app.inject({
         method: "GET",
         url: "/api/mcp_server_installation_requests/c7528140-07b0-4870-841d-6886a6daeb32",
@@ -328,7 +328,7 @@ describe("MCP server installation request routes", () => {
       expect(body.reviewedBy).toBeDefined();
     });
 
-    test("returns 404 when approving non-existent request", async () => {
+    test("returns 404 when approving nonexistent request", async () => {
       const response = await app.inject({
         method: "POST",
         url: "/api/mcp_server_installation_requests/c7528140-07b0-4870-841d-6886a6daeb33/approve",
@@ -369,7 +369,7 @@ describe("MCP server installation request routes", () => {
       expect(body.reviewedAt).toBeDefined();
     });
 
-    test("returns 404 when declining non-existent request", async () => {
+    test("returns 404 when declining nonexistent request", async () => {
       const response = await app.inject({
         method: "POST",
         url: "/api/mcp_server_installation_requests/c7528140-07b0-4870-841d-6886a6daeb34/decline",
@@ -449,7 +449,7 @@ describe("MCP server installation request routes", () => {
       expect(noteContents).toContain("Second note");
     });
 
-    test("returns 404 when adding note to non-existent request", async () => {
+    test("returns 404 when adding note to nonexistent request", async () => {
       const response = await app.inject({
         method: "POST",
         url: "/api/mcp_server_installation_requests/c7528140-07b0-4870-841d-6886a6daeb35/notes",

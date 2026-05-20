@@ -440,9 +440,9 @@ describe("McpServerRuntimeManager", () => {
       const { McpServerRuntimeManager } = await import("./manager");
       const manager = new McpServerRuntimeManager();
 
-      // Call stopServer with non-existent server ID - should not throw
+      // Call stopServer with nonexistent server ID - should not throw
       await expect(
-        manager.stopServer("non-existent-server"),
+        manager.stopServer("nonexistent-server"),
       ).resolves.toBeUndefined();
 
       mockLoadFromDefault.mockRestore();

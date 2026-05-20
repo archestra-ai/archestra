@@ -121,7 +121,7 @@ describe("IncomingEmailSubscriptionModel", () => {
       expect(updated.expiresAt.getTime()).toBe(newExpiry.getTime());
     });
 
-    test("returns undefined for non-existent subscription", async () => {
+    test("returns undefined for nonexistent subscription", async () => {
       const newExpiry = new Date(Date.now() + 72 * 60 * 60 * 1000);
 
       const updated = await IncomingEmailSubscriptionModel.updateExpiry({
@@ -153,8 +153,8 @@ describe("IncomingEmailSubscriptionModel", () => {
       expect(found).toBeUndefined();
     });
 
-    test("does not throw for non-existent subscription", async () => {
-      // Should not throw even for non-existent IDs
+    test("does not throw for nonexistent subscription", async () => {
+      // Should not throw even for nonexistent IDs
       await expect(
         IncomingEmailSubscriptionModel.delete(
           "00000000-0000-0000-0000-000000000000",
@@ -187,11 +187,11 @@ describe("IncomingEmailSubscriptionModel", () => {
       expect(found).toBeUndefined();
     });
 
-    test("does not throw for non-existent subscription ID", async () => {
-      // Should not throw even for non-existent subscription IDs
+    test("does not throw for nonexistent subscription ID", async () => {
+      // Should not throw even for nonexistent subscription IDs
       await expect(
         IncomingEmailSubscriptionModel.deleteBySubscriptionId(
-          "non-existent-subscription-id",
+          "nonexistent-subscription-id",
         ),
       ).resolves.not.toThrow();
     });
@@ -212,9 +212,9 @@ describe("IncomingEmailSubscriptionModel", () => {
       expect(found.subscriptionId).toBe(subscriptionId);
     });
 
-    test("returns undefined for non-existent subscription ID", async () => {
+    test("returns undefined for nonexistent subscription ID", async () => {
       const found = await IncomingEmailSubscriptionModel.findBySubscriptionId(
-        "non-existent-subscription-id",
+        "nonexistent-subscription-id",
       );
 
       expect(found).toBeUndefined();

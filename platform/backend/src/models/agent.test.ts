@@ -106,7 +106,7 @@ describe("AgentModel", () => {
       expect(exists).toBe(true);
     });
 
-    test("returns false for a non-existent agent", async () => {
+    test("returns false for a nonexistent agent", async () => {
       const nonExistentId = "00000000-0000-0000-0000-000000000000";
       const exists = await AgentModel.exists(nonExistentId);
       expect(exists).toBe(false);
@@ -2491,7 +2491,7 @@ describe("AgentModel", () => {
       expect(result.size).toBe(0);
     });
 
-    test("omits non-existent agent IDs from result", async ({ makeAgent }) => {
+    test("omits nonexistent agent IDs from result", async ({ makeAgent }) => {
       const agent = await makeAgent({ name: "Exists" });
 
       const result = await AgentModel.findByIdsForPermissionCheck([
@@ -2606,7 +2606,7 @@ describe("AgentModel", () => {
   });
 
   describe("resolveIdFromIdOrSlug", () => {
-    test("returns null for non-existent UUID", async () => {
+    test("returns null for nonexistent UUID", async () => {
       const uuid = "f47ac10b-58cc-4372-a567-0e02b2c3d479";
       const result = await AgentModel.resolveIdFromIdOrSlug(uuid);
       expect(result).toBeNull();
@@ -2638,9 +2638,8 @@ describe("AgentModel", () => {
       expect(result).toBe(agent.id);
     });
 
-    test("returns null for non-existent slug", async () => {
-      const result =
-        await AgentModel.resolveIdFromIdOrSlug("non-existent-slug");
+    test("returns null for nonexistent slug", async () => {
+      const result = await AgentModel.resolveIdFromIdOrSlug("nonexistent-slug");
       expect(result).toBeNull();
     });
   });

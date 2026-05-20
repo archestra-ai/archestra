@@ -31,7 +31,7 @@ describe("AgentToolModel.findById", () => {
     expect(result?.tool.name).toBe("test-tool");
   });
 
-  test("returns undefined for non-existent ID", async () => {
+  test("returns undefined for nonexistent ID", async () => {
     const result = await AgentToolModel.findById(
       "00000000-0000-0000-0000-000000000000",
     );

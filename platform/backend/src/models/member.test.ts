@@ -149,7 +149,7 @@ describe("MemberModel", () => {
       expect(result?.role).toBe("member");
     });
 
-    test("should return undefined for non-existent user", async ({
+    test("should return undefined for nonexistent user", async ({
       makeOrganization,
     }) => {
       const org = await makeOrganization();

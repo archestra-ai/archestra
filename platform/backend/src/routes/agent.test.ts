@@ -198,7 +198,7 @@ describe("agent routes", () => {
       expect(response.statusCode).toBe(404);
     });
 
-    test("should return 404 for non-existent agent", async () => {
+    test("should return 404 for nonexistent agent", async () => {
       const fakeId = crypto.randomUUID();
 
       const response = await app.inject({

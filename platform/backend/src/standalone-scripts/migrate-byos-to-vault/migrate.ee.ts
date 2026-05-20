@@ -1721,7 +1721,7 @@ async function phase4Audit(args: {
   // mode — only `secret` is snapshotted in the backup table). C14 below
   // still catches the most important FK integrity failure (dangling refs).
 
-  // C14: no FK consumer references a non-existent secret_id.
+  // C14: no FK consumer references a nonexistent secret_id.
   for (const { table, column } of FK_TABLES) {
     const key = `${table}.${column}`;
     const r = await db.execute(sql`

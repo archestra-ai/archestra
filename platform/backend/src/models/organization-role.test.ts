@@ -172,7 +172,7 @@ describe("OrganizationRoleModel", () => {
       });
     });
 
-    test("should return null for non-existent custom role", async ({
+    test("should return null for nonexistent custom role", async ({
       makeOrganization,
     }) => {
       const org = await makeOrganization();
@@ -216,7 +216,7 @@ describe("OrganizationRoleModel", () => {
       });
     });
 
-    test("should return empty permissions for non-existent role", async ({
+    test("should return empty permissions for nonexistent role", async ({
       makeOrganization,
     }) => {
       const org = await makeOrganization();
@@ -350,7 +350,7 @@ describe("OrganizationRoleModel", () => {
       });
     });
 
-    test("should return false for non-existent role", async ({
+    test("should return false for nonexistent role", async ({
       makeOrganization,
     }) => {
       const org = await makeOrganization();

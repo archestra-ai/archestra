@@ -468,7 +468,7 @@ describe("KnowledgeBaseConnectorModel", () => {
       expect(result?.connectorType).toBe("jira");
     });
 
-    test("returns null for non-existent ID", async () => {
+    test("returns null for nonexistent ID", async () => {
       const result = await KnowledgeBaseConnectorModel.findById(
         "00000000-0000-0000-0000-000000000000",
       );
@@ -507,7 +507,7 @@ describe("KnowledgeBaseConnectorModel", () => {
       expect(results).toHaveLength(0);
     });
 
-    test("returns only matching connectors and ignores non-existent IDs", async ({
+    test("returns only matching connectors and ignores nonexistent IDs", async ({
       makeOrganization,
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
@@ -636,7 +636,7 @@ describe("KnowledgeBaseConnectorModel", () => {
       expect(updated?.enabled).toBe(false);
     });
 
-    test("returns null when updating a non-existent connector", async () => {
+    test("returns null when updating a nonexistent connector", async () => {
       const result = await KnowledgeBaseConnectorModel.update(
         "00000000-0000-0000-0000-000000000000",
         { name: "Does Not Exist" },
@@ -732,7 +732,7 @@ describe("KnowledgeBaseConnectorModel", () => {
       expect(found).toBeNull();
     });
 
-    test("does not throw when deleting a non-existent connector", async () => {
+    test("does not throw when deleting a nonexistent connector", async () => {
       // Should not throw; PGlite rowCount behavior may vary
       await KnowledgeBaseConnectorModel.delete(
         "00000000-0000-0000-0000-000000000000",

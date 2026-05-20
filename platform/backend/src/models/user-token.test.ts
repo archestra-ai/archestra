@@ -67,7 +67,7 @@ describe("UserTokenModel", () => {
       expect(found?.name).toBe("Test Token");
     });
 
-    test("returns null for non-existent ID", async () => {
+    test("returns null for nonexistent ID", async () => {
       const found = await UserTokenModel.findById(crypto.randomUUID());
       expect(found).toBeNull();
     });
@@ -146,7 +146,7 @@ describe("UserTokenModel", () => {
       expect(updated?.tokenStart).toBe(result?.value.substring(0, 14));
     });
 
-    test("returns null for non-existent token", async () => {
+    test("returns null for nonexistent token", async () => {
       const result = await UserTokenModel.rotate(crypto.randomUUID());
       expect(result).toBeNull();
     });
@@ -248,7 +248,7 @@ describe("UserTokenModel", () => {
       expect(retrievedValue).toBe(value);
     });
 
-    test("returns null for non-existent token", async () => {
+    test("returns null for nonexistent token", async () => {
       const value = await UserTokenModel.getTokenValue(crypto.randomUUID());
       expect(value).toBeNull();
     });
@@ -306,7 +306,7 @@ describe("UserTokenModel", () => {
       expect(found).toBeNull();
     });
 
-    test("returns false for non-existent token", async () => {
+    test("returns false for nonexistent token", async () => {
       const deleted = await UserTokenModel.delete(crypto.randomUUID());
       expect(deleted).toBe(false);
     });

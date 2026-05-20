@@ -301,7 +301,7 @@ describe("shared K8s utilities", () => {
       expect(() => validateKubeconfig(undefined)).not.toThrow();
     });
 
-    test("throws for non-existent file", async () => {
+    test("throws for nonexistent file", async () => {
       const { validateKubeconfig } = await import("./shared");
       expect(() => validateKubeconfig("/nonexistent/path")).toThrow(
         "Kubeconfig file not found",

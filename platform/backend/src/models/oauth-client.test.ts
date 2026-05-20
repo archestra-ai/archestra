@@ -275,9 +275,9 @@ describe("OAuthClientModel", () => {
       expect(found?.redirectUris).toHaveLength(3);
     });
 
-    test("should do nothing for non-existent client", async () => {
+    test("should do nothing for nonexistent client", async () => {
       await OAuthClientModel.addRedirectUri(
-        "non-existent-client",
+        "nonexistent-client",
         "http://127.0.0.1:54321/callback",
       );
       // Should not throw

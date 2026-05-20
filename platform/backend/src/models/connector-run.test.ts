@@ -186,7 +186,7 @@ describe("ConnectorRunModel", () => {
       expect(result?.status).toBe("running");
     });
 
-    test("returns null for non-existent ID", async () => {
+    test("returns null for nonexistent ID", async () => {
       const result = await ConnectorRunModel.findById(
         "00000000-0000-0000-0000-000000000000",
       );
@@ -276,7 +276,7 @@ describe("ConnectorRunModel", () => {
       expect(updated?.documentsIngested).toBe(45);
     });
 
-    test("returns null when updating a non-existent run", async () => {
+    test("returns null when updating a nonexistent run", async () => {
       const result = await ConnectorRunModel.update(
         "00000000-0000-0000-0000-000000000000",
         { status: "failed" },

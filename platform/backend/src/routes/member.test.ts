@@ -173,10 +173,10 @@ describe("GET /api/organization/members/:idOrEmail", () => {
     expect(body.role).toBeDefined();
   });
 
-  test("returns 404 for non-existent user ID", async () => {
+  test("returns 404 for nonexistent user ID", async () => {
     const response = await app.inject({
       method: "GET",
-      url: "/api/organization/members/non-existent-id",
+      url: "/api/organization/members/nonexistent-id",
     });
 
     expect(response.statusCode).toBe(404);
@@ -184,7 +184,7 @@ describe("GET /api/organization/members/:idOrEmail", () => {
     expect(body.error.message).toBe("Member not found");
   });
 
-  test("returns 404 for non-existent email", async () => {
+  test("returns 404 for nonexistent email", async () => {
     const response = await app.inject({
       method: "GET",
       url: `/api/organization/members/${encodeURIComponent("nobody@nowhere.com")}`,

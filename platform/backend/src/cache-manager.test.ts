@@ -363,7 +363,7 @@ describe("CacheManager", () => {
       await insertKeyvEntry("other-key", { data: "value" });
 
       const deletedCount = await cacheManager.deleteByPrefix(
-        "non-existent-prefix" as AllowedCacheKey,
+        "nonexistent-prefix" as AllowedCacheKey,
       );
 
       expect(deletedCount).toBe(0);

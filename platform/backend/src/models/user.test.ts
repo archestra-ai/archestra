@@ -52,7 +52,7 @@ describe("User.getUserPermissions", () => {
     expect(result).toEqual(predefinedPermissionsMap[ADMIN_ROLE_NAME]);
   });
 
-  test("should return empty permissions for non-existent user", async () => {
+  test("should return empty permissions for nonexistent user", async () => {
     const nonExistentUserId = crypto.randomUUID();
 
     const result = await UserModel.getUserPermissions(
@@ -89,7 +89,7 @@ describe("UserModel.findByEmail", () => {
     expect(foundUser?.email).toBe("findme@test.com");
   });
 
-  test("should return undefined for non-existent email", async () => {
+  test("should return undefined for nonexistent email", async () => {
     const foundUser = await UserModel.findByEmail("nonexistent@test.com");
 
     expect(foundUser).toBeUndefined();
@@ -133,7 +133,7 @@ describe("UserModel.delete", () => {
     expect(foundUser).toBeUndefined();
   });
 
-  test("should return false for non-existent user", async () => {
+  test("should return false for nonexistent user", async () => {
     const deleted = await UserModel.delete(crypto.randomUUID());
 
     expect(deleted).toBe(false);

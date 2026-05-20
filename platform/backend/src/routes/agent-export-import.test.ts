@@ -198,7 +198,7 @@ describe("Agent export/import routes", () => {
       });
     });
 
-    test("returns 404 for a non-existent agent", async () => {
+    test("returns 404 for a nonexistent agent", async () => {
       // Use a valid UUID-format ID that will pass Zod param validation
       // but won't exist in the database
       const nonExistentId = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";

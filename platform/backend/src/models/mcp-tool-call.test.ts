@@ -51,7 +51,7 @@ describe("McpToolCallModel", () => {
       expect(found?.id).toBe(created.id);
     });
 
-    test("returns null for non-existent id", async () => {
+    test("returns null for nonexistent id", async () => {
       const found = await McpToolCallModel.findById(
         "00000000-0000-0000-0000-000000000000",
       );

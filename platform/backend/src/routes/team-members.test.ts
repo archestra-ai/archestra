@@ -286,29 +286,29 @@ describe("team routes", () => {
       expect(body.pagination.total).toBeGreaterThanOrEqual(2);
     });
 
-    test("returns 404 for non-existent team", async () => {
+    test("returns 404 for nonexistent team", async () => {
       const response = await app.inject({
         method: "GET",
-        url: "/api/teams/non-existent-id",
+        url: "/api/teams/nonexistent-id",
       });
 
       expect(response.statusCode).toBe(404);
     });
 
-    test("returns 404 when updating non-existent team", async () => {
+    test("returns 404 when updating nonexistent team", async () => {
       const response = await app.inject({
         method: "PUT",
-        url: "/api/teams/non-existent-id",
+        url: "/api/teams/nonexistent-id",
         payload: { name: "Ghost" },
       });
 
       expect(response.statusCode).toBe(404);
     });
 
-    test("returns 404 when deleting non-existent team", async () => {
+    test("returns 404 when deleting nonexistent team", async () => {
       const response = await app.inject({
         method: "DELETE",
-        url: "/api/teams/non-existent-id",
+        url: "/api/teams/nonexistent-id",
       });
 
       expect(response.statusCode).toBe(404);
@@ -474,23 +474,23 @@ describe("team routes", () => {
       ).toBe(false);
     });
 
-    test("returns 404 when listing members of non-existent team", async () => {
+    test("returns 404 when listing members of nonexistent team", async () => {
       const response = await app.inject({
         method: "GET",
-        url: "/api/teams/non-existent-id/members",
+        url: "/api/teams/nonexistent-id/members",
       });
 
       expect(response.statusCode).toBe(404);
     });
 
-    test("returns 404 when removing non-existent member", async ({
+    test("returns 404 when removing nonexistent member", async ({
       makeTeam,
     }) => {
       const team = await makeTeam(organizationId, adminUser.id);
 
       const response = await app.inject({
         method: "DELETE",
-        url: `/api/teams/${team.id}/members/non-existent-user`,
+        url: `/api/teams/${team.id}/members/nonexistent-user`,
       });
 
       expect(response.statusCode).toBe(404);
@@ -628,23 +628,23 @@ describe("team routes", () => {
       expect(response.json().groupIdentifier).toBe("engineering-team");
     });
 
-    test("returns 404 when removing non-existent group mapping", async ({
+    test("returns 404 when removing nonexistent group mapping", async ({
       makeTeam,
     }) => {
       const team = await makeTeam(organizationId, adminUser.id);
 
       const response = await app.inject({
         method: "DELETE",
-        url: `/api/teams/${team.id}/external-groups/non-existent-id`,
+        url: `/api/teams/${team.id}/external-groups/nonexistent-id`,
       });
 
       expect(response.statusCode).toBe(404);
     });
 
-    test("returns 404 for external groups of non-existent team", async () => {
+    test("returns 404 for external groups of nonexistent team", async () => {
       const response = await app.inject({
         method: "GET",
-        url: "/api/teams/non-existent-id/external-groups",
+        url: "/api/teams/nonexistent-id/external-groups",
       });
 
       expect(response.statusCode).toBe(404);

@@ -50,9 +50,9 @@ describe("SubagentExecutionTracker", () => {
     expect(subagentExecutionTracker.hasActiveSubagents(keyB)).toBe(false);
   });
 
-  it("should handle decrement on non-existent key gracefully", () => {
-    subagentExecutionTracker.decrement("non-existent");
-    expect(subagentExecutionTracker.hasActiveSubagents("non-existent")).toBe(
+  it("should handle decrement on nonexistent key gracefully", () => {
+    subagentExecutionTracker.decrement("nonexistent");
+    expect(subagentExecutionTracker.hasActiveSubagents("nonexistent")).toBe(
       false,
     );
   });

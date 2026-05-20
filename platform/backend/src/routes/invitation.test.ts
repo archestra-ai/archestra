@@ -71,7 +71,7 @@ describe("invitation routes", () => {
       expect(body.userExists).toBe(true);
     });
 
-    test("returns 404 for non-existent invitation", async () => {
+    test("returns 404 for nonexistent invitation", async () => {
       const response = await app.inject({
         method: "GET",
         url: "/api/invitation/00000000-0000-0000-0000-000000000000/check",

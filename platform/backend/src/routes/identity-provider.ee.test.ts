@@ -455,10 +455,10 @@ describe("identity provider routes", () => {
   });
 
   describe("GET /api/identity-providers/:id", () => {
-    test("returns 404 for non-existent provider", async () => {
+    test("returns 404 for nonexistent provider", async () => {
       const response = await app.inject({
         method: "GET",
-        url: "/api/identity-providers/non-existent-id",
+        url: "/api/identity-providers/nonexistent-id",
       });
 
       expect(response.statusCode).toBe(404);

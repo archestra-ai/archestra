@@ -63,7 +63,7 @@ describe("resolveAgent", () => {
 // =========================================================================
 
 describe("validateVirtualApiKey", () => {
-  test("throws 401 for invalid/non-existent token", async () => {
+  test("throws 401 for invalid/nonexistent token", async () => {
     await expect(
       validateVirtualApiKey(
         `${LEGACY_ARCHESTRA_TOKEN_PREFIXES[0]}nonexistent`,

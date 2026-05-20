@@ -46,7 +46,7 @@ describe("getSecretValueForLlmProviderApiKey", () => {
   // Edge cases
   // =========================================================================
 
-  test("returns undefined for non-existent secret", async () => {
+  test("returns undefined for nonexistent secret", async () => {
     expect(
       await getSecretValueForLlmProviderApiKey(
         "00000000-0000-0000-0000-000000000000",

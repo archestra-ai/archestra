@@ -247,7 +247,7 @@ describe("TeamModel", () => {
     }) => {
       const org = await makeOrganization();
 
-      const found = await TeamModel.findByName("Non-existent", org.id);
+      const found = await TeamModel.findByName("Nonexistent", org.id);
 
       expect(found).toBeNull();
     });
@@ -296,7 +296,7 @@ describe("TeamModel", () => {
       expect(teams).toEqual([]);
     });
 
-    test("should return empty array for non-existent IDs", async () => {
+    test("should return empty array for nonexistent IDs", async () => {
       const teams = await TeamModel.findByIds([
         crypto.randomUUID(),
         crypto.randomUUID(),
@@ -488,7 +488,7 @@ describe("TeamModel", () => {
       expect(groups).toEqual([]);
     });
 
-    test("should handle non-existent group gracefully", async ({
+    test("should handle nonexistent group gracefully", async ({
       makeUser,
       makeOrganization,
       makeTeam,
@@ -497,8 +497,8 @@ describe("TeamModel", () => {
       const org = await makeOrganization();
       const team = await makeTeam(org.id, user.id);
 
-      // Should not throw when removing non-existent group
-      await TeamModel.removeExternalGroup(team.id, "non-existent");
+      // Should not throw when removing nonexistent group
+      await TeamModel.removeExternalGroup(team.id, "nonexistent");
 
       const groups = await TeamModel.getExternalGroups(team.id);
       expect(groups).toEqual([]);

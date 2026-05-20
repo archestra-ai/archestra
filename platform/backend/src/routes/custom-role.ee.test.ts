@@ -461,7 +461,7 @@ describe("custom role routes", () => {
     });
   });
 
-  test("GET /api/roles/:roleId returns 404 for non-existent role", async () => {
+  test("GET /api/roles/:roleId returns 404 for nonexistent role", async () => {
     const response = await app.inject({
       method: "GET",
       url: "/api/roles/c7528140-07b0-4870-841d-6886a6daeb36",
@@ -720,7 +720,7 @@ describe("custom role routes", () => {
     // We test the delete route response is correct.
   });
 
-  test("DELETE /api/roles/:roleId returns 404 for non-existent role", async () => {
+  test("DELETE /api/roles/:roleId returns 404 for nonexistent role", async () => {
     const response = await app.inject({
       method: "DELETE",
       url: "/api/roles/c7528140-07b0-4870-841d-6886a6daeb36",

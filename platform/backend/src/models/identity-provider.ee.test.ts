@@ -1021,7 +1021,7 @@ describe("IdentityProviderModel", () => {
     }) => {
       const org = await makeOrganization();
       const provider = await IdentityProviderModel.findById(
-        "non-existent-id",
+        "nonexistent-id",
         org.id,
       );
       expect(provider).toBeNull();
@@ -1083,7 +1083,7 @@ describe("IdentityProviderModel", () => {
     }) => {
       const org = await makeOrganization();
       const result = await IdentityProviderModel.update(
-        "non-existent-id",
+        "nonexistent-id",
         { issuer: "https://new-issuer.com" },
         org.id,
       );
@@ -1255,7 +1255,7 @@ describe("IdentityProviderModel", () => {
     }) => {
       const org = await makeOrganization();
       const result = await IdentityProviderModel.delete(
-        "non-existent-id",
+        "nonexistent-id",
         org.id,
       );
       expect(result).toBe(false);
@@ -1803,7 +1803,7 @@ describe("evaluateRoleMapping", () => {
         rules: [
           {
             expression:
-              '{{#each groups}}{{#equals this "non-existent"}}true{{/equals}}{{/each}}',
+              '{{#each groups}}{{#equals this "nonexistent"}}true{{/equals}}{{/each}}',
             role: "admin",
           },
         ],

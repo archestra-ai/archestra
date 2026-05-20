@@ -107,7 +107,7 @@ describe("InvitationModel", () => {
       expect(deletedInvitation).toBeUndefined();
     });
 
-    test("should handle deletion of non-existent invitation gracefully", async () => {
+    test("should handle deletion of nonexistent invitation gracefully", async () => {
       const nonExistentId = crypto.randomUUID();
 
       // Should not throw an error
@@ -388,7 +388,7 @@ describe("InvitationModel", () => {
       );
     });
 
-    test("should return empty array for non-existent email", async () => {
+    test("should return empty array for nonexistent email", async () => {
       const invitations = await InvitationModel.findByEmail(
         "nonexistent@example.com",
       );
@@ -455,7 +455,7 @@ describe("InvitationModel", () => {
       expect(found).toBeUndefined();
     });
 
-    test("should return undefined for non-existent email", async () => {
+    test("should return undefined for nonexistent email", async () => {
       const found = await InvitationModel.findPendingByEmail(
         "nonexistent@example.com",
       );

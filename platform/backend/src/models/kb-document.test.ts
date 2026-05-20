@@ -101,7 +101,7 @@ describe("KbDocumentModel", () => {
       expect(found?.title).toBe("Find Me");
     });
 
-    test("returns null for non-existent id", async () => {
+    test("returns null for nonexistent id", async () => {
       const found = await KbDocumentModel.findById(
         "00000000-0000-0000-0000-000000000000",
       );
@@ -325,7 +325,7 @@ describe("KbDocumentModel", () => {
       expect(updated?.chunkCount).toBe(10);
     });
 
-    test("returns null for non-existent id", async () => {
+    test("returns null for nonexistent id", async () => {
       const updated = await KbDocumentModel.update(
         "00000000-0000-0000-0000-000000000000",
         { title: "Nope" },
@@ -354,7 +354,7 @@ describe("KbDocumentModel", () => {
       expect(found).toBeNull();
     });
 
-    test("returns false for non-existent id", async () => {
+    test("returns false for nonexistent id", async () => {
       const deleted = await KbDocumentModel.delete(
         "00000000-0000-0000-0000-000000000000",
       );

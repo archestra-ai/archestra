@@ -110,7 +110,7 @@ describe("knowledge base routes", () => {
       expect(body.name).toBe("Fetch KB");
     });
 
-    test("returns 404 for non-existent knowledge base", async () => {
+    test("returns 404 for nonexistent knowledge base", async () => {
       const response = await app.inject({
         method: "GET",
         url: `/api/knowledge-bases/${crypto.randomUUID()}`,
@@ -285,7 +285,7 @@ describe("knowledge base routes", () => {
       expect(getResponse.json().name).toBe("After Update");
     });
 
-    test("returns 404 for non-existent knowledge base", async () => {
+    test("returns 404 for nonexistent knowledge base", async () => {
       const response = await app.inject({
         method: "PUT",
         url: `/api/knowledge-bases/${crypto.randomUUID()}`,
@@ -331,7 +331,7 @@ describe("knowledge base routes", () => {
       expect(getResponse.statusCode).toBe(404);
     });
 
-    test("returns 404 for non-existent knowledge base", async () => {
+    test("returns 404 for nonexistent knowledge base", async () => {
       const response = await app.inject({
         method: "DELETE",
         url: `/api/knowledge-bases/${crypto.randomUUID()}`,
@@ -370,7 +370,7 @@ describe("knowledge base routes", () => {
       expect(body).toHaveProperty("totalDocsIngested");
     });
 
-    test("returns 404 for non-existent connector", async () => {
+    test("returns 404 for nonexistent connector", async () => {
       const response = await app.inject({
         method: "GET",
         url: `/api/connectors/${crypto.randomUUID()}`,
@@ -702,7 +702,7 @@ describe("knowledge base routes", () => {
       }
     });
 
-    test("returns 404 for non-existent connector", async () => {
+    test("returns 404 for nonexistent connector", async () => {
       const response = await app.inject({
         method: "PUT",
         url: `/api/connectors/${crypto.randomUUID()}`,
@@ -884,7 +884,7 @@ describe("knowledge base routes", () => {
       expect(getResponse.statusCode).toBe(404);
     });
 
-    test("returns 404 for non-existent connector", async () => {
+    test("returns 404 for nonexistent connector", async () => {
       const response = await app.inject({
         method: "DELETE",
         url: `/api/connectors/${crypto.randomUUID()}`,
@@ -1081,7 +1081,7 @@ describe("knowledge base routes", () => {
       expect(body.pagination.total).toBe(2);
     });
 
-    test("returns 404 for runs of non-existent connector", async () => {
+    test("returns 404 for runs of nonexistent connector", async () => {
       const response = await app.inject({
         method: "GET",
         url: `/api/connectors/${crypto.randomUUID()}/runs?limit=10&offset=0`,
@@ -1117,7 +1117,7 @@ describe("knowledge base routes", () => {
       expect(body.status).toBe("success");
     });
 
-    test("returns 404 for non-existent run", async () => {
+    test("returns 404 for nonexistent run", async () => {
       const connector = await KnowledgeBaseConnectorModel.create({
         organizationId,
         name: "No Run Connector",
@@ -1218,7 +1218,7 @@ describe("knowledge base routes", () => {
       expect(response.json().status).toBe("healthy");
     });
 
-    test("returns 404 for non-existent knowledge base", async () => {
+    test("returns 404 for nonexistent knowledge base", async () => {
       const response = await app.inject({
         method: "GET",
         url: `/api/knowledge-bases/${crypto.randomUUID()}/health`,

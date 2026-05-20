@@ -367,7 +367,7 @@ export async function autoReinstallServer(
  * the catalog-reinstall endpoint to cascade tools to every install
  * attached to a multi-tenant catalog once the shared pod is back up.
  */
-export async function syncToolsForServer(
+async function syncToolsForServer(
   server: McpServer,
   catalogItem: InternalMcpCatalog,
   options?: {

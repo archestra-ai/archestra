@@ -92,7 +92,7 @@ export function LlmProviderApiKeySelector({
     setOpen(newOpen);
     onOpenChange?.(newOpen);
   };
-  // Track which provider we last auto-selected for to prevent infinite loops.
+  // Track which provider we last auto-selected to prevent infinite loops.
   // Using the provider value (not a boolean) so we can re-run auto-select when
   // the provider genuinely changes (e.g., user picks a model from a different provider)
   // without looping when our own mutations cause provider changes.

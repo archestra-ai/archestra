@@ -762,11 +762,27 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // A key that lived in the existing bag but is no longer
         // referenced by either env vars or image-pull-secrets gets
         // implicitly dropped on `updateSecret` below — that's a value
-        // change on the bag too, so flag it as rotation.
-        for (const existingKey of Object.keys(existingSecretValues)) {
-          if (!(existingKey in secretEnvVars)) {
-            catalogSharedSecretValuesRotated = true;
-            break;
+        // change on the bag, so flag it as rotation.
+        //
+        // Gated on whether the request actually supplied either
+        // local-config surface that produces bag keys. A userConfig-
+        // only edit enters this `else if` branch (because the outer
+        // condition matches `restBody.userConfig`) without supplying
+        // a `localConfig`, leaving `secretEnvVars` empty solely
+        // because there were no env-var/imagePullSecret entries to
+        // iterate — not because keys were dropped. Without this
+        // gate, a userConfig-only edit (e.g. adding an optional
+        // header) would falsely force the auto path on a catalog
+        // with any pre-existing local secret bag.
+        const localBagSurfaceTouched =
+          restBody.localConfig?.environment !== undefined ||
+          restBody.localConfig?.imagePullSecrets !== undefined;
+        if (localBagSurfaceTouched) {
+          for (const existingKey of Object.keys(existingSecretValues)) {
+            if (!(existingKey in secretEnvVars)) {
+              catalogSharedSecretValuesRotated = true;
+              break;
+            }
           }
         }
         // Orphaned __regcred_password:* keys (from removed entries) are implicitly
@@ -1887,24 +1903,42 @@ async function cascadeReinstallForCatalog(
   originalCatalogItem: InternalMcpCatalog,
   catalogItem: InternalMcpCatalog,
   /**
-   * Force the auto-restart path regardless of the row-diff gates. Used
-   * when the caller has out-of-band knowledge that pods need to
-   * restart even though the row looks unchanged — primarily catalog
-   * secret-bag value rotation (non-prompted secret env vars, OAuth
-   * client_secret, image-pull-secret passwords, default-preset
-   * sensitive values). The bag content lives outside the catalog row,
-   * so the gate snapshot (unexpanded by design — see comment further
-   * down) cannot see a value change; without this opt-in the cascade
-   * would silently skip and pods would keep injecting the old value.
+   * Force the auto-restart path past the "no restart needed" gates
+   * (metadata-only, forward-compat) — used when the caller has
+   * out-of-band knowledge that pods need to restart even though the
+   * row looks unchanged (primarily catalog secret-bag value rotation:
+   * non-prompted secret env vars, OAuth client_secret, image-pull-
+   * secret passwords, default-preset sensitive values). The bag
+   * content lives outside the catalog row, so the unexpanded gate
+   * snapshot cannot see a value change.
    *
-   * Re-prompt is still skipped: rotation means the admin already
-   * supplied the new value via the request; the user just needs the
-   * pod to pick it up.
+   * Does NOT override `requiresNewUserInputForReinstall`. If the same
+   * PUT both rotates a secret AND adds a re-prompt-requiring change
+   * (e.g. a new required prompted env var), the cascade must still
+   * mark servers for manual reinstall — auto-restarting would bring
+   * pods back without the newly-required input. The two signals are
+   * orthogonal: rotation says "pods need to restart for the value to
+   * propagate"; re-prompt says "no restart can succeed until the user
+   * supplies a value the install doesn't have."
    */
   override?: { forceAutoRestart?: boolean },
 ): Promise<void> {
   const installedServers = await McpServerModel.findByCatalogId(catalogItem.id);
   if (installedServers.length === 0) return;
+
+  // Manual path is authoritative: a re-prompt edit blocks both the
+  // gate-decided auto path AND the forced auto path. Run it before any
+  // override branching.
+  if (requiresNewUserInputForReinstall(originalCatalogItem, catalogItem)) {
+    logger.info(
+      { catalogId: catalogItem.id, serverCount: installedServers.length },
+      "Catalog edit requires new user input - marking servers for manual reinstall",
+    );
+    for (const server of installedServers) {
+      await McpServerModel.update(server.id, { reinstallRequired: true });
+    }
+    return;
+  }
 
   if (override?.forceAutoRestart) {
     logger.info(
@@ -1944,17 +1978,6 @@ async function cascadeReinstallForCatalog(
         { catalogId: catalogItem.id, serverCount: installedServers.length },
         "Catalog edit is a forward-compatible env-var change - skipping reinstall",
       );
-      return;
-    }
-
-    if (requiresNewUserInputForReinstall(originalCatalogItem, catalogItem)) {
-      logger.info(
-        { catalogId: catalogItem.id, serverCount: installedServers.length },
-        "Catalog edit requires new user input - marking servers for manual reinstall",
-      );
-      for (const server of installedServers) {
-        await McpServerModel.update(server.id, { reinstallRequired: true });
-      }
       return;
     }
 

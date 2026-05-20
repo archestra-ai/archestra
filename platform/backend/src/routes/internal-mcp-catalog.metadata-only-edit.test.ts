@@ -462,6 +462,194 @@ describe("PUT /api/internal_mcp_catalog/:id — metadata-only edit cascade", () 
     expect(serverRow.reinstallRequired).toBe(false);
   });
 
+  test("rotation + re-prompt edit in the same PUT marks installs for manual reinstall (forceAutoRestart must not preempt re-prompt)", async ({
+    makeMcpServer,
+  }) => {
+    // Regression: when a single PUT both rotates a non-prompted secret
+    // env var value AND adds a re-prompt-requiring schema change (a
+    // new REQUIRED prompted env var), the previous `forceAutoRestart`
+    // override unconditionally skipped `requiresNewUserInputForReinstall`
+    // — so pods were auto-restarted with the rotated secret but
+    // without the newly-required prompted value. Manual path must win:
+    // re-prompt blocks any auto-restart variant.
+    const catalog = await createCatalog({
+      name: "rotate-plus-reprompt",
+      serverType: "local",
+      description: "original",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [
+          {
+            key: "DB_PASSWORD",
+            type: "secret",
+            value: "old-secret",
+            promptOnInstallation: false,
+            required: false,
+          },
+        ],
+      },
+    });
+
+    const installedServer = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: user.id,
+      scope: "personal",
+    });
+
+    const updateSpy = vi.spyOn(McpServerModel, "update");
+
+    const putResponse = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${catalog.id}`,
+      payload: {
+        name: "rotate-plus-reprompt",
+        serverType: "local",
+        description: "original",
+        localConfig: {
+          command: "node",
+          arguments: ["server.js"],
+          environment: [
+            {
+              // Rotated value — triggers `catalogSharedSecretValuesRotated`.
+              key: "DB_PASSWORD",
+              type: "secret",
+              value: "new-secret",
+              promptOnInstallation: false,
+              required: false,
+            },
+            {
+              // Newly-required prompted env var — triggers
+              // `promptedEnvVarsChanged → requiresNewUserInputForReinstall`.
+              key: "NEW_REQUIRED",
+              type: "plain_text",
+              promptOnInstallation: true,
+              required: true,
+            },
+          ],
+        },
+      },
+    });
+
+    if (putResponse.statusCode !== 200) {
+      throw new Error(
+        `PUT failed: ${putResponse.statusCode} ${putResponse.body}`,
+      );
+    }
+
+    // Manual path fired: server marked reinstallRequired, no auto
+    // restart status churn.
+    const [serverRow] = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.id, installedServer.id));
+    expect(serverRow.reinstallRequired).toBe(true);
+    expect(serverRow.localInstallationStatus).toBe("idle");
+
+    const updateCalls = updateSpy.mock.calls.filter(
+      ([id]) => id === installedServer.id,
+    );
+    // Exactly one update — the reinstallRequired flag. No "pending" /
+    // "success" transitions from the auto-restart branch.
+    expect(updateCalls).toHaveLength(1);
+    expect(updateCalls[0][1]).toEqual({ reinstallRequired: true });
+  });
+
+  test("userConfig-only PUT on a local catalog with a localConfigSecretId does not falsely trigger forceAutoRestart", async ({
+    makeMcpServer,
+  }) => {
+    // Regression: the local-config secret block runs whenever the
+    // request supplies EITHER `localConfig` OR `userConfig`. When the
+    // request only touches `userConfig`, we never iterate the env-var /
+    // image-pull-secret loops, so `secretEnvVars` stays empty. The
+    // "dropped key" rotation detection used to flag every existing
+    // bag key as dropped — falsely setting `catalogSharedSecretValuesRotated`
+    // and forcing the auto path for an edit the forward-compat gate
+    // should skip.
+    const catalog = await createCatalog({
+      name: "userconfig-only-on-bag-catalog",
+      serverType: "local",
+      description: "original",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [
+          {
+            key: "DB_PASSWORD",
+            type: "secret",
+            value: "supersecret",
+            promptOnInstallation: false,
+            required: false,
+          },
+        ],
+      },
+      userConfig: {
+        existing_header: {
+          type: "string",
+          title: "x-existing",
+          description: "",
+          headerName: "x-existing",
+          promptOnInstallation: true,
+          required: false,
+          sensitive: false,
+        },
+      },
+    });
+
+    const installedServer = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: user.id,
+      scope: "personal",
+    });
+
+    const updateSpy = vi.spyOn(McpServerModel, "update");
+
+    // Userconfig-only edit: add an optional header. localConfig
+    // intentionally omitted from the body — the existing secret bag
+    // (`DB_PASSWORD`) must not be read as "all keys dropped."
+    const putResponse = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${catalog.id}`,
+      payload: {
+        userConfig: {
+          existing_header: {
+            type: "string",
+            title: "x-existing",
+            description: "",
+            headerName: "x-existing",
+            promptOnInstallation: true,
+            required: false,
+            sensitive: false,
+          },
+          new_optional_header: {
+            type: "string",
+            title: "x-new-optional",
+            description: "",
+            headerName: "x-new-optional",
+            promptOnInstallation: true,
+            required: false,
+            sensitive: false,
+          },
+        },
+      },
+    });
+
+    if (putResponse.statusCode !== 200) {
+      throw new Error(
+        `PUT failed: ${putResponse.statusCode} ${putResponse.body}`,
+      );
+    }
+
+    await assertCascadeDidNotFire(updateSpy);
+
+    const [serverRow] = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.id, installedServer.id));
+    expect(serverRow.localInstallationStatus).toBe("idle");
+    expect(serverRow.reinstallRequired).toBe(false);
+  });
+
   async function createCatalog(payload: Record<string, unknown>): Promise<{
     id: string;
   }> {

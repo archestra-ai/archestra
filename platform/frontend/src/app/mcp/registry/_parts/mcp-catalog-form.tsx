@@ -2273,7 +2273,11 @@ function ReinstallHint({ show }: { show: boolean }) {
   );
 }
 
-type PromptedEnvVarInfo = { required: boolean; type: string };
+type PromptedEnvVarInfo = {
+  required: boolean;
+  type: string;
+  mounted: boolean;
+};
 
 /**
  * Mirror of `promptedEnvVarsChanged` in
@@ -2313,6 +2317,12 @@ function envChangeRequiresReinstall(prev: unknown, next: unknown): boolean {
     if (!nextVal) return true;
     if (nextVal.type !== prevVal.type) return true;
     if (!prevVal.required && nextVal.required) return true;
+    // Runtime layout change: `mounted` flips the pod spec between env
+    // var injection and a mounted secret file at `/secrets/<key>`.
+    // Mirror of backend `promptedEnvVarsRuntimeChanged` — without
+    // this, the badge stays hidden while the cascade bar still
+    // fires on save.
+    if (prevVal.mounted !== nextVal.mounted) return true;
   }
   for (const [key, nextVal] of nextMap) {
     if (prevMap.has(key)) continue;
@@ -2328,13 +2338,18 @@ type RawEnvVar = {
   required?: boolean;
   promptOnInstallation?: boolean;
   sensitive?: boolean;
+  mounted?: boolean;
 };
 
 function promptedMap(arr: RawEnvVar[]): Map<string, PromptedEnvVarInfo> {
   const m = new Map<string, PromptedEnvVarInfo>();
   for (const v of arr) {
     if (!v?.key || !v.promptOnInstallation) continue;
-    m.set(v.key, { required: Boolean(v.required), type: String(v.type ?? "") });
+    m.set(v.key, {
+      required: Boolean(v.required),
+      type: String(v.type ?? ""),
+      mounted: Boolean(v.mounted),
+    });
   }
   return m;
 }
@@ -2400,22 +2415,29 @@ function deriveAdditionalHeaders(userConfig: unknown): AdditionalHeader[] {
 }
 
 /**
- * Same schema-evolution semantics as `envChangeRequiresReinstall`, but
- * for `additionalHeaders`. Returns true only when the change
- * invalidates existing installs:
+ * Mirror of backend `userConfigChangedBreakingly`, scoped to header-
+ * mapped userConfig fields (the form's `additionalHeaders` projection).
+ * Returns true only when the change invalidates existing installs:
  *
- *   - Added OPTIONAL header        → existing installs stay valid (false)
- *   - Added REQUIRED header        → existing installs are missing it → true
- *   - Removed header               → stored value for removed field → true
- *   - required false → true        → installs that didn't fill it → true
- *   - required true → false        → installs still valid → false
- *   - headerName change            → routing changes → true
- *   - sensitive flag flip          → storage bucket moved → true
- *   - default value change         → catalog default changed, propagated → true
- *   - bearer-prefix flag flip      → auth header semantic change → true
+ *   - Added OPTIONAL header  → existing installs stay valid (false)
+ *   - Added REQUIRED header  → existing installs are missing it → true
+ *   - Removed header         → stored value for removed field → true
+ *   - required false → true  → installs that didn't fill it → true
+ *   - required true → false  → installs still valid → false
+ *   - headerName change      → routing changes → true
+ *   - sensitive flag flip    → storage bucket moved → true
  *
- * Keep in sync with the backend equivalent in
- * `backend/src/services/mcp-reinstall.ts`.
+ * Deliberately ignored (mirror of backend's "deliberately NOT checking"
+ * comment in `userConfigChangedBreakingly`):
+ *   - `value` (becomes `default` in userConfig) — cosmetic / template
+ *     default, doesn't affect install validity
+ *   - `includeBearerPrefix` (becomes `valuePrefix: "Bearer "`) — cosmetic
+ *     wire-format detail; doesn't move storage
+ *   - `description`, `title` — pure metadata
+ *
+ * Keep in sync with `backend/src/services/mcp-reinstall.ts` — a
+ * mismatch silently disagrees with the cascade bar's behaviour and
+ * shows the user a misleading per-field hint badge.
  */
 function additionalHeadersChangeRequiresReinstall(
   prev: AdditionalHeader[],
@@ -2434,10 +2456,6 @@ function additionalHeadersChangeRequiresReinstall(
     if (!p.required && Boolean(n.required)) return true; // Became required
     if ((p.headerName ?? "") !== (n.headerName ?? "")) return true; // Routing
     if (Boolean(p.sensitive) !== Boolean(n.sensitive)) return true; // Storage
-    if (Boolean(p.includeBearerPrefix) !== Boolean(n.includeBearerPrefix)) {
-      return true; // Auth semantics
-    }
-    if ((p.value ?? "") !== (n.value ?? "")) return true; // Default value
   }
   for (const [key, n] of nextMap) {
     if (prevMap.has(key)) continue;

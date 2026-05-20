@@ -837,20 +837,39 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // (plaintext jsonb instead of the bag, or stale bag still merged
       // over jsonb by the read path).
       //
-      // The partition runs against the *effective* userConfig — the
-      // incoming one when this PUT updates userConfig, otherwise the
-      // row's current userConfig. Reading only originalCatalogItem
-      // would misroute values for fields newly flipped to sensitive in
-      // the same request.
+      // The partition runs against the *effective* parent — the incoming
+      // userConfig / localConfig when the request supplies them,
+      // otherwise the row's current values. Reading only
+      // originalCatalogItem would misroute values for fields newly
+      // flipped to sensitive (userConfig) or newly flipped to
+      // `type: "secret"` on a prompted-on-preset env var.
       const parentForPartition: InternalMcpCatalog = {
         ...originalCatalogItem,
         userConfig: restBody.userConfig ?? originalCatalogItem.userConfig,
+        localConfig: restBody.localConfig
+          ? {
+              ...(originalCatalogItem.localConfig ?? {}),
+              ...restBody.localConfig,
+            }
+          : originalCatalogItem.localConfig,
       };
+      // True when the set of preset-scoped *secret* keys differs between
+      // the old and new effective parent — covers both surfaces:
+      //   • userConfig: a field flipped `sensitive` true/false (or a
+      //     promptOnPreset sensitive field was added/removed)
+      //   • localConfig.environment: a `promptOnPreset` env var's
+      //     `type` flipped between "secret" and anything else (or
+      //     such an env var was added/removed)
+      // Either kind of flip means children's already-stored preset
+      // values need to be repartitioned between plaintext jsonb and
+      // the secret bag, otherwise the read path returns stale data
+      // from the wrong storage.
       const secretKeysChanged =
-        restBody.userConfig !== undefined &&
-        presetSecretKeysChanged(
-          originalCatalogItem.userConfig,
-          restBody.userConfig,
+        (restBody.userConfig !== undefined ||
+          restBody.localConfig !== undefined) &&
+        !setsEqual(
+          collectSecretPresetKeys(originalCatalogItem),
+          collectSecretPresetKeys(parentForPartition),
         );
       // Enforce the org-wide default validation regex against incoming
       // default-scoped values. Symmetric to the entry-regex check on the
@@ -1214,7 +1233,19 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Clear the custom deployment YAML
-      await InternalMcpCatalogModel.update(id, { deploymentSpecYaml: null });
+      const updated = await InternalMcpCatalogModel.update(id, {
+        deploymentSpecYaml: null,
+      });
+
+      // Cascade-reinstall installed pods so they pick up the
+      // auto-generated manifest. Without this, existing pods would keep
+      // running on the (now-cleared) override until another unrelated
+      // edit or manual reinstall triggered a restart. The standard
+      // gate handles the decision: pods come up with the new template
+      // via the auto path (no user re-prompt needed).
+      if (updated) {
+        await cascadeReinstallForCatalog(catalogItem, updated);
+      }
 
       // Extract imagePullSecrets names for YAML preview
       const imagePullSecretsForYaml = catalogItem.localConfig?.imagePullSecrets
@@ -1649,19 +1680,10 @@ async function getCatalogClientSecretValues(
  * plaintext keys now want the secret bag, and previously-secret keys now
  * want plaintext jsonb.
  */
-function presetSecretKeysChanged(
-  oldUserConfig: InternalMcpCatalog["userConfig"],
-  newUserConfig: InternalMcpCatalog["userConfig"],
-): boolean {
-  const old = collectSecretPresetKeys({
-    userConfig: oldUserConfig,
-  } as InternalMcpCatalog);
-  const next = collectSecretPresetKeys({
-    userConfig: newUserConfig,
-  } as InternalMcpCatalog);
-  if (old.size !== next.size) return true;
-  for (const k of old) if (!next.has(k)) return true;
-  return false;
+function setsEqual<T>(a: Set<T>, b: Set<T>): boolean {
+  if (a.size !== b.size) return false;
+  for (const v of a) if (!b.has(v)) return false;
+  return true;
 }
 
 /**

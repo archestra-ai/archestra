@@ -56,6 +56,10 @@ export type CatalogShapeFixture = {
       required?: boolean;
       sensitive?: boolean;
       description?: string;
+      // Flips pod-spec layout between env var (false) and a mounted
+      // secret file at `/secrets/<key>` (true). Tracked by the cascade
+      // gate's `promptedEnvVarsRuntimeChanged`.
+      mounted?: boolean;
     }>;
     envFrom?: Array<{ type: "secret" | "configMap"; name: string }>;
     dockerImage?: string;

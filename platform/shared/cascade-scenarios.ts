@@ -379,6 +379,17 @@ export const CASCADE_SCENARIOS: CascadeScenario[] = [
       "Installs that filled the required var are still valid; the var is just no longer mandatory. Forward-compatible change.",
   },
   {
+    id: "flip-env-var-mounted",
+    shape: "promptedEnvLocal",
+    userAction:
+      "Admin flips a prompted secret env var's mounted layout (env var ↔ mounted file)",
+    edit: modifyEnvVar("EXISTING_REQUIRED_PROMPT", { mounted: true }),
+    expected: "auto",
+    sharedPredicate: "non-metadata-diff",
+    rationale:
+      "Toggling `mounted` swaps the pod spec between an env var injection and a mounted secret file at `/secrets/<key>`. The user supplied the same value at install time; no re-prompt needed. But pods still have to restart to pick up the new layout. Caught by `promptedEnvVarsRuntimeChanged` (separate from the lenient `promptedEnvVarsChanged` schema check).",
+  },
+  {
     id: "change-env-var-type",
     shape: "promptedEnvLocal",
     userAction: "Admin changes an env var's type from plain_text to secret",

@@ -255,7 +255,7 @@ export default class VaultSecretManager
       return this.getVaultPath(name, id);
     }
 
-    // KV v2: Use configured metadata path, or fallback to replacing /data/ with /metadata/
+    // KV v2: Use configured metadata path, or fall back to replacing /data/ with /metadata/
     const metadataPath =
       this.config.secretMetadataPath ??
       this.config.secretPath.replace("/data/", "/metadata/");

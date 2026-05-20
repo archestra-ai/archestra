@@ -6,7 +6,7 @@ export type { ToolCompressionStats };
 
 /**
  * Determine if TOON compression should be applied based on organization/team settings
- * Follows the same pattern as cost optimization: uses agent's teams or fallback to first org
+ * Follows the same pattern as cost optimization: uses agent's teams or fall back to first org
  */
 export async function shouldApplyToonCompression(
   agentId: string,
@@ -26,7 +26,7 @@ export async function shouldApplyToonCompression(
       );
     }
   } else {
-    // If agent has no teams, use fallback to first organization in database
+    // If agent has no teams, fall back to first organization in database
     const firstOrg = await OrganizationModel.getFirst();
 
     if (firstOrg) {

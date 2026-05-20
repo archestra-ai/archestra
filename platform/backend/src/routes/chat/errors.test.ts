@@ -1139,7 +1139,7 @@ describe("mapProviderError - Bedrock", () => {
     });
   });
 
-  describe("fallback to HTTP status code", () => {
+  describe("fall back to HTTP status code", () => {
     it("should fall back to status code when __type is missing", () => {
       const error = {
         statusCode: 429,

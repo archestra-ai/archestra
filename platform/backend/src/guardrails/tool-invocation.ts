@@ -222,7 +222,7 @@ export async function getGlobalToolPolicy(
     }
   }
 
-  // Agent has no teams - fallback to first organization (avoid double fetch)
+  // Agent has no teams - fall back to first organization (avoid double fetch)
   const firstOrg = await OrganizationModel.getFirst();
   if (!firstOrg) {
     logger.warn(

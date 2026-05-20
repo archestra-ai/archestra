@@ -848,7 +848,7 @@ export default class K8sDeployment {
             : {}),
           args: (localConfig.arguments || []).map((arg) => {
             // Interpolate ${user_config.xxx} placeholders with actual values
-            // Use environmentValues first (for internal catalog), fallback to userConfigValues (for external catalog)
+            // Use environmentValues first (for internal catalog), fall back to userConfigValues (for external catalog)
             if (this.environmentValues || this.userConfigValues) {
               return arg.replace(
                 /\$\{user_config\.([^}]+)\}/g,
@@ -1318,7 +1318,7 @@ export default class K8sDeployment {
           value = envDef.value != null ? String(envDef.value) : undefined;
 
           // Interpolate ${user_config.xxx} placeholders with actual values
-          // Use environmentValues first (for internal catalog), fallback to userConfigValues (for external catalog)
+          // Use environmentValues first (for internal catalog), fall back to userConfigValues (for external catalog)
           if (value && (this.environmentValues || this.userConfigValues)) {
             value = value.replace(
               /\$\{user_config\.([^}]+)\}/g,

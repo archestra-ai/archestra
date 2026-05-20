@@ -634,7 +634,7 @@ export async function refreshOAuthToken(
       ...(tokenData.expires_in && {
         expires_at: Date.now() + tokenData.expires_in * 1000,
       }),
-      // Store client credentials for token refresh (config takes precedence, fallback to stored)
+      // Store client credentials for token refresh (config takes precedence, fall back to stored)
       ...(clientId && { client_id: clientId }),
       ...(clientSecret && { client_secret: clientSecret }),
     };

@@ -147,7 +147,7 @@ describe("McpClient", () => {
     );
     vi.spyOn(McpHttpSessionModel, "deleteExpired").mockResolvedValue(0);
 
-    // Default: listTools returns empty list (fallback to stripped name)
+    // Default: listTools returns empty list (fall back to stripped name)
     mockListTools.mockResolvedValue({ tools: [] });
     mockListResources.mockResolvedValue({ resources: [] });
   });

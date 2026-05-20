@@ -325,7 +325,7 @@ describe("AuthPageWithInvitationCheck", () => {
       );
     });
 
-    it("should fallback to / for invalid redirectTo", () => {
+    it("should fall back to / for invalid redirectTo", () => {
       vi.mocked(useSearchParams).mockReturnValue({
         get: vi.fn((key: string) =>
           key === "redirectTo" ? encodeURIComponent("https://evil.com") : null,
@@ -342,7 +342,7 @@ describe("AuthPageWithInvitationCheck", () => {
       expect(screen.getByTestId("auth-callback")).toHaveTextContent("/");
     });
 
-    it("should fallback to / when redirectTo is not provided", () => {
+    it("should fall back to / when redirectTo is not provided", () => {
       vi.mocked(useSearchParams).mockReturnValue({
         get: vi.fn().mockReturnValue(null),
         toString: vi.fn(() => ""),

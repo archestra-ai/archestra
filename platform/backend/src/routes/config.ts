@@ -90,7 +90,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (_request, reply) => {
-      // Get global tool policy from first organization (fallback to permissive)
+      // Get global tool policy from first organization (fall back to permissive)
       const org = await OrganizationModel.getFirst();
       const globalToolPolicy: GlobalToolPolicy =
         org?.globalToolPolicy ?? "permissive";

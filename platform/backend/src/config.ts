@@ -82,7 +82,7 @@ export const getOtlpAuthHeaders = (): Record<string, string> | undefined => {
 };
 
 /**
- * Get database URL (prefer ARCHESTRA_DATABASE_URL, fallback to DATABASE_URL)
+ * Get database URL (prefer ARCHESTRA_DATABASE_URL, fall back to DATABASE_URL)
  * @public — exported for testability
  */
 export const getDatabaseUrl = (): string => {

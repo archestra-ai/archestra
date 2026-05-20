@@ -50,7 +50,7 @@ For OpenAI, you can get an API key from:
    docker compose -f docker-compose-openwebui.yaml up
    ```
 
-4. Alternatively, if you already have OpenWebUI, you can only deploy Archerstra, and configure your existing OpenWebUI in the next step
+4. Alternatively, if you already have OpenWebUI, you can only deploy Archestra, and configure your existing OpenWebUI in the next step
 
    ```bash
    docker compose -f docker-compose-openwebui.yaml up platform
@@ -110,13 +110,13 @@ Archestra proxies every request from yout AI Agent (OpenWebUI in this guide) and
 1. Open [http://localhost:3000](http://localhost:3000) and navigate to **Chat**
 2. In the table with conversations open any of them by clicking on the **Details**
 
-## Step 7. See the tools in Archesta and configure the rules
+## Step 7. See the tools in Archestra and configure the rules
 
 Every tool call is recorded and you can see all the tools ever used by OpenWebUI in on the Tool page, accessible via [http://localhost:3000](http://localhost:3000)
 
 By default, every tool call result is untrusted, e.g. it can poison the context of your agent with prompt injection by email from stranger, or by sketchy website.
 
-Also by default, if your context was exposed to untrusted information, any subsequent tool call would be blocked by archstra.
+Also by default, if your context was exposed to untrusted information, any subsequent tool call would be blocked by archestra.
 
 This rule might be quite limiting for the agent, but you can additional rules to validate the input (the arguments for the tool calls) and allow the tool call even if the conext is untrusted
 

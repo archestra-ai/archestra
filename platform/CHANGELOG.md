@@ -2030,7 +2030,7 @@
 * browser preview improvements ([#2580](https://github.com/archestra-ai/archestra/issues/2580)) ([6307b90](https://github.com/archestra-ai/archestra/commit/6307b9084385ad043c575cff902b640c2a55ca40))
 * consistent mcp session id ([#2661](https://github.com/archestra-ai/archestra/issues/2661)) ([97f18ce](https://github.com/archestra-ai/archestra/commit/97f18cefc4d17e5f46d107a13392892c32b53de0))
 * enable browser mcp ([#2689](https://github.com/archestra-ai/archestra/issues/2689)) ([e4c6307](https://github.com/archestra-ai/archestra/commit/e4c630753b5afc59c8833066de2b50c2944ecdcb))
-* fix bulding arm platform image ([#2638](https://github.com/archestra-ai/archestra/issues/2638)) ([cf2065e](https://github.com/archestra-ai/archestra/commit/cf2065ed99280ac4cbb8f8a54dd508067263c592))
+* fix building arm platform image ([#2638](https://github.com/archestra-ai/archestra/issues/2638)) ([cf2065e](https://github.com/archestra-ai/archestra/commit/cf2065ed99280ac4cbb8f8a54dd508067263c592))
 * fix cves ([#2591](https://github.com/archestra-ai/archestra/issues/2591)) ([580bca1](https://github.com/archestra-ai/archestra/commit/580bca1e15d428344fa7842e54ade17873bdbbcf))
 * fix mcp browser reinstall ([#2660](https://github.com/archestra-ai/archestra/issues/2660)) ([b17d764](https://github.com/archestra-ai/archestra/commit/b17d7640b421bfd3570e84ec2a977b562b6dbad9))
 * fix streamable default yaml generation ([#2601](https://github.com/archestra-ai/archestra/issues/2601)) ([16f055d](https://github.com/archestra-ai/archestra/commit/16f055d44ffad618e5f756f848e9a6811b1789b0))

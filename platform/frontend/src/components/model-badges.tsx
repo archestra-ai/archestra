@@ -1,5 +1,28 @@
-import { Fingerprint, Star, Zap } from "lucide-react";
+import { Fingerprint, RefreshCw, Sparkles, Star, Zap } from "lucide-react";
 import { InlineTag } from "@/components/ui/inline-tag";
+
+const GREEN_TAG =
+  "text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-950";
+
+export function FreeModelBadge() {
+  return <InlineTag className={GREEN_TAG}>free</InlineTag>;
+}
+
+export function FreeRouterModelBadge() {
+  return (
+    <InlineTag icon={<Sparkles />} className={GREEN_TAG}>
+      free router
+    </InlineTag>
+  );
+}
+
+export function LatestModelBadge() {
+  return (
+    <InlineTag icon={<RefreshCw />} className="text-muted-foreground bg-muted">
+      latest
+    </InlineTag>
+  );
+}
 
 export function UnknownCapabilitiesBadge() {
   return (

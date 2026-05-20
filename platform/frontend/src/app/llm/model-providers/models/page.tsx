@@ -5,6 +5,7 @@ import {
   INPUT_MODALITY_OPTIONS,
   type ModelInputModality,
   type ModelOutputModality,
+  OPENROUTER_FREE_MODEL_ID,
   OUTPUT_MODALITY_OPTIONS,
   SUPPORTED_EMBEDDING_DIMENSIONS,
 } from "@shared";
@@ -32,6 +33,9 @@ import {
   BestModelBadge,
   EmbeddingModelBadge,
   FastestModelBadge,
+  FreeModelBadge,
+  FreeRouterModelBadge,
+  LatestModelBadge,
   UnknownCapabilitiesBadge,
 } from "@/components/model-badges";
 import { SearchInput } from "@/components/search-input";
@@ -177,18 +181,27 @@ export default function ModelsPage() {
         accessorKey: "modelId",
         size: 280,
         header: "Model ID",
-        cell: ({ row }) => (
-          <div className="min-w-0 space-y-2">
-            <span className="font-mono text-sm">{row.original.modelId}</span>
-            <div className="mt-0.5 flex flex-wrap items-center gap-2">
-              {row.original.isFastest && <FastestModelBadge />}
-              {row.original.isBest && <BestModelBadge />}
-              {row.original.embeddingDimensions !== null && (
-                <EmbeddingModelBadge />
-              )}
+        cell: ({ row }) => {
+          const { modelId, provider, isFree } = row.original;
+          const isFreeRouter = modelId === OPENROUTER_FREE_MODEL_ID;
+          const isLatestAlias =
+            provider === "openrouter" && modelId.startsWith("~");
+          return (
+            <div className="min-w-0 space-y-2">
+              <span className="font-mono text-sm">{modelId}</span>
+              <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                {isFreeRouter && <FreeRouterModelBadge />}
+                {isFree && !isFreeRouter && <FreeModelBadge />}
+                {isLatestAlias && <LatestModelBadge />}
+                {row.original.isFastest && <FastestModelBadge />}
+                {row.original.isBest && <BestModelBadge />}
+                {row.original.embeddingDimensions !== null && (
+                  <EmbeddingModelBadge />
+                )}
+              </div>
             </div>
-          </div>
-        ),
+          );
+        },
       },
       {
         accessorKey: "apiKeys",

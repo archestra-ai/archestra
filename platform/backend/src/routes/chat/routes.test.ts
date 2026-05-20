@@ -26,6 +26,7 @@ vi.mock("@/models/llm-provider-api-key-model", () => ({
   default: { getFastestModel: mockGetFastestModel },
 }));
 
+import { FAST_MODELS } from "@shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { createDirectLLMModel } from "@/clients/llm-client";
 import {
@@ -755,7 +756,7 @@ describe("generateConversationTitle", () => {
 
     expect(mockGetFastestModel).not.toHaveBeenCalled();
     expect(createDirectLLMModel).toHaveBeenCalledWith(
-      expect.objectContaining({ modelName: "claude-haiku-4-5-20251001" }),
+      expect.objectContaining({ modelName: FAST_MODELS.anthropic }),
     );
   });
 
@@ -774,7 +775,7 @@ describe("generateConversationTitle", () => {
 
     expect(mockGetFastestModel).toHaveBeenCalledWith("api-key-456");
     expect(createDirectLLMModel).toHaveBeenCalledWith(
-      expect.objectContaining({ modelName: "gpt-4o-mini" }),
+      expect.objectContaining({ modelName: FAST_MODELS.openai }),
     );
   });
 
@@ -793,7 +794,7 @@ describe("generateConversationTitle", () => {
 
     expect(mockGetFastestModel).toHaveBeenCalledWith("api-key-789");
     expect(createDirectLLMModel).toHaveBeenCalledWith(
-      expect.objectContaining({ modelName: "gemini-2.0-flash-001" }),
+      expect.objectContaining({ modelName: FAST_MODELS.gemini }),
     );
   });
 });

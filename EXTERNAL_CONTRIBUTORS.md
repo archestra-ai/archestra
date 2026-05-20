@@ -412,3 +412,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @wuwjpingpongx-lang
 - @Jayant-kernel
 - @jamie950315
+- @champacked

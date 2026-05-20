@@ -733,9 +733,9 @@ describe("McpServerRuntimeManager", () => {
 
       // Stale HTTP sessions were dropped for both siblings.
       expect(
-        vi.mocked(McpHttpSessionModel.deleteByMcpServerId).mock.calls.map(
-          (c) => c[0],
-        ),
+        vi
+          .mocked(McpHttpSessionModel.deleteByMcpServerId)
+          .mock.calls.map((c) => c[0]),
       ).toEqual(expect.arrayContaining([tenantAId, tenantBId]));
 
       // Full teardown ran exactly once against the representative —

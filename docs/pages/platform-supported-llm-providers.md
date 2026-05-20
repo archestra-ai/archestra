@@ -264,7 +264,7 @@ You can generate an API key from the [Groq Console](https://console.groq.com/key
 | ---------------------------------- | -------- | --------------------------------------------------------------------------- |
 | `ARCHESTRA_OPENROUTER_BASE_URL`    | No       | OpenRouter API base URL (default: `https://openrouter.ai/api/v1`)           |
 | `ARCHESTRA_CHAT_OPENROUTER_API_KEY`| No       | Default API key for OpenRouter (can be overridden per conversation/team/org)|
-| `ARCHESTRA_OPENROUTER_REFERER`     | No       | Attribution header `HTTP-Referer` sent to OpenRouter (recommended)          |
+| `ARCHESTRA_OPENROUTER_REFERER`     | No       | Attribution header `HTTP-Referer` sent to OpenRouter (default: `https://archestra.ai`) |
 | `ARCHESTRA_OPENROUTER_TITLE`       | No       | Attribution header `X-Title` sent to OpenRouter (recommended)               |
 
 ### Getting an API Key

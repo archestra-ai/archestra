@@ -445,13 +445,20 @@ export async function reinstallMultitenantCatalog(
   // Flip every install pending up-front so each tenant's UI shows
   // progress; per-install events are fanned out as each one's tool
   // sync completes (matches existing reinstall UX).
-  for (const install of installs) {
-    await McpServerModel.update(install.id, {
-      localInstallationStatus: "pending",
-      localInstallationError: null,
-    });
-    broadcastMcpInstallationStatus(install.id, "pending", null);
-  }
+  //
+  // Parallelize per-install bookkeeping — they're independent rows and
+  // independent WS broadcasts. `allSettled` so one row's failed DB
+  // write doesn't abort the rest; per-install errors are logged but
+  // not fatal here (Phase 2 still runs and reports per-install status).
+  await Promise.allSettled(
+    installs.map(async (install) => {
+      await McpServerModel.update(install.id, {
+        localInstallationStatus: "pending",
+        localInstallationError: null,
+      });
+      broadcastMcpInstallationStatus(install.id, "pending", null);
+    }),
+  );
 
   // Phase 1 — recreate the shared pod.
   try {
@@ -463,39 +470,52 @@ export async function reinstallMultitenantCatalog(
       { err: error, catalogId: catalogItem.id },
       "Catalog reinstall: shared deployment recreate failed",
     );
-    for (const install of installs) {
-      await McpServerModel.update(install.id, {
-        localInstallationStatus: "error",
-        localInstallationError: errorMessage,
-      });
-      broadcastMcpInstallationStatus(install.id, "error", errorMessage);
-    }
+    await Promise.allSettled(
+      installs.map(async (install) => {
+        await McpServerModel.update(install.id, {
+          localInstallationStatus: "error",
+          localInstallationError: errorMessage,
+        });
+        broadcastMcpInstallationStatus(install.id, "error", errorMessage);
+      }),
+    );
     throw error;
   }
 
-  // Phase 2 — cascade tool sync to every install.
-  for (const install of installs) {
-    try {
-      await syncToolsForServer(install, catalogItem);
-      await McpServerModel.update(install.id, {
-        localInstallationStatus: "success",
-        localInstallationError: null,
-      });
-      broadcastMcpInstallationStatus(install.id, "success", null);
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error";
-      logger.error(
-        { err: error, serverId: install.id, catalogId: catalogItem.id },
-        "Catalog reinstall: tool sync failed for install",
-      );
-      await McpServerModel.update(install.id, {
-        localInstallationStatus: "error",
-        localInstallationError: errorMessage,
-      });
-      broadcastMcpInstallationStatus(install.id, "error", errorMessage);
-    }
-  }
+  // Phase 2 — cascade tool sync to every install in parallel. The pod
+  // is up and shared across all installs, so the syncs are independent.
+  // `allSettled` ensures one failing install doesn't abort the rest;
+  // per-install errors are recorded inline.
+  await Promise.allSettled(
+    installs.map(async (install) => {
+      try {
+        await syncToolsForServer(install, catalogItem);
+        await McpServerModel.update(install.id, {
+          localInstallationStatus: "success",
+          localInstallationError: null,
+        });
+        broadcastMcpInstallationStatus(install.id, "success", null);
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
+        logger.error(
+          { err: error, serverId: install.id, catalogId: catalogItem.id },
+          "Catalog reinstall: tool sync failed for install",
+        );
+        // Flag for per-install retry. The catalog-level flag is cleared
+        // unconditionally below once Phase 1 succeeded, so without this
+        // the tenant is stuck: the catalog Reinstall button is gone and
+        // the per-install Reinstall button is gated on
+        // `reinstallRequired` (see mcp-server-card.tsx userFlaggedInstalls).
+        await McpServerModel.update(install.id, {
+          reinstallRequired: true,
+          localInstallationStatus: "error",
+          localInstallationError: errorMessage,
+        });
+        broadcastMcpInstallationStatus(install.id, "error", errorMessage);
+      }
+    }),
+  );
 
   await InternalMcpCatalogModel.update(catalogItem.id, {
     catalogReinstallRequired: false,

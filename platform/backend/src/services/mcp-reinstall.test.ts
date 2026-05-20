@@ -5,14 +5,19 @@ vi.mock("@/k8s/mcp-server-runtime", () => ({
   McpServerRuntimeManager: {
     restartServer: vi.fn(),
     getOrLoadDeployment: vi.fn(),
+    reinstallSharedDeployment: vi.fn(),
   },
 }));
 
 vi.mock("@/models", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/models")>();
   return {
+    InternalMcpCatalogModel: {
+      update: vi.fn(),
+    },
     McpServerModel: {
       constructServerName: original.McpServerModel.constructServerName,
+      findByCatalogId: vi.fn(),
       getToolsFromServer: vi.fn(),
       update: vi.fn(),
     },
@@ -25,14 +30,19 @@ vi.mock("@/models", async (importOriginal) => {
   };
 });
 
+vi.mock("@/websocket", () => ({
+  broadcastMcpInstallationStatus: vi.fn(),
+}));
+
 import { CASCADE_SCENARIOS, CATALOG_SHAPES, isMetadataOnlyEdit } from "@shared";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
-import { McpServerModel, ToolModel } from "@/models";
+import { InternalMcpCatalogModel, McpServerModel, ToolModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { InternalMcpCatalog, McpServer } from "@/types";
 import {
   autoReinstallServer,
   onlyForwardCompatibleEnvDiff,
+  reinstallMultitenantCatalog,
   requiresNewUserInputForReinstall,
 } from "./mcp-reinstall";
 
@@ -1295,6 +1305,90 @@ describe("mcp-reinstall", () => {
       expect(McpServerModel.update).toHaveBeenCalledWith(server.id, {
         reinstallRequired: false,
       });
+    });
+  });
+
+  describe("reinstallMultitenantCatalog", () => {
+    const catalog = {
+      id: "catalog-mt",
+      name: "shared",
+      serverType: "local",
+      multitenant: true,
+      localConfig: { command: "npm", arguments: ["start"] },
+    } as InternalMcpCatalog;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    test("Phase 2 tool-sync failure flags the install for retry", async () => {
+      // Two tenants share the catalog. Pod recreate succeeds (Phase 1).
+      // Tool fetch fails for tenantB only (Phase 2). We expect tenantB to
+      // be flagged `reinstallRequired: true` so the per-install Reinstall
+      // button surfaces; otherwise the tenant is stuck with only the red
+      // error banner and no retry path.
+      const tenantA = {
+        id: "tenant-a",
+        name: "tenant-a",
+        catalogId: catalog.id,
+        serverType: "local",
+      } as McpServer;
+      const tenantB = {
+        id: "tenant-b",
+        name: "tenant-b",
+        catalogId: catalog.id,
+        serverType: "local",
+      } as McpServer;
+
+      vi.mocked(McpServerModel.findByCatalogId).mockResolvedValue([
+        tenantA,
+        tenantB,
+      ]);
+      vi.mocked(
+        McpServerRuntimeManager.reinstallSharedDeployment,
+      ).mockResolvedValue(undefined);
+      vi.mocked(McpServerModel.getToolsFromServer).mockImplementation(
+        async (server: McpServer) => {
+          if (server.id === tenantB.id) {
+            throw new Error("tool fetch boom");
+          }
+          return [];
+        },
+      );
+      vi.mocked(ToolModel.syncToolsForCatalog).mockResolvedValue({
+        created: [],
+        updated: [],
+        unchanged: [],
+        deleted: [],
+      } as never);
+      vi.mocked(McpServerModel.update).mockResolvedValue({} as McpServer);
+      vi.mocked(InternalMcpCatalogModel.update).mockResolvedValue(
+        {} as InternalMcpCatalog,
+      );
+
+      await reinstallMultitenantCatalog(catalog);
+
+      // The failing tenant must be marked for retry — this is the assertion
+      // the current code fails. Without `reinstallRequired: true`, the
+      // per-install Reinstall button stays hidden (mcp-server-card.tsx
+      // gates on this flag) and the tenant is stuck.
+      expect(McpServerModel.update).toHaveBeenCalledWith(
+        tenantB.id,
+        expect.objectContaining({
+          reinstallRequired: true,
+          localInstallationStatus: "error",
+        }),
+      );
+
+      // Sanity: the successful tenant is NOT flagged for retry.
+      const tenantACalls = vi
+        .mocked(McpServerModel.update)
+        .mock.calls.filter(([id]) => id === tenantA.id);
+      const tenantAFlaggedForRetry = tenantACalls.some(
+        ([, patch]) =>
+          (patch as { reinstallRequired?: boolean }).reinstallRequired === true,
+      );
+      expect(tenantAFlaggedForRetry).toBe(false);
     });
   });
 });

@@ -84,7 +84,7 @@ Here's how it works:
 
 **Step 1: Route Agent through Archestra**
 
-Archestra sits as a proxy layer between your agent and the MCP servers/LLM. Open your AI Aplication code and change the destination to Archestra
+Archestra sits as a proxy layer between your agent and the MCP servers/LLM. Open your AI Application code and change the destination to Archestra
 
 ![Screenshot: Archestra proxy configuration](/docs/platform-foundry-04.webp)
 

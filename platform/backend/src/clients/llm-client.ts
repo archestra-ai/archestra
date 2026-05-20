@@ -33,6 +33,7 @@ import {
   isBedrockIamAuthEnabled,
 } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
 import config from "@/config";
 import logger from "@/logging";
 import { ApiError } from "@/types";
@@ -98,6 +99,7 @@ export function createDirectLLMModel({
     apiKey,
     modelName,
     baseURL,
+    headers: providerHeaders(cfg),
   });
 }
 
@@ -314,7 +316,18 @@ type ProviderModelConfig = {
   apiKeyRequiredMessage?: string;
   /** Path suffix appended to proxy base URL for proxied calls (e.g. "/v1" for anthropic) */
   proxiedPathSuffix?: string;
+  /** Static headers always sent to the provider (e.g. OpenRouter attribution). */
+  extraHeaders?: Record<string, string>;
 };
+
+/** Static provider headers (e.g. OpenRouter attribution), or undefined when none. */
+function providerHeaders(
+  cfg: ProviderModelConfig,
+): Record<string, string> | undefined {
+  return cfg.extraHeaders && Object.keys(cfg.extraHeaders).length > 0
+    ? cfg.extraHeaders
+    : undefined;
+}
 
 /**
  * Unified registry of model configs for each provider.
@@ -390,6 +403,7 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
     defaultBaseUrl: config.llm.openrouter.baseUrl,
     apiKeyRequiredMessage:
       "OpenRouter API key is required. Please configure ARCHESTRA_CHAT_OPENROUTER_API_KEY.",
+    extraHeaders: openRouterAttributionHeaders(),
   },
 
   perplexity: {

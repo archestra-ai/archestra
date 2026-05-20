@@ -38,6 +38,7 @@ export const handlers: HttpHandler[] = [
   ...getJson("/health", healthSeed),
   ...getJson("/api/organization", organizationSeed),
   ...getJson("/api/organization/appearance-settings", appearanceSettingsSeed),
+  ...getJson("/api/organization/mcp-preset-entries", []),
   ...getJson("/api/teams", teamsSeed),
   ...getJson("/api/internal_mcp_catalog", catalogSeed),
   ...getJson("/api/internal_mcp_catalog/labels/keys", []),

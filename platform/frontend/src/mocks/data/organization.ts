@@ -28,6 +28,7 @@ export function makeOrganization(
     defaultLlmModel: null,
     defaultLlmProvider: "openai",
     defaultLlmApiKeyId: null,
+    defaultModelId: null,
     defaultUserLimitValue: null,
     defaultUserLimitModel: null,
     defaultUserLimitCleanupInterval: "1h",
@@ -55,6 +56,7 @@ export function makeOrganization(
     presetEntityName: null,
     presetEntityNamePlural: null,
     presetEntityDefaultLabel: null,
+    presetEntityDefaultValidationRegex: null,
     ...overrides,
   };
 }

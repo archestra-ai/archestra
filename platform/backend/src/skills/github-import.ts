@@ -1,4 +1,7 @@
+import { createHash } from "node:crypto";
 import { Octokit } from "@octokit/rest";
+import { TimeInMs } from "@shared";
+import { LRUCacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import type { SkillFileKind } from "@/types";
 import {
@@ -12,12 +15,25 @@ import {
  * Imports Agent Skills from GitHub repositories. A skill is any directory
  * containing a `SKILL.md` file; import is a one-time snapshot — the GitHub
  * token is used for the request and never persisted.
+ *
+ * Per-repo tree state from `discoverSkills` is cached briefly and reused by
+ * `importSkills` so a discover → import round-trip from the UI doesn't pay the
+ * REST quota cost twice. File contents are fetched from
+ * `raw.githubusercontent.com`, which doesn't consume the REST API rate limit.
  */
 
 /** Skip individual resource files larger than this (text only, no binaries). */
 const MAX_SKILL_FILE_BYTES = 256 * 1024;
 /** Cap on resource files copied per skill. */
 const MAX_FILES_PER_SKILL = 50;
+/** Number of distinct repo snapshots to keep cached across requests. */
+const REPO_CACHE_MAX_ENTRIES = 50;
+/**
+ * How long a repo snapshot stays cached. Short enough that an import sees the
+ * same commit the user discovered, long enough to cover a typical
+ * discover-then-import flow without re-fetching.
+ */
+const REPO_CACHE_TTL_MS = 5 * TimeInMs.Minute;
 
 /** Raised when a repository URL is malformed or content cannot be fetched. */
 export class SkillImportError extends Error {
@@ -55,6 +71,21 @@ interface RepoLocation {
   subpath: string;
 }
 
+/** A single entry from `GET /repos/{owner}/{repo}/git/trees`. */
+interface TreeItem {
+  type?: string;
+  path?: string;
+  size?: number;
+}
+
+/** Snapshot of a repo at a specific commit, shared between discover and import. */
+interface CachedRepo {
+  commitSha: string;
+  tree: TreeItem[];
+  /** Manifests parsed during discovery, keyed by their full repo path. */
+  manifests: Map<string, ParsedSkill>;
+}
+
 /**
  * Walk a repository tree and return every directory containing a `SKILL.md`,
  * with the skill's catalog metadata parsed from its frontmatter.
@@ -66,9 +97,13 @@ export async function discoverSkills(params: {
 }): Promise<{ repoUrl: string; ref: string; skills: DiscoveredSkill[] }> {
   const location = parseRepoUrl(params.repoUrl, params.path);
   const octokit = createOctokit(params.githubToken);
-  const { commitSha, tree } = await fetchRepoTree(octokit, location);
+  const snapshot = await loadRepoSnapshot(
+    octokit,
+    location,
+    params.githubToken,
+  );
 
-  const manifestPaths = tree
+  const manifestPaths = snapshot.tree
     .filter(
       (item) =>
         item.type === "blob" &&
@@ -81,21 +116,29 @@ export async function discoverSkills(params: {
   const skills: DiscoveredSkill[] = [];
   for (const manifestPath of manifestPaths) {
     const skillPath = dirname(manifestPath);
-    const raw = await fetchFileContent(octokit, location, manifestPath);
-    if (raw === null) continue;
-
-    let parsed: ParsedSkill;
-    try {
-      parsed = parseSkillManifest(raw);
-    } catch (error) {
-      logger.warn(
-        { manifestPath, error: errorMessage(error) },
-        "[Skills] Skipping skill with unparseable SKILL.md",
+    let parsed = snapshot.manifests.get(manifestPath);
+    if (!parsed) {
+      const raw = await fetchRawFile(
+        location,
+        snapshot.commitSha,
+        manifestPath,
+        params.githubToken,
       );
-      continue;
+      if (raw === null) continue;
+
+      try {
+        parsed = parseSkillManifest(raw);
+      } catch (error) {
+        logger.warn(
+          { manifestPath, error: errorMessage(error) },
+          "[Skills] Skipping skill with unparseable SKILL.md",
+        );
+        continue;
+      }
+      snapshot.manifests.set(manifestPath, parsed);
     }
 
-    const fileCount = tree.filter(
+    const fileCount = snapshot.tree.filter(
       (item) =>
         item.type === "blob" &&
         !!item.path &&
@@ -114,7 +157,7 @@ export async function discoverSkills(params: {
 
   return {
     repoUrl: `${location.owner}/${location.repo}`,
-    ref: location.ref ?? commitSha,
+    ref: location.ref ?? snapshot.commitSha,
     skills,
   };
 }
@@ -131,32 +174,53 @@ export async function importSkills(params: {
 }): Promise<ImportedSkill[]> {
   const location = parseRepoUrl(params.repoUrl, params.path);
   const octokit = createOctokit(params.githubToken);
-  const { commitSha, tree } = await fetchRepoTree(octokit, location);
-  const ref = location.ref ?? commitSha;
+  const snapshot = await loadRepoSnapshot(
+    octokit,
+    location,
+    params.githubToken,
+  );
+  const ref = location.ref ?? snapshot.commitSha;
 
   const imported: ImportedSkill[] = [];
   for (const skillPath of params.skillPaths) {
     const manifestPath = skillPath ? `${skillPath}/SKILL.md` : "SKILL.md";
-    const raw = await fetchFileContent(octokit, location, manifestPath);
-    if (raw === null) {
-      throw new SkillImportError(`No SKILL.md found at ${skillPath}`);
+    let parsed = snapshot.manifests.get(manifestPath);
+    if (!parsed) {
+      const raw = await fetchRawFile(
+        location,
+        snapshot.commitSha,
+        manifestPath,
+        params.githubToken,
+      );
+      if (raw === null) {
+        throw new SkillImportError(`No SKILL.md found at ${skillPath}`);
+      }
+      parsed = parseSkillManifest(raw);
+      snapshot.manifests.set(manifestPath, parsed);
     }
-    const parsed = parseSkillManifest(raw);
 
-    const resourcePaths = tree
+    // Pre-filter using the tree's `size` field so we don't issue HTTP requests
+    // for files we'd immediately drop on the response side.
+    const resourcePaths = snapshot.tree
       .filter(
         (item) =>
           item.type === "blob" &&
           !!item.path &&
           isUnderSkillDir(item.path, skillPath) &&
-          basename(item.path) !== SKILL_MANIFEST_FILENAME,
+          basename(item.path) !== SKILL_MANIFEST_FILENAME &&
+          (typeof item.size !== "number" || item.size <= MAX_SKILL_FILE_BYTES),
       )
       .map((item) => item.path as string)
       .slice(0, MAX_FILES_PER_SKILL);
 
     const files: ImportedSkill["files"] = [];
     for (const absolutePath of resourcePaths) {
-      const content = await fetchFileContent(octokit, location, absolutePath);
+      const content = await fetchRawFile(
+        location,
+        snapshot.commitSha,
+        absolutePath,
+        params.githubToken,
+      );
       if (content === null) continue;
       const relativePath = skillPath
         ? absolutePath.slice(skillPath.length + 1)
@@ -172,7 +236,7 @@ export async function importSkills(params: {
       parsed,
       files,
       sourceRef: `${location.owner}/${location.repo}@${ref}:${skillPath}`,
-      sourceCommit: commitSha,
+      sourceCommit: snapshot.commitSha,
     });
   }
 
@@ -180,6 +244,16 @@ export async function importSkills(params: {
 }
 
 // ===== Internal helpers =====
+
+/**
+ * Per-repo snapshot cache. Keyed by `owner/repo@ref#tokenFingerprint` so
+ * separate tokens (or no token) never share a cache entry — a token granting
+ * access to a private repo doesn't leak its tree paths to a later unauth call.
+ */
+const repoCache = new LRUCacheManager<CachedRepo>({
+  maxSize: REPO_CACHE_MAX_ENTRIES,
+  defaultTtl: REPO_CACHE_TTL_MS,
+});
 
 function createOctokit(token?: string): Octokit {
   return new Octokit(token ? { auth: token } : {});
@@ -222,14 +296,22 @@ function parseRepoUrl(repoUrl: string, pathOverride?: string): RepoLocation {
   return { owner, repo, ref, subpath };
 }
 
-async function fetchRepoTree(
+/**
+ * Resolve a ref to a commit SHA and load the recursive tree, caching the
+ * result so a follow-up call within the TTL pays no REST quota.
+ */
+async function loadRepoSnapshot(
   octokit: Octokit,
   location: RepoLocation,
-): Promise<{
-  commitSha: string;
-  tree: { type?: string; path?: string }[];
-}> {
-  const ref = location.ref ?? (await getDefaultBranch(octokit, location));
+  token: string | undefined,
+): Promise<CachedRepo> {
+  const cacheKey = repoCacheKey(location, token);
+  const cached = repoCache.get(cacheKey);
+  if (cached) return cached;
+
+  // Pass "HEAD" when no ref is provided — saves the separate default-branch
+  // lookup `octokit.rest.repos.get` used to do.
+  const ref = location.ref ?? "HEAD";
 
   let commitSha: string;
   try {
@@ -245,6 +327,7 @@ async function fetchRepoTree(
     );
   }
 
+  let tree: TreeItem[];
   try {
     const treeResponse = await octokit.rest.git.getTree({
       owner: location.owner,
@@ -252,70 +335,89 @@ async function fetchRepoTree(
       tree_sha: commitSha,
       recursive: "true",
     });
-    return { commitSha, tree: treeResponse.data.tree };
+    tree = treeResponse.data.tree;
   } catch (error) {
     throw new SkillImportError(
       `Could not read repository tree: ${errorMessage(error)}`,
     );
   }
+
+  const snapshot: CachedRepo = {
+    commitSha,
+    tree,
+    manifests: new Map(),
+  };
+  repoCache.set(cacheKey, snapshot);
+  return snapshot;
 }
 
-async function getDefaultBranch(
-  octokit: Octokit,
+function repoCacheKey(
   location: RepoLocation,
-): Promise<string> {
-  try {
-    const repo = await octokit.rest.repos.get({
-      owner: location.owner,
-      repo: location.repo,
-    });
-    return repo.data.default_branch;
-  } catch (error) {
-    throw new SkillImportError(
-      `Could not access ${location.owner}/${location.repo}: ${errorMessage(error)}`,
-    );
-  }
+  token: string | undefined,
+): string {
+  // Fingerprint instead of raw token so the cache key never logs a credential
+  // even if it ends up in a debug dump.
+  const tokenFingerprint = token
+    ? createHash("sha256").update(token).digest("hex").slice(0, 16)
+    : "public";
+  const ref = location.ref ?? "HEAD";
+  return `${location.owner}/${location.repo}@${ref}#${tokenFingerprint}`;
 }
 
-/** Fetch and decode a single file as UTF-8 text. Returns null for binaries. */
-async function fetchFileContent(
-  octokit: Octokit,
+/**
+ * Fetch a file from `raw.githubusercontent.com`. This endpoint serves the
+ * same bytes as `repos.getContent` but is not counted against the GitHub REST
+ * rate limit, which is the limit that bites users importing many files.
+ */
+async function fetchRawFile(
   location: RepoLocation,
+  commitSha: string,
   path: string,
+  token: string | undefined,
 ): Promise<string | null> {
-  let data: unknown;
+  const url = `https://raw.githubusercontent.com/${location.owner}/${location.repo}/${commitSha}/${path}`;
+  const headers: Record<string, string> = {
+    Accept: "application/vnd.github.raw",
+  };
+  if (token) headers.Authorization = `token ${token}`;
+
+  let response: Response;
   try {
-    const response = await octokit.rest.repos.getContent({
-      owner: location.owner,
-      repo: location.repo,
-      path,
-      ...(location.ref ? { ref: location.ref } : {}),
-    });
-    data = response.data;
+    response = await fetch(url, { headers });
   } catch (error) {
     logger.warn(
       { path, error: errorMessage(error) },
-      "[Skills] Failed to fetch file content",
+      "[Skills] Raw file fetch failed",
     );
     return null;
   }
 
-  if (
-    !data ||
-    typeof data !== "object" ||
-    Array.isArray(data) ||
-    !("content" in data)
-  ) {
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    logger.warn(
+      { path, status: response.status },
+      "[Skills] Raw file fetch returned non-OK status",
+    );
     return null;
   }
 
-  const { content, size } = data as { content: string; size: number };
-  if (typeof size === "number" && size > MAX_SKILL_FILE_BYTES) {
-    logger.warn({ path, size }, "[Skills] Skipping oversized file");
+  const contentLength = Number(response.headers.get("content-length") ?? "0");
+  if (contentLength > MAX_SKILL_FILE_BYTES) {
+    logger.warn(
+      { path, size: contentLength },
+      "[Skills] Skipping oversized file",
+    );
     return null;
   }
 
-  const buffer = Buffer.from(content, "base64");
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (buffer.length > MAX_SKILL_FILE_BYTES) {
+    logger.warn(
+      { path, size: buffer.length },
+      "[Skills] Skipping oversized file",
+    );
+    return null;
+  }
   if (buffer.includes(0)) {
     // Null byte — treat as binary and skip (binary assets are unsupported).
     return null;

@@ -10,6 +10,7 @@ const {
   updateSkill,
   deleteSkill,
   discoverGithubSkills,
+  previewGithubSkill,
   importGithubSkills,
 } = archestraApiSdk;
 
@@ -120,6 +121,32 @@ export function useDiscoverGithubSkills() {
       body: archestraApiTypes.DiscoverGithubSkillsData["body"],
     ) => {
       const { data, error } = await discoverGithubSkills({ body });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+  });
+}
+
+export function usePreviewGithubSkill(
+  body: archestraApiTypes.PreviewGithubSkillData["body"] | null,
+) {
+  return useQuery({
+    queryKey: [
+      "skills",
+      "github-preview",
+      body?.repoUrl,
+      body?.path ?? null,
+      body?.skillPath,
+    ],
+    enabled: !!body,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const { data, error } = await previewGithubSkill({
+        body: body as archestraApiTypes.PreviewGithubSkillData["body"],
+      });
       if (error) {
         handleApiError(error);
         return null;

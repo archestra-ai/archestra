@@ -46502,6 +46502,108 @@ export type DiscoverGithubSkillsResponses = {
 
 export type DiscoverGithubSkillsResponse = DiscoverGithubSkillsResponses[keyof DiscoverGithubSkillsResponses];
 
+export type PreviewGithubSkillData = {
+    body: {
+        repoUrl: string;
+        path?: string;
+        githubToken?: string;
+        skillPath: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/skills/github/preview';
+};
+
+export type PreviewGithubSkillErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type PreviewGithubSkillError = PreviewGithubSkillErrors[keyof PreviewGithubSkillErrors];
+
+export type PreviewGithubSkillResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        name: string;
+        description: string;
+        content: string;
+        license: string | null;
+        compatibility: string | null;
+        metadata: {
+            [key: string]: string;
+        };
+        files: Array<{
+            path: string;
+            content: string;
+            kind: 'reference' | 'script' | 'asset';
+        }>;
+        sourceRef: string;
+        sourceCommit: string;
+    };
+};
+
+export type PreviewGithubSkillResponse = PreviewGithubSkillResponses[keyof PreviewGithubSkillResponses];
+
 export type ImportGithubSkillsData = {
     body: {
         repoUrl: string;

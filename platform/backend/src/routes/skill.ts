@@ -253,6 +253,62 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.post(
+    "/api/skills/github/preview",
+    {
+      schema: {
+        operationId: RouteId.PreviewGithubSkill,
+        description:
+          "Fetch a single skill's manifest and files from GitHub without persisting it.",
+        tags: ["Skills"],
+        body: z.object({
+          repoUrl: z.string().min(1),
+          path: z.string().optional(),
+          githubToken: z.string().optional(),
+          skillPath: z.string(),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            name: z.string(),
+            description: z.string(),
+            content: z.string(),
+            license: z.string().nullable(),
+            compatibility: z.string().nullable(),
+            metadata: z.record(z.string(), z.string()),
+            files: z.array(
+              z.object({
+                path: z.string(),
+                content: z.string(),
+                kind: z.enum(["reference", "script", "asset"]),
+              }),
+            ),
+            sourceRef: z.string(),
+            sourceCommit: z.string(),
+          }),
+        ),
+      },
+    },
+    async ({ body }, reply) => {
+      const [item] = await runImport(() =>
+        importSkills({
+          repoUrl: body.repoUrl,
+          path: body.path,
+          githubToken: body.githubToken,
+          skillPaths: [body.skillPath],
+        }),
+      );
+      if (!item) {
+        throw new ApiError(404, `Skill not found at ${body.skillPath}`);
+      }
+      return reply.send({
+        ...item.parsed,
+        files: item.files,
+        sourceRef: item.sourceRef,
+        sourceCommit: item.sourceCommit,
+      });
+    },
+  );
+
+  fastify.post(
     "/api/skills/github/import",
     {
       schema: {

@@ -1,6 +1,14 @@
 "use client";
 
-import { ChevronDown, ChevronRight, FileText, X } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  FileText,
+  Folder,
+  FolderOpen,
+  Plus,
+  X,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
@@ -19,6 +27,11 @@ interface ResourceFile {
   content: string;
 }
 
+interface FolderEntry {
+  file: ResourceFile;
+  index: number;
+}
+
 const MANIFEST_PLACEHOLDER = `---
 name: my-skill
 description: One line on when an agent should use this skill.
@@ -28,17 +41,36 @@ description: One line on when an agent should use this skill.
 
 Step-by-step instructions for the agent...`;
 
+const ROOT_ADD_KEY = "";
+
+export interface SkillPreview {
+  name: string;
+  description: string;
+  content: string;
+  license: string | null;
+  compatibility: string | null;
+  metadata: Record<string, string>;
+  files: ResourceFile[];
+}
+
 export function SkillEditorDialog({
   skillId,
   open,
   onOpenChange,
+  preview,
+  isPreviewLoading,
 }: {
   skillId: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  preview?: SkillPreview | null;
+  isPreviewLoading?: boolean;
 }) {
-  const isEdit = skillId !== null;
-  const { data: skill, isPending: isLoading } = useSkill(open ? skillId : null);
+  const isPreview = preview !== undefined;
+  const isEdit = !isPreview && skillId !== null;
+  const { data: skill, isPending: isLoading } = useSkill(
+    open && !isPreview ? skillId : null,
+  );
   const createSkill = useCreateSkill();
   const updateSkill = useUpdateSkill();
 
@@ -46,13 +78,25 @@ export function SkillEditorDialog({
   const [files, setFiles] = useState<ResourceFile[]>([]);
   // null = the SKILL.md manifest is open; otherwise an index into `files`.
   const [openFileIndex, setOpenFileIndex] = useState<number | null>(null);
-  const [filesExpanded, setFilesExpanded] = useState(false);
-  const [newFilePath, setNewFilePath] = useState("");
+  const [filesExpanded, setFilesExpanded] = useState(true);
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(
+    new Set(),
+  );
+  // null = not adding; "" = adding at root; otherwise the folder name.
+  const [addingIn, setAddingIn] = useState<string | null>(null);
+  const [newFileName, setNewFileName] = useState("");
 
-  // Hydrate the editor whenever the dialog opens (or the loaded skill changes).
   useEffect(() => {
     if (!open) return;
-    if (isEdit && skill) {
+    if (isPreview) {
+      if (preview) {
+        setManifest(composeManifest(preview));
+        setFiles(preview.files.map(({ path, content }) => ({ path, content })));
+      } else {
+        setManifest("");
+        setFiles([]);
+      }
+    } else if (isEdit && skill) {
       setManifest(composeManifest(skill));
       setFiles(skill.files.map(({ path, content }) => ({ path, content })));
     } else if (!isEdit) {
@@ -60,12 +104,16 @@ export function SkillEditorDialog({
       setFiles([]);
     }
     setOpenFileIndex(null);
-    setNewFilePath("");
-  }, [open, isEdit, skill]);
+    setAddingIn(null);
+    setNewFileName("");
+    setCollapsedFolders(new Set());
+  }, [open, isPreview, preview, isEdit, skill]);
 
   const parsed = useMemo(() => parseManifestFields(manifest), [manifest]);
   const isSaving = createSkill.isPending || updateSkill.isPending;
   const canSave = parsed.hasName && parsed.hasDescription && !isSaving;
+
+  const tree = useMemo(() => buildTree(files), [files]);
 
   const handleSave = async () => {
     const body = { content: manifest, files };
@@ -77,12 +125,20 @@ export function SkillEditorDialog({
     }
   };
 
-  const addFile = () => {
-    const path = newFilePath.trim();
-    if (!path || files.some((file) => file.path === path)) return;
+  const commitNewFile = (folder: string | null) => {
+    const name = newFileName.trim();
+    if (!name) return;
+    const path = folder ? `${folder}/${name}` : name;
+    if (files.some((f) => f.path === path)) return;
     setFiles((prev) => [...prev, { path, content: "" }]);
-    setNewFilePath("");
     setOpenFileIndex(files.length);
+    setNewFileName("");
+    setAddingIn(null);
+  };
+
+  const cancelAdding = () => {
+    setAddingIn(null);
+    setNewFileName("");
   };
 
   const removeFile = (index: number) => {
@@ -92,6 +148,40 @@ export function SkillEditorDialog({
       if (current !== null && current > index) return current - 1;
       return current;
     });
+  };
+
+  const removeFolder = (folder: string) => {
+    const prefix = `${folder}/`;
+    let openWasInFolder = false;
+    if (openFileIndex !== null) {
+      const openPath = files[openFileIndex]?.path;
+      if (openPath?.startsWith(prefix)) openWasInFolder = true;
+    }
+    setFiles((prev) => prev.filter((f) => !f.path.startsWith(prefix)));
+    if (openWasInFolder) setOpenFileIndex(null);
+  };
+
+  const toggleFolder = (folder: string) => {
+    setCollapsedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(folder)) {
+        next.delete(folder);
+      } else {
+        next.add(folder);
+      }
+      return next;
+    });
+  };
+
+  const beginAddingInFolder = (folder: string) => {
+    setCollapsedFolders((prev) => {
+      if (!prev.has(folder)) return prev;
+      const next = new Set(prev);
+      next.delete(folder);
+      return next;
+    });
+    setAddingIn(folder);
+    setNewFileName("");
   };
 
   const openFile = openFileIndex === null ? null : files[openFileIndex];
@@ -112,25 +202,45 @@ export function SkillEditorDialog({
     <StandardDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={isEdit ? "Edit skill" : "New skill"}
-      description="A skill is a SKILL.md instruction set plus optional resource files."
+      title={
+        isPreview
+          ? (preview?.name ?? "Preview skill")
+          : isEdit
+            ? "Edit skill"
+            : "New skill"
+      }
+      description={
+        isPreview
+          ? "Preview — this skill has not been imported yet."
+          : "A skill is a SKILL.md instruction set plus optional resource files."
+      }
       size="large"
       footer={
-        <>
+        isPreview ? (
           <Button
             type="button"
             variant="outline"
             onClick={() => onOpenChange(false)}
           >
-            Cancel
+            Close
           </Button>
-          <Button type="button" disabled={!canSave} onClick={handleSave}>
-            {isSaving ? "Saving..." : "Save skill"}
-          </Button>
-        </>
+        ) : (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="button" disabled={!canSave} onClick={handleSave}>
+              {isSaving ? "Saving..." : "Save skill"}
+            </Button>
+          </>
+        )
       }
     >
-      {isEdit && isLoading ? (
+      {(isPreview && isPreviewLoading) || (isEdit && isLoading) ? (
         <div className="py-10 text-center text-sm text-muted-foreground">
           Loading skill...
         </div>
@@ -157,7 +267,7 @@ export function SkillEditorDialog({
                   </span>
                 )}
               </Label>
-              {!openFile && (
+              {!openFile && !isPreview && (
                 <span className="text-xs text-muted-foreground">
                   parsed: name <Marker ok={parsed.hasName} /> · description{" "}
                   <Marker ok={parsed.hasDescription} />
@@ -170,6 +280,7 @@ export function SkillEditorDialog({
               placeholder={openFile ? "File contents..." : MANIFEST_PLACEHOLDER}
               className="min-h-[320px] font-mono text-xs"
               spellCheck={false}
+              readOnly={isPreview}
             />
           </div>
 
@@ -185,86 +296,297 @@ export function SkillEditorDialog({
                 ) : (
                   <ChevronRight className="h-4 w-4" />
                 )}
-                Resource files ({files.length})
+                Files ({files.length + 1})
               </span>
               <span className="text-xs text-muted-foreground">
-                references/ · scripts/ · assets/
+                SKILL.md · references/ · scripts/ · assets/
               </span>
             </button>
 
             {filesExpanded && (
               <div className="border-t p-2">
-                {files.length === 0 && (
-                  <p className="px-1 py-1.5 text-xs text-muted-foreground">
-                    No resource files. Most skills are just a SKILL.md.
-                  </p>
-                )}
-                <ul className="space-y-1">
-                  {files.map((file, index) => (
-                    <li
-                      key={file.path}
-                      className={cn(
-                        "flex items-center gap-2 rounded px-2 py-1.5 text-sm",
-                        openFileIndex === index && "bg-muted",
-                      )}
-                    >
-                      <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      <span className="flex-1 truncate font-mono text-xs">
-                        {file.path}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {deriveKind(file.path)}
-                      </span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 px-2 text-xs"
-                        onClick={() => setOpenFileIndex(index)}
-                      >
-                        open
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        onClick={() => removeFile(index)}
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-                <div className="mt-2 flex items-center gap-2">
-                  <Input
-                    value={newFilePath}
-                    onChange={(e) => setNewFilePath(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        addFile();
-                      }
-                    }}
-                    placeholder="references/new-file.md"
-                    className="h-8 font-mono text-xs"
+                <ul className="space-y-0.5">
+                  <ManifestRow
+                    isOpen={openFileIndex === null}
+                    onOpen={() => setOpenFileIndex(null)}
                   />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={addFile}
-                    disabled={!newFilePath.trim()}
-                  >
-                    Add
-                  </Button>
-                </div>
+
+                  {tree.folderNames.map((folder) => {
+                    const isCollapsed = collapsedFolders.has(folder);
+                    const entries = tree.folders[folder];
+                    return (
+                      <li key={folder}>
+                        <FolderRow
+                          folder={folder}
+                          fileCount={entries.length}
+                          isCollapsed={isCollapsed}
+                          readOnly={isPreview}
+                          onToggle={() => toggleFolder(folder)}
+                          onAddFile={() => beginAddingInFolder(folder)}
+                          onRemoveFolder={() => removeFolder(folder)}
+                        />
+                        {!isCollapsed && (
+                          <ul className="ml-5 space-y-0.5 border-l pl-2">
+                            {entries.map(({ file, index }) => (
+                              <FileRow
+                                key={file.path}
+                                label={file.path.slice(folder.length + 1)}
+                                isOpen={openFileIndex === index}
+                                readOnly={isPreview}
+                                onOpen={() => setOpenFileIndex(index)}
+                                onRemove={() => removeFile(index)}
+                              />
+                            ))}
+                            {addingIn === folder && (
+                              <NewFileRow
+                                placeholder="filename.md"
+                                value={newFileName}
+                                onChange={setNewFileName}
+                                onCommit={() => commitNewFile(folder)}
+                                onCancel={cancelAdding}
+                              />
+                            )}
+                          </ul>
+                        )}
+                      </li>
+                    );
+                  })}
+
+                  {tree.rootFiles.map(({ file, index }) => (
+                    <FileRow
+                      key={file.path}
+                      label={file.path}
+                      isOpen={openFileIndex === index}
+                      readOnly={isPreview}
+                      onOpen={() => setOpenFileIndex(index)}
+                      onRemove={() => removeFile(index)}
+                    />
+                  ))}
+
+                  {addingIn === ROOT_ADD_KEY && (
+                    <NewFileRow
+                      placeholder="new-file.md or folder/new-file.md"
+                      value={newFileName}
+                      onChange={setNewFileName}
+                      onCommit={() => commitNewFile(null)}
+                      onCancel={cancelAdding}
+                    />
+                  )}
+                </ul>
+
+                {!isPreview && addingIn === null && (
+                  <div className="mt-2 border-t pt-2">
+                    <button
+                      type="button"
+                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                      onClick={() => {
+                        setAddingIn(ROOT_ADD_KEY);
+                        setNewFileName("");
+                      }}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      New file (type{" "}
+                      <span className="font-mono">folder/name.md</span> to nest)
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
         </div>
       )}
     </StandardDialog>
+  );
+}
+
+function ManifestRow({
+  isOpen,
+  onOpen,
+}: {
+  isOpen: boolean;
+  onOpen: () => void;
+}) {
+  return (
+    <li
+      className={cn(
+        "flex items-center gap-2 rounded px-2 py-1",
+        isOpen ? "bg-muted" : "hover:bg-muted/50",
+      )}
+    >
+      <FileText className="h-4 w-4 shrink-0 text-foreground" />
+      <button
+        type="button"
+        className="flex-1 truncate text-left font-mono text-xs font-medium"
+        onClick={onOpen}
+      >
+        SKILL.md
+      </button>
+      <span className="text-xs text-muted-foreground">manifest</span>
+    </li>
+  );
+}
+
+function FolderRow({
+  folder,
+  fileCount,
+  isCollapsed,
+  readOnly,
+  onToggle,
+  onAddFile,
+  onRemoveFolder,
+}: {
+  folder: string;
+  fileCount: number;
+  isCollapsed: boolean;
+  readOnly: boolean;
+  onToggle: () => void;
+  onAddFile: () => void;
+  onRemoveFolder: () => void;
+}) {
+  return (
+    <div className="group flex items-center gap-1 rounded px-1 py-1 hover:bg-muted/50">
+      <button
+        type="button"
+        className="flex flex-1 items-center gap-1.5 text-left"
+        onClick={onToggle}
+      >
+        {isCollapsed ? (
+          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        ) : (
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        )}
+        {isCollapsed ? (
+          <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
+        ) : (
+          <FolderOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
+        )}
+        <span className="text-sm font-medium">{folder}/</span>
+        {isCollapsed && (
+          <span className="text-xs text-muted-foreground">({fileCount})</span>
+        )}
+      </button>
+      {!readOnly && (
+        <>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 opacity-0 group-hover:opacity-100"
+            onClick={onAddFile}
+            title={`Add file in ${folder}/`}
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 opacity-0 group-hover:opacity-100"
+            onClick={onRemoveFolder}
+            title={`Remove folder ${folder}/`}
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </>
+      )}
+    </div>
+  );
+}
+
+function FileRow({
+  label,
+  isOpen,
+  readOnly,
+  onOpen,
+  onRemove,
+}: {
+  label: string;
+  isOpen: boolean;
+  readOnly: boolean;
+  onOpen: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <li
+      className={cn(
+        "group flex items-center gap-2 rounded px-2 py-1",
+        isOpen ? "bg-muted" : "hover:bg-muted/50",
+      )}
+    >
+      <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <button
+        type="button"
+        className="flex-1 truncate text-left font-mono text-xs"
+        onClick={onOpen}
+      >
+        {label}
+      </button>
+      {!readOnly && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 opacity-0 group-hover:opacity-100"
+          onClick={onRemove}
+        >
+          <X className="h-3.5 w-3.5" />
+        </Button>
+      )}
+    </li>
+  );
+}
+
+function NewFileRow({
+  placeholder,
+  value,
+  onChange,
+  onCommit,
+  onCancel,
+}: {
+  placeholder: string;
+  value: string;
+  onChange: (value: string) => void;
+  onCommit: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <li className="flex items-center gap-2 px-2 py-1">
+      <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <Input
+        autoFocus
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            onCommit();
+          } else if (e.key === "Escape") {
+            onCancel();
+          }
+        }}
+        placeholder={placeholder}
+        className="h-7 flex-1 font-mono text-xs"
+      />
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-7 px-2 text-xs"
+        onClick={onCommit}
+        disabled={!value.trim()}
+      >
+        Add
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7"
+        onClick={onCancel}
+      >
+        <X className="h-3.5 w-3.5" />
+      </Button>
+    </li>
   );
 }
 
@@ -276,9 +598,26 @@ function Marker({ ok }: { ok: boolean }) {
   );
 }
 
-// ===== Manifest helpers =====
+function buildTree(files: ResourceFile[]): {
+  folders: Record<string, FolderEntry[]>;
+  folderNames: string[];
+  rootFiles: FolderEntry[];
+} {
+  const folders: Record<string, FolderEntry[]> = {};
+  const rootFiles: FolderEntry[] = [];
+  files.forEach((file, index) => {
+    const slashIdx = file.path.indexOf("/");
+    if (slashIdx === -1) {
+      rootFiles.push({ file, index });
+    } else {
+      const folder = file.path.slice(0, slashIdx);
+      if (!folders[folder]) folders[folder] = [];
+      folders[folder].push({ file, index });
+    }
+  });
+  return { folders, folderNames: Object.keys(folders).sort(), rootFiles };
+}
 
-/** Lightweight client-side check that frontmatter has the required fields. */
 function parseManifestFields(raw: string): {
   hasName: boolean;
   hasDescription: boolean;
@@ -291,7 +630,6 @@ function parseManifestFields(raw: string): {
   };
 }
 
-/** Rebuild a raw SKILL.md from a stored skill (frontmatter + body). */
 function composeManifest(skill: {
   name: string;
   description: string;
@@ -316,11 +654,4 @@ function composeManifest(skill: {
   }
   lines.push("---", "", skill.content);
   return lines.join("\n");
-}
-
-function deriveKind(path: string): string {
-  const normalized = path.toLowerCase();
-  if (normalized.startsWith("scripts/")) return "script";
-  if (normalized.startsWith("assets/")) return "asset";
-  return "reference";
 }

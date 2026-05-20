@@ -1075,6 +1075,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateSkill]: { agent: ["update"] },
   [RouteId.DeleteSkill]: { agent: ["delete"] },
   [RouteId.DiscoverGithubSkills]: { agent: ["read"] },
+  [RouteId.PreviewGithubSkill]: { agent: ["read"] },
   [RouteId.ImportGithubSkills]: { agent: ["create"] },
 
   // Config endpoint - any authenticated user can access

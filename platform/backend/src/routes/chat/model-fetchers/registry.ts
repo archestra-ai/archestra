@@ -41,7 +41,7 @@ export async function fetchModelsForProvider(params: {
   const vertexAiEnabled = provider === "gemini" && isVertexAiEnabled();
   const bedrockIamEnabled = provider === "bedrock" && isBedrockIamAuthEnabled();
   const anthropicWifEnabled =
-    provider === "anthropic" && isAnthropicWorkloadIdentityEnabled();
+    provider === "anthropic" && !apiKey && isAnthropicWorkloadIdentityEnabled();
   const isKeylessProviderEnabled =
     (provider === "vllm" && config.llm.vllm.enabled) ||
     (provider === "ollama" && config.llm.ollama.enabled);

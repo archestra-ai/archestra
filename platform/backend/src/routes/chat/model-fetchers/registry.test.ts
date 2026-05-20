@@ -118,6 +118,67 @@ describe("provider fetcher registry", () => {
     expect(models[0].id).toBe("deepseek-chat");
   });
 
+  test("Anthropic model discovery prefers configured API keys over WIF", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const secret = await makeSecret({ secret: { apiKey: "anthropic-key" } });
+    await makeLlmProviderApiKey(org.id, secret.id, { provider: "anthropic" });
+    const originalWorkloadIdentity = {
+      ...config.llm.anthropic.workloadIdentity,
+    };
+
+    try {
+      Object.assign(config.llm.anthropic.workloadIdentity, {
+        enabled: true,
+        federationRuleId: "fdrl_test",
+        organizationId: "00000000-0000-0000-0000-000000000000",
+        serviceAccountId: "svac_test",
+        identityToken: "idp-jwt",
+      });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            data: [
+              {
+                id: "claude-sonnet-4-5",
+                display_name: "Claude Sonnet 4.5",
+                created_at: "2026-05-20T00:00:00Z",
+              },
+            ],
+          }),
+      });
+
+      const models = await fetchModelsForProvider({
+        provider: "anthropic",
+        organizationId: org.id,
+        userId: user.id,
+        userTeamIds: [],
+      });
+
+      expect(models).toHaveLength(1);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(mockFetch.mock.calls[0][1].headers).toMatchObject({
+        "x-api-key": "anthropic-key",
+      });
+      expect(mockFetch.mock.calls[0][1].headers).not.toHaveProperty(
+        "Authorization",
+      );
+    } finally {
+      Object.assign(
+        config.llm.anthropic.workloadIdentity,
+        originalWorkloadIdentity,
+      );
+    }
+  });
+
   test("returns empty array when provider has no API key", async ({
     makeOrganization,
     makeUser,

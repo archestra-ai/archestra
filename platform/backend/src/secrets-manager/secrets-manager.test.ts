@@ -63,7 +63,7 @@ describe("SecretsManager", async () => {
       expect(type).toBe(SecretsManagerType.DB);
     });
 
-    test("should return DB when ARCHESTRA_SECRETS_MANAGER is 'db' (case insensitive)", () => {
+    test("should return DB when ARCHESTRA_SECRETS_MANAGER is 'db' (case-insensitive)", () => {
       process.env.ARCHESTRA_SECRETS_MANAGER = "db";
       config.secretsManager.type = "DB";
 
@@ -81,7 +81,7 @@ describe("SecretsManager", async () => {
       expect(type).toBe(SecretsManagerType.Vault);
     });
 
-    test("should return Vault when ARCHESTRA_SECRETS_MANAGER is 'vault' (case insensitive)", () => {
+    test("should return Vault when ARCHESTRA_SECRETS_MANAGER is 'vault' (case-insensitive)", () => {
       process.env.ARCHESTRA_SECRETS_MANAGER = "vault";
       config.secretsManager.type = "VAULT";
 

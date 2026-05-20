@@ -161,7 +161,7 @@ describe("sortAndFilterTools", () => {
     expect(result[0]?.id).toBe("1");
   });
 
-  it("is case insensitive when filtering", () => {
+  it("is case-insensitive when filtering", () => {
     const tools = [tool("1", "server__MyTool", "UPPERCASE DESC")];
 
     expect(sortAndFilterTools(tools, new Set(), "mytool")).toHaveLength(1);

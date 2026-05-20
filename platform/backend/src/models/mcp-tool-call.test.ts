@@ -208,7 +208,7 @@ describe("McpToolCallModel", () => {
   });
 
   describe("search filtering", () => {
-    test("searches by mcpServerName (case insensitive)", async ({
+    test("searches by mcpServerName (case-insensitive)", async ({
       makeAdmin,
     }) => {
       const admin = await makeAdmin();
@@ -248,7 +248,7 @@ describe("McpToolCallModel", () => {
       expect(toolCalls.data[0].mcpServerName).toBe("MyTestServer");
     });
 
-    test("searches by tool name (case insensitive)", async ({ makeAdmin }) => {
+    test("searches by tool name (case-insensitive)", async ({ makeAdmin }) => {
       const admin = await makeAdmin();
       const agent = await AgentModel.create({
         name: "Agent",
@@ -332,7 +332,7 @@ describe("McpToolCallModel", () => {
       expect(toolCalls.data[0].toolCall?.name).toBe("searchTool");
     });
 
-    test("searches by method field (case insensitive)", async ({
+    test("searches by method field (case-insensitive)", async ({
       makeAdmin,
     }) => {
       const admin = await makeAdmin();
@@ -380,7 +380,7 @@ describe("McpToolCallModel", () => {
       expect(toolCalls.data[0].method).toBe("tools/list");
     });
 
-    test("searches by toolResult content (case insensitive)", async ({
+    test("searches by toolResult content (case-insensitive)", async ({
       makeAdmin,
     }) => {
       const admin = await makeAdmin();

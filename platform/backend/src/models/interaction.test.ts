@@ -1280,7 +1280,7 @@ describe("InteractionModel", () => {
   });
 
   describe("getSessions search filtering", () => {
-    test("searches by request message content (case insensitive)", async ({
+    test("searches by request message content (case-insensitive)", async ({
       makeAdmin,
     }) => {
       const admin = await makeAdmin();
@@ -1642,7 +1642,7 @@ describe("InteractionModel", () => {
       expect(sessions.data[0].sessionId).toBe("searchable-session");
     });
 
-    test("searches by conversation title (case insensitive)", async ({
+    test("searches by conversation title (case-insensitive)", async ({
       makeAdmin,
       makeUser,
       makeOrganization,
@@ -1718,7 +1718,7 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      // Search by conversation title (case insensitive)
+      // Search by conversation title (case-insensitive)
       const sessions = await InteractionModel.getSessions(
         { limit: 100, offset: 0 },
         admin.id,

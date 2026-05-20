@@ -127,7 +127,7 @@ describe("ToolChecklist", () => {
       ).toBeInTheDocument();
     });
 
-    it("should be case insensitive when filtering", async () => {
+    it("should be case-insensitive when filtering", async () => {
       const user = userEvent.setup();
       const tools = [
         ...createMockTools(5),

@@ -1067,7 +1067,7 @@ describe("parseProcessType", () => {
     expect(parseProcessType("worker")).toBe("worker");
   });
 
-  test("should be case insensitive", () => {
+  test("should be case-insensitive", () => {
     expect(parseProcessType("WEB")).toBe("web");
     expect(parseProcessType("WORKER")).toBe("worker");
     expect(parseProcessType("Web")).toBe("web");

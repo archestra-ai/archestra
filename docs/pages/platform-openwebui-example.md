@@ -118,7 +118,7 @@ By default, every tool call result is untrusted, e.g. it can poison the context 
 
 Also by default, if your context was exposed to untrusted information, any subsequent tool call would be blocked by archestra.
 
-This rule might be quite limiting for the agent, but you can additional rules to validate the input (the arguments for the tool calls) and allow the tool call even if the conext is untrusted
+This rule might be quite limiting for the agent, but you can additional rules to validate the input (the arguments for the tool calls) and allow the tool call even if the context is untrusted
 
 ![](/docs/platfrom/openwebui-image4.webp)
 

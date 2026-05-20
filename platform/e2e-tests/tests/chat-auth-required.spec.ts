@@ -117,13 +117,13 @@ test.describe("Chat - Auth Required Tool", () => {
     }
     if (!geminiKey.bestModelId) {
       throw new Error(
-        "Expected the available Gemini key to expose a bestModelId",
+        "Expected Gemini key to expose bestModelId for chat auth-required e2e",
       );
     }
     chatApiKeyId = geminiKey.id;
 
     // 6. Create agent and assign Marketing Team so the member can access it.
-    // modelId + llmApiKeyId must be set together (or both omitted).
+    // modelId + llmApiKeyId must be set together (backend validator added in #4829).
     const profileResponse = await makeApiRequest({
       request,
       method: "post",

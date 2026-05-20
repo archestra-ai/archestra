@@ -114,8 +114,9 @@ export function requiresNewUserInputForReinstall(
 }
 
 /**
- * Returns true iff the catalog diff is JUST forward-compatible schema
- * evolution that doesn't actually invalidate any install. Used as a
+ * Returns true when (and only when) the catalog diff is JUST
+ * forward-compatible schema evolution that doesn't actually invalidate
+ * any install. Used as a
  * refinement gate on top of `isMetadataOnlyEdit`: when that predicate
  * says "non-metadata diff exists" but the diff is purely
  * forward-compatible (added optional env var, added optional header,

@@ -48,7 +48,6 @@ describe("cascade scenarios — shared predicate sweep", () => {
     expect(dupes).toEqual([]);
   });
 
-  // The main sweep.
   test.each(
     CASCADE_SCENARIOS,
   )("$id ($expected): $userAction", (scenario: CascadeScenario) => {
@@ -60,7 +59,7 @@ describe("cascade scenarios — shared predicate sweep", () => {
     );
 
     const expected: Record<SharedPredicateExpectation, boolean> = {
-      // The predicate's contract: `true` iff every diff is in
+      // The predicate's contract: `true` when every diff is in
       // METADATA_ONLY_CATALOG_FIELDS AND at least one such diff exists.
       "metadata-only-diff": true,
       // Some non-metadata field differs → false.

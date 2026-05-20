@@ -225,8 +225,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Direct client_secret value
         const clientSecret = restBody.oauthConfig.client_secret;
         if (clientSecret) {
-          // POST/create path — `rotated` is irrelevant for cascade
-          // since there are no installs yet.
+          // `rotated` is irrelevant here: no installs exist yet on create.
           const result = await upsertCatalogClientSecretValue({
             clientSecretId,
             catalogName: restBody.name,
@@ -1806,8 +1805,9 @@ async function partitionPresetFieldValuesAndUpsertSecrets(params: {
   nonSecretFieldValues: PresetFieldValues;
   presetSecretId: string | null;
   /**
-   * True iff this call WROTE a different value set to an EXISTING
-   * preset secret bag (same `presetSecretId`, changed content). Used
+   * True when (and only when) this call WROTE a different value set to
+   * an EXISTING preset secret bag (same `presetSecretId`, changed
+   * content). Used
    * by the cascade gate to force the auto-restart path — a same-id-
    * different-content update is invisible to the row-diff gate. New
    * bags (`presetSecretId` flips from null to a new id) and bag

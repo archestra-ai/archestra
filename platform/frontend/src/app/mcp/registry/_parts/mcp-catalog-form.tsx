@@ -513,13 +513,9 @@ export function McpCatalogForm({
   const isHttpPortDirty = deploymentField("httpPort");
   const isHttpPathDirty = deploymentField("httpPath");
 
-  // NOTE: the cascade decision (manual vs auto vs skip) used to live
-  // here as a hand-rolled OR of the per-field dirty flags above. That
-  // logic moved into the pure `computeCascadeOutcome` in
-  // `cascade-decision.ts`, which mirrors the backend gate and is
-  // matrix-tested against the shared scenarios fixture. The per-field
-  // `is*Dirty` flags below are still consumed to render `ReinstallHint`
-  // badges next to individual inputs.
+  // The per-field `is*Dirty` flags below drive `ReinstallHint` badges
+  // next to individual inputs. The form-level cascade decision lives in
+  // `computeCascadeOutcome` (cascade-decision.ts).
   const areLabelsChanged = useMemo(() => {
     if (labels.length !== labelsBaseline.length) return true;
     return labels.some(

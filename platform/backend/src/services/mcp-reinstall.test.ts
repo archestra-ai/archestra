@@ -847,7 +847,6 @@ describe("mcp-reinstall", () => {
   });
 
   describe("autoReinstallServer", () => {
-    // Helper to create a minimal server
     const createServer = (overrides: Partial<McpServer> = {}): McpServer =>
       ({
         id: "server-123",

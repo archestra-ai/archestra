@@ -109,9 +109,7 @@ export function computeCascadeOutcome(
   return "auto";
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// Manual-path predicate (mirror of `requiresNewUserInputForReinstall`).
-// ─────────────────────────────────────────────────────────────────────
+// Manual-path predicate. Mirror of `requiresNewUserInputForReinstall`.
 
 function requiresUserReprompt(
   prev: CascadeSnapshot,
@@ -159,10 +157,7 @@ function localExecutionConfigChanged(
   return JSON.stringify(shape(prev)) !== JSON.stringify(shape(next));
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// Schema-evolution predicates (env, userConfig). Same rules as
-// backend/src/services/mcp-reinstall.ts.
-// ─────────────────────────────────────────────────────────────────────
+// Schema-evolution predicates. Mirror of backend/src/services/mcp-reinstall.ts.
 
 type PromptedInfo = {
   required: boolean;
@@ -192,8 +187,8 @@ const promptedEnvMap = (
 };
 
 /**
- * Mirror of backend `promptedEnvVarsChanged`. True iff the prompted-env
- * schema changed in a way that invalidates installs (added required,
+ * Mirror of backend `promptedEnvVarsChanged`. True when the
+ * prompted-env schema changed in a way that invalidates installs (added required,
  * removed, type change, required false → true).
  */
 export function promptedEnvVarsChanged(
@@ -216,8 +211,8 @@ export function promptedEnvVarsChanged(
 }
 
 /**
- * Mirror of backend `promptedEnvVarsRuntimeChanged`. True iff a prompted
- * env var present on both sides has a different `mounted` flag. Drives
+ * Mirror of backend `promptedEnvVarsRuntimeChanged`. True when a
+ * prompted env var present on both sides has a different `mounted` flag. Drives
  * the auto path (pod restart) without manual re-prompt.
  */
 function promptedEnvVarsRuntimeChanged(
@@ -235,8 +230,8 @@ function promptedEnvVarsRuntimeChanged(
 }
 
 /**
- * Mirror of backend `requiredUserConfigChanged`. True iff a change to the
- * required-userConfig-fields set needs a user re-prompt:
+ * Mirror of backend `requiredUserConfigChanged`. True when a change to
+ * the required-userConfig-fields set needs a user re-prompt:
  *   • added required field (install must supply a new value), OR
  *   • type changed on a still-required field (storage moves).
  *
@@ -271,10 +266,7 @@ export function requiredUserConfigChanged(
   return false;
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// Forward-compatible diff predicates (mirror of backend
-// `onlyForwardCompatibleEnvDiff`).
-// ─────────────────────────────────────────────────────────────────────
+// Forward-compatible diff predicates. Mirror of backend `onlyForwardCompatibleEnvDiff`.
 
 function onlyForwardCompatibleDiff(
   prev: CascadeSnapshot,
@@ -310,8 +302,8 @@ function onlyForwardCompatibleDiff(
 }
 
 /**
- * Mirror of backend `userConfigChangedBreakingly`. True iff a userConfig
- * field change invalidates existing installs (added required, removed
+ * Mirror of backend `userConfigChangedBreakingly`. True when a
+ * userConfig field change invalidates existing installs (added required, removed
  * any, type/headerName/sensitive flip, required false → true). Pure
  * cosmetic changes (description, title, default value) are not breaking.
  */

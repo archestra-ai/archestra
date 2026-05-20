@@ -712,7 +712,7 @@ describe("ChatOpsChannelBindingModel", () => {
       const org = await makeOrganization();
       const agent = await makeAgent({ agentType: "agent" });
 
-      // Create a assigned channel
+      // Create an assigned channel
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
         provider: "ms-teams",

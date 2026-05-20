@@ -111,12 +111,10 @@ export default function ModelsPage() {
   }, [models]);
 
   // "free only" is an openrouter-specific filter — free models are otherwise
-  // a non-concept, so the toggle shows only when an openrouter key is active.
-  const isOpenRouterSelected = useMemo(
-    () =>
-      availableApiKeys.find(([id]) => id === apiKeyFilter)?.[1].provider ===
-      "openrouter",
-    [availableApiKeys, apiKeyFilter],
+  // a non-concept, so the toggle shows whenever openrouter is set up.
+  const hasOpenRouterModels = useMemo(
+    () => availableApiKeys.some(([, key]) => key.provider === "openrouter"),
+    [availableApiKeys],
   );
 
   const filteredModels = useMemo(() => {
@@ -135,7 +133,7 @@ export default function ModelsPage() {
     } else if (modelTypeFilter === "chat") {
       result = result.filter((m) => m.embeddingDimensions === null);
     }
-    if (freeOnly && isOpenRouterSelected) {
+    if (freeOnly && hasOpenRouterModels) {
       result = result.filter((m) => m.isFree);
     }
     // Group by provider, then apply the shared model ordering within each
@@ -150,7 +148,7 @@ export default function ModelsPage() {
     apiKeyFilter,
     modelTypeFilter,
     freeOnly,
-    isOpenRouterSelected,
+    hasOpenRouterModels,
   ]);
 
   const handleRefresh = useCallback(async () => {
@@ -417,7 +415,7 @@ export default function ModelsPage() {
                 },
               ]}
             />
-            {isOpenRouterSelected && (
+            {hasOpenRouterModels && (
               <div className="flex items-center gap-2">
                 <Switch
                   id="models-free-only"
@@ -447,7 +445,7 @@ export default function ModelsPage() {
             search ||
               apiKeyFilter !== "all" ||
               modelTypeFilter !== "all" ||
-              (isOpenRouterSelected && freeOnly),
+              (hasOpenRouterModels && freeOnly),
           )}
           filteredEmptyMessage="No models match your filters. Try adjusting your search."
           onClearFilters={() => {

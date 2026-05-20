@@ -1,4 +1,8 @@
-import { FAST_MODELS, type SupportedProvider } from "@shared";
+import {
+  FAST_MODELS,
+  OPENROUTER_FREE_MODEL_ID,
+  type SupportedProvider,
+} from "@shared";
 import { vi } from "vitest";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import {
@@ -616,5 +620,21 @@ describe("resolveFastModelName", () => {
     const result = await resolveFastModelName("openai", "key-789");
 
     expect(result).toBe(FAST_MODELS.openai);
+  });
+
+  test("always uses the free router for OpenRouter, bypassing the DB lookup", async () => {
+    const getFastestModel = vi.spyOn(
+      LlmProviderApiKeyModelLinkModel,
+      "getFastestModel",
+    );
+
+    expect(await resolveFastModelName("openrouter", undefined)).toBe(
+      OPENROUTER_FREE_MODEL_ID,
+    );
+    expect(await resolveFastModelName("openrouter", "key-123")).toBe(
+      OPENROUTER_FREE_MODEL_ID,
+    );
+    // openrouter/auto (the marked "fastest" model) is paid — never resolved here.
+    expect(getFastestModel).not.toHaveBeenCalled();
   });
 });

@@ -2,6 +2,7 @@ import {
   DEFAULT_MODELS,
   FAST_MODELS,
   type ModelSelection,
+  OPENROUTER_FREE_MODEL_ID,
   resolveModelSelection,
   type SupportedProvider,
   SupportedProvidersSchema,
@@ -241,6 +242,13 @@ export async function resolveFastModelName(
   provider: SupportedProvider,
   chatApiKeyId: string | undefined,
 ): Promise<string> {
+  // OpenRouter meta calls always go through the free router: the "fastest"
+  // marker is openrouter/auto, which is paid and fails outright on a
+  // zero-balance free-only key.
+  if (provider === "openrouter") {
+    return OPENROUTER_FREE_MODEL_ID;
+  }
+
   if (!chatApiKeyId) {
     const fallback = FAST_MODELS[provider];
     logger.debug(

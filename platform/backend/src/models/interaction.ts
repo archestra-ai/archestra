@@ -903,7 +903,7 @@ class InteractionModel {
           source: sql<InteractionSource | null>`CASE WHEN COUNT(DISTINCT ${schema.interactionsTable.source}) = 1 THEN MAX(${schema.interactionsTable.source}) ELSE NULL END`,
           sources: sql<
             InteractionSource[]
-          >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.source}), NULL)`,
+          >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.source} ORDER BY ${schema.interactionsTable.source}), NULL)`,
           // For single interactions (no session), return the interaction ID for direct navigation
           interactionId: sql<string>`CASE WHEN MAX(${schema.interactionsTable.sessionId}) IS NULL THEN MAX(${schema.interactionsTable.id}::text) ELSE NULL END`,
           requestCount: count(),

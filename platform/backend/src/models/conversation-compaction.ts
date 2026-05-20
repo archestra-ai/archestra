@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { asc, desc, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertConversationCompaction } from "@/types/conversation-compaction";
 
@@ -36,7 +36,7 @@ class ConversationCompactionModel {
       .where(
         eq(schema.conversationCompactionsTable.conversationId, conversationId),
       )
-      .orderBy(schema.conversationCompactionsTable.createdAt);
+      .orderBy(asc(schema.conversationCompactionsTable.createdAt));
   }
 
   static async deleteByConversation(

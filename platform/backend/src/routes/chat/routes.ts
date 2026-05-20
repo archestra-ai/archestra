@@ -542,7 +542,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   userId: user.id,
                   agentId: conversation.agentId,
                   provider,
-                  selectedModel: conversation.selectedModel,
+                  selectedModel,
                   agentLlmApiKeyId: agent.llmApiKeyId,
                   messages: normalizedMessagesForLLM,
                   systemPrompt,

@@ -392,7 +392,14 @@ const PromptInputContent = ({
     setQueuedMessages((current) =>
       current.filter((message) => message.id !== nextMessage.id),
     );
-    submitQueuedMessage(nextMessage);
+    try {
+      submitQueuedMessage(nextMessage);
+    } catch {
+      // restore the message so a failed send is not lost silently; the
+      // sending guard stays set so we do not retry in a tight loop — the
+      // next ready transition (guard reset on status change) picks it up
+      setQueuedMessages((current) => [nextMessage, ...current]);
+    }
   }, [visibleQueuedMessages, status, submitQueuedMessage]);
 
   const selectSlashCommand = useCallback(

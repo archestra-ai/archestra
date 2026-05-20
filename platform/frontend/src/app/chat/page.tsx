@@ -1049,53 +1049,64 @@ export function ChatPageContent({
       (result.conversation.messages ?? []) as UIMessage[],
     );
 
-    if (result.status === "created") {
-      if (result.compaction) {
-        recordContextCompaction?.({
-          compactionId: result.compaction.id,
-          originalTokenEstimate: result.compaction.originalTokenEstimate,
-          compactedTokenEstimate: result.compaction.compactedTokenEstimate,
-        });
+    switch (result.status) {
+      case "created": {
+        if (result.compaction) {
+          recordContextCompaction?.({
+            compactionId: result.compaction.id,
+            originalTokenEstimate: result.compaction.originalTokenEstimate,
+            compactedTokenEstimate: result.compaction.compactedTokenEstimate,
+          });
+        }
+
+        setManualCompactionFeedback(null);
+        return;
       }
+      case "existing": {
+        if (result.compaction) {
+          recordContextCompaction?.({
+            compactionId: result.compaction.id,
+            originalTokenEstimate: result.compaction.originalTokenEstimate,
+            compactedTokenEstimate: result.compaction.compactedTokenEstimate,
+          });
+        }
 
-      setManualCompactionFeedback(null);
-      return;
-    }
-
-    if (result.status === "existing") {
-      if (result.compaction) {
-        recordContextCompaction?.({
-          compactionId: result.compaction.id,
-          originalTokenEstimate: result.compaction.originalTokenEstimate,
-          compactedTokenEstimate: result.compaction.compactedTokenEstimate,
+        setManualCompactionFeedback({
+          status: "skipped",
+          message: getManualCompactionSkippedMessage(
+            result.reason,
+            result.status,
+          ),
         });
+        return;
       }
-
-      setManualCompactionFeedback({
-        status: "skipped",
-        message: getManualCompactionSkippedMessage(
-          result.reason,
-          result.status,
-        ),
-      });
-      return;
+      case "skipped": {
+        setManualCompactionFeedback({
+          status: "skipped",
+          message: getManualCompactionSkippedMessage(
+            result.reason,
+            result.status,
+          ),
+        });
+        return;
+      }
+      case "failed": {
+        setManualCompactionFeedback({
+          status: "failed",
+          message: "Context compaction failed.",
+        });
+        return;
+      }
+      default: {
+        // compile-time guard: a new status must be handled explicitly above
+        result.status satisfies never;
+        setManualCompactionFeedback({
+          status: "failed",
+          message: "Context compaction failed.",
+        });
+        return;
+      }
     }
-
-    if (result.status === "skipped") {
-      setManualCompactionFeedback({
-        status: "skipped",
-        message: getManualCompactionSkippedMessage(
-          result.reason,
-          result.status,
-        ),
-      });
-      return;
-    }
-
-    setManualCompactionFeedback({
-      status: "failed",
-      message: "Context compaction failed.",
-    });
   }, [
     compactConversationMutation,
     conversationId,

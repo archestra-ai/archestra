@@ -592,6 +592,34 @@ describe("ArchestraPromptInput", () => {
       );
     });
 
+    it("keeps the queued follow-up in the queue when submitting it fails", () => {
+      const onSubmit = vi.fn(() => {
+        throw new Error("submit failed");
+      });
+      mockControllerState.value = "Retain on failure";
+
+      const { rerender } = render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          onSubmit={onSubmit}
+          status="streaming"
+        />,
+      );
+
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      rerender(
+        <ArchestraPromptInput
+          {...defaultProps}
+          onSubmit={onSubmit}
+          status="ready"
+        />,
+      );
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      expect(screen.getByText("Retain on failure")).toBeInTheDocument();
+    });
+
     it("does not submit queued follow-ups after switching conversations", () => {
       const onConversationASubmit = vi.fn();
       const onConversationBSubmit = vi.fn();

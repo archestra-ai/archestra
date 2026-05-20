@@ -741,10 +741,15 @@ export function McpCatalogForm({
         autoComplete={MCP_CONFIG_AUTOCOMPLETE}
         data-1p-ignore="true"
       >
-        {/* Lock fields during the bar's save so the user can't drift
-            values away from the snapshot the API will see. */}
+        {/* Lock fields while the confirm bar is up AND during the save
+            itself — keeps the snapshot the bar describes in sync with
+            what the user sees on screen, and prevents silent data loss
+            when a mid-bar edit gets dropped on confirm (the save uses
+            `pendingSubmit.values`, the snapshot taken at first-save
+            time, not the current form state). Matches the same pattern
+            in `preset-editor-dialog.tsx`. */}
         <fieldset
-          disabled={isConfirming}
+          disabled={pendingSubmit !== null || isConfirming}
           className="flex min-h-0 min-w-0 flex-1 flex-col m-0 p-0 border-0"
         >
           <div

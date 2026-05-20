@@ -166,7 +166,7 @@ export function McpCatalogForm({
   // Fetch local config secrets only for local MCP catalog items.
   const { data: localConfigSecret } = useGetSecret(localConfigSecretId);
 
-  // Pre-existing secret env-var keys, used to render a `••••••••` placeholder.
+  // Preexisting secret env-var keys, used to render a `••••••••` placeholder.
   const storedSecretKeys = useMemo(() => {
     if (initialValues?.serverType !== "local" || !initialValues.localConfig) {
       return new Set<string>();

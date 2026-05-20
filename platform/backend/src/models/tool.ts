@@ -657,7 +657,7 @@ class ToolModel {
    * then creates/updates tools with the catalog ID.
    * Called during server startup to ensure Archestra tools exist.
    *
-   * Also migrates any pre-existing "discovered" Archestra tools (catalog_id = NULL)
+   * Also migrates any preexisting "discovered" Archestra tools (catalog_id = NULL)
    * to use the proper catalog ID.
    */
   static async seedArchestraTools(
@@ -687,7 +687,7 @@ class ToolModel {
     const archestraTools = getArchestraMcpTools();
     const archestraToolNames = new Set(archestraTools.map((t) => t.name));
 
-    // Migrate pre-existing "discovered" Archestra tools (catalog_id = NULL) to use the catalog
+    // Migrate preexisting "discovered" Archestra tools (catalog_id = NULL) to use the catalog
     // This handles tools that were auto-discovered via proxy before the catalog was introduced
     const discoveredTools = await db
       .select()

@@ -772,7 +772,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // iterate — not because keys were dropped. Without this
         // gate, a userConfig-only edit (e.g. adding an optional
         // header) would falsely force the auto path on a catalog
-        // with any pre-existing local secret bag.
+        // with any preexisting local secret bag.
         const localBagSurfaceTouched =
           restBody.localConfig?.environment !== undefined ||
           restBody.localConfig?.imagePullSecrets !== undefined;

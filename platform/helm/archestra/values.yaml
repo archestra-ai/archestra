@@ -702,7 +702,7 @@ postgresql:
   # Option 1 - Set URL here (stored in K8s secret automatically):
   #   external_database_url: postgres://username:password@host:5432/database
   #
-  # Option 2 - Use pre-existing K8s secret (leave external_database_url as null):
+  # Option 2 - Use preexisting K8s secret (leave external_database_url as null):
   #   archestra:
   #     envFromSecrets:
   #       - name: ARCHESTRA_DATABASE_URL

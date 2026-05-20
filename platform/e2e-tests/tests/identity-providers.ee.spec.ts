@@ -607,7 +607,7 @@ test.describe("Identity Provider Team Sync E2E", () => {
     try {
       // STEP 5: Verify user was automatically added to the team
       // Re-authenticate the admin page before polling. In CI, the SSO flow can
-      // invalidate or age out the pre-existing admin session used for cleanup
+      // invalidate or age out the preexisting admin session used for cleanup
       // and verification.
       await ensureAdminAuthenticated(page);
       const teamId = await getTeamIdByNameViaApi(page, teamName);

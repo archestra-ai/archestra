@@ -264,7 +264,7 @@ describe("RoleMappingForm", () => {
     ).toHaveLength(1);
   });
 
-  it("renders pre-existing rules", async () => {
+  it("renders preexisting rules", async () => {
     render(
       <TestWrapper
         defaultRules={[

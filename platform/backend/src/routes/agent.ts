@@ -923,7 +923,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // A model and its API key are a pair: persist both or neither. Validate
       // the merged result, but only when this update touches either field — an
-      // unrelated edit must not be blocked by a pre-existing half pair.
+      // unrelated edit must not be blocked by a preexisting half pair.
       if (body.modelId !== undefined || body.llmApiKeyId !== undefined) {
         const mergedModelId =
           body.modelId !== undefined ? body.modelId : existingAgent.modelId;

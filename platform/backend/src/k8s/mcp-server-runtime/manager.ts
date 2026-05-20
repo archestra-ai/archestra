@@ -848,7 +848,7 @@ export class McpServerRuntimeManager {
 
   /**
    * List Archestra-managed docker-registry secrets in the namespace.
-   * Filters by `app=mcp-server,type=regcred` labels to exclude pre-existing secrets.
+   * Filters by `app=mcp-server,type=regcred` labels to exclude preexisting secrets.
    * For non-admin users, further filters by `team-id` label matching the user's team IDs.
    *
    * Returns empty array when called without options to prevent accidental unscoped access.

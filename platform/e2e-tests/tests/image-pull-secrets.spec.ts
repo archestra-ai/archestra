@@ -25,7 +25,7 @@ test.describe("Image Pull Secrets", () => {
   test.beforeAll(async () => {
     k8sApi = getK8sApi();
 
-    // Create a pre-existing dockerconfigjson secret in the target namespace
+    // Create a preexisting dockerconfigjson secret in the target namespace
     // (simulates a secret that a user would select via "Existing Secret" mode)
     const dockerConfigJson = JSON.stringify({
       auths: {
@@ -64,7 +64,7 @@ test.describe("Image Pull Secrets", () => {
         await deleteMcpCatalogItem(request, catalogId).catch(() => {});
       }
 
-      // Delete the pre-existing test secret
+      // Delete the preexisting test secret
       try {
         await k8sApi.deleteNamespacedSecret({
           name: TEST_EXISTING_SECRET_NAME,
@@ -215,7 +215,7 @@ test.describe("Image Pull Secrets", () => {
     expect(secretName).toContain("e2e-test-user");
   });
 
-  test("GET /api/k8s/image-pull-secrets returns Archestra-managed secrets but not pre-existing ones", async ({
+  test("GET /api/k8s/image-pull-secrets returns Archestra-managed secrets but not preexisting ones", async ({
     request,
     makeApiRequest,
   }) => {
@@ -233,7 +233,7 @@ test.describe("Image Pull Secrets", () => {
     );
     expect(hasArchestraRegcred).toBe(true);
 
-    // The pre-existing test secret (created without Archestra labels) should NOT appear
+    // The preexisting test secret (created without Archestra labels) should NOT appear
     expect(regcredNames).not.toContain(TEST_EXISTING_SECRET_NAME);
   });
 });

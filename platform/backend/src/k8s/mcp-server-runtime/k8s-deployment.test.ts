@@ -4600,7 +4600,7 @@ describe("K8sDeployment.createDockerRegistrySecrets", () => {
     const result = await deployment.createDockerRegistrySecrets(
       { "__regcred_password:docker.io:ci-bot": "docker-pass" },
       [
-        { source: "existing", name: "pre-existing-secret" },
+        { source: "existing", name: "preexisting-secret" },
         {
           source: "credentials",
           server: "docker.io",
@@ -4700,11 +4700,11 @@ describe("K8sDeployment.collectImagePullSecretNames", () => {
 
   test("merges existing names with generated regcred names", () => {
     const result = K8sDeployment.collectImagePullSecretNames(
-      [{ source: "existing", name: "pre-existing" }],
+      [{ source: "existing", name: "preexisting" }],
       ["mcp-server-x-regcred-quay.io-user"],
     );
     expect(result).toEqual([
-      { name: "pre-existing" },
+      { name: "preexisting" },
       { name: "mcp-server-x-regcred-quay.io-user" },
     ]);
   });

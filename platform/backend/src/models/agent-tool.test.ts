@@ -1045,7 +1045,7 @@ describe("AgentToolModel.findAll", () => {
         [tool1.id, tool2.id, tool3.id],
       );
 
-      // Verify all relationships exist (including the pre-existing one)
+      // Verify all relationships exist (including the preexisting one)
       const agent1Tools = await AgentToolModel.findToolIdsByAgent(agent1.id);
       const agent2Tools = await AgentToolModel.findToolIdsByAgent(agent2.id);
 

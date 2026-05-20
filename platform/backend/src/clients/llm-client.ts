@@ -99,7 +99,7 @@ export function createDirectLLMModel({
     apiKey,
     modelName,
     baseURL,
-    headers: mergeProviderHeaders(cfg),
+    headers: providerHeaders(cfg),
   });
 }
 
@@ -320,13 +320,13 @@ type ProviderModelConfig = {
   extraHeaders?: Record<string, string>;
 };
 
-/** Merge static provider headers with per-request headers (request headers win). */
-function mergeProviderHeaders(
+/** Static provider headers (e.g. OpenRouter attribution), or undefined when none. */
+function providerHeaders(
   cfg: ProviderModelConfig,
-  requestHeaders?: Record<string, string>,
 ): Record<string, string> | undefined {
-  const merged = { ...cfg.extraHeaders, ...requestHeaders };
-  return Object.keys(merged).length > 0 ? merged : undefined;
+  return cfg.extraHeaders && Object.keys(cfg.extraHeaders).length > 0
+    ? cfg.extraHeaders
+    : undefined;
 }
 
 /**

@@ -136,9 +136,6 @@ export const MINIMAX_MODELS = [
   { id: "MiniMax-M2.7-highspeed", displayName: "MiniMax-M2.7-highspeed" },
   { id: "MiniMax-M2.5", displayName: "MiniMax-M2.5" },
   { id: "MiniMax-M2.5-highspeed", displayName: "MiniMax-M2.5-highspeed" },
-  { id: "MiniMax-M2.1", displayName: "MiniMax-M2.1" },
-  { id: "MiniMax-M2.1-highspeed", displayName: "MiniMax-M2.1-highspeed" },
-  { id: "MiniMax-M2", displayName: "MiniMax-M2" },
 ] as const;
 
 /**

@@ -2079,8 +2079,29 @@ async function persistNewMessages(
       uiMessages,
     });
 
+    // Detect existing messages whose content has changed (e.g., tool approval
+    // state updates, tool results added in-place after approval). These need
+    // to be UPDATEd, not INSERTed.
+    const changedMessages = getMessagesWithChangedContent({
+      existingMessages,
+      uiMessages,
+    });
+
+    // Update changed messages first (approval state, tool results, etc.)
+    if (changedMessages.length > 0) {
+      const normalized = changedMessages.map((msg) => ({
+        id: msg.id,
+        content: normalizeChatMessages([msg])[0] ?? msg,
+        conversationId,
+      }));
+      await MessageModel.bulkUpdateContent(normalized);
+      logger.info(
+        `Updated ${changedMessages.length} changed messages in conversation ${conversationId} (${context})`,
+      );
+    }
+
     if (newMessages.length === 0) {
-      return 0;
+      return changedMessages.length;
     }
 
     // Check if last message has empty parts and strip it if so
@@ -2090,7 +2111,7 @@ async function persistNewMessages(
     }
 
     if (messagesToSave.length === 0) {
-      return 0;
+      return changedMessages.length;
     }
 
     let messagesToStore: ChatMessage[];
@@ -2129,11 +2150,12 @@ async function persistNewMessages(
 
     await MessageModel.bulkCreate(messageData);
 
+    const totalPersisted = messagesToSave.length + changedMessages.length;
     logger.info(
-      `Appended ${messagesToSave.length} new messages to conversation ${conversationId} (${context})`,
+      `Persisted ${messagesToSave.length} new + ${changedMessages.length} updated messages in conversation ${conversationId} (${context})`,
     );
 
-    return messagesToSave.length;
+    return totalPersisted;
   } catch (error) {
     logger.error(
       { error, conversationId, context },
@@ -2166,6 +2188,65 @@ function getSerializableChatError(error: ChatErrorResponse): ChatErrorResponse {
   } catch {
     return getMinimalFrontendError(error);
   }
+}
+
+/**
+ * Detect existing messages whose content has changed since they were persisted.
+ * This handles cases like tool approval state updates, tool results added
+ * in-place after approval, etc.
+ */
+function getMessagesWithChangedContent(params: {
+  existingMessages: Array<{ id: string; content: unknown }>;
+  uiMessages: ChatMessage[];
+}): ChatMessage[] {
+  const existingById = new Map<string, { id: string; content: unknown }>();
+
+  for (const message of params.existingMessages) {
+    existingById.set(message.id, message);
+    // Also index by content ID for messages whose IDs were re-keyed
+    const contentId =
+      typeof message.content === "object" &&
+      message.content !== null &&
+      "id" in message.content &&
+      typeof (message.content as Record<string, unknown>).id === "string"
+        ? ((message.content as Record<string, unknown>).id as string)
+        : null;
+    if (contentId) {
+      existingById.set(contentId, message);
+    }
+  }
+
+  const changed: ChatMessage[] = [];
+
+  for (const uiMsg of params.uiMessages) {
+    if (!uiMsg.id || typeof uiMsg.id !== "string") continue;
+
+    const existing = existingById.get(uiMsg.id);
+    if (!existing) continue;
+
+    // Compare the number of parts — if the UI message has more parts than
+    // the persisted one, it means new content was added (e.g., tool result
+    // after approval).
+    const existingContent = existing.content as Record<string, unknown>;
+    const existingParts = Array.isArray(existingContent?.parts)
+      ? existingContent.parts
+      : [];
+    const uiParts = Array.isArray(uiMsg.parts) ? uiMsg.parts : [];
+
+    if (uiParts.length !== existingParts.length) {
+      changed.push(uiMsg);
+      continue;
+    }
+
+    // Compare JSON serialization for deeper changes (approval state, etc.)
+    const existingJson = JSON.stringify(existingContent);
+    const uiJson = JSON.stringify(uiMsg);
+    if (existingJson !== uiJson) {
+      changed.push(uiMsg);
+    }
+  }
+
+  return changed;
 }
 
 function getMessagesNotYetPersisted(params: {
@@ -2691,6 +2772,7 @@ async function validateChatApiKeyAccess(
 
 export const __test = {
   getMessagesNotYetPersisted,
+  getMessagesWithChangedContent,
   prepareMessagesForProvider,
 };
 

@@ -502,6 +502,150 @@ describe("getMessagesNotYetPersisted", () => {
   });
 });
 
+describe("getMessagesWithChangedContent", () => {
+  it("detects messages with new tool result parts added after approval", () => {
+    const changed = __test.getMessagesWithChangedContent({
+      existingMessages: [
+        {
+          id: "msg-1",
+          content: {
+            id: "msg-1",
+            role: "assistant",
+            parts: [
+              {
+                type: "tool-mcp__search",
+                toolCallId: "tc-1",
+                state: "approval-requested",
+                approval: { id: "ap-1" },
+                input: { query: "test" },
+              },
+            ],
+          },
+        },
+      ],
+      uiMessages: [
+        {
+          id: "msg-1",
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-mcp__search",
+              toolCallId: "tc-1",
+              state: "output-available",
+              approval: { id: "ap-1" },
+              input: { query: "test" },
+              output: { results: ["a", "b"] },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(changed).toHaveLength(1);
+    expect(changed[0].id).toBe("msg-1");
+  });
+
+  it("detects messages where approval state changed from requested to denied", () => {
+    const changed = __test.getMessagesWithChangedContent({
+      existingMessages: [
+        {
+          id: "msg-2",
+          content: {
+            id: "msg-2",
+            role: "assistant",
+            parts: [
+              {
+                type: "tool-mcp__write",
+                toolCallId: "tc-2",
+                state: "approval-requested",
+                approval: { id: "ap-2" },
+                input: { path: "/tmp/test" },
+              },
+            ],
+          },
+        },
+      ],
+      uiMessages: [
+        {
+          id: "msg-2",
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-mcp__write",
+              toolCallId: "tc-2",
+              state: "denied",
+              approval: { id: "ap-2" },
+              input: { path: "/tmp/test" },
+              errorText: "Tool execution was denied by the user.",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(changed).toHaveLength(1);
+    expect(changed[0].id).toBe("msg-2");
+  });
+
+  it("returns empty array when messages are unchanged", () => {
+    const unchangedContent = {
+      id: "msg-3",
+      role: "assistant" as const,
+      parts: [{ type: "text" as const, text: "Hello!" }],
+    };
+
+    const changed = __test.getMessagesWithChangedContent({
+      existingMessages: [
+        { id: "msg-3", content: unchangedContent },
+      ],
+      uiMessages: [
+        { id: "msg-3", role: "assistant", parts: [{ type: "text", text: "Hello!" }] },
+      ],
+    });
+
+    expect(changed).toHaveLength(0);
+  });
+
+  it("matches by content ID when message IDs were re-keyed to DB UUIDs", () => {
+    const changed = __test.getMessagesWithChangedContent({
+      existingMessages: [
+        {
+          id: "db-uuid-123",
+          content: {
+            id: "original-nanoid",
+            role: "assistant",
+            parts: [
+              {
+                type: "tool-mcp__search",
+                toolCallId: "tc-3",
+                state: "approval-requested",
+                input: {},
+              },
+            ],
+          },
+        },
+      ],
+      uiMessages: [
+        {
+          id: "original-nanoid",
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-mcp__search",
+              toolCallId: "tc-3",
+              state: "output-available",
+              input: {},
+              output: { data: "result" },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(changed).toHaveLength(1);
+  });
+});
+
 describe("extractFirstMessages", () => {
   it("extracts first user message from parts", () => {
     const messages = [

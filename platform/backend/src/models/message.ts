@@ -251,6 +251,37 @@ class MessageModel {
     }
     return await run(executor);
   }
+  /**
+   * Bulk-update message content for messages that have been modified
+   * (e.g., tool approval state changes, tool results added in-place).
+   */
+  static async bulkUpdateContent(
+    messages: Array<{ id: string; content: unknown; conversationId: string }>,
+  ): Promise<void> {
+    if (messages.length === 0) {
+      return;
+    }
+
+    await Promise.all(
+      messages.map(async (msg) => {
+        await db
+          .update(schema.messagesTable)
+          .set({
+            content: msg.content,
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.messagesTable.id, msg.id));
+      }),
+    );
+
+    // Update conversation's updatedAt for all affected conversations
+    const uniqueConversationIds = [
+      ...new Set(messages.map((m) => m.conversationId)),
+    ];
+    await Promise.all(
+      uniqueConversationIds.map((id) => MessageModel.touchConversation(id)),
+    );
+  }
 }
 
 export default MessageModel;

@@ -408,3 +408,8 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @krrish175-byte
 - @KyleReiser
 - @aminemenhane4
+- @beyondpremiere
+- @wuwjpingpongx-lang
+- @Jayant-kernel
+- @jamie950315
+- @champacked

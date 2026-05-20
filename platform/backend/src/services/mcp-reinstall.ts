@@ -447,23 +447,32 @@ function getRequiredUserConfigFields(
 }
 
 /**
- * Check if required userConfig fields changed between old and new catalog items.
- * Returns true if any required field was added, removed, or had its type changed.
+ * Check if a change to the required-userConfig-fields set needs a user
+ * re-prompt. Treats *additions* to the required set as breaking (the
+ * installer must supply a value the install didn't have) and
+ * *type changes on a still-required field* as breaking (storage moves).
+ *
+ * Removals from the required set are NOT breaking: that case is either
+ *   - a demotion (required true → false): the install already supplied a
+ *     value, and the now-optional field accepts that value, OR
+ *   - a full field deletion: the install's stored value becomes orphaned,
+ *     but the pod doesn't need the user to re-supply anything. The pod
+ *     does need to restart to stop injecting the stale value — that's
+ *     caught by `userConfigChangedBreakingly` further down the gate
+ *     chain, which routes the cascade to the auto path.
  */
 function requiredUserConfigChanged(
   oldMap: Map<string, UserConfigFieldInfo>,
   newMap: Map<string, UserConfigFieldInfo>,
 ): boolean {
-  // Check for removals or changes
   for (const [key, oldVal] of oldMap) {
     const newVal = newMap.get(key);
-    if (!newVal) return true; // Removed
-    if (newVal.type !== oldVal.type) return true; // Type changed
+    if (!newVal) continue; // Removed from required set — see comment above
+    if (newVal.type !== oldVal.type) return true; // Type changed on still-required field
   }
 
-  // Check for additions
   for (const key of newMap.keys()) {
-    if (!oldMap.has(key)) return true; // Added
+    if (!oldMap.has(key)) return true; // Added required → install must supply
   }
 
   return false;

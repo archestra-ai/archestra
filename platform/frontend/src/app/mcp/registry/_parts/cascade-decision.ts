@@ -202,11 +202,16 @@ export function promptedEnvVarsChanged(
 }
 
 /**
- * Mirror of backend `requiredUserConfigChanged`. True iff the set of
- * REQUIRED userConfig fields changed (added required, removed required,
- * type of a required field changed). Strictly stricter than
- * `userConfigChangedBreakingly` below — only the required-field deltas
- * cascade to the MANUAL path.
+ * Mirror of backend `requiredUserConfigChanged`. True iff a change to the
+ * required-userConfig-fields set needs a user re-prompt:
+ *   • added required field (install must supply a new value), OR
+ *   • type changed on a still-required field (storage moves).
+ *
+ * Removals from the required set are NOT breaking here — that case is
+ * either a demotion (required true → false: existing values still valid)
+ * or a full field deletion (caught by `userConfigChangedBreakingly`,
+ * which routes to the auto path; pod restart drops the orphaned value
+ * without re-prompting the user).
  */
 export function requiredUserConfigChanged(
   prev: CascadeSnapshot,
@@ -224,11 +229,11 @@ export function requiredUserConfigChanged(
   const nextReq = required(next.userConfig);
   for (const [k, p] of prevReq) {
     const n = nextReq.get(k);
-    if (!n) return true;
-    if (n.type !== p.type) return true;
+    if (!n) continue; // Removed from required set — see comment above
+    if (n.type !== p.type) return true; // Type changed on still-required field
   }
   for (const k of nextReq.keys()) {
-    if (!prevReq.has(k)) return true;
+    if (!prevReq.has(k)) return true; // Added required → install must supply
   }
   return false;
 }

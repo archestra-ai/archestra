@@ -228,6 +228,59 @@ describe("requiredUserConfigChanged — manual-path leaf predicate", () => {
       ),
     ).toBe(true);
   });
+  test("demoted required → optional (same field) → false (forward-compat)", () => {
+    // The existing install supplied a value when the field was required.
+    // After demotion the install's value is still valid; no re-prompt
+    // needed. (The pod doesn't need to restart for this either — the
+    // field's stored value continues to flow through.)
+    expect(
+      requiredUserConfigChanged(
+        {
+          userConfig: {
+            r1: { type: "string", required: true, headerName: "x-r1" },
+          },
+        },
+        {
+          userConfig: {
+            r1: { type: "string", required: false, headerName: "x-r1" },
+          },
+        },
+      ),
+    ).toBe(false);
+  });
+  test("entirely removed required field → false (no re-prompt; auto path catches the cleanup)", () => {
+    // Field key is gone from userConfig altogether. The user has nothing
+    // to re-supply — the field doesn't exist anymore. The install's
+    // stored value becomes orphaned, but that's an auto-path concern:
+    // `userConfigChangedBreakingly` flags the removal and the cascade
+    // restarts the pod so the orphaned value stops being injected.
+    expect(
+      requiredUserConfigChanged(
+        {
+          userConfig: {
+            r1: { type: "string", required: true, headerName: "x-r1" },
+          },
+        },
+        { userConfig: {} },
+      ),
+    ).toBe(false);
+  });
+  test("promoted optional → required → true (existing install missing it)", () => {
+    expect(
+      requiredUserConfigChanged(
+        {
+          userConfig: {
+            r1: { type: "string", required: false, headerName: "x-r1" },
+          },
+        },
+        {
+          userConfig: {
+            r1: { type: "string", required: true, headerName: "x-r1" },
+          },
+        },
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("userConfigChangedBreakingly — forward-compat leaf predicate", () => {

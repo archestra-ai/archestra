@@ -449,6 +449,16 @@ export const CASCADE_SCENARIOS: CascadeScenario[] = [
       "An installer that didn't fill the previously-optional value is now invalid. Re-prompt.",
   },
   {
+    id: "demote-header-to-optional",
+    shape: "sqlOneBagLocal",
+    userAction: "Admin flips a required header back to optional",
+    edit: modifyUserConfigField("header_x_required_token", { required: false }),
+    expected: "skip",
+    sharedPredicate: "non-metadata-diff",
+    rationale:
+      "The install already supplied a value when the header was required; that value remains valid after demotion. `requiredUserConfigChanged` deliberately does not fire on demotion (mirror of `demote-env-var-to-optional` for the header surface). No re-prompt, no pod restart.",
+  },
+  {
     id: "change-header-name",
     shape: "sqlOneBagLocal",
     userAction: "Admin changes the wire header name (e.g. x-foo → x-bar)",

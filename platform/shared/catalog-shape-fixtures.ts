@@ -203,6 +203,18 @@ export const CATALOG_SHAPES = {
         sensitive: false,
         headerName: "x-db-url",
       },
+      // A required, prompt-on-install header used by `demote-header-to-optional`
+      // to exercise the required→optional transition. Distinct field key so
+      // existing scenarios targeting `header_x_db_url` are unaffected.
+      header_x_required_token: {
+        type: "string",
+        title: "x-required-token",
+        description: "Sent as x-required-token",
+        promptOnInstallation: true,
+        required: true,
+        sensitive: false,
+        headerName: "x-required-token",
+      },
     },
     oauthConfig: null,
     enterpriseManagedConfig: null,

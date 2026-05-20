@@ -620,11 +620,48 @@ describe("mcp-reinstall", () => {
         expect(result).toBe(false);
       });
 
-      test("returns true when required userConfig field is REMOVED", () => {
+      test("returns false when required userConfig field is fully REMOVED (auto path handles cleanup)", () => {
+        // The field is gone, so there's nothing to re-prompt the user
+        // for. The install's stored value becomes orphaned and the pod
+        // needs to restart so the value stops being injected — but the
+        // restart is the auto path's job (driven by
+        // `userConfigChangedBreakingly`), not a re-prompt case.
         const oldConfig = createRemoteCatalog({
           field: { type: "string", required: true },
         });
         const newConfig = createRemoteCatalog({});
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("returns false when required userConfig field is DEMOTED to optional", () => {
+        // Existing install supplied a value when the field was required.
+        // After demotion the value is still accepted; no re-prompt
+        // needed.
+        const oldConfig = createRemoteCatalog({
+          field: { type: "string", required: true },
+        });
+        const newConfig = createRemoteCatalog({
+          field: { type: "string", required: false },
+        });
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("returns true when optional userConfig field is PROMOTED to required", () => {
+        // Existing install may have skipped the optional field; once
+        // required, the install is missing a mandatory value and the
+        // user must re-supply it.
+        const oldConfig = createRemoteCatalog({
+          field: { type: "string", required: false },
+        });
+        const newConfig = createRemoteCatalog({
+          field: { type: "string", required: true },
+        });
 
         const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
 

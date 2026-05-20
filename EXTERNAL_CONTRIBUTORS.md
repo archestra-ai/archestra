@@ -420,3 +420,6 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @krapcys1-maker
 - @jsoref
 - @paulhshort
+- @Misch369
+- @amittbhardwj
+- @asim48-ctrl

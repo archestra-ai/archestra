@@ -883,6 +883,92 @@ describe("mcp-reinstall", () => {
       );
     });
 
+    test("static header `default` value change returns false (pod restart needed, auto path)", () => {
+      // `userConfigChangedBreakingly` would naively skip a `default`
+      // change as cosmetic, but for a static header-mapped userConfig
+      // entry (no install/preset prompt) `default` IS the actual runtime
+      // header value the form writes from the admin's input. A change
+      // there must route through the auto path so pods restart and pick
+      // up the new value — install owners don't need to re-supply
+      // anything.
+      const oldConfig = {
+        ...baseLocal([]),
+        userConfig: {
+          header_x_region: {
+            type: "string",
+            title: "x-region",
+            description: "",
+            required: false,
+            headerName: "x-region",
+            sensitive: false,
+            promptOnInstallation: false,
+            default: "us-east-1",
+          },
+        },
+      } as InternalMcpCatalog;
+      const newConfig = {
+        ...baseLocal([]),
+        userConfig: {
+          header_x_region: {
+            type: "string",
+            title: "x-region",
+            description: "",
+            required: false,
+            headerName: "x-region",
+            sensitive: false,
+            promptOnInstallation: false,
+            default: "eu-west-1",
+          },
+        },
+      } as InternalMcpCatalog;
+
+      expect(onlyForwardCompatibleEnvDiff(oldConfig, newConfig)).toBe(false);
+      // Not a re-prompt — admin provides the value, install just needs
+      // a restart to pick it up.
+      expect(requiresNewUserInputForReinstall(oldConfig, newConfig)).toBe(
+        false,
+      );
+    });
+
+    test("prompted header `default` value change returns true (placeholder text, not runtime)", () => {
+      // For a prompted header, `default` is just a placeholder shown
+      // to the user at install time — they always supply their own
+      // value. Changing the placeholder text is cosmetic and must NOT
+      // trigger a cascade.
+      const oldConfig = {
+        ...baseLocal([]),
+        userConfig: {
+          header_x_api_key: {
+            type: "string",
+            title: "x-api-key",
+            description: "",
+            required: false,
+            headerName: "x-api-key",
+            sensitive: false,
+            promptOnInstallation: true,
+            default: "your-key-here",
+          },
+        },
+      } as InternalMcpCatalog;
+      const newConfig = {
+        ...baseLocal([]),
+        userConfig: {
+          header_x_api_key: {
+            type: "string",
+            title: "x-api-key",
+            description: "",
+            required: false,
+            headerName: "x-api-key",
+            sensitive: false,
+            promptOnInstallation: true,
+            default: "your-api-key",
+          },
+        },
+      } as InternalMcpCatalog;
+
+      expect(onlyForwardCompatibleEnvDiff(oldConfig, newConfig)).toBe(true);
+    });
+
     test("snapshot-shape asymmetry (toolCount present on one side) does not over-fire", () => {
       // When the parent PUT loop cascades to children, the old snapshot
       // comes from `findChildren()` (with `attachListMetadata` adding

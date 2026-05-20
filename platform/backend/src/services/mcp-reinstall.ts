@@ -273,10 +273,23 @@ function userConfigChangedBreakingly(
     if (String(p.type ?? "") !== String(n.type ?? "")) return true; // Type changed
     if (String(p.headerName ?? "") !== String(n.headerName ?? "")) return true; // Routing changed
     if (Boolean(p.sensitive) !== Boolean(n.sensitive)) return true; // Storage moved
-    // Note: deliberately NOT checking `default`, `description`, `title`,
-    // `valuePrefix` etc. — those are cosmetic / template defaults that
-    // don't affect install validity. If a default value matters to your
-    // pod, change it via a runtime field (env value) instead.
+    // Static header value rotation. For a static header-mapped userConfig
+    // entry (no install/preset prompt), `default` IS the runtime header
+    // value the form transform writes from the admin's input — changing it
+    // changes what installs send on the wire. For prompted entries
+    // `default` is just a placeholder/template, so we still skip those.
+    if (
+      String(p.headerName ?? "") !== "" &&
+      !p.promptOnInstallation &&
+      !p.promptOnPreset &&
+      !n.promptOnInstallation &&
+      !n.promptOnPreset &&
+      String(p.default ?? "") !== String(n.default ?? "")
+    ) {
+      return true;
+    }
+    // Note: `description`, `title`, `valuePrefix` remain cosmetic — they
+    // don't change what installs send.
   }
 
   // Added required field → existing installs are missing it.

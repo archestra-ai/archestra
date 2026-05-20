@@ -145,6 +145,10 @@ export const CATALOG_SHAPES = {
         required: false,
         sensitive: false,
         headerName: "x-static-token",
+        // The form writes static header values into `default`. Having
+        // one in the baseline lets the `change-static-header-value`
+        // scenario exercise the "default rotated" path.
+        default: "initial-token-value",
       },
     },
     oauthConfig: null,

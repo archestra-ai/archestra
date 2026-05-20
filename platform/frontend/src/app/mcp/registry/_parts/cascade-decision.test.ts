@@ -452,6 +452,52 @@ describe("userConfigChangedBreakingly — forward-compat leaf predicate", () => 
       ),
     ).toBe(true);
   });
+  test("static header `default` value change → true (it's the runtime header)", () => {
+    const base = {
+      type: "string",
+      required: false,
+      headerName: "x-region",
+      sensitive: false,
+      promptOnInstallation: false,
+    };
+    expect(
+      userConfigChangedBreakingly(
+        { h1: { ...base, default: "us-east-1" } },
+        { h1: { ...base, default: "eu-west-1" } },
+      ),
+    ).toBe(true);
+  });
+  test("prompted header `default` value change → false (just a placeholder)", () => {
+    const base = {
+      type: "string",
+      required: false,
+      headerName: "x-api-key",
+      sensitive: false,
+      promptOnInstallation: true,
+    };
+    expect(
+      userConfigChangedBreakingly(
+        { h1: { ...base, default: "placeholder-a" } },
+        { h1: { ...base, default: "placeholder-b" } },
+      ),
+    ).toBe(false);
+  });
+  test("preset header `default` value change → false (value lives in the bag, not `default`)", () => {
+    const base = {
+      type: "string",
+      required: false,
+      headerName: "x-region",
+      sensitive: false,
+      promptOnInstallation: false,
+      promptOnPreset: true,
+    };
+    expect(
+      userConfigChangedBreakingly(
+        { h1: { ...base, default: "us-east-1" } },
+        { h1: { ...base, default: "eu-west-1" } },
+      ),
+    ).toBe(false);
+  });
 });
 
 // Regression: `prev` comes from the catalog API (extra fields like id,

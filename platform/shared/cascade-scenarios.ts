@@ -479,6 +479,19 @@ export const CASCADE_SCENARIOS: CascadeScenario[] = [
     rationale:
       "Header routing changed. The pod and gateway need to be in sync on which header carries the value; reinstall realigns them.",
   },
+  {
+    id: "change-static-header-value",
+    shape: "hdrprobeDockerOnly",
+    userAction:
+      "Admin edits a static header's value (no install prompt, no preset prompt)",
+    edit: modifyUserConfigField("header_x_static_token", {
+      default: "rotated-token-value",
+    }),
+    expected: "auto",
+    sharedPredicate: "non-metadata-diff",
+    rationale:
+      "For a static header-mapped userConfig entry (no install/preset prompt), the form writes the admin's value into `userConfig[field].default` — that IS the runtime header sent on the wire. Changing it means installs would keep sending the old value until pods restart. The auto path is correct (no re-prompt needed; admin already provided the value). Caught by `userConfigChangedBreakingly` on both sides. Distinct from prompted headers where `default` is just a placeholder.",
+  },
 
   // ── identity / nothing-changed sanity ─────────────────────────────
   {

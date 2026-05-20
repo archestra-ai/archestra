@@ -98,6 +98,7 @@ export function createDirectLLMModel({
     apiKey,
     modelName,
     baseURL,
+    headers: mergeProviderHeaders(cfg),
   });
 }
 
@@ -314,7 +315,18 @@ type ProviderModelConfig = {
   apiKeyRequiredMessage?: string;
   /** Path suffix appended to proxy base URL for proxied calls (e.g. "/v1" for anthropic) */
   proxiedPathSuffix?: string;
+  /** Static headers always sent to the provider (e.g. OpenRouter attribution). */
+  extraHeaders?: Record<string, string>;
 };
+
+/** Merge static provider headers with per-request headers (request headers win). */
+function mergeProviderHeaders(
+  cfg: ProviderModelConfig,
+  requestHeaders?: Record<string, string>,
+): Record<string, string> | undefined {
+  const merged = { ...cfg.extraHeaders, ...requestHeaders };
+  return Object.keys(merged).length > 0 ? merged : undefined;
+}
 
 /**
  * Unified registry of model configs for each provider.
@@ -390,6 +402,16 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
     defaultBaseUrl: config.llm.openrouter.baseUrl,
     apiKeyRequiredMessage:
       "OpenRouter API key is required. Please configure ARCHESTRA_CHAT_OPENROUTER_API_KEY.",
+    // OpenRouter attribution headers — sent on the direct path; the LLM proxy
+    // adapter sets the same headers independently for proxied calls.
+    extraHeaders: {
+      ...(config.llm.openrouter.referer
+        ? { "HTTP-Referer": config.llm.openrouter.referer }
+        : {}),
+      ...(config.llm.openrouter.title
+        ? { "X-Title": config.llm.openrouter.title }
+        : {}),
+    },
   },
 
   perplexity: {

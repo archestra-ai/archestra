@@ -85,6 +85,30 @@ export function pickBestModel<T extends { isBest?: boolean }>(
   return models.find((m) => m.isBest) ?? models[0];
 }
 
+/** Per-token USD prices for a model, as stored on the `models` table. */
+export interface ModelPricing {
+  promptPricePerToken: string | null;
+  completionPricePerToken: string | null;
+}
+
+/**
+ * A model is "free" only when both per-token prices are known and exactly zero.
+ * Null pricing means unknown, not free. Shared by the backend (auto-default) and
+ * the frontend (badge, filter).
+ */
+export function isFreeModel(model: ModelPricing): boolean {
+  if (
+    model.promptPricePerToken == null ||
+    model.completionPricePerToken == null
+  ) {
+    return false;
+  }
+  return (
+    Number(model.promptPricePerToken) === 0 &&
+    Number(model.completionPricePerToken) === 0
+  );
+}
+
 /**
  * Determine where the selected model came from, purely by comparison with the
  * configured defaults — no stored state.

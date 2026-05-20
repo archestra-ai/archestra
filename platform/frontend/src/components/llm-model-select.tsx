@@ -1,13 +1,20 @@
 "use client";
 
 import type { PopoverContentProps } from "@radix-ui/react-popover";
-import { providerDisplayNames, type SupportedProvider } from "@shared";
-import { Layers } from "lucide-react";
+import {
+  OPENROUTER_AUTO_MODEL_ID,
+  OPENROUTER_FREE_MODEL_ID,
+  providerDisplayNames,
+  type SupportedProvider,
+} from "@shared";
+import { Layers, RefreshCw, Sparkles } from "lucide-react";
 import Image from "next/image";
-import type { ReactNode } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { SearchableMultiSelect } from "@/components/searchable-multi-select";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
 const PROVIDER_LOGO_NAME: Record<SupportedProvider, string> = {
@@ -38,7 +45,57 @@ export type LlmModelSelectOption = {
   pricePerMillionInput?: string | null;
   pricePerMillionOutput?: string | null;
   badge?: ReactNode;
+  /** Provider charges nothing for this model — rendered with a green "Free" badge. */
+  isFree?: boolean;
+  /** Provider's lowest-latency model — rendered with a "Fastest" badge. */
+  isFastest?: boolean;
 };
+
+/** Renders the Free Router / Free / Latest / Fastest / custom badges shared across the option views. */
+function ModelBadges({ option }: { option: LlmModelSelectOption }) {
+  const isFreeRouter = option.model === OPENROUTER_FREE_MODEL_ID;
+  // OpenRouter "~...-latest" ids are aliases that always point at the newest
+  // model in a family — the badge tells users the selection auto-updates.
+  const isLatestAlias =
+    option.provider === "openrouter" && option.model.startsWith("~");
+  return (
+    <>
+      {isFreeRouter && (
+        <Badge
+          variant="outline"
+          className="shrink-0 gap-1 text-xs border-green-300 bg-green-100 text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-300"
+        >
+          <Sparkles className="h-3 w-3" />
+          Free Router
+        </Badge>
+      )}
+      {option.isFree && !isFreeRouter && (
+        <Badge
+          variant="outline"
+          className="shrink-0 text-xs border-green-300 bg-green-100 text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-300"
+        >
+          Free
+        </Badge>
+      )}
+      {isLatestAlias && (
+        <Badge variant="outline" className="shrink-0 gap-1 text-xs">
+          <RefreshCw className="h-3 w-3" />
+          Latest
+        </Badge>
+      )}
+      {option.isFastest && (
+        <Badge variant="outline" className="shrink-0 text-xs">
+          Fastest
+        </Badge>
+      )}
+      {option.badge && (
+        <Badge variant="outline" className="shrink-0 text-xs">
+          {option.badge}
+        </Badge>
+      )}
+    </>
+  );
+}
 
 export function LlmModelOptionLabel({
   option,
@@ -67,11 +124,7 @@ export function LlmModelOptionLabel({
           >
             {option.model}
           </span>
-          {option.badge && (
-            <Badge variant="outline" className="shrink-0 text-xs">
-              {option.badge}
-            </Badge>
-          )}
+          <ModelBadges option={option} />
         </div>
         {showPricing && (
           <div className="truncate text-xs text-muted-foreground">
@@ -106,11 +159,7 @@ function LlmModelSelectedValue({
           className="shrink-0 rounded dark:invert"
         />
         <span className="truncate">{option.model}</span>
-        {option.badge && (
-          <Badge variant="outline" className="shrink-0 text-xs">
-            {option.badge}
-          </Badge>
-        )}
+        <ModelBadges option={option} />
       </div>
     );
   }
@@ -127,11 +176,7 @@ function LlmModelSelectedValue({
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           <span className="truncate">{option.model}</span>
-          {option.badge && (
-            <Badge variant="outline" className="shrink-0 text-xs">
-              {option.badge}
-            </Badge>
-          )}
+          <ModelBadges option={option} />
         </div>
         {showPricing && (
           <div className="truncate text-xs text-muted-foreground">
@@ -175,6 +220,8 @@ type SharedProps = {
   popoverSide?: PopoverContentProps["side"];
   popoverAlign?: PopoverContentProps["align"];
   popoverAvoidCollisions?: PopoverContentProps["avoidCollisions"];
+  /** Show a "Free only" toggle that filters the list to zero-cost models. */
+  freeFilterable?: boolean;
 };
 
 type SingleSelectProps = SharedProps & {
@@ -213,56 +260,66 @@ export function LlmModelSearchableSelect(props: LlmModelSearchableSelectProps) {
     popoverSide,
     popoverAlign,
     popoverAvoidCollisions,
+    freeFilterable = false,
   } = props;
 
-  if (props.multiple) {
-    return (
-      <SearchableMultiSelect
-        value={props.value}
-        onValueChange={props.onValueChange}
-        placeholder={placeholder}
-        searchPlaceholder={searchPlaceholder}
-        disabled={disabled}
-        className={cn("w-full", className)}
-        emptyMessage={emptyMessage}
-        contentClassName={popoverContentClassName}
-        listClassName={popoverListClassName}
-        contentSide={popoverSide}
-        contentAlign={popoverAlign}
-        contentAvoidCollisions={popoverAvoidCollisions}
-        maxSelected={props.maxSelected}
-        maxBadgeDisplay={props.maxBadgeDisplay}
-        items={[
-          ...(includeAllOption
-            ? [
-                {
-                  value: "all",
-                  label: allLabel,
-                  searchText: allLabel,
-                  content: <AllModelsOptionLabel label={allLabel} />,
-                  selectedContent: <AllModelsSelectedBadge label={allLabel} />,
-                },
-              ]
-            : []),
-          ...options.map((option) => ({
-            value: option.value,
-            label: option.model,
-            searchText: `${providerDisplayNames[option.provider]} ${option.model}`,
-            content: (
-              <LlmModelOptionLabel
-                option={option}
-                showPricing={showPricing}
-                truncateModelName={truncateOptionLabels}
-              />
-            ),
-            selectedContent: <LlmModelSelectedBadge option={option} />,
-          })),
-        ]}
-      />
+  const [freeOnly, setFreeOnly] = useState(false);
+  // Pin the OpenRouter routers to the top so the zero-cost on-ramp is the first
+  // thing users see; everything else keeps its incoming order (stable sort).
+  const visibleOptions = useMemo(() => {
+    const filtered =
+      freeFilterable && freeOnly
+        ? options.filter((option) => option.isFree)
+        : options;
+    return [...filtered].sort(
+      (a, b) => routerSortRank(a.model) - routerSortRank(b.model),
     );
-  }
+  }, [options, freeFilterable, freeOnly]);
 
-  return (
+  const selectElement = props.multiple ? (
+    <SearchableMultiSelect
+      value={props.value}
+      onValueChange={props.onValueChange}
+      placeholder={placeholder}
+      searchPlaceholder={searchPlaceholder}
+      disabled={disabled}
+      className={cn("w-full", className)}
+      emptyMessage={emptyMessage}
+      contentClassName={popoverContentClassName}
+      listClassName={popoverListClassName}
+      contentSide={popoverSide}
+      contentAlign={popoverAlign}
+      contentAvoidCollisions={popoverAvoidCollisions}
+      maxSelected={props.maxSelected}
+      maxBadgeDisplay={props.maxBadgeDisplay}
+      items={[
+        ...(includeAllOption
+          ? [
+              {
+                value: "all",
+                label: allLabel,
+                searchText: allLabel,
+                content: <AllModelsOptionLabel label={allLabel} />,
+                selectedContent: <AllModelsSelectedBadge label={allLabel} />,
+              },
+            ]
+          : []),
+        ...visibleOptions.map((option) => ({
+          value: option.value,
+          label: option.model,
+          searchText: `${providerDisplayNames[option.provider]} ${option.model}`,
+          content: (
+            <LlmModelOptionLabel
+              option={option}
+              showPricing={showPricing}
+              truncateModelName={truncateOptionLabels}
+            />
+          ),
+          selectedContent: <LlmModelSelectedBadge option={option} />,
+        })),
+      ]}
+    />
+  ) : (
     <SearchableSelect
       value={props.value}
       onValueChange={props.onValueChange}
@@ -290,7 +347,7 @@ export function LlmModelSearchableSelect(props: LlmModelSearchableSelectProps) {
               },
             ]
           : []),
-        ...options.map((option) => ({
+        ...visibleOptions.map((option) => ({
           value: option.value,
           label: option.model,
           searchText: `${providerDisplayNames[option.provider]} ${option.model}`,
@@ -309,11 +366,56 @@ export function LlmModelSearchableSelect(props: LlmModelSearchableSelectProps) {
       ]}
     />
   );
+
+  if (!freeFilterable) {
+    return selectElement;
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <Switch
+          id="llm-model-free-only"
+          checked={freeOnly}
+          onCheckedChange={setFreeOnly}
+          disabled={disabled}
+        />
+        <Label
+          htmlFor="llm-model-free-only"
+          className="text-xs text-muted-foreground"
+        >
+          Free models only
+        </Label>
+      </div>
+      {selectElement}
+    </div>
+  );
+}
+
+/** Routers sort first (free, then auto); every other model keeps its order. */
+function routerSortRank(modelId: string): number {
+  switch (modelId) {
+    case OPENROUTER_FREE_MODEL_ID:
+      return 0;
+    case OPENROUTER_AUTO_MODEL_ID:
+      return 1;
+    default:
+      return 2;
+  }
 }
 
 function formatPricing(option: LlmModelSelectOption) {
   const input = option.pricePerMillionInput ?? "0";
   const output = option.pricePerMillionOutput ?? "0";
+  // OpenRouter's Auto Router has no fixed price — it bills at the routed
+  // model's rate. A negative price is the same "dynamic" sentinel.
+  if (
+    option.model === OPENROUTER_AUTO_MODEL_ID ||
+    Number(input) < 0 ||
+    Number(output) < 0
+  ) {
+    return "Dynamic pricing";
+  }
   return `$${input} / $${output} per 1M tokens`;
 }
 

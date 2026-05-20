@@ -162,6 +162,8 @@ export default function AgentSettingsPage() {
       value: model.dbId,
       model: model.displayName ?? model.id,
       provider: model.provider,
+      isFree: model.isFree,
+      isFastest: model.isFastest,
     }));
   }, [allModels]);
 
@@ -266,6 +268,7 @@ export default function AgentSettingsPage() {
                   value={defaultModel}
                   onValueChange={setDefaultModel}
                   options={modelItems}
+                  freeFilterable
                   placeholder={
                     !selectedApiKeyId
                       ? "Select API key first..."

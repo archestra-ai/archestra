@@ -129683,6 +129683,9 @@
                       "isFastest": {
                         "type": "boolean"
                       },
+                      "isFree": {
+                        "type": "boolean"
+                      },
                       "embeddingDimensions": {
                         "nullable": true,
                         "allOf": [
@@ -129696,7 +129699,8 @@
                       "id",
                       "dbId",
                       "displayName",
-                      "provider"
+                      "provider",
+                      "isFree"
                     ],
                     "additionalProperties": false
                   }
@@ -130394,6 +130398,9 @@
                           "models_dev",
                           "default"
                         ]
+                      },
+                      "isFree": {
+                        "type": "boolean"
                       }
                     },
                     "required": [
@@ -130422,7 +130429,8 @@
                       "pricePerMillionInput",
                       "pricePerMillionOutput",
                       "isCustomPrice",
-                      "priceSource"
+                      "priceSource",
+                      "isFree"
                     ],
                     "additionalProperties": false
                   }

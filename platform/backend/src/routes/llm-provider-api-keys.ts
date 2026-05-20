@@ -441,6 +441,25 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Failed to sync models for new API key",
           );
         }
+
+        try {
+          await modelSyncService.maybeAutoSetOrgDefaultModel({
+            organizationId,
+            apiKeyId: createdApiKey.id,
+            provider: body.provider,
+          });
+        } catch (error) {
+          // Auto-default selection is best-effort; never block key creation.
+          logger.error(
+            {
+              apiKeyId: createdApiKey.id,
+              provider: body.provider,
+              errorMessage:
+                error instanceof Error ? error.message : String(error),
+            },
+            "Failed to auto-select org default model for new API key",
+          );
+        }
       }
 
       return reply.send(createdApiKey);

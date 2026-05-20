@@ -34183,6 +34183,7 @@ export type GetLlmModelsResponses = {
         };
         isBest?: boolean;
         isFastest?: boolean;
+        isFree: boolean;
         embeddingDimensions?: EmbeddingDimensions | null;
     }>;
 };
@@ -34381,6 +34382,7 @@ export type GetModelsWithApiKeysResponses = {
         pricePerMillionOutput: string | null;
         isCustomPrice: boolean;
         priceSource: 'custom' | 'models_dev' | 'default';
+        isFree: boolean;
     }>;
 };
 

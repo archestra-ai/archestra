@@ -19,6 +19,8 @@ export type ModelPricing = Array<{
   model: string;
   pricePerMillionInput: string;
   pricePerMillionOutput: string;
+  isFree?: boolean;
+  isFastest?: boolean;
 }>;
 
 export type SortDirection = "asc" | "desc";
@@ -42,6 +44,8 @@ type SharedProps = {
   autoSelectFirst?: boolean;
   sortDirection?: SortDirection;
   includeAllOption?: boolean;
+  /** Show a "Free only" toggle in the editable searchable select. */
+  freeFilterable?: boolean;
 };
 
 type SingleSelectProps = SharedProps & {
@@ -61,8 +65,14 @@ type MultiSelectProps = SharedProps & {
 export type LlmModelPickerProps = SingleSelectProps | MultiSelectProps;
 
 export function LlmModelPicker(props: LlmModelPickerProps) {
-  const { models, editable, autoSelectFirst, sortDirection, includeAllOption } =
-    props;
+  const {
+    models,
+    editable,
+    autoSelectFirst,
+    sortDirection,
+    includeAllOption,
+    freeFilterable,
+  } = props;
 
   const sortedModels = sortDirection
     ? sortModelsByPrice(models, sortDirection)
@@ -117,6 +127,8 @@ export function LlmModelPicker(props: LlmModelPickerProps) {
     provider: price.provider as SupportedProvider,
     pricePerMillionInput: price.pricePerMillionInput,
     pricePerMillionOutput: price.pricePerMillionOutput,
+    isFree: "isFree" in price ? price.isFree : undefined,
+    isFastest: "isFastest" in price ? price.isFastest : undefined,
   }));
 
   if (!editable) {
@@ -218,6 +230,7 @@ export function LlmModelPicker(props: LlmModelPickerProps) {
         placeholder="Select target model..."
         className="w-full"
         showPricing
+        freeFilterable={freeFilterable}
       />
     );
   }
@@ -253,6 +266,7 @@ export function LlmModelPicker(props: LlmModelPickerProps) {
       placeholder="Select target models..."
       className="w-full"
       showPricing
+      freeFilterable={freeFilterable}
       maxSelected={props.maxSelected}
       maxBadgeDisplay={props.maxBadgeDisplay}
       includeAllOption={includeAllOption}

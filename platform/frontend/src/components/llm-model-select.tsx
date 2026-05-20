@@ -2,12 +2,12 @@
 
 import type { PopoverContentProps } from "@radix-ui/react-popover";
 import {
+  compareModelsForDisplay,
   OPENROUTER_AUTO_MODEL_ID,
-  OPENROUTER_FREE_MODEL_ID,
   providerDisplayNames,
   type SupportedProvider,
 } from "@shared";
-import { Layers, RefreshCw, Sparkles } from "lucide-react";
+import { Layers, Sparkles } from "lucide-react";
 import Image from "next/image";
 import { type ReactNode, useMemo, useState } from "react";
 import { SearchableMultiSelect } from "@/components/searchable-multi-select";
@@ -64,35 +64,25 @@ function modelIdOf(option: LlmModelSelectOption): string {
   return option.modelId ?? option.model;
 }
 
-/** Renders the Free Router / Free / Latest / Fastest / custom badges shared across the option views. */
+/** Renders the Free / Latest / Fastest / custom badges shared across the option views. */
 function ModelBadges({ option }: { option: LlmModelSelectOption }) {
   const id = modelIdOf(option);
-  const isFreeRouter = id === OPENROUTER_FREE_MODEL_ID;
   // OpenRouter "~...-latest" ids are aliases that always point at the newest
   // model in a family — the badge tells users the selection auto-updates.
   const isLatestAlias = option.provider === "openrouter" && id.startsWith("~");
   return (
     <>
-      {isFreeRouter && (
+      {option.isFree && (
         <Badge
           variant="outline"
           className="shrink-0 gap-1 text-xs border-green-300 bg-green-100 text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-300"
         >
           <Sparkles className="h-3 w-3" />
-          Free Router
-        </Badge>
-      )}
-      {option.isFree && !isFreeRouter && (
-        <Badge
-          variant="outline"
-          className="shrink-0 text-xs border-green-300 bg-green-100 text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-300"
-        >
           Free
         </Badge>
       )}
       {isLatestAlias && (
-        <Badge variant="outline" className="shrink-0 gap-1 text-xs">
-          <RefreshCw className="h-3 w-3" />
+        <Badge variant="outline" className="shrink-0 text-xs">
           Latest
         </Badge>
       )}
@@ -235,6 +225,11 @@ type SharedProps = {
   popoverAvoidCollisions?: PopoverContentProps["avoidCollisions"];
   /** Show a "Free only" toggle that filters the list to zero-cost models. */
   freeFilterable?: boolean;
+  /**
+   * Keep the incoming option order instead of applying the shared model
+   * ordering. Used when the caller imposes its own order (e.g. by price).
+   */
+  preserveOrder?: boolean;
 };
 
 type SingleSelectProps = SharedProps & {
@@ -274,19 +269,28 @@ export function LlmModelSearchableSelect(props: LlmModelSearchableSelectProps) {
     popoverAlign,
     popoverAvoidCollisions,
     freeFilterable = false,
+    preserveOrder = false,
   } = props;
 
   const [freeOnly, setFreeOnly] = useState(false);
-  // Order: routers first, then recommended models, then the rest in their
-  // incoming order. The sort is stable, so each consumer controls how the
-  // remaining models are arranged (e.g. alphabetically or by price).
+  // Shared ordering: routers, then recommended models, then the rest
+  // alphabetically — identical across every model picker, unless the caller
+  // imposes its own order (preserveOrder).
   const visibleOptions = useMemo(() => {
     const filtered =
       freeFilterable && freeOnly
         ? options.filter((option) => option.isFree)
         : options;
-    return [...filtered].sort((a, b) => modelSortRank(a) - modelSortRank(b));
-  }, [options, freeFilterable, freeOnly]);
+    if (preserveOrder) {
+      return filtered;
+    }
+    return [...filtered].sort((a, b) =>
+      compareModelsForDisplay(
+        { modelId: modelIdOf(a), isBest: a.isBest },
+        { modelId: modelIdOf(b), isBest: b.isBest },
+      ),
+    );
+  }, [options, freeFilterable, freeOnly, preserveOrder]);
 
   const selectElement = props.multiple ? (
     <SearchableMultiSelect
@@ -402,21 +406,6 @@ export function LlmModelSearchableSelect(props: LlmModelSearchableSelectProps) {
       {selectElement}
     </div>
   );
-}
-
-/**
- * Tiered order: free router (0), auto router (1), recommended models (2),
- * everything else (3). Within a tier the stable sort preserves input order.
- */
-function modelSortRank(option: LlmModelSelectOption): number {
-  switch (modelIdOf(option)) {
-    case OPENROUTER_FREE_MODEL_ID:
-      return 0;
-    case OPENROUTER_AUTO_MODEL_ID:
-      return 1;
-    default:
-      return option.isBest ? 2 : 3;
-  }
 }
 
 function formatPricing(option: LlmModelSelectOption) {

@@ -2,10 +2,10 @@
 
 import {
   type archestraApiTypes,
+  compareModelsForDisplay,
   INPUT_MODALITY_OPTIONS,
   type ModelInputModality,
   type ModelOutputModality,
-  OPENROUTER_FREE_MODEL_ID,
   OUTPUT_MODALITY_OPTIONS,
   SUPPORTED_EMBEDDING_DIMENSIONS,
 } from "@shared";
@@ -34,7 +34,6 @@ import {
   EmbeddingModelBadge,
   FastestModelBadge,
   FreeModelBadge,
-  FreeRouterModelBadge,
   LatestModelBadge,
   UnknownCapabilitiesBadge,
 } from "@/components/model-badges";
@@ -106,11 +105,11 @@ export default function ModelsPage() {
     } else if (modelTypeFilter === "chat") {
       result = result.filter((m) => m.embeddingDimensions === null);
     }
-    // Stable sort so rows don't jump when data refetches after edits
+    // Group by provider, then apply the shared model ordering within each
+    // group (routers, recommended, then the rest alphabetically).
     return [...result].sort(
       (a, b) =>
-        a.provider.localeCompare(b.provider) ||
-        a.modelId.localeCompare(b.modelId),
+        a.provider.localeCompare(b.provider) || compareModelsForDisplay(a, b),
     );
   }, [models, search, apiKeyFilter, modelTypeFilter]);
 
@@ -183,15 +182,13 @@ export default function ModelsPage() {
         header: "Model ID",
         cell: ({ row }) => {
           const { modelId, provider, isFree } = row.original;
-          const isFreeRouter = modelId === OPENROUTER_FREE_MODEL_ID;
           const isLatestAlias =
             provider === "openrouter" && modelId.startsWith("~");
           return (
             <div className="min-w-0 space-y-2">
               <span className="font-mono text-sm">{modelId}</span>
               <div className="mt-0.5 flex flex-wrap items-center gap-2">
-                {isFreeRouter && <FreeRouterModelBadge />}
-                {isFree && !isFreeRouter && <FreeModelBadge />}
+                {isFree && <FreeModelBadge />}
                 {isLatestAlias && <LatestModelBadge />}
                 {row.original.isFastest && <FastestModelBadge />}
                 {row.original.isBest && <BestModelBadge />}

@@ -75,11 +75,11 @@ export function LlmModelPicker(props: LlmModelPickerProps) {
     freeFilterable,
   } = props;
 
-  // With an explicit price sort, keep it; otherwise order the rest
-  // alphabetically (the select then pins routers and recommended models).
+  // `sortDirection` price-sorts for `autoSelectFirst`; the dropdown itself is
+  // ordered by the shared model ordering inside LlmModelSearchableSelect.
   const sortedModels = sortDirection
     ? sortModelsByPrice(models, sortDirection)
-    : [...models].sort((a, b) => a.model.localeCompare(b.model));
+    : models;
 
   const isSingle = !props.multiple;
   const value = isSingle ? props.value : props.value;
@@ -236,6 +236,7 @@ export function LlmModelPicker(props: LlmModelPickerProps) {
         className="w-full"
         showPricing
         freeFilterable={freeFilterable}
+        preserveOrder={sortDirection !== undefined}
       />
     );
   }
@@ -272,6 +273,7 @@ export function LlmModelPicker(props: LlmModelPickerProps) {
       className="w-full"
       showPricing
       freeFilterable={freeFilterable}
+      preserveOrder={sortDirection !== undefined}
       maxSelected={props.maxSelected}
       maxBadgeDisplay={props.maxBadgeDisplay}
       includeAllOption={includeAllOption}

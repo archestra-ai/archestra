@@ -79,7 +79,7 @@ describe("LlmModelPicker", () => {
       expect(onValueChange).toHaveBeenCalledWith("gpt-4o");
     });
 
-    it("auto-selects the first model (alphabetical) when autoSelectFirst is true", () => {
+    it("auto-selects first model when autoSelectFirst is true", () => {
       const onValueChange = vi.fn();
 
       render(
@@ -92,7 +92,7 @@ describe("LlmModelPicker", () => {
         />,
       );
 
-      expect(onValueChange).toHaveBeenCalledWith("claude-3.5-sonnet");
+      expect(onValueChange).toHaveBeenCalledWith("gpt-4o");
     });
 
     it("shows 'Add pricing' link when no models have pricing", () => {

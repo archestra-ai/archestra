@@ -103,7 +103,7 @@ describe("LlmModelSearchableSelect", () => {
     expect(screen.getByText("free-model")).toBeInTheDocument();
   });
 
-  it("renders a distinct Free Router badge for the OpenRouter free router", async () => {
+  it("renders the unified Free badge for the OpenRouter free router", async () => {
     const user = userEvent.setup();
     render(
       <LlmModelSearchableSelect
@@ -121,9 +121,7 @@ describe("LlmModelSearchableSelect", () => {
     );
 
     await user.click(screen.getByRole("combobox"));
-    expect(screen.getByText("Free Router")).toBeInTheDocument();
-    // The generic green "Free" badge is replaced, not duplicated.
-    expect(screen.queryByText("Free")).not.toBeInTheDocument();
+    expect(screen.getByText("Free")).toBeInTheDocument();
   });
 
   it("renders a Latest badge for OpenRouter ~latest aliases", async () => {
@@ -232,6 +230,6 @@ describe("LlmModelSearchableSelect", () => {
     );
 
     await user.click(screen.getByRole("combobox"));
-    expect(screen.getByText("Free Router")).toBeInTheDocument();
+    expect(screen.getByText("Free")).toBeInTheDocument();
   });
 });

@@ -14,6 +14,11 @@
  * handling to do here.
  */
 
+import {
+  OPENROUTER_AUTO_MODEL_ID,
+  OPENROUTER_FREE_MODEL_ID,
+} from "./model-constants";
+
 /** A (model, key) pair stored at one level of the resolution chain. */
 export interface ModelSelection {
   modelId: string | null | undefined;
@@ -107,6 +112,32 @@ export function isFreeModel(model: ModelPricing): boolean {
     Number(model.promptPricePerToken) === 0 &&
     Number(model.completionPricePerToken) === 0
   );
+}
+
+/** A model as it appears in a selection list, for display ordering. */
+export interface DisplayOrderModel {
+  modelId: string;
+  isBest?: boolean | null;
+}
+
+/**
+ * Comparator for ordering models in selection UIs. Shared so every picker —
+ * chat selector, settings selects, the models management table — lists models
+ * identically: routers first (free, then auto), then provider-recommended
+ * models, then the rest, each tier sorted alphabetically by model id.
+ */
+export function compareModelsForDisplay(
+  a: DisplayOrderModel,
+  b: DisplayOrderModel,
+): number {
+  const rankDiff = displayOrderRank(a) - displayOrderRank(b);
+  return rankDiff !== 0 ? rankDiff : a.modelId.localeCompare(b.modelId);
+}
+
+function displayOrderRank(model: DisplayOrderModel): number {
+  if (model.modelId === OPENROUTER_FREE_MODEL_ID) return 0;
+  if (model.modelId === OPENROUTER_AUTO_MODEL_ID) return 1;
+  return model.isBest ? 2 : 3;
 }
 
 /**

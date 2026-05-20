@@ -1,5 +1,11 @@
 import { describe, expect, test } from "vitest";
 import {
+  OPENROUTER_AUTO_MODEL_ID,
+  OPENROUTER_FREE_MODEL_ID,
+} from "./model-constants";
+import {
+  compareModelsForDisplay,
+  type DisplayOrderModel,
   deriveModelSource,
   isFreeModel,
   type ModelSelection,
@@ -246,5 +252,28 @@ describe("isFreeModel", () => {
     expect(
       isFreeModel({ promptPricePerToken: null, completionPricePerToken: "0" }),
     ).toBe(false);
+  });
+});
+
+describe("compareModelsForDisplay", () => {
+  test("orders routers, then recommended, then the rest alphabetically", () => {
+    const models: DisplayOrderModel[] = [
+      { modelId: "zzz/model" },
+      { modelId: "aaa/model" },
+      { modelId: OPENROUTER_AUTO_MODEL_ID },
+      { modelId: "openai/gpt-5.5", isBest: true },
+      { modelId: OPENROUTER_FREE_MODEL_ID },
+      { modelId: "anthropic/claude", isBest: true },
+    ];
+    expect(
+      [...models].sort(compareModelsForDisplay).map((m) => m.modelId),
+    ).toEqual([
+      OPENROUTER_FREE_MODEL_ID,
+      OPENROUTER_AUTO_MODEL_ID,
+      "anthropic/claude",
+      "openai/gpt-5.5",
+      "aaa/model",
+      "zzz/model",
+    ]);
   });
 });

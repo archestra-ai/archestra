@@ -158,17 +158,15 @@ export default function AgentSettingsPage() {
 
   const modelItems = useMemo(() => {
     if (!allModels) return [];
-    return allModels
-      .map((model) => ({
-        value: model.dbId,
-        model: model.displayName ?? model.id,
-        modelId: model.id,
-        provider: model.provider,
-        isFree: model.isFree,
-        isFastest: model.isFastest,
-        isBest: model.isBest,
-      }))
-      .sort((a, b) => a.model.localeCompare(b.model));
+    return allModels.map((model) => ({
+      value: model.dbId,
+      model: model.displayName ?? model.id,
+      modelId: model.id,
+      provider: model.provider,
+      isFree: model.isFree,
+      isFastest: model.isFastest,
+      isBest: model.isBest,
+    }));
   }, [allModels]);
 
   const selectedApiKey = useMemo(

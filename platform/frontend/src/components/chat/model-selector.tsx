@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  compareModelsForDisplay,
   E2eTestId,
   type ModelInputModality,
   providerDisplayNames,
@@ -34,7 +35,11 @@ import {
   ModelSelectorTrigger,
 } from "@/components/ai-elements/model-selector";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
-import { UnknownCapabilitiesBadge } from "@/components/model-badges";
+import {
+  FreeModelBadge,
+  LatestModelBadge,
+  UnknownCapabilitiesBadge,
+} from "@/components/model-badges";
 import { Button } from "@/components/ui/button";
 import { DialogClose } from "@/components/ui/dialog";
 import { Toggle } from "@/components/ui/toggle";
@@ -143,6 +148,19 @@ function parseModelValue(
     provider: value.substring(0, colonIndex) as SupportedProvider,
     modelId: value.substring(colonIndex + 1),
   };
+}
+
+/** Shared model ordering (routers, recommended, then the rest alphabetically). */
+function compareLlmModels(a: LlmModel, b: LlmModel): number {
+  return compareModelsForDisplay(
+    { modelId: a.id, isBest: a.isBest },
+    { modelId: b.id, isBest: b.isBest },
+  );
+}
+
+/** True for OpenRouter "~...-latest" aliases that always track the newest model. */
+function isLatestAliasModel(provider: SupportedProvider, modelId: string) {
+  return provider === "openrouter" && modelId.startsWith("~");
 }
 
 /**
@@ -839,51 +857,57 @@ export function ModelSelector({
                 key={provider}
                 heading={providerDisplayNames[provider]}
               >
-                {filteredModelsByProvider[provider]?.map((model) => {
-                  // Use provider:modelId format for unique keys/values
-                  // This prevents issues when different providers have models with the same ID
-                  const modelValue = createModelValue(provider, model.dbId);
-                  return (
-                    <ModelSelectorItem
-                      key={modelValue}
-                      value={modelValue}
-                      onSelect={() => handleSelectModel(modelValue)}
-                      className="group"
-                    >
-                      <ModelSelectorLogo
-                        provider={providerToLogoProvider[provider]}
-                      />
-                      <ModelSelectorName>
-                        {model.displayName}{" "}
-                        <span className="text-xs text-muted-foreground font-mono">
-                          ({model.id})
-                        </span>
-                        <CopyModelIdButton modelId={model.id} />
-                      </ModelSelectorName>
-                      <div className="ml-auto flex items-center gap-2">
-                        <ModelCapabilityBadges
-                          capabilities={model.capabilities}
+                {[...(filteredModelsByProvider[provider] ?? [])]
+                  .sort(compareLlmModels)
+                  .map((model) => {
+                    // Use provider:modelId format for unique keys/values
+                    // This prevents issues when different providers have models with the same ID
+                    const modelValue = createModelValue(provider, model.dbId);
+                    return (
+                      <ModelSelectorItem
+                        key={modelValue}
+                        value={modelValue}
+                        onSelect={() => handleSelectModel(modelValue)}
+                        className="group"
+                      >
+                        <ModelSelectorLogo
+                          provider={providerToLogoProvider[provider]}
                         />
-                        <ContextLengthIndicator
-                          contextLength={model.capabilities?.contextLength}
-                        />
-                        <PricingIndicator
-                          pricePerMillionInput={
-                            model.capabilities?.pricePerMillionInput
-                          }
-                          pricePerMillionOutput={
-                            model.capabilities?.pricePerMillionOutput
-                          }
-                        />
-                        {selectedModel === model.dbId ? (
-                          <CheckIcon className="size-4" />
-                        ) : (
-                          <div className="size-4" />
+                        <ModelSelectorName>
+                          {model.displayName}{" "}
+                          <span className="text-xs text-muted-foreground font-mono">
+                            ({model.id})
+                          </span>
+                          <CopyModelIdButton modelId={model.id} />
+                        </ModelSelectorName>
+                        {model.isFree && <FreeModelBadge />}
+                        {isLatestAliasModel(provider, model.id) && (
+                          <LatestModelBadge />
                         )}
-                      </div>
-                    </ModelSelectorItem>
-                  );
-                })}
+                        <div className="ml-auto flex items-center gap-2">
+                          <ModelCapabilityBadges
+                            capabilities={model.capabilities}
+                          />
+                          <ContextLengthIndicator
+                            contextLength={model.capabilities?.contextLength}
+                          />
+                          <PricingIndicator
+                            pricePerMillionInput={
+                              model.capabilities?.pricePerMillionInput
+                            }
+                            pricePerMillionOutput={
+                              model.capabilities?.pricePerMillionOutput
+                            }
+                          />
+                          {selectedModel === model.dbId ? (
+                            <CheckIcon className="size-4" />
+                          ) : (
+                            <div className="size-4" />
+                          )}
+                        </div>
+                      </ModelSelectorItem>
+                    );
+                  })}
               </ModelSelectorGroup>
             ))}
           </ModelSelectorList>

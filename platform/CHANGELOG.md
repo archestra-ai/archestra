@@ -490,7 +490,7 @@
 
 ### Features
 
-* OpenAI Complations - Bedrock converse compat layer ([#3996](https://github.com/archestra-ai/archestra/issues/3996)) ([6ea9c8a](https://github.com/archestra-ai/archestra/commit/6ea9c8ac28977ac14a167f4622082f6c91a9306a))
+* OpenAI Completions - Bedrock converse compat layer ([#3996](https://github.com/archestra-ai/archestra/issues/3996)) ([6ea9c8a](https://github.com/archestra-ai/archestra/commit/6ea9c8ac28977ac14a167f4622082f6c91a9306a))
 * unified connect page ([#3980](https://github.com/archestra-ai/archestra/issues/3980)) ([f198391](https://github.com/archestra-ai/archestra/commit/f19839101bef8bbf339eef6df89d8184ed34408a))
 
 

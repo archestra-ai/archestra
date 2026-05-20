@@ -120,4 +120,115 @@ describe("fetchOpenrouterModels", () => {
     );
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
+
+  test("captures pricing, context length and tool calling from /models", async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            data: [
+              {
+                id: "openai/gpt-4o-mini",
+                name: "GPT-4o mini",
+                context_length: 128000,
+                pricing: { prompt: "0.00000015", completion: "0.0000006" },
+                supported_parameters: ["tools", "tool_choice", "max_tokens"],
+              },
+            ],
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ data: [] }),
+      });
+
+    const [model] = await fetchOpenrouterModels("test-api-key");
+
+    expect(model.displayName).toBe("GPT-4o mini");
+    expect(model.capabilities).toEqual({
+      contextLength: 128000,
+      supportsToolCalling: true,
+      promptPricePerToken: "0.00000015",
+      completionPricePerToken: "0.0000006",
+    });
+  });
+
+  test("marks :free models as zero-priced and detects missing tool calling", async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            data: [
+              {
+                id: "deepseek/deepseek-chat-v3.1:free",
+                context_length: 64000,
+                pricing: { prompt: "0", completion: "0" },
+                supported_parameters: ["max_tokens"],
+              },
+            ],
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ data: [] }),
+      });
+
+    const [model] = await fetchOpenrouterModels("test-api-key");
+
+    expect(model.capabilities).toEqual({
+      contextLength: 64000,
+      supportsToolCalling: false,
+      promptPricePerToken: "0",
+      completionPricePerToken: "0",
+    });
+  });
+
+  test("normalizes negative dynamic-router pricing to unknown", async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            data: [
+              {
+                id: "openrouter/auto",
+                context_length: 2000000,
+                pricing: { prompt: "-1", completion: "-1" },
+                supported_parameters: ["tools"],
+              },
+            ],
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ data: [] }),
+      });
+
+    const [model] = await fetchOpenrouterModels("test-api-key");
+
+    expect(model.capabilities).toEqual({
+      contextLength: 2000000,
+      supportsToolCalling: true,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+    });
+  });
+
+  test("leaves capabilities undefined when /models carries no metadata", async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ data: [{ id: "openrouter/auto" }] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ data: [] }),
+      });
+
+    const [model] = await fetchOpenrouterModels("test-api-key");
+
+    expect(model.capabilities).toBeUndefined();
+  });
 });

@@ -1,5 +1,5 @@
 {
-  "id": "d18413b6-4d10-4856-87d7-0a4a0fb46a77",
+  "id": "7007e1f4-802b-409a-b289-ce18a049d756",
   "prevId": "78bedb87-c35b-47d5-a1ba-80f1474b386a",
   "version": "7",
   "dialect": "postgresql",
@@ -5437,6 +5437,12 @@
           "notNull": true,
           "default": 0
         },
+        "validation_regex": {
+          "name": "validation_regex",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -7405,13 +7411,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
-        },
-        "skill_tools_enabled": {
-          "name": "skill_tools_enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         }
       },
       "indexes": {},
@@ -7935,268 +7934,6 @@
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.skill_files": {
-      "name": "skill_files",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "skill_id": {
-          "name": "skill_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "path": {
-          "name": "path",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "content": {
-          "name": "content",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "encoding": {
-          "name": "encoding",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'utf8'"
-        },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "skill_files_skill_id_idx": {
-          "name": "skill_files_skill_id_idx",
-          "columns": [
-            {
-              "expression": "skill_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "skill_files_skill_path_idx": {
-          "name": "skill_files_skill_path_idx",
-          "columns": [
-            {
-              "expression": "skill_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "path",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "skill_files_skill_id_skills_id_fk": {
-          "name": "skill_files_skill_id_skills_id_fk",
-          "tableFrom": "skill_files",
-          "tableTo": "skills",
-          "columnsFrom": [
-            "skill_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.skills": {
-      "name": "skills",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "author_id": {
-          "name": "author_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "content": {
-          "name": "content",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "license": {
-          "name": "license",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "compatibility": {
-          "name": "compatibility",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "metadata": {
-          "name": "metadata",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::jsonb"
-        },
-        "source_type": {
-          "name": "source_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'manual'"
-        },
-        "source_ref": {
-          "name": "source_ref",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "source_commit": {
-          "name": "source_commit",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "skills_organization_id_idx": {
-          "name": "skills_organization_id_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "skills_org_name_idx": {
-          "name": "skills_org_name_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "name",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "skills_author_id_user_id_fk": {
-          "name": "skills_author_id_user_id_fk",
-          "tableFrom": "skills",
-          "tableTo": "user",
-          "columnsFrom": [
-            "author_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

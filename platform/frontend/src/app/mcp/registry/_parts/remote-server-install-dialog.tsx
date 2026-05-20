@@ -23,10 +23,15 @@ import {
 } from "@/components/ui/select";
 import { useFeature } from "@/lib/config/config.query";
 import { useCatalogPresets } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpPresetEntries } from "@/lib/mcp/mcp-preset-entry.query";
+import { usePresetEntityName } from "@/lib/organization.query";
 import { useTeamsWithVaultFolders } from "@/lib/teams/team.query";
 import { InstallPresetPicker } from "./install-preset-picker";
 import { FillPresetFieldsStep } from "./preset-fallback-fields";
-import { presetHasUnfilledFields } from "./preset-helpers";
+import {
+  compileValidationRegex,
+  presetHasUnfilledFields,
+} from "./preset-helpers";
 import {
   type McpServerInstallScope,
   SelectMcpServerCredentialTypeAndTeams,
@@ -117,7 +122,23 @@ export function RemoteServerInstallDialog({
     preselectedCatalogId ?? catalogItem?.id ?? "",
   );
   const { data: presets = [] } = useCatalogPresets(catalogItem?.id ?? null);
+  const { data: presetEntries = [] } = useMcpPresetEntries();
+  const { singular, defaultValidationRegex } = usePresetEntityName();
   const hasPresets = presets.length > 0;
+
+  // Compile the regex once per selected preset. Uses the preset entry's
+  // regex for child installs; for the implicit default row (no entry) falls
+  // back to the org-wide default validation regex.
+  const selectedChild =
+    catalogItem && selectedCatalogId && selectedCatalogId !== catalogItem.id
+      ? presets.find((p) => p.id === selectedCatalogId)
+      : null;
+  const presetValidationRegex = (() => {
+    const entryId = selectedChild?.presetEntryId ?? null;
+    if (!entryId) return compileValidationRegex(defaultValidationRegex);
+    const entry = presetEntries.find((e) => e.id === entryId);
+    return compileValidationRegex(entry?.validationRegex);
+  })();
 
   // Step 1 ("fill-preset") asks the caller to fill in any preset-scoped fields
   // the selected preset doesn't have values for, persists them onto the preset
@@ -311,7 +332,34 @@ export function RemoteServerInstallDialog({
         configValues[fieldName]?.trim(),
       );
 
-  const isValid = !hasConfig || (isNonSensitiveValid && isSensitiveValid);
+  // Run the preset regex against every prompted-string user field. Skips
+  // numbers, booleans, empty values, and BYOS vault-backed sensitive fields
+  // (whose value isn't a free-text string).
+  const fieldRegexErrors: Record<string, string | null> = {};
+  if (presetValidationRegex) {
+    for (const [fieldName, fieldConfig] of Object.entries(
+      promptableUserConfig,
+    )) {
+      if (
+        fieldConfig.type !== "string" &&
+        fieldConfig.type !== "directory" &&
+        fieldConfig.type !== "file"
+      ) {
+        continue;
+      }
+      if (useVaultSecrets && fieldConfig.sensitive) continue;
+      const v = configValues[fieldName] ?? "";
+      if (!v) continue;
+      fieldRegexErrors[fieldName] = presetValidationRegex.test(v)
+        ? null
+        : `Value does not match the ${singular} Validation Rule`;
+    }
+  }
+  const hasRegexErrors = Object.values(fieldRegexErrors).some((e) => !!e);
+
+  const isValid =
+    (!hasConfig || (isNonSensitiveValid && isSensitiveValid)) &&
+    !hasRegexErrors;
 
   if (step === "fill-preset") {
     return (
@@ -536,28 +584,39 @@ export function RemoteServerInstallDialog({
                     />
                   </Suspense>
                 ) : (
-                  <Input
-                    id={fieldName}
-                    type={
-                      fieldConfig.sensitive
-                        ? "password"
-                        : fieldConfig.type === "number"
-                          ? "number"
-                          : "text"
-                    }
-                    placeholder={
-                      fieldConfig.default?.toString() || fieldConfig.description
-                    }
-                    value={configValues[fieldName] || ""}
-                    onChange={(e) =>
-                      setConfigValues((prev) => ({
-                        ...prev,
-                        [fieldName]: e.target.value,
-                      }))
-                    }
-                    min={fieldConfig.min}
-                    max={fieldConfig.max}
-                  />
+                  <>
+                    <Input
+                      id={fieldName}
+                      type={
+                        fieldConfig.sensitive
+                          ? "password"
+                          : fieldConfig.type === "number"
+                            ? "number"
+                            : "text"
+                      }
+                      placeholder={
+                        fieldConfig.default?.toString() ||
+                        fieldConfig.description
+                      }
+                      value={configValues[fieldName] || ""}
+                      onChange={(e) =>
+                        setConfigValues((prev) => ({
+                          ...prev,
+                          [fieldName]: e.target.value,
+                        }))
+                      }
+                      min={fieldConfig.min}
+                      max={fieldConfig.max}
+                      aria-invalid={
+                        fieldRegexErrors[fieldName] ? true : undefined
+                      }
+                    />
+                    {fieldRegexErrors[fieldName] && (
+                      <p className="text-xs text-destructive">
+                        {fieldRegexErrors[fieldName]}
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
             ),

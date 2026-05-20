@@ -9,6 +9,7 @@ import {
   DeleteObjectResponseSchema,
   McpPresetEntryWithAssignedCountSchema,
   SelectMcpPresetEntrySchema,
+  UpdateMcpPresetEntrySchema,
   UuidIdSchema,
 } from "@/types";
 
@@ -55,7 +56,34 @@ const mcpPresetEntryRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const entry = await McpPresetEntryModel.create({
         organizationId,
         name: body.name,
+        validationRegex: body.validationRegex ?? null,
       });
+      return reply.send(entry);
+    },
+  );
+
+  fastify.patch(
+    "/api/organization/mcp-preset-entries/:id",
+    {
+      schema: {
+        operationId: RouteId.UpdateMcpPresetEntry,
+        description:
+          "Update a preset entry's validation regex. Name is immutable.",
+        tags: ["Organization"],
+        params: z.object({ id: UuidIdSchema }),
+        body: UpdateMcpPresetEntrySchema,
+        response: constructResponseSchema(SelectMcpPresetEntrySchema),
+      },
+    },
+    async ({ organizationId, params, body }, reply) => {
+      const entry = await McpPresetEntryModel.update({
+        id: params.id,
+        organizationId,
+        validationRegex: body.validationRegex,
+      });
+      if (!entry) {
+        throw new ApiError(404, "Preset entry not found");
+      }
       return reply.send(entry);
     },
   );

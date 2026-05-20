@@ -190,6 +190,32 @@ describe("ConversationSearchPalette", () => {
     expect(screen.getByText("Second conversation")).toBeInTheDocument();
   });
 
+  it("does not show the recent chats empty state in the full search palette", () => {
+    mockUseConversations.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isFetching: false,
+    });
+
+    render(<ConversationSearchPalette {...defaultProps} />);
+
+    expect(screen.getByText("New chat")).toBeInTheDocument();
+    expect(screen.getByText("Pages")).toBeInTheDocument();
+    expect(screen.queryByText("No recent chats")).not.toBeInTheDocument();
+  });
+
+  it("shows the recent chats empty state in recent chats view", () => {
+    mockUseConversations.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isFetching: false,
+    });
+
+    render(<ConversationSearchPalette {...defaultProps} recentChatsView />);
+
+    expect(screen.getByText("No recent chats")).toBeInTheDocument();
+  });
+
   it("redirects to /chat when deleting the currently viewed conversation", () => {
     mockUsePathname.mockReturnValue("/chat/conv-1");
 

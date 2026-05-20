@@ -499,6 +499,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateInternalMcpCatalogItem]: {
     mcpRegistry: ["update"],
   },
+  [RouteId.ReinstallInternalMcpCatalogItem]: {
+    mcpRegistry: ["update"],
+  },
   [RouteId.DeleteInternalMcpCatalogItem]: {
     mcpRegistry: ["delete"],
   },
@@ -691,6 +694,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteChatConversation]: {
     chat: ["delete"],
   },
+  [RouteId.CompactChatConversation]: {
+    chat: ["update"],
+  },
   [RouteId.GenerateChatConversationTitle]: {
     chat: ["update"],
   },
@@ -852,10 +858,16 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdatePresetEntityDefaultLabel]: {
     mcpServerInstallation: ["admin"],
   },
+  [RouteId.UpdatePresetEntityDefaultValidationRegex]: {
+    mcpServerInstallation: ["admin"],
+  },
   [RouteId.ListMcpPresetEntries]: {
     mcpRegistry: ["read"],
   },
   [RouteId.CreateMcpPresetEntry]: {
+    mcpServerInstallation: ["admin"],
+  },
+  [RouteId.UpdateMcpPresetEntry]: {
     mcpServerInstallation: ["admin"],
   },
   [RouteId.DeleteMcpPresetEntry]: {
@@ -922,8 +934,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetUserPermissions]: {}, // User permissions route - available to all authenticated users (no specific permissions required)
   [RouteId.GetImpersonableUsers]: { member: ["update"] }, // Role debugger picker — admin-only (better-auth still gates the actual impersonate-user call)
 
-  // Member default agent routes - available to all authenticated users (manages their own default agent)
+  // Member default routes - available to all authenticated users (manages their own defaults)
   [RouteId.GetMemberDefaultAgent]: {},
+  [RouteId.GetMemberDefaultModel]: {},
+  [RouteId.UpdateMemberDefaultModel]: {},
 
   // User token routes - available to all authenticated users (manages their own personal token)
   [RouteId.GetUserToken]: {},

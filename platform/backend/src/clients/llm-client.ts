@@ -33,6 +33,7 @@ import {
   isBedrockIamAuthEnabled,
 } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
 import config from "@/config";
 import logger from "@/logging";
 import { ApiError } from "@/types";
@@ -53,55 +54,6 @@ const KEYLESS_PROVIDER_API_KEY_PLACEHOLDER = "EMPTY";
  * Type representing a model that can be passed to streamText/generateText
  */
 export type LLMModel = Parameters<typeof streamText>[0]["model"];
-
-/**
- * @deprecated DO NOT USE THIS FUNCTION FOR NEW CODE.
- * Detect which provider a model belongs to based on its name
- * It's a recommended to rely on explicit provider selection whenever possible,
- * Since same models could be served by different providers.
- * Currently it exists for backward compatibility.
- *
- * Note: vLLM and Ollama can serve any model, so they cannot be auto-detected by model name.
- * Users must explicitly select vLLM or Ollama as the provider.
- */
-export function detectProviderFromModel(model: string): SupportedProvider {
-  const lowerModel = model.toLowerCase();
-
-  if (lowerModel.includes("claude")) {
-    return "anthropic";
-  }
-
-  if (lowerModel.includes("gemini") || lowerModel.includes("google")) {
-    return "gemini";
-  }
-
-  if (
-    lowerModel.includes("gpt") ||
-    lowerModel.includes("o1") ||
-    lowerModel.includes("o3")
-  ) {
-    return "openai";
-  }
-
-  if (lowerModel.includes("command")) {
-    return "cohere";
-  }
-  if (lowerModel.includes("glm") || lowerModel.includes("chatglm")) {
-    return "zhipuai";
-  }
-
-  if (lowerModel.includes("minimax")) {
-    return "minimax";
-  }
-
-  if (lowerModel.includes("deepseek")) {
-    return "deepseek";
-  }
-
-  // Default to anthropic for backwards compatibility
-  // Note: vLLM and Ollama cannot be auto-detected as they can serve any model
-  return "anthropic";
-}
 
 /**
  * Check if API key is required for the given provider
@@ -147,6 +99,7 @@ export function createDirectLLMModel({
     apiKey,
     modelName,
     baseURL,
+    headers: providerHeaders(cfg),
   });
 }
 
@@ -363,7 +316,18 @@ type ProviderModelConfig = {
   apiKeyRequiredMessage?: string;
   /** Path suffix appended to proxy base URL for proxied calls (e.g. "/v1" for anthropic) */
   proxiedPathSuffix?: string;
+  /** Static headers always sent to the provider (e.g. OpenRouter attribution). */
+  extraHeaders?: Record<string, string>;
 };
+
+/** Static provider headers (e.g. OpenRouter attribution), or undefined when none. */
+function providerHeaders(
+  cfg: ProviderModelConfig,
+): Record<string, string> | undefined {
+  return cfg.extraHeaders && Object.keys(cfg.extraHeaders).length > 0
+    ? cfg.extraHeaders
+    : undefined;
+}
 
 /**
  * Unified registry of model configs for each provider.
@@ -439,6 +403,7 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
     defaultBaseUrl: config.llm.openrouter.baseUrl,
     apiKeyRequiredMessage:
       "OpenRouter API key is required. Please configure ARCHESTRA_CHAT_OPENROUTER_API_KEY.",
+    extraHeaders: openRouterAttributionHeaders(),
   },
 
   perplexity: {

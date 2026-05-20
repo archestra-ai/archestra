@@ -14,6 +14,7 @@ const {
   getInternalMcpCatalogLabelValues,
   getInternalMcpCatalogTools,
   getK8sImagePullSecrets,
+  reinstallInternalMcpCatalogItem,
   resetDeploymentYaml,
   updateCatalogChild,
   updateInternalMcpCatalogItem,
@@ -110,6 +111,34 @@ export function useUpdateInternalMcpCatalogItem() {
     onError: (error) => {
       console.error("Edit error:", error);
       toast.error("Failed to update catalog item");
+    },
+  });
+}
+
+/**
+ * Reinstall the shared K8s Deployment for a multi-tenant local catalog.
+ * Recreates the pod with the current catalog spec and cascades tool sync
+ * to every install attached to the catalog. Only callable when
+ * `catalog.catalogReinstallRequired === true`.
+ */
+export function useReinstallInternalMcpCatalogItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const response = await reinstallInternalMcpCatalogItem({
+        path: { id },
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+      queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
+      toast.success("Catalog reinstalled successfully");
+    },
+    onError: (error) => {
+      console.error("Catalog reinstall error:", error);
+      toast.error("Failed to reinstall catalog");
     },
   });
 }

@@ -199,7 +199,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const apiKeysWithBestModel = apiKeys.map((key) => ({
         ...key,
-        bestModelId: bestModelsByApiKeyId.get(key.id)?.modelId ?? null,
+        bestModelId: bestModelsByApiKeyId.get(key.id)?.id ?? null,
       }));
 
       return reply.send(apiKeysWithBestModel);
@@ -439,6 +439,25 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 error instanceof Error ? error.message : String(error),
             },
             "Failed to sync models for new API key",
+          );
+        }
+
+        try {
+          await modelSyncService.maybeAutoSetOrgDefaultModel({
+            organizationId,
+            apiKeyId: createdApiKey.id,
+            provider: body.provider,
+          });
+        } catch (error) {
+          // Auto-default selection is best-effort; never block key creation.
+          logger.error(
+            {
+              apiKeyId: createdApiKey.id,
+              provider: body.provider,
+              errorMessage:
+                error instanceof Error ? error.message : String(error),
+            },
+            "Failed to auto-select org default model for new API key",
           );
         }
       }

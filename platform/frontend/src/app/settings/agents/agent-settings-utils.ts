@@ -6,14 +6,15 @@ interface ApiKey {
 }
 
 interface OrganizationData {
-  defaultLlmModel?: string | null;
-  defaultLlmProvider?: string | null;
+  /** FK to models(id) — the organization's default model. */
+  defaultModelId?: string | null;
   defaultLlmApiKeyId?: string | null;
   defaultAgentId?: string | null;
 }
 
 export interface AgentSettingsState {
   selectedApiKeyId: string;
+  /** The models.id UUID of the selected default model. */
   defaultModel: string;
   defaultAgentId: string;
 }
@@ -24,7 +25,6 @@ export function resolveInitialState(
 ): AgentSettingsState {
   let selectedApiKeyId = "";
 
-  // Prefer exact API key ID when available; fall back to provider-based lookup
   if (organization.defaultLlmApiKeyId) {
     const exactKey = apiKeys.find(
       (k) => k.id === organization.defaultLlmApiKeyId,
@@ -33,18 +33,10 @@ export function resolveInitialState(
       selectedApiKeyId = exactKey.id;
     }
   }
-  if (!selectedApiKeyId && organization.defaultLlmProvider) {
-    const matchingKey = apiKeys.find(
-      (k) => k.provider === organization.defaultLlmProvider,
-    );
-    if (matchingKey) {
-      selectedApiKeyId = matchingKey.id;
-    }
-  }
 
   return {
     selectedApiKeyId,
-    defaultModel: organization.defaultLlmModel ?? "",
+    defaultModel: organization.defaultModelId ?? "",
     defaultAgentId: organization.defaultAgentId ?? "",
   };
 }
@@ -69,7 +61,6 @@ export function detectChanges(
 export function buildSavePayload(
   localState: AgentSettingsState,
   savedState: AgentSettingsState,
-  apiKeys: ApiKey[],
 ): Record<string, unknown> {
   const { hasModelChanges, hasAgentChanges } = detectChanges(
     localState,
@@ -78,19 +69,12 @@ export function buildSavePayload(
   const payload: Record<string, unknown> = {};
 
   if (hasModelChanges) {
-    let resolvedProvider: string | null = null;
-    if (localState.defaultModel && localState.selectedApiKeyId) {
-      const key = apiKeys.find((k) => k.id === localState.selectedApiKeyId);
-      if (key) {
-        resolvedProvider = key.provider;
-      }
-    }
-    payload.defaultLlmModel = localState.defaultModel || null;
-    payload.defaultLlmProvider = resolvedProvider;
-    payload.defaultLlmApiKeyId =
-      localState.defaultModel && localState.selectedApiKeyId
-        ? localState.selectedApiKeyId
-        : null;
+    // The default model and its API key are a pair: persist both or neither.
+    const complete = Boolean(
+      localState.defaultModel && localState.selectedApiKeyId,
+    );
+    payload.defaultModelId = complete ? localState.defaultModel : null;
+    payload.defaultLlmApiKeyId = complete ? localState.selectedApiKeyId : null;
   }
 
   if (hasAgentChanges) {

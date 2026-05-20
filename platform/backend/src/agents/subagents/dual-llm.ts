@@ -1,18 +1,10 @@
 import { BUILT_IN_AGENT_IDS, type SupportedProvider } from "@shared";
 import { generateObject, generateText } from "ai";
 import { z } from "zod";
-import {
-  createDirectLLMModel,
-  detectProviderFromModel,
-} from "@/clients/llm-client";
+import { createDirectLLMModel } from "@/clients/llm-client";
 import config, { getProviderEnvApiKey } from "@/config";
 import logger from "@/logging";
-import {
-  AgentModel,
-  LlmProviderApiKeyModel,
-  LlmProviderApiKeyModelLinkModel,
-} from "@/models";
-import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import { AgentModel } from "@/models";
 import { renderSystemPrompt } from "@/templating";
 import type {
   Agent,
@@ -20,8 +12,10 @@ import type {
   DualLlmAnalysis,
   DualLlmMessage,
 } from "@/types";
-import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
-import { resolveSmartDefaultLlm } from "@/utils/llm-resolution";
+import {
+  resolveBestAvailableLlm,
+  resolveConfiguredAgentLlm,
+} from "@/utils/llm-resolution";
 
 export class DualLlmSubagent {
   private constructor(
@@ -268,45 +262,22 @@ async function resolveBuiltInAgentSelection(params: {
 }> {
   const { agent, organizationId, userId } = params;
 
-  if (agent.llmApiKeyId) {
-    const apiKey = await LlmProviderApiKeyModel.findById(agent.llmApiKeyId);
-    if (apiKey) {
-      const bestModel = await LlmProviderApiKeyModelLinkModel.getBestModel(
-        apiKey.id,
-      );
-      const secretValue = apiKey.secretId
-        ? await getSecretValueForLlmProviderApiKey(apiKey.secretId)
-        : undefined;
-
-      return {
-        provider: apiKey.provider,
-        apiKey: secretValue,
-        modelName:
-          agent.llmModel ?? bestModel?.modelId ?? config.chat.defaultModel,
-        baseUrl: apiKey.inferenceBaseUrl ?? apiKey.baseUrl,
-      };
-    }
+  // Agent's explicitly configured model/key, then the best available LLM
+  // across the org's keys.
+  const configured = await resolveConfiguredAgentLlm({
+    llmApiKeyId: agent.llmApiKeyId,
+    modelId: agent.modelId,
+  });
+  if (configured) {
+    return configured;
   }
 
-  if (agent.llmModel) {
-    const provider = detectProviderFromModel(agent.llmModel);
-    const resolvedApiKey = await resolveProviderApiKey({
-      organizationId,
-      userId,
-      provider,
-    });
-
-    return {
-      provider,
-      apiKey: resolvedApiKey.apiKey,
-      modelName: agent.llmModel,
-      baseUrl: resolvedApiKey.baseUrl,
-    };
-  }
-
-  const smartDefault = await resolveSmartDefaultLlm({ organizationId, userId });
-  if (smartDefault) {
-    return smartDefault;
+  const bestAvailable = await resolveBestAvailableLlm({
+    organizationId,
+    userId,
+  });
+  if (bestAvailable) {
+    return bestAvailable;
   }
 
   return {

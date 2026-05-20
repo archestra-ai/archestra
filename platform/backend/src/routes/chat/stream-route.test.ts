@@ -356,6 +356,51 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(errorsAfterFinish).toHaveLength(1);
   });
 
+  test("persists user message with new DB id on provider error and allows subsequent PATCH", async ({
+    expect,
+  }) => {
+    const { default: MessageModel } = await import("@/models/message");
+
+    const clientTempId = "client-temp-msg-1";
+    const messageText = "hello from provider-error test";
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: clientTempId,
+            role: "user",
+            parts: [{ type: "text", text: messageText }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+    expect(capturedInnerOnError).toBeDefined();
+
+    capturedInnerOnError?.(new Error("Upstream provider error"));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const persisted = await MessageModel.findByConversation(conversationId);
+    const userMessage = persisted.find((m) => m.role === "user");
+    expect(userMessage).toBeDefined();
+    // The persistence layer assigns a DB id distinct from the client tempId,
+    // which is what makes PATCH /api/chat/messages/:id possible later.
+    expect(userMessage?.id).not.toBe(clientTempId);
+
+    const patchResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/chat/messages/${userMessage?.id}`,
+      payload: { partIndex: 0, text: "Edited after provider error" },
+    });
+    expect(patchResponse.statusCode).toBe(200);
+  });
+
   test("passes compacted messages to streamText", async () => {
     const compactedMessages = [
       {

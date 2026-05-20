@@ -119,6 +119,42 @@ describe("POST /api/webhooks/chatops/whatsapp", () => {
     await app.close();
   });
 
+  test("acknowledges the webhook before ChatOps processing settles", async () => {
+    validateWebhookRequestMock.mockResolvedValue(true);
+    let resolveHandler: (() => void) | undefined;
+    handleIncomingMessageMock.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveHandler = resolve;
+        }),
+    );
+    const app = createFastifyInstance();
+    await app.register(chatopsRoutes);
+    const payload = {
+      entry: [{ changes: [{ field: "messages", value: { messages: [] } }] }],
+    };
+
+    const response = await app.inject({
+      headers: {
+        "content-type": "application/json",
+        "x-hub-signature-256": "sha256=test",
+      },
+      method: "POST",
+      payload: JSON.stringify(payload),
+      url: "/api/webhooks/chatops/whatsapp",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ ok: true });
+    expect(handleIncomingMessageMock).toHaveBeenCalledWith(
+      providerMock,
+      payload,
+    );
+
+    resolveHandler?.();
+    await app.close();
+  });
+
   test("invalid signature returns 400 and does not process message", async () => {
     validateWebhookRequestMock.mockResolvedValue(false);
     const app = createFastifyInstance();

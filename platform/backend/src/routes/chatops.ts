@@ -825,19 +825,19 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, "Invalid request signature");
       }
 
-      try {
+      void (async () => {
         await chatOpsManager.handleIncomingMessage(provider, request.body);
-        return reply.send({ ok: true });
-      } catch (error) {
+      })().catch((error) => {
         logger.error(
           {
             error: error instanceof Error ? error.message : String(error),
             stack: error instanceof Error ? error.stack : undefined,
           },
-          "[ChatOps] Error processing WhatsApp webhook",
+          "[ChatOps] Error processing WhatsApp webhook asynchronously",
         );
-        throw new ApiError(500, "Internal server error");
-      }
+      });
+
+      return reply.send({ ok: true });
     },
   );
 

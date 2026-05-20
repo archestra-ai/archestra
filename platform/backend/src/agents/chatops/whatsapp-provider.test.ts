@@ -186,6 +186,20 @@ describe("WhatsAppProvider.parseWebhookNotification", () => {
       null,
     );
   });
+
+  test("ignores messages for a different WhatsApp phone number", async () => {
+    const provider = createProvider();
+    const payload = makeTextWebhookPayload({
+      metadata: {
+        display_phone_number: "15550000001",
+        phone_number_id: "other-phone-number",
+      },
+    });
+
+    await expect(provider.parseWebhookNotification(payload, {})).resolves.toBe(
+      null,
+    );
+  });
 });
 
 describe("WhatsAppProvider.getUserEmail", () => {

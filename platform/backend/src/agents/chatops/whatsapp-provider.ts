@@ -129,6 +129,11 @@ class WhatsAppProvider implements ChatOpsProvider {
     const entry = parsed.entry?.[0];
     const change = entry?.changes?.find((item) => item.field === "messages");
     const value = change?.value;
+    const phoneNumberId = value?.metadata?.phone_number_id;
+    if (phoneNumberId !== this.config.phoneNumberId) {
+      return null;
+    }
+
     const message = value?.messages?.[0];
     if (!message || message.type !== "text" || !message.text?.body) {
       return null;
@@ -154,7 +159,7 @@ class WhatsAppProvider implements ChatOpsProvider {
         channelType: "im",
         displayPhoneNumber: value?.metadata?.display_phone_number,
         messageType: message.type,
-        phoneNumberId: value?.metadata?.phone_number_id,
+        phoneNumberId,
       },
       rawText: message.text.body,
       senderId,

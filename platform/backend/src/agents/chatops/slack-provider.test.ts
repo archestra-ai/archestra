@@ -1404,7 +1404,7 @@ describe("SlackProvider.notifyMissingScopes", () => {
     isThreadReply: false,
   };
 
-  test("sends notification with missing scopes list", async () => {
+  test("sends notification without scopes list", async () => {
     const provider = createProviderWithMissingScopes(["files:read"]);
 
     // Ensure cache returns undefined (not notified yet)

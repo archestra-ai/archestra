@@ -5,14 +5,19 @@ vi.mock("@/k8s/mcp-server-runtime", () => ({
   McpServerRuntimeManager: {
     restartServer: vi.fn(),
     getOrLoadDeployment: vi.fn(),
+    reinstallSharedDeployment: vi.fn(),
   },
 }));
 
 vi.mock("@/models", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/models")>();
   return {
+    InternalMcpCatalogModel: {
+      update: vi.fn(),
+    },
     McpServerModel: {
       constructServerName: original.McpServerModel.constructServerName,
+      findByCatalogId: vi.fn(),
       getToolsFromServer: vi.fn(),
       update: vi.fn(),
     },
@@ -25,14 +30,19 @@ vi.mock("@/models", async (importOriginal) => {
   };
 });
 
+vi.mock("@/websocket", () => ({
+  broadcastMcpInstallationStatus: vi.fn(),
+}));
+
 import { CASCADE_SCENARIOS, CATALOG_SHAPES, isMetadataOnlyEdit } from "@shared";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
-import { McpServerModel, ToolModel } from "@/models";
+import { InternalMcpCatalogModel, McpServerModel, ToolModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { InternalMcpCatalog, McpServer } from "@/types";
 import {
   autoReinstallServer,
   onlyForwardCompatibleEnvDiff,
+  reinstallMultitenantCatalog,
   requiresNewUserInputForReinstall,
 } from "./mcp-reinstall";
 
@@ -411,6 +421,63 @@ describe("mcp-reinstall", () => {
             serviceAccount: "custom-sa",
             environment: [],
           },
+        } as InternalMcpCatalog;
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(true);
+      });
+
+      test("returns false when docker image changes on a multi-tenant catalog (handled via catalogReinstallRequired)", () => {
+        // Multi-tenant local catalogs route execution-config drift through
+        // the catalog-level flag, not the per-install reinstall_required
+        // flag — so this branch must NOT fire for them.
+        const oldConfig = {
+          ...createLocalCatalog([]),
+          multitenant: true,
+          localConfig: {
+            command: "node",
+            arguments: ["server.js"],
+            dockerImage: "registry.example.com/mcp:1",
+            transportType: "stdio",
+            environment: [],
+          },
+        } as InternalMcpCatalog;
+        const newConfig = {
+          ...createLocalCatalog([]),
+          multitenant: true,
+          localConfig: {
+            command: "node",
+            arguments: ["server.js"],
+            dockerImage: "registry.example.com/mcp:2",
+            transportType: "stdio",
+            environment: [],
+          },
+        } as InternalMcpCatalog;
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("returns true when a prompted env var is added on a multi-tenant catalog (still install-scope)", () => {
+        // Multi-tenant gating is scoped to execution-config drift only —
+        // prompted env vars are install-scope and still need per-tenant
+        // input regardless of tenancy.
+        const oldConfig = {
+          ...createLocalCatalog([]),
+          multitenant: true,
+        } as InternalMcpCatalog;
+        const newConfig = {
+          ...createLocalCatalog([
+            {
+              key: "API_KEY",
+              type: "secret",
+              promptOnInstallation: true,
+              required: true,
+            },
+          ]),
+          multitenant: true,
         } as InternalMcpCatalog;
 
         const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
@@ -814,6 +881,92 @@ describe("mcp-reinstall", () => {
       expect(requiresNewUserInputForReinstall(oldConfig, newConfig)).toBe(
         false,
       );
+    });
+
+    test("static header `default` value change returns false (pod restart needed, auto path)", () => {
+      // `userConfigChangedBreakingly` would naively skip a `default`
+      // change as cosmetic, but for a static header-mapped userConfig
+      // entry (no install/preset prompt) `default` IS the actual runtime
+      // header value the form writes from the admin's input. A change
+      // there must route through the auto path so pods restart and pick
+      // up the new value — install owners don't need to re-supply
+      // anything.
+      const oldConfig = {
+        ...baseLocal([]),
+        userConfig: {
+          header_x_region: {
+            type: "string",
+            title: "x-region",
+            description: "",
+            required: false,
+            headerName: "x-region",
+            sensitive: false,
+            promptOnInstallation: false,
+            default: "us-east-1",
+          },
+        },
+      } as InternalMcpCatalog;
+      const newConfig = {
+        ...baseLocal([]),
+        userConfig: {
+          header_x_region: {
+            type: "string",
+            title: "x-region",
+            description: "",
+            required: false,
+            headerName: "x-region",
+            sensitive: false,
+            promptOnInstallation: false,
+            default: "eu-west-1",
+          },
+        },
+      } as InternalMcpCatalog;
+
+      expect(onlyForwardCompatibleEnvDiff(oldConfig, newConfig)).toBe(false);
+      // Not a re-prompt — admin provides the value, install just needs
+      // a restart to pick it up.
+      expect(requiresNewUserInputForReinstall(oldConfig, newConfig)).toBe(
+        false,
+      );
+    });
+
+    test("prompted header `default` value change returns true (placeholder text, not runtime)", () => {
+      // For a prompted header, `default` is just a placeholder shown
+      // to the user at install time — they always supply their own
+      // value. Changing the placeholder text is cosmetic and must NOT
+      // trigger a cascade.
+      const oldConfig = {
+        ...baseLocal([]),
+        userConfig: {
+          header_x_api_key: {
+            type: "string",
+            title: "x-api-key",
+            description: "",
+            required: false,
+            headerName: "x-api-key",
+            sensitive: false,
+            promptOnInstallation: true,
+            default: "your-key-here",
+          },
+        },
+      } as InternalMcpCatalog;
+      const newConfig = {
+        ...baseLocal([]),
+        userConfig: {
+          header_x_api_key: {
+            type: "string",
+            title: "x-api-key",
+            description: "",
+            required: false,
+            headerName: "x-api-key",
+            sensitive: false,
+            promptOnInstallation: true,
+            default: "your-api-key",
+          },
+        },
+      } as InternalMcpCatalog;
+
+      expect(onlyForwardCompatibleEnvDiff(oldConfig, newConfig)).toBe(true);
     });
 
     test("snapshot-shape asymmetry (toolCount present on one side) does not over-fire", () => {
@@ -1238,6 +1391,90 @@ describe("mcp-reinstall", () => {
       expect(McpServerModel.update).toHaveBeenCalledWith(server.id, {
         reinstallRequired: false,
       });
+    });
+  });
+
+  describe("reinstallMultitenantCatalog", () => {
+    const catalog = {
+      id: "catalog-mt",
+      name: "shared",
+      serverType: "local",
+      multitenant: true,
+      localConfig: { command: "npm", arguments: ["start"] },
+    } as InternalMcpCatalog;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    test("Phase 2 tool-sync failure flags the install for retry", async () => {
+      // Two tenants share the catalog. Pod recreate succeeds (Phase 1).
+      // Tool fetch fails for tenantB only (Phase 2). We expect tenantB to
+      // be flagged `reinstallRequired: true` so the per-install Reinstall
+      // button surfaces; otherwise the tenant is stuck with only the red
+      // error banner and no retry path.
+      const tenantA = {
+        id: "tenant-a",
+        name: "tenant-a",
+        catalogId: catalog.id,
+        serverType: "local",
+      } as McpServer;
+      const tenantB = {
+        id: "tenant-b",
+        name: "tenant-b",
+        catalogId: catalog.id,
+        serverType: "local",
+      } as McpServer;
+
+      vi.mocked(McpServerModel.findByCatalogId).mockResolvedValue([
+        tenantA,
+        tenantB,
+      ]);
+      vi.mocked(
+        McpServerRuntimeManager.reinstallSharedDeployment,
+      ).mockResolvedValue(undefined);
+      vi.mocked(McpServerModel.getToolsFromServer).mockImplementation(
+        async (server: McpServer) => {
+          if (server.id === tenantB.id) {
+            throw new Error("tool fetch boom");
+          }
+          return [];
+        },
+      );
+      vi.mocked(ToolModel.syncToolsForCatalog).mockResolvedValue({
+        created: [],
+        updated: [],
+        unchanged: [],
+        deleted: [],
+      } as never);
+      vi.mocked(McpServerModel.update).mockResolvedValue({} as McpServer);
+      vi.mocked(InternalMcpCatalogModel.update).mockResolvedValue(
+        {} as InternalMcpCatalog,
+      );
+
+      await reinstallMultitenantCatalog(catalog);
+
+      // The failing tenant must be marked for retry — this is the assertion
+      // the current code fails. Without `reinstallRequired: true`, the
+      // per-install Reinstall button stays hidden (mcp-server-card.tsx
+      // gates on this flag) and the tenant is stuck.
+      expect(McpServerModel.update).toHaveBeenCalledWith(
+        tenantB.id,
+        expect.objectContaining({
+          reinstallRequired: true,
+          localInstallationStatus: "error",
+        }),
+      );
+
+      // Sanity: the successful tenant is NOT flagged for retry.
+      const tenantACalls = vi
+        .mocked(McpServerModel.update)
+        .mock.calls.filter(([id]) => id === tenantA.id);
+      const tenantAFlaggedForRetry = tenantACalls.some(
+        ([, patch]) =>
+          (patch as { reinstallRequired?: boolean }).reinstallRequired === true,
+      );
+      expect(tenantAFlaggedForRetry).toBe(false);
     });
   });
 });

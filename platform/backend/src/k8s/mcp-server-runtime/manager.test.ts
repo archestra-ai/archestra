@@ -497,6 +497,295 @@ describe("McpServerRuntimeManager", () => {
     });
   });
 
+  describe("stopServer - multi-tenant teardown guard", () => {
+    // Sibling-aware short-circuit from PR #4288.
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      vi.resetModules();
+    });
+
+    function buildCleanupSpies() {
+      return {
+        stopDeployment: vi.fn().mockResolvedValue(undefined),
+        deleteK8sService: vi.fn().mockResolvedValue(undefined),
+        deleteK8sSecret: vi.fn().mockResolvedValue(undefined),
+        deleteDockerRegistrySecrets: vi.fn().mockResolvedValue(undefined),
+      };
+    }
+
+    test("preserves shared Deployment when another sibling install exists", async () => {
+      const mockLoadFromDefault = vi
+        .spyOn(k8s.KubeConfig.prototype, "loadFromDefault")
+        .mockImplementation(() => {});
+      const mockMakeApiClient = vi
+        .spyOn(k8s.KubeConfig.prototype, "makeApiClient")
+        .mockReturnValue({} as k8s.CoreV1Api);
+
+      const McpServerModel = (await import("@/models/mcp-server")).default;
+      const InternalMcpCatalogModel = (
+        await import("@/models/internal-mcp-catalog")
+      ).default;
+
+      const tenantAId = "server-tenant-a";
+      const tenantBId = "server-tenant-b";
+      const catalogId = "shared-multitenant-catalog";
+
+      vi.mocked(McpServerModel.findById).mockResolvedValueOnce({
+        id: tenantAId,
+        catalogId,
+      } as Awaited<ReturnType<typeof McpServerModel.findById>>);
+      vi.mocked(InternalMcpCatalogModel.findById).mockResolvedValueOnce({
+        id: catalogId,
+        multitenant: true,
+      } as unknown as Awaited<
+        ReturnType<typeof InternalMcpCatalogModel.findById>
+      >);
+      vi.mocked(McpServerModel.findByCatalogId).mockResolvedValueOnce([
+        { id: tenantAId, catalogId },
+        { id: tenantBId, catalogId },
+      ] as unknown as Awaited<
+        ReturnType<typeof McpServerModel.findByCatalogId>
+      >);
+
+      const { McpServerRuntimeManager } = await import("./manager");
+      const manager = new McpServerRuntimeManager();
+
+      const spies = buildCleanupSpies();
+
+      // @ts-expect-error - accessing private property for testing
+      manager.mcpServerIdToDeploymentMap.set(tenantAId, spies);
+
+      await manager.stopServer(tenantAId);
+
+      // Tenant B is still using the shared Deployment — no teardown should fire.
+      expect(spies.stopDeployment).not.toHaveBeenCalled();
+      expect(spies.deleteK8sService).not.toHaveBeenCalled();
+      expect(spies.deleteK8sSecret).not.toHaveBeenCalled();
+      expect(spies.deleteDockerRegistrySecrets).not.toHaveBeenCalled();
+
+      // The in-memory cache entry for the leaving caller is dropped.
+      // @ts-expect-error - accessing private property for testing
+      expect(manager.mcpServerIdToDeploymentMap.has(tenantAId)).toBe(false);
+
+      mockLoadFromDefault.mockRestore();
+      mockMakeApiClient.mockRestore();
+    });
+
+    test("tears down Deployment when the last sibling install is removed", async () => {
+      const mockLoadFromDefault = vi
+        .spyOn(k8s.KubeConfig.prototype, "loadFromDefault")
+        .mockImplementation(() => {});
+      const mockMakeApiClient = vi
+        .spyOn(k8s.KubeConfig.prototype, "makeApiClient")
+        .mockReturnValue({} as k8s.CoreV1Api);
+
+      const McpServerModel = (await import("@/models/mcp-server")).default;
+      const InternalMcpCatalogModel = (
+        await import("@/models/internal-mcp-catalog")
+      ).default;
+
+      const lastTenantId = "server-last-tenant";
+      const catalogId = "shared-multitenant-catalog";
+
+      vi.mocked(McpServerModel.findById).mockResolvedValueOnce({
+        id: lastTenantId,
+        catalogId,
+      } as Awaited<ReturnType<typeof McpServerModel.findById>>);
+      vi.mocked(InternalMcpCatalogModel.findById).mockResolvedValueOnce({
+        id: catalogId,
+        multitenant: true,
+      } as unknown as Awaited<
+        ReturnType<typeof InternalMcpCatalogModel.findById>
+      >);
+      vi.mocked(McpServerModel.findByCatalogId).mockResolvedValueOnce([
+        { id: lastTenantId, catalogId },
+      ] as unknown as Awaited<
+        ReturnType<typeof McpServerModel.findByCatalogId>
+      >);
+
+      const { McpServerRuntimeManager } = await import("./manager");
+      const manager = new McpServerRuntimeManager();
+
+      const spies = buildCleanupSpies();
+
+      // @ts-expect-error - accessing private property for testing
+      manager.mcpServerIdToDeploymentMap.set(lastTenantId, spies);
+
+      await manager.stopServer(lastTenantId);
+
+      // After last installation deletion — full teardown.
+      expect(spies.stopDeployment).toHaveBeenCalledTimes(1);
+      expect(spies.deleteK8sService).toHaveBeenCalledTimes(1);
+      expect(spies.deleteK8sSecret).toHaveBeenCalledTimes(1);
+      expect(spies.deleteDockerRegistrySecrets).toHaveBeenCalledTimes(1);
+
+      mockLoadFromDefault.mockRestore();
+      mockMakeApiClient.mockRestore();
+    });
+  });
+
+  describe("reinstallSharedDeployment", () => {
+    // Catalog-level reinstall path used by the multi-tenant catalog
+    // reinstall endpoint. Bypasses the sibling guard that protects
+    // per-tenant uninstall and recreates the shared K8s Deployment.
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      vi.resetModules();
+    });
+
+    test("tears down shared Deployment for all siblings then recreates via startServer", async () => {
+      const mockLoadFromDefault = vi
+        .spyOn(k8s.KubeConfig.prototype, "loadFromDefault")
+        .mockImplementation(() => {});
+      const mockMakeApiClient = vi
+        .spyOn(k8s.KubeConfig.prototype, "makeApiClient")
+        .mockReturnValue({} as k8s.CoreV1Api);
+
+      const McpServerModel = (await import("@/models/mcp-server")).default;
+      const McpHttpSessionModel = (await import("@/models/mcp-http-session"))
+        .default;
+      const InternalMcpCatalogModel = (
+        await import("@/models/internal-mcp-catalog")
+      ).default;
+
+      const catalogId = "shared-multitenant-catalog";
+      const tenantAId = "server-tenant-a";
+      const tenantBId = "server-tenant-b";
+
+      const installs = [
+        { id: tenantAId, catalogId, serverType: "local" },
+        { id: tenantBId, catalogId, serverType: "local" },
+      ];
+
+      vi.mocked(McpServerModel.findByCatalogId).mockResolvedValue(
+        installs as unknown as Awaited<
+          ReturnType<typeof McpServerModel.findByCatalogId>
+        >,
+      );
+      vi.mocked(McpServerModel.findById).mockImplementation(async (id) => {
+        const found = installs.find((s) => s.id === id);
+        return (found ?? null) as unknown as Awaited<
+          ReturnType<typeof McpServerModel.findById>
+        >;
+      });
+      vi.mocked(InternalMcpCatalogModel.findById).mockResolvedValue({
+        id: catalogId,
+        serverType: "local",
+        multitenant: true,
+        localConfig: {
+          dockerImage: "registry/mcp:v2",
+          command: "node",
+          arguments: ["server.js"],
+          environment: [],
+        },
+      } as unknown as Awaited<
+        ReturnType<typeof InternalMcpCatalogModel.findById>
+      >);
+      vi.mocked(McpHttpSessionModel.deleteByMcpServerId).mockResolvedValue(0);
+
+      const { McpServerRuntimeManager } = await import("./manager");
+      const manager = new McpServerRuntimeManager();
+
+      // Inject mock K8s clients startServer checks for.
+      const managerAny = manager as unknown as {
+        k8sAttach: unknown;
+        k8sLog: unknown;
+        k8sExec: unknown;
+      };
+      managerAny.k8sAttach = {};
+      managerAny.k8sLog = {};
+      managerAny.k8sExec = {};
+
+      // Pre-seed the in-memory map with a mock deployment for tenant A
+      // (the representative). All cleanup methods are spies.
+      const stopDeployment = vi.fn().mockResolvedValue(undefined);
+      const deleteK8sService = vi.fn().mockResolvedValue(undefined);
+      const deleteK8sSecret = vi.fn().mockResolvedValue(undefined);
+      const deleteDockerRegistrySecrets = vi.fn().mockResolvedValue(undefined);
+      const waitForDeploymentReady = vi.fn().mockResolvedValue(undefined);
+
+      // @ts-expect-error - accessing private property for testing
+      manager.mcpServerIdToDeploymentMap.set(tenantAId, {
+        stopDeployment,
+        deleteK8sService,
+        deleteK8sSecret,
+        deleteDockerRegistrySecrets,
+        waitForDeploymentReady,
+      });
+      // Also seed tenant B so we can verify its entry gets dropped too.
+      // @ts-expect-error - accessing private property for testing
+      manager.mcpServerIdToDeploymentMap.set(tenantBId, {
+        stopDeployment: vi.fn(),
+        deleteK8sService: vi.fn(),
+        deleteK8sSecret: vi.fn(),
+        deleteDockerRegistrySecrets: vi.fn(),
+      });
+
+      // Spy startServer so we don't exercise the full pod-creation flow —
+      // we only care that it was called for the representative install.
+      const startServerSpy = vi
+        .spyOn(manager, "startServer")
+        .mockResolvedValue(undefined);
+
+      await manager.reinstallSharedDeployment(catalogId);
+
+      // Stale HTTP sessions were dropped for both siblings.
+      expect(
+        vi
+          .mocked(McpHttpSessionModel.deleteByMcpServerId)
+          .mock.calls.map((c) => c[0]),
+      ).toEqual(expect.arrayContaining([tenantAId, tenantBId]));
+
+      // Full teardown ran exactly once against the representative —
+      // sibling guard bypassed.
+      expect(stopDeployment).toHaveBeenCalledTimes(1);
+      expect(deleteK8sService).toHaveBeenCalledTimes(1);
+      expect(deleteK8sSecret).toHaveBeenCalledTimes(1);
+      expect(deleteDockerRegistrySecrets).toHaveBeenCalledTimes(1);
+
+      // Both siblings' in-memory entries cleared.
+      // @ts-expect-error - accessing private property for testing
+      expect(manager.mcpServerIdToDeploymentMap.has(tenantAId)).toBe(false);
+      // @ts-expect-error - accessing private property for testing
+      expect(manager.mcpServerIdToDeploymentMap.has(tenantBId)).toBe(false);
+
+      // Recreate happened via startServer for the representative.
+      expect(startServerSpy).toHaveBeenCalledTimes(1);
+      expect(startServerSpy.mock.calls[0][0]).toMatchObject({ id: tenantAId });
+
+      mockLoadFromDefault.mockRestore();
+      mockMakeApiClient.mockRestore();
+    });
+
+    test("no-ops when no installs exist for the catalog", async () => {
+      const mockLoadFromDefault = vi
+        .spyOn(k8s.KubeConfig.prototype, "loadFromDefault")
+        .mockImplementation(() => {});
+      const mockMakeApiClient = vi
+        .spyOn(k8s.KubeConfig.prototype, "makeApiClient")
+        .mockReturnValue({} as k8s.CoreV1Api);
+
+      const McpServerModel = (await import("@/models/mcp-server")).default;
+      vi.mocked(McpServerModel.findByCatalogId).mockResolvedValueOnce([]);
+
+      const { McpServerRuntimeManager } = await import("./manager");
+      const manager = new McpServerRuntimeManager();
+
+      const startServerSpy = vi
+        .spyOn(manager, "startServer")
+        .mockResolvedValue(undefined);
+
+      await manager.reinstallSharedDeployment("empty-catalog");
+
+      expect(startServerSpy).not.toHaveBeenCalled();
+
+      mockLoadFromDefault.mockRestore();
+      mockMakeApiClient.mockRestore();
+    });
+  });
+
   describe("streamMcpServerLogs", () => {
     beforeEach(() => {
       vi.clearAllMocks();

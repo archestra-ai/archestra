@@ -1,7 +1,8 @@
-import type { SupportedProvider } from "@shared";
+import { OPENROUTER_FREE_MODEL_ID, type SupportedProvider } from "@shared";
 import { vi } from "vitest";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
+import OrganizationModel from "@/models/organization";
 import { modelFetchers } from "@/routes/chat/model-fetchers";
 import { afterEach, describe, expect, test } from "@/test";
 import { modelSyncService, resolveModelCapabilities } from "./model-sync";
@@ -298,6 +299,184 @@ describe("ModelSyncService", () => {
     expect(capabilities.inputModalities).toEqual(["text", "image"]);
     expect(capabilities.outputModalities).toEqual([]);
     expect(capabilities.supportsToolCalling).toBe(false);
+  });
+
+  test("prefers fetcher capabilities over models.dev with per-field fallthrough", () => {
+    const capabilities = resolveModelCapabilities({
+      provider: "openrouter",
+      modelId: "deepseek/deepseek-chat-v3.1:free",
+      capabilities: {
+        description: "DeepSeek V3.1",
+        contextLength: 32000,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: false,
+        promptPricePerToken: "0.0000002",
+        completionPricePerToken: "0.0000008",
+      },
+      fetched: {
+        contextLength: 64000,
+        supportsToolCalling: true,
+        promptPricePerToken: "0",
+        completionPricePerToken: "0",
+      },
+    });
+
+    // Fetcher wins on the fields it carries.
+    expect(capabilities.contextLength).toBe(64000);
+    expect(capabilities.supportsToolCalling).toBe(true);
+    expect(capabilities.promptPricePerToken).toBe("0");
+    expect(capabilities.completionPricePerToken).toBe("0");
+    // models.dev still fills fields the fetcher does not carry.
+    expect(capabilities.description).toBe("DeepSeek V3.1");
+    expect(capabilities.inputModalities).toEqual(["text"]);
+  });
+
+  test("persists fetcher pricing so :free models sync as zero-priced", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "openrouter-key" } });
+    const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openrouter",
+    });
+
+    modelFetchers.openrouter = async () => [
+      {
+        id: "deepseek/deepseek-chat-v3.1:free",
+        displayName: "DeepSeek V3.1 (free)",
+        provider: "openrouter" as SupportedProvider,
+        capabilities: {
+          contextLength: 64000,
+          supportsToolCalling: true,
+          promptPricePerToken: "0",
+          completionPricePerToken: "0",
+        },
+      },
+    ];
+
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId: apiKey.id,
+      provider: "openrouter",
+      apiKeyValue: "openrouter-key",
+    });
+
+    const model = await ModelModel.findByProviderAndModelId(
+      "openrouter",
+      "deepseek/deepseek-chat-v3.1:free",
+    );
+    expect(Number(model?.promptPricePerToken)).toBe(0);
+    expect(Number(model?.completionPricePerToken)).toBe(0);
+    expect(model?.contextLength).toBe(64000);
+    expect(model?.supportsToolCalling).toBe(true);
+  });
+
+  test("auto-selects the Free Models Router as the org default for a new OpenRouter key", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "openrouter-key" } });
+    const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openrouter",
+    });
+
+    modelFetchers.openrouter = async () => [
+      {
+        id: "deepseek/deepseek-chat-v3.1:free",
+        displayName: "DeepSeek V3.1 (free)",
+        provider: "openrouter" as SupportedProvider,
+        capabilities: {
+          contextLength: 64000,
+          supportsToolCalling: true,
+          promptPricePerToken: "0",
+          completionPricePerToken: "0",
+        },
+      },
+      {
+        id: OPENROUTER_FREE_MODEL_ID,
+        displayName: "Free Models Router",
+        provider: "openrouter" as SupportedProvider,
+        capabilities: {
+          contextLength: 200000,
+          supportsToolCalling: true,
+          promptPricePerToken: "0",
+          completionPricePerToken: "0",
+        },
+      },
+    ];
+
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId: apiKey.id,
+      provider: "openrouter",
+      apiKeyValue: "openrouter-key",
+    });
+    await modelSyncService.maybeAutoSetOrgDefaultModel({
+      organizationId: org.id,
+      apiKeyId: apiKey.id,
+      provider: "openrouter",
+    });
+
+    const routerModel = await ModelModel.findByProviderAndModelId(
+      "openrouter",
+      OPENROUTER_FREE_MODEL_ID,
+    );
+    const updatedOrg = await OrganizationModel.getById(org.id);
+    expect(updatedOrg?.defaultModelId).toBe(routerModel?.id);
+    expect(updatedOrg?.defaultLlmApiKeyId).toBe(apiKey.id);
+  });
+
+  test("does not override an existing org default model", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "openrouter-key" } });
+    const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openrouter",
+    });
+
+    modelFetchers.openrouter = async () => [
+      {
+        id: OPENROUTER_FREE_MODEL_ID,
+        displayName: "Free Models Router",
+        provider: "openrouter" as SupportedProvider,
+        capabilities: {
+          contextLength: 200000,
+          supportsToolCalling: true,
+          promptPricePerToken: "0",
+          completionPricePerToken: "0",
+        },
+      },
+    ];
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId: apiKey.id,
+      provider: "openrouter",
+      apiKeyValue: "openrouter-key",
+    });
+
+    const routerModel = await ModelModel.findByProviderAndModelId(
+      "openrouter",
+      OPENROUTER_FREE_MODEL_ID,
+    );
+    if (!routerModel) throw new Error("router model not synced");
+    await OrganizationModel.patch(org.id, {
+      defaultModelId: routerModel.id,
+      defaultLlmApiKeyId: apiKey.id,
+    });
+
+    // A non-openrouter provider must never trigger an auto-default.
+    await modelSyncService.maybeAutoSetOrgDefaultModel({
+      organizationId: org.id,
+      apiKeyId: apiKey.id,
+      provider: "openai",
+    });
+    const unchanged = await OrganizationModel.getById(org.id);
+    expect(unchanged?.defaultModelId).toBe(routerModel.id);
   });
 
   test("infers dimensions for Azure OpenAI embedding deployments", async ({

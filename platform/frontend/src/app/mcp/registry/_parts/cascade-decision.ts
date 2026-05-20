@@ -303,9 +303,11 @@ function onlyForwardCompatibleDiff(
 
 /**
  * Mirror of backend `userConfigChangedBreakingly`. True when a
- * userConfig field change invalidates existing installs (added required, removed
- * any, type/headerName/sensitive flip, required false → true). Pure
- * cosmetic changes (description, title, default value) are not breaking.
+ * userConfig field change invalidates existing installs (added required,
+ * removed any, type/headerName/sensitive flip, required false → true, or
+ * a static header-mapped field's `default` value changes). For prompted
+ * fields, `default` is just a placeholder shown at install time, so
+ * changes there stay non-breaking.
  */
 export function userConfigChangedBreakingly(
   prev: Record<string, unknown> | null | undefined,
@@ -321,6 +323,19 @@ export function userConfigChangedBreakingly(
     if (String(p.type ?? "") !== String(n.type ?? "")) return true;
     if (String(p.headerName ?? "") !== String(n.headerName ?? "")) return true;
     if (Boolean(p.sensitive) !== Boolean(n.sensitive)) return true;
+    // Static header value rotation — `default` is the runtime header
+    // value for static header-mapped entries (the form writes the admin's
+    // input straight into `default` when promptOnInstallation is false).
+    if (
+      String(p.headerName ?? "") !== "" &&
+      !p.promptOnInstallation &&
+      !p.promptOnPreset &&
+      !n.promptOnInstallation &&
+      !n.promptOnPreset &&
+      String(p.default ?? "") !== String(n.default ?? "")
+    ) {
+      return true;
+    }
   }
   for (const [key, n] of Object.entries(nextMap)) {
     if (key in prevMap) continue;

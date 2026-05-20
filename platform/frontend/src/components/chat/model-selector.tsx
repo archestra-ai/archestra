@@ -1,7 +1,9 @@
 "use client";
 
 import {
+  compareModelsForDisplay,
   E2eTestId,
+  isOpenRouterLatestAlias,
   type ModelInputModality,
   providerDisplayNames,
   type SupportedProvider,
@@ -34,7 +36,11 @@ import {
   ModelSelectorTrigger,
 } from "@/components/ai-elements/model-selector";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
-import { UnknownCapabilitiesBadge } from "@/components/model-badges";
+import {
+  FreeModelBadge,
+  LatestModelBadge,
+  UnknownCapabilitiesBadge,
+} from "@/components/model-badges";
 import { Button } from "@/components/ui/button";
 import { DialogClose } from "@/components/ui/dialog";
 import { Toggle } from "@/components/ui/toggle";
@@ -51,7 +57,7 @@ import {
   useLlmModelsByProvider,
   useSyncLlmModels,
 } from "@/lib/llm-models.query";
-import { cn } from "@/lib/utils";
+import { cn, formatContextLength } from "@/lib/utils";
 
 /** Modalities that can be filtered (excludes "text" since all models support it) */
 type FilterableModality = Exclude<ModelInputModality, "text">;
@@ -145,6 +151,14 @@ function parseModelValue(
   };
 }
 
+/** Shared model ordering (routers, recommended, then the rest alphabetically). */
+function compareLlmModels(a: LlmModel, b: LlmModel): number {
+  return compareModelsForDisplay(
+    { modelId: a.id, isBest: a.isBest },
+    { modelId: b.id, isBest: b.isBest },
+  );
+}
+
 /**
  * Capability icon component - matches Vercel AI Elements style.
  * Small, compact icons that show model capabilities.
@@ -219,20 +233,6 @@ function ModelCapabilityBadges({
       </div>
     </TooltipProvider>
   );
-}
-
-/**
- * Formats a context length number into a human-readable string.
- * e.g., 128000 -> "128K", 1000000 -> "1M"
- */
-function formatContextLength(contextLength: number): string {
-  if (contextLength >= 1_000_000) {
-    return `${(contextLength / 1_000_000).toFixed(contextLength % 1_000_000 === 0 ? 0 : 1)}M`;
-  }
-  if (contextLength >= 1_000) {
-    return `${(contextLength / 1_000).toFixed(contextLength % 1_000 === 0 ? 0 : 1)}K`;
-  }
-  return contextLength.toString();
 }
 
 /**
@@ -619,6 +619,17 @@ export function ModelSelector({
     return Object.keys(filteredModelsByProvider) as SupportedProvider[];
   }, [filteredModelsByProvider]);
 
+  // Sort once per data change rather than on every render inside the JSX map.
+  const sortedModelsByProvider = useMemo(() => {
+    const sorted: Partial<Record<SupportedProvider, LlmModel[]>> = {};
+    for (const provider of filteredProviders) {
+      sorted[provider] = [...(filteredModelsByProvider[provider] ?? [])].sort(
+        compareLlmModels,
+      );
+    }
+    return sorted;
+  }, [filteredModelsByProvider, filteredProviders]);
+
   // Find the provider for a given model
   const getProviderForModel = (model: string): SupportedProvider | null => {
     for (const provider of availableProviders) {
@@ -853,7 +864,7 @@ export function ModelSelector({
                 key={provider}
                 heading={providerDisplayNames[provider]}
               >
-                {filteredModelsByProvider[provider]?.map((model) => {
+                {(sortedModelsByProvider[provider] ?? []).map((model) => {
                   // Use provider:modelId format for unique keys/values
                   // This prevents issues when different providers have models with the same ID
                   const modelValue = createModelValue(provider, model.dbId);
@@ -874,6 +885,10 @@ export function ModelSelector({
                         </span>
                         <CopyModelIdButton modelId={model.id} />
                       </ModelSelectorName>
+                      {model.isFree && <FreeModelBadge />}
+                      {isOpenRouterLatestAlias(provider, model.id) && (
+                        <LatestModelBadge />
+                      )}
                       <div className="ml-auto flex items-center gap-2">
                         <ModelCapabilityBadges
                           capabilities={model.capabilities}

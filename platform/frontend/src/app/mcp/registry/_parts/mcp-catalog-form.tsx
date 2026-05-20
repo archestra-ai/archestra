@@ -2396,6 +2396,7 @@ type AdditionalHeader = {
   description?: string;
   includeBearerPrefix?: boolean;
   promptOnInstallation?: boolean;
+  promptOnPreset?: boolean;
 };
 
 /**
@@ -2428,6 +2429,7 @@ function deriveAdditionalHeaders(userConfig: unknown): AdditionalHeader[] {
         cfg.promptOnInstallation === undefined
           ? true
           : Boolean(cfg.promptOnInstallation),
+      promptOnPreset: Boolean(cfg.promptOnPreset),
     });
   }
   return out;
@@ -2445,11 +2447,15 @@ function deriveAdditionalHeaders(userConfig: unknown): AdditionalHeader[] {
  *   - required true → false  → installs still valid → false
  *   - headerName change      → routing changes → true
  *   - sensitive flag flip    → storage bucket moved → true
+ *   - STATIC header `value`  → that's the actual runtime header sent on
+ *     the wire (form writes it into `userConfig[field].default` when
+ *     promptOnInstallation is false). Change there → installs would
+ *     keep sending the old value → true
  *
- * Deliberately ignored (mirror of backend's "deliberately NOT checking"
- * comment in `userConfigChangedBreakingly`):
- *   - `value` (becomes `default` in userConfig) — cosmetic / template
- *     default, doesn't affect install validity
+ * Deliberately ignored:
+ *   - `value` on prompted headers (becomes `default` in userConfig) —
+ *     just a placeholder shown at install time, doesn't affect what's
+ *     actually sent
  *   - `includeBearerPrefix` (becomes `valuePrefix: "Bearer "`) — cosmetic
  *     wire-format detail; doesn't move storage
  *   - `description`, `title` — pure metadata
@@ -2475,6 +2481,14 @@ function additionalHeadersChangeRequiresReinstall(
     if (!p.required && Boolean(n.required)) return true; // Became required
     if ((p.headerName ?? "") !== (n.headerName ?? "")) return true; // Routing
     if (Boolean(p.sensitive) !== Boolean(n.sensitive)) return true; // Storage
+    // Static header value rotation. `value` only matters at runtime
+    // when the header is fully static (no install or preset prompt) —
+    // for prompted headers it's just a placeholder.
+    const wasStatic = !p.promptOnInstallation && !p.promptOnPreset;
+    const isStatic = !n.promptOnInstallation && !n.promptOnPreset;
+    if (wasStatic && isStatic && (p.value ?? "") !== (n.value ?? "")) {
+      return true;
+    }
   }
   for (const [key, n] of nextMap) {
     if (prevMap.has(key)) continue;

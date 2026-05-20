@@ -1,7 +1,8 @@
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
-import { McpServerModel, ToolModel } from "@/models";
+import { InternalMcpCatalogModel, McpServerModel, ToolModel } from "@/models";
 import type { InternalMcpCatalog, LocalConfig, McpServer } from "@/types";
+import { broadcastMcpInstallationStatus } from "@/websocket";
 
 /**
  * Checks if a catalog edit requires new user input for reinstallation.
@@ -51,7 +52,16 @@ export function requiresNewUserInputForReinstall(
       return true;
     }
 
-    if (localExecutionConfigChanged(oldCatalogItem, newCatalogItem)) {
+    // Multi-tenant catalogs handle execution-config drift via the
+    // catalog-level `catalogReinstallRequired` flag (one shared pod across
+    // all installs; the catalog-reinstall endpoint applies the change for
+    // everyone in one shot). Single-tenant: each install owns its own pod,
+    // so a silent auto-restart of others' pods would surprise them; mark
+    // every install reinstall-required and let owners reinstall explicitly.
+    if (
+      !newCatalogItem.multitenant &&
+      localExecutionConfigChanged(oldCatalogItem, newCatalogItem)
+    ) {
       logger.info(
         { catalogId: newCatalogItem.id },
         "Local execution config changed - manual reinstall required",
@@ -263,10 +273,23 @@ function userConfigChangedBreakingly(
     if (String(p.type ?? "") !== String(n.type ?? "")) return true; // Type changed
     if (String(p.headerName ?? "") !== String(n.headerName ?? "")) return true; // Routing changed
     if (Boolean(p.sensitive) !== Boolean(n.sensitive)) return true; // Storage moved
-    // Note: deliberately NOT checking `default`, `description`, `title`,
-    // `valuePrefix` etc. — those are cosmetic / template defaults that
-    // don't affect install validity. If a default value matters to your
-    // pod, change it via a runtime field (env value) instead.
+    // Static header value rotation. For a static header-mapped userConfig
+    // entry (no install/preset prompt), `default` IS the runtime header
+    // value the form transform writes from the admin's input — changing it
+    // changes what installs send on the wire. For prompted entries
+    // `default` is just a placeholder/template, so we still skip those.
+    if (
+      String(p.headerName ?? "") !== "" &&
+      !p.promptOnInstallation &&
+      !p.promptOnPreset &&
+      !n.promptOnInstallation &&
+      !n.promptOnPreset &&
+      String(p.default ?? "") !== String(n.default ?? "")
+    ) {
+      return true;
+    }
+    // Note: `description`, `title`, `valuePrefix` remain cosmetic — they
+    // don't change what installs send.
   }
 
   // Added required field → existing installs are missing it.
@@ -343,15 +366,42 @@ export async function autoReinstallServer(
     }
   }
 
-  // Fetch and sync tools
+  await syncToolsForServer(server, catalogItem, options);
+
+  // Clear reinstall flag
+  await McpServerModel.update(server.id, {
+    reinstallRequired: false,
+  });
+}
+
+/**
+ * Fetch tools from a running MCP server and reconcile the `tools` table
+ * for its catalog. Used by `autoReinstallServer` after a restart, and by
+ * the catalog-reinstall endpoint to cascade tools to every install
+ * attached to a multi-tenant catalog once the shared pod is back up.
+ */
+async function syncToolsForServer(
+  server: McpServer,
+  catalogItem: InternalMcpCatalog,
+  options?: {
+    getTools?: (params: {
+      server: McpServer;
+      catalogItem: InternalMcpCatalog;
+    }) => Promise<
+      Array<{
+        name: string;
+        description: string;
+        inputSchema: Record<string, unknown>;
+        _meta?: Record<string, unknown>;
+        annotations?: Record<string, unknown>;
+      }>
+    >;
+  },
+): Promise<void> {
   const tools = options?.getTools
-    ? await options.getTools({
-        server,
-        catalogItem,
-      })
+    ? await options.getTools({ server, catalogItem })
     : await McpServerModel.getToolsFromServer(server);
 
-  // Use catalog item name for tool naming (consistent with install flow)
   const toolNamePrefix = catalogItem.name;
   const toolsToSync = tools.map((tool) => ({
     name: ToolModel.slugifyName(toolNamePrefix, tool.name),
@@ -359,8 +409,6 @@ export async function autoReinstallServer(
     parameters: tool.inputSchema,
     meta: { _meta: tool._meta, annotations: tool.annotations },
     catalogId: catalogItem.id,
-    // Pass the raw tool name from MCP server for accurate matching
-    // This handles cases where catalog name contains `__` (e.g., huggingface__remote-mcp)
     rawToolName: tool.name,
   }));
 
@@ -369,18 +417,121 @@ export async function autoReinstallServer(
   logger.info(
     {
       serverId: server.id,
-      serverName: reconstructedName,
+      serverName: server.name,
       created: syncResult.created.length,
       updated: syncResult.updated.length,
       unchanged: syncResult.unchanged.length,
       deleted: syncResult.deleted.length,
     },
-    "Auto-reinstall completed - tools synced",
+    "Tools synced for MCP server",
+  );
+}
+
+/**
+ * Reinstall a multi-tenant local catalog: recreate the shared K8s
+ * Deployment and cascade tool sync to every install attached to the
+ * catalog, broadcasting per-install status the whole way.
+ *
+ * Phase 1 — recreate the shared pod (delete + create, bypassing the
+ * per-install sibling guard). If this step fails every install is marked
+ * `error` and the function throws so the caller can surface an HTTP 500.
+ *
+ * Phase 2 — fan out `syncToolsForServer` to every install. Per-install
+ * errors are surfaced via WebSocket but don't abort the cascade —
+ * remaining installs still get a chance to sync.
+ *
+ * On full success `catalog_reinstall_required` is cleared.
+ *
+ * Callers are expected to have validated:
+ *   - catalog exists
+ *   - catalog is multi-tenant + local
+ *   - caller has edit rights on the catalog
+ *   - `catalog_reinstall_required` is true
+ * The route handler `/api/internal_mcp_catalog/:id/reinstall` performs
+ * those checks before delegating here.
+ */
+export async function reinstallMultitenantCatalog(
+  catalogItem: InternalMcpCatalog,
+): Promise<void> {
+  const installs = await McpServerModel.findByCatalogId(catalogItem.id);
+
+  // Flip every install pending up-front so each tenant's UI shows
+  // progress; per-install events are fanned out as each one's tool
+  // sync completes (matches existing reinstall UX).
+  //
+  // Parallelize per-install bookkeeping — they're independent rows and
+  // independent WS broadcasts. `allSettled` so one row's failed DB
+  // write doesn't abort the rest; per-install errors are logged but
+  // not fatal here (Phase 2 still runs and reports per-install status).
+  await Promise.allSettled(
+    installs.map(async (install) => {
+      await McpServerModel.update(install.id, {
+        localInstallationStatus: "pending",
+        localInstallationError: null,
+      });
+      broadcastMcpInstallationStatus(install.id, "pending", null);
+    }),
   );
 
-  // Clear reinstall flag
-  await McpServerModel.update(server.id, {
-    reinstallRequired: false,
+  // Phase 1 — recreate the shared pod.
+  try {
+    await McpServerRuntimeManager.reinstallSharedDeployment(catalogItem.id);
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    logger.error(
+      { err: error, catalogId: catalogItem.id },
+      "Catalog reinstall: shared deployment recreate failed",
+    );
+    await Promise.allSettled(
+      installs.map(async (install) => {
+        await McpServerModel.update(install.id, {
+          localInstallationStatus: "error",
+          localInstallationError: errorMessage,
+        });
+        broadcastMcpInstallationStatus(install.id, "error", errorMessage);
+      }),
+    );
+    throw error;
+  }
+
+  // Phase 2 — cascade tool sync to every install in parallel. The pod
+  // is up and shared across all installs, so the syncs are independent.
+  // `allSettled` ensures one failing install doesn't abort the rest;
+  // per-install errors are recorded inline.
+  await Promise.allSettled(
+    installs.map(async (install) => {
+      try {
+        await syncToolsForServer(install, catalogItem);
+        await McpServerModel.update(install.id, {
+          localInstallationStatus: "success",
+          localInstallationError: null,
+        });
+        broadcastMcpInstallationStatus(install.id, "success", null);
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
+        logger.error(
+          { err: error, serverId: install.id, catalogId: catalogItem.id },
+          "Catalog reinstall: tool sync failed for install",
+        );
+        // Flag for per-install retry. The catalog-level flag is cleared
+        // unconditionally below once Phase 1 succeeded, so without this
+        // the tenant is stuck: the catalog Reinstall button is gone and
+        // the per-install Reinstall button is gated on
+        // `reinstallRequired` (see mcp-server-card.tsx userFlaggedInstalls).
+        await McpServerModel.update(install.id, {
+          reinstallRequired: true,
+          localInstallationStatus: "error",
+          localInstallationError: errorMessage,
+        });
+        broadcastMcpInstallationStatus(install.id, "error", errorMessage);
+      }
+    }),
+  );
+
+  await InternalMcpCatalogModel.update(catalogItem.id, {
+    catalogReinstallRequired: false,
   });
 }
 
@@ -487,7 +638,7 @@ function promptedEnvVarsRuntimeChanged(
   return false;
 }
 
-function localExecutionConfigChanged(
+export function localExecutionConfigChanged(
   oldCatalog: InternalMcpCatalog,
   newCatalog: InternalMcpCatalog,
 ): boolean {

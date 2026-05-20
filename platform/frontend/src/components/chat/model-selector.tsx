@@ -51,7 +51,7 @@ import {
   useLlmModelsByProvider,
   useSyncLlmModels,
 } from "@/lib/llm-models.query";
-import { cn } from "@/lib/utils";
+import { cn, formatContextLength } from "@/lib/utils";
 
 /** Modalities that can be filtered (excludes "text" since all models support it) */
 type FilterableModality = Exclude<ModelInputModality, "text">;
@@ -219,20 +219,6 @@ function ModelCapabilityBadges({
       </div>
     </TooltipProvider>
   );
-}
-
-/**
- * Formats a context length number into a human-readable string.
- * e.g., 128000 -> "128K", 1000000 -> "1M"
- */
-function formatContextLength(contextLength: number): string {
-  if (contextLength >= 1_000_000) {
-    return `${(contextLength / 1_000_000).toFixed(contextLength % 1_000_000 === 0 ? 0 : 1)}M`;
-  }
-  if (contextLength >= 1_000) {
-    return `${(contextLength / 1_000).toFixed(contextLength % 1_000 === 0 ? 0 : 1)}K`;
-  }
-  return contextLength.toString();
 }
 
 /**

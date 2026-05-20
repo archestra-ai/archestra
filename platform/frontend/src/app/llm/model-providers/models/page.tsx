@@ -68,6 +68,7 @@ import {
   useUpdateModel,
 } from "@/lib/llm-models.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { formatContextLength } from "@/lib/utils";
 import { useSetModelProvidersAction } from "../layout";
 
 export default function ModelsPage() {
@@ -905,17 +906,6 @@ function ModalitySelectField<T extends string>(params: {
       </div>
     </div>
   );
-}
-
-function formatContextLength(contextLength: number | null): string {
-  if (contextLength === null) return "-";
-  if (contextLength >= 1000000) {
-    return `${(contextLength / 1000000).toFixed(contextLength % 1000000 === 0 ? 0 : 1)}M`;
-  }
-  if (contextLength >= 1000) {
-    return `${(contextLength / 1000).toFixed(contextLength % 1000 === 0 ? 0 : 1)}K`;
-  }
-  return contextLength.toString();
 }
 
 function hasUnknownCapabilities(model: ModelWithApiKeys): boolean {

@@ -1822,7 +1822,7 @@
 
 ### Bug Fixes
 
-* ensure anthopic title autogeneration uses haiku 4 ([#2952](https://github.com/archestra-ai/archestra/issues/2952)) ([dbffab8](https://github.com/archestra-ai/archestra/commit/dbffab898ad02a4c991df4799f584352ea890cb8))
+* ensure anthropic title autogeneration uses haiku 4 ([#2952](https://github.com/archestra-ai/archestra/issues/2952)) ([dbffab8](https://github.com/archestra-ai/archestra/commit/dbffab898ad02a4c991df4799f584352ea890cb8))
 * fix handling server name during reinstall ([#2977](https://github.com/archestra-ai/archestra/issues/2977)) ([be001d1](https://github.com/archestra-ai/archestra/commit/be001d1132ad3a1e54949a418ea4b3c0f67f03a0))
 * hide Logs button when logs are unavailable ([#2971](https://github.com/archestra-ai/archestra/issues/2971)) ([e89214a](https://github.com/archestra-ai/archestra/commit/e89214a4734d2df58969b38de0bbd93f501fe1f4))
 * preserve chat and converstations after agent deletion ([#2431](https://github.com/archestra-ai/archestra/issues/2431)) ([f876089](https://github.com/archestra-ai/archestra/commit/f876089426bfa797c2ef687f9a02c922efa7f36f))

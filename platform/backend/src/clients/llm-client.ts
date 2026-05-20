@@ -33,6 +33,7 @@ import {
   isBedrockIamAuthEnabled,
 } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
 import config from "@/config";
 import logger from "@/logging";
 import { ApiError } from "@/types";
@@ -402,16 +403,7 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
     defaultBaseUrl: config.llm.openrouter.baseUrl,
     apiKeyRequiredMessage:
       "OpenRouter API key is required. Please configure ARCHESTRA_CHAT_OPENROUTER_API_KEY.",
-    // OpenRouter attribution headers — sent on the direct path; the LLM proxy
-    // adapter sets the same headers independently for proxied calls.
-    extraHeaders: {
-      ...(config.llm.openrouter.referer
-        ? { "HTTP-Referer": config.llm.openrouter.referer }
-        : {}),
-      ...(config.llm.openrouter.title
-        ? { "X-Title": config.llm.openrouter.title }
-        : {}),
-    },
+    extraHeaders: openRouterAttributionHeaders(),
   },
 
   perplexity: {

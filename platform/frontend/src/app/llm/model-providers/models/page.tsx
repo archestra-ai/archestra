@@ -4,6 +4,7 @@ import {
   type archestraApiTypes,
   compareModelsForDisplay,
   INPUT_MODALITY_OPTIONS,
+  isOpenRouterLatestAlias,
   type ModelInputModality,
   type ModelOutputModality,
   OUTPUT_MODALITY_OPTIONS,
@@ -182,8 +183,7 @@ export default function ModelsPage() {
         header: "Model ID",
         cell: ({ row }) => {
           const { modelId, provider, isFree } = row.original;
-          const isLatestAlias =
-            provider === "openrouter" && modelId.startsWith("~");
+          const isLatestAlias = isOpenRouterLatestAlias(provider, modelId);
           return (
             <div className="min-w-0 space-y-2">
               <span className="font-mono text-sm">{modelId}</span>

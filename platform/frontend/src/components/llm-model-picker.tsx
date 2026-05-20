@@ -131,9 +131,9 @@ export function LlmModelPicker(props: LlmModelPickerProps) {
     provider: price.provider as SupportedProvider,
     pricePerMillionInput: price.pricePerMillionInput,
     pricePerMillionOutput: price.pricePerMillionOutput,
-    isFree: "isFree" in price ? price.isFree : undefined,
-    isFastest: "isFastest" in price ? price.isFastest : undefined,
-    isBest: "isBest" in price ? price.isBest : undefined,
+    isFree: price.isFree,
+    isFastest: price.isFastest,
+    isBest: price.isBest,
   }));
 
   if (!editable) {

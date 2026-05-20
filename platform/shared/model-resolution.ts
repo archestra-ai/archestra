@@ -17,6 +17,8 @@
 import {
   OPENROUTER_AUTO_MODEL_ID,
   OPENROUTER_FREE_MODEL_ID,
+  OPENROUTER_LATEST_ALIAS_PREFIX,
+  type SupportedProvider,
 } from "./model-constants";
 
 /** A (model, key) pair stored at one level of the resolution chain. */
@@ -111,6 +113,20 @@ export function isFreeModel(model: ModelPricing): boolean {
   return (
     Number(model.promptPricePerToken) === 0 &&
     Number(model.completionPricePerToken) === 0
+  );
+}
+
+/**
+ * True for OpenRouter "latest" alias ids (`~vendor/model-latest`) that always
+ * track the newest model in a family. Shared by every picker for the badge.
+ */
+export function isOpenRouterLatestAlias(
+  provider: SupportedProvider,
+  modelId: string,
+): boolean {
+  return (
+    provider === "openrouter" &&
+    modelId.startsWith(OPENROUTER_LATEST_ALIAS_PREFIX)
   );
 }
 

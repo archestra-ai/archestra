@@ -3,6 +3,7 @@
 import type { PopoverContentProps } from "@radix-ui/react-popover";
 import {
   compareModelsForDisplay,
+  isOpenRouterLatestAlias,
   OPENROUTER_AUTO_MODEL_ID,
   providerDisplayNames,
   type SupportedProvider,
@@ -67,9 +68,8 @@ function modelIdOf(option: LlmModelSelectOption): string {
 /** Renders the Free / Latest / Fastest / custom badges shared across the option views. */
 function ModelBadges({ option }: { option: LlmModelSelectOption }) {
   const id = modelIdOf(option);
-  // OpenRouter "~...-latest" ids are aliases that always point at the newest
-  // model in a family — the badge tells users the selection auto-updates.
-  const isLatestAlias = option.provider === "openrouter" && id.startsWith("~");
+  // the badge tells users an alias selection auto-updates to the newest model.
+  const isLatestAlias = isOpenRouterLatestAlias(option.provider, id);
   return (
     <>
       {option.isFree && (

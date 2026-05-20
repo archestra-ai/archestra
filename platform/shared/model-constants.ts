@@ -179,6 +179,12 @@ export const OPENROUTER_AUTO_MODEL_ID = "openrouter/auto";
 export const OPENROUTER_FREE_MODEL_ID = "openrouter/free";
 
 /**
+ * Prefix of OpenRouter "latest" alias ids (e.g. `~anthropic/claude-sonnet-latest`)
+ * that always redirect to the newest model in a family.
+ */
+export const OPENROUTER_LATEST_ALIAS_PREFIX = "~";
+
+/**
  * Pattern-based model markers per provider.
  * Patterns are substrings that model IDs must contain (case-insensitive).
  * Used to identify "fastest" (lightweight, low latency) and "best" (highest quality) models.

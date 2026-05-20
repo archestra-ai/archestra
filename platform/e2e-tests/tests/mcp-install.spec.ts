@@ -87,10 +87,6 @@ test.describe("MCP Install", () => {
     );
   });
 
-  // "Custom remote" (No auth required, Bearer Token) moved to
-  // platform/frontend/tests-integration/mcp-install.spec.ts under the
-  // Playwright + MSW suite — they no longer depend on huggingface.co.
-
   test("Local server with bogus image shows error, logs, and can be fixed", async ({
     adminPage,
     extractCookieHeaders,

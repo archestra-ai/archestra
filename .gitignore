@@ -25,3 +25,5 @@ __pycache__/
 # playwright-cli runtime cache (snapshots, console logs, screenshots)
 .playwright-cli/
 
+docs/superpowers/plans
+

@@ -301,7 +301,7 @@ class AgentTeamModel {
    * Access rules:
    * 1. scope = 'org' → true
    * 2. scope = 'team' AND agent assigned to the given team → true
-   * 3. Otherwise → false (personal agents NOT accessible via team tokens)
+   * 3. Otherwise, → false (personal agents NOT accessible via team tokens)
    */
   static async teamHasAgentAccess(
     agentId: string,

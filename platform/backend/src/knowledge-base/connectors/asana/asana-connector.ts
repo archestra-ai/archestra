@@ -219,7 +219,7 @@ export class AsanaConnector extends BaseConnector {
         const nextOffset = extractNextOffset(result);
 
         // Advance the monotonic high-water mark based on ALL fetched tasks,
-        // not only the ones that pass filtering. Otherwise tasks filtered out
+        // not only the ones that pass filtering. Otherwise, tasks filtered out
         // by `tagsToSkip` would indefinitely hold the checkpoint behind them
         // and force re-fetching the same window every run. Matches Jira's
         // `buildBatch` pattern which advances on the last fetched issue.

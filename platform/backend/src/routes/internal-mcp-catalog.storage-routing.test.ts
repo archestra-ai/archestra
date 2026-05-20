@@ -749,7 +749,7 @@ describe("Internal MCP Catalog - Storage Routing", () => {
       expect(flipResponse.statusCode).toBe(200);
 
       // Step 3: the new value must land in plaintext jsonb, AND the secret
-      // bag must no longer contain the stale sensitive value. Otherwise the
+      // bag must no longer contain the stale sensitive value. Otherwise, the
       // catalog read path's merge would surface the stale secret on top of
       // the plaintext, and outgoing headers would still carry the old value.
       row = await loadRaw(created.id);

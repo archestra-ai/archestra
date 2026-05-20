@@ -123,7 +123,7 @@ export function ConnectionFlow({
     if (!id) return;
     // When the user arrived from the MCP Gateway / LLM Proxy table
     // (from=table + only one pinned id), auto-open just that side.
-    // Otherwise expand both steps so the full flow is visible.
+    // Otherwise, expand both steps so the full flow is visible.
     const toOpen: OpenKey[] =
       fromTable && urlGatewayId && !urlProxyId
         ? ["mcp"]

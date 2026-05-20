@@ -498,7 +498,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       };
       const agent = await AgentModel.create(createData, user.id);
       // We need to re-init metrics with the new label keys in case label keys changed.
-      // Otherwise the newly added labels will not make it to metrics. The labels with new keys, that is.
+      // Otherwise, the newly added labels will not make it to metrics. The labels with new keys, that is.
       await initializeObservabilityMetrics();
 
       return reply.send(agent);

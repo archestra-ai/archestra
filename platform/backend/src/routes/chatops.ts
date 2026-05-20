@@ -1343,7 +1343,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
    * Refresh channel discovery for a provider.
    * Clears the TTL cache, then triggers immediate discovery if the provider
-   * supports it (e.g., Slack). Otherwise channels are re-discovered on the
+   * supports it (e.g., Slack). Otherwise, channels are re-discovered on the
    * next bot interaction (e.g., MS Teams).
    */
   fastify.post(

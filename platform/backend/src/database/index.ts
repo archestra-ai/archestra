@@ -23,7 +23,7 @@ export type Transaction = Parameters<
  * The function:
  * 1. Checks if ARCHESTRA_DATABASE_URL_VAULT_REF is set AND READONLY_VAULT is enabled
  * 2. If so, reads database URL from Vault
- * 3. Otherwise falls back to ARCHESTRA_DATABASE_URL or DATABASE_URL env vars
+ * 3. Otherwise, falls back to ARCHESTRA_DATABASE_URL or DATABASE_URL env vars
  * 4. Creates the connection pool with keepalive settings
  *
  * @throws Error if database URL is not configured anywhere

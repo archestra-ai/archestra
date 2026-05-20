@@ -429,7 +429,7 @@ class ModelsDevClient {
         if (modelPriority < existingPriority) {
           deduplicatedModels.set(key, model);
         }
-        // Otherwise keep existing (same priority = first occurrence wins)
+        // Otherwise, keep existing (same priority = first occurrence wins)
       }
     }
     const uniqueModelsToSync = Array.from(deduplicatedModels.values());

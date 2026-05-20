@@ -33,7 +33,7 @@ export function getDefaultEnabledToolIds(
  * Priority:
  * 1. If conversation exists with custom selection → use the custom enabledToolIds
  * 2. If no conversation but pending actions exist → apply them on top of defaults
- * 3. Otherwise → use defaults (all assigned tools enabled)
+ * 3. Otherwise, → use defaults (all assigned tools enabled)
  */
 export function getCurrentEnabledToolIds({
   conversationId,

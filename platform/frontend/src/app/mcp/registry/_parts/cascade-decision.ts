@@ -10,7 +10,7 @@
  *       required userConfig changes, OAuth added/removed)
  *   3. Only forward-compatible env/userConfig changes (or pure
  *      metadata) → "skip"
- *   4. Otherwise → "auto" (breaking change with no re-prompt needed)
+ *   4. Otherwise, → "auto" (breaking change with no re-prompt needed)
  *
  * If this diverges from the backend gate, the scenario matrix's
  * frontend + backend sweeps will disagree. That's the contract — fix

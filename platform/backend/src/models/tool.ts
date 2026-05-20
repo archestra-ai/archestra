@@ -1260,7 +1260,7 @@ class ToolModel {
           // Current tool matches new pattern, prefer it
           existingToolsByRawName.set(rawNameLower, tool);
         }
-        // Otherwise keep the existing entry (first one wins, or it already matches new pattern)
+        // Otherwise, keep the existing entry (first one wins, or it already matches new pattern)
       } else {
         // Store with lowercase key for case-insensitive matching
         existingToolsByRawName.set(rawNameLower, tool);

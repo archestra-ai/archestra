@@ -53,6 +53,14 @@
     "test:e2e:ui": {
       "cache": false
     },
+    "test:integration": {
+      "cache": false,
+      "passThroughEnv": ["CI", "PLAYWRIGHT_BROWSERS_PATH"]
+    },
+    "test:integration:ui": {
+      "cache": false,
+      "persistent": true
+    },
     "codegen": {
       "cache": false
     },

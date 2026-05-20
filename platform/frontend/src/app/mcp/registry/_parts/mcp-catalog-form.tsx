@@ -358,6 +358,10 @@ export function McpCatalogForm({
         (header) => header.includeBearerPrefix,
       );
       if (!hasAuthHeader) {
+        // Bearer-token credential — always sensitive. The Add Header
+        // dialog forces this choice on manual additions, but the
+        // token-auth flow seeds the row programmatically and so must
+        // own the default itself.
         appendAdditionalHeader({
           fieldName: undefined,
           headerName: "Authorization",
@@ -367,6 +371,7 @@ export function McpCatalogForm({
           value: "",
           description: "",
           includeBearerPrefix: true,
+          sensitive: true,
         });
       }
     }

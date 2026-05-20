@@ -421,3 +421,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @jsoref
 - @paulhshort
 - @Misch369
+- @amittbhardwj

@@ -16,7 +16,7 @@ export const FunctionDeclarationSchema = z
       .record(z.string(), z.any())
       .optional()
       .describe(
-        "Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.",
+        "Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case-sensitive. Schema Value: the Schema defining the type used for the parameter.",
       ),
     parametersJsonSchema: z.any().optional(),
     response: z.any().optional(),

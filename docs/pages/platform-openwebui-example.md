@@ -16,7 +16,7 @@ OpenWebUI - one of the most popular clients for LLMs, however it doesn't have bu
 
 ## Plan
 
-In this guide, we will set up the basics: OpenWebUI + Github tool -> Archestra Platform -> OpenAI. We will then make OpenWebUI read a very _interesting_ issue that could impact the original plan and cause the OpenWebUI Chat to do something you haven't even asked for. Afterwards, we'll connect it to Archestra to see how it prevented such behavior. This illustrates a fundamental problem faced by any AI Agent when it has access to tools that can read private data or post outside, known as the [Lethal Trifecta](https://www.archestra.ai/docs/platform-lethal-trifecta).
+In this guide, we will set up the basics: OpenWebUI + GitHub tool -> Archestra Platform -> OpenAI. We will then make OpenWebUI read a very _interesting_ issue that could impact the original plan and cause the OpenWebUI Chat to do something you haven't even asked for. Afterwards, we'll connect it to Archestra to see how it prevented such behavior. This illustrates a fundamental problem faced by any AI Agent when it has access to tools that can read private data or post outside, known as the [Lethal Trifecta](https://www.archestra.ai/docs/platform-lethal-trifecta).
 
 ## Step 1. Get your LLM Provider API Key
 

@@ -2,7 +2,8 @@
 
 import type { archestraApiTypes } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { AlertTriangle, Github, Pencil, Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, BookOpen, Pencil, Plus, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -18,13 +19,25 @@ import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
-import { useDeleteSkill, useSkillsPaginated } from "@/lib/skills/skill.query";
-import { ImportSkillsDialog } from "./_parts/import-skills-dialog";
+import { useOrganization } from "@/lib/organization.query";
+import {
+  useDeleteSkill,
+  useEnableSkillToolDefaults,
+  useSkillSourceRepos,
+  useSkillsPaginated,
+} from "@/lib/skills/skill.query";
 import { SkillEditorDialog } from "./_parts/skill-editor-dialog";
 
 type SkillItem = archestraApiTypes.GetSkillsResponses["200"]["data"][number];
@@ -47,6 +60,7 @@ function SkillsList() {
   const pageIndex = Number(searchParams.get("page") || "1") - 1;
   const pageSize = Number(searchParams.get("pageSize") || DEFAULT_TABLE_LIMIT);
   const search = searchParams.get("search") || "";
+  const sourceRepo = searchParams.get("sourceRepo") || "";
 
   const {
     data: skills,
@@ -56,19 +70,38 @@ function SkillsList() {
     limit: pageSize,
     offset: pageIndex * pageSize,
     search: search || undefined,
+    sourceRepo: sourceRepo || undefined,
   });
+  const { data: sourceReposData } = useSkillSourceRepos();
+  const sourceRepos = sourceReposData?.repos ?? [];
 
-  const [isImportOpen, setIsImportOpen] = useState(false);
+  const setSourceRepoFilter = useCallback(
+    (value: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (value) {
+        params.set("sourceRepo", value);
+      } else {
+        params.delete("sourceRepo");
+      }
+      params.set("page", "1");
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
+
   const [editingSkillId, setEditingSkillId] = useState<string | null>(null);
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [deletingSkill, setDeletingSkill] = useState<SkillItem | null>(null);
 
   const items = skills?.data ?? [];
   const pagination = skills?.pagination;
+  const totalSkills = pagination?.total ?? 0;
+  const hasActiveFilters = !!search || !!sourceRepo;
+  const showEmptyState = !isPending && totalSkills === 0 && !hasActiveFilters;
 
   const clearFilters = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
     params.delete("search");
+    params.delete("sourceRepo");
     params.set("page", "1");
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
   }, [pathname, router, searchParams]);
@@ -77,16 +110,27 @@ function SkillsList() {
     {
       id: "name",
       accessorKey: "name",
-      header: "Name",
+      header: "Skill",
+      size: 700,
       cell: ({ row }) => {
         const skill = row.original;
+        const repo = parseRepoFromSourceRef(skill.sourceRef);
         return (
-          <div className="flex items-center gap-2">
-            <div className="min-w-0">
-              <div className="font-medium">{skill.name}</div>
-              <div className="max-w-md truncate text-xs text-muted-foreground">
-                {skill.description}
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline gap-2">
+                <span className="truncate font-medium">{skill.name}</span>
+                {repo && (
+                  <span className="truncate font-mono text-xs text-muted-foreground">
+                    {repo}
+                  </span>
+                )}
               </div>
+              {skill.description && (
+                <div className="truncate text-xs text-muted-foreground">
+                  {skill.description}
+                </div>
+              )}
             </div>
             {skill.compatibility && (
               <Tooltip>
@@ -96,7 +140,7 @@ function SkillsList() {
                     className="gap-1 text-amber-600 dark:text-amber-500"
                   >
                     <AlertTriangle className="h-3 w-3" />
-                    runtime
+                    compatibility
                   </Badge>
                 </TooltipTrigger>
                 <TooltipContent>{skill.compatibility}</TooltipContent>
@@ -107,38 +151,20 @@ function SkillsList() {
       },
     },
     {
-      id: "source",
-      header: "Source",
-      cell: ({ row }) => {
-        const skill = row.original;
-        const badge = (
-          <Badge variant="secondary" className="capitalize">
-            {skill.sourceType}
-          </Badge>
-        );
-        return skill.sourceRef ? (
-          <Tooltip>
-            <TooltipTrigger asChild>{badge}</TooltipTrigger>
-            <TooltipContent>{skill.sourceRef}</TooltipContent>
-          </Tooltip>
-        ) : (
-          badge
-        );
-      },
-    },
-    {
       id: "files",
-      header: "Files",
+      size: 150,
+      header: () => <div className="text-right">Files</div>,
       cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground">
+        <div className="text-right text-sm text-muted-foreground">
           {row.original.fileCount}{" "}
           {row.original.fileCount === 1 ? "file" : "files"}
-        </span>
+        </div>
       ),
     },
     {
       id: "actions",
-      header: "Actions",
+      size: 150,
+      header: () => <div className="text-right">Actions</div>,
       cell: ({ row }) => {
         const skill = row.original;
         const actions: TableRowAction[] = [
@@ -154,7 +180,11 @@ function SkillsList() {
             onClick: () => setDeletingSkill(skill),
           },
         ];
-        return <TableRowActions actions={actions} />;
+        return (
+          <div className="flex justify-end">
+            <TableRowActions actions={actions} />
+          </div>
+        );
       },
     },
   ];
@@ -166,64 +196,73 @@ function SkillsList() {
     >
       <PageLayout
         title="Skills"
-        description="Reusable SKILL.md instruction sets that agents load on demand. Available to all agents in the organization."
+        description=""
         actionButton={
-          <div className="flex items-center gap-2">
-            <PermissionButton
-              permissions={{ agent: ["create"] }}
-              variant="outline"
-              onClick={() => setIsImportOpen(true)}
-            >
-              <Github className="h-4 w-4" />
-              Import from GitHub
+          !showEmptyState && (
+            <PermissionButton permissions={{ agent: ["create"] }} asChild>
+              <Link href="/agents/skills/new">
+                <Plus className="h-4 w-4" />
+                Add new skill
+              </Link>
             </PermissionButton>
-            <PermissionButton
-              permissions={{ agent: ["create"] }}
-              onClick={() => setIsCreateOpen(true)}
-            >
-              <Plus className="h-4 w-4" />
-              New Skill
-            </PermissionButton>
-          </div>
+          )
         }
       >
-        <div className="mb-6 flex items-center gap-4">
-          <SearchInput paramName="search" className="relative w-[370px]" />
-        </div>
+        {showEmptyState ? (
+          <SkillsEmptyState />
+        ) : (
+          <>
+            <div className="mb-6 flex flex-wrap items-center gap-3">
+              <SearchInput paramName="search" className="relative w-[370px]" />
+              <Select
+                value={sourceRepo || "all"}
+                onValueChange={(value) =>
+                  setSourceRepoFilter(value === "all" ? "" : value)
+                }
+              >
+                <SelectTrigger className="w-[260px]">
+                  <SelectValue placeholder="All repositories" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All repositories</SelectItem>
+                  {sourceRepos.map((repo) => (
+                    <SelectItem key={repo} value={repo}>
+                      <span className="truncate font-mono text-xs">{repo}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-        <DataTable
-          columns={columns}
-          data={items}
-          getRowId={(row) => row.id}
-          emptyMessage="No skills yet. Import from GitHub or create one manually."
-          hasActiveFilters={!!search}
-          filteredEmptyMessage="No skills match your search."
-          onClearFilters={clearFilters}
-          hideSelectedCount
-          manualPagination
-          pagination={{
-            pageIndex,
-            pageSize,
-            total: pagination?.total ?? 0,
-          }}
-          onPaginationChange={(newPagination) => {
-            const params = new URLSearchParams(searchParams.toString());
-            params.set("page", String(newPagination.pageIndex + 1));
-            params.set("pageSize", String(newPagination.pageSize));
-            router.push(`${pathname}?${params.toString()}`, { scroll: false });
-          }}
-          onRowClick={(row) => setEditingSkillId(row.id)}
-          isLoading={isFetching}
-        />
+            <DataTable
+              columns={columns}
+              data={items}
+              getRowId={(row) => row.id}
+              emptyMessage="No skills yet."
+              hasActiveFilters={hasActiveFilters}
+              filteredEmptyMessage="No skills match the current filters."
+              onClearFilters={clearFilters}
+              hideSelectedCount
+              manualPagination
+              pagination={{
+                pageIndex,
+                pageSize,
+                total: totalSkills,
+              }}
+              onPaginationChange={(newPagination) => {
+                const params = new URLSearchParams(searchParams.toString());
+                params.set("page", String(newPagination.pageIndex + 1));
+                params.set("pageSize", String(newPagination.pageSize));
+                router.push(`${pathname}?${params.toString()}`, {
+                  scroll: false,
+                });
+              }}
+              onRowClick={(row) => setEditingSkillId(row.id)}
+              isLoading={isFetching}
+            />
+          </>
+        )}
       </PageLayout>
-
-      <ImportSkillsDialog open={isImportOpen} onOpenChange={setIsImportOpen} />
-
-      <SkillEditorDialog
-        skillId={null}
-        open={isCreateOpen}
-        onOpenChange={setIsCreateOpen}
-      />
 
       {editingSkillId && (
         <SkillEditorDialog
@@ -241,6 +280,69 @@ function SkillsList() {
         />
       )}
     </LoadingWrapper>
+  );
+}
+
+/** Extract `owner/repo` from a `source_ref` shaped like `owner/repo@ref:path`. */
+function parseRepoFromSourceRef(sourceRef: string | null): string | null {
+  if (!sourceRef) return null;
+  const atIdx = sourceRef.indexOf("@");
+  return atIdx === -1 ? sourceRef : sourceRef.slice(0, atIdx);
+}
+
+function SkillsEmptyState() {
+  const router = useRouter();
+  const { data: organization } = useOrganization();
+  const enableDefaults = useEnableSkillToolDefaults();
+  const alreadyEnabled = organization?.skillToolsEnabled === true;
+
+  const handleEnableAndCreate = useCallback(async () => {
+    const result = await enableDefaults.mutateAsync();
+    if (result) {
+      router.push("/agents/skills/new");
+    }
+  }, [enableDefaults, router]);
+
+  return (
+    <div className="flex min-h-[60vh] items-center justify-center">
+      <div className="max-w-md text-center">
+        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl border bg-background shadow-sm">
+          <BookOpen className="h-7 w-7 text-primary" />
+        </div>
+        <h2 className="mb-2 text-xl font-semibold">No skills yet</h2>
+        <p className="mb-2 text-sm text-muted-foreground">
+          A skill is a set of instructions and files. Agents pick the right one
+          by name and follow it on demand.
+        </p>
+        {!alreadyEnabled && (
+          <p className="mb-6 text-sm text-muted-foreground">
+            Turning skills on makes them available to every agent in this
+            organization.
+          </p>
+        )}
+        <div className="flex items-center justify-center">
+          {alreadyEnabled ? (
+            <PermissionButton permissions={{ agent: ["create"] }} asChild>
+              <Link href="/agents/skills/new">
+                <Plus className="mr-2 h-4 w-4" />
+                Add your first skill
+              </Link>
+            </PermissionButton>
+          ) : (
+            <PermissionButton
+              permissions={{ agent: ["update"] }}
+              onClick={handleEnableAndCreate}
+              disabled={enableDefaults.isPending}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              {enableDefaults.isPending
+                ? "Enabling…"
+                : "Enable and create a new skill"}
+            </PermissionButton>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 

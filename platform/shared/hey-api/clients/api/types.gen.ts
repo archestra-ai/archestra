@@ -41953,6 +41953,7 @@ export type GetOrganizationResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        skillToolsEnabled: boolean;
     };
 };
 
@@ -42230,6 +42231,7 @@ export type UpdateAppearanceSettingsResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        skillToolsEnabled: boolean;
     };
 };
 
@@ -42378,6 +42380,7 @@ export type UpdateSecuritySettingsResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        skillToolsEnabled: boolean;
     };
 };
 
@@ -42529,6 +42532,7 @@ export type UpdateLlmSettingsResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        skillToolsEnabled: boolean;
     };
 };
 
@@ -42540,6 +42544,7 @@ export type UpdateAgentSettingsData = {
         defaultLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         defaultLlmApiKeyId?: string | null;
         defaultAgentId?: string | null;
+        skillToolsEnabled?: boolean;
     };
     path?: never;
     query?: never;
@@ -42679,6 +42684,7 @@ export type UpdateAgentSettingsResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        skillToolsEnabled: boolean;
     };
 };
 
@@ -42836,6 +42842,7 @@ export type UpdateConnectionSettingsResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        skillToolsEnabled: boolean;
     };
 };
 
@@ -42984,6 +42991,7 @@ export type UpdatePresetEntityNameResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        skillToolsEnabled: boolean;
     };
 };
 
@@ -43131,6 +43139,7 @@ export type UpdatePresetEntityDefaultLabelResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        skillToolsEnabled: boolean;
     };
 };
 
@@ -43279,6 +43288,7 @@ export type UpdateAuthSettingsResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        skillToolsEnabled: boolean;
     };
 };
 
@@ -43429,6 +43439,7 @@ export type UpdateKnowledgeSettingsResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        skillToolsEnabled: boolean;
     };
 };
 
@@ -43574,6 +43585,7 @@ export type DropEmbeddingConfigResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        skillToolsEnabled: boolean;
     };
 };
 
@@ -43808,6 +43820,7 @@ export type CompleteOnboardingResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        skillToolsEnabled: boolean;
     };
 };
 
@@ -45881,6 +45894,7 @@ export type GetSkillsData = {
         limit?: number;
         offset?: number;
         search?: string;
+        sourceRepo?: string;
     };
     url: '/api/skills';
 };
@@ -45993,6 +46007,7 @@ export type CreateSkillData = {
         files?: Array<{
             path: string;
             content: string;
+            encoding?: 'utf8' | 'base64';
         }>;
     };
     path?: never;
@@ -46091,6 +46106,7 @@ export type CreateSkillResponses = {
             skillId: string;
             path: string;
             content: string;
+            encoding: 'utf8' | 'base64';
             kind: 'reference' | 'script' | 'asset';
             createdAt: string;
         }>;
@@ -46284,6 +46300,7 @@ export type GetSkillResponses = {
             skillId: string;
             path: string;
             content: string;
+            encoding: 'utf8' | 'base64';
             kind: 'reference' | 'script' | 'asset';
             createdAt: string;
         }>;
@@ -46298,6 +46315,7 @@ export type UpdateSkillData = {
         files?: Array<{
             path: string;
             content: string;
+            encoding?: 'utf8' | 'base64';
         }>;
     };
     path: {
@@ -46398,6 +46416,7 @@ export type UpdateSkillResponses = {
             skillId: string;
             path: string;
             content: string;
+            encoding: 'utf8' | 'base64';
             kind: 'reference' | 'script' | 'asset';
             createdAt: string;
         }>;
@@ -46405,6 +46424,173 @@ export type UpdateSkillResponses = {
 };
 
 export type UpdateSkillResponse = UpdateSkillResponses[keyof UpdateSkillResponses];
+
+export type GetSkillSourceReposData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/skills/source-repos';
+};
+
+export type GetSkillSourceReposErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetSkillSourceReposError = GetSkillSourceReposErrors[keyof GetSkillSourceReposErrors];
+
+export type GetSkillSourceReposResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        repos: Array<string>;
+    };
+};
+
+export type GetSkillSourceReposResponse = GetSkillSourceReposResponses[keyof GetSkillSourceReposResponses];
+
+export type EnableSkillToolDefaultsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/skills/enable-defaults';
+};
+
+export type EnableSkillToolDefaultsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type EnableSkillToolDefaultsError = EnableSkillToolDefaultsErrors[keyof EnableSkillToolDefaultsErrors];
+
+export type EnableSkillToolDefaultsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        enabled: true;
+        agentsBackfilled: number;
+    };
+};
+
+export type EnableSkillToolDefaultsResponse = EnableSkillToolDefaultsResponses[keyof EnableSkillToolDefaultsResponses];
 
 export type DiscoverGithubSkillsData = {
     body: {
@@ -46595,6 +46781,7 @@ export type PreviewGithubSkillResponses = {
         files: Array<{
             path: string;
             content: string;
+            encoding: 'utf8' | 'base64';
             kind: 'reference' | 'script' | 'asset';
         }>;
         sourceRef: string;

@@ -126,6 +126,15 @@ const registry = defineArchestraTools([
         );
       }
 
+      if (file.encoding === "base64") {
+        return successResult(
+          `<skill_file skill="${skill.name}" path="${file.path}" encoding="base64">\n` +
+            `Binary asset, ${file.content.length} base64 chars. ` +
+            "Not loaded inline — fetch the raw bytes through the platform " +
+            "if you need to use this file.\n</skill_file>",
+        );
+      }
+
       return successResult(
         `<skill_file skill="${skill.name}" path="${file.path}">\n${file.content}\n</skill_file>`,
       );

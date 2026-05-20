@@ -325,14 +325,20 @@ export const DEFAULT_ARCHESTRA_TOOL_NAMES: readonly string[] = [
   TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
-  TOOL_ACTIVATE_SKILL_FULL_NAME,
-  TOOL_READ_SKILL_FILE_FULL_NAME,
 ];
 
 export const DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_ARTIFACT_WRITE_SHORT_NAME,
   TOOL_TODO_WRITE_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+] as const satisfies readonly ArchestraToolShortName[];
+
+/**
+ * Agent Skill tools — only assigned to agents once an org admin opts in via
+ * the "Enable and create a new skill" empty-state action on /agents/skills
+ * (sets `organization.skillToolsEnabled`).
+ */
+export const SKILL_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_ACTIVATE_SKILL_SHORT_NAME,
   TOOL_READ_SKILL_FILE_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];

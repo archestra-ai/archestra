@@ -1,21 +1,26 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { handleApiError } from "@/lib/utils";
+import { getApiErrorMessage, handleApiError } from "@/lib/utils";
 
 const {
   getSkills,
   getSkill,
+  getSkillSourceRepos,
   createSkill,
   updateSkill,
   deleteSkill,
   discoverGithubSkills,
   previewGithubSkill,
   importGithubSkills,
+  enableSkillToolDefaults,
 } = archestraApiSdk;
 
 type SkillsQuery = NonNullable<archestraApiTypes.GetSkillsData["query"]>;
-type SkillsPaginatedParams = Pick<SkillsQuery, "limit" | "offset" | "search">;
+type SkillsPaginatedParams = Pick<
+  SkillsQuery,
+  "limit" | "offset" | "search" | "sourceRepo"
+>;
 
 // ===== Query hooks =====
 
@@ -28,6 +33,20 @@ export function useSkillsPaginated(params: SkillsPaginatedParams) {
       if (error) {
         handleApiError(error);
         return null;
+      }
+      return data;
+    },
+  });
+}
+
+export function useSkillSourceRepos() {
+  return useQuery({
+    queryKey: ["skills", "source-repos"],
+    queryFn: async () => {
+      const { data, error } = await getSkillSourceRepos();
+      if (error) {
+        handleApiError(error);
+        return { repos: [] as string[] };
       }
       return data;
     },
@@ -122,10 +141,9 @@ export function useDiscoverGithubSkills() {
     ) => {
       const { data, error } = await discoverGithubSkills({ body });
       if (error) {
-        handleApiError(error);
-        return null;
+        return { data: null, errorMessage: getApiErrorMessage(error) };
       }
-      return data;
+      return { data, errorMessage: null };
     },
   });
 }
@@ -152,6 +170,35 @@ export function usePreviewGithubSkill(
         return null;
       }
       return data;
+    },
+  });
+}
+
+export function useEnableSkillToolDefaults() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await enableSkillToolDefaults();
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      // Backfill has added skill tools to every agent in the org — invalidate
+      // all agent/tool caches so the gateway and other agent pages refresh.
+      queryClient.invalidateQueries({ queryKey: ["organization"] });
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+      queryClient.invalidateQueries({ queryKey: ["tools"] });
+      const { agentsBackfilled } = data;
+      toast.success(
+        `Skill tools enabled for ${agentsBackfilled} agent${
+          agentsBackfilled === 1 ? "" : "s"
+        }`,
+      );
     },
   });
 }

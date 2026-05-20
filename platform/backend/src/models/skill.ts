@@ -1,4 +1,4 @@
-import { and, count, desc, eq, ilike, or } from "drizzle-orm";
+import { and, count, desc, eq, ilike, isNotNull, like, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertSkill, InsertSkillFile, Skill, UpdateSkill } from "@/types";
 
@@ -8,6 +8,7 @@ class SkillModel {
     limit?: number;
     offset?: number;
     search?: string;
+    sourceRepo?: string;
   }): Promise<Skill[]> {
     let query = db
       .select()
@@ -29,6 +30,7 @@ class SkillModel {
   static async countByOrganization(params: {
     organizationId: string;
     search?: string;
+    sourceRepo?: string;
   }): Promise<number> {
     const [result] = await db
       .select({ count: count() })
@@ -36,6 +38,34 @@ class SkillModel {
       .where(and(...buildOrgFilters(params)));
 
     return result?.count ?? 0;
+  }
+
+  /**
+   * Distinct `owner/repo` strings across the org's imported skills, derived
+   * from the `source_ref` provenance column (formatted as
+   * `owner/repo@ref:path`).
+   */
+  static async findDistinctSourceRepos(
+    organizationId: string,
+  ): Promise<string[]> {
+    const rows = await db
+      .selectDistinct({ sourceRef: schema.skillsTable.sourceRef })
+      .from(schema.skillsTable)
+      .where(
+        and(
+          eq(schema.skillsTable.organizationId, organizationId),
+          isNotNull(schema.skillsTable.sourceRef),
+        ),
+      );
+
+    const repos = new Set<string>();
+    for (const { sourceRef } of rows) {
+      if (!sourceRef) continue;
+      const atIdx = sourceRef.indexOf("@");
+      const repo = atIdx === -1 ? sourceRef : sourceRef.slice(0, atIdx);
+      if (repo) repos.add(repo);
+    }
+    return [...repos].sort();
   }
 
   static async findById(id: string): Promise<Skill | null> {
@@ -132,8 +162,13 @@ class SkillModel {
   }
 }
 
-function buildOrgFilters(params: { organizationId: string; search?: string }) {
+function buildOrgFilters(params: {
+  organizationId: string;
+  search?: string;
+  sourceRepo?: string;
+}) {
   const normalizedSearch = params.search?.trim();
+  const normalizedSourceRepo = params.sourceRepo?.trim();
   return [
     eq(schema.skillsTable.organizationId, params.organizationId),
     ...(normalizedSearch
@@ -143,6 +178,9 @@ function buildOrgFilters(params: { organizationId: string; search?: string }) {
             ilike(schema.skillsTable.description, `%${normalizedSearch}%`),
           ),
         ]
+      : []),
+    ...(normalizedSourceRepo
+      ? [like(schema.skillsTable.sourceRef, `${normalizedSourceRepo}@%`)]
       : []),
   ];
 }

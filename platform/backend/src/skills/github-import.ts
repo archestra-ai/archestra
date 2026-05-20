@@ -3,7 +3,7 @@ import { Octokit } from "@octokit/rest";
 import { TimeInMs } from "@shared";
 import { LRUCacheManager } from "@/cache-manager";
 import logger from "@/logging";
-import type { SkillFileKind } from "@/types";
+import type { SkillFileEncoding, SkillFileKind } from "@/types";
 import {
   deriveSkillFileKind,
   type ParsedSkill,
@@ -22,10 +22,13 @@ import {
  * `raw.githubusercontent.com`, which doesn't consume the REST API rate limit.
  */
 
-/** Skip individual resource files larger than this (text only, no binaries). */
-const MAX_SKILL_FILE_BYTES = 256 * 1024;
+/**
+ * Per-file size cap. Generous enough to import binary assets (images, fonts,
+ * small PDFs) so we can faithfully redistribute whole skills.
+ */
+const MAX_SKILL_FILE_BYTES = 10 * 1024 * 1024;
 /** Cap on resource files copied per skill. */
-const MAX_FILES_PER_SKILL = 50;
+const MAX_FILES_PER_SKILL = 500;
 /** Number of distinct repo snapshots to keep cached across requests. */
 const REPO_CACHE_MAX_ENTRIES = 50;
 /**
@@ -57,7 +60,12 @@ interface DiscoveredSkill {
 /** A fully fetched skill ready to be persisted. */
 interface ImportedSkill {
   parsed: ParsedSkill;
-  files: { path: string; content: string; kind: SkillFileKind }[];
+  files: {
+    path: string;
+    content: string;
+    encoding: SkillFileEncoding;
+    kind: SkillFileKind;
+  }[];
   /** Provenance string, e.g. `owner/repo@main:skills/pdf`. */
   sourceRef: string;
   /** Commit SHA the snapshot was taken at. */
@@ -124,10 +132,10 @@ export async function discoverSkills(params: {
         manifestPath,
         params.githubToken,
       );
-      if (raw === null) continue;
+      if (raw === null || raw.encoding !== "utf8") continue;
 
       try {
-        parsed = parseSkillManifest(raw);
+        parsed = parseSkillManifest(raw.content);
       } catch (error) {
         logger.warn(
           { manifestPath, error: errorMessage(error) },
@@ -192,10 +200,10 @@ export async function importSkills(params: {
         manifestPath,
         params.githubToken,
       );
-      if (raw === null) {
+      if (raw === null || raw.encoding !== "utf8") {
         throw new SkillImportError(`No SKILL.md found at ${skillPath}`);
       }
-      parsed = parseSkillManifest(raw);
+      parsed = parseSkillManifest(raw.content);
       snapshot.manifests.set(manifestPath, parsed);
     }
 
@@ -215,19 +223,20 @@ export async function importSkills(params: {
 
     const files: ImportedSkill["files"] = [];
     for (const absolutePath of resourcePaths) {
-      const content = await fetchRawFile(
+      const fetched = await fetchRawFile(
         location,
         snapshot.commitSha,
         absolutePath,
         params.githubToken,
       );
-      if (content === null) continue;
+      if (fetched === null) continue;
       const relativePath = skillPath
         ? absolutePath.slice(skillPath.length + 1)
         : absolutePath;
       files.push({
         path: relativePath,
-        content,
+        content: fetched.content,
+        encoding: fetched.encoding,
         kind: deriveSkillFileKind(relativePath),
       });
     }
@@ -368,13 +377,17 @@ function repoCacheKey(
  * Fetch a file from `raw.githubusercontent.com`. This endpoint serves the
  * same bytes as `repos.getContent` but is not counted against the GitHub REST
  * rate limit, which is the limit that bites users importing many files.
+ *
+ * Returns `{ content, encoding }`: UTF-8 text for text files, or a
+ * base64-encoded payload (with `encoding: "base64"`) for binary assets so the
+ * raw bytes survive a round-trip through Postgres `text` storage.
  */
 async function fetchRawFile(
   location: RepoLocation,
   commitSha: string,
   path: string,
   token: string | undefined,
-): Promise<string | null> {
+): Promise<{ content: string; encoding: SkillFileEncoding } | null> {
   const url = `https://raw.githubusercontent.com/${location.owner}/${location.repo}/${commitSha}/${path}`;
   const headers: Record<string, string> = {
     Accept: "application/vnd.github.raw",
@@ -418,11 +431,12 @@ async function fetchRawFile(
     );
     return null;
   }
+  // Null byte → binary. Preserve raw bytes by base64-encoding so we can
+  // redistribute the asset verbatim later.
   if (buffer.includes(0)) {
-    // Null byte — treat as binary and skip (binary assets are unsupported).
-    return null;
+    return { content: buffer.toString("base64"), encoding: "base64" };
   }
-  return buffer.toString("utf-8");
+  return { content: buffer.toString("utf-8"), encoding: "utf8" };
 }
 
 function normalizeSubpath(path: string): string {

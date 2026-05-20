@@ -19,6 +19,13 @@ export type SkillSourceType = z.infer<typeof SkillSourceTypeSchema>;
 export const SkillFileKindSchema = z.enum(["reference", "script", "asset"]);
 export type SkillFileKind = z.infer<typeof SkillFileKindSchema>;
 
+/**
+ * How `content` is encoded. UTF-8 for text; base64 for binary assets so the
+ * raw bytes can be reconstructed when redistributing a skill.
+ */
+export const SkillFileEncodingSchema = z.enum(["utf8", "base64"]);
+export type SkillFileEncoding = z.infer<typeof SkillFileEncodingSchema>;
+
 const SkillMetadataSchema = z.record(z.string(), z.string());
 
 export const SelectSkillSchema = createSelectSchema(schema.skillsTable, {
@@ -51,6 +58,7 @@ export const SelectSkillFileSchema = createSelectSchema(
   schema.skillFilesTable,
   {
     kind: SkillFileKindSchema,
+    encoding: SkillFileEncodingSchema,
   },
 );
 
@@ -58,6 +66,7 @@ export const InsertSkillFileSchema = createInsertSchema(
   schema.skillFilesTable,
   {
     kind: SkillFileKindSchema,
+    encoding: SkillFileEncodingSchema.optional(),
   },
 ).omit({
   id: true,

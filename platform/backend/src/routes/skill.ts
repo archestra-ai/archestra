@@ -7,7 +7,12 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import logger from "@/logging";
-import { SkillFileModel, SkillModel } from "@/models";
+import {
+  OrganizationModel,
+  SkillFileModel,
+  SkillModel,
+  ToolModel,
+} from "@/models";
 import {
   discoverSkills,
   importSkills,
@@ -23,6 +28,7 @@ import {
   constructResponseSchema,
   DeleteObjectResponseSchema,
   SelectSkillSchema,
+  SkillFileEncodingSchema,
   SkillWithFilesSchema,
 } from "@/types";
 
@@ -35,6 +41,7 @@ const SkillListItemSchema = SelectSkillSchema.extend({
 const SkillFileInputSchema = z.object({
   path: z.string().min(1),
   content: z.string(),
+  encoding: SkillFileEncodingSchema.optional(),
 });
 
 /** Manual create/update payload: raw SKILL.md plus resource files. */
@@ -61,21 +68,26 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Skills"],
         querystring: PaginationQuerySchema.extend({
           search: z.string().optional(),
+          sourceRepo: z.string().optional(),
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(SkillListItemSchema),
         ),
       },
     },
-    async ({ query: { limit, offset, search }, organizationId }, reply) => {
+    async (
+      { query: { limit, offset, search, sourceRepo }, organizationId },
+      reply,
+    ) => {
       const [skills, total] = await Promise.all([
         SkillModel.findByOrganization({
           organizationId,
           limit,
           offset,
           search,
+          sourceRepo,
         }),
-        SkillModel.countByOrganization({ organizationId, search }),
+        SkillModel.countByOrganization({ organizationId, search, sourceRepo }),
       ]);
 
       const fileCounts = await SkillFileModel.countBySkillIds(
@@ -185,6 +197,25 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.get(
+    "/api/skills/source-repos",
+    {
+      schema: {
+        operationId: RouteId.GetSkillSourceRepos,
+        description:
+          "List distinct GitHub repositories that skills in this organization were imported from",
+        tags: ["Skills"],
+        response: constructResponseSchema(
+          z.object({ repos: z.array(z.string()) }),
+        ),
+      },
+    },
+    async ({ organizationId }, reply) => {
+      const repos = await SkillModel.findDistinctSourceRepos(organizationId);
+      return reply.send({ repos });
+    },
+  );
+
   fastify.delete(
     "/api/skills/:id",
     {
@@ -203,6 +234,33 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Skill not found");
       }
       return reply.send({ success: true });
+    },
+  );
+
+  fastify.post(
+    "/api/skills/enable-defaults",
+    {
+      schema: {
+        operationId: RouteId.EnableSkillToolDefaults,
+        description:
+          "Enable the Agent Skill tools (`activate_skill`, `read_skill_file`) for this organization. Sets the org-level flag and backfills both tools onto every existing agent. Idempotent.",
+        tags: ["Skills"],
+        response: constructResponseSchema(
+          z.object({ enabled: z.literal(true), agentsBackfilled: z.number() }),
+        ),
+      },
+    },
+    async ({ organizationId }, reply) => {
+      await OrganizationModel.patch(organizationId, {
+        skillToolsEnabled: true,
+      });
+      const agentsBackfilled =
+        await ToolModel.backfillSkillToolsToOrgAgents(organizationId);
+      logger.info(
+        { organizationId, agentsBackfilled },
+        "[Skills] Enabled skill tool defaults and backfilled existing agents",
+      );
+      return reply.send({ enabled: true, agentsBackfilled });
     },
   );
 
@@ -278,6 +336,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
               z.object({
                 path: z.string(),
                 content: z.string(),
+                encoding: SkillFileEncodingSchema,
                 kind: z.enum(["reference", "script", "asset"]),
               }),
             ),
@@ -411,10 +470,13 @@ async function assertNameAvailable(organizationId: string, name: string) {
   }
 }
 
-function toSkillFiles(files: { path: string; content: string }[]) {
+function toSkillFiles(
+  files: { path: string; content: string; encoding?: "utf8" | "base64" }[],
+) {
   return files.map((file) => ({
     path: file.path,
     content: file.content,
+    encoding: file.encoding ?? "utf8",
     kind: deriveSkillFileKind(file.path),
   }));
 }

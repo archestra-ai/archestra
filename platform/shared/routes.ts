@@ -478,6 +478,8 @@ export const RouteId = {
   DiscoverGithubSkills: "discoverGithubSkills",
   PreviewGithubSkill: "previewGithubSkill",
   ImportGithubSkills: "importGithubSkills",
+  GetSkillSourceRepos: "getSkillSourceRepos",
+  EnableSkillToolDefaults: "enableSkillToolDefaults",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

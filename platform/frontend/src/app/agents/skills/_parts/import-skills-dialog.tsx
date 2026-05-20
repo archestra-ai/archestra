@@ -1,15 +1,37 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { AlertTriangle, ArrowLeft, Eye } from "lucide-react";
-import { useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  CheckCircle2,
+  Eye,
+  Info,
+  Loader2,
+  PackageSearch,
+  SearchX,
+} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { SearchInput } from "@/components/search-input";
 import { StandardDialog } from "@/components/standard-dialog";
-import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   useDiscoverGithubSkills,
   useImportGithubSkills,
@@ -24,21 +46,27 @@ type DiscoveredSkill =
 export function ImportSkillsDialog({
   open,
   onOpenChange,
+  onImported,
+  initialRepoUrl = "",
+  autoDiscover = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onImported?: () => void;
+  initialRepoUrl?: string;
+  autoDiscover?: boolean;
 }) {
   const discover = useDiscoverGithubSkills();
   const importSkills = useImportGithubSkills();
 
-  const [repoUrl, setRepoUrl] = useState("");
+  const [repoUrl, setRepoUrl] = useState(initialRepoUrl);
   const [path, setPath] = useState("");
   const [githubToken, setGithubToken] = useState("");
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [discovered, setDiscovered] = useState<DiscoveredSkill[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [previewSkillPath, setPreviewSkillPath] = useState<string | null>(null);
+  const [discoverError, setDiscoverError] = useState<string | null>(null);
 
   const previewBody = previewSkillPath
     ? {
@@ -55,11 +83,11 @@ export function ImportSkillsDialog({
     setRepoUrl("");
     setPath("");
     setGithubToken("");
-    setShowAdvanced(false);
     setDiscovered(null);
     setSelected(new Set());
     setSearch("");
     setPreviewSkillPath(null);
+    setDiscoverError(null);
   };
 
   const backToDiscover = () => {
@@ -73,19 +101,31 @@ export function ImportSkillsDialog({
     onOpenChange(isOpen);
   };
 
-  const handleDiscover = async () => {
-    const result = await discover.mutateAsync({
-      repoUrl,
+  const handleDiscover = async (overrideRepoUrl?: string) => {
+    setDiscoverError(null);
+    const { data, errorMessage } = await discover.mutateAsync({
+      repoUrl: overrideRepoUrl ?? repoUrl,
       ...(path.trim() && { path: path.trim() }),
       ...(githubToken.trim() && { githubToken: githubToken.trim() }),
     });
-    if (result) {
-      setDiscovered(result.skills);
+    if (data) {
+      setDiscovered(data.skills);
       setSelected(
-        new Set(result.skills.filter((s) => !s.exists).map((s) => s.skillPath)),
+        new Set(data.skills.filter((s) => !s.exists).map((s) => s.skillPath)),
       );
+    } else if (errorMessage) {
+      setDiscoverError(errorMessage);
     }
   };
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only fire on open
+  useEffect(() => {
+    if (!open) return;
+    setRepoUrl(initialRepoUrl);
+    if (autoDiscover && initialRepoUrl) {
+      handleDiscover(initialRepoUrl);
+    }
+  }, [open]);
 
   const handleImport = async () => {
     const result = await importSkills.mutateAsync({
@@ -96,6 +136,7 @@ export function ImportSkillsDialog({
     });
     if (result) {
       handleClose(false);
+      onImported?.();
     }
   };
 
@@ -149,40 +190,71 @@ export function ImportSkillsDialog({
   };
 
   const isSelectStep = discovered !== null;
+  const isAutoDiscovering = autoDiscover && !isSelectStep && !discoverError;
+  const hasGithubToken = githubToken.trim().length > 0;
+
+  const repoSlug = repoUrl
+    .replace(/^https?:\/\//, "")
+    .replace(/^github\.com\//, "")
+    .replace(/\.git$/, "")
+    .replace(/\/$/, "");
+  const repoOwner = repoSlug.split("/")[0];
+
+  const totalImportable = discovered?.filter((s) => !s.exists).length ?? 0;
+  const totalExisting = discovered?.filter((s) => s.exists).length ?? 0;
 
   return (
     <StandardDialog
       open={open}
       onOpenChange={handleClose}
       title={
-        isSelectStep ? (
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={backToDiscover}
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
+        isAutoDiscovering ? (
+          "Scanning repository"
+        ) : isSelectStep ? (
+          autoDiscover ? (
             <span>Select skills to import</span>
-          </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={backToDiscover}
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <span>Select skills to import</span>
+            </div>
+          )
         ) : (
           "Import skills from GitHub"
         )
       }
       description={
-        isSelectStep
-          ? "Skills already in your organization are disabled."
-          : "Point at a repository containing one or more SKILL.md directories."
+        isAutoDiscovering
+          ? "Looking for SKILL.md directories in the repository."
+          : isSelectStep
+            ? "Choose which skills to add to your organization."
+            : "Point at a repository containing one or more SKILL.md directories."
       }
       size="medium"
+      bodyClassName={isSelectStep ? "p-0" : undefined}
       footer={
-        isSelectStep ? (
+        isAutoDiscovering ? (
+          <Button variant="outline" onClick={() => handleClose(false)}>
+            Cancel
+          </Button>
+        ) : isSelectStep ? (
           <>
-            <Button variant="outline" onClick={backToDiscover}>
-              Back
-            </Button>
+            {autoDiscover ? (
+              <Button variant="outline" onClick={() => handleClose(false)}>
+                Cancel
+              </Button>
+            ) : (
+              <Button variant="outline" onClick={backToDiscover}>
+                Back
+              </Button>
+            )}
             <Button
               onClick={handleImport}
               disabled={selected.size === 0 || importSkills.isPending}
@@ -198,7 +270,7 @@ export function ImportSkillsDialog({
               Cancel
             </Button>
             <Button
-              onClick={handleDiscover}
+              onClick={() => handleDiscover()}
               disabled={!repoUrl.trim() || discover.isPending}
             >
               {discover.isPending ? "Discovering..." : "Discover"}
@@ -207,181 +279,341 @@ export function ImportSkillsDialog({
         )
       }
     >
-      {isSelectStep ? (
-        <div>
+      {isAutoDiscovering ? (
+        <div className="flex flex-col items-center justify-center gap-4 py-10">
+          <Avatar className="size-14">
+            <AvatarImage
+              src={`https://github.com/${repoOwner}.png?size=128`}
+              alt=""
+            />
+            <AvatarFallback>
+              <PackageSearch className="size-6 text-muted-foreground" />
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="size-3.5 animate-spin" />
+            <span className="font-mono text-foreground">{repoSlug}</span>
+          </div>
+        </div>
+      ) : isSelectStep ? (
+        <div className="flex flex-col">
           {discovered.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              No SKILL.md directories found in that repository.
-            </p>
+            <>
+              <div className="flex items-center gap-3 border-b bg-muted/30 px-4 py-3">
+                <Avatar className="size-8 shrink-0">
+                  <AvatarImage
+                    src={`https://github.com/${repoOwner}.png?size=64`}
+                    alt=""
+                  />
+                  <AvatarFallback className="text-xs">
+                    {repoOwner.slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1 truncate font-mono text-sm font-medium">
+                  {repoSlug}
+                </div>
+                {!autoDiscover && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={backToDiscover}
+                    className="shrink-0"
+                  >
+                    Change source
+                  </Button>
+                )}
+              </div>
+              <div className="px-4 py-8">
+                <Empty>
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <SearchX />
+                    </EmptyMedia>
+                    <EmptyTitle>No SKILL.md directories</EmptyTitle>
+                    <EmptyDescription>
+                      This repository doesn’t contain any directories with a
+                      SKILL.md manifest. Try a different repository or subpath.
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              </div>
+            </>
           ) : (
             <>
-              <div className="sticky -top-4 z-10 -mx-4 space-y-2 bg-background px-4 pt-4 pb-3">
-                <SearchInput
-                  value={search}
-                  onSearchChange={setSearch}
-                  syncQueryParams={false}
-                  placeholder="Search skills by name or description"
-                  className="relative w-full"
-                />
-                <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                  <button
-                    type="button"
-                    disabled={selectableFiltered.length === 0}
-                    onClick={toggleAllFiltered}
-                    className="flex cursor-pointer items-center gap-2 select-none disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <Checkbox
-                      checked={
-                        allFilteredSelected
-                          ? true
-                          : someFilteredSelected
-                            ? "indeterminate"
-                            : false
-                      }
-                      disabled={selectableFiltered.length === 0}
-                      className="pointer-events-none"
-                      tabIndex={-1}
-                      aria-label="Select all visible skills"
+              <div className="sticky top-0 z-10 border-b bg-background">
+                <div className="flex items-center gap-3 border-b bg-muted/30 px-4 py-2.5">
+                  <Avatar className="size-7 shrink-0">
+                    <AvatarImage
+                      src={`https://github.com/${repoOwner}.png?size=64`}
+                      alt=""
                     />
-                    <span>
-                      {allFilteredSelected
-                        ? "Deselect all"
-                        : search.trim()
-                          ? `Select all (${selectableFiltered.length} visible)`
-                          : "Select all"}
+                    <AvatarFallback className="text-xs">
+                      {repoOwner.slice(0, 2).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1 truncate font-mono text-sm font-medium">
+                    {repoSlug}
+                  </div>
+                  {!autoDiscover && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={backToDiscover}
+                      className="shrink-0"
+                    >
+                      Change source
+                    </Button>
+                  )}
+                </div>
+                <div className="space-y-2 px-4 py-3">
+                  <SearchInput
+                    value={search}
+                    onSearchChange={setSearch}
+                    syncQueryParams={false}
+                    placeholder="Search by name, description, or path"
+                    className="relative w-full"
+                  />
+                  <div className="flex items-center justify-between gap-3">
+                    <button
+                      type="button"
+                      disabled={selectableFiltered.length === 0}
+                      onClick={toggleAllFiltered}
+                      className="flex cursor-pointer items-center gap-2 text-xs font-medium text-muted-foreground select-none hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-muted-foreground"
+                    >
+                      <Checkbox
+                        checked={
+                          allFilteredSelected
+                            ? true
+                            : someFilteredSelected
+                              ? "indeterminate"
+                              : false
+                        }
+                        disabled={selectableFiltered.length === 0}
+                        className="pointer-events-none"
+                        tabIndex={-1}
+                        aria-label="Select all visible skills"
+                      />
+                      <span>
+                        {allFilteredSelected
+                          ? "Deselect all"
+                          : search.trim()
+                            ? `Select all (${selectableFiltered.length} visible)`
+                            : "Select all"}
+                      </span>
+                    </button>
+                    <span className="text-xs tabular-nums text-muted-foreground">
+                      {selected.size} of {totalImportable} selected
+                      {totalExisting > 0 && ` · ${totalExisting} imported`}
                     </span>
-                  </button>
-                  <span>
-                    {selected.size} of{" "}
-                    {discovered.filter((s) => !s.exists).length} selected
-                  </span>
+                  </div>
                 </div>
               </div>
               {filteredSkills.length === 0 ? (
-                <p className="py-6 text-center text-sm text-muted-foreground">
-                  No skills match “{search}”.
-                </p>
+                <div className="px-4 py-8">
+                  <Empty>
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <SearchX />
+                      </EmptyMedia>
+                      <EmptyTitle>No matches</EmptyTitle>
+                      <EmptyDescription>
+                        No skills match “{search}”.
+                      </EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
+                </div>
               ) : (
-                <ul className="space-y-1">
-                  {filteredSkills.map((skill) => (
-                    <li
-                      key={skill.skillPath}
-                      className={cn(
-                        "flex items-center gap-3 rounded-md border p-3",
-                        skill.exists ? "opacity-60" : "hover:bg-muted/50",
-                      )}
-                    >
-                      <button
-                        type="button"
-                        disabled={skill.exists}
-                        onClick={() => toggle(skill.skillPath)}
+                <ul className="divide-y">
+                  {filteredSkills.map((skill) => {
+                    const isSelected = selected.has(skill.skillPath);
+                    return (
+                      <li
+                        key={skill.skillPath}
                         className={cn(
-                          "flex min-w-0 flex-1 items-center gap-3 text-left",
+                          "group relative flex items-center gap-3 px-4 py-3 transition-colors",
                           skill.exists
-                            ? "cursor-not-allowed"
-                            : "cursor-pointer",
+                            ? "bg-muted/20"
+                            : isSelected
+                              ? "bg-primary/5"
+                              : "hover:bg-muted/40",
                         )}
                       >
-                        <Checkbox
-                          checked={selected.has(skill.skillPath)}
+                        <button
+                          type="button"
                           disabled={skill.exists}
-                          className="pointer-events-none"
-                          tabIndex={-1}
-                        />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">{skill.name}</span>
-                            {skill.compatibility && (
-                              <Badge
-                                variant="outline"
-                                className="gap-1 text-amber-600 dark:text-amber-500"
+                          onClick={() => toggle(skill.skillPath)}
+                          className={cn(
+                            "flex min-w-0 flex-1 items-center gap-3 text-left",
+                            skill.exists
+                              ? "cursor-not-allowed"
+                              : "cursor-pointer",
+                          )}
+                          aria-label={
+                            skill.exists
+                              ? `${skill.name} (already imported)`
+                              : isSelected
+                                ? `Deselect ${skill.name}`
+                                : `Select ${skill.name}`
+                          }
+                        >
+                          {skill.exists ? (
+                            <CheckCircle2
+                              className="size-4 shrink-0 text-muted-foreground"
+                              aria-hidden
+                            />
+                          ) : (
+                            <Checkbox
+                              checked={isSelected}
+                              className="pointer-events-none shrink-0"
+                              tabIndex={-1}
+                            />
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={cn(
+                                  "truncate text-sm font-medium",
+                                  skill.exists && "text-muted-foreground",
+                                )}
                               >
-                                <AlertTriangle className="h-3 w-3" />
-                                runtime
-                              </Badge>
-                            )}
-                            {skill.exists && (
-                              <Badge variant="secondary">already exists</Badge>
-                            )}
+                                {skill.name}
+                              </span>
+                              {skill.compatibility && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span
+                                      role="img"
+                                      aria-label={`Compatibility: ${skill.compatibility}`}
+                                      className="inline-flex shrink-0 items-center gap-1 rounded border border-dashed px-1.5 py-px text-[10px] font-medium tracking-wide text-muted-foreground uppercase"
+                                    >
+                                      <Info className="size-3" />
+                                      compatibility
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-xs">
+                                    {skill.compatibility}
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
+                              {skill.exists && (
+                                <span className="shrink-0 text-[11px] font-medium text-muted-foreground">
+                                  Imported
+                                </span>
+                              )}
+                            </div>
+                            <div className="truncate text-xs text-muted-foreground">
+                              {skill.description || (
+                                <span className="italic">No description</span>
+                              )}
+                            </div>
                           </div>
-                          <div className="truncate text-xs text-muted-foreground">
-                            {skill.description}
-                          </div>
+                        </button>
+                        <div className="flex shrink-0 items-center gap-3">
+                          <span className="text-xs tabular-nums text-muted-foreground">
+                            {skill.fileCount}{" "}
+                            {skill.fileCount === 1 ? "file" : "files"}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 gap-1.5 px-2 text-xs text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                            onClick={() => setPreviewSkillPath(skill.skillPath)}
+                            aria-label={`Preview ${skill.name}`}
+                          >
+                            <Eye className="size-3.5" />
+                            Preview
+                          </Button>
                         </div>
-                      </button>
-                      <span className="shrink-0 text-xs text-muted-foreground">
-                        {skill.fileCount}{" "}
-                        {skill.fileCount === 1 ? "file" : "files"}
-                      </span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 shrink-0"
-                        onClick={() => setPreviewSkillPath(skill.skillPath)}
-                        aria-label={`Preview ${skill.name}`}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                    </li>
-                  ))}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
-              <p className="mt-3 text-xs text-muted-foreground">
-                Scripts are imported as readable text — they are not executed.
-              </p>
             </>
           )}
         </div>
       ) : (
-        <div className="space-y-4">
-          <div className="space-y-1.5">
+        <div className="space-y-6">
+          <div className="space-y-2">
             <Label htmlFor="skill-repo-url">Repository URL</Label>
             <Input
               id="skill-repo-url"
               value={repoUrl}
               onChange={(e) => setRepoUrl(e.target.value)}
-              placeholder="github.com/anthropics/skills"
+              placeholder="github.com/owner/repo"
               autoFocus
             />
+            <p className="text-sm text-muted-foreground">
+              Any directory containing a{" "}
+              <code className="font-mono">SKILL.md</code> with{" "}
+              <code className="font-mono">name</code> and{" "}
+              <code className="font-mono">description</code> frontmatter counts
+              as a skill.
+            </p>
           </div>
-
-          <button
-            type="button"
-            className="text-xs text-muted-foreground hover:text-foreground"
-            onClick={() => setShowAdvanced((v) => !v)}
-          >
-            {showAdvanced ? "▾" : "▸"} Advanced (subpath, private token)
-          </button>
-
-          {showAdvanced && (
-            <div className="space-y-4 rounded-md border p-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="skill-subpath">Subpath</Label>
-                <Input
-                  id="skill-subpath"
-                  value={path}
-                  onChange={(e) => setPath(e.target.value)}
-                  placeholder="skills"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Only scan SKILL.md directories under this path.
-                </p>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="skill-token">GitHub token</Label>
-                <Input
-                  id="skill-token"
-                  type="password"
-                  value={githubToken}
-                  onChange={(e) => setGithubToken(e.target.value)}
-                  placeholder="ghp_… (for private repositories)"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Used only for this import and never stored.
-                </p>
-              </div>
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="skill-subpath">
+              Subpath
+              <span className="text-muted-foreground font-normal">
+                (optional)
+              </span>
+            </Label>
+            <Input
+              id="skill-subpath"
+              value={path}
+              onChange={(e) => setPath(e.target.value)}
+              placeholder="packages/skills"
+            />
+            <p className="text-sm text-muted-foreground">
+              Restrict the scan to <code className="font-mono">SKILL.md</code>{" "}
+              directories under this path.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="skill-token">
+              GitHub token
+              <span className="text-muted-foreground font-normal">
+                (optional)
+              </span>
+            </Label>
+            <Input
+              id="skill-token"
+              type="password"
+              value={githubToken}
+              onChange={(e) => setGithubToken(e.target.value)}
+              placeholder="ghp_…"
+            />
+            <p className="text-sm text-muted-foreground">
+              Required for private repositories. Used only for this import and
+              never stored.{" "}
+              <a
+                href="https://github.com/settings/personal-access-tokens/new"
+                target="_blank"
+                rel="noreferrer"
+                className="font-medium text-primary underline-offset-4 hover:underline"
+              >
+                Create a token
+              </a>
+              .
+            </p>
+          </div>
+          {discoverError && (
+            <Alert variant="destructive">
+              <AlertTriangle />
+              <AlertTitle>Couldn’t reach that repository</AlertTitle>
+              <AlertDescription>
+                <p>{discoverError}</p>
+                {!hasGithubToken && (
+                  <p>
+                    If the repository is private, paste a GitHub token above and
+                    try again.
+                  </p>
+                )}
+              </AlertDescription>
+            </Alert>
           )}
         </div>
       )}

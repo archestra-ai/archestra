@@ -16,6 +16,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   useCreateSkill,
   useSkill,
   useUpdateSkill,
@@ -25,6 +30,7 @@ import { cn } from "@/lib/utils";
 interface ResourceFile {
   path: string;
   content: string;
+  encoding: "utf8" | "base64";
 }
 
 interface FolderEntry {
@@ -41,6 +47,14 @@ description: One line on when an agent should use this skill.
 
 Step-by-step instructions for the agent...`;
 
+const BLANK_TEMPLATE = `---
+name: template-skill
+description: Replace with description of the skill and when Agents should use it.
+---
+
+# Insert instructions below
+`;
+
 const ROOT_ADD_KEY = "";
 
 export interface SkillPreview {
@@ -50,19 +64,21 @@ export interface SkillPreview {
   license: string | null;
   compatibility: string | null;
   metadata: Record<string, string>;
-  files: ResourceFile[];
+  files: (ResourceFile & { kind?: "reference" | "script" | "asset" })[];
 }
 
 export function SkillEditorDialog({
   skillId,
   open,
   onOpenChange,
+  onSaved,
   preview,
   isPreviewLoading,
 }: {
   skillId: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onSaved?: () => void;
   preview?: SkillPreview | null;
   isPreviewLoading?: boolean;
 }) {
@@ -91,16 +107,28 @@ export function SkillEditorDialog({
     if (isPreview) {
       if (preview) {
         setManifest(composeManifest(preview));
-        setFiles(preview.files.map(({ path, content }) => ({ path, content })));
+        setFiles(
+          preview.files.map(({ path, content, encoding }) => ({
+            path,
+            content,
+            encoding,
+          })),
+        );
       } else {
         setManifest("");
         setFiles([]);
       }
     } else if (isEdit && skill) {
       setManifest(composeManifest(skill));
-      setFiles(skill.files.map(({ path, content }) => ({ path, content })));
+      setFiles(
+        skill.files.map(({ path, content, encoding }) => ({
+          path,
+          content,
+          encoding,
+        })),
+      );
     } else if (!isEdit) {
-      setManifest("");
+      setManifest(BLANK_TEMPLATE);
       setFiles([]);
     }
     setOpenFileIndex(null);
@@ -122,6 +150,7 @@ export function SkillEditorDialog({
       : await createSkill.mutateAsync(body);
     if (result) {
       onOpenChange(false);
+      onSaved?.();
     }
   };
 
@@ -130,7 +159,7 @@ export function SkillEditorDialog({
     if (!name) return;
     const path = folder ? `${folder}/${name}` : name;
     if (files.some((f) => f.path === path)) return;
-    setFiles((prev) => [...prev, { path, content: "" }]);
+    setFiles((prev) => [...prev, { path, content: "", encoding: "utf8" }]);
     setOpenFileIndex(files.length);
     setNewFileName("");
     setAddingIn(null);
@@ -211,7 +240,7 @@ export function SkillEditorDialog({
       }
       description={
         isPreview
-          ? "Preview — this skill has not been imported yet."
+          ? "Preview of a skill that has not been imported yet."
           : "A skill is a SKILL.md instruction set plus optional resource files."
       }
       size="large"
@@ -248,40 +277,51 @@ export function SkillEditorDialog({
         <div className="space-y-4">
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <Label>
-                {openFile ? (
-                  <button
-                    type="button"
-                    className="text-muted-foreground hover:text-foreground"
-                    onClick={() => setOpenFileIndex(null)}
-                  >
-                    SKILL.md
-                  </button>
-                ) : (
-                  "SKILL.md"
-                )}
-                {openFile && (
-                  <span className="text-muted-foreground">
-                    {" / "}
-                    <span className="text-foreground">{openFile.path}</span>
-                  </span>
-                )}
-              </Label>
+              <Label>{openFile ? openFile.path : "SKILL.md"}</Label>
               {!openFile && !isPreview && (
-                <span className="text-xs text-muted-foreground">
-                  parsed: name <Marker ok={parsed.hasName} /> · description{" "}
-                  <Marker ok={parsed.hasDescription} />
-                </span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="cursor-help text-xs text-muted-foreground">
+                      frontmatter: name <Marker ok={parsed.hasName} /> ·
+                      description <Marker ok={parsed.hasDescription} />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <code className="font-mono">name</code> and{" "}
+                    <code className="font-mono">description</code> must be set
+                    in the YAML frontmatter block (between the{" "}
+                    <code className="font-mono">---</code> fences) at the top of{" "}
+                    <code className="font-mono">SKILL.md</code>. Agents read
+                    these to decide when to use the skill.
+                  </TooltipContent>
+                </Tooltip>
               )}
             </div>
-            <Textarea
-              value={editorValue}
-              onChange={(e) => setEditorValue(e.target.value)}
-              placeholder={openFile ? "File contents..." : MANIFEST_PLACEHOLDER}
-              className="min-h-[320px] font-mono text-xs"
-              spellCheck={false}
-              readOnly={isPreview}
-            />
+            {openFile && openFile.encoding === "base64" ? (
+              <div className="flex min-h-[320px] flex-col items-center justify-center gap-1 rounded-md border bg-muted/30 text-center text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">
+                  Binary asset
+                </span>
+                <span className="text-xs">
+                  {formatBytes(approxBase64Bytes(openFile.content))} · base64
+                  encoded
+                </span>
+                <span className="max-w-xs text-xs">
+                  Stored verbatim for redistribution. Not editable here.
+                </span>
+              </div>
+            ) : (
+              <Textarea
+                value={editorValue}
+                onChange={(e) => setEditorValue(e.target.value)}
+                placeholder={
+                  openFile ? "File contents..." : MANIFEST_PLACEHOLDER
+                }
+                className="min-h-[320px] font-mono text-xs"
+                spellCheck={false}
+                readOnly={isPreview}
+              />
+            )}
           </div>
 
           <div className="rounded-md border">
@@ -297,9 +337,6 @@ export function SkillEditorDialog({
                   <ChevronRight className="h-4 w-4" />
                 )}
                 Files ({files.length + 1})
-              </span>
-              <span className="text-xs text-muted-foreground">
-                SKILL.md · references/ · scripts/ · assets/
               </span>
             </button>
 
@@ -596,6 +633,17 @@ function Marker({ ok }: { ok: boolean }) {
       {ok ? "✓" : "—"}
     </span>
   );
+}
+
+function approxBase64Bytes(content: string): number {
+  // Each 4 chars of base64 encodes 3 bytes; ignore padding for a rough estimate.
+  return Math.floor((content.length * 3) / 4);
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function buildTree(files: ResourceFile[]): {

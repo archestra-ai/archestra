@@ -7405,6 +7405,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "skill_tools_enabled": {
+          "name": "skill_tools_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         }
       },
       "indexes": {},
@@ -7960,6 +7967,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "encoding": {
+          "name": "encoding",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'utf8'"
         },
         "kind": {
           "name": "kind",

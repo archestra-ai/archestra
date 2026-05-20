@@ -3,6 +3,7 @@ CREATE TABLE "skill_files" (
 	"skill_id" uuid NOT NULL,
 	"path" text NOT NULL,
 	"content" text NOT NULL,
+	"encoding" text DEFAULT 'utf8' NOT NULL,
 	"kind" text NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
@@ -29,4 +30,5 @@ ALTER TABLE "skills" ADD CONSTRAINT "skills_author_id_user_id_fk" FOREIGN KEY ("
 CREATE INDEX "skill_files_skill_id_idx" ON "skill_files" USING btree ("skill_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "skill_files_skill_path_idx" ON "skill_files" USING btree ("skill_id","path");--> statement-breakpoint
 CREATE INDEX "skills_organization_id_idx" ON "skills" USING btree ("organization_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "skills_org_name_idx" ON "skills" USING btree ("organization_id","name");
+CREATE UNIQUE INDEX "skills_org_name_idx" ON "skills" USING btree ("organization_id","name");--> statement-breakpoint
+ALTER TABLE "organization" ADD COLUMN "skill_tools_enabled" boolean DEFAULT false NOT NULL;

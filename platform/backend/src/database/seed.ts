@@ -11,7 +11,6 @@ import {
   type PredefinedRoleName,
   type SupportedProvider,
   SupportedProviders,
-  TOOL_ACTIVATE_SKILL_SHORT_NAME,
   testMcpServerCommand,
 } from "@shared";
 import { and, eq, inArray, isNull } from "drizzle-orm";
@@ -166,23 +165,10 @@ export async function syncBuiltInAgents(): Promise<void> {
  * Seeds Archestra MCP catalog and tools.
  * ToolModel.seedArchestraTools handles catalog creation with onConflictDoNothing().
  * Tools are NOT automatically assigned to agents - users must assign them manually.
- *
- * Exception: the Agent Skill tools are backfilled to all existing agents the
- * first time they are seeded, so skills become usable without manual setup.
  */
 async function seedArchestraCatalogAndTools(): Promise<void> {
-  const newlySeededToolNames = await ToolModel.seedArchestraTools(
-    ARCHESTRA_MCP_CATALOG_ID,
-  );
+  await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
   logger.info("Seeded Archestra catalog and tools");
-
-  if (
-    newlySeededToolNames.some((name) =>
-      name.endsWith(TOOL_ACTIVATE_SKILL_SHORT_NAME),
-    )
-  ) {
-    await ToolModel.backfillSkillToolsToAllAgents();
-  }
 }
 
 /**

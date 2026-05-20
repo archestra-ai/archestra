@@ -83,7 +83,10 @@ async function applyOverridesFromRegistry(worker: SetupWorker): Promise<void> {
     const overrides = data.overrides ?? [];
     if (overrides.length === 0) return;
 
-    const { http, HttpResponse } = await import("msw");
+    const [msw, { buildHandler }] = await Promise.all([
+      import("msw"),
+      import("@/mocks/build-handler"),
+    ]);
     // One `worker.use()` per override (not a batched call) so each prepend
     // honors "latest wins" for repeated overrides of the same method+url.
     // A single `worker.use(...handlers)` would keep arg-list order, so the
@@ -91,9 +94,7 @@ async function applyOverridesFromRegistry(worker: SetupWorker): Promise<void> {
     // from the Node side, where one `server.use()` per POST gives the
     // most-recent override priority.
     for (const o of overrides) {
-      const responder = () =>
-        HttpResponse.json(o.body ?? null, { status: o.status ?? 200 });
-      worker.use(http[o.method](o.url, responder, { once: o.once === true }));
+      worker.use(buildHandler(msw, o.url, o));
     }
   } catch {
     // Best effort: if sync fails, the browser falls back to base handlers.

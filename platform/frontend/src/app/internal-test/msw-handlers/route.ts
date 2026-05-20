@@ -43,20 +43,17 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
-  const [{ http, HttpResponse }, { server }] = await Promise.all([
+  const [msw, { server }, { buildHandler }] = await Promise.all([
     import("msw"),
     import("@/mocks/node"),
+    import("@/mocks/build-handler"),
   ]);
-
-  const status = override.status ?? 200;
-  const responder = () => HttpResponse.json(override.body ?? null, { status });
-  const options = { once: override.once === true };
 
   const urls = override.url.startsWith("/")
     ? [override.url, `${BACKEND_ORIGIN}${override.url}`]
     : [override.url];
 
-  server.use(...urls.map((u) => http[override.method](u, responder, options)));
+  server.use(...urls.map((u) => buildHandler(msw, u, override)));
 
   registry().push(override);
 

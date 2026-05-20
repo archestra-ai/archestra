@@ -2100,7 +2100,7 @@
 * autoopen connect and tool assign dialogs ([#2421](https://github.com/archestra-ai/archestra/issues/2421)) ([9aa0307](https://github.com/archestra-ai/archestra/commit/9aa03077e45ea626702225107490d8e495b9b4ae))
 * bug with persisting model metadata ([#2474](https://github.com/archestra-ai/archestra/issues/2474)) ([2162c19](https://github.com/archestra-ai/archestra/commit/2162c19bc6e76d41d1d9ecb9eb46ee8adbe302b2))
 * chat link colors ([#2524](https://github.com/archestra-ai/archestra/issues/2524)) ([eba5260](https://github.com/archestra-ai/archestra/commit/eba526018adf40b35ae4c134fe610b6bd294734e))
-* complie kind ([#2550](https://github.com/archestra-ai/archestra/issues/2550)) ([a7eb73d](https://github.com/archestra-ai/archestra/commit/a7eb73de6c9d4b346d15826e709e1c4faf92fa41))
+* compile kind ([#2550](https://github.com/archestra-ai/archestra/issues/2550)) ([a7eb73d](https://github.com/archestra-ai/archestra/commit/a7eb73de6c9d4b346d15826e709e1c4faf92fa41))
 * ensure agent toolnames in the db matches slugify behaviour ([#2522](https://github.com/archestra-ai/archestra/issues/2522)) ([8f4ebc0](https://github.com/archestra-ai/archestra/commit/8f4ebc02fa84e5184c7081309756e00189d8b506))
 * fail faster if k8s failure detected, improve dialogs and btns ([#2573](https://github.com/archestra-ai/archestra/issues/2573)) ([e801604](https://github.com/archestra-ai/archestra/commit/e80160481a74f93713fa476a34c30ec5c19afcbe))
 * Fix calling agent tools via mcp gateway ([#2526](https://github.com/archestra-ai/archestra/issues/2526)) ([bfcdf86](https://github.com/archestra-ai/archestra/commit/bfcdf865d67484a6e599d3884052328838991702))

@@ -511,6 +511,7 @@ export function McpServerCard({
       variant="ghost"
       size="icon"
       className="h-8 w-8"
+      data-testid={`${E2eTestId.McpServerSettingsButton}-${item.name}`}
       onClick={() => openSettingsPage("configuration")}
     >
       <Pencil className="h-4 w-4" />

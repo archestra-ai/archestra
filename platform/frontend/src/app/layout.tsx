@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { PublicEnvScript } from "next-runtime-env";
 import { AppShell } from "./_parts/app-shell";
+import { MswInit } from "./_parts/msw-init";
 import { PostHogProviderWrapper } from "./_parts/posthog-provider";
 import { ArchestraQueryClientProvider } from "./_parts/query-client-provider";
 import { ThemeProvider } from "./_parts/theme-provider";
@@ -175,29 +176,31 @@ export default function RootLayout({
         <link rel="icon" href="/favicon.ico" />
       </head>
       <body className="font-sans antialiased">
-        <ArchestraQueryClientProvider>
-          <AuthProvider>
-            <ChatProvider>
-              <ThemeProvider
-                attribute="class"
-                defaultTheme="system"
-                enableSystem
-                disableTransitionOnChange
-              >
-                <PostHogProviderWrapper>
-                  <OrgThemeLoader />
-                  <DynamicHead />
-                  <WithAuthCheck>
-                    <WebsocketInitializer />
-                    <AppShell>
-                      <WithPagePermissions>{children}</WithPagePermissions>
-                    </AppShell>
-                  </WithAuthCheck>
-                </PostHogProviderWrapper>
-              </ThemeProvider>
-            </ChatProvider>
-          </AuthProvider>
-        </ArchestraQueryClientProvider>
+        <MswInit>
+          <ArchestraQueryClientProvider>
+            <AuthProvider>
+              <ChatProvider>
+                <ThemeProvider
+                  attribute="class"
+                  defaultTheme="system"
+                  enableSystem
+                  disableTransitionOnChange
+                >
+                  <PostHogProviderWrapper>
+                    <OrgThemeLoader />
+                    <DynamicHead />
+                    <WithAuthCheck>
+                      <WebsocketInitializer />
+                      <AppShell>
+                        <WithPagePermissions>{children}</WithPagePermissions>
+                      </AppShell>
+                    </WithAuthCheck>
+                  </PostHogProviderWrapper>
+                </ThemeProvider>
+              </ChatProvider>
+            </AuthProvider>
+          </ArchestraQueryClientProvider>
+        </MswInit>
       </body>
     </html>
   );

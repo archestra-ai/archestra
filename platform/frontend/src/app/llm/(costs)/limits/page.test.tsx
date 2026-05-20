@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import LimitsPage, { getLimitModels } from "./page";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import LimitsPage, { getLimitModels, getLimitResetLabel } from "./page";
 
 const mockSetCostsAction = vi.fn();
 const mockUseLimits = vi.fn();
@@ -310,6 +310,10 @@ describe("LimitsPage", () => {
     });
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("shows a settings notice when a default user limit is configured", () => {
     render(<LimitsPage />);
 
@@ -366,6 +370,37 @@ describe("LimitsPage", () => {
     render(<LimitsPage />);
     const modelsBadge = screen.getByTestId("limits-table-models-badge");
     expect(modelsBadge).toHaveTextContent("All models");
+  });
+
+  it("shows a reset countdown badge in the cleanup column", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:30:00Z"));
+    mockUseLimits.mockReturnValue({
+      data: [
+        {
+          id: "limit-1",
+          entityType: "organization",
+          entityId: "org-1",
+          limitType: "token_cost",
+          limitValue: 1000,
+          model: null,
+          mcpServerName: null,
+          toolName: null,
+          cleanupInterval: "1h",
+          lastCleanup: "2026-01-01T00:00:00Z",
+          createdAt: "2026-01-01",
+          updatedAt: "2026-01-01",
+          modelUsage: [],
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<LimitsPage />);
+
+    expect(screen.getByTestId("limits-table-reset-badge")).toHaveTextContent(
+      "resets in 30m",
+    );
   });
 
   it("shows multiple model badges for limits with multiple models", () => {
@@ -528,5 +563,40 @@ describe("LimitsPage", () => {
     render(<LimitsPage />);
     const row = screen.getByTestId("data-table-row-limit-proxy");
     expect(row).toHaveTextContent("Unknown LLM proxy");
+  });
+});
+
+describe("getLimitResetLabel", () => {
+  it("returns null when the limit has not been cleaned up yet", () => {
+    expect(getLimitResetLabel({ lastCleanup: null } as never, "1h")).toBeNull();
+  });
+
+  it("formats future resets by minutes, hours, and days", () => {
+    const now = new Date("2026-01-01T00:00:00Z");
+
+    expect(
+      getLimitResetLabel(
+        { lastCleanup: "2026-01-01T00:30:00Z" } as never,
+        "1h",
+        now,
+      ),
+    ).toBe("resets in 2h");
+    expect(
+      getLimitResetLabel(
+        { lastCleanup: "2026-01-01T00:00:00Z" } as never,
+        "24h",
+        now,
+      ),
+    ).toBe("resets in 1d");
+  });
+
+  it("shows resets soon for overdue cleanup windows", () => {
+    expect(
+      getLimitResetLabel(
+        { lastCleanup: "2026-01-01T00:00:00Z" } as never,
+        "1h",
+        new Date("2026-01-01T02:00:00Z"),
+      ),
+    ).toBe("resets soon");
   });
 });

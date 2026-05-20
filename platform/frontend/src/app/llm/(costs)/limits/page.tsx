@@ -101,6 +101,13 @@ const DEFAULT_FORM_STATE: LimitFormState = {
 
 const LIMITS_ENTITY_SELECTOR_PAGE_SIZE = 100;
 const MAX_VISIBLE_MODEL_BADGES = 3;
+const CLEANUP_INTERVAL_MS: Record<LimitCleanupInterval, number> = {
+  "1h": 60 * 60 * 1000,
+  "12h": 12 * 60 * 60 * 1000,
+  "24h": 24 * 60 * 60 * 1000,
+  "1w": 7 * 24 * 60 * 60 * 1000,
+  "1m": 30 * 24 * 60 * 60 * 1000,
+};
 
 const ENTITY_TYPE_ITEMS: Array<{
   value: LimitFormEntityType;
@@ -487,13 +494,27 @@ export default function LimitsPage() {
       {
         accessorKey: "cleanupInterval",
         header: "Cleanup",
-        size: 140,
+        size: 180,
         minSize: 120,
         cell: ({ row }) => {
           const cleanupInterval =
             (row.original.cleanupInterval as LimitCleanupInterval | null) ??
             DEFAULT_LIMIT_CLEANUP_INTERVAL;
-          return CLEANUP_INTERVAL_LABELS[cleanupInterval];
+          const resetLabel = getLimitResetLabel(row.original, cleanupInterval);
+          return (
+            <div className="flex flex-col items-start gap-1">
+              <span>{CLEANUP_INTERVAL_LABELS[cleanupInterval]}</span>
+              {resetLabel && (
+                <Badge
+                  variant="outline"
+                  className="text-xs font-normal text-muted-foreground"
+                  data-testid="limits-table-reset-badge"
+                >
+                  {resetLabel}
+                </Badge>
+              )}
+            </div>
+          );
         },
       },
       {
@@ -927,4 +948,43 @@ export function getLimitModels(limit: LimitData): string[] {
   return Array.isArray(limit.model)
     ? limit.model.filter((model): model is string => typeof model === "string")
     : [];
+}
+
+export function getLimitResetLabel(
+  limit: Pick<LimitData, "lastCleanup">,
+  cleanupInterval: LimitCleanupInterval,
+  now = new Date(),
+): string | null {
+  if (!limit.lastCleanup) {
+    return null;
+  }
+
+  const lastCleanupMs = new Date(limit.lastCleanup).getTime();
+  if (Number.isNaN(lastCleanupMs)) {
+    return null;
+  }
+
+  const resetAtMs = lastCleanupMs + CLEANUP_INTERVAL_MS[cleanupInterval];
+  const remainingMs = resetAtMs - now.getTime();
+
+  if (remainingMs <= 0) {
+    return "resets soon";
+  }
+
+  return `resets in ${formatRelativeDuration(remainingMs)}`;
+}
+
+function formatRelativeDuration(durationMs: number) {
+  const minutes = Math.ceil(durationMs / (60 * 1000));
+  if (minutes < 60) {
+    return `${minutes}m`;
+  }
+
+  const hours = Math.ceil(minutes / 60);
+  if (hours < 24) {
+    return `${hours}h`;
+  }
+
+  const days = Math.ceil(hours / 24);
+  return `${days}d`;
 }

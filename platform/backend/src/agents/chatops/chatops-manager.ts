@@ -49,6 +49,7 @@ import {
 import MSTeamsProvider from "./ms-teams-provider";
 import SlackProvider from "./slack-provider";
 import { errorMessage, isSlackDmChannel } from "./utils";
+import WhatsAppProvider from "./whatsapp-provider";
 
 /**
  * ChatOps Manager - handles chatops provider lifecycle and message processing
@@ -57,6 +58,7 @@ import { errorMessage, isSlackDmChannel } from "./utils";
 export class ChatOpsManager {
   private msTeamsProvider: MSTeamsProvider | null = null;
   private slackProvider: SlackProvider | null = null;
+  private whatsAppProvider: WhatsAppProvider | null = null;
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
   private readonly a2aManager: A2AManager;
 
@@ -74,6 +76,10 @@ export class ChatOpsManager {
     return this.slackProvider;
   }
 
+  getWhatsAppProvider(): WhatsAppProvider | null {
+    return this.whatsAppProvider;
+  }
+
   getChatOpsProvider(
     providerType: ChatOpsProviderType,
   ): ChatOpsProvider | null {
@@ -82,6 +88,8 @@ export class ChatOpsManager {
         return this.getMSTeamsProvider();
       case "slack":
         return this.getSlackProvider();
+      case "whatsapp":
+        return this.getWhatsAppProvider();
     }
   }
 
@@ -140,7 +148,8 @@ export class ChatOpsManager {
   isAnyProviderConfigured(): boolean {
     return (
       (this.msTeamsProvider?.isConfigured() ?? false) ||
-      (this.slackProvider?.isConfigured() ?? false)
+      (this.slackProvider?.isConfigured() ?? false) ||
+      (this.whatsAppProvider?.isConfigured() ?? false)
     );
   }
 
@@ -226,7 +235,7 @@ export class ChatOpsManager {
 
     // Load configs from DB (the single source of truth)
     // Errors are caught individually so a single broken config doesn't prevent other providers from initializing
-    const [msTeamsConfig, slackConfig] = await Promise.all([
+    const [msTeamsConfig, slackConfig, whatsAppConfig] = await Promise.all([
       ChatOpsConfigModel.getMsTeamsConfig().catch((error) => {
         logger.error(
           { error: error instanceof Error ? error.message : String(error) },
@@ -238,6 +247,13 @@ export class ChatOpsManager {
         logger.error(
           { error: error instanceof Error ? error.message : String(error) },
           "[ChatOps] Failed to load Slack config, skipping",
+        );
+        return null;
+      }),
+      ChatOpsConfigModel.getWhatsAppConfig().catch((error) => {
+        logger.error(
+          { error: error instanceof Error ? error.message : String(error) },
+          "[ChatOps] Failed to load WhatsApp config, skipping",
         );
         return null;
       }),
@@ -254,6 +270,9 @@ export class ChatOpsManager {
       // access manager capabilities (e.g., getAccessibleChatopsAgents for slash commands)
       this.slackProvider.setEventHandler(this);
     }
+    if (whatsAppConfig) {
+      this.whatsAppProvider = new WhatsAppProvider(whatsAppConfig);
+    }
 
     if (!this.isAnyProviderConfigured()) {
       return;
@@ -262,6 +281,7 @@ export class ChatOpsManager {
     const providers: { name: string; provider: ChatOpsProvider | null }[] = [
       { name: "MS Teams", provider: this.msTeamsProvider },
       { name: "Slack", provider: this.slackProvider },
+      { name: "WhatsApp", provider: this.whatsAppProvider },
     ];
 
     for (const { name, provider } of providers) {
@@ -313,6 +333,10 @@ export class ChatOpsManager {
     if (this.slackProvider) {
       await this.slackProvider.cleanup();
       this.slackProvider = null;
+    }
+    if (this.whatsAppProvider) {
+      await this.whatsAppProvider.cleanup();
+      this.whatsAppProvider = null;
     }
     this.stopCleanupInterval();
   }
@@ -1189,6 +1213,7 @@ export class ChatOpsManager {
   private async seedConfigFromEnvVars(): Promise<void> {
     await this.seedMsTeamsConfigFromEnvVars();
     await this.seedSlackConfigFromEnvVars();
+    await this.seedWhatsAppConfigFromEnvVars();
   }
 
   private async seedMsTeamsConfigFromEnvVars(): Promise<void> {
@@ -1257,6 +1282,45 @@ export class ChatOpsManager {
       logger.error(
         { error: errorMessage(error) },
         "[ChatOps] Failed to seed Slack config from env vars",
+      );
+    }
+  }
+
+  private async seedWhatsAppConfigFromEnvVars(): Promise<void> {
+    try {
+      const existing = await ChatOpsConfigModel.getWhatsAppConfig();
+      if (existing) return;
+
+      const accessToken =
+        process.env.ARCHESTRA_CHATOPS_WHATSAPP_ACCESS_TOKEN || "";
+      const appSecret = process.env.ARCHESTRA_CHATOPS_WHATSAPP_APP_SECRET || "";
+      const phoneNumberId =
+        process.env.ARCHESTRA_CHATOPS_WHATSAPP_PHONE_NUMBER_ID || "";
+      const verifyToken =
+        process.env.ARCHESTRA_CHATOPS_WHATSAPP_VERIFY_TOKEN || "";
+      if (!accessToken || !appSecret || !phoneNumberId || !verifyToken) {
+        return;
+      }
+
+      await ChatOpsConfigModel.saveWhatsAppConfig({
+        enabled: process.env.ARCHESTRA_CHATOPS_WHATSAPP_ENABLED === "true",
+        accessToken,
+        appSecret,
+        businessAccountId:
+          process.env.ARCHESTRA_CHATOPS_WHATSAPP_BUSINESS_ACCOUNT_ID || "",
+        graphApiVersion:
+          process.env.ARCHESTRA_CHATOPS_WHATSAPP_GRAPH_API_VERSION || "v21.0",
+        phoneNumberId,
+        phoneUserMappings: parseWhatsAppPhoneUserMappings(
+          process.env.ARCHESTRA_CHATOPS_WHATSAPP_PHONE_USER_MAPPINGS,
+        ),
+        verifyToken,
+      });
+      logger.info("[ChatOps] Seeded WhatsApp config from env vars to DB");
+    } catch (error) {
+      logger.error(
+        { error: errorMessage(error) },
+        "[ChatOps] Failed to seed WhatsApp config from env vars",
       );
     }
   }
@@ -1797,6 +1861,32 @@ function stripBotFooter(text: string): string {
     .replace(/\n\n---\n+🤖 .+$/i, "")
     .replace(/\n🤖 .+$/, "")
     .trim();
+}
+
+function parseWhatsAppPhoneUserMappings(
+  raw: string | undefined,
+): Array<{ phoneNumber: string; email: string }> {
+  if (!raw?.trim()) return [];
+
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((item) => {
+      if (
+        !item ||
+        typeof item !== "object" ||
+        !("phoneNumber" in item) ||
+        !("email" in item)
+      ) {
+        return [];
+      }
+      const phoneNumber = String(item.phoneNumber).trim();
+      const email = String(item.email).trim().toLowerCase();
+      return phoneNumber && email ? [{ phoneNumber, email }] : [];
+    });
+  } catch {
+    return [];
+  }
 }
 
 /**

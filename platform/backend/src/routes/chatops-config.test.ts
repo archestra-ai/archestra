@@ -13,6 +13,7 @@ vi.mock("@/agents/chatops/chatops-manager", () => ({
     reinitialize: reinitializeMock,
     getMSTeamsProvider: vi.fn(() => null),
     getSlackProvider: vi.fn(() => null),
+    getWhatsAppProvider: vi.fn(() => null),
     processMessage: vi.fn(),
     getAccessibleChatopsAgents: vi.fn(),
   },
@@ -145,6 +146,92 @@ describe("PUT /api/chatops/config/slack", () => {
     });
 
     expect(reinitializeMock).toHaveBeenCalledTimes(1);
+
+    await app.close();
+  });
+});
+
+describe("PUT /api/chatops/config/whatsapp", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test("saves config to DB and reinitializes", async () => {
+    const app = createFastifyInstance();
+    await app.register(chatopsRoutes);
+
+    const response = await app.inject({
+      method: "PUT",
+      url: "/api/chatops/config/whatsapp",
+      payload: {
+        enabled: true,
+        accessToken: "whatsapp-token",
+        appSecret: "whatsapp-app-secret",
+        businessAccountId: "waba-123",
+        phoneNumberId: "phone-123",
+        verifyToken: "verify-token",
+        phoneUserMappings: [
+          { phoneNumber: "+15551234567", email: "user@example.com" },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ success: true });
+
+    const dbConfig = await ChatOpsConfigModel.getWhatsAppConfig();
+    expect(dbConfig).toEqual({
+      enabled: true,
+      accessToken: "whatsapp-token",
+      appSecret: "whatsapp-app-secret",
+      businessAccountId: "waba-123",
+      graphApiVersion: "v21.0",
+      phoneNumberId: "phone-123",
+      verifyToken: "verify-token",
+      phoneUserMappings: [
+        { phoneNumber: "+15551234567", email: "user@example.com" },
+      ],
+    });
+
+    expect(reinitializeMock).toHaveBeenCalledTimes(1);
+
+    await app.close();
+  });
+
+  test("merges partial updates with existing DB config", async () => {
+    await ChatOpsConfigModel.saveWhatsAppConfig({
+      enabled: true,
+      accessToken: "initial-token",
+      appSecret: "initial-secret",
+      businessAccountId: "initial-waba",
+      graphApiVersion: "v21.0",
+      phoneNumberId: "initial-phone",
+      verifyToken: "initial-verify",
+      phoneUserMappings: [
+        { phoneNumber: "+15551234567", email: "initial@example.com" },
+      ],
+    });
+
+    const app = createFastifyInstance();
+    await app.register(chatopsRoutes);
+
+    const response = await app.inject({
+      method: "PUT",
+      url: "/api/chatops/config/whatsapp",
+      payload: {
+        phoneNumberId: "updated-phone",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const dbConfig = await ChatOpsConfigModel.getWhatsAppConfig();
+    expect(dbConfig?.phoneNumberId).toBe("updated-phone");
+    expect(dbConfig?.accessToken).toBe("initial-token");
+    expect(dbConfig?.phoneUserMappings).toEqual([
+      { phoneNumber: "+15551234567", email: "initial@example.com" },
+    ]);
+    expect(dbConfig?.enabled).toBe(true);
 
     await app.close();
   });

@@ -36,6 +36,19 @@ export function useTriggerStatuses() {
       ? !!ngrokDomain && hasLlmKey && !!slack?.configured
       : hasLlmKey && !!slack?.configured;
 
+  const whatsApp = chatOpsProviders?.find((p) => String(p.id) === "whatsapp");
+  const whatsAppCreds = whatsApp?.credentials as
+    | { phoneUserMappings?: unknown[] }
+    | undefined;
+  const hasWhatsAppMappings =
+    (whatsAppCreds?.phoneUserMappings?.length ?? 0) > 0;
+  const whatsAppActive = isLocalDev
+    ? !!ngrokDomain &&
+      hasLlmKey &&
+      !!whatsApp?.configured &&
+      hasWhatsAppMappings
+    : hasLlmKey && !!whatsApp?.configured && hasWhatsAppMappings;
+
   const emailActive =
     !!configData?.features.incomingEmail?.enabled && !!emailStatus?.isActive;
 
@@ -46,6 +59,7 @@ export function useTriggerStatuses() {
   const triggers = [
     { active: msTeamsActive, href: "/agents/triggers/ms-teams" },
     { active: slackActive, href: "/agents/triggers/slack" },
+    { active: whatsAppActive, href: "/agents/triggers/whatsapp" },
     { active: emailActive, href: "/agents/triggers/email" },
     { active: a2aActive, href: "/agents/triggers/a2a" },
   ] as const;
@@ -55,6 +69,7 @@ export function useTriggerStatuses() {
   return {
     msTeams: msTeamsActive,
     slack: slackActive,
+    whatsapp: whatsAppActive,
     email: emailActive,
     a2a: a2aActive,
     firstActiveHref,

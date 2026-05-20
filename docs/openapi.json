@@ -74948,6 +74948,215 @@
         }
       }
     },
+    "/api/webhooks/chatops/whatsapp": {
+      "get": {
+        "tags": [
+          "ChatOps Webhooks"
+        ],
+        "description": "WhatsApp Cloud API webhook verification endpoint",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "hub.challenge",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "hub.mode",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "hub.verify_token",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "ChatOps Webhooks"
+        ],
+        "description": "WhatsApp Cloud API webhook endpoint",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/webhooks/chatops/slack/interactive": {
       "post": {
         "tags": [
@@ -75163,7 +75372,8 @@
                             "type": "string",
                             "enum": [
                               "ms-teams",
-                              "slack"
+                              "slack",
+                              "whatsapp"
                             ]
                           },
                           "displayName": {
@@ -75199,6 +75409,40 @@
                                   "webhook",
                                   "socket"
                                 ]
+                              },
+                              "accessToken": {
+                                "type": "string"
+                              },
+                              "businessAccountId": {
+                                "type": "string"
+                              },
+                              "graphApiVersion": {
+                                "type": "string"
+                              },
+                              "phoneNumberId": {
+                                "type": "string"
+                              },
+                              "phoneUserMappings": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "phoneNumber": {
+                                      "type": "string"
+                                    },
+                                    "email": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "phoneNumber",
+                                    "email"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "verifyToken": {
+                                "type": "string"
                               }
                             },
                             "additionalProperties": false
@@ -75486,7 +75730,8 @@
               "type": "string",
               "enum": [
                 "ms-teams",
-                "slack"
+                "slack",
+                "whatsapp"
               ]
             },
             "in": "query",
@@ -75594,7 +75839,8 @@
                             "type": "string",
                             "enum": [
                               "ms-teams",
-                              "slack"
+                              "slack",
+                              "whatsapp"
                             ]
                           },
                           "channelId": {
@@ -76045,7 +76291,8 @@
                         "type": "string",
                         "enum": [
                           "ms-teams",
-                          "slack"
+                          "slack",
+                          "whatsapp"
                         ]
                       },
                       "channelId": {
@@ -76680,7 +76927,8 @@
                       "type": "string",
                       "enum": [
                         "ms-teams",
-                        "slack"
+                        "slack",
+                        "whatsapp"
                       ]
                     },
                     "channelId": {
@@ -77001,7 +77249,8 @@
                     "type": "string",
                     "enum": [
                       "ms-teams",
-                      "slack"
+                      "slack",
+                      "whatsapp"
                     ]
                   },
                   "agentId": {
@@ -77039,7 +77288,8 @@
                       "type": "string",
                       "enum": [
                         "ms-teams",
-                        "slack"
+                        "slack",
+                        "whatsapp"
                       ]
                     },
                     "channelId": {
@@ -77938,6 +78188,331 @@
         }
       }
     },
+    "/api/chatops/config/whatsapp": {
+      "put": {
+        "operationId": "updateWhatsAppChatOpsConfig",
+        "tags": [
+          "ChatOps"
+        ],
+        "description": "Update WhatsApp chatops configuration\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentTrigger:update`: Modify agent trigger configurations",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "accessToken": {
+                    "type": "string",
+                    "maxLength": 1024
+                  },
+                  "appSecret": {
+                    "type": "string",
+                    "maxLength": 256
+                  },
+                  "businessAccountId": {
+                    "type": "string",
+                    "maxLength": 256
+                  },
+                  "graphApiVersion": {
+                    "type": "string",
+                    "maxLength": 32
+                  },
+                  "phoneNumberId": {
+                    "type": "string",
+                    "maxLength": 256
+                  },
+                  "phoneUserMappings": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "phoneNumber": {
+                          "type": "string",
+                          "maxLength": 64
+                        },
+                        "email": {
+                          "type": "string",
+                          "maxLength": 256,
+                          "format": "email",
+                          "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                        }
+                      },
+                      "required": [
+                        "phoneNumber",
+                        "email"
+                      ]
+                    }
+                  },
+                  "verifyToken": {
+                    "type": "string",
+                    "maxLength": 256
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "agentTrigger:update"
+          ]
+        }
+      }
+    },
     "/api/chatops/channel-discovery/refresh": {
       "post": {
         "operationId": "refreshChatOpsChannelDiscovery",
@@ -77956,7 +78531,8 @@
                     "type": "string",
                     "enum": [
                       "ms-teams",
-                      "slack"
+                      "slack",
+                      "whatsapp"
                     ]
                   }
                 },

@@ -53,6 +53,7 @@ export default function AgentTriggersLayout({
   const {
     msTeams: msTeamsActive,
     slack: slackActive,
+    whatsapp: whatsAppActive,
     email: emailActive,
     a2a: a2aActive,
   } = useTriggerStatuses();
@@ -82,6 +83,17 @@ export default function AgentTriggersLayout({
         active: slackActive,
       },
       {
+        label: (
+          <TabLabel
+            iconSrc="/icons/whatsapp.svg"
+            label="WhatsApp"
+            active={whatsAppActive}
+          />
+        ),
+        href: "/agents/triggers/whatsapp",
+        active: whatsAppActive,
+      },
+      {
         label: <TabLabel icon={Mail} label="Email" active={emailActive} />,
         href: "/agents/triggers/email",
         active: emailActive,
@@ -97,7 +109,7 @@ export default function AgentTriggersLayout({
         active: a2aActive,
       },
     ];
-  }, [msTeamsActive, slackActive, emailActive, a2aActive]);
+  }, [msTeamsActive, slackActive, whatsAppActive, emailActive, a2aActive]);
 
   if (canReadTriggers === false) {
     return null;

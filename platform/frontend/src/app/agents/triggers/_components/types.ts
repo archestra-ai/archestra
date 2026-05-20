@@ -1,12 +1,15 @@
-export type ChatOpsProvider = "slack" | "ms-teams";
+export type ChatOpsProvider = "slack" | "ms-teams" | "whatsapp";
 
 export interface ProviderConfig {
   provider: ChatOpsProvider;
   providerLabel: string;
   providerIcon: string;
+  resourceLabelPlural?: string;
+  resourceLabelSingular?: string;
+  resourceSetupText?: string;
   webhookPath: string;
   docsUrl: string | null;
-  slashCommand: string;
+  slashCommand?: string;
   buildDeepLink: (binding: {
     channelId: string;
     channelName?: string | null;

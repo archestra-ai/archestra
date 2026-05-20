@@ -8,6 +8,15 @@ import {
 import { toast } from "sonner";
 import { handleApiError } from "@/lib/utils";
 
+type ChatOpsBindingsQuery = Omit<
+  NonNullable<archestraApiTypes.ListChatOpsBindingsData["query"]>,
+  "provider"
+> & {
+  provider?: NonNullable<
+    NonNullable<archestraApiTypes.ListChatOpsBindingsData["query"]>["provider"]
+  >;
+};
+
 export function useChatOpsStatus() {
   return useQuery({
     queryKey: ["chatops", "status"],
@@ -22,9 +31,7 @@ export function useChatOpsStatus() {
   });
 }
 
-export function useChatOpsBindings(
-  params: NonNullable<archestraApiTypes.ListChatOpsBindingsData["query"]>,
-) {
+export function useChatOpsBindings(params: ChatOpsBindingsQuery) {
   return useQuery({
     queryKey: ["chatops", "bindings", params],
     placeholderData: keepPreviousData,
@@ -99,7 +106,9 @@ export function useCreateChatOpsDmBinding() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (params: {
-      provider: "ms-teams" | "slack";
+      provider: NonNullable<
+        archestraApiTypes.CreateChatOpsDmBindingData["body"]["provider"]
+      >;
       agentId: string | null;
     }) => {
       const { data, error } = await archestraApiSdk.createChatOpsDmBinding({
@@ -145,7 +154,11 @@ export function useRefreshChatOpsChannelDiscovery() {
   return useMutation({
     mutationFn: async (provider: string) => {
       const { error } = await archestraApiSdk.refreshChatOpsChannelDiscovery({
-        body: { provider: provider as "ms-teams" | "slack" },
+        body: {
+          provider: provider as NonNullable<
+            archestraApiTypes.RefreshChatOpsChannelDiscoveryData["body"]
+          >["provider"],
+        },
       });
       if (error) {
         handleApiError(error);

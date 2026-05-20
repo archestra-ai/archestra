@@ -51,6 +51,7 @@ export const DocsPage = {
   PlatformSsoTeamSync: "platform-sso-team-sync",
   PlatformSupportedLlmProviders: "platform-supported-llm-providers",
   PlatformVercelAiExample: "platform-vercel-ai-example",
+  PlatformWhatsApp: "platform-whatsapp",
 } as const;
 
 export type DocsPage = (typeof DocsPage)[keyof typeof DocsPage];

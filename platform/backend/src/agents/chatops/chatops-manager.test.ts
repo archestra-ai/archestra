@@ -1008,6 +1008,14 @@ describe("ChatOpsManager.initialize — partial config", () => {
     vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_APP_ID", "");
     vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_CONNECTION_MODE", "");
     vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_APP_LEVEL_TOKEN", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_WHATSAPP_ENABLED", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_WHATSAPP_ACCESS_TOKEN", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_WHATSAPP_APP_SECRET", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_WHATSAPP_BUSINESS_ACCOUNT_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_WHATSAPP_GRAPH_API_VERSION", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_WHATSAPP_PHONE_NUMBER_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_WHATSAPP_VERIFY_TOKEN", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_WHATSAPP_PHONE_USER_MAPPINGS", "");
   });
 
   afterEach(() => {
@@ -1053,12 +1061,38 @@ describe("ChatOpsManager.initialize — partial config", () => {
     await manager.cleanup();
   });
 
+  test("initializes WhatsApp when only WhatsApp config exists in DB", async () => {
+    await ChatOpsConfigModel.saveWhatsAppConfig({
+      enabled: true,
+      accessToken: "whatsapp-token",
+      appSecret: "whatsapp-app-secret",
+      businessAccountId: "waba-123",
+      graphApiVersion: "v21.0",
+      phoneNumberId: "phone-123",
+      verifyToken: "verify-token",
+      phoneUserMappings: [
+        { phoneNumber: "+15551234567", email: "user@example.com" },
+      ],
+    });
+
+    const manager = new ChatOpsManager();
+    await manager.initialize();
+
+    expect(manager.getMSTeamsProvider()).toBeNull();
+    expect(manager.getSlackProvider()).toBeNull();
+    expect(manager.getWhatsAppProvider()).not.toBeNull();
+    expect(manager.getWhatsAppProvider()?.isConfigured()).toBe(true);
+
+    await manager.cleanup();
+  });
+
   test("handles no config in DB gracefully", async () => {
     const manager = new ChatOpsManager();
     await manager.initialize();
 
     expect(manager.getMSTeamsProvider()).toBeNull();
     expect(manager.getSlackProvider()).toBeNull();
+    expect(manager.getWhatsAppProvider()).toBeNull();
     expect(manager.isAnyProviderConfigured()).toBe(false);
 
     await manager.cleanup();
@@ -1085,6 +1119,14 @@ describe("ChatOpsManager.seedConfigFromEnvVars", () => {
     vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_APP_ID", "");
     vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_CONNECTION_MODE", "");
     vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_APP_LEVEL_TOKEN", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_WHATSAPP_ENABLED", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_WHATSAPP_ACCESS_TOKEN", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_WHATSAPP_APP_SECRET", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_WHATSAPP_BUSINESS_ACCOUNT_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_WHATSAPP_GRAPH_API_VERSION", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_WHATSAPP_PHONE_NUMBER_ID", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_WHATSAPP_VERIFY_TOKEN", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_WHATSAPP_PHONE_USER_MAPPINGS", "");
   });
 
   afterEach(() => {
@@ -1125,6 +1167,40 @@ describe("ChatOpsManager.seedConfigFromEnvVars", () => {
     expect(config?.botToken).toBe("xoxb-test-token");
     expect(config?.signingSecret).toBe("test-signing-secret");
     expect(config?.appId).toBe("A12345");
+  });
+
+  test("seeds WhatsApp config from env vars when DB is empty", async () => {
+    vi.stubEnv("ARCHESTRA_CHATOPS_WHATSAPP_ENABLED", "true");
+    vi.stubEnv("ARCHESTRA_CHATOPS_WHATSAPP_ACCESS_TOKEN", "wa-token");
+    vi.stubEnv("ARCHESTRA_CHATOPS_WHATSAPP_APP_SECRET", "wa-app-secret");
+    vi.stubEnv("ARCHESTRA_CHATOPS_WHATSAPP_BUSINESS_ACCOUNT_ID", "waba-123");
+    vi.stubEnv("ARCHESTRA_CHATOPS_WHATSAPP_GRAPH_API_VERSION", "v21.0");
+    vi.stubEnv("ARCHESTRA_CHATOPS_WHATSAPP_PHONE_NUMBER_ID", "phone-123");
+    vi.stubEnv("ARCHESTRA_CHATOPS_WHATSAPP_VERIFY_TOKEN", "verify-token");
+    vi.stubEnv(
+      "ARCHESTRA_CHATOPS_WHATSAPP_PHONE_USER_MAPPINGS",
+      JSON.stringify([
+        { phoneNumber: "+15551234567", email: "user@example.com" },
+      ]),
+    );
+
+    const manager = new ChatOpsManager();
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
+    await (manager as any).seedConfigFromEnvVars();
+
+    const config = await ChatOpsConfigModel.getWhatsAppConfig();
+    expect(config).toEqual({
+      enabled: true,
+      accessToken: "wa-token",
+      appSecret: "wa-app-secret",
+      businessAccountId: "waba-123",
+      graphApiVersion: "v21.0",
+      phoneNumberId: "phone-123",
+      verifyToken: "verify-token",
+      phoneUserMappings: [
+        { phoneNumber: "+15551234567", email: "user@example.com" },
+      ],
+    });
   });
 
   test("does not overwrite existing MS Teams DB config", async () => {
@@ -1173,6 +1249,34 @@ describe("ChatOpsManager.seedConfigFromEnvVars", () => {
     expect(config?.botToken).toBe("xoxb-db-token");
   });
 
+  test("does not overwrite existing WhatsApp DB config", async () => {
+    await ChatOpsConfigModel.saveWhatsAppConfig({
+      enabled: true,
+      accessToken: "db-token",
+      appSecret: "db-secret",
+      businessAccountId: "db-waba",
+      graphApiVersion: "v21.0",
+      phoneNumberId: "db-phone",
+      verifyToken: "db-verify",
+      phoneUserMappings: [
+        { phoneNumber: "+15550000000", email: "db@example.com" },
+      ],
+    });
+
+    vi.stubEnv("ARCHESTRA_CHATOPS_WHATSAPP_ENABLED", "true");
+    vi.stubEnv("ARCHESTRA_CHATOPS_WHATSAPP_ACCESS_TOKEN", "env-token");
+    vi.stubEnv("ARCHESTRA_CHATOPS_WHATSAPP_APP_SECRET", "env-secret");
+    vi.stubEnv("ARCHESTRA_CHATOPS_WHATSAPP_PHONE_NUMBER_ID", "env-phone");
+    vi.stubEnv("ARCHESTRA_CHATOPS_WHATSAPP_VERIFY_TOKEN", "env-verify");
+
+    const manager = new ChatOpsManager();
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
+    await (manager as any).seedConfigFromEnvVars();
+
+    const config = await ChatOpsConfigModel.getWhatsAppConfig();
+    expect(config?.accessToken).toBe("db-token");
+  });
+
   test("no-op when no DB config and no env vars", async () => {
     const manager = new ChatOpsManager();
     // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
@@ -1180,8 +1284,10 @@ describe("ChatOpsManager.seedConfigFromEnvVars", () => {
 
     const msTeams = await ChatOpsConfigModel.getMsTeamsConfig();
     const slack = await ChatOpsConfigModel.getSlackConfig();
+    const whatsApp = await ChatOpsConfigModel.getWhatsAppConfig();
     expect(msTeams).toBeNull();
     expect(slack).toBeNull();
+    expect(whatsApp).toBeNull();
   });
 
   test("MS Teams graph credentials fall back to bot credentials when not set", async () => {

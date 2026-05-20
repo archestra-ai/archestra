@@ -5,7 +5,11 @@ import type { A2AAttachment } from "@/agents/a2a-executor";
  * ChatOps provider types enum
  * Used for PG ENUM in database schema
  */
-export const ChatOpsProviderTypeSchema = z.enum(["ms-teams", "slack"]);
+export const ChatOpsProviderTypeSchema = z.enum([
+  "ms-teams",
+  "slack",
+  "whatsapp",
+]);
 export type ChatOpsProviderType = z.infer<typeof ChatOpsProviderTypeSchema>;
 
 export const ChatOpsConnectionModeSchema = z.enum(["webhook", "socket"]);
@@ -24,6 +28,19 @@ export const ChatOpsProviderCredentialsSchema = z
     signingSecret: z.string().optional(),
     appLevelToken: z.string().optional(),
     connectionMode: ChatOpsConnectionModeSchema.optional(),
+    accessToken: z.string().optional(),
+    businessAccountId: z.string().optional(),
+    graphApiVersion: z.string().optional(),
+    phoneNumberId: z.string().optional(),
+    phoneUserMappings: z
+      .array(
+        z.object({
+          phoneNumber: z.string(),
+          email: z.string(),
+        }),
+      )
+      .optional(),
+    verifyToken: z.string().optional(),
   })
   .optional();
 
@@ -517,4 +534,16 @@ export interface SlackDbConfig {
   appId: string;
   connectionMode?: ChatOpsConnectionMode;
   appLevelToken?: string;
+}
+
+/** WhatsApp Cloud API config stored as a DB secret */
+export interface WhatsAppDbConfig {
+  enabled: boolean;
+  accessToken: string;
+  appSecret: string;
+  businessAccountId: string;
+  graphApiVersion: string;
+  phoneNumberId: string;
+  phoneUserMappings?: Array<{ phoneNumber: string; email: string }>;
+  verifyToken: string;
 }

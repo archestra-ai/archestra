@@ -55,8 +55,9 @@ Agents can be triggered through:
 - [Incoming Email](/docs/platform-agent-triggers-email)
 - [Slack](/docs/platform-slack)
 - [MS Teams](/docs/platform-ms-teams)
+- [WhatsApp](/docs/platform-whatsapp)
 
-Trigger setup is managed from **Agent Triggers**. Slack, MS Teams, and Incoming Email each have their own setup flow, and Incoming Email also owns the per-agent email invocation settings.
+Trigger setup is managed from **Agent Triggers**. Slack, MS Teams, WhatsApp, and Incoming Email each have their own setup flow, and Incoming Email also owns the per-agent email invocation settings.
 
 ## Knowledge Sources
 

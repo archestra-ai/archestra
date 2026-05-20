@@ -1009,6 +1009,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateSlackChatOpsConfig]: {
     agentTrigger: ["update"],
   },
+  [RouteId.UpdateWhatsAppChatOpsConfig]: {
+    agentTrigger: ["update"],
+  },
   [RouteId.RefreshChatOpsChannelDiscovery]: {
     agentTrigger: ["read"],
   },

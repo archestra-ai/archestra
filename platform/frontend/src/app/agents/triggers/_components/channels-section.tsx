@@ -80,6 +80,12 @@ export function ChannelsSection({
   providerConfig: ProviderConfig;
 }) {
   const appName = useAppName();
+  const resourceLabelPlural = providerConfig.resourceLabelPlural ?? "Channels";
+  const resourceLabelSingular =
+    providerConfig.resourceLabelSingular ?? "Channel";
+  const resourceSetupText =
+    providerConfig.resourceSetupText ??
+    `New channels appear after adding the bot to a channel and the first interaction with it.`;
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -331,22 +337,29 @@ export function ChannelsSection({
       <div>
         <div className="flex items-center gap-3">
           <h2 className="text-lg font-semibold relative">
-            Channels
+            {resourceLabelPlural}
             {isFetching && (
               <LoadingSpinner className="h-3 w-3 animate-spin text-muted-foreground absolute right-[-20px] top-[7px]" />
             )}
           </h2>
         </div>
         <p className="text-xs text-muted-foreground mt-1">
-          New channels appear after adding the bot to a channel and the first
-          interaction with it.
+          {resourceSetupText}
           <br />
-          Then, assign a default agent to each channel you want {appName} bot to
-          reply in. Use the Assign button below or{" "}
-          <code className="bg-muted px-1 py-0.5 rounded text-xs">
-            {providerConfig.slashCommand}
-          </code>{" "}
-          in {providerConfig.providerLabel}.{" "}
+          Then, assign a default agent to each{" "}
+          {resourceLabelSingular.toLowerCase()} you want {appName} bot to reply
+          in. Use the Assign button below
+          {providerConfig.slashCommand ? (
+            <>
+              {" "}
+              or{" "}
+              <code className="bg-muted px-1 py-0.5 rounded text-xs">
+                {providerConfig.slashCommand}
+              </code>{" "}
+              in {providerConfig.providerLabel}
+            </>
+          ) : null}
+          .{" "}
         </p>
       </div>
 
@@ -357,7 +370,7 @@ export function ChannelsSection({
           {/* Search + filters + bulk assign */}
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <SearchInput
-              placeholder="Search channels..."
+              placeholder={`Search ${resourceLabelPlural.toLowerCase()}...`}
               paramName="search"
               className="relative w-full xl:max-w-md xl:flex-1"
               debounceMs={300}
@@ -474,7 +487,7 @@ export function ChannelsSection({
                       className="h-auto !p-0 font-medium hover:bg-transparent"
                       onClick={() => handleSortToggle("channelName")}
                     >
-                      Channel
+                      {resourceLabelSingular}
                       <SortIcon
                         isSorted={
                           sortByFromUrl === "channelName"
@@ -499,7 +512,8 @@ export function ChannelsSection({
                         </div>
                         <div className="space-y-1">
                           <p className="font-medium">
-                            No channels match your filters.
+                            No {resourceLabelPlural.toLowerCase()} match your
+                            filters.
                           </p>
                           <p className="text-muted-foreground text-sm">
                             Try adjusting your search.
@@ -524,6 +538,7 @@ export function ChannelsSection({
                     dmAgentList={dmAgentList}
                     providerConfig={providerConfig}
                     providerStatus={providerStatus}
+                    resourceLabelPlural={resourceLabelPlural}
                     onAssignAgent={handleAssignAgent}
                     isUpdating={updateMutation.isPending}
                     selectedIds={selectedIds}
@@ -576,6 +591,7 @@ function ChannelRows({
   dmAgentList,
   providerConfig,
   providerStatus,
+  resourceLabelPlural,
   onAssignAgent,
   isUpdating,
   selectedIds,
@@ -600,6 +616,7 @@ function ChannelRows({
   providerStatus: {
     dmInfo?: { botUserId?: string; teamId?: string; appId?: string } | null;
   } | null;
+  resourceLabelPlural: string;
   onAssignAgent: (bindingId: string, agentId: string | null) => void;
   isUpdating: boolean;
   selectedIds: Set<string>;
@@ -672,7 +689,7 @@ function ChannelRows({
             colSpan={5}
             className="h-16 text-center text-sm text-muted-foreground"
           >
-            No matching channels
+            No matching {resourceLabelPlural.toLowerCase()}
           </TableCell>
         </TableRow>
       )}

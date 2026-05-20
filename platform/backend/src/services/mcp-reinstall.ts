@@ -139,6 +139,13 @@ export function onlyForwardCompatibleEnvDiff(
   const newPrompted = getPromptedEnvVars(newCatalogItem);
   if (promptedEnvVarsChanged(oldPrompted, newPrompted)) return false;
 
+  // 1b. Runtime-only prompted-env changes (e.g., `mounted` flip) don't
+  //    need user re-prompt, but DO need a pod restart because they
+  //    change the pod spec (env var vs mounted secret file at
+  //    `/secrets/<key>`). Return false so the cascade fires via the
+  //    auto path — not the manual path that re-prompts the user.
+  if (promptedEnvVarsRuntimeChanged(oldPrompted, newPrompted)) return false;
+
   // 2. Non-prompted env vars are unchanged (their values are part of
   //    the catalog template; any change must propagate to pods).
   const stripPromptOnInstall = (env: NonNullable<LocalConfig["environment"]>) =>
@@ -167,26 +174,67 @@ export function onlyForwardCompatibleEnvDiff(
     return false;
   }
 
-  // 4. No OTHER non-metadata catalog field changed. Strip env +
-  //    userConfig + metadata fields and compare what remains. JSON.stringify
-  //    is fine — both sides are DB-shape rows that round-trip stably
-  //    through the model layer.
-  const strip = (cat: InternalMcpCatalog): InternalMcpCatalog => ({
-    ...cat,
-    localConfig: cat.localConfig
-      ? { ...cat.localConfig, environment: [] }
-      : cat.localConfig,
-    userConfig: null,
-    // Metadata-only fields that legitimately differ on every PUT but
-    // don't invalidate installs.
-    description: "",
-    createdAt: oldCatalogItem.createdAt,
-    updatedAt: oldCatalogItem.updatedAt,
-  });
-  return (
-    JSON.stringify(strip(oldCatalogItem)) ===
-    JSON.stringify(strip(newCatalogItem))
-  );
+  // 4. No OTHER non-metadata catalog field changed.
+  //
+  // Compare an explicit projection of cascade-relevant fields rather
+  // than `JSON.stringify({...cat, …})`. Two reasons spread+stringify
+  // is unsafe here:
+  //   (a) The two snapshots can come from differently-enriched code
+  //       paths — the parent-cascade-to-children loop in
+  //       `routes/internal-mcp-catalog.ts` passes `originalChild`
+  //       from `Model.findChildren()` (with `attachListMetadata`
+  //       adding `toolCount`) against `updatedChild` from
+  //       `Model.update()` (which adds `authorName` but not
+  //       `toolCount`). A whole-row stringify diffs on these
+  //       bookkeeping fields and over-fires the auto cascade.
+  //   (b) JavaScript object-spread preserves the original key order,
+  //       so even if every value matches after overrides, the JSON
+  //       string can still differ when the two inputs spread keys in
+  //       different orders. Explicit projection in a fixed order
+  //       sidesteps the issue.
+  //
+  // Any cascade-relevant field added to `internal_mcp_catalog` in the
+  // future must be added to this projection — otherwise its changes
+  // become invisible to the auto path.
+  const project = (cat: InternalMcpCatalog) =>
+    JSON.stringify({
+      name: cat.name ?? "",
+      version: cat.version ?? "",
+      instructions: cat.instructions ?? "",
+      repository: cat.repository ?? "",
+      installationCommand: cat.installationCommand ?? "",
+      requiresAuth: Boolean(cat.requiresAuth),
+      authDescription: cat.authDescription ?? "",
+      authFields: cat.authFields ?? null,
+      serverType: cat.serverType ?? "",
+      multitenant: Boolean(cat.multitenant),
+      serverUrl: cat.serverUrl ?? "",
+      docsUrl: cat.docsUrl ?? "",
+      icon: cat.icon ?? null,
+      clientSecretId: cat.clientSecretId ?? null,
+      localConfigSecretId: cat.localConfigSecretId ?? null,
+      presetSecretId: cat.presetSecretId ?? null,
+      presetFieldValues: cat.presetFieldValues ?? {},
+      deploymentSpecYaml: cat.deploymentSpecYaml ?? "",
+      oauthConfig: cat.oauthConfig ?? null,
+      enterpriseManagedConfig: cat.enterpriseManagedConfig ?? null,
+      // localConfig minus environment (covered by steps 1, 1b, 2 above).
+      localConfig: cat.localConfig
+        ? {
+            command: cat.localConfig.command ?? "",
+            arguments: cat.localConfig.arguments ?? [],
+            envFrom: cat.localConfig.envFrom ?? [],
+            dockerImage: cat.localConfig.dockerImage ?? "",
+            transportType: cat.localConfig.transportType ?? "",
+            httpPort: cat.localConfig.httpPort ?? null,
+            httpPath: cat.localConfig.httpPath ?? "",
+            nodePort: cat.localConfig.nodePort ?? null,
+            serviceAccount: cat.localConfig.serviceAccount ?? "",
+            imagePullSecrets: cat.localConfig.imagePullSecrets ?? [],
+          }
+        : null,
+    });
+  return project(oldCatalogItem) === project(newCatalogItem);
 }
 
 /**
@@ -337,7 +385,16 @@ export async function autoReinstallServer(
 
 // ===== Internal helpers =====
 
-type PromptedEnvVarInfo = { required: boolean; type: string };
+type PromptedEnvVarInfo = {
+  required: boolean;
+  type: string;
+  // `mounted` flips the pod spec between an env var (`mounted=false`)
+  // and a mounted secret file at `/secrets/<key>` (`mounted=true`).
+  // Captured here so the runtime-only gate below can detect a pure
+  // mount-flag change — it doesn't need user re-prompt but pods still
+  // need to restart to pick up the new layout.
+  mounted: boolean;
+};
 type ComparableLocalConfig = Pick<
   LocalConfig,
   | "command"
@@ -358,7 +415,11 @@ function getPromptedEnvVars(
   const map = new Map<string, PromptedEnvVarInfo>();
   for (const env of catalog.localConfig?.environment || []) {
     if (env.promptOnInstallation) {
-      map.set(env.key, { required: env.required ?? false, type: env.type });
+      map.set(env.key, {
+        required: env.required ?? false,
+        type: env.type,
+        mounted: env.mounted ?? false,
+      });
     }
   }
   return map;
@@ -402,6 +463,26 @@ function promptedEnvVarsChanged(
     if (newVal.required) return true; // Added required var
   }
 
+  return false;
+}
+
+/**
+ * Runtime-only change detector for prompted env vars. Returns true when
+ * a key present on both sides has a different `mounted` flag — flipping
+ * mounted changes the pod spec (env var ↔ mounted secret file at
+ * `/secrets/<key>`) but does NOT change what the user supplied at
+ * install time. So the cascade still needs to fire (pod restart) but
+ * via the AUTO path, not the manual re-prompt path.
+ */
+function promptedEnvVarsRuntimeChanged(
+  oldMap: Map<string, PromptedEnvVarInfo>,
+  newMap: Map<string, PromptedEnvVarInfo>,
+): boolean {
+  for (const [key, oldVal] of oldMap) {
+    const newVal = newMap.get(key);
+    if (!newVal) continue; // Removal is handled by promptedEnvVarsChanged
+    if (oldVal.mounted !== newVal.mounted) return true;
+  }
   return false;
 }
 

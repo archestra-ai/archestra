@@ -61,6 +61,9 @@ type PromptedOrStaticEnvVar = {
   required?: boolean;
   sensitive?: boolean;
   description?: string;
+  // Runtime layout flag — env var (false) vs mounted secret file at
+  // `/secrets/<key>` (true). Flipping it requires a pod restart.
+  mounted?: boolean;
 };
 
 export type ComputeCascadeOutcomeOptions = {
@@ -161,7 +164,17 @@ function localExecutionConfigChanged(
 // backend/src/services/mcp-reinstall.ts.
 // ─────────────────────────────────────────────────────────────────────
 
-type PromptedInfo = { required: boolean; type: string };
+type PromptedInfo = {
+  required: boolean;
+  type: string;
+  // `mounted` flips the pod spec between an env var (`mounted=false`)
+  // and a mounted secret file at `/secrets/<key>` (`mounted=true`).
+  // The schema-evolution check (`promptedEnvVarsChanged`) ignores it
+  // because flipping mounted doesn't need re-prompt, but the auto
+  // path's whole-row diff still has to catch it — see
+  // `onlyForwardCompatibleDiff`'s `promptedEnvVarsRuntimeChanged` hop.
+  mounted: boolean;
+};
 
 const promptedEnvMap = (
   arr: PromptedOrStaticEnvVar[] | undefined,
@@ -172,6 +185,7 @@ const promptedEnvMap = (
     m.set(v.key, {
       required: Boolean(v.required),
       type: String(v.type ?? ""),
+      mounted: Boolean(v.mounted),
     });
   }
   return m;
@@ -197,6 +211,25 @@ export function promptedEnvVarsChanged(
   for (const [key, n] of nextMap) {
     if (prevMap.has(key)) continue;
     if (n.required) return true;
+  }
+  return false;
+}
+
+/**
+ * Mirror of backend `promptedEnvVarsRuntimeChanged`. True iff a prompted
+ * env var present on both sides has a different `mounted` flag. Drives
+ * the auto path (pod restart) without manual re-prompt.
+ */
+function promptedEnvVarsRuntimeChanged(
+  prev: CascadeSnapshot,
+  next: CascadeSnapshot,
+): boolean {
+  const prevMap = promptedEnvMap(prev.localConfig?.environment);
+  const nextMap = promptedEnvMap(next.localConfig?.environment);
+  for (const [key, p] of prevMap) {
+    const n = nextMap.get(key);
+    if (!n) continue; // Removal is handled by promptedEnvVarsChanged
+    if (p.mounted !== n.mounted) return true;
   }
   return false;
 }
@@ -252,6 +285,10 @@ function onlyForwardCompatibleDiff(
 
   // Prompted env-var changes are schema-evolution compatible.
   if (promptedEnvVarsChanged(prev, next)) return false;
+  // …but a runtime-only `mounted` flip still requires a pod restart
+  // (env var ↔ mounted secret file). Routes through the auto path,
+  // not the manual one.
+  if (promptedEnvVarsRuntimeChanged(prev, next)) return false;
 
   // Non-prompted env vars are unchanged.
   const stripPromptOnInstall = (arr: PromptedOrStaticEnvVar[] | undefined) =>

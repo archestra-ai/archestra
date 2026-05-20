@@ -180,6 +180,74 @@ describe("promptedEnvVarsChanged — manual-path leaf predicate", () => {
       ),
     ).toBe(false);
   });
+  test("`mounted` flip on existing prompted var → false (not a schema change)", () => {
+    // The schema-evolution check is intentionally lenient about
+    // `mounted` (no re-prompt needed). The runtime-only check below
+    // catches it for the auto path. See full-cascade test for that.
+    expect(
+      promptedEnvVarsChanged(
+        env({
+          environment: [
+            {
+              key: "X",
+              type: "secret",
+              promptOnInstallation: true,
+              required: false,
+              mounted: false,
+            },
+          ],
+        }),
+        env({
+          environment: [
+            {
+              key: "X",
+              type: "secret",
+              promptOnInstallation: true,
+              required: false,
+              mounted: true,
+            },
+          ],
+        }),
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("computeCascadeOutcome — `mounted` flip routes to auto, not manual", () => {
+  test("flipping mounted on an existing prompted secret env var → auto", () => {
+    const base = env({
+      environment: [
+        {
+          key: "API_KEY",
+          type: "secret",
+          promptOnInstallation: true,
+          required: false,
+          mounted: false,
+        },
+      ],
+    });
+    const flipped = env({
+      environment: [
+        {
+          key: "API_KEY",
+          type: "secret",
+          promptOnInstallation: true,
+          required: false,
+          mounted: true,
+        },
+      ],
+    });
+    // Re-import here from the module to exercise the full pipeline,
+    // not just the leaf predicate — verifies the gate routes mounted
+    // changes through `onlyForwardCompatibleDiff` returning false →
+    // auto, NOT the manual path.
+    expect(
+      computeCascadeOutcome(base, flipped, {
+        affectedServerCount: 1,
+        labelsChanged: false,
+      }),
+    ).toBe("auto");
+  });
 });
 
 describe("requiredUserConfigChanged — manual-path leaf predicate", () => {

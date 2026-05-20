@@ -763,6 +763,89 @@ describe("mcp-reinstall", () => {
     });
   });
 
+  describe("onlyForwardCompatibleEnvDiff", () => {
+    const baseLocal = (
+      environment: Array<{
+        key: string;
+        type: "plain_text" | "secret";
+        promptOnInstallation: boolean;
+        required?: boolean;
+        mounted?: boolean;
+      }>,
+    ): InternalMcpCatalog =>
+      ({
+        id: "test-id",
+        name: "Test Server",
+        serverType: "local",
+        localConfig: {
+          command: "npm",
+          arguments: ["start"],
+          environment,
+        },
+        userConfig: {},
+      }) as InternalMcpCatalog;
+
+    test("flipping `mounted` on an existing prompted env var returns false (pod restart needed, auto path)", () => {
+      // Same key + type + required, only `mounted` flips.
+      // `promptedEnvVarsChanged` is intentionally lenient here (no
+      // re-prompt needed). The runtime check has to catch it so the
+      // cascade fires via the auto path instead of silently skipping.
+      const oldConfig = baseLocal([
+        {
+          key: "API_KEY",
+          type: "secret",
+          promptOnInstallation: true,
+          required: false,
+          mounted: false,
+        },
+      ]);
+      const newConfig = baseLocal([
+        {
+          key: "API_KEY",
+          type: "secret",
+          promptOnInstallation: true,
+          required: false,
+          mounted: true,
+        },
+      ]);
+
+      expect(onlyForwardCompatibleEnvDiff(oldConfig, newConfig)).toBe(false);
+      // And NOT a re-prompt — the user already supplied the value.
+      expect(requiresNewUserInputForReinstall(oldConfig, newConfig)).toBe(
+        false,
+      );
+    });
+
+    test("snapshot-shape asymmetry (toolCount present on one side) does not over-fire", () => {
+      // When the parent PUT loop cascades to children, the old snapshot
+      // comes from `findChildren()` (with `attachListMetadata` adding
+      // `toolCount`) while the new snapshot comes from `update()`
+      // (which doesn't). A naive whole-row stringify would diff on
+      // these bookkeeping fields and over-fire for every parent edit.
+      // The predicate's strip step must normalize them out.
+      const oldWithListMetadata = {
+        ...baseLocal([]),
+        toolCount: 3,
+        labels: [{ key: "env", value: "prod" }],
+        teams: [],
+      } as InternalMcpCatalog;
+      const newWithoutListMetadata = {
+        ...baseLocal([]),
+        // No toolCount on the row returned by Model.update.
+        labels: [{ key: "env", value: "prod" }],
+        teams: [],
+        authorName: "Alice",
+      } as InternalMcpCatalog;
+
+      expect(
+        onlyForwardCompatibleEnvDiff(
+          oldWithListMetadata,
+          newWithoutListMetadata,
+        ),
+      ).toBe(true);
+    });
+  });
+
   describe("autoReinstallServer", () => {
     // Helper to create a minimal server
     const createServer = (overrides: Partial<McpServer> = {}): McpServer =>

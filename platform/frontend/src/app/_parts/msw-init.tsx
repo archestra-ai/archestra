@@ -16,15 +16,19 @@ type HandlerOverride = {
 declare global {
   interface Window {
     __archestraUnhandledRequests?: string[];
-    __archestraSyncMswOverrides?: () => Promise<void>;
+    __archestraApplyMswOverride?: (override: HandlerOverride) => Promise<void>;
+    __archestraResetMswOverrides?: () => void;
   }
 }
 
+const MSW_ENABLED =
+  process.env.NEXT_PUBLIC_API_MOCKING === "enabled" &&
+  process.env.NODE_ENV !== "production";
+
 export function MswInit({ children }: { children: React.ReactNode }) {
-  // `process.env.NEXT_PUBLIC_*` is inlined at build time, so in production
-  // builds (where the env var is unset) this branch is statically reachable
-  // and the dynamic import below is dead code that bundlers can eliminate.
-  if (process.env.NEXT_PUBLIC_API_MOCKING !== "enabled") {
+  // Inlining the guard means the dynamic import below is dead code in
+  // production bundles, so MSW is fully tree-shaken.
+  if (!MSW_ENABLED) {
     return <>{children}</>;
   }
   return <MswInitInner>{children}</MswInitInner>;
@@ -36,30 +40,50 @@ function MswInitInner({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const [{ worker }, { isApiRequest }] = await Promise.all([
-        import("@/mocks/browser"),
-        import("@/mocks/match"),
-      ]);
-      await worker.start({
-        // Strict mode: any unmocked API request is tracked and asserted at
-        // test teardown. Non-API requests (Next.js internals, telemetry,
-        // fonts, source maps) silently bypass — they aren't the contract
-        // these tests verify. See src/mocks/match.ts for the predicate.
-        onUnhandledRequest(req) {
-          if (!isApiRequest(req.url)) return;
-          window.__archestraUnhandledRequests ??= [];
-          window.__archestraUnhandledRequests.push(`${req.method} ${req.url}`);
-        },
-        serviceWorker: { url: "/mockServiceWorker.js" },
-      });
-      await syncOverrides(worker);
-      // Expose a sync entrypoint the Playwright `MswControl` fixture calls
-      // after every `use(...)` / `reset()` so late overrides reach the
-      // browser worker, not just the Node MSW server. Without this, a test
-      // that overrides a response after navigation would see SSR data drift
-      // from client-side refetches.
-      window.__archestraSyncMswOverrides = () => syncOverrides(worker);
-      if (!cancelled) setReady(true);
+      try {
+        const [{ worker }, { isApiRequest }, msw, { buildHandler }] =
+          await Promise.all([
+            import("@/mocks/browser"),
+            import("@/mocks/match"),
+            import("msw"),
+            import("@/mocks/build-handler"),
+          ]);
+        await worker.start({
+          // Strict mode: any unmocked API request is tracked and asserted at
+          // test teardown. Non-API requests (Next.js internals, telemetry,
+          // fonts, source maps) silently bypass — they aren't the contract
+          // these tests verify. See src/mocks/match.ts for the predicate.
+          onUnhandledRequest(req) {
+            if (!isApiRequest(req.url)) return;
+            window.__archestraUnhandledRequests ??= [];
+            window.__archestraUnhandledRequests.push(
+              `${req.method} ${req.url}`,
+            );
+          },
+          serviceWorker: { url: "/mockServiceWorker.js" },
+        });
+        await applyOverridesFromRegistry(worker, msw, buildHandler);
+        // The Playwright `MswControl` fixture calls these after every
+        // use(...) / reset(). Apply pushes a single handler — no
+        // reset-and-replay, because that would resurrect `once: true`
+        // handlers MSW had already consumed.
+        window.__archestraApplyMswOverride = async (override) => {
+          worker.use(buildHandler(msw, override.url, override));
+        };
+        window.__archestraResetMswOverrides = () => {
+          worker.resetHandlers();
+        };
+      } catch (e) {
+        // Surface the failure loudly so the test harness sees it. Without
+        // this, a service-worker registration error would leave the page in
+        // an indefinite "rendering null" state and the test would only fail
+        // with an opaque timeout. We still set ready=true below so the rest
+        // of the page mounts and tests fail on real assertions plus this
+        // console.error breadcrumb, which is far more actionable.
+        console.error("[MswInit] worker.start() failed:", e);
+      } finally {
+        if (!cancelled) setReady(true);
+      }
     })();
     return () => {
       cancelled = true;
@@ -70,12 +94,11 @@ function MswInitInner({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-async function syncOverrides(worker: SetupWorker): Promise<void> {
-  worker.resetHandlers();
-  await applyOverridesFromRegistry(worker);
-}
-
-async function applyOverridesFromRegistry(worker: SetupWorker): Promise<void> {
+async function applyOverridesFromRegistry(
+  worker: SetupWorker,
+  msw: typeof import("msw"),
+  buildHandler: typeof import("@/mocks/build-handler").buildHandler,
+): Promise<void> {
   try {
     const res = await fetch("/internal-test/msw-handlers");
     if (!res.ok) return;
@@ -83,13 +106,9 @@ async function applyOverridesFromRegistry(worker: SetupWorker): Promise<void> {
     const overrides = data.overrides ?? [];
     if (overrides.length === 0) return;
 
-    const [msw, { buildHandler }] = await Promise.all([
-      import("msw"),
-      import("@/mocks/build-handler"),
-    ]);
-    // One `worker.use()` per override (not a batched call) so each prepend
-    // honors "latest wins" for repeated overrides of the same method+url.
-    // A single `worker.use(...handlers)` would keep arg-list order, so the
+    // One `worker.use()` per override so each prepend honors "latest wins"
+    // for repeated overrides of the same method+url. A single
+    // `worker.use(...handlers)` would keep arg-list order, so the
     // first-registered override would match earlier requests — diverging
     // from the Node side, where one `server.use()` per POST gives the
     // most-recent override priority.

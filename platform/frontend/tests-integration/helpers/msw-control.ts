@@ -28,7 +28,10 @@ export class MswControl {
         `MswControl.use failed (status ${res.status()}): ${await res.text()}`,
       );
     }
-    await this.syncBrowser();
+    // Push the new override straight into the browser worker as a single
+    // worker.use(handler) call. Deliberately not a reset+replay — that would
+    // resurrect `once: true` handlers MSW had already consumed.
+    await this.applyToBrowser(override);
   }
 
   /**
@@ -50,20 +53,28 @@ export class MswControl {
         `MswControl.reset failed (status ${res.status()}): ${await res.text()}`,
       );
     }
-    await this.syncBrowser();
+    await this.resetBrowser();
   }
 
-  // Push the latest registry state into the browser worker by invoking the
-  // sync entrypoint MswInit installs on `window`. Best effort: if the page
-  // has not navigated yet (window function not installed), the worker will
-  // pick up the registry on its initial replay at startup.
-  private async syncBrowser(): Promise<void> {
+  // Push a single override into the browser worker. No-op if the page has
+  // not navigated yet — the initial registry replay at MswInit startup will
+  // pick it up when the page eventually loads.
+  private async applyToBrowser(override: HandlerOverride): Promise<void> {
     try {
       await this.page.evaluate(
-        async () => await window.__archestraSyncMswOverrides?.(),
+        async (o) => await window.__archestraApplyMswOverride?.(o),
+        override,
       );
     } catch {
-      // No active page context — nothing to sync.
+      // No active page context.
+    }
+  }
+
+  private async resetBrowser(): Promise<void> {
+    try {
+      await this.page.evaluate(() => window.__archestraResetMswOverrides?.());
+    } catch {
+      // No active page context.
     }
   }
 }

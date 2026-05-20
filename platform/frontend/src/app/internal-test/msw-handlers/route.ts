@@ -28,7 +28,12 @@ declare global {
   var __archestraMswOverrides: HandlerOverride[] | undefined;
 }
 
-const ENABLED = process.env.NEXT_PUBLIC_API_MOCKING === "enabled";
+// Defense in depth: even if NEXT_PUBLIC_API_MOCKING somehow leaks into a
+// production-like deployment, NODE_ENV !== "production" keeps the endpoint
+// 404. Matching the gate in instrumentation.ts and msw-init.tsx.
+const ENABLED =
+  process.env.NEXT_PUBLIC_API_MOCKING === "enabled" &&
+  process.env.NODE_ENV !== "production";
 const BACKEND_ORIGIN =
   process.env.ARCHESTRA_INTERNAL_API_BASE_URL || "http://localhost:9000";
 

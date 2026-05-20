@@ -1,10 +1,14 @@
 import * as Sentry from "@sentry/nextjs";
 
+const MSW_ENABLED =
+  process.env.NEXT_PUBLIC_API_MOCKING === "enabled" &&
+  process.env.NODE_ENV !== "production";
+
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     await import("../sentry.server.config");
 
-    if (process.env.NEXT_PUBLIC_API_MOCKING === "enabled") {
+    if (MSW_ENABLED) {
       const [{ server }, { isApiRequest }] = await Promise.all([
         import("./mocks/node"),
         import("./mocks/match"),

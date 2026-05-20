@@ -9,6 +9,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { capitalize } from "lodash-es";
 import { z } from "zod";
 import { hasPermission, userHasPermission } from "@/auth";
+import { isAnthropicWorkloadIdentityEnabled } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import {
   type BedrockSigV4Credentials,
@@ -249,6 +250,8 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 isProviderApiKeyOptional({
                   provider: data.provider,
                   azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+                  anthropicWorkloadIdentityEnabled:
+                    isAnthropicWorkloadIdentityEnabled(),
                 }) || data.apiKey
               );
             },
@@ -387,6 +390,8 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         !isProviderApiKeyOptional({
           provider: body.provider,
           azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+          anthropicWorkloadIdentityEnabled:
+            isAnthropicWorkloadIdentityEnabled(),
         })
       ) {
         throw new ApiError(
@@ -418,6 +423,8 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         isProviderApiKeyOptional({
           provider: body.provider,
           azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+          anthropicWorkloadIdentityEnabled:
+            isAnthropicWorkloadIdentityEnabled(),
         });
       if (canSync) {
         try {
@@ -727,6 +734,8 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           !isProviderApiKeyOptional({
             provider: apiKeyFromDB.provider,
             azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+            anthropicWorkloadIdentityEnabled:
+              isAnthropicWorkloadIdentityEnabled(),
           })
         ) {
           throw new ApiError(

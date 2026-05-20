@@ -1,4 +1,8 @@
 import {
+  getAnthropicWorkloadIdentityBearerToken,
+  isAnthropicWorkloadIdentityEnabled,
+} from "@/clients/anthropic-workload-identity";
+import {
   getAzureAiFoundryBearerTokenProvider,
   isAnthropicAzureFoundryEntraIdEnabled,
 } from "@/clients/azure-openai-credentials";
@@ -52,6 +56,12 @@ async function getAnthropicAuthHeaders(
   }
 
   if (!isAnthropicAzureFoundryEntraIdEnabled()) {
+    if (isAnthropicWorkloadIdentityEnabled()) {
+      return {
+        Authorization: `Bearer ${await getAnthropicWorkloadIdentityBearerToken()}`,
+      };
+    }
+
     return { "x-api-key": "" };
   }
 

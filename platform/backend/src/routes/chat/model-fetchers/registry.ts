@@ -1,4 +1,5 @@
 import type { SupportedProvider } from "@shared";
+import { isAnthropicWorkloadIdentityEnabled } from "@/clients/anthropic-workload-identity";
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config, { getProviderEnvApiKey } from "@/config";
@@ -39,6 +40,8 @@ export async function fetchModelsForProvider(params: {
 
   const vertexAiEnabled = provider === "gemini" && isVertexAiEnabled();
   const bedrockIamEnabled = provider === "bedrock" && isBedrockIamAuthEnabled();
+  const anthropicWifEnabled =
+    provider === "anthropic" && isAnthropicWorkloadIdentityEnabled();
   const isKeylessProviderEnabled =
     (provider === "vllm" && config.llm.vllm.enabled) ||
     (provider === "ollama" && config.llm.ollama.enabled);
@@ -48,6 +51,7 @@ export async function fetchModelsForProvider(params: {
     !apiKey &&
     !vertexAiEnabled &&
     !bedrockIamEnabled &&
+    !anthropicWifEnabled &&
     !isKeylessProviderEnabled &&
     !isBedrockEnabled
   ) {
@@ -65,6 +69,8 @@ export async function fetchModelsForProvider(params: {
       models = await fetchGeminiModelsViaVertexAi();
     } else if (provider === "bedrock" && bedrockIamEnabled) {
       models = await fetchBedrockModelsViaIam();
+    } else if (provider === "anthropic" && anthropicWifEnabled) {
+      models = await modelFetchers[provider]("");
     } else {
       models = await modelFetchers[provider](apiKey || PLACEHOLDER_API_KEY);
     }

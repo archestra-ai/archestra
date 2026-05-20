@@ -41,6 +41,22 @@ const frontendBaseUrl =
 const DEFAULT_POSTHOG_KEY = "phc_FFZO7LacnsvX2exKFWehLDAVaXLBfoBaJypdOuYoTk7";
 const DEFAULT_POSTHOG_HOST = "https://eu.i.posthog.com";
 
+const isAnthropicWifImplicitlyEnabled = (): boolean =>
+  Boolean(
+    process.env.ARCHESTRA_ANTHROPIC_WIF_FEDERATION_RULE_ID &&
+      process.env.ARCHESTRA_ANTHROPIC_WIF_ORGANIZATION_ID &&
+      process.env.ARCHESTRA_ANTHROPIC_WIF_SERVICE_ACCOUNT_ID &&
+      (process.env.ARCHESTRA_ANTHROPIC_WIF_IDENTITY_TOKEN ||
+        process.env.ARCHESTRA_ANTHROPIC_WIF_IDENTITY_TOKEN_FILE),
+  );
+
+const isAnthropicWifEnabled = (): boolean => {
+  const explicit = process.env.ARCHESTRA_ANTHROPIC_WIF_ENABLED;
+  return explicit === undefined
+    ? isAnthropicWifImplicitlyEnabled()
+    : explicit === "true";
+};
+
 /**
  * Determines OTLP authentication headers based on environment variables
  * Returns undefined if authentication is not properly configured
@@ -609,6 +625,21 @@ const config = {
       azureFoundryEntraIdEnabled:
         process.env.ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED ===
         "true",
+      workloadIdentity: {
+        enabled: isAnthropicWifEnabled(),
+        tokenUrl: process.env.ARCHESTRA_ANTHROPIC_WIF_TOKEN_URL || "",
+        federationRuleId:
+          process.env.ARCHESTRA_ANTHROPIC_WIF_FEDERATION_RULE_ID || "",
+        organizationId:
+          process.env.ARCHESTRA_ANTHROPIC_WIF_ORGANIZATION_ID || "",
+        serviceAccountId:
+          process.env.ARCHESTRA_ANTHROPIC_WIF_SERVICE_ACCOUNT_ID || "",
+        workspaceId: process.env.ARCHESTRA_ANTHROPIC_WIF_WORKSPACE_ID || "",
+        identityToken:
+          process.env.ARCHESTRA_ANTHROPIC_WIF_IDENTITY_TOKEN || "",
+        identityTokenFile:
+          process.env.ARCHESTRA_ANTHROPIC_WIF_IDENTITY_TOKEN_FILE || "",
+      },
     },
     gemini: {
       baseUrl:

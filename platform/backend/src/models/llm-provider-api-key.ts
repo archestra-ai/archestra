@@ -5,6 +5,7 @@ import {
   type SupportedProvider,
 } from "@shared";
 import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { isAnthropicWorkloadIdentityEnabled } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import db, { schema } from "@/database";
 import { computeSecretStorageType } from "@/secrets-manager/utils";
@@ -274,6 +275,8 @@ class LlmProviderApiKeyModel {
         schema.llmProviderApiKeysTable.provider,
         getProvidersWithOptionalApiKey({
           azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+          anthropicWorkloadIdentityEnabled:
+            isAnthropicWorkloadIdentityEnabled(),
         }),
       ),
     );
@@ -430,6 +433,8 @@ class LlmProviderApiKeyModel {
         schema.llmProviderApiKeysTable.provider,
         getProvidersWithOptionalApiKey({
           azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+          anthropicWorkloadIdentityEnabled:
+            isAnthropicWorkloadIdentityEnabled(),
         }),
       ),
     );
@@ -747,6 +752,7 @@ function canUseProviderApiKey(
 
   return getProvidersWithOptionalApiKey({
     azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+    anthropicWorkloadIdentityEnabled: isAnthropicWorkloadIdentityEnabled(),
   }).includes(apiKey.provider);
 }
 

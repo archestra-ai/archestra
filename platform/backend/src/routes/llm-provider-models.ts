@@ -6,6 +6,7 @@ import {
 } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { isAnthropicWorkloadIdentityEnabled } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
@@ -301,6 +302,8 @@ export async function syncModelsForVisibleApiKeys(params: {
           !isProviderApiKeyOptional({
             provider: apiKey.provider,
             azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+            anthropicWorkloadIdentityEnabled:
+              isAnthropicWorkloadIdentityEnabled(),
           })
         ) {
           if (apiKey.secretId) {

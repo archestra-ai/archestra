@@ -96,19 +96,26 @@ const PROVIDERS_WITH_OPTIONAL_API_KEY = new Set<SupportedProvider>([
 export function isProviderApiKeyOptional(params: {
   provider: SupportedProvider;
   azureEntraIdEnabled?: boolean;
+  anthropicWorkloadIdentityEnabled?: boolean;
 }): boolean {
   return (
     PROVIDERS_WITH_OPTIONAL_API_KEY.has(params.provider) ||
-    (params.provider === "azure" && params.azureEntraIdEnabled === true)
+    (params.provider === "azure" && params.azureEntraIdEnabled === true) ||
+    (params.provider === "anthropic" &&
+      params.anthropicWorkloadIdentityEnabled === true)
   );
 }
 
 export function getProvidersWithOptionalApiKey(params?: {
   azureEntraIdEnabled?: boolean;
+  anthropicWorkloadIdentityEnabled?: boolean;
 }): SupportedProvider[] {
   const providers = [...PROVIDERS_WITH_OPTIONAL_API_KEY];
   if (params?.azureEntraIdEnabled === true) {
     providers.push("azure");
+  }
+  if (params?.anthropicWorkloadIdentityEnabled === true) {
+    providers.push("anthropic");
   }
   return providers;
 }

@@ -19,6 +19,10 @@ vi.mock("@/clients/azure-openai-credentials", () => ({
   getAzureOpenAiBearerTokenProvider: vi.fn(),
 }));
 
+vi.mock("@/clients/anthropic-workload-identity", () => ({
+  isAnthropicWorkloadIdentityEnabled: vi.fn(() => false),
+}));
+
 // Mock auth for permission checks
 vi.mock("@/auth", () => ({
   hasPermission: vi.fn(),

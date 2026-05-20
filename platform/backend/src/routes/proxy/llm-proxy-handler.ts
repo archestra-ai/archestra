@@ -21,6 +21,10 @@ import {
 } from "@shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { LRUCacheManager } from "@/cache-manager";
+import {
+  ANTHROPIC_WIF_API_KEY_PLACEHOLDER,
+  isAnthropicWorkloadIdentityEnabled,
+} from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import config from "@/config";
 import logger from "@/logging";
@@ -332,6 +336,15 @@ export async function handleLLMProxy<
   // 2. Extract API key from headers if not already resolved via JWKS
   if (!authOverride && !wasJwksAuthenticated) {
     apiKey = provider.extractApiKey(headers);
+  }
+
+  if (
+    isLoopbackAddress(request.ip) &&
+    providerName === "anthropic" &&
+    isAnthropicWorkloadIdentityEnabled() &&
+    apiKey === ANTHROPIC_WIF_API_KEY_PLACEHOLDER
+  ) {
+    apiKey = undefined;
   }
 
   // 3. Resolve platform-managed virtual API keys.
@@ -1568,6 +1581,7 @@ function shouldUseKeylessProviderApiKey(params: {
   return isProviderApiKeyOptional({
     provider: row.provider,
     azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+    anthropicWorkloadIdentityEnabled: isAnthropicWorkloadIdentityEnabled(),
   });
 }
 

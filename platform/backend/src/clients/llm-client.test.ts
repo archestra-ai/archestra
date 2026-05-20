@@ -15,13 +15,37 @@ import { describe, expect, it, test } from "@/test";
 // Mock the gemini-client module before importing llm-client
 const mockIsVertexAiEnabled = vi.hoisted(() => vi.fn(() => false));
 const mockIsAzureOpenAiEntraIdEnabled = vi.hoisted(() => vi.fn(() => false));
+const mockIsAnthropicWorkloadIdentityEnabled = vi.hoisted(() =>
+  vi.fn(() => false),
+);
+const mockCreateAnthropicWorkloadIdentityFetch = vi.hoisted(() =>
+  vi.fn((fetch?: typeof globalThis.fetch) => fetch ?? globalThis.fetch),
+);
+const capturedCreateAnthropicOptions = vi.hoisted(() => ({
+  apiKey: undefined as string | undefined,
+  fetch: undefined as typeof globalThis.fetch | undefined,
+  headers: undefined as Record<string, string> | undefined,
+}));
 const mockCreateAnthropic = vi.hoisted(() =>
-  vi.fn(({ headers }: { headers?: Record<string, string> }) =>
-    vi.fn((modelName: string) => ({
-      provider: "anthropic",
-      modelName,
+  vi.fn(
+    ({
+      apiKey,
+      fetch,
       headers,
-    })),
+    }: {
+      apiKey?: string;
+      fetch?: typeof globalThis.fetch;
+      headers?: Record<string, string>;
+    }) => {
+      capturedCreateAnthropicOptions.apiKey = apiKey;
+      capturedCreateAnthropicOptions.fetch = fetch;
+      capturedCreateAnthropicOptions.headers = headers;
+      return vi.fn((modelName: string) => ({
+        provider: "anthropic",
+        modelName,
+        headers,
+      }));
+    },
   ),
 );
 vi.mock("@/clients/gemini-client", () => ({
@@ -35,6 +59,12 @@ vi.mock("@/clients/azure-openai-credentials", async (importOriginal) => {
     isAzureOpenAiEntraIdEnabled: mockIsAzureOpenAiEntraIdEnabled,
   };
 });
+vi.mock("@/clients/anthropic-workload-identity", () => ({
+  ANTHROPIC_WIF_API_KEY_PLACEHOLDER: "ARCHESTRA_ANTHROPIC_WIF_KEYLESS",
+  createAnthropicWorkloadIdentityFetch:
+    mockCreateAnthropicWorkloadIdentityFetch,
+  isAnthropicWorkloadIdentityEnabled: mockIsAnthropicWorkloadIdentityEnabled,
+}));
 vi.mock("@ai-sdk/anthropic", () => ({
   createAnthropic: mockCreateAnthropic,
 }));
@@ -186,6 +216,26 @@ describe("createDirectLLMModel", () => {
     ).toThrow(
       "Anthropic API key is required. Please configure ANTHROPIC_API_KEY.",
     );
+  });
+
+  it("creates an anthropic model without API key when workload identity is enabled", () => {
+    mockIsAnthropicWorkloadIdentityEnabled.mockReturnValue(true);
+    mockCreateAnthropicWorkloadIdentityFetch.mockClear();
+
+    const model = createDirectLLMModel({
+      provider: "anthropic",
+      apiKey: undefined,
+      modelName: "claude-3-5-haiku-20241022",
+      baseUrl: null,
+    });
+
+    expect(model).toBeDefined();
+    expect(capturedCreateAnthropicOptions.apiKey).toBe(
+      "ARCHESTRA_ANTHROPIC_WIF_KEYLESS",
+    );
+    expect(mockCreateAnthropicWorkloadIdentityFetch).toHaveBeenCalled();
+
+    mockIsAnthropicWorkloadIdentityEnabled.mockReturnValue(false);
   });
 
   it("throws descriptive error for openai provider without API key", () => {
@@ -502,6 +552,36 @@ describe("createLLMModel", () => {
     expect(new Headers(fetchInit?.headers).get("authorization")).toBe(
       "Bearer EMPTY",
     );
+  });
+
+  test("allows anthropic chat without a provider key when workload identity is enabled", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+  }) => {
+    mockIsAnthropicWorkloadIdentityEnabled.mockReturnValue(true);
+    mockCreateAnthropicWorkloadIdentityFetch.mockClear();
+
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ name: "Anthropic WIF Agent", teams: [] });
+
+    const result = await createLLMModelForAgent({
+      organizationId: org.id,
+      userId: user.id,
+      agentId: agent.id,
+      model: "claude-3-5-haiku-20241022",
+      provider: "anthropic",
+      source: "chat",
+    });
+
+    expect(result.apiKeySource).toBe("environment");
+    expect(capturedCreateAnthropicOptions.apiKey).toBe(
+      "ARCHESTRA_ANTHROPIC_WIF_KEYLESS",
+    );
+    expect(mockCreateAnthropicWorkloadIdentityFetch).not.toHaveBeenCalled();
+
+    mockIsAnthropicWorkloadIdentityEnabled.mockReturnValue(false);
   });
 
   test("sets the untrusted-context header only when contextIsTrusted is false", () => {

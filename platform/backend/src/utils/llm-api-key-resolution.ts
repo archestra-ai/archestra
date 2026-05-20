@@ -1,4 +1,5 @@
 import { isProviderApiKeyOptional, type SupportedProvider } from "@shared";
+import { isAnthropicWorkloadIdentityEnabled } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { getProviderEnvApiKey } from "@/config";
 import { LlmProviderApiKeyModel, TeamModel } from "@/models";
@@ -73,6 +74,7 @@ export async function resolveProviderApiKey(params: {
       isProviderApiKeyOptional({
         provider,
         azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+        anthropicWorkloadIdentityEnabled: isAnthropicWorkloadIdentityEnabled(),
       })
     ) {
       return {

@@ -772,6 +772,17 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: `https://api.anthropic.com`
   - Use this to point to your own proxy or other custom endpoints
 
+- **Anthropic Workload Identity Federation (WIF)** - Enable Anthropic keyless authentication by exchanging an OIDC identity token for an Anthropic bearer token.
+  - **`ARCHESTRA_ANTHROPIC_WIF_ENABLED`** - Enable Anthropic WIF explicitly. If omitted, WIF is enabled when the required WIF settings below are present.
+  - **`ARCHESTRA_ANTHROPIC_WIF_FEDERATION_RULE_ID`** - Anthropic federation rule ID.
+  - **`ARCHESTRA_ANTHROPIC_WIF_ORGANIZATION_ID`** - Anthropic organization ID.
+  - **`ARCHESTRA_ANTHROPIC_WIF_SERVICE_ACCOUNT_ID`** - Anthropic service account ID.
+  - **`ARCHESTRA_ANTHROPIC_WIF_WORKSPACE_ID`** - Optional Anthropic workspace ID.
+  - **`ARCHESTRA_ANTHROPIC_WIF_IDENTITY_TOKEN_FILE`** - Path to the IdP-issued OIDC token file.
+  - **`ARCHESTRA_ANTHROPIC_WIF_IDENTITY_TOKEN`** - IdP-issued OIDC token value. Prefer the file variable for deployed workloads.
+  - **`ARCHESTRA_ANTHROPIC_WIF_TOKEN_URL`** - Optional token exchange endpoint override. Defaults to `<ARCHESTRA_ANTHROPIC_BASE_URL>/v1/oauth/token`.
+  - When both WIF and `ARCHESTRA_CHAT_ANTHROPIC_API_KEY` are configured, the API key takes precedence for environment-backed chat calls.
+
 - **`ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED`** - Enable Microsoft Entra ID authentication for Anthropic models deployed in Microsoft Foundry.
   - Default: `false`
   - Set `ARCHESTRA_ANTHROPIC_BASE_URL=https://<resource-name>.services.ai.azure.com/anthropic`

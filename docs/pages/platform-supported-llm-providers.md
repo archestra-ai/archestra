@@ -74,6 +74,12 @@ Model Router translation is text-first. Anthropic, Gemini, and Cohere routes cur
 - **Authentication**: Pass your Anthropic API key in the `x-api-key` header
 - **Messages path**: `POST /v1/anthropic/{profile-id}/v1/messages`
 
+### Anthropic Workload Identity Federation
+
+Archestra can use Anthropic Workload Identity Federation for keyless Anthropic calls. Configure the Anthropic federation rule, organization, service account, and identity token source with the `ARCHESTRA_ANTHROPIC_WIF_*` environment variables listed in [LLM Provider Configuration](/docs/platform-deployment#llm-provider-configuration).
+
+When WIF is enabled and no Anthropic API key is configured, Archestra exchanges the workload identity token for an Anthropic bearer token and refreshes it before expiry. Stored Anthropic API keys and `ARCHESTRA_CHAT_ANTHROPIC_API_KEY` continue to take precedence. Use WIF for deployments where static Anthropic API keys should not be stored in Archestra.
+
 ### Anthropic on Microsoft Foundry
 
 Claude models deployed in Microsoft Foundry use the Anthropic Messages API at `https://<resource>.services.ai.azure.com/anthropic`. Set `ARCHESTRA_ANTHROPIC_BASE_URL` to that `/anthropic` base URL. For keyless Microsoft Entra ID authentication, also set `ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED=true`; Archestra sends a bearer token scoped to `https://ai.azure.com/.default`.

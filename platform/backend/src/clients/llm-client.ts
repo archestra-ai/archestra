@@ -21,6 +21,11 @@ import {
   USER_ID_HEADER,
 } from "@shared";
 import type { streamText } from "ai";
+import {
+  ANTHROPIC_WIF_API_KEY_PLACEHOLDER,
+  createAnthropicWorkloadIdentityFetch,
+  isAnthropicWorkloadIdentityEnabled,
+} from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import {
   createAzureFetchWithApiVersion,
@@ -62,6 +67,9 @@ export function isApiKeyRequired(
   apiKey: string | undefined,
 ): boolean {
   if (apiKey) return false;
+  if (provider === "anthropic" && isAnthropicWorkloadIdentityEnabled()) {
+    return false;
+  }
   // Gemini with Vertex AI doesn't require an API key
   if (provider === "gemini" && isVertexAiEnabled()) return false;
   return !!providerModelConfigs[provider].apiKeyRequiredMessage;
@@ -86,7 +94,7 @@ export function createDirectLLMModel({
   if (!cfg) {
     throw new ApiError(400, `Unsupported provider: ${provider}`);
   }
-  if (cfg.apiKeyRequiredMessage && !apiKey) {
+  if (cfg.apiKeyRequiredMessage && isApiKeyRequired(provider, apiKey)) {
     throw new ApiError(400, cfg.apiKeyRequiredMessage);
   }
   const resolvedBaseUrl = baseUrl ?? cfg.defaultBaseUrl;
@@ -244,6 +252,8 @@ export async function createLLMModelForAgent(params: {
   const isOllama = provider === "ollama";
   const isAzureWithEntra =
     provider === "azure" && isAzureOpenAiEntraIdEnabled();
+  const isAnthropicWithWorkloadIdentity =
+    provider === "anthropic" && isAnthropicWorkloadIdentityEnabled();
 
   logger.info(
     {
@@ -254,6 +264,7 @@ export async function createLLMModelForAgent(params: {
       isVllm,
       isOllama,
       isAzureWithEntra,
+      isAnthropicWithWorkloadIdentity,
     },
     "Using LLM provider API key",
   );
@@ -264,7 +275,8 @@ export async function createLLMModelForAgent(params: {
     !isBedrockWithIamAuth &&
     !isVllm &&
     !isOllama &&
-    !isAzureWithEntra
+    !isAzureWithEntra &&
+    !isAnthropicWithWorkloadIdentity
   ) {
     throw new ApiError(
       400,
@@ -326,8 +338,21 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   // --- Native SDK providers (use their own SDK, call client(modelName)) ---
 
   anthropic: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      createAnthropic({ apiKey, baseURL, headers, fetch })(modelName),
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) => {
+      const useWorkloadIdentity =
+        !apiKey && isAnthropicWorkloadIdentityEnabled();
+      return createAnthropic({
+        apiKey: useWorkloadIdentity
+          ? ANTHROPIC_WIF_API_KEY_PLACEHOLDER
+          : apiKey,
+        baseURL,
+        headers,
+        fetch:
+          useWorkloadIdentity && !headers
+            ? createAnthropicWorkloadIdentityFetch(fetch)
+            : fetch,
+      })(modelName);
+    },
     defaultBaseUrl: config.llm.anthropic.baseUrl,
     apiKeyRequiredMessage:
       "Anthropic API key is required. Please configure ANTHROPIC_API_KEY.",

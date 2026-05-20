@@ -117,7 +117,7 @@ describe("proxy", () => {
       );
     });
 
-    it("should rewrite SAML callback with missing origin", () => {
+    it("should rewrite SAML callback missing origin", () => {
       const request = createMockRequest({
         method: "POST",
         url: "/api/auth/sso/saml2/sp/acs/MyProvider",

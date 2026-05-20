@@ -168,7 +168,7 @@ async function runCompactMessagesForChat(
         compactionId: latestCompaction.id,
         compactedThroughMessageId: latestCompaction.compactedThroughMessageId,
       },
-      "[ContextCompaction] ignoring stale compaction with missing boundary message",
+      "[ContextCompaction] ignoring stale compaction missing boundary message",
     );
   }
 

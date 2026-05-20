@@ -212,7 +212,7 @@ describe("persistTools", () => {
     expect(tool).not.toBeNull();
   });
 
-  test("handles tools with missing optional fields", async ({ makeAgent }) => {
+  test("handles tools missing optional fields", async ({ makeAgent }) => {
     const agent = await makeAgent({ name: "Test Agent" });
 
     const tools = [

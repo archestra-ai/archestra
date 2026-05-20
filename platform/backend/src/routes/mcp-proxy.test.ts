@@ -199,7 +199,7 @@ describe("mcpProxyRoutes POST /api/mcp/:agentId", () => {
     }
   });
 
-  test("rejects tools/call with missing name param", async ({
+  test("rejects tools/call missing name param", async ({
     makeUser,
     makeAgent,
   }) => {

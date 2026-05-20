@@ -1199,7 +1199,7 @@ describe("parseWebhookNotification", () => {
     expect(result).toBeNull();
   });
 
-  test("skips notifications with missing resourceData.id", async () => {
+  test("skips notifications missing resourceData.id", async () => {
     const mockGraphClient = createMockGraphClient();
     const provider = new OutlookEmailProvider(validConfig);
     // @ts-expect-error - accessing private property for testing

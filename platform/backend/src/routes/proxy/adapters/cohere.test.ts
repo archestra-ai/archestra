@@ -668,7 +668,7 @@ describe("CohereStreamAdapter", () => {
       expect(adapter.state.toolCalls[0].name).toBe("test_tool");
     });
 
-    test("generates ID for tool call with missing ID", () => {
+    test("generates ID for tool call missing ID", () => {
       const adapter = cohereAdapterFactory.createStreamAdapter();
 
       const chunk = {

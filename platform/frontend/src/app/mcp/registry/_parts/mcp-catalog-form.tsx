@@ -747,10 +747,23 @@ export function McpCatalogForm({
             when a mid-bar edit gets dropped on confirm (the save uses
             `pendingSubmit.values`, the snapshot taken at first-save
             time, not the current form state). Matches the same pattern
-            in `preset-editor-dialog.tsx`. */}
+            in `preset-editor-dialog.tsx`.
+
+            `disabled` covers native form controls (input/select/button)
+            but not the custom `<div role="button">` rows in the env-var
+            and header tables (they CAN'T be real <button>s because they
+            contain a nested delete <button>, and button-in-button is
+            invalid HTML — see comments in those table components).
+            `inert` blocks click + focus + keyboard for the entire
+            subtree, catching the row-as-div case. The `opacity-60`
+            class gives the user-visible "this is locked" signal that
+            `inert` alone doesn't provide. */}
         <fieldset
           disabled={pendingSubmit !== null || isConfirming}
-          className="flex min-h-0 min-w-0 flex-1 flex-col m-0 p-0 border-0"
+          inert={pendingSubmit !== null || isConfirming}
+          className={`flex min-h-0 min-w-0 flex-1 flex-col m-0 p-0 border-0 transition-opacity ${
+            pendingSubmit !== null || isConfirming ? "opacity-60" : ""
+          }`}
         >
           <div
             className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-6 ${embedded ? "space-y-6 pt-6 pb-0" : "space-y-6 py-6"}`}

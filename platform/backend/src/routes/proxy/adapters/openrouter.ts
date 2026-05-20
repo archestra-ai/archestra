@@ -2,7 +2,7 @@
  * OpenRouter LLM Proxy Adapter - OpenAI-compatible
  *
  * OpenRouter exposes an OpenAI-compatible API at https://openrouter.ai/api/v1
- * and recommends attribution headers (HTTP-Referer, X-Title).
+ * and recommends attribution headers (HTTP-Referer, X-OpenRouter-Title).
  */
 import { ArchestraInternalErrorCode } from "@shared";
 import { get } from "lodash-es";

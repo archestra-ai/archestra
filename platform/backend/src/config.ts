@@ -603,6 +603,10 @@ const config = {
         process.env.ARCHESTRA_OPENROUTER_REFERER?.trim() ||
         "https://archestra.ai",
       title: process.env.ARCHESTRA_OPENROUTER_TITLE || DEFAULT_APP_NAME,
+      // Comma-separated OpenRouter marketplace categories for app attribution.
+      categories:
+        process.env.ARCHESTRA_OPENROUTER_CATEGORIES?.trim() ||
+        "general-chat,personal-agent",
     },
     anthropic: {
       baseUrl:

@@ -21,6 +21,7 @@ export type ModelPricing = Array<{
   pricePerMillionOutput: string;
   isFree?: boolean;
   isFastest?: boolean;
+  isBest?: boolean;
 }>;
 
 export type SortDirection = "asc" | "desc";
@@ -74,9 +75,11 @@ export function LlmModelPicker(props: LlmModelPickerProps) {
     freeFilterable,
   } = props;
 
+  // With an explicit price sort, keep it; otherwise order the rest
+  // alphabetically (the select then pins routers and recommended models).
   const sortedModels = sortDirection
     ? sortModelsByPrice(models, sortDirection)
-    : models;
+    : [...models].sort((a, b) => a.model.localeCompare(b.model));
 
   const isSingle = !props.multiple;
   const value = isSingle ? props.value : props.value;
@@ -124,11 +127,13 @@ export function LlmModelPicker(props: LlmModelPickerProps) {
   const options = modelsWithCurrent.map((price) => ({
     value: price.model,
     model: price.model,
+    modelId: price.model,
     provider: price.provider as SupportedProvider,
     pricePerMillionInput: price.pricePerMillionInput,
     pricePerMillionOutput: price.pricePerMillionOutput,
     isFree: "isFree" in price ? price.isFree : undefined,
     isFastest: "isFastest" in price ? price.isFastest : undefined,
+    isBest: "isBest" in price ? price.isBest : undefined,
   }));
 
   if (!editable) {

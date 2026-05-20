@@ -186,4 +186,52 @@ describe("LlmModelSearchableSelect", () => {
       auto.compareDocumentPosition(other) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
+
+  it("orders recommended models above the rest", async () => {
+    const user = userEvent.setup();
+    render(
+      <LlmModelSearchableSelect
+        value=""
+        onValueChange={vi.fn()}
+        options={[
+          { value: "z", model: "zzz/model", provider: "openrouter" },
+          {
+            value: "best",
+            model: "best/model",
+            provider: "openrouter",
+            isBest: true,
+          },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox"));
+    const best = screen.getByText("best/model");
+    const rest = screen.getByText("zzz/model");
+    expect(
+      best.compareDocumentPosition(rest) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("detects the free router by modelId when the label is a display name", async () => {
+    const user = userEvent.setup();
+    render(
+      <LlmModelSearchableSelect
+        value=""
+        onValueChange={vi.fn()}
+        options={[
+          {
+            value: "models-table-uuid",
+            model: "Free Models Router",
+            modelId: OPENROUTER_FREE_MODEL_ID,
+            provider: "openrouter",
+            isFree: true,
+          },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox"));
+    expect(screen.getByText("Free Router")).toBeInTheDocument();
+  });
 });

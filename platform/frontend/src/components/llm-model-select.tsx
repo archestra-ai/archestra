@@ -41,6 +41,12 @@ export type LlmModelSelectOption = {
   value: string;
   model: string;
   provider: SupportedProvider;
+  /**
+   * The provider's native model id (e.g. `openrouter/free`). `model` is a
+   * display label and may be a friendly name, so router/badge detection and
+   * ordering key off this. Falls back to `model` when omitted.
+   */
+  modelId?: string;
   description?: string;
   pricePerMillionInput?: string | null;
   pricePerMillionOutput?: string | null;
@@ -49,15 +55,22 @@ export type LlmModelSelectOption = {
   isFree?: boolean;
   /** Provider's lowest-latency model — rendered with a "Fastest" badge. */
   isFastest?: boolean;
+  /** Provider's highest-quality ("recommended") model — sorted near the top. */
+  isBest?: boolean;
 };
+
+/** The provider's native model id, used for badge detection and ordering. */
+function modelIdOf(option: LlmModelSelectOption): string {
+  return option.modelId ?? option.model;
+}
 
 /** Renders the Free Router / Free / Latest / Fastest / custom badges shared across the option views. */
 function ModelBadges({ option }: { option: LlmModelSelectOption }) {
-  const isFreeRouter = option.model === OPENROUTER_FREE_MODEL_ID;
+  const id = modelIdOf(option);
+  const isFreeRouter = id === OPENROUTER_FREE_MODEL_ID;
   // OpenRouter "~...-latest" ids are aliases that always point at the newest
   // model in a family — the badge tells users the selection auto-updates.
-  const isLatestAlias =
-    option.provider === "openrouter" && option.model.startsWith("~");
+  const isLatestAlias = option.provider === "openrouter" && id.startsWith("~");
   return (
     <>
       {isFreeRouter && (
@@ -264,16 +277,15 @@ export function LlmModelSearchableSelect(props: LlmModelSearchableSelectProps) {
   } = props;
 
   const [freeOnly, setFreeOnly] = useState(false);
-  // Pin the OpenRouter routers to the top so the zero-cost on-ramp is the first
-  // thing users see; everything else keeps its incoming order (stable sort).
+  // Order: routers first, then recommended models, then the rest in their
+  // incoming order. The sort is stable, so each consumer controls how the
+  // remaining models are arranged (e.g. alphabetically or by price).
   const visibleOptions = useMemo(() => {
     const filtered =
       freeFilterable && freeOnly
         ? options.filter((option) => option.isFree)
         : options;
-    return [...filtered].sort(
-      (a, b) => routerSortRank(a.model) - routerSortRank(b.model),
-    );
+    return [...filtered].sort((a, b) => modelSortRank(a) - modelSortRank(b));
   }, [options, freeFilterable, freeOnly]);
 
   const selectElement = props.multiple ? (
@@ -392,15 +404,18 @@ export function LlmModelSearchableSelect(props: LlmModelSearchableSelectProps) {
   );
 }
 
-/** Routers sort first (free, then auto); every other model keeps its order. */
-function routerSortRank(modelId: string): number {
-  switch (modelId) {
+/**
+ * Tiered order: free router (0), auto router (1), recommended models (2),
+ * everything else (3). Within a tier the stable sort preserves input order.
+ */
+function modelSortRank(option: LlmModelSelectOption): number {
+  switch (modelIdOf(option)) {
     case OPENROUTER_FREE_MODEL_ID:
       return 0;
     case OPENROUTER_AUTO_MODEL_ID:
       return 1;
     default:
-      return 2;
+      return option.isBest ? 2 : 3;
   }
 }
 
@@ -410,7 +425,7 @@ function formatPricing(option: LlmModelSelectOption) {
   // OpenRouter's Auto Router has no fixed price — it bills at the routed
   // model's rate. A negative price is the same "dynamic" sentinel.
   if (
-    option.model === OPENROUTER_AUTO_MODEL_ID ||
+    modelIdOf(option) === OPENROUTER_AUTO_MODEL_ID ||
     Number(input) < 0 ||
     Number(output) < 0
   ) {

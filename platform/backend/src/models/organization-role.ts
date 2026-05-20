@@ -256,7 +256,7 @@ class OrganizationRoleModel {
   }
 
   /**
-   * Get a role by identifier, e.g. "member" (buit-in) or "reader" (custom)
+   * Get a role by identifier, e.g. "member" (built-in) or "reader" (custom)
    */
   static async getByIdentifier(
     identifier: string,

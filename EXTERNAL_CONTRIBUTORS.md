@@ -433,3 +433,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @cobymyers
 - @mouseos
 - @iamank1t
+- @VishalB98

@@ -108,11 +108,11 @@ export async function evaluateIfContextIsTrusted(
   if (allToolCalls.length === 0) {
     logger.debug(
       { agentId },
-      "[trustedData] evaluateIfContextIsTrusted: no tool calls found, context is trusted",
+      "[trustedData] evaluateIfContextIsTrusted: no tool calls found",
     );
     return {
       toolResultUpdates,
-      contextIsTrusted: true,
+      contextIsTrusted: !hasUntrustedData,
       usedDualLlm: false,
       dualLlmAnalyses: [],
       unsafeContextBoundary,

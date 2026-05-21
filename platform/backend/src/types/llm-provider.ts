@@ -287,7 +287,7 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
   // ---------------------------------------------------------------------------
 
   /**
-   * processChunk process straming chunkgs one-by-one to:
+   * processChunk process straming chunks one-by-one to:
    * 1. Tell LLMProxy how to handle current streaming chunk, depending on it's type (stream immediately, buffer for tool result inspection, etc.)
    * 2. Updates concrete StreamAdapter's internal StreamingAccumulatorState. This state is also used by the LLMProxy
    *    to build final response and other business logic.

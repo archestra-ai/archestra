@@ -3,10 +3,12 @@ import {
   ADMIN_ROLE_NAME,
   MEMBER_ROLE_NAME,
   TOOL_ACTIVATE_SKILL_FULL_NAME,
+  TOOL_CREATE_SKILL_FULL_NAME,
   TOOL_LIST_SKILLS_FULL_NAME,
   TOOL_READ_SKILL_FILE_FULL_NAME,
+  TOOL_UPDATE_SKILL_FULL_NAME,
 } from "@shared";
-import { SkillModel } from "@/models";
+import { SkillFileModel, SkillModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent, InsertSkill, InsertSkillFile } from "@/types";
 import {
@@ -60,11 +62,24 @@ describe("skill tool execution", () => {
     });
   }
 
-  test("all three skill tools are registered as Archestra tools", () => {
+  function manifest(name: string, body = "Do the thing."): string {
+    return [
+      "---",
+      `name: ${name}`,
+      "description: A test skill.",
+      "---",
+      "",
+      body,
+    ].join("\n");
+  }
+
+  test("all skill tools are registered as Archestra tools", () => {
     const names = getArchestraMcpTools().map((tool) => tool.name);
     expect(names).toContain(TOOL_LIST_SKILLS_FULL_NAME);
     expect(names).toContain(TOOL_ACTIVATE_SKILL_FULL_NAME);
     expect(names).toContain(TOOL_READ_SKILL_FILE_FULL_NAME);
+    expect(names).toContain(TOOL_CREATE_SKILL_FULL_NAME);
+    expect(names).toContain(TOOL_UPDATE_SKILL_FULL_NAME);
   });
 
   test("list_skills lists the org catalog", async () => {
@@ -239,5 +254,196 @@ describe("skill tool execution", () => {
 
     expect(result.isError).toBe(true);
     expect(textOf(result)).toContain("pdf-processing");
+  });
+
+  test("create_skill persists a personal skill owned by the caller", async () => {
+    const result = await executeArchestraTool(
+      TOOL_CREATE_SKILL_FULL_NAME,
+      { content: manifest("research", "Run the research playbook.") },
+      context,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(textOf(result)).toContain('Created skill "research"');
+
+    const skill = await SkillModel.findByName(organizationId, "research");
+    expect(skill?.content).toBe("Run the research playbook.");
+    expect(skill?.scope).toBe("personal");
+    expect(skill?.authorId).toBe(userId);
+  });
+
+  test("create_skill persists bundled resource files", async () => {
+    const result = await executeArchestraTool(
+      TOOL_CREATE_SKILL_FULL_NAME,
+      {
+        content: manifest("multi"),
+        files: [
+          { path: "references/api.md", content: "# API" },
+          { path: "scripts/run.py", content: "print('hi')" },
+        ],
+      },
+      context,
+    );
+    expect(result.isError).toBe(false);
+
+    const skill = await SkillModel.findByName(organizationId, "multi");
+    const files = await SkillFileModel.findBySkillId(skill?.id ?? "");
+    expect(files.map((f) => `${f.path}:${f.kind}`).sort()).toEqual([
+      "references/api.md:reference",
+      "scripts/run.py:script",
+    ]);
+  });
+
+  test("create_skill errors on a manifest without frontmatter", async () => {
+    const result = await executeArchestraTool(
+      TOOL_CREATE_SKILL_FULL_NAME,
+      { content: "just some text, no frontmatter" },
+      context,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("frontmatter");
+  });
+
+  test("create_skill errors on a duplicate skill name", async () => {
+    await seedSkill();
+    const result = await executeArchestraTool(
+      TOOL_CREATE_SKILL_FULL_NAME,
+      { content: manifest("pdf-processing") },
+      context,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("already exists");
+  });
+
+  test("create_skill is denied without skill:create", async ({ makeUser }) => {
+    const outsider = await makeUser();
+    const result = await executeArchestraTool(
+      TOOL_CREATE_SKILL_FULL_NAME,
+      { content: manifest("blocked") },
+      { ...context, userId: outsider.id },
+    );
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("skill:create");
+  });
+
+  test("update_skill replaces the SKILL.md body", async () => {
+    await seedSkill();
+    const result = await executeArchestraTool(
+      TOOL_UPDATE_SKILL_FULL_NAME,
+      {
+        name: "pdf-processing",
+        content: manifest("pdf-processing", "Updated instructions."),
+      },
+      context,
+    );
+
+    expect(result.isError).toBe(false);
+    const skill = await SkillModel.findByName(organizationId, "pdf-processing");
+    expect(skill?.content).toBe("Updated instructions.");
+  });
+
+  test("update_skill with files replaces the entire bundled set", async () => {
+    await seedSkill({
+      files: [
+        { path: "references/OLD.md", content: "# Old", kind: "reference" },
+      ],
+    });
+    const result = await executeArchestraTool(
+      TOOL_UPDATE_SKILL_FULL_NAME,
+      {
+        name: "pdf-processing",
+        content: manifest("pdf-processing"),
+        files: [{ path: "references/NEW.md", content: "# New" }],
+      },
+      context,
+    );
+    expect(result.isError).toBe(false);
+
+    const skill = await SkillModel.findByName(organizationId, "pdf-processing");
+    const files = await SkillFileModel.findBySkillId(skill?.id ?? "");
+    expect(files.map((f) => f.path)).toEqual(["references/NEW.md"]);
+  });
+
+  test("update_skill without files leaves resource files untouched", async () => {
+    await seedSkill({
+      files: [
+        { path: "references/KEEP.md", content: "# Keep", kind: "reference" },
+      ],
+    });
+    const result = await executeArchestraTool(
+      TOOL_UPDATE_SKILL_FULL_NAME,
+      {
+        name: "pdf-processing",
+        content: manifest("pdf-processing", "Edited."),
+      },
+      context,
+    );
+    expect(result.isError).toBe(false);
+
+    const skill = await SkillModel.findByName(organizationId, "pdf-processing");
+    const files = await SkillFileModel.findBySkillId(skill?.id ?? "");
+    expect(files.map((f) => f.path)).toEqual(["references/KEEP.md"]);
+  });
+
+  test("update_skill errors on an unknown skill", async () => {
+    const result = await executeArchestraTool(
+      TOOL_UPDATE_SKILL_FULL_NAME,
+      { name: "does-not-exist", content: manifest("does-not-exist") },
+      context,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("does-not-exist");
+  });
+
+  test("update_skill denies a non-admin editing an org-scoped skill", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    await seedSkill({ skill: { scope: "org" } });
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, { role: MEMBER_ROLE_NAME });
+
+    const result = await executeArchestraTool(
+      TOOL_UPDATE_SKILL_FULL_NAME,
+      {
+        name: "pdf-processing",
+        content: manifest("pdf-processing", "Sneaky edit."),
+      },
+      { ...context, userId: member.id },
+    );
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("org-scoped");
+  });
+
+  test("update_skill lets the author edit their own personal skill", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, { role: MEMBER_ROLE_NAME });
+    const memberContext = { ...context, userId: member.id };
+
+    await executeArchestraTool(
+      TOOL_CREATE_SKILL_FULL_NAME,
+      { content: manifest("my-skill", "First draft.") },
+      memberContext,
+    );
+    const result = await executeArchestraTool(
+      TOOL_UPDATE_SKILL_FULL_NAME,
+      {
+        name: "my-skill",
+        content: manifest("my-skill", "Second draft."),
+      },
+      memberContext,
+    );
+
+    expect(result.isError).toBe(false);
+    const skill = await SkillModel.findByName(organizationId, "my-skill");
+    expect(skill?.content).toBe("Second draft.");
   });
 });

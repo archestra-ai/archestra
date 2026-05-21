@@ -1573,6 +1573,8 @@ Required RBAC permission: None (no additional RBAC permission required)
 | `list_skills` | List the Agent Skills available in this organization — one line per skill (name and description). | `skill:read` |
 | `activate_skill` | Load a specialized Agent Skill — a reusable SKILL.md instruction set. | `skill:read` |
 | `read_skill_file` | Read a bundled resource file from a skill. | `skill:read` |
+| `create_skill` | Create a new Agent Skill from a SKILL.md manifest. | `skill:create` |
+| `update_skill` | Update an existing Agent Skill from a SKILL.md manifest. | `skill:update` |
 
 #### list_skills
 
@@ -1602,4 +1604,35 @@ Required RBAC permission: `skill:read`
 |-----------|------|----------|-------------|
 | `skill` | `string` | Yes | The skill that owns the file |
 | `path` | `string` | Yes | Resource path from the skill, e.g. references/REFERENCE.md |
+
+
+#### create_skill
+
+Required RBAC permission: `skill:create`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `content` | `string` | Yes | A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `metadata`), followed by the Markdown instruction body. |
+| `files` | `object[]` | No | Optional bundled resource files. Each is `{ path, content }` with text content; the path prefix classifies the file — `references/` for docs, `scripts/` for code, `assets/` for other files. |
+| `files[].path` | `string` | Yes | Resource path, e.g. references/API.md or scripts/run.py |
+| `files[].content` | `string` | Yes | Text content of the file |
+| `files[].encoding` | `"utf8" \| "base64"` | No |  |
+
+
+#### update_skill
+
+Required RBAC permission: `skill:update`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | `string` | Yes | The current name of the skill to update, as named by list_skills. |
+| `content` | `string` | Yes | A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `metadata`), followed by the Markdown instruction body. |
+| `files` | `object[]` | No | Optional. WHEN PROVIDED, REPLACES THE SKILL'S ENTIRE bundled file set. Omit it to leave the existing resource files untouched. There is no per-file patch: to change one file you must resend all of them — read the current files back first with activate_skill + read_skill_file. |
+| `files[].path` | `string` | Yes | Resource path, e.g. references/API.md or scripts/run.py |
+| `files[].content` | `string` | Yes | Text content of the file |
+| `files[].encoding` | `"utf8" \| "base64"` | No |  |
 

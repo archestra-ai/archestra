@@ -130,6 +130,10 @@ export const TOOL_PERMISSIONS: Record<
   list_skills: { resource: "skill", action: "read" },
   activate_skill: { resource: "skill", action: "read" },
   read_skill_file: { resource: "skill", action: "read" },
+  // Skill authoring — writes need skill:create/update; create_skill always
+  // makes a personal skill, update_skill re-checks the target skill's scope.
+  create_skill: { resource: "skill", action: "create" },
+  update_skill: { resource: "skill", action: "update" },
 };
 
 /**

@@ -55,8 +55,8 @@ export function PermissionButton({
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className={className}>
-            <Button {...props} className={cn(className, "w-full")}>
+          <span className={cn("inline-flex", className)}>
+            <Button {...props} className={className}>
               {children}
             </Button>
           </span>
@@ -79,7 +79,7 @@ export function PermissionButton({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className={cn("cursor-not-allowed", className)}>
+        <span className={cn("inline-flex cursor-not-allowed", className)}>
           <Button
             onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
               // Prevent action when disabled
@@ -87,7 +87,7 @@ export function PermissionButton({
               e.stopPropagation();
             }}
             {...props}
-            className={cn(className, "w-full")}
+            className={className}
             disabled
           >
             {children}

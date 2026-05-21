@@ -26,9 +26,16 @@ import {
  * Per-file size cap. Generous enough to import binary assets (images, fonts,
  * small PDFs) so we can faithfully redistribute whole skills.
  */
-const MAX_SKILL_FILE_BYTES = 10 * 1024 * 1024;
+export const MAX_SKILL_FILE_BYTES = 10 * 1024 * 1024;
+/**
+ * Character cap for a single stored file's `content`. A binary file at the
+ * `MAX_SKILL_FILE_BYTES` limit grows ~33% once base64-encoded, so the text
+ * cap has to leave room for that expansion.
+ */
+export const MAX_SKILL_FILE_CONTENT_CHARS =
+  Math.ceil(MAX_SKILL_FILE_BYTES / 3) * 4;
 /** Cap on resource files copied per skill. */
-const MAX_FILES_PER_SKILL = 500;
+export const MAX_FILES_PER_SKILL = 500;
 /** Number of distinct repo snapshots to keep cached across requests. */
 const REPO_CACHE_MAX_ENTRIES = 50;
 /**

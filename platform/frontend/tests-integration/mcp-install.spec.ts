@@ -2,7 +2,7 @@ import { makeCatalogItem } from "../src/mocks/data/catalog";
 import { makeInstalledServer } from "../src/mocks/data/servers";
 import { expect, test } from "./fixtures";
 
-test.describe("Add Remote MCP Server (mocked backend)", () => {
+test.describe("Add Remote MCP Server", () => {
   test("no-auth remote: create + install shows the success toast", async ({
     page,
     mcpRegistryPage,

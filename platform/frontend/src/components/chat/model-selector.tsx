@@ -872,6 +872,13 @@ export function ModelSelector({
                     <ModelSelectorItem
                       key={modelValue}
                       value={modelValue}
+                      // value is provider:dbId (a UUID) for stable selection,
+                      // so search must match human-readable terms via keywords
+                      keywords={[
+                        model.displayName,
+                        model.id,
+                        providerDisplayNames[provider],
+                      ]}
                       onSelect={() => handleSelectModel(modelValue)}
                       className="group"
                     >

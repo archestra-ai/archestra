@@ -159,7 +159,6 @@ export function McpServerSettingsDialog({
     navItems.push({
       id: "presets",
       label: presetEntityName.plural,
-      badge: presets.length + 1,
     });
   }
   if (showConnections) {

@@ -1,5 +1,6 @@
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { MAX_SKILL_FILE_BYTES } from "@/skills/github-import";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -102,6 +103,16 @@ describe("skill routes", () => {
 
       expect(response.statusCode).toBe(409);
     });
+
+    test("rejects a manifest larger than the size cap", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: { content: MANIFEST + "x".repeat(MAX_SKILL_FILE_BYTES) },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
   });
 
   describe("GET /api/skills", () => {
@@ -155,6 +166,52 @@ describe("skill routes", () => {
       expect(body.description).toBe("Extract text and tables from PDF files.");
       expect(body.files).toHaveLength(1);
       expect(body.files[0].path).toBe("references/NEW.md");
+    });
+
+    test("leaves resource files untouched when `files` is omitted", async () => {
+      const created = (
+        await app.inject({
+          method: "POST",
+          url: "/api/skills",
+          payload: {
+            content: MANIFEST,
+            files: [{ path: "references/KEEP.md", content: "keep" }],
+          },
+        })
+      ).json();
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/skills/${created.id}`,
+        payload: { content: MANIFEST },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.files).toHaveLength(1);
+      expect(body.files[0].path).toBe("references/KEEP.md");
+    });
+
+    test("clears resource files when `files` is an empty array", async () => {
+      const created = (
+        await app.inject({
+          method: "POST",
+          url: "/api/skills",
+          payload: {
+            content: MANIFEST,
+            files: [{ path: "references/GONE.md", content: "gone" }],
+          },
+        })
+      ).json();
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/skills/${created.id}`,
+        payload: { content: MANIFEST, files: [] },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().files).toEqual([]);
     });
   });
 

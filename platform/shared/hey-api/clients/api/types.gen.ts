@@ -22485,6 +22485,7 @@ export type GetConfigResponses = {
         features: {
             orchestratorK8sRuntime: boolean;
             advancedToolFeaturesEnabled: boolean;
+            agentSkillsEnabled: boolean;
             byosEnabled: boolean;
             byosVaultKvVersion: '1' | '2';
             azureOpenAiEntraIdEnabled: boolean;
@@ -42620,6 +42621,7 @@ export type GetOrganizationResponses = {
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
         skillToolsEnabled: boolean;
+        skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
     };
 };
@@ -42900,6 +42902,7 @@ export type UpdateAppearanceSettingsResponses = {
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
         skillToolsEnabled: boolean;
+        skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
     };
 };
@@ -43051,6 +43054,7 @@ export type UpdateSecuritySettingsResponses = {
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
         skillToolsEnabled: boolean;
+        skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
     };
 };
@@ -43205,6 +43209,7 @@ export type UpdateLlmSettingsResponses = {
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
         skillToolsEnabled: boolean;
+        skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
     };
 };
@@ -43216,6 +43221,7 @@ export type UpdateAgentSettingsData = {
         defaultModelId?: string | null;
         defaultLlmApiKeyId?: string | null;
         defaultAgentId?: string | null;
+        skillSlashCommandsEnabled?: boolean;
     };
     path?: never;
     query?: never;
@@ -43357,6 +43363,7 @@ export type UpdateAgentSettingsResponses = {
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
         skillToolsEnabled: boolean;
+        skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
     };
 };
@@ -43517,6 +43524,7 @@ export type UpdateConnectionSettingsResponses = {
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
         skillToolsEnabled: boolean;
+        skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
     };
 };
@@ -43668,6 +43676,7 @@ export type UpdatePresetEntityNameResponses = {
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
         skillToolsEnabled: boolean;
+        skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
     };
 };
@@ -43818,6 +43827,7 @@ export type UpdatePresetEntityDefaultLabelResponses = {
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
         skillToolsEnabled: boolean;
+        skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
     };
 };
@@ -43968,6 +43978,7 @@ export type UpdatePresetEntityDefaultValidationRegexResponses = {
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
         skillToolsEnabled: boolean;
+        skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
     };
 };
@@ -44119,6 +44130,7 @@ export type UpdateAuthSettingsResponses = {
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
         skillToolsEnabled: boolean;
+        skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
     };
 };
@@ -44272,6 +44284,7 @@ export type UpdateKnowledgeSettingsResponses = {
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
         skillToolsEnabled: boolean;
+        skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
     };
 };
@@ -44420,6 +44433,7 @@ export type DropEmbeddingConfigResponses = {
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
         skillToolsEnabled: boolean;
+        skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
     };
 };
@@ -44657,6 +44671,7 @@ export type CompleteOnboardingResponses = {
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
         skillToolsEnabled: boolean;
+        skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
     };
 };

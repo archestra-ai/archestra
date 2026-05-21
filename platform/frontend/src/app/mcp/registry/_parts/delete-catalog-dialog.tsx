@@ -1,22 +1,28 @@
 import type { archestraApiTypes } from "@shared";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { useDeleteInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
+import {
+  useCatalogPresets,
+  useDeleteInternalMcpCatalogItem,
+} from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpServers } from "@/lib/mcp/mcp-server.query";
+import { usePresetEntityName } from "@/lib/organization.query";
 
 interface DeleteCatalogDialogProps {
   item: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] | null;
   onClose: () => void;
   /** Called only after a successful deletion (before onClose). */
   onDeleted?: () => void;
-  installationCount: number;
 }
 
 export function DeleteCatalogDialog({
   item,
   onClose,
   onDeleted,
-  installationCount,
 }: DeleteCatalogDialogProps) {
   const deleteMutation = useDeleteInternalMcpCatalogItem();
+  const { data: presets = [] } = useCatalogPresets(item?.id ?? null);
+  const { data: installedServers = [] } = useMcpServers();
+  const { singular, plural } = usePresetEntityName();
 
   const handleConfirm = async () => {
     if (!item) return;
@@ -25,12 +31,26 @@ export function DeleteCatalogDialog({
     onClose();
   };
 
-  const ConfirmationContent = ({ name }: { name: string }) => (
-    <span>
-      Are you sure you want to delete{" "}
-      <span className="font-semibold break-all">"{name}"</span>?
-    </span>
+  // Deleting a parent catalog item cascade-deletes its child presets and
+  // uninstalls every server across the parent and the children. Count all of
+  // them, plus how many distinct envs (parent + presets) actually hold installs.
+  const envCatalogIds = item ? [item.id, ...presets.map((p) => p.id)] : [];
+  const relevantInstalls = installedServers.filter((s) =>
+    envCatalogIds.includes(s.catalogId),
   );
+  const installationCount = relevantInstalls.length;
+  const envsWithInstalls = new Set(relevantInstalls.map((s) => s.catalogId))
+    .size;
+
+  const envTerm = envsWithInstalls === 1 ? singular : plural;
+  const showEnvBreakdown = presets.length > 0 && envsWithInstalls > 0;
+
+  const question = item ? (
+    <p>
+      Are you sure you want to delete{" "}
+      <span className="font-semibold break-all">"{item.name}"</span>?
+    </p>
+  ) : null;
 
   return (
     <DeleteConfirmDialog
@@ -40,16 +60,24 @@ export function DeleteCatalogDialog({
       description={
         item ? (
           installationCount > 0 ? (
-            <span className="block space-y-3">
-              <ConfirmationContent name={item.name} />
-              <span className="block text-sm">
+            <div className="space-y-2">
+              {question}
+              <p className="text-sm text-muted-foreground">
                 There are currently <strong>{installationCount}</strong>{" "}
-                installation(s) of this server. Deleting this catalog entry will
-                also uninstall all associated servers.
-              </span>
-            </span>
+                {installationCount === 1 ? "installation" : "installations"} of
+                this server
+                {showEnvBreakdown ? (
+                  <>
+                    {" "}
+                    across <strong>{envsWithInstalls}</strong>{" "}
+                    {envTerm.toLowerCase()}
+                  </>
+                ) : null}
+                . Deleting this catalog item will uninstall all of them.
+              </p>
+            </div>
           ) : (
-            <ConfirmationContent name={item.name} />
+            question
           )
         ) : (
           ""

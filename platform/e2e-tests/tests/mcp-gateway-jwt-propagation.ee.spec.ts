@@ -33,9 +33,9 @@ import {
 import {
   callMcpTool,
   initializeMcpSession,
-  listMcpTools,
   makeApiRequest,
   waitForGatewayIdentityProviderReady,
+  waitForMcpGatewayJwtReady,
 } from "../utils/mcp-gateway";
 import { expect, test } from "./api-fixtures";
 
@@ -151,7 +151,7 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
       expect(agentTool).toBeDefined();
 
       // STEP 8: Wait for the external JWT gateway auth path to be ready.
-      const tools = await waitForExternalJwtGatewayTools({
+      const tools = await waitForMcpGatewayJwtReady({
         request,
         profileId: pid,
         token: jwt,
@@ -500,7 +500,7 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
       expect(agentTool).toBeDefined();
 
       // STEP 8: Wait for the external JWT gateway auth path to be ready.
-      const tools = await waitForExternalJwtGatewayTools({
+      const tools = await waitForMcpGatewayJwtReady({
         request,
         profileId: pid,
         token: jwt,
@@ -567,43 +567,3 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
     }
   });
 });
-
-async function waitForExternalJwtGatewayTools(params: {
-  request: Parameters<typeof initializeMcpSession>[0];
-  profileId: string;
-  token: string;
-  expectedToolName: string;
-}) {
-  let lastError: unknown;
-
-  for (const delayMs of [
-    0, 500, 1000, 2000, 4000, 8000, 8000, 8000, 8000, 8000,
-  ]) {
-    if (delayMs > 0) {
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-    }
-
-    try {
-      await initializeMcpSession(params.request, {
-        profileId: params.profileId,
-        token: params.token,
-      });
-
-      const tools = await listMcpTools(params.request, {
-        profileId: params.profileId,
-        token: params.token,
-      });
-
-      if (tools.some((tool) => tool.name === params.expectedToolName)) {
-        return tools;
-      }
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  throw (
-    lastError ??
-    new Error(`Tool ${params.expectedToolName} was not available via JWT auth`)
-  );
-}

@@ -2,29 +2,32 @@
 title: Webhook (A2A)
 category: Agents
 order: 7
-description: Invoke agents over HTTP using the A2A protocol or any JSON payload
+description: Invoke agents over HTTP using the A2A protocol
 ---
 
 <!--
 Check ../docs_writer_prompt.md before changing this file.
 -->
 
-Webhook (A2A) lets external systems invoke an agent by POSTing to a per-agent URL. The endpoint follows the [A2A (Agent-to-Agent) protocol](https://a2a-protocol.org/) for interoperability with other A2A-compatible callers, and also accepts any non-A2A JSON payload as a pass-through, so it works as a generic webhook for tools that just want to fire data at an agent.
-
-Use it for: internal services kicking off an agent run, third-party tools (Zapier, n8n, GitHub Actions) sending events as webhooks, or another agent platform calling an Archestra agent over A2A.
-
-Only **internal agents** (agents with `agentType: "agent"`) can be invoked this way. External-agent records cannot expose an A2A endpoint.
+Webhook (A2A) lets external systems invoke an agent by POSTing to a per-agent URL. The endpoint follows the [A2A (Agent-to-Agent) 1.0 protocol](https://a2a-protocol.org/) for interoperability with other A2A-compatible callers.
 
 ## Endpoints
 
-Each internal agent gets two endpoints:
-
 | Method | Path | Purpose |
 |--------|------|---------|
-| `GET`  | `/v1/a2a/{agentId}/.well-known/agent.json` | A2A AgentCard for capability discovery |
-| `POST` | `/v1/a2a/{agentId}` | Execute a message against the agent |
+| `GET`  | `/v2/a2a/{agentId}/.well-known/agent-card.json` | A2A 1.0 AgentCard for capability discovery |
+| `POST` | `/v2/a2a/{agentId}` | JSON-RPC entry point for `SendMessage` and `GetTask` |
 
 The AgentCard advertises the agent's name, description, and a single skill derived from the agent. A2A clients fetch it first to discover what the agent can do, then send messages to the POST endpoint.
+
+## SDKs
+
+| SDK | A2A 1.0 support | Works with `/v2/a2a` |
+|-----|-----------------|----------------------|
+| [a2a-python](https://github.com/a2aproject/a2a-python) | Yes | Yes — use directly |
+| [a2a-js](https://github.com/a2aproject/a2a-js) (TypeScript) | Not yet — tracked in [a2a-js#321](https://github.com/a2aproject/a2a-js/issues/321) | No — speak JSON-RPC directly, or translate `role` / `state` enums between 0.3 and 1.0 |
+
+Other languages can call the JSON-RPC endpoint directly using the request shapes below.
 
 ## Authentication
 
@@ -34,30 +37,162 @@ Both endpoints require an Archestra token in the `Authorization` header:
 Authorization: Bearer <platform_token>
 ```
 
-A personal token from **Settings > Your Account**, a team token from **Settings > Teams**, or the organization token from **Settings > Organization** all work, as long as the token has access to the target agent. Token issuance is the same as for the [MCP Gateway](/docs/platform-mcp-gateway) — there is no separate token type for A2A.
+A personal token from **Settings > Your Account**, a team token from **Settings > Teams**, or the organization token from **Settings > Organization** all work, as long as the token has access to the target agent.
 
-## Request Formats
+## SendMessage
 
-The POST endpoint accepts two shapes.
-
-**A2A JSON-RPC envelope** — for callers that speak the A2A protocol natively:
+JSON-RPC method `SendMessage` runs a message against the agent.
 
 ```json
 {
   "jsonrpc": "2.0",
   "id": 1,
-  "method": "message/send",
+  "method": "SendMessage",
   "params": {
     "message": {
-      "parts": [
-        { "kind": "text", "text": "Summarize the last 5 PRs in repo X." }
-      ]
+      "messageId": "11111111-1111-1111-1111-111111111111",
+      "role": "ROLE_USER",
+      "parts": [{ "text": "Summarize the last 5 PRs in repo X." }]
     }
   }
 }
 ```
 
-**Pass-through payload** — any other JSON body is stringified and passed to the agent as the user message. This is what makes the endpoint work as a generic webhook:
+Field notes:
+
+- `messageId` — required, must be unique per message (UUIDs recommended).
+- `role` — `ROLE_USER` for caller, `ROLE_AGENT` for the agent's reply.
+- `parts[].text` — message body.
+- `contextId` / `taskId` — omit on the first message; copy from the response for follow-up turns.
+
+The response is one of two shapes inside `result`:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "message": {
+      "messageId": "...",
+      "role": "ROLE_AGENT",
+      "contextId": "327a5306-c7dc-4e0c-ba2f-107da6c2548b",
+      "parts": [{ "text": "Here is the summary..." }]
+    }
+  }
+}
+```
+
+If the agent needs human approval before running a tool, `result` contains a `task` with `status.state = "TASK_STATE_INPUT_REQUIRED"` and `metadata.approvalRequests`. See [Approvals](#approvals).
+
+## Multi-turn conversations
+
+To keep messages in the same conversation, copy `contextId` from the first response into every subsequent request:
+
+```bash
+# Turn 1
+curl -X POST https://archestra.example.com/v2/a2a/<agentId> \
+  -H "Authorization: Bearer <platform_token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "SendMessage",
+    "params": {
+      "message": {
+        "messageId": "11111111-1111-1111-1111-111111111111",
+        "role": "ROLE_USER",
+        "parts": [{ "text": "hi, my name is victor" }]
+      }
+    }
+  }'
+# → result.message.contextId = "327a5306-..."
+
+# Turn 2 — reuse contextId
+curl -X POST https://archestra.example.com/v2/a2a/<agentId> \
+  -H "Authorization: Bearer <platform_token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "SendMessage",
+    "params": {
+      "message": {
+        "messageId": "22222222-2222-2222-2222-222222222222",
+        "role": "ROLE_USER",
+        "contextId": "327a5306-c7dc-4e0c-ba2f-107da6c2548b",
+        "parts": [{ "text": "do you know who i am?" }]
+      }
+    }
+  }'
+```
+
+`contextId` is generated by Archestra on the first message. Clients cannot supply their own.
+
+`X-Archestra-Session-Id` and `Mcp-Session-Id` do **not** group conversations — they are observability-only headers. Use `contextId` to continue a conversation.
+
+## Approvals
+
+When an agent's tool call hits a [tool invocation policy](/docs/platform-guardrails-toolpolicies) requiring approval, the response is a `task`, not a `message`:
+
+```json
+{
+  "result": {
+    "task": {
+      "id": "task-...",
+      "contextId": "ctx-...",
+      "status": { "state": "TASK_STATE_INPUT_REQUIRED" },
+      "metadata": {
+        "approvalRequests": [
+          { "approvalId": "appr-...", "toolName": "send_email", "approved": false, "resolved": false }
+        ]
+      }
+    }
+  }
+}
+```
+
+To approve (or reject), send a follow-up `SendMessage` with `taskId`, `contextId`, and decisions in `metadata.taskOps`:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "SendMessage",
+  "params": {
+    "message": {
+      "messageId": "33333333-3333-3333-3333-333333333333",
+      "role": "ROLE_USER",
+      "taskId": "task-...",
+      "contextId": "ctx-...",
+      "parts": [],
+      "metadata": {
+        "taskOps": {
+          "approvalDecisions": [{ "approvalId": "appr-...", "approved": true }]
+        }
+      }
+    }
+  }
+}
+```
+
+Approvals also work through Slack/Teams [ChatOps](/docs/platform-chatops). The same flow handles multi-request and multi-turn approvals.
+
+## GetTask
+
+Use `GetTask` to fetch the current state of a task (useful while polling an approval task):
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "method": "GetTask",
+  "params": { "id": "task-..." }
+}
+```
+
+## Pass-through payload (v1 only)
+
+The legacy `POST /v1/a2a/{agentId}` endpoint accepts any non-A2A JSON body. The body is stringified and passed to the agent as the user message — useful for tools like Zapier that just want to fire an event at an agent:
 
 ```json
 {
@@ -67,57 +202,18 @@ The POST endpoint accepts two shapes.
 }
 ```
 
-The agent receives the serialized payload as its first message and can reason over it directly.
+`v1` is single-turn — every call is a fresh conversation. For multi-turn use `v2` with a `SendMessage` envelope.
 
-## Response
+## Observability
 
-The endpoint always replies with a JSON-RPC response envelope, regardless of the request format:
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 1,
-  "result": {
-    "messageId": "...",
-    "role": "agent",
-    "parts": [
-      { "kind": "text", "text": "Here is the summary..." }
-    ]
-  }
-}
-```
-
-On failure, `result` is replaced with an `error` object containing a JSON-RPC error code and a message.
-
-## Session Grouping
-
-To group multiple A2A requests into a single conversation in [Observability](/docs/platform-observability), pass a session ID in the request:
+Pass a session ID to group all LLM and MCP tool calls in [Observability](/docs/platform-observability):
 
 ```
 X-Archestra-Session-Id: my-session-123
 ```
 
-All LLM and MCP tool calls executed during the request are recorded as children of one trace and tagged with the session ID. If no header is provided, Archestra generates a unique ID per request.
+Without it, Archestra generates one per request. The header is independent of `contextId` — it tags traces only.
 
 ## Configuration
 
 A2A uses the same LLM configuration as [Chat](/docs/platform-chat). See [Deployment - Environment Variables](/docs/platform-deployment#environment-variables) for the full list of `ARCHESTRA_CHAT_*` variables.
-
-## Example
-
-```bash
-curl -X POST https://archestra.example.com/v1/a2a/<agentId> \
-  -H "Authorization: Bearer <platform_token>" \
-  -H "Content-Type: application/json" \
-  -H "X-Archestra-Session-Id: incident-4471" \
-  -d '{
-    "jsonrpc": "2.0",
-    "id": 1,
-    "method": "message/send",
-    "params": {
-      "message": {
-        "parts": [{ "kind": "text", "text": "Run the on-call check." }]
-      }
-    }
-  }'
-```

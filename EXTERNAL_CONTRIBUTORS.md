@@ -438,3 +438,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @munyanezaarmel
 - @vishal-tiwari9
 - @kdvsolis
+- @firewine

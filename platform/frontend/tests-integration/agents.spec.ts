@@ -1,7 +1,7 @@
 import { makeAgent, makeAgentsList } from "../src/mocks/data/agents";
 import { expect, test } from "./fixtures";
 
-test.describe("Agents (mocked backend)", () => {
+test.describe("Agents", () => {
   test("can create and delete an agent", async ({
     page,
     agentsPage,

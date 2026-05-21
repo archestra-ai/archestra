@@ -10,7 +10,7 @@ export function makeLlmProviderApiKey(
     id: "test-llm-key",
     organizationId: "test-org",
     name: "test-llm-key",
-    provider: "zhipuai",
+    provider: "anthropic",
     secretId: "test-secret",
     scope: "personal",
     userId: "test-user-admin",

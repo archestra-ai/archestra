@@ -7,12 +7,12 @@ import {
 } from "../src/mocks/data/llm-keys";
 import { expect, test } from "./fixtures";
 
-const PROVIDER = "zhipuai" as const;
-const PROVIDER_OPTION_NAME = /Zhipu AI/i;
+const PROVIDER = "anthropic" as const;
+const PROVIDER_OPTION_NAME = /Anthropic/i;
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Virtual API Keys (mocked backend)", () => {
+test.describe("Virtual API Keys", () => {
   test("Can create a virtual key from a parent provider key", async ({
     page,
     virtualKeysPage,

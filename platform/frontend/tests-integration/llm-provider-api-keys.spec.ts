@@ -1,13 +1,13 @@
 import { makeLlmProviderApiKey } from "../src/mocks/data/llm-keys";
 import { expect, test } from "./fixtures";
 
-const PROVIDER = "zhipuai" as const;
-const PROVIDER_OPTION_NAME = "Zhipu AI Zhipu AI";
+const PROVIDER = "anthropic" as const;
+const PROVIDER_OPTION_NAME = "Anthropic Anthropic";
 const API_KEY_PLACEHOLDER = "sk-ant-test-key-12345";
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("LLM Provider API Keys (mocked backend)", () => {
+test.describe("LLM Provider API Keys", () => {
   test("Admin can create, update, and delete an API key", async ({
     page,
     llmKeysPage,

@@ -25,7 +25,7 @@ export async function getServerApiHeaders() {
 function encodeCookieValue(value: string): string {
   let out = "";
   for (const ch of value) {
-    out += ch.codePointAt(0)! <= 127 ? ch : encodeURIComponent(ch);
+    out += (ch.codePointAt(0) ?? 0) <= 127 ? ch : encodeURIComponent(ch);
   }
   return out;
 }

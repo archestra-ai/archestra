@@ -3,8 +3,12 @@ import {
   BedrockErrorTypes,
   ChatErrorCode,
   ChatErrorMessages,
+  type ChatErrorResponse,
   GeminiErrorCodes,
   GeminiErrorReasons,
+  LIMIT_RESETS_AT_HEADER,
+  LIMIT_SCOPE_HEADER,
+  LIMIT_VALUE_HEADER,
   OpenAIErrorTypes,
   ZhipuaiErrorTypes,
 } from "@shared";
@@ -1665,5 +1669,139 @@ describe("ProviderError", () => {
       traceId: "trace-123",
       spanId: "span-123",
     });
+  });
+
+  it("should preserve limitInfo in sanitized output", () => {
+    const error: ChatErrorResponse = {
+      code: ChatErrorCode.RateLimit,
+      message: "Too many requests",
+      isRetryable: true,
+      limitInfo: {
+        limitValue: 10,
+        resetsAt: "2026-05-22T00:00:00.000Z",
+        scope: "agent",
+      },
+    };
+    const result = sanitizeChatErrorForFrontend(error);
+    expect(result.limitInfo).toEqual(error.limitInfo);
+  });
+});
+
+// =============================================================================
+// 429 Limit Info Propagation Tests
+// =============================================================================
+
+describe("429 - limit info propagation", () => {
+  function createOpenAIErrorWithHeaders(
+    statusCode: number,
+    errorType: string,
+    message: string,
+    responseHeaders?: Record<string, string>,
+  ) {
+    return {
+      name: "AI_APICallError",
+      statusCode,
+      responseBody: JSON.stringify({
+        error: {
+          type: errorType,
+          message,
+        },
+      }),
+      isRetryable: statusCode >= 500 || statusCode === 429,
+      responseHeaders,
+    };
+  }
+
+  it("should include limitInfo when 429 has limit headers", () => {
+    const error = createOpenAIErrorWithHeaders(
+      429,
+      OpenAIErrorTypes.RATE_LIMIT,
+      "Rate limit exceeded",
+      {
+        [LIMIT_VALUE_HEADER.toLowerCase()]: "10.00",
+        [LIMIT_RESETS_AT_HEADER.toLowerCase()]: "2026-05-22T00:00:00.000Z",
+        [LIMIT_SCOPE_HEADER.toLowerCase()]: "agent",
+      },
+    );
+    const result = mapProviderError(error, "openai");
+
+    expect(result.code).toBe(ChatErrorCode.RateLimit);
+    expect(result.limitInfo).toBeDefined();
+    expect(result.limitInfo?.limitValue).toBe(10);
+    expect(result.limitInfo?.resetsAt).toBe("2026-05-22T00:00:00.000Z");
+    expect(result.limitInfo?.scope).toBe("agent");
+  });
+
+  it("should NOT include limitInfo when 429 has no limit headers", () => {
+    const error = {
+      name: "AI_APICallError",
+      statusCode: 429,
+      responseBody: JSON.stringify({
+        error: {
+          type: OpenAIErrorTypes.RATE_LIMIT,
+          message: "Rate limit exceeded",
+        },
+      }),
+      isRetryable: true,
+    };
+    const result = mapProviderError(error, "openai");
+
+    expect(result.code).toBe(ChatErrorCode.RateLimit);
+    expect(result.limitInfo).toBeUndefined();
+  });
+
+  it("should NOT include limitInfo for non-429 errors", () => {
+    const error = createOpenAIErrorWithHeaders(
+      500,
+      OpenAIErrorTypes.SERVER_ERROR,
+      "Internal server error",
+      {
+        [LIMIT_VALUE_HEADER.toLowerCase()]: "10.00",
+        [LIMIT_RESETS_AT_HEADER.toLowerCase()]: "2026-05-22T00:00:00.000Z",
+        [LIMIT_SCOPE_HEADER.toLowerCase()]: "agent",
+      },
+    );
+    const result = mapProviderError(error, "openai");
+
+    expect(result.code).toBe(ChatErrorCode.ServerError);
+    expect(result.limitInfo).toBeUndefined();
+  });
+
+  it("should produce descriptive message when limitInfo is present", () => {
+    const error = createOpenAIErrorWithHeaders(
+      429,
+      OpenAIErrorTypes.RATE_LIMIT,
+      "Rate limit exceeded",
+      {
+        [LIMIT_VALUE_HEADER.toLowerCase()]: "25.00",
+        [LIMIT_RESETS_AT_HEADER.toLowerCase()]: "2026-05-22T00:00:00.000Z",
+        [LIMIT_SCOPE_HEADER.toLowerCase()]: "team",
+      },
+    );
+    const result = mapProviderError(error, "openai");
+
+    expect(result.code).toBe(ChatErrorCode.RateLimit);
+    expect(result.limitInfo).toBeDefined();
+    expect(result.message).toContain("team");
+    expect(result.message).toContain("$25.00");
+    expect(result.message).not.toBe(ChatErrorMessages[ChatErrorCode.RateLimit]);
+  });
+
+  it("should use generic rate limit message when limitInfo is absent", () => {
+    const error = {
+      name: "AI_APICallError",
+      statusCode: 429,
+      responseBody: JSON.stringify({
+        error: {
+          type: OpenAIErrorTypes.RATE_LIMIT,
+          message: "Rate limit exceeded",
+        },
+      }),
+      isRetryable: true,
+    };
+    const result = mapProviderError(error, "openai");
+
+    expect(result.code).toBe(ChatErrorCode.RateLimit);
+    expect(result.message).toBe(ChatErrorMessages[ChatErrorCode.RateLimit]);
   });
 });

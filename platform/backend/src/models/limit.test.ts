@@ -4260,3 +4260,47 @@ describe("checkUsageLimits cleanup integration", () => {
     await expect(LimitModel.cleanupLimitsIfNeeded({})).resolves.toBeUndefined();
   });
 });
+
+describe("computeResetsAt — integration with checkUsageLimits", () => {
+  test("1w interval returns fixed 7-day reset from current lastCleanup", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "Test Agent" });
+
+    const limit = await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 1,
+      model: ["gpt-4o"],
+      cleanupInterval: "1w",
+    });
+
+    await LimitModel.updateTokenLimitUsage(
+      "agent",
+      agent.id,
+      "gpt-4o",
+      1_000_000,
+      1_000_000,
+    );
+
+    await LimitModel.patch(limit.id, { lastCleanup: new Date() });
+
+    const result = await LimitValidationService.checkUsageLimits({
+      agentId: agent.id,
+    });
+
+    expect(result).not.toBeNull();
+
+    const updatedLimit = await LimitModel.findById(limit.id);
+    const lastCleanupDate = updatedLimit?.lastCleanup;
+    expect(lastCleanupDate).not.toBeNull();
+
+    const expectedResetsAt = new Date(
+      (lastCleanupDate as Date).getTime() + 604_800_000,
+    );
+    const actualResetsAt = new Date(result?.limit?.resetsAt ?? "");
+
+    expect(actualResetsAt.getTime()).toBe(expectedResetsAt.getTime());
+  });
+});

@@ -2,6 +2,7 @@ import type { UIMessage } from "@ai-sdk/react";
 import {
   type ArchestraToolShortName,
   type archestraApiTypes,
+  type ChatErrorResponse,
   ChatMessageMetadataSchema,
   parseFullToolName,
   SWAP_AGENT_FAILED_POKE_TEXT,
@@ -89,6 +90,7 @@ import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
 import { AssignedCredentialUnavailableTool } from "./assigned-credential-unavailable-tool";
 import { AuthRequiredTool } from "./auth-required-tool";
+import { isPersistedLimitError } from "./chat-error.utils";
 import {
   extractFileAttachments,
   filterOptimisticToolCalls,
@@ -101,6 +103,7 @@ import { EditableUserMessage } from "./editable-user-message";
 import { ExpiredAuthTool } from "./expired-auth-tool";
 import { InlineChatError } from "./inline-chat-error";
 import { hasKnowledgeBaseToolCall } from "./knowledge-graph-citations";
+import { LimitExhaustedMessage } from "./limit-exhausted-message";
 import { McpAppSection, type McpToolOutput } from "./mcp-app-container";
 import { McpInstallDialogs } from "./mcp-install-dialogs";
 import {
@@ -162,6 +165,7 @@ type PersistedChatError =
 type TimelineItem =
   | { kind: "message"; message: UIMessage; messageIndex: number }
   | { kind: "chat-error"; chatError: PersistedChatError }
+  | { kind: "live-error"; error: Error }
   | {
       kind: "compaction";
       compaction: archestraApiTypes.GetChatConversationResponses["200"]["compactions"][number];
@@ -458,6 +462,10 @@ export function ChatMessages({
     chatErrors.some(
       (chatError) => chatError.error.message === liveErrorMessage,
     );
+  const allTimelineItems: TimelineItem[] =
+    error && !hasRenderedLiveError
+      ? [...timelineItems, { kind: "live-error" as const, error }]
+      : timelineItems;
 
   return (
     <Conversation
@@ -477,12 +485,40 @@ export function ChatMessages({
           {unsafeContextBoundary?.kind === "preexisting_untrusted" && (
             <PreexistingUnsafeContextDivider dividerRef={unsafeBoundaryRef} />
           )}
-          {timelineItems.map((item) => {
+          {allTimelineItems.map((item) => {
             if (item.kind === "chat-error") {
+              if (isPersistedLimitError(item.chatError)) {
+                return (
+                  <LimitExhaustedMessage
+                    key={`chat-error-${item.chatError.id}`}
+                    chatError={item.chatError.error as ChatErrorResponse}
+                  />
+                );
+              }
               return (
                 <InlineChatError
                   key={`chat-error-${item.chatError.id}`}
                   error={new Error(JSON.stringify(item.chatError.error))}
+                  conversationId={conversationId}
+                  supportMessage={organization?.chatErrorSupportMessage}
+                  slimChatErrorUi={organization?.slimChatErrorUi ?? false}
+                  agentName={agentName}
+                  selectedModel={selectedModel}
+                  modelSource={modelSource}
+                />
+              );
+            }
+
+            if (item.kind === "live-error") {
+              return isLiveLimitError(item.error) ? (
+                <LimitExhaustedMessage
+                  key="live-error"
+                  chatError={JSON.parse(item.error.message)}
+                />
+              ) : (
+                <InlineChatError
+                  key="live-error"
+                  error={item.error}
                   conversationId={conversationId}
                   supportMessage={organization?.chatErrorSupportMessage}
                   slimChatErrorUi={organization?.slimChatErrorUi ?? false}
@@ -1238,18 +1274,6 @@ export function ChatMessages({
               </div>
             );
           })}
-          {/* Inline error display */}
-          {error && !hasRenderedLiveError && (
-            <InlineChatError
-              error={error}
-              conversationId={conversationId}
-              supportMessage={organization?.chatErrorSupportMessage}
-              slimChatErrorUi={organization?.slimChatErrorUi ?? false}
-              agentName={agentName}
-              selectedModel={selectedModel}
-              modelSource={modelSource}
-            />
-          )}
           {pendingToolCalls.map((toolCall) => (
             <MessageTool
               part={{
@@ -2496,6 +2520,24 @@ function getInlineErrorMessage(error: Error): string {
   }
 
   return error.message;
+}
+
+function isLiveLimitError(error: Error): boolean {
+  try {
+    const parsed = JSON.parse(error.message);
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      "limitInfo" in parsed &&
+      parsed.limitInfo !== undefined &&
+      parsed.limitInfo !== null
+    ) {
+      return true;
+    }
+  } catch {
+    // Not JSON-encoded.
+  }
+  return false;
 }
 
 function ContextCompactionStatus({

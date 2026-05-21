@@ -133,6 +133,19 @@ const BACKEND_ERROR_TYPE_TO_CODE: Record<string, ChatErrorCode> = {
 };
 
 /**
+ * Check whether a persisted chat error is a limit-exhausted error.
+ */
+export function isPersistedLimitError(error: { error: unknown }): boolean {
+  return (
+    typeof error.error === "object" &&
+    error.error !== null &&
+    "limitInfo" in error.error &&
+    (error.error as Record<string, unknown>).limitInfo !== undefined &&
+    (error.error as Record<string, unknown>).limitInfo !== null
+  );
+}
+
+/**
  * Map unstructured errors to a ChatErrorResponse so they display with the
  * same styled error card. Recognizes known client-side patterns (network errors,
  * aborts), known backend error envelopes, and falls back to a generic error.

@@ -76,6 +76,20 @@ vi.mock("@/components/chat/inline-chat-error", () => ({
   ),
 }));
 
+vi.mock("@/components/chat/limit-exhausted-message", () => ({
+  LimitExhaustedMessage: ({
+    chatError,
+  }: {
+    chatError: {
+      limitInfo?: { scope: string; limitValue: number; resetsAt: string };
+    };
+  }) => (
+    <div data-testid="limit-exhausted-message">
+      limit:{chatError.limitInfo?.scope}:{chatError.limitInfo?.limitValue}
+    </div>
+  ),
+}));
+
 vi.mock("@/components/chat/mcp-install-dialogs", () => ({
   McpInstallDialogs: () => null,
 }));
@@ -428,6 +442,116 @@ describe("ChatMessages", () => {
     expect(retry.compareDocumentPosition(error)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
+  });
+
+  it("renders LimitExhaustedMessage for persisted limit errors", () => {
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        metadata: { createdAt: "2026-04-22T12:00:00.000Z" },
+        parts: [{ type: "text", text: "first try" }],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        chatErrors={[
+          {
+            id: "error-1",
+            conversationId: "conv-1",
+            createdAt: "2026-04-22T12:01:00.000Z",
+            error: {
+              code: "rate_limit",
+              message: "The team usage limit of $25.00 has been reached.",
+              isRetryable: true,
+              limitInfo: {
+                limitValue: 25,
+                resetsAt: "2026-05-22T00:00:00.000Z",
+                scope: "team",
+              },
+            },
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.queryByTestId("inline-chat-error")).not.toBeInTheDocument();
+    expect(screen.getByTestId("limit-exhausted-message")).toHaveTextContent(
+      "limit:team:25",
+    );
+  });
+
+  it("renders LimitExhaustedMessage for live limit errors", () => {
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "hello" }],
+      },
+    ] as UIMessage[];
+
+    const limitError = new Error(
+      JSON.stringify({
+        code: "rate_limit",
+        message: "The agent usage limit of $10.00 has been reached.",
+        isRetryable: true,
+        limitInfo: {
+          limitValue: 10,
+          resetsAt: "2026-05-22T00:00:00.000Z",
+          scope: "agent",
+        },
+      }),
+    );
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="error"
+        error={limitError}
+      />,
+    );
+
+    expect(screen.queryByTestId("inline-chat-error")).not.toBeInTheDocument();
+    expect(screen.getByTestId("limit-exhausted-message")).toHaveTextContent(
+      "limit:agent:10",
+    );
+  });
+
+  it("renders InlineChatError for non-limit errors even with live error", () => {
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "hello" }],
+      },
+    ] as UIMessage[];
+
+    const serverError = new Error(
+      JSON.stringify({
+        code: "server_error",
+        message: "Provider failed",
+        isRetryable: true,
+      }),
+    );
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="error"
+        error={serverError}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("limit-exhausted-message"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("inline-chat-error")).toBeInTheDocument();
   });
 
   it("renders context compaction feedback after existing messages", () => {

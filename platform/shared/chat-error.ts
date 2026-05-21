@@ -307,6 +307,14 @@ export const RetryableErrorCodes: Set<ChatErrorCode> = new Set([
   ChatErrorCode.NetworkError,
 ]);
 
+export const LIMIT_SCOPE_LABELS: Record<string, string> = {
+  agent: "Agent",
+  user: "User",
+  team: "Team",
+  organization: "Organization",
+  virtual_key: "Virtual Key",
+};
+
 /**
  * Structured error response returned by the chat API for error conditions.
  * Provides both user-friendly messaging and technical details for debugging.
@@ -324,6 +332,17 @@ export interface ChatErrorResponse {
   traceId?: string;
   /** OpenTelemetry span ID for correlating with backend logs */
   spanId?: string;
+  /** Token cost limit info when the error is a rate limit (429) from cost limits */
+  limitInfo?: {
+    /** The limit value (in USD) */
+    limitValue: number;
+    /** ISO timestamp when the limit resets */
+    resetsAt: string;
+    /** Scope of the limit (agent, team, user, organization, virtual_key) */
+    scope: string;
+    /** Models the limit applies to, null/empty means all models */
+    models?: string[] | null;
+  };
   /** Original error details for debugging (provider-specific) */
   originalError?: {
     /** Provider name (anthropic, openai, gemini) */
@@ -346,6 +365,14 @@ export const ChatErrorResponseSchema: z.ZodType<ChatErrorResponse> = z.object({
   sessionId: z.string().optional(),
   traceId: z.string().optional(),
   spanId: z.string().optional(),
+  limitInfo: z
+    .object({
+      limitValue: z.number(),
+      resetsAt: z.string(),
+      scope: z.string(),
+      models: z.array(z.string()).nullable().optional(),
+    })
+    .optional(),
   originalError: z
     .object({
       provider: SupportedProvidersSchema.optional(),

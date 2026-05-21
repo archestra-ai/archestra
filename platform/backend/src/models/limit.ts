@@ -963,7 +963,10 @@ ${contentMessage}`;
           return {
             limit: {
               limitValue: limit.limitValue,
-              resetsAt: computeResetsAt(null, limit.cleanupInterval ?? "1w"),
+              resetsAt: computeResetsAt(
+                limit.lastCleanup,
+                limit.cleanupInterval ?? "1w",
+              ),
               scope: limit.entityType,
               models: normalizeLimitModels(limit.model),
             },

@@ -36,13 +36,13 @@ describe("LimitUsageCard", () => {
       data: undefined,
       isPending: true,
       isLoading: true,
-    } as ReturnType<typeof useLimits>);
+    } as unknown as ReturnType<typeof useLimits>);
 
     mockedUseMyDefaultLimitUsage.mockReturnValue({
       data: undefined,
       isPending: true,
       isLoading: true,
-    } as ReturnType<typeof useMyDefaultLimitUsage>);
+    } as unknown as ReturnType<typeof useMyDefaultLimitUsage>);
 
     render(<LimitUsageCard />);
     expect(screen.getByText("Usage Limits")).toBeInTheDocument();
@@ -69,13 +69,13 @@ describe("LimitUsageCard", () => {
       ],
       isPending: false,
       isLoading: false,
-    } as ReturnType<typeof useLimits>);
+    } as unknown as ReturnType<typeof useLimits>);
 
     mockedUseMyDefaultLimitUsage.mockReturnValue({
       data: null,
       isPending: false,
       isLoading: false,
-    } as ReturnType<typeof useMyDefaultLimitUsage>);
+    } as unknown as ReturnType<typeof useMyDefaultLimitUsage>);
 
     render(<LimitUsageCard />);
     expect(screen.getByText("Custom Limit")).toBeInTheDocument();
@@ -89,7 +89,7 @@ describe("LimitUsageCard", () => {
       data: [],
       isPending: false,
       isLoading: false,
-    } as ReturnType<typeof useLimits>);
+    } as unknown as ReturnType<typeof useLimits>);
 
     mockedUseMyDefaultLimitUsage.mockReturnValue({
       data: {
@@ -100,7 +100,7 @@ describe("LimitUsageCard", () => {
       },
       isPending: false,
       isLoading: false,
-    } as ReturnType<typeof useMyDefaultLimitUsage>);
+    } as unknown as ReturnType<typeof useMyDefaultLimitUsage>);
 
     render(<LimitUsageCard />);
     expect(screen.getByText("Default Limit")).toBeInTheDocument();
@@ -119,13 +119,13 @@ describe("LimitUsageCard", () => {
       data: [],
       isPending: false,
       isLoading: false,
-    } as ReturnType<typeof useLimits>);
+    } as unknown as ReturnType<typeof useLimits>);
 
     mockedUseMyDefaultLimitUsage.mockReturnValue({
       data: null,
       isPending: false,
       isLoading: false,
-    } as ReturnType<typeof useMyDefaultLimitUsage>);
+    } as unknown as ReturnType<typeof useMyDefaultLimitUsage>);
 
     const { container } = render(<LimitUsageCard />);
     expect(container.firstChild).toBeNull();

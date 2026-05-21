@@ -153,4 +153,24 @@ describe("InlineChatError", () => {
     expect(screen.getByText("conversation-12345678")).toBeInTheDocument();
     expect(screen.getByText("Session")).toBeInTheDocument();
   });
+
+  it("does not render limit details when limitInfo is absent", () => {
+    render(
+      <InlineChatError
+        error={
+          new Error(
+            JSON.stringify({
+              code: "rate_limit",
+              message: "Too many requests. Please wait a moment and try again.",
+              isRetryable: true,
+            }),
+          )
+        }
+      />,
+    );
+
+    expect(screen.getByText(/Too many requests/)).toBeInTheDocument();
+    expect(screen.queryByText("Scope:")).not.toBeInTheDocument();
+    expect(screen.queryByText("Limit:")).not.toBeInTheDocument();
+  });
 });

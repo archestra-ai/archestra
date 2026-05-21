@@ -75,6 +75,14 @@ vi.mock("@/components/chat/inline-chat-error", () => ({
   },
 }));
 
+vi.mock("@/components/chat/limit-exhausted-message", () => ({
+  LimitExhaustedMessage: ({
+    chatError,
+  }: {
+    chatError: { message: string };
+  }) => <div data-testid="limit-exhausted-message">{chatError.message}</div>,
+}));
+
 vi.mock("@/components/chat/message-actions", () => ({
   MessageActions: () => null,
 }));
@@ -163,6 +171,46 @@ describe("MessageThread", () => {
     expect(error.compareDocumentPosition(retry)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
+  });
+
+  it("renders LimitExhaustedMessage for persisted limit errors", () => {
+    const messages: PartialUIMessage[] = [
+      {
+        id: "user-1",
+        role: "user",
+        metadata: {
+          createdAt: "2026-04-22T12:00:00.000Z",
+        } as PartialUIMessage["metadata"],
+        parts: [{ type: "text", text: "first try" }],
+      },
+    ];
+
+    render(
+      <MessageThread
+        messages={messages}
+        chatErrors={[
+          {
+            id: "error-limit",
+            conversationId: "conv-1",
+            createdAt: "2026-04-22T12:01:00.000Z",
+            error: {
+              code: "rate_limit",
+              message:
+                "The team usage limit of $25.00 has been reached. Please wait for the limit to reset or ask your administrator to increase it.",
+              isRetryable: true,
+              limitInfo: {
+                limitValue: 25.0,
+                resetsAt: "2026-05-22T00:00:00.000Z",
+                scope: "team",
+              },
+            },
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByTestId("limit-exhausted-message")).toBeInTheDocument();
+    expect(screen.queryByTestId("inline-chat-error")).not.toBeInTheDocument();
   });
 
   it("renders the unsafe-context divider after the boundary tool result", () => {

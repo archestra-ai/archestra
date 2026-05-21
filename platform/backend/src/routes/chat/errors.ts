@@ -12,6 +12,11 @@ import {
   type ChatErrorResponse,
   GeminiErrorCodes,
   GeminiErrorReasons,
+  LIMIT_MODELS_HEADER,
+  LIMIT_RESETS_AT_HEADER,
+  LIMIT_SCOPE_HEADER,
+  LIMIT_SCOPE_LABELS,
+  LIMIT_VALUE_HEADER,
   OllamaErrorTypes,
   OpenAIErrorTypes,
   RetryableErrorCodes,
@@ -1413,11 +1418,20 @@ function createErrorResponse(
   originalMessage: string,
   errorType: string | undefined,
   rawError: unknown,
+  limitInfo?: { limitValue: number; resetsAt: string; scope: string },
 ): ChatErrorResponse {
+  let message = ChatErrorMessages[code];
+
+  if (code === ChatErrorCode.RateLimit && limitInfo) {
+    const scopeLabel = LIMIT_SCOPE_LABELS[limitInfo.scope] ?? limitInfo.scope;
+    message = `The ${scopeLabel.toLowerCase()} usage limit of $${limitInfo.limitValue.toFixed(2)} has been reached. Please wait for the limit to reset or ask your administrator to increase it.`;
+  }
+
   return {
     code,
-    message: ChatErrorMessages[code],
+    message,
     isRetryable: RetryableErrorCodes.has(code),
+    limitInfo,
     originalError: {
       provider,
       status,
@@ -1497,6 +1511,7 @@ export function mapProviderError(
 
   let statusCode: number | undefined;
   let responseBody: string | undefined;
+  let responseHeaders: Record<string, string> | undefined;
   let parsedError: ParsedProviderError | null = null;
 
   // Handle Vercel AI SDK APICallError
@@ -1504,6 +1519,7 @@ export function mapProviderError(
     const apiError = error as InstanceType<typeof APICallError>;
     statusCode = apiError.statusCode;
     responseBody = apiError.responseBody;
+    responseHeaders = apiError.responseHeaders;
 
     // Parse the response body using provider-specific parser
     if (responseBody) {
@@ -1520,6 +1536,10 @@ export function mapProviderError(
           : undefined;
     responseBody =
       typeof obj.responseBody === "string" ? obj.responseBody : undefined;
+    responseHeaders =
+      typeof obj.responseHeaders === "object" && obj.responseHeaders !== null
+        ? (obj.responseHeaders as Record<string, string>)
+        : undefined;
 
     if (responseBody) {
       parsedError = parseError(responseBody);
@@ -1553,6 +1573,8 @@ export function mapProviderError(
     (parsedError as ParsedGeminiError)?.status ||
     (error instanceof Error ? error.name : undefined);
   const rawErrorJson = stringifyRawError(error);
+
+  const limitInfo = extractLimitInfoFromHeaders(statusCode, responseHeaders);
 
   if (!isTerminatedStream) {
     captureRawProviderErrorInSentry({
@@ -1596,6 +1618,7 @@ export function mapProviderError(
         ? (error as InstanceType<typeof APICallError>).isRetryable
         : undefined,
     },
+    limitInfo,
   );
 }
 
@@ -1634,6 +1657,38 @@ export function getActiveTraceContext(): {
  * Strip provider/internal error details from the frontend payload while
  * preserving the user-safe message and correlation IDs for log lookup.
  */
+function extractLimitInfoFromHeaders(
+  statusCode: number | undefined,
+  responseHeaders: Record<string, string> | undefined,
+):
+  | {
+      limitValue: number;
+      resetsAt: string;
+      scope: string;
+      models?: string[] | null;
+    }
+  | undefined {
+  if (statusCode !== 429 || !responseHeaders) return undefined;
+  const limitValue = responseHeaders[LIMIT_VALUE_HEADER.toLowerCase()];
+  const resetsAt = responseHeaders[LIMIT_RESETS_AT_HEADER.toLowerCase()];
+  const scope = responseHeaders[LIMIT_SCOPE_HEADER.toLowerCase()];
+  const modelsRaw = responseHeaders[LIMIT_MODELS_HEADER.toLowerCase()];
+  if (limitValue && resetsAt && scope) {
+    let models: string[] | null | undefined;
+    if (modelsRaw) {
+      models =
+        modelsRaw === "all" ? null : modelsRaw.split(",").filter(Boolean);
+    }
+    return {
+      limitValue: Number.parseFloat(limitValue),
+      resetsAt,
+      scope,
+      models,
+    };
+  }
+  return undefined;
+}
+
 export function sanitizeChatErrorForFrontend(
   error: ChatErrorResponse,
 ): ChatErrorResponse {
@@ -1641,6 +1696,7 @@ export function sanitizeChatErrorForFrontend(
     code: error.code,
     message: error.message,
     isRetryable: error.isRetryable,
+    limitInfo: error.limitInfo,
     sessionId: error.sessionId,
     traceId: error.traceId,
     spanId: error.spanId,

@@ -1,6 +1,7 @@
 export { getApiErrorMessage, handleApiError, toApiError } from "./api";
 export {
   formatDate,
+  formatLocalDateTime,
   formatRelativeTime,
   formatRelativeTimeFromNow,
 } from "./date-time";

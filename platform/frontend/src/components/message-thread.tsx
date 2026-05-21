@@ -3,6 +3,7 @@
 import {
   type archestraApiTypes,
   type BlockedToolPart,
+  type ChatErrorResponse,
   type DualLlmPart,
   type PartialUIMessage,
   type PolicyDeniedPart,
@@ -44,11 +45,13 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
+import { isPersistedLimitError } from "@/components/chat/chat-error.utils";
 import { InlineChatError } from "@/components/chat/inline-chat-error";
 import {
   hasKnowledgeBaseToolCall,
   KnowledgeGraphCitations,
 } from "@/components/chat/knowledge-graph-citations";
+import { LimitExhaustedMessage } from "@/components/chat/limit-exhausted-message";
 import { MessageActions } from "@/components/chat/message-actions";
 import {
   findScrollContainer,
@@ -180,6 +183,14 @@ const MessageThread = ({
             <div className="max-w-4xl mx-auto">
               {timelineItems.map((item) => {
                 if (item.kind === "chat-error") {
+                  if (isPersistedLimitError(item.chatError)) {
+                    return (
+                      <LimitExhaustedMessage
+                        key={`chat-error-${item.chatError.id}`}
+                        chatError={item.chatError.error as ChatErrorResponse}
+                      />
+                    );
+                  }
                   return (
                     <InlineChatError
                       key={`chat-error-${item.chatError.id}`}

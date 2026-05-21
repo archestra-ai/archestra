@@ -36,7 +36,7 @@ import {
 
 interface A2AManagerConfig {
   /**
-   * In statless mode A2AManager:
+   * In stateless mode A2AManager:
    * - Does not save context/task/messages in the db by default.
    * - Does not retrieve full messages history from the db at the message execution.
    * - May create context/task/message in special cases like approval flows.

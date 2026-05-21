@@ -32,28 +32,6 @@ export async function openAddMcpServerDialog(page: Page): Promise<void> {
   await page.waitForLoadState("domcontentloaded");
 }
 
-export async function openRemoteServerForm(page: Page): Promise<void> {
-  await page.getByRole("button", { name: /^Remote/ }).click();
-}
-
-export async function fillRemoteServerForm(
-  page: Page,
-  params: {
-    name: string;
-    serverUrl: string;
-    authMode?: "none" | "bearer";
-  },
-): Promise<void> {
-  await page.getByRole("textbox", { name: "Name *" }).fill(params.name);
-  await page
-    .getByRole("textbox", { name: "Server URL *" })
-    .fill(params.serverUrl);
-
-  if (params.authMode === "bearer") {
-    await page.getByRole("radio", { name: /"Authorization: Bearer/ }).click();
-  }
-}
-
 export async function submitAddServer(page: Page): Promise<void> {
   await clickButton({ page, options: { name: "Add Server" } });
   await page.waitForLoadState("domcontentloaded");

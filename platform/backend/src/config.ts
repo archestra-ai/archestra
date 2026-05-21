@@ -597,11 +597,16 @@ const config = {
       baseUrl:
         process.env.ARCHESTRA_OPENROUTER_BASE_URL ||
         "https://openrouter.ai/api/v1",
+      // OpenRouter attribution must always identify the product, never the
+      // deployment host (which would leak `localhost`/internal URLs).
       referer:
-        process.env.ARCHESTRA_OPENROUTER_REFERER ||
-        process.env.ARCHESTRA_FRONTEND_URL?.trim() ||
-        frontendBaseUrl,
+        process.env.ARCHESTRA_OPENROUTER_REFERER?.trim() ||
+        "https://archestra.ai",
       title: process.env.ARCHESTRA_OPENROUTER_TITLE || DEFAULT_APP_NAME,
+      // Comma-separated OpenRouter marketplace categories for app attribution.
+      categories:
+        process.env.ARCHESTRA_OPENROUTER_CATEGORIES?.trim() ||
+        "general-chat,personal-agent",
     },
     anthropic: {
       baseUrl:

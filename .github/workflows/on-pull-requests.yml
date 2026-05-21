@@ -332,6 +332,72 @@ jobs:
 
           echo "✅ All validation checks passed"
 
+  frontend-integration-tests:
+    name: Frontend Integration Tests (MSW)
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ./platform
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./platform
+
+      - name: Run codegen
+        run: pnpm codegen
+
+      - name: Resolve Playwright version
+        id: pw-version
+        run: |
+          version=$(pnpm --filter @frontend exec playwright --version | awk '{print $2}')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: ./.github/actions/github-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
+
+      - name: Install Chromium for Playwright
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm --filter @frontend exec playwright install --with-deps chromium
+
+      - name: Install Chromium system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm --filter @frontend exec playwright install-deps chromium
+
+      - name: Run integration tests
+        run: pnpm test:integration
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: ./.github/actions/github-upload-artifact
+        with:
+          name: playwright-integration-report
+          path: platform/frontend/playwright-report/
+          retention-days: "7"
+
+      - name: Upload traces
+        if: failure()
+        uses: ./.github/actions/github-upload-artifact
+        with:
+          name: playwright-integration-traces
+          path: platform/frontend/test-results/
+          retention-days: "7"
+
   docker-image-builds:
     name: Docker Image Builds (${{ matrix.name }})
     runs-on: ${{ matrix.runner }}

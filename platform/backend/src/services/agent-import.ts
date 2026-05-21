@@ -101,7 +101,6 @@ export async function importAgentFromPayload(
       considerContextUntrusted: data.agent.considerContextUntrusted,
       toolAssignmentMode: data.agent.toolAssignmentMode,
       toolExposureMode: data.agent.toolExposureMode,
-      llmModel: data.agent.llmModel,
       llmApiKeyId: null,
       identityProviderId: null,
       incomingEmailEnabled: data.agent.incomingEmailEnabled,

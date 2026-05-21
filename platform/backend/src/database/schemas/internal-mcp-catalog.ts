@@ -19,6 +19,7 @@ import type {
   UserConfig,
   UserConfigFieldDefault,
 } from "@/types";
+import mcpPresetEntriesTable from "./mcp-preset-entry";
 import secretTable from "./secret";
 import usersTable from "./user";
 
@@ -95,6 +96,16 @@ const internalMcpCatalogTable = pgTable(
      */
     childName: text("child_name"),
     /**
+     * For child catalog items only: FK to the org-level preset entry this
+     * child configures (e.g. "Production", "Staging"). Cascade-deleted when
+     * the entry is removed at /mcp/registry/org-structure. NULL for root rows.
+     * Canonical link — `child_name` is just a denormalized display copy.
+     */
+    presetEntryId: uuid("preset_entry_id").references(
+      () => mcpPresetEntriesTable.id,
+      { onDelete: "cascade" },
+    ),
+    /**
      * Values for fields the parent declared with promptOnPreset: true.
      * Meaningful on parent (= default preset values) AND child (= preset overlay).
      * Stores only non-secret values; secret-typed preset values live in the
@@ -113,6 +124,21 @@ const internalMcpCatalogTable = pgTable(
     presetSecretId: uuid("preset_secret_id").references(() => secretTable.id, {
       onDelete: "set null",
     }),
+    /**
+     * To re-install multi-tenant self-hosted MCPs.
+     *
+     * Set to `true` when an admin/owner edits a catalog-scope execution
+     * field (image, command, args, transport) on a `multitenant: true` +
+     * `serverType: "local"` catalog. Cleared by the catalog-reinstall
+     * endpoint after the shared K8s Deployment is updated and tools are
+     * re-synced for every install attached to this catalog.
+     *
+     * Not used for single-tenant or remote catalogs — those keep using
+     * the per-install `mcp_server.reinstall_required` flag.
+     */
+    catalogReinstallRequired: boolean("catalog_reinstall_required")
+      .notNull()
+      .default(false),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

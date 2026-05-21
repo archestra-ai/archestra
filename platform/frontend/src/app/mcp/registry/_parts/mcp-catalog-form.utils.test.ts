@@ -458,6 +458,7 @@ describe("transformFormToApiData", () => {
         value: "tenant-42",
         description: "Tenant ID",
         includeBearerPrefix: false,
+        sensitive: false,
       },
     ]);
   });
@@ -742,6 +743,147 @@ describe("transformFormToApiData", () => {
         });
       });
     }
+  });
+
+  describe("round-trips the `sensitive` flag on additional headers", () => {
+    // Test 1 from the recommendation: form → API → form preserves
+    // `sensitive`. Covers both preset-scoped (where the flag is the only
+    // routing signal between `preset_field_values` and `preset_secret_id`)
+    // and installation-scoped (where the flag controls input masking but
+    // doesn't change storage).
+    type AdditionalHeader = NonNullable<
+      McpCatalogFormValues["additionalHeaders"]
+    >[number];
+
+    function makeBaseValues(header: AdditionalHeader): McpCatalogFormValues {
+      return {
+        name: "Sensitive Headers MCP",
+        description: "",
+        icon: null,
+        serverType: "remote",
+        serverUrl: "https://mcp.example.com",
+        authMethod: "none",
+        includeBearerPrefix: false,
+        authHeaderName: "",
+        additionalHeaders: [header],
+        oauthConfig: undefined,
+        enterpriseManagedConfig: null,
+        localConfig: undefined,
+        deploymentSpecYaml: "",
+        originalDeploymentSpecYaml: "",
+        oauthClientSecretVaultPath: "",
+        oauthClientSecretVaultKey: "",
+        localConfigVaultPath: "",
+        localConfigVaultKey: "",
+        labels: [],
+        scope: "personal",
+        teams: [],
+      };
+    }
+
+    function roundTrip(header: AdditionalHeader): AdditionalHeader {
+      const values = makeBaseValues(header);
+      const apiData = transformFormToApiData(values);
+      const rehydrated = transformCatalogItemToFormValues({
+        id: "round-trip",
+        name: values.name,
+        description: null,
+        icon: null,
+        serverType: "remote",
+        serverUrl: values.serverUrl,
+        oauthConfig: null,
+        enterpriseManagedConfig: null,
+        localConfig: null,
+        deploymentSpecYaml: null,
+        userConfig: apiData.userConfig ?? null,
+        scope: "personal",
+        teams: [],
+        labels: [],
+      } as never);
+      expect(rehydrated.additionalHeaders).toHaveLength(1);
+      const [first] = rehydrated.additionalHeaders ?? [];
+      if (!first) {
+        throw new Error("expected hydrated header row");
+      }
+      return first;
+    }
+
+    it("preserves sensitive=true on a preset-scoped header", () => {
+      const result = roundTrip({
+        headerName: "x-auth",
+        promptOnInstallation: false,
+        promptOnPreset: true,
+        required: false,
+        value: "",
+        description: "",
+        includeBearerPrefix: false,
+        sensitive: true,
+      });
+      expect(result).toMatchObject({
+        headerName: "x-auth",
+        promptOnPreset: true,
+        promptOnInstallation: false,
+        sensitive: true,
+      });
+    });
+
+    it("preserves sensitive=false on a preset-scoped header", () => {
+      const result = roundTrip({
+        headerName: "x-region",
+        promptOnInstallation: false,
+        promptOnPreset: true,
+        required: false,
+        value: "",
+        description: "",
+        includeBearerPrefix: false,
+        sensitive: false,
+      });
+      expect(result).toMatchObject({
+        headerName: "x-region",
+        promptOnPreset: true,
+        sensitive: false,
+      });
+    });
+
+    it("preserves sensitive=true on an installation-scoped header", () => {
+      const result = roundTrip({
+        headerName: "x-tenant-token",
+        promptOnInstallation: true,
+        promptOnPreset: false,
+        required: true,
+        value: "",
+        description: "",
+        includeBearerPrefix: false,
+        sensitive: true,
+      });
+      expect(result).toMatchObject({
+        headerName: "x-tenant-token",
+        promptOnInstallation: true,
+        sensitive: true,
+      });
+    });
+
+    it("forces sensitive=false on a static header regardless of incoming flag", () => {
+      // Server-side validator rejects sensitive + static; the form save
+      // path mirrors that so the API never sees the illegal combination.
+      const result = roundTrip({
+        headerName: "x-static",
+        promptOnInstallation: false,
+        promptOnPreset: false,
+        required: false,
+        value: "fixed-value",
+        description: "",
+        includeBearerPrefix: false,
+        sensitive: true, // ← should be coerced to false by the save path
+      });
+      expect(result).toMatchObject({
+        headerName: "x-static",
+        promptOnInstallation: false,
+        promptOnPreset: false,
+        value: "fixed-value",
+        sensitive: false,
+      });
+    });
   });
 });
 

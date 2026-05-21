@@ -27,7 +27,6 @@ describe("ConversationShareModel", () => {
       userId: user.id,
       organizationId: org.id,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
     });
 
     const share = await ConversationShareModel.upsert({
@@ -68,7 +67,6 @@ describe("ConversationShareModel", () => {
       userId: user.id,
       organizationId: org.id,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
     });
 
     await ConversationShareModel.upsert({
@@ -108,7 +106,6 @@ describe("ConversationShareModel", () => {
       userId: user.id,
       organizationId: org.id,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
     });
 
     const found = await ConversationShareModel.findByConversationId({
@@ -139,7 +136,6 @@ describe("ConversationShareModel", () => {
       userId: user.id,
       organizationId: org.id,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
     });
 
     await ConversationShareModel.upsert({
@@ -187,7 +183,6 @@ describe("ConversationShareModel", () => {
       userId: user.id,
       organizationId: org.id,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
     });
 
     await MessageModel.create({
@@ -246,7 +241,6 @@ describe("ConversationShareModel", () => {
       userId: user.id,
       organizationId: org.id,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
     });
 
     await ConversationChatErrorModel.create({
@@ -304,7 +298,6 @@ describe("ConversationShareModel", () => {
       userId: user.id,
       organizationId: org.id,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
     });
 
     const share = await ConversationShareModel.upsert({
@@ -345,7 +338,6 @@ describe("ConversationShareModel", () => {
       userId: user.id,
       organizationId: org.id,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
     });
 
     const share = await ConversationShareModel.upsert({
@@ -392,7 +384,6 @@ describe("ConversationShareModel", () => {
       userId: owner.id,
       organizationId: org.id,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
     });
 
     const firstShare = await ConversationShareModel.upsert({
@@ -446,7 +437,6 @@ describe("ConversationShareModel", () => {
       userId: owner.id,
       organizationId: org.id,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
     });
 
     await MessageModel.create({
@@ -518,7 +508,6 @@ describe("ConversationShareModel", () => {
       userId: owner.id,
       organizationId: org.id,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
     });
 
     const share = await ConversationShareModel.upsert({
@@ -566,7 +555,6 @@ describe("ConversationShareModel", () => {
       userId: owner.id,
       organizationId: org.id,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
     });
 
     const share = await ConversationShareModel.upsert({
@@ -616,7 +604,6 @@ describe("ConversationShareModel", () => {
       userId: owner.id,
       organizationId: org.id,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
     });
 
     await ConversationShareModel.upsert({

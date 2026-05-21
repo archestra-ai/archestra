@@ -25,6 +25,7 @@ import {
   MCP_CONFIG_AUTOCOMPLETE,
   MCP_SECRET_AUTOCOMPLETE,
 } from "@/lib/mcp/mcp-form-autocomplete";
+import { usePresetEntityName } from "@/lib/organization.query";
 
 const ExternalSecretSelector = lazy(
   () =>
@@ -58,14 +59,16 @@ interface EnvironmentVariableDialogProps {
   onConfirm: (draft: EnvVarDraft) => void;
 }
 
-const EMPTY_DRAFT: EnvVarDraft = {
-  key: "",
-  type: "plain_text",
-  scope: "installation",
-  required: false,
-  description: "",
-  value: "",
-};
+function makeEmptyDraft(disableInstallation: boolean): EnvVarDraft {
+  return {
+    key: "",
+    type: "plain_text",
+    scope: disableInstallation ? "static" : "installation",
+    required: !disableInstallation,
+    description: "",
+    value: "",
+  };
+}
 
 export function EnvironmentVariableDialog({
   open,
@@ -79,14 +82,17 @@ export function EnvironmentVariableDialog({
   onClose,
   onConfirm,
 }: EnvironmentVariableDialogProps) {
-  const [draft, setDraft] = useState<EnvVarDraft>(initial ?? EMPTY_DRAFT);
+  const { singular } = usePresetEntityName();
+  const [draft, setDraft] = useState<EnvVarDraft>(
+    initial ?? makeEmptyDraft(disableInstallation),
+  );
   const [vaultDialogOpen, setVaultDialogOpen] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setDraft(initial ?? EMPTY_DRAFT);
+      setDraft(initial ?? makeEmptyDraft(disableInstallation));
     }
-  }, [open, initial]);
+  }, [open, initial, disableInstallation]);
 
   const trimmedKey = draft.key.trim();
   const duplicate = useMemo(
@@ -116,7 +122,9 @@ export function EnvironmentVariableDialog({
   function updateDraft(patch: Partial<EnvVarDraft>) {
     setDraft((prev) => {
       const next = { ...prev, ...patch };
-      if (patch.scope && patch.scope !== "installation") {
+      if (patch.scope === "installation") {
+        next.required = true;
+      } else if (patch.scope) {
         next.required = false;
       }
       if (patch.scope && patch.scope !== "static") {
@@ -228,8 +236,8 @@ export function EnvironmentVariableDialog({
         )}
         {draft.scope === "preset" && (
           <ScopeCallout
-            title="An admin sets this for each preset"
-            body="Each preset that uses this server supplies its own value."
+            title={`An admin sets this for each ${singular}`}
+            body={`Each ${singular} that uses this server supplies its own value.`}
           />
         )}
         {draft.scope === "static" && (

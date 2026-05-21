@@ -9,6 +9,7 @@ import {
 } from "drizzle-orm/pg-core";
 import agentsTable from "./agent";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
+import modelsTable from "./model";
 
 // Note: Additional pg_trgm GIN index for search is created in migration 0116_pg_trgm_indexes.sql:
 // - conversations_title_trgm_idx: GIN index on title column
@@ -28,8 +29,14 @@ const conversationsTable = pgTable("conversations", {
     },
   ),
   title: text("title"),
+  /** @deprecated Superseded by `modelId` (FK). Retained, no longer read or written. */
   selectedModel: text("selected_model").notNull().default("gpt-4o"),
+  /** @deprecated Superseded by `modelId` (FK). Retained, no longer read or written. */
   selectedProvider: text("selected_provider").$type<SupportedProvider>(),
+  /** FK to models(id) — the resolved model for this conversation. */
+  modelId: uuid("model_id").references(() => modelsTable.id, {
+    onDelete: "set null",
+  }),
   hasCustomToolSelection: boolean("has_custom_tool_selection")
     .notNull()
     .default(false),

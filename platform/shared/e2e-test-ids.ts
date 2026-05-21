@@ -39,6 +39,7 @@ export const E2eTestId = {
   IdpRoleMappingAddRule: "idp-role-mapping-add-rule",
   McpServerError: "mcp-server-error",
   McpServerCard: "mcp-server-card",
+  McpServerSettingsButton: "mcp-server-settings-button",
   McpServerToolsCount: "mcp-server-tools-count",
   McpToolsDialog: "mcp-tools-dialog",
   TokenSelect: "token-select",

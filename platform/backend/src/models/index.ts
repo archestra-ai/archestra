@@ -17,6 +17,7 @@ export { default as ChatOpsThreadAgentOverrideModel } from "./chatops-thread-age
 export { default as ConnectorRunModel } from "./connector-run";
 export { default as ConversationModel } from "./conversation";
 export { default as ConversationChatErrorModel } from "./conversation-chat-error";
+export { default as ConversationCompactionModel } from "./conversation-compaction";
 export { default as ConversationEnabledToolModel } from "./conversation-enabled-tool";
 export { default as ConversationShareModel } from "./conversation-share";
 export { default as InteractionModel } from "./interaction";
@@ -33,6 +34,7 @@ export { default as LlmProviderApiKeyModel } from "./llm-provider-api-key";
 export { default as LlmProviderApiKeyModelLinkModel } from "./llm-provider-api-key-model";
 export { default as McpCatalogLabelModel } from "./mcp-catalog-label";
 export { default as McpHttpSessionModel } from "./mcp-http-session";
+export { default as McpPresetEntryModel } from "./mcp-preset-entry";
 export { default as McpServerModel } from "./mcp-server";
 export { default as McpServerInstallationRequestModel } from "./mcp-server-installation-request";
 export { default as McpToolCallModel } from "./mcp-tool-call";
@@ -50,6 +52,8 @@ export { default as ScheduleTriggerRunModel } from "./schedule-trigger-run";
 export { default as SecretModel } from "./secret";
 /** @public — re-exported for testability (consumed by src/test/fixtures.ts) */
 export { default as SessionModel } from "./session";
+export { default as SkillModel } from "./skill";
+export { default as SkillFileModel } from "./skill-file";
 export { default as StatisticsModel } from "./statistics";
 export { default as TaskModel } from "./task";
 export { default as TeamModel } from "./team";

@@ -131,11 +131,7 @@ export default function AgentSettingsPage() {
     if (!apiKeys) return;
 
     if (changes.hasChanges) {
-      const payload = buildSavePayload(
-        localState,
-        savedStateRef.current,
-        apiKeys,
-      );
+      const payload = buildSavePayload(localState, savedStateRef.current);
       await updateAgentMutation.mutateAsync(payload);
       savedStateRef.current = { ...localState };
     }
@@ -163,9 +159,13 @@ export default function AgentSettingsPage() {
   const modelItems = useMemo(() => {
     if (!allModels) return [];
     return allModels.map((model) => ({
-      value: model.id,
+      value: model.dbId,
       model: model.displayName ?? model.id,
+      modelId: model.id,
       provider: model.provider,
+      isFree: model.isFree,
+      isFastest: model.isFastest,
+      isBest: model.isBest,
     }));
   }, [allModels]);
 
@@ -270,6 +270,7 @@ export default function AgentSettingsPage() {
                   value={defaultModel}
                   onValueChange={setDefaultModel}
                   options={modelItems}
+                  freeFilterable
                   placeholder={
                     !selectedApiKeyId
                       ? "Select API key first..."

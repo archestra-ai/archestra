@@ -23,6 +23,7 @@ const additionalHeaderSchema = z
     value: z.string().optional(),
     description: z.string().optional().or(z.literal("")),
     includeBearerPrefix: z.boolean().optional(),
+    sensitive: z.boolean().optional(),
   })
   .superRefine((value, ctx) => {
     if (value.promptOnInstallation && value.promptOnPreset) {

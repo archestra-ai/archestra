@@ -180149,7 +180149,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Enable the Agent Skill tools (`activate_skill`, `read_skill_file`) for this organization. Sets the org-level flag and backfills both tools onto every existing agent. Idempotent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:update`: Modify agent configuration and settings",
+        "description": "Enable the Agent Skill tools (`list_skills`, `activate_skill`, `read_skill_file`) for this organization. Sets the org-level flag and backfills the tools onto every existing agent. Idempotent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:update`: Modify agent configuration and settings",
         "responses": {
           "200": {
             "description": "Default Response",

@@ -231,8 +231,9 @@ const organizationsTable = pgTable("organization", {
   presetEntityDefaultLabel: text("preset_entity_default_label"),
 
   /**
-   * When true, the Agent Skill tools (`activate_skill`, `read_skill_file`) are
-   * assigned to every agent in the org and added to all new agents. Flipped on
+   * When true, the Agent Skill tools (`list_skills`, `activate_skill`,
+   * `read_skill_file`) are assigned to every agent in the org and added to all
+   * new agents. Flipped on
    * by the "Enable and create a new skill" empty-state button on /agents/skills.
    */
   skillToolsEnabled: boolean("skill_tools_enabled").notNull().default(false),

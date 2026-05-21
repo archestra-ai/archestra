@@ -65,6 +65,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   identityProvider: ["read", "create", "update", "delete"],
   secret: ["read", "update"],
   organizationSettings: ["read", "update"],
+  siteAnnouncement: ["read", "create", "update", "delete"],
 
   // UI behavior resources
   simpleView: ["enable"],
@@ -118,6 +119,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   identityProvider: ["read"],
   secret: ["read"],
   organizationSettings: ["read", "update"],
+  siteAnnouncement: ["read", "create", "update", "delete"],
 
   // UI behavior resources
   simpleView: [],
@@ -171,6 +173,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   identityProvider: [],
   secret: [],
   organizationSettings: [],
+  siteAnnouncement: ["read"],
 
   // UI behavior resources
   simpleView: ["enable"],
@@ -333,6 +336,10 @@ export const permissionDescriptions: Record<string, string> = {
     "View organization settings (appearance, authentication, etc)",
   "organizationSettings:update":
     "Customize organization appearance, authentication, etc",
+  "siteAnnouncement:read": "View active site announcements",
+  "siteAnnouncement:create": "Create site announcements",
+  "siteAnnouncement:update": "Update site announcements",
+  "siteAnnouncement:delete": "Delete site announcements",
   "knowledgeSource:read": "View Knowledge Bases and Connectors",
   "knowledgeSource:create": "Create Knowledge Bases and Connectors",
   "knowledgeSource:update": "Modify Knowledge Bases and Connectors",
@@ -875,6 +882,18 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.UpdateKnowledgeSettings]: {
     knowledgeSettings: ["update"],
+  },
+  [RouteId.GetSiteAnnouncement]: {
+    siteAnnouncement: ["read"],
+  },
+  [RouteId.GetActiveSiteAnnouncement]: {
+    siteAnnouncement: ["read"],
+  },
+  [RouteId.UpsertSiteAnnouncement]: {
+    siteAnnouncement: ["create", "update"],
+  },
+  [RouteId.DeleteSiteAnnouncement]: {
+    siteAnnouncement: ["delete"],
   },
   [RouteId.DropEmbeddingConfig]: {
     knowledgeSettings: ["update"],

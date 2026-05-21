@@ -2,6 +2,17 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 export function proxy(req: NextRequest) {
+  const maintenanceMessage = getMaintenanceModeMessage();
+  if (
+    maintenanceMessage &&
+    !isMaintenanceModeBypassPath(req.nextUrl.pathname)
+  ) {
+    const maintenanceUrl = req.nextUrl.clone();
+    maintenanceUrl.pathname = "/maintenance";
+    maintenanceUrl.search = "";
+    return NextResponse.rewrite(maintenanceUrl);
+  }
+
   // Redirect root to /chat before any client components render
   if (req.nextUrl.pathname === "/") {
     return NextResponse.redirect(new URL("/chat", req.url));
@@ -68,5 +79,21 @@ const isSamlCallback = (req: NextRequest) => {
   // Match SAML ACS callback URLs: /api/auth/sso/saml2/sp/acs/*
   return (
     req.method === "POST" && pathname.startsWith("/api/auth/sso/saml2/sp/acs/")
+  );
+};
+
+const getMaintenanceModeMessage = (): string => {
+  return process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE?.trim() ?? "";
+};
+
+const isMaintenanceModeBypassPath = (pathname: string): boolean => {
+  return (
+    pathname === "/maintenance" ||
+    pathname === "/favicon.ico" ||
+    pathname.startsWith("/_next/") ||
+    pathname.startsWith("/api/") ||
+    pathname.startsWith("/v1/") ||
+    pathname.startsWith("/ws") ||
+    pathname.startsWith("/_sandbox/")
   );
 };

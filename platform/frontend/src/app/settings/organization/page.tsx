@@ -38,6 +38,7 @@ import {
   validateOnboardingWizard,
 } from "./_components/onboarding-wizards-editor.utils";
 import { OrganizationTokenSection } from "./_components/organization-token-section";
+import { SiteAnnouncementCard } from "./_components/site-announcement-card";
 import { ThemeSelector } from "./_components/theme-selector";
 
 export default function OrganizationSettingsPage() {
@@ -404,6 +405,8 @@ export default function OrganizationSettingsPage() {
               />
             </CardContent>
           </Card>
+
+          <SiteAnnouncementCard />
         </SettingsSectionStack>
       </div>
 

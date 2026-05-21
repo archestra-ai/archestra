@@ -666,6 +666,11 @@ The following environment variables can be used to configure Archestra Platform.
   - Requires wildcard DNS (`*.mcp.example.com`) and wildcard TLS certificate pointing to the backend
   - See [MCP Apps Sandbox](#mcp-apps-sandbox) for setup instructions
 
+- **`ARCHESTRA_MAINTENANCE_MODE_MESSAGE`** - Enables deployment maintenance mode and displays this message to users instead of the main application.
+  - Default: unset (maintenance mode disabled)
+  - Example: `Archestra is being upgraded and will be back in a few minutes.`
+  - API routes, static assets, websocket paths, and the maintenance page itself are not rewritten
+
 - **`ARCHESTRA_GLOBAL_TOOL_POLICY`** - Controls how tool invocation is treated across the LLM proxy.
   - Default: `permissive`
   - Values: `permissive` or `restrictive`

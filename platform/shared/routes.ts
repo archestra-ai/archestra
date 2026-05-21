@@ -133,6 +133,12 @@ export const RouteId = {
   UpdateRole: "updateRole",
   DeleteRole: "deleteRole",
 
+  // Site Announcement Routes
+  GetSiteAnnouncement: "getSiteAnnouncement",
+  GetActiveSiteAnnouncement: "getActiveSiteAnnouncement",
+  UpsertSiteAnnouncement: "upsertSiteAnnouncement",
+  DeleteSiteAnnouncement: "deleteSiteAnnouncement",
+
   // Tool Routes
   GetTools: "getTools",
   GetToolsWithAssignments: "getToolsWithAssignments",

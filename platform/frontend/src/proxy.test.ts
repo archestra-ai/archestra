@@ -22,12 +22,15 @@ describe("proxy", () => {
     ARCHESTRA_FRONTEND_URL: process.env.ARCHESTRA_FRONTEND_URL,
     ARCHESTRA_INTERNAL_API_BASE_URL:
       process.env.ARCHESTRA_INTERNAL_API_BASE_URL,
+    ARCHESTRA_MAINTENANCE_MODE_MESSAGE:
+      process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE,
   };
 
   beforeEach(() => {
     // Reset env vars before each test
     delete process.env.ARCHESTRA_FRONTEND_URL;
     delete process.env.ARCHESTRA_INTERNAL_API_BASE_URL;
+    delete process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE;
     // Suppress console.log during tests
     vi.spyOn(console, "log").mockImplementation(() => {});
   });
@@ -44,6 +47,12 @@ describe("proxy", () => {
         originalEnv.ARCHESTRA_INTERNAL_API_BASE_URL;
     } else {
       delete process.env.ARCHESTRA_INTERNAL_API_BASE_URL;
+    }
+    if (originalEnv.ARCHESTRA_MAINTENANCE_MODE_MESSAGE) {
+      process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE =
+        originalEnv.ARCHESTRA_MAINTENANCE_MODE_MESSAGE;
+    } else {
+      delete process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE;
     }
     vi.restoreAllMocks();
   });
@@ -91,6 +100,84 @@ describe("proxy", () => {
       const request = createMockRequest({
         method: "GET",
         url: "/settings",
+      });
+
+      const response = proxy(request);
+
+      expect(response.headers.get("x-middleware-next")).toBe("1");
+    });
+  });
+
+  describe("maintenance mode", () => {
+    it("should rewrite page requests to the maintenance page", () => {
+      process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE =
+        "Deploying a database migration";
+
+      const request = createMockRequest({
+        method: "GET",
+        url: "/chat",
+      });
+
+      const response = proxy(request);
+
+      expect(response.headers.get("x-middleware-next")).toBeNull();
+      expect(response.headers.get("x-middleware-rewrite")).toContain(
+        "/maintenance",
+      );
+    });
+
+    it("should rewrite root to the maintenance page before the chat redirect", () => {
+      process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE =
+        "Deploying a database migration";
+
+      const request = createMockRequest({
+        method: "GET",
+        url: "/",
+      });
+
+      const response = proxy(request);
+
+      expect(response.status).not.toBe(307);
+      expect(response.headers.get("x-middleware-rewrite")).toContain(
+        "/maintenance",
+      );
+    });
+
+    it("should not rewrite the maintenance page itself", () => {
+      process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE =
+        "Deploying a database migration";
+
+      const request = createMockRequest({
+        method: "GET",
+        url: "/maintenance",
+      });
+
+      const response = proxy(request);
+
+      expect(response.headers.get("x-middleware-next")).toBe("1");
+    });
+
+    it("should not rewrite API requests", () => {
+      process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE =
+        "Deploying a database migration";
+
+      const request = createMockRequest({
+        method: "GET",
+        url: "/api/config/public",
+      });
+
+      const response = proxy(request);
+
+      expect(response.headers.get("x-middleware-next")).toBe("1");
+    });
+
+    it("should not rewrite Next.js assets", () => {
+      process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE =
+        "Deploying a database migration";
+
+      const request = createMockRequest({
+        method: "GET",
+        url: "/_next/static/chunk.js",
       });
 
       const response = proxy(request);

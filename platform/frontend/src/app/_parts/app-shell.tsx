@@ -9,6 +9,7 @@ import {
   useNavigationStatus,
 } from "@/components/navigation-status-provider";
 import { OnboardingDialogWrapper } from "@/components/onboarding-dialog-wrapper";
+import { SiteAnnouncementBanner } from "@/components/site-announcement-banner";
 import {
   SidebarCircleToggle,
   SidebarProvider,
@@ -77,6 +78,7 @@ export function AppShell({ children }: AppShellProps) {
         <NavAwareSidebarCircleToggle />
         <main className="h-screen w-full flex flex-col bg-background min-w-0 relative">
           <ImpersonationBanner />
+          <SiteAnnouncementBanner />
           <header className="h-14 border-b border-border flex md:hidden items-center justify-between px-6 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">
             <SidebarTrigger className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2 -ml-2" />
             <div

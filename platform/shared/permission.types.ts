@@ -47,6 +47,7 @@ export const resources = [
   "agentSettings",
   "agentTrigger",
   "scheduledTask",
+  "siteAnnouncement",
   /**
    * Better-auth access control resource - needed for organization role management
    * See: https://github.com/better-auth/better-auth/issues/2336#issuecomment-2820620809
@@ -105,6 +106,7 @@ export const resourceLabels: Record<Resource, string> = {
   agentSettings: "Agent Settings",
   agentTrigger: "Agent Triggers",
   scheduledTask: "Scheduled Tasks",
+  siteAnnouncement: "Site Announcements",
   simpleView: "Simple View",
   chatAgentPicker: "Chat Agent Picker",
   chatProviderSettings: "Chat Provider Settings",
@@ -120,6 +122,7 @@ export const resourceDescriptions: Record<Resource, string> = {
   chat: "Chat conversations",
   agentTrigger: "Agent triggers (Slack, MS Teams, incoming emails)",
   scheduledTask: "Scheduled agent tasks that run on a schedule",
+  siteAnnouncement: "Organization-wide site announcements",
   llmProviderApiKey: "LLM provider API keys and their visibility",
   llmVirtualKey: "LLM virtual keys and their visibility",
   llmOauthClient: "OAuth clients authorized to call LLM proxies",
@@ -203,6 +206,7 @@ export const resourceCategories: Record<string, Resource[]> = {
     "secret",
     "apiKey",
     "organizationSettings",
+    "siteAnnouncement",
   ],
 };
 

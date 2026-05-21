@@ -1061,6 +1061,111 @@ describe("mcp server inspect route", () => {
     expect(connectAndGetToolsMock).not.toHaveBeenCalled();
   });
 
+  // Bug capture: reinstall of a REMOTE MCP server does not persist
+  // `userConfigValues` from the request body. The route's value-
+  // persistence branch in `backend/src/routes/mcp-server.ts:1598-1602`
+  // is gated on `mcpServer.serverType === "local"` — for remote
+  // installs, the body's `userConfigValues` is silently dropped and
+  // the secret is never updated. End-user symptom: admin edits a
+  // remote catalog to add a new required header, clicks Reinstall,
+  // the pod restarts but the new header has no value, all tool calls
+  // start failing 401/403.
+  //
+  // Mirrors the existing local-server test
+  // ("reinstalls a local MCP server with prompted header user config")
+  // and the remote-reauth test
+  // ("re-authenticates a remote MCP server with provided user config values")
+  // both of which persist values correctly via their respective code
+  // paths. Reinstall-on-remote is the missing third case.
+  //
+  // Marked `test.fails` because the assertion is the correct behavior
+  // the route should have. When the bug is fixed, this test will pass
+  // and Vitest will fail with "test was expected to fail, but passed"
+  // — that's the cue to remove the `test.fails` marker.
+  test.fails("[bug] reinstall of a remote MCP server persists userConfigValues into the install's secret", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Remote Reinstall With New Required Header",
+      serverType: "remote",
+      serverUrl: "http://localhost:30082/mcp",
+      userConfig: {
+        header_x_api_key: {
+          type: "string",
+          title: "x-api-key",
+          description: "Newly-required header added on a catalog edit",
+          promptOnInstallation: true,
+          required: true,
+          sensitive: true,
+          headerName: "x-api-key",
+        },
+      },
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+    // makeMcpServer hardcodes `serverType: "local"`. The route gates its
+    // value-persistence branch on the install row's serverType, not the
+    // catalog's, so we have to force it here for the bug to actually
+    // reproduce. Without this update the install is treated as local
+    // and the local branch persists the value — the bug doesn't appear.
+    await db
+      .update(schema.mcpServersTable)
+      .set({ serverType: "remote" })
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
+    await McpServerUserModel.assignUserToMcpServer(mcpServer.id, user.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${mcpServer.id}/reinstall`,
+      payload: {
+        userConfigValues: {
+          header_x_api_key: "fresh-header-value",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const [updatedServer] = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
+
+    expect(updatedServer?.secretId).toBeTruthy();
+    if (!updatedServer?.secretId) {
+      throw new Error("Expected reinstall to persist a secretId");
+    }
+
+    const storedSecret = await secretManager().getSecret(
+      updatedServer.secretId,
+    );
+    expect(storedSecret?.secret).toMatchObject({
+      header_x_api_key: "fresh-header-value",
+    });
+
+    // Drain the route's setImmediate-deferred reinstall so background
+    // work doesn't leak into the next test in the file. The local-
+    // reinstall test above uses 200ms total, but the remote path runs
+    // autoReinstallServer with a tool-fetch that takes longer when
+    // mocks aren't pre-primed — give it 2s so we don't leak a
+    // "pending" install whose async error fires inside the next test.
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const [serverRow] = await db
+        .select()
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.id, mcpServer.id));
+
+      if (serverRow?.localInstallationStatus !== "pending") {
+        break;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+  });
+
   test("automatically retries protected remote MCP server installation with an exchanged enterprise-managed credential", async ({
     makeAccount,
     makeIdentityProvider,

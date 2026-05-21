@@ -1,25 +1,27 @@
 import type { FastifyRequest } from "fastify";
+import config from "@/config";
 
 /**
- * Return the public origin for a request using Fastify's trusted request
- * accessors instead of reading forwarded headers directly.
+ * Return the public origin used in OAuth and MCP metadata.
  *
- * Fastify derives `request.host` and `request.protocol` from the raw Host,
- * X-Forwarded-Host, and X-Forwarded-Proto headers according to the server's
- * `trustProxy` option. That matters because `ARCHESTRA_TRUST_PROXY` can be:
+ * Resolution order:
  *
- * - false: ignore all forwarded headers
- * - true: trust forwarded headers from any proxy
- * - an IP/CIDR list: trust forwarded headers only when the remote proxy matches
+ * 1. `config.publicOrigin` — set when an operator configures
+ *    ARCHESTRA_FRONTEND_URL. This is the safe, server-controlled path: it
+ *    works behind ingress without ARCHESTRA_TRUST_PROXY because it doesn't
+ *    rely on header trust.
  *
- * Reading `X-Forwarded-*` manually would either ignore CIDR matching or require
- * duplicating Fastify's proxy-trust implementation. Using these accessors keeps
- * OAuth and MCP metadata generation aligned with the same proxy trust rules
- * that Fastify applies to the rest of the request.
+ * 2. Fastify's `request.host` / `request.protocol`. These honor
+ *    X-Forwarded-Host and X-Forwarded-Proto only when ARCHESTRA_TRUST_PROXY
+ *    matches the inbound proxy IP/CIDR — otherwise they reflect the raw Host
+ *    and the request's protocol.
  */
 export function getPublicRequestOrigin(request: FastifyRequest): string {
+  if (config.publicOrigin) {
+    return config.publicOrigin;
+  }
+
   const host = request.host || "localhost";
   const protocol = (request.protocol || "http").replace(/:$/, "");
-
   return `${protocol}://${host}`;
 }

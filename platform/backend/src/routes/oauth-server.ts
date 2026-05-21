@@ -107,18 +107,26 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const baseUrl = config.frontendBaseUrl;
+      const baseUrl = getPublicRequestOrigin(request);
+
+      // authorization_endpoint must be browser-facing (for session cookies).
+      // Use the frontend URL so the browser sends its session cookie via
+      // the catch-all /api/auth proxy. Server-to-server endpoints use the
+      // request Host so Docker containers can reach them directly.
+      const browserBaseUrl = config.frontendBaseUrl;
 
       // The issuer MUST match the JWT "iss" claim exactly. Pydantic's AnyHttpUrl
       // (used by MCP clients like Open WebUI) normalizes URLs by appending a
       // trailing slash when the path is empty. We include the trailing slash so
       // the JWT iss claim, the well-known issuer, and the normalized URL all match.
-      const issuer = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+      const issuer = browserBaseUrl.endsWith("/")
+        ? browserBaseUrl
+        : `${browserBaseUrl}/`;
 
       reply.type("application/json");
       return {
         issuer,
-        authorization_endpoint: `${baseUrl}${OAUTH_ENDPOINTS.authorize}`,
+        authorization_endpoint: `${browserBaseUrl}${OAUTH_ENDPOINTS.authorize}`,
         token_endpoint: `${baseUrl}${OAUTH_ENDPOINTS.token}`,
         registration_endpoint: `${baseUrl}${OAUTH_ENDPOINTS.register}`,
         jwks_uri: `${baseUrl}${OAUTH_ENDPOINTS.jwks}`,

@@ -54,6 +54,7 @@ export * from "./schedule-trigger";
 export * from "./secret";
 export * from "./secrets-manager";
 export * from "./session";
+export * from "./skill";
 export * from "./statistics";
 export * from "./task";
 export * from "./team";

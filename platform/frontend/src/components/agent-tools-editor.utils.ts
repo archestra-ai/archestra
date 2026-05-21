@@ -2,15 +2,24 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
   parseFullToolName,
+  SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
 } from "@shared";
 
 const DEFAULT_ARCHESTRA_TOOL_SHORT_NAME_SET = new Set<string>(
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
 );
+const SKILL_ARCHESTRA_TOOL_SHORT_NAME_SET = new Set<string>(
+  SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
+);
 
 /**
  * Given catalog items and a parallel array of tool lists, find the default
  * Archestra tools and return their IDs plus the catalog index.
+ *
+ * Pass `includeSkillTools: true` when the org has opted in (via the skills
+ * empty-state enable action) so the skill tools also appear pre-selected on
+ * the new agent form, mirroring the server-side `assignSkillToolsToAgent`
+ * behavior on save.
  *
  * Returns null if the Archestra catalog isn't found, tools aren't loaded,
  * or no default tools match.
@@ -18,6 +27,7 @@ const DEFAULT_ARCHESTRA_TOOL_SHORT_NAME_SET = new Set<string>(
 export function getDefaultArchestraToolIds(
   catalogItems: { id: string; name: string }[],
   toolsByCatalogIndex: ({ id: string; name: string }[] | undefined)[],
+  options: { includeSkillTools?: boolean } = {},
 ): { toolIds: Set<string>; catalogIndex: number } | null {
   const catalogIndex = catalogItems.findIndex(
     (c) => c.id === ARCHESTRA_MCP_CATALOG_ID,
@@ -31,10 +41,15 @@ export function getDefaultArchestraToolIds(
     tools
       .filter((t) => {
         const shortName = parseFullToolName(t.name).toolName;
-        return (
-          shortName !== null &&
-          DEFAULT_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName)
-        );
+        if (shortName === null) return false;
+        if (DEFAULT_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName)) return true;
+        if (
+          options.includeSkillTools &&
+          SKILL_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName)
+        ) {
+          return true;
+        }
+        return false;
       })
       .map((t) => t.id),
   );

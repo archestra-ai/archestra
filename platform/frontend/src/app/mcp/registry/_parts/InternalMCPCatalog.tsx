@@ -1494,13 +1494,6 @@ export function InternalMCPCatalog({
       <DeleteCatalogDialog
         item={deletingItem}
         onClose={() => setDeletingItem(null)}
-        installationCount={
-          deletingItem
-            ? installedServers?.filter(
-                (server) => server.catalogId === deletingItem.id,
-              ).length || 0
-            : 0
-        }
       />
 
       <RemoteServerInstallDialog

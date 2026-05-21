@@ -710,18 +710,24 @@ function composeManifest(skill: {
 }): string {
   const lines = [
     "---",
-    `name: ${skill.name}`,
-    `description: ${skill.description}`,
+    `name: ${yamlScalar(skill.name)}`,
+    `description: ${yamlScalar(skill.description)}`,
   ];
-  if (skill.license) lines.push(`license: ${skill.license}`);
-  if (skill.compatibility) lines.push(`compatibility: ${skill.compatibility}`);
+  if (skill.license) lines.push(`license: ${yamlScalar(skill.license)}`);
+  if (skill.compatibility) {
+    lines.push(`compatibility: ${yamlScalar(skill.compatibility)}`);
+  }
   const metadataEntries = Object.entries(skill.metadata ?? {});
   if (metadataEntries.length > 0) {
     lines.push("metadata:");
     for (const [key, value] of metadataEntries) {
-      lines.push(`  ${key}: ${value}`);
+      lines.push(`  ${yamlScalar(key)}: ${yamlScalar(value)}`);
     }
   }
   lines.push("---", "", skill.content);
   return lines.join("\n");
+}
+
+function yamlScalar(value: string): string {
+  return JSON.stringify(value);
 }

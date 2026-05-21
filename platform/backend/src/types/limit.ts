@@ -164,3 +164,16 @@ export interface LimitInfo {
   scope: LimitEntityType;
   models?: string[] | null;
 }
+
+export const DefaultUserLimitUsageSchema = z.object({
+  limitValue: z.number(),
+  cleanupInterval: LimitCleanupIntervalSchema,
+  models: z.array(z.string()).nullable(),
+  usage: z.object({
+    cost: z.number(),
+    tokensIn: z.number(),
+    tokensOut: z.number(),
+  }),
+});
+
+export type DefaultUserLimitUsage = z.infer<typeof DefaultUserLimitUsageSchema>;

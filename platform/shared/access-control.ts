@@ -819,6 +819,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteLimit]: {
     llmLimit: ["delete"],
   },
+  [RouteId.GetMyDefaultLimitUsage]: {},
   [RouteId.GetOptimizationRules]: {
     optimizationRule: ["read"],
   },

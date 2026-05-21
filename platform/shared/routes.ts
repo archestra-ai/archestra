@@ -327,6 +327,7 @@ export const RouteId = {
   GetLimit: "getLimit",
   UpdateLimit: "updateLimit",
   DeleteLimit: "deleteLimit",
+  GetMyDefaultLimitUsage: "getMyDefaultLimitUsage",
 
   // Organization Routes
   GetOrganization: "getOrganization",

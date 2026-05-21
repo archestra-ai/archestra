@@ -44,6 +44,106 @@ describe("limits routes", () => {
     await app.close();
   });
 
+  describe("GET /api/limits/me/default-usage", () => {
+    test("returns null when no default user limit is configured", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/limits/me/default-usage",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body).toBeNull();
+    });
+
+    test("returns default limit usage when configured and no custom user limit exists", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization({
+        defaultUserLimitValue: 100,
+        defaultUserLimitModel: null,
+        defaultUserLimitCleanupInterval: "1w",
+      });
+
+      const admin = user;
+
+      app = createFastifyInstance();
+      app.addHook("onRequest", async (request) => {
+        (
+          request as typeof request & {
+            organizationId: string;
+            user: User;
+          }
+        ).organizationId = org.id;
+        (request as typeof request & { user: User }).user = admin;
+      });
+
+      const { default: limitsRoutes } = await import("./limits");
+      await app.register(limitsRoutes);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/limits/me/default-usage",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body).toEqual({
+        limitValue: 100,
+        cleanupInterval: "1w",
+        models: null,
+        usage: {
+          cost: 0,
+          tokensIn: 0,
+          tokensOut: 0,
+        },
+      });
+    });
+
+    test("returns null when custom user limit exists", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization({
+        defaultUserLimitValue: 100,
+        defaultUserLimitModel: null,
+        defaultUserLimitCleanupInterval: "1w",
+      });
+
+      await LimitModel.create({
+        entityType: "user",
+        entityId: user.id,
+        limitType: "token_cost",
+        limitValue: 50,
+        model: null,
+      });
+
+      const admin = user;
+
+      app = createFastifyInstance();
+      app.addHook("onRequest", async (request) => {
+        (
+          request as typeof request & {
+            organizationId: string;
+            user: User;
+          }
+        ).organizationId = org.id;
+        (request as typeof request & { user: User }).user = admin;
+      });
+
+      const { default: limitsRoutes } = await import("./limits");
+      await app.register(limitsRoutes);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/limits/me/default-usage",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body).toBeNull();
+    });
+  });
+
   describe("GET /api/limits", () => {
     test("calls cleanupLimitsIfNeeded with allForOrganizationId before returning limits", async ({
       makeAgent,

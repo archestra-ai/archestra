@@ -19132,6 +19132,12 @@ export type GetChatConversationsResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                limitInfo?: {
+                    limitValue: number;
+                    resetsAt: string;
+                    scope: string;
+                    models?: Array<string> | null;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -19280,6 +19286,12 @@ export type CreateChatConversationResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                limitInfo?: {
+                    limitValue: number;
+                    resetsAt: string;
+                    scope: string;
+                    models?: Array<string> | null;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -19510,6 +19522,12 @@ export type GetChatConversationResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                limitInfo?: {
+                    limitValue: number;
+                    resetsAt: string;
+                    scope: string;
+                    models?: Array<string> | null;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -19662,6 +19680,12 @@ export type UpdateChatConversationResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                limitInfo?: {
+                    limitValue: number;
+                    resetsAt: string;
+                    scope: string;
+                    models?: Array<string> | null;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -19809,6 +19833,12 @@ export type ForkChatConversationResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                limitInfo?: {
+                    limitValue: number;
+                    resetsAt: string;
+                    scope: string;
+                    models?: Array<string> | null;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -20058,6 +20088,12 @@ export type CompactChatConversationResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    limitInfo?: {
+                        limitValue: number;
+                        resetsAt: string;
+                        scope: string;
+                        models?: Array<string> | null;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -20477,6 +20513,12 @@ export type GetSharedConversationResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                limitInfo?: {
+                    limitValue: number;
+                    resetsAt: string;
+                    scope: string;
+                    models?: Array<string> | null;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -20625,6 +20667,12 @@ export type ForkSharedConversationResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                limitInfo?: {
+                    limitValue: number;
+                    resetsAt: string;
+                    scope: string;
+                    models?: Array<string> | null;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -20775,6 +20823,12 @@ export type GenerateChatConversationTitleResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                limitInfo?: {
+                    limitValue: number;
+                    resetsAt: string;
+                    scope: string;
+                    models?: Array<string> | null;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -20924,6 +20978,12 @@ export type UpdateChatMessageResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                limitInfo?: {
+                    limitValue: number;
+                    resetsAt: string;
+                    scope: string;
+                    models?: Array<string> | null;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -23944,6 +24004,12 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    limitInfo?: {
+                        limitValue: number;
+                        resetsAt: string;
+                        scope: string;
+                        models?: Array<string> | null;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -24127,6 +24193,12 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    limitInfo?: {
+                        limitValue: number;
+                        resetsAt: string;
+                        scope: string;
+                        models?: Array<string> | null;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -24216,6 +24288,12 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    limitInfo?: {
+                        limitValue: number;
+                        resetsAt: string;
+                        scope: string;
+                        models?: Array<string> | null;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -24281,6 +24359,12 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    limitInfo?: {
+                        limitValue: number;
+                        resetsAt: string;
+                        scope: string;
+                        models?: Array<string> | null;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -24348,6 +24432,12 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    limitInfo?: {
+                        limitValue: number;
+                        resetsAt: string;
+                        scope: string;
+                        models?: Array<string> | null;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -24789,6 +24879,12 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    limitInfo?: {
+                        limitValue: number;
+                        resetsAt: string;
+                        scope: string;
+                        models?: Array<string> | null;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -24856,6 +24952,12 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    limitInfo?: {
+                        limitValue: number;
+                        resetsAt: string;
+                        scope: string;
+                        models?: Array<string> | null;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -24923,6 +25025,12 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    limitInfo?: {
+                        limitValue: number;
+                        resetsAt: string;
+                        scope: string;
+                        models?: Array<string> | null;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -24990,6 +25098,12 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    limitInfo?: {
+                        limitValue: number;
+                        resetsAt: string;
+                        scope: string;
+                        models?: Array<string> | null;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25057,6 +25171,12 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    limitInfo?: {
+                        limitValue: number;
+                        resetsAt: string;
+                        scope: string;
+                        models?: Array<string> | null;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25124,6 +25244,12 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    limitInfo?: {
+                        limitValue: number;
+                        resetsAt: string;
+                        scope: string;
+                        models?: Array<string> | null;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25191,6 +25317,12 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    limitInfo?: {
+                        limitValue: number;
+                        resetsAt: string;
+                        scope: string;
+                        models?: Array<string> | null;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25258,6 +25390,12 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    limitInfo?: {
+                        limitValue: number;
+                        resetsAt: string;
+                        scope: string;
+                        models?: Array<string> | null;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25323,6 +25461,12 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    limitInfo?: {
+                        limitValue: number;
+                        resetsAt: string;
+                        scope: string;
+                        models?: Array<string> | null;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25388,6 +25532,12 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    limitInfo?: {
+                        limitValue: number;
+                        resetsAt: string;
+                        scope: string;
+                        models?: Array<string> | null;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25455,6 +25605,12 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    limitInfo?: {
+                        limitValue: number;
+                        resetsAt: string;
+                        scope: string;
+                        models?: Array<string> | null;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25522,6 +25678,12 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    limitInfo?: {
+                        limitValue: number;
+                        resetsAt: string;
+                        scope: string;
+                        models?: Array<string> | null;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25589,6 +25751,12 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    limitInfo?: {
+                        limitValue: number;
+                        resetsAt: string;
+                        scope: string;
+                        models?: Array<string> | null;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25723,6 +25891,12 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    limitInfo?: {
+                        limitValue: number;
+                        resetsAt: string;
+                        scope: string;
+                        models?: Array<string> | null;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25906,6 +26080,12 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    limitInfo?: {
+                        limitValue: number;
+                        resetsAt: string;
+                        scope: string;
+                        models?: Array<string> | null;
+                    };
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -26387,6 +26567,12 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                limitInfo?: {
+                    limitValue: number;
+                    resetsAt: string;
+                    scope: string;
+                    models?: Array<string> | null;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -26570,6 +26756,12 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                limitInfo?: {
+                    limitValue: number;
+                    resetsAt: string;
+                    scope: string;
+                    models?: Array<string> | null;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -26659,6 +26851,12 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                limitInfo?: {
+                    limitValue: number;
+                    resetsAt: string;
+                    scope: string;
+                    models?: Array<string> | null;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -26724,6 +26922,12 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                limitInfo?: {
+                    limitValue: number;
+                    resetsAt: string;
+                    scope: string;
+                    models?: Array<string> | null;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -26791,6 +26995,12 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                limitInfo?: {
+                    limitValue: number;
+                    resetsAt: string;
+                    scope: string;
+                    models?: Array<string> | null;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27232,6 +27442,12 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                limitInfo?: {
+                    limitValue: number;
+                    resetsAt: string;
+                    scope: string;
+                    models?: Array<string> | null;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27299,6 +27515,12 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                limitInfo?: {
+                    limitValue: number;
+                    resetsAt: string;
+                    scope: string;
+                    models?: Array<string> | null;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27366,6 +27588,12 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                limitInfo?: {
+                    limitValue: number;
+                    resetsAt: string;
+                    scope: string;
+                    models?: Array<string> | null;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27433,6 +27661,12 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                limitInfo?: {
+                    limitValue: number;
+                    resetsAt: string;
+                    scope: string;
+                    models?: Array<string> | null;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27500,6 +27734,12 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                limitInfo?: {
+                    limitValue: number;
+                    resetsAt: string;
+                    scope: string;
+                    models?: Array<string> | null;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27567,6 +27807,12 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                limitInfo?: {
+                    limitValue: number;
+                    resetsAt: string;
+                    scope: string;
+                    models?: Array<string> | null;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27634,6 +27880,12 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                limitInfo?: {
+                    limitValue: number;
+                    resetsAt: string;
+                    scope: string;
+                    models?: Array<string> | null;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27701,6 +27953,12 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                limitInfo?: {
+                    limitValue: number;
+                    resetsAt: string;
+                    scope: string;
+                    models?: Array<string> | null;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27766,6 +28024,12 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                limitInfo?: {
+                    limitValue: number;
+                    resetsAt: string;
+                    scope: string;
+                    models?: Array<string> | null;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27831,6 +28095,12 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                limitInfo?: {
+                    limitValue: number;
+                    resetsAt: string;
+                    scope: string;
+                    models?: Array<string> | null;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27898,6 +28168,12 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                limitInfo?: {
+                    limitValue: number;
+                    resetsAt: string;
+                    scope: string;
+                    models?: Array<string> | null;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27965,6 +28241,12 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                limitInfo?: {
+                    limitValue: number;
+                    resetsAt: string;
+                    scope: string;
+                    models?: Array<string> | null;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -28032,6 +28314,12 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                limitInfo?: {
+                    limitValue: number;
+                    resetsAt: string;
+                    scope: string;
+                    models?: Array<string> | null;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -28166,6 +28454,12 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                limitInfo?: {
+                    limitValue: number;
+                    resetsAt: string;
+                    scope: string;
+                    models?: Array<string> | null;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -28349,6 +28643,12 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                limitInfo?: {
+                    limitValue: number;
+                    resetsAt: string;
+                    scope: string;
+                    models?: Array<string> | null;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -34471,6 +34771,96 @@ export type UpdateLimitResponses = {
 };
 
 export type UpdateLimitResponse = UpdateLimitResponses[keyof UpdateLimitResponses];
+
+export type GetMyDefaultLimitUsageData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/limits/me/default-usage';
+};
+
+export type GetMyDefaultLimitUsageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetMyDefaultLimitUsageError = GetMyDefaultLimitUsageErrors[keyof GetMyDefaultLimitUsageErrors];
+
+export type GetMyDefaultLimitUsageResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        limitValue: number;
+        cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        models: Array<string> | null;
+        usage: {
+            cost: number;
+            tokensIn: number;
+            tokensOut: number;
+        };
+    } | null;
+};
+
+export type GetMyDefaultLimitUsageResponse = GetMyDefaultLimitUsageResponses[keyof GetMyDefaultLimitUsageResponses];
 
 export type GetLlmModelsData = {
     body?: never;
@@ -46463,6 +46853,12 @@ export type CreateScheduleTriggerRunConversationResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                limitInfo?: {
+                    limitValue: number;
+                    resetsAt: string;
+                    scope: string;
+                    models?: Array<string> | null;
+                };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;

@@ -6,6 +6,7 @@ import {
   ApiError,
   CreateLimitSchema,
   constructResponseSchema,
+  DefaultUserLimitUsageSchema,
   DeleteObjectResponseSchema,
   LimitEntityTypeSchema,
   LimitTypeSchema,
@@ -161,6 +162,33 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send({ success: true });
+    },
+  );
+
+  fastify.get(
+    "/api/limits/me/default-usage",
+    {
+      schema: {
+        operationId: RouteId.GetMyDefaultLimitUsage,
+        description:
+          "Get the current user's default limit usage (only if no custom user limit exists)",
+        tags: ["Limits"],
+        response: constructResponseSchema(
+          DefaultUserLimitUsageSchema.nullable(),
+        ),
+      },
+    },
+    async ({ organizationId, user }, reply) => {
+      if (!organizationId || !user?.id) {
+        throw new ApiError(401, "Unauthorized");
+      }
+
+      const usage = await LimitModel.getDefaultUserLimitUsageForUser({
+        organizationId,
+        userId: user.id,
+      });
+
+      return reply.send(usage);
     },
   );
 };

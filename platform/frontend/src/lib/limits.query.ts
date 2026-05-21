@@ -2,8 +2,14 @@ import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-const { getLimits, createLimit, getLimit, updateLimit, deleteLimit } =
-  archestraApiSdk;
+const {
+  getLimits,
+  createLimit,
+  getLimit,
+  updateLimit,
+  deleteLimit,
+  getMyDefaultLimitUsage,
+} = archestraApiSdk;
 
 type LimitsQuery = NonNullable<archestraApiTypes.GetLimitsData["query"]>;
 type LimitsParams = Partial<LimitsQuery>;
@@ -102,5 +108,17 @@ export function useDeleteLimit() {
       console.error("Delete limit error:", error);
       toast.error("Failed to delete limit");
     },
+  });
+}
+
+export function useMyDefaultLimitUsage() {
+  return useQuery({
+    queryKey: ["limits", "me", "default-usage"],
+    queryFn: async () => {
+      const response = await getMyDefaultLimitUsage();
+      return response.data;
+    },
+    refetchInterval: 5000,
+    refetchOnWindowFocus: true,
   });
 }

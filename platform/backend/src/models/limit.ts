@@ -533,6 +533,54 @@ class LimitModel {
 
     return limits;
   }
+
+  static async getDefaultUserLimitUsageForUser(params: {
+    organizationId: string;
+    userId: string;
+  }): Promise<{
+    limitValue: number;
+    cleanupInterval: LimitCleanupInterval;
+    models: string[] | null;
+    usage: { cost: number; tokensIn: number; tokensOut: number };
+  } | null> {
+    const [organization] = await db
+      .select({
+        defaultUserLimitValue: schema.organizationsTable.defaultUserLimitValue,
+        defaultUserLimitModel: schema.organizationsTable.defaultUserLimitModel,
+        defaultUserLimitCleanupInterval:
+          schema.organizationsTable.defaultUserLimitCleanupInterval,
+      })
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, params.organizationId))
+      .limit(1);
+
+    if (!organization?.defaultUserLimitValue) {
+      return null;
+    }
+
+    const customUserLimits = await LimitModel.findLimitsForValidation(
+      "user",
+      params.userId,
+      "token_cost",
+    );
+    if (customUserLimits.length > 0) {
+      return null;
+    }
+
+    const usage = await getDefaultUserLimitUsage({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      models: normalizeLimitModels(organization.defaultUserLimitModel),
+      cleanupInterval: organization.defaultUserLimitCleanupInterval ?? "1w",
+    });
+
+    return {
+      limitValue: organization.defaultUserLimitValue,
+      cleanupInterval: organization.defaultUserLimitCleanupInterval ?? "1w",
+      models: normalizeLimitModels(organization.defaultUserLimitModel),
+      usage,
+    };
+  }
 }
 
 /**

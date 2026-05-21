@@ -6,6 +6,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { ChangePasswordDialog } from "@/app/settings/account/_components/change-password-dialog";
 import { LightDarkToggle } from "@/app/settings/account/_components/light-dark-toggle";
+import { LimitUsageCard } from "@/app/settings/account/_components/limit-usage-card";
 import { useSetSettingsAction } from "@/app/settings/layout";
 import { LoadingSpinner } from "@/components/loading";
 import { PersonalTokenCard } from "@/components/settings/personal-token-card";
@@ -51,6 +52,7 @@ function AccountSettingsContent() {
     <>
       <SettingsSectionStack>
         <RolePermissionsCard />
+        <LimitUsageCard />
         <PersonalTokenCard />
         {organization?.showTwoFactor && (
           <TwoFactorCard classNames={{ base: "w-full" }} />

@@ -65876,6 +65876,33 @@
                                 "spanId": {
                                   "type": "string"
                                 },
+                                "limitInfo": {
+                                  "type": "object",
+                                  "properties": {
+                                    "limitValue": {
+                                      "type": "number"
+                                    },
+                                    "resetsAt": {
+                                      "type": "string"
+                                    },
+                                    "scope": {
+                                      "type": "string"
+                                    },
+                                    "models": {
+                                      "nullable": true,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "limitValue",
+                                    "resetsAt",
+                                    "scope"
+                                  ],
+                                  "additionalProperties": false
+                                },
                                 "originalError": {
                                   "type": "object",
                                   "properties": {
@@ -66541,6 +66568,33 @@
                               "spanId": {
                                 "type": "string"
                               },
+                              "limitInfo": {
+                                "type": "object",
+                                "properties": {
+                                  "limitValue": {
+                                    "type": "number"
+                                  },
+                                  "resetsAt": {
+                                    "type": "string"
+                                  },
+                                  "scope": {
+                                    "type": "string"
+                                  },
+                                  "models": {
+                                    "nullable": true,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "limitValue",
+                                  "resetsAt",
+                                  "scope"
+                                ],
+                                "additionalProperties": false
+                              },
                               "originalError": {
                                 "type": "object",
                                 "properties": {
@@ -67182,6 +67236,33 @@
                               },
                               "spanId": {
                                 "type": "string"
+                              },
+                              "limitInfo": {
+                                "type": "object",
+                                "properties": {
+                                  "limitValue": {
+                                    "type": "number"
+                                  },
+                                  "resetsAt": {
+                                    "type": "string"
+                                  },
+                                  "scope": {
+                                    "type": "string"
+                                  },
+                                  "models": {
+                                    "nullable": true,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "limitValue",
+                                  "resetsAt",
+                                  "scope"
+                                ],
+                                "additionalProperties": false
                               },
                               "originalError": {
                                 "type": "object",
@@ -67865,6 +67946,33 @@
                               },
                               "spanId": {
                                 "type": "string"
+                              },
+                              "limitInfo": {
+                                "type": "object",
+                                "properties": {
+                                  "limitValue": {
+                                    "type": "number"
+                                  },
+                                  "resetsAt": {
+                                    "type": "string"
+                                  },
+                                  "scope": {
+                                    "type": "string"
+                                  },
+                                  "models": {
+                                    "nullable": true,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "limitValue",
+                                  "resetsAt",
+                                  "scope"
+                                ],
+                                "additionalProperties": false
                               },
                               "originalError": {
                                 "type": "object",
@@ -68801,6 +68909,33 @@
                               },
                               "spanId": {
                                 "type": "string"
+                              },
+                              "limitInfo": {
+                                "type": "object",
+                                "properties": {
+                                  "limitValue": {
+                                    "type": "number"
+                                  },
+                                  "resetsAt": {
+                                    "type": "string"
+                                  },
+                                  "scope": {
+                                    "type": "string"
+                                  },
+                                  "models": {
+                                    "nullable": true,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "limitValue",
+                                  "resetsAt",
+                                  "scope"
+                                ],
+                                "additionalProperties": false
                               },
                               "originalError": {
                                 "type": "object",
@@ -69810,6 +69945,33 @@
                                   },
                                   "spanId": {
                                     "type": "string"
+                                  },
+                                  "limitInfo": {
+                                    "type": "object",
+                                    "properties": {
+                                      "limitValue": {
+                                        "type": "number"
+                                      },
+                                      "resetsAt": {
+                                        "type": "string"
+                                      },
+                                      "scope": {
+                                        "type": "string"
+                                      },
+                                      "models": {
+                                        "nullable": true,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "limitValue",
+                                      "resetsAt",
+                                      "scope"
+                                    ],
+                                    "additionalProperties": false
                                   },
                                   "originalError": {
                                     "type": "object",
@@ -71409,6 +71571,33 @@
                               "spanId": {
                                 "type": "string"
                               },
+                              "limitInfo": {
+                                "type": "object",
+                                "properties": {
+                                  "limitValue": {
+                                    "type": "number"
+                                  },
+                                  "resetsAt": {
+                                    "type": "string"
+                                  },
+                                  "scope": {
+                                    "type": "string"
+                                  },
+                                  "models": {
+                                    "nullable": true,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "limitValue",
+                                  "resetsAt",
+                                  "scope"
+                                ],
+                                "additionalProperties": false
+                              },
                               "originalError": {
                                 "type": "object",
                                 "properties": {
@@ -72075,6 +72264,33 @@
                               "spanId": {
                                 "type": "string"
                               },
+                              "limitInfo": {
+                                "type": "object",
+                                "properties": {
+                                  "limitValue": {
+                                    "type": "number"
+                                  },
+                                  "resetsAt": {
+                                    "type": "string"
+                                  },
+                                  "scope": {
+                                    "type": "string"
+                                  },
+                                  "models": {
+                                    "nullable": true,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "limitValue",
+                                  "resetsAt",
+                                  "scope"
+                                ],
+                                "additionalProperties": false
+                              },
                               "originalError": {
                                 "type": "object",
                                 "properties": {
@@ -72732,6 +72948,33 @@
                               },
                               "spanId": {
                                 "type": "string"
+                              },
+                              "limitInfo": {
+                                "type": "object",
+                                "properties": {
+                                  "limitValue": {
+                                    "type": "number"
+                                  },
+                                  "resetsAt": {
+                                    "type": "string"
+                                  },
+                                  "scope": {
+                                    "type": "string"
+                                  },
+                                  "models": {
+                                    "nullable": true,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "limitValue",
+                                  "resetsAt",
+                                  "scope"
+                                ],
+                                "additionalProperties": false
                               },
                               "originalError": {
                                 "type": "object",
@@ -73400,6 +73643,33 @@
                               },
                               "spanId": {
                                 "type": "string"
+                              },
+                              "limitInfo": {
+                                "type": "object",
+                                "properties": {
+                                  "limitValue": {
+                                    "type": "number"
+                                  },
+                                  "resetsAt": {
+                                    "type": "string"
+                                  },
+                                  "scope": {
+                                    "type": "string"
+                                  },
+                                  "models": {
+                                    "nullable": true,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "limitValue",
+                                  "resetsAt",
+                                  "scope"
+                                ],
+                                "additionalProperties": false
                               },
                               "originalError": {
                                 "type": "object",
@@ -83415,6 +83685,33 @@
                                         "spanId": {
                                           "type": "string"
                                         },
+                                        "limitInfo": {
+                                          "type": "object",
+                                          "properties": {
+                                            "limitValue": {
+                                              "type": "number"
+                                            },
+                                            "resetsAt": {
+                                              "type": "string"
+                                            },
+                                            "scope": {
+                                              "type": "string"
+                                            },
+                                            "models": {
+                                              "nullable": true,
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "limitValue",
+                                            "resetsAt",
+                                            "scope"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -84248,6 +84545,33 @@
                                         "spanId": {
                                           "type": "string"
                                         },
+                                        "limitInfo": {
+                                          "type": "object",
+                                          "properties": {
+                                            "limitValue": {
+                                              "type": "number"
+                                            },
+                                            "resetsAt": {
+                                              "type": "string"
+                                            },
+                                            "scope": {
+                                              "type": "string"
+                                            },
+                                            "models": {
+                                              "nullable": true,
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "limitValue",
+                                            "resetsAt",
+                                            "scope"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -84783,6 +85107,33 @@
                                         "spanId": {
                                           "type": "string"
                                         },
+                                        "limitInfo": {
+                                          "type": "object",
+                                          "properties": {
+                                            "limitValue": {
+                                              "type": "number"
+                                            },
+                                            "resetsAt": {
+                                              "type": "string"
+                                            },
+                                            "scope": {
+                                              "type": "string"
+                                            },
+                                            "models": {
+                                              "nullable": true,
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "limitValue",
+                                            "resetsAt",
+                                            "scope"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -85181,6 +85532,33 @@
                                         },
                                         "spanId": {
                                           "type": "string"
+                                        },
+                                        "limitInfo": {
+                                          "type": "object",
+                                          "properties": {
+                                            "limitValue": {
+                                              "type": "number"
+                                            },
+                                            "resetsAt": {
+                                              "type": "string"
+                                            },
+                                            "scope": {
+                                              "type": "string"
+                                            },
+                                            "models": {
+                                              "nullable": true,
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "limitValue",
+                                            "resetsAt",
+                                            "scope"
+                                          ],
+                                          "additionalProperties": false
                                         },
                                         "originalError": {
                                           "type": "object",
@@ -85591,6 +85969,33 @@
                                         },
                                         "spanId": {
                                           "type": "string"
+                                        },
+                                        "limitInfo": {
+                                          "type": "object",
+                                          "properties": {
+                                            "limitValue": {
+                                              "type": "number"
+                                            },
+                                            "resetsAt": {
+                                              "type": "string"
+                                            },
+                                            "scope": {
+                                              "type": "string"
+                                            },
+                                            "models": {
+                                              "nullable": true,
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "limitValue",
+                                            "resetsAt",
+                                            "scope"
+                                          ],
+                                          "additionalProperties": false
                                         },
                                         "originalError": {
                                           "type": "object",
@@ -87714,6 +88119,33 @@
                                         "spanId": {
                                           "type": "string"
                                         },
+                                        "limitInfo": {
+                                          "type": "object",
+                                          "properties": {
+                                            "limitValue": {
+                                              "type": "number"
+                                            },
+                                            "resetsAt": {
+                                              "type": "string"
+                                            },
+                                            "scope": {
+                                              "type": "string"
+                                            },
+                                            "models": {
+                                              "nullable": true,
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "limitValue",
+                                            "resetsAt",
+                                            "scope"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -88123,6 +88555,33 @@
                                         },
                                         "spanId": {
                                           "type": "string"
+                                        },
+                                        "limitInfo": {
+                                          "type": "object",
+                                          "properties": {
+                                            "limitValue": {
+                                              "type": "number"
+                                            },
+                                            "resetsAt": {
+                                              "type": "string"
+                                            },
+                                            "scope": {
+                                              "type": "string"
+                                            },
+                                            "models": {
+                                              "nullable": true,
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "limitValue",
+                                            "resetsAt",
+                                            "scope"
+                                          ],
+                                          "additionalProperties": false
                                         },
                                         "originalError": {
                                           "type": "object",
@@ -88534,6 +88993,33 @@
                                         "spanId": {
                                           "type": "string"
                                         },
+                                        "limitInfo": {
+                                          "type": "object",
+                                          "properties": {
+                                            "limitValue": {
+                                              "type": "number"
+                                            },
+                                            "resetsAt": {
+                                              "type": "string"
+                                            },
+                                            "scope": {
+                                              "type": "string"
+                                            },
+                                            "models": {
+                                              "nullable": true,
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "limitValue",
+                                            "resetsAt",
+                                            "scope"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -88943,6 +89429,33 @@
                                         },
                                         "spanId": {
                                           "type": "string"
+                                        },
+                                        "limitInfo": {
+                                          "type": "object",
+                                          "properties": {
+                                            "limitValue": {
+                                              "type": "number"
+                                            },
+                                            "resetsAt": {
+                                              "type": "string"
+                                            },
+                                            "scope": {
+                                              "type": "string"
+                                            },
+                                            "models": {
+                                              "nullable": true,
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "limitValue",
+                                            "resetsAt",
+                                            "scope"
+                                          ],
+                                          "additionalProperties": false
                                         },
                                         "originalError": {
                                           "type": "object",
@@ -89354,6 +89867,33 @@
                                         "spanId": {
                                           "type": "string"
                                         },
+                                        "limitInfo": {
+                                          "type": "object",
+                                          "properties": {
+                                            "limitValue": {
+                                              "type": "number"
+                                            },
+                                            "resetsAt": {
+                                              "type": "string"
+                                            },
+                                            "scope": {
+                                              "type": "string"
+                                            },
+                                            "models": {
+                                              "nullable": true,
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "limitValue",
+                                            "resetsAt",
+                                            "scope"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -89763,6 +90303,33 @@
                                         },
                                         "spanId": {
                                           "type": "string"
+                                        },
+                                        "limitInfo": {
+                                          "type": "object",
+                                          "properties": {
+                                            "limitValue": {
+                                              "type": "number"
+                                            },
+                                            "resetsAt": {
+                                              "type": "string"
+                                            },
+                                            "scope": {
+                                              "type": "string"
+                                            },
+                                            "models": {
+                                              "nullable": true,
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "limitValue",
+                                            "resetsAt",
+                                            "scope"
+                                          ],
+                                          "additionalProperties": false
                                         },
                                         "originalError": {
                                           "type": "object",
@@ -90174,6 +90741,33 @@
                                         "spanId": {
                                           "type": "string"
                                         },
+                                        "limitInfo": {
+                                          "type": "object",
+                                          "properties": {
+                                            "limitValue": {
+                                              "type": "number"
+                                            },
+                                            "resetsAt": {
+                                              "type": "string"
+                                            },
+                                            "scope": {
+                                              "type": "string"
+                                            },
+                                            "models": {
+                                              "nullable": true,
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "limitValue",
+                                            "resetsAt",
+                                            "scope"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -90584,6 +91178,33 @@
                                         "spanId": {
                                           "type": "string"
                                         },
+                                        "limitInfo": {
+                                          "type": "object",
+                                          "properties": {
+                                            "limitValue": {
+                                              "type": "number"
+                                            },
+                                            "resetsAt": {
+                                              "type": "string"
+                                            },
+                                            "scope": {
+                                              "type": "string"
+                                            },
+                                            "models": {
+                                              "nullable": true,
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "limitValue",
+                                            "resetsAt",
+                                            "scope"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -90983,6 +91604,33 @@
                                         "spanId": {
                                           "type": "string"
                                         },
+                                        "limitInfo": {
+                                          "type": "object",
+                                          "properties": {
+                                            "limitValue": {
+                                              "type": "number"
+                                            },
+                                            "resetsAt": {
+                                              "type": "string"
+                                            },
+                                            "scope": {
+                                              "type": "string"
+                                            },
+                                            "models": {
+                                              "nullable": true,
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "limitValue",
+                                            "resetsAt",
+                                            "scope"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -91381,6 +92029,33 @@
                                         },
                                         "spanId": {
                                           "type": "string"
+                                        },
+                                        "limitInfo": {
+                                          "type": "object",
+                                          "properties": {
+                                            "limitValue": {
+                                              "type": "number"
+                                            },
+                                            "resetsAt": {
+                                              "type": "string"
+                                            },
+                                            "scope": {
+                                              "type": "string"
+                                            },
+                                            "models": {
+                                              "nullable": true,
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "limitValue",
+                                            "resetsAt",
+                                            "scope"
+                                          ],
+                                          "additionalProperties": false
                                         },
                                         "originalError": {
                                           "type": "object",
@@ -91792,6 +92467,33 @@
                                         "spanId": {
                                           "type": "string"
                                         },
+                                        "limitInfo": {
+                                          "type": "object",
+                                          "properties": {
+                                            "limitValue": {
+                                              "type": "number"
+                                            },
+                                            "resetsAt": {
+                                              "type": "string"
+                                            },
+                                            "scope": {
+                                              "type": "string"
+                                            },
+                                            "models": {
+                                              "nullable": true,
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "limitValue",
+                                            "resetsAt",
+                                            "scope"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -92202,6 +92904,33 @@
                                         "spanId": {
                                           "type": "string"
                                         },
+                                        "limitInfo": {
+                                          "type": "object",
+                                          "properties": {
+                                            "limitValue": {
+                                              "type": "number"
+                                            },
+                                            "resetsAt": {
+                                              "type": "string"
+                                            },
+                                            "scope": {
+                                              "type": "string"
+                                            },
+                                            "models": {
+                                              "nullable": true,
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "limitValue",
+                                            "resetsAt",
+                                            "scope"
+                                          ],
+                                          "additionalProperties": false
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -92611,6 +93340,33 @@
                                         },
                                         "spanId": {
                                           "type": "string"
+                                        },
+                                        "limitInfo": {
+                                          "type": "object",
+                                          "properties": {
+                                            "limitValue": {
+                                              "type": "number"
+                                            },
+                                            "resetsAt": {
+                                              "type": "string"
+                                            },
+                                            "scope": {
+                                              "type": "string"
+                                            },
+                                            "models": {
+                                              "nullable": true,
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "limitValue",
+                                            "resetsAt",
+                                            "scope"
+                                          ],
+                                          "additionalProperties": false
                                         },
                                         "originalError": {
                                           "type": "object",
@@ -93247,6 +94003,33 @@
                                         },
                                         "spanId": {
                                           "type": "string"
+                                        },
+                                        "limitInfo": {
+                                          "type": "object",
+                                          "properties": {
+                                            "limitValue": {
+                                              "type": "number"
+                                            },
+                                            "resetsAt": {
+                                              "type": "string"
+                                            },
+                                            "scope": {
+                                              "type": "string"
+                                            },
+                                            "models": {
+                                              "nullable": true,
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "limitValue",
+                                            "resetsAt",
+                                            "scope"
+                                          ],
+                                          "additionalProperties": false
                                         },
                                         "originalError": {
                                           "type": "object",
@@ -94080,6 +94863,33 @@
                                         },
                                         "spanId": {
                                           "type": "string"
+                                        },
+                                        "limitInfo": {
+                                          "type": "object",
+                                          "properties": {
+                                            "limitValue": {
+                                              "type": "number"
+                                            },
+                                            "resetsAt": {
+                                              "type": "string"
+                                            },
+                                            "scope": {
+                                              "type": "string"
+                                            },
+                                            "models": {
+                                              "nullable": true,
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "limitValue",
+                                            "resetsAt",
+                                            "scope"
+                                          ],
+                                          "additionalProperties": false
                                         },
                                         "originalError": {
                                           "type": "object",
@@ -95964,6 +96774,33 @@
                                   "spanId": {
                                     "type": "string"
                                   },
+                                  "limitInfo": {
+                                    "type": "object",
+                                    "properties": {
+                                      "limitValue": {
+                                        "type": "number"
+                                      },
+                                      "resetsAt": {
+                                        "type": "string"
+                                      },
+                                      "scope": {
+                                        "type": "string"
+                                      },
+                                      "models": {
+                                        "nullable": true,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "limitValue",
+                                      "resetsAt",
+                                      "scope"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -96797,6 +97634,33 @@
                                   "spanId": {
                                     "type": "string"
                                   },
+                                  "limitInfo": {
+                                    "type": "object",
+                                    "properties": {
+                                      "limitValue": {
+                                        "type": "number"
+                                      },
+                                      "resetsAt": {
+                                        "type": "string"
+                                      },
+                                      "scope": {
+                                        "type": "string"
+                                      },
+                                      "models": {
+                                        "nullable": true,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "limitValue",
+                                      "resetsAt",
+                                      "scope"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -97332,6 +98196,33 @@
                                   "spanId": {
                                     "type": "string"
                                   },
+                                  "limitInfo": {
+                                    "type": "object",
+                                    "properties": {
+                                      "limitValue": {
+                                        "type": "number"
+                                      },
+                                      "resetsAt": {
+                                        "type": "string"
+                                      },
+                                      "scope": {
+                                        "type": "string"
+                                      },
+                                      "models": {
+                                        "nullable": true,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "limitValue",
+                                      "resetsAt",
+                                      "scope"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -97730,6 +98621,33 @@
                                   },
                                   "spanId": {
                                     "type": "string"
+                                  },
+                                  "limitInfo": {
+                                    "type": "object",
+                                    "properties": {
+                                      "limitValue": {
+                                        "type": "number"
+                                      },
+                                      "resetsAt": {
+                                        "type": "string"
+                                      },
+                                      "scope": {
+                                        "type": "string"
+                                      },
+                                      "models": {
+                                        "nullable": true,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "limitValue",
+                                      "resetsAt",
+                                      "scope"
+                                    ],
+                                    "additionalProperties": false
                                   },
                                   "originalError": {
                                     "type": "object",
@@ -98140,6 +99058,33 @@
                                   },
                                   "spanId": {
                                     "type": "string"
+                                  },
+                                  "limitInfo": {
+                                    "type": "object",
+                                    "properties": {
+                                      "limitValue": {
+                                        "type": "number"
+                                      },
+                                      "resetsAt": {
+                                        "type": "string"
+                                      },
+                                      "scope": {
+                                        "type": "string"
+                                      },
+                                      "models": {
+                                        "nullable": true,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "limitValue",
+                                      "resetsAt",
+                                      "scope"
+                                    ],
+                                    "additionalProperties": false
                                   },
                                   "originalError": {
                                     "type": "object",
@@ -100263,6 +101208,33 @@
                                   "spanId": {
                                     "type": "string"
                                   },
+                                  "limitInfo": {
+                                    "type": "object",
+                                    "properties": {
+                                      "limitValue": {
+                                        "type": "number"
+                                      },
+                                      "resetsAt": {
+                                        "type": "string"
+                                      },
+                                      "scope": {
+                                        "type": "string"
+                                      },
+                                      "models": {
+                                        "nullable": true,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "limitValue",
+                                      "resetsAt",
+                                      "scope"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -100672,6 +101644,33 @@
                                   },
                                   "spanId": {
                                     "type": "string"
+                                  },
+                                  "limitInfo": {
+                                    "type": "object",
+                                    "properties": {
+                                      "limitValue": {
+                                        "type": "number"
+                                      },
+                                      "resetsAt": {
+                                        "type": "string"
+                                      },
+                                      "scope": {
+                                        "type": "string"
+                                      },
+                                      "models": {
+                                        "nullable": true,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "limitValue",
+                                      "resetsAt",
+                                      "scope"
+                                    ],
+                                    "additionalProperties": false
                                   },
                                   "originalError": {
                                     "type": "object",
@@ -101083,6 +102082,33 @@
                                   "spanId": {
                                     "type": "string"
                                   },
+                                  "limitInfo": {
+                                    "type": "object",
+                                    "properties": {
+                                      "limitValue": {
+                                        "type": "number"
+                                      },
+                                      "resetsAt": {
+                                        "type": "string"
+                                      },
+                                      "scope": {
+                                        "type": "string"
+                                      },
+                                      "models": {
+                                        "nullable": true,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "limitValue",
+                                      "resetsAt",
+                                      "scope"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -101492,6 +102518,33 @@
                                   },
                                   "spanId": {
                                     "type": "string"
+                                  },
+                                  "limitInfo": {
+                                    "type": "object",
+                                    "properties": {
+                                      "limitValue": {
+                                        "type": "number"
+                                      },
+                                      "resetsAt": {
+                                        "type": "string"
+                                      },
+                                      "scope": {
+                                        "type": "string"
+                                      },
+                                      "models": {
+                                        "nullable": true,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "limitValue",
+                                      "resetsAt",
+                                      "scope"
+                                    ],
+                                    "additionalProperties": false
                                   },
                                   "originalError": {
                                     "type": "object",
@@ -101903,6 +102956,33 @@
                                   "spanId": {
                                     "type": "string"
                                   },
+                                  "limitInfo": {
+                                    "type": "object",
+                                    "properties": {
+                                      "limitValue": {
+                                        "type": "number"
+                                      },
+                                      "resetsAt": {
+                                        "type": "string"
+                                      },
+                                      "scope": {
+                                        "type": "string"
+                                      },
+                                      "models": {
+                                        "nullable": true,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "limitValue",
+                                      "resetsAt",
+                                      "scope"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -102312,6 +103392,33 @@
                                   },
                                   "spanId": {
                                     "type": "string"
+                                  },
+                                  "limitInfo": {
+                                    "type": "object",
+                                    "properties": {
+                                      "limitValue": {
+                                        "type": "number"
+                                      },
+                                      "resetsAt": {
+                                        "type": "string"
+                                      },
+                                      "scope": {
+                                        "type": "string"
+                                      },
+                                      "models": {
+                                        "nullable": true,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "limitValue",
+                                      "resetsAt",
+                                      "scope"
+                                    ],
+                                    "additionalProperties": false
                                   },
                                   "originalError": {
                                     "type": "object",
@@ -102723,6 +103830,33 @@
                                   "spanId": {
                                     "type": "string"
                                   },
+                                  "limitInfo": {
+                                    "type": "object",
+                                    "properties": {
+                                      "limitValue": {
+                                        "type": "number"
+                                      },
+                                      "resetsAt": {
+                                        "type": "string"
+                                      },
+                                      "scope": {
+                                        "type": "string"
+                                      },
+                                      "models": {
+                                        "nullable": true,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "limitValue",
+                                      "resetsAt",
+                                      "scope"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -103133,6 +104267,33 @@
                                   "spanId": {
                                     "type": "string"
                                   },
+                                  "limitInfo": {
+                                    "type": "object",
+                                    "properties": {
+                                      "limitValue": {
+                                        "type": "number"
+                                      },
+                                      "resetsAt": {
+                                        "type": "string"
+                                      },
+                                      "scope": {
+                                        "type": "string"
+                                      },
+                                      "models": {
+                                        "nullable": true,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "limitValue",
+                                      "resetsAt",
+                                      "scope"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -103532,6 +104693,33 @@
                                   "spanId": {
                                     "type": "string"
                                   },
+                                  "limitInfo": {
+                                    "type": "object",
+                                    "properties": {
+                                      "limitValue": {
+                                        "type": "number"
+                                      },
+                                      "resetsAt": {
+                                        "type": "string"
+                                      },
+                                      "scope": {
+                                        "type": "string"
+                                      },
+                                      "models": {
+                                        "nullable": true,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "limitValue",
+                                      "resetsAt",
+                                      "scope"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -103930,6 +105118,33 @@
                                   },
                                   "spanId": {
                                     "type": "string"
+                                  },
+                                  "limitInfo": {
+                                    "type": "object",
+                                    "properties": {
+                                      "limitValue": {
+                                        "type": "number"
+                                      },
+                                      "resetsAt": {
+                                        "type": "string"
+                                      },
+                                      "scope": {
+                                        "type": "string"
+                                      },
+                                      "models": {
+                                        "nullable": true,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "limitValue",
+                                      "resetsAt",
+                                      "scope"
+                                    ],
+                                    "additionalProperties": false
                                   },
                                   "originalError": {
                                     "type": "object",
@@ -104341,6 +105556,33 @@
                                   "spanId": {
                                     "type": "string"
                                   },
+                                  "limitInfo": {
+                                    "type": "object",
+                                    "properties": {
+                                      "limitValue": {
+                                        "type": "number"
+                                      },
+                                      "resetsAt": {
+                                        "type": "string"
+                                      },
+                                      "scope": {
+                                        "type": "string"
+                                      },
+                                      "models": {
+                                        "nullable": true,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "limitValue",
+                                      "resetsAt",
+                                      "scope"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -104751,6 +105993,33 @@
                                   "spanId": {
                                     "type": "string"
                                   },
+                                  "limitInfo": {
+                                    "type": "object",
+                                    "properties": {
+                                      "limitValue": {
+                                        "type": "number"
+                                      },
+                                      "resetsAt": {
+                                        "type": "string"
+                                      },
+                                      "scope": {
+                                        "type": "string"
+                                      },
+                                      "models": {
+                                        "nullable": true,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "limitValue",
+                                      "resetsAt",
+                                      "scope"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -105160,6 +106429,33 @@
                                   },
                                   "spanId": {
                                     "type": "string"
+                                  },
+                                  "limitInfo": {
+                                    "type": "object",
+                                    "properties": {
+                                      "limitValue": {
+                                        "type": "number"
+                                      },
+                                      "resetsAt": {
+                                        "type": "string"
+                                      },
+                                      "scope": {
+                                        "type": "string"
+                                      },
+                                      "models": {
+                                        "nullable": true,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "limitValue",
+                                      "resetsAt",
+                                      "scope"
+                                    ],
+                                    "additionalProperties": false
                                   },
                                   "originalError": {
                                     "type": "object",
@@ -105796,6 +107092,33 @@
                                   },
                                   "spanId": {
                                     "type": "string"
+                                  },
+                                  "limitInfo": {
+                                    "type": "object",
+                                    "properties": {
+                                      "limitValue": {
+                                        "type": "number"
+                                      },
+                                      "resetsAt": {
+                                        "type": "string"
+                                      },
+                                      "scope": {
+                                        "type": "string"
+                                      },
+                                      "models": {
+                                        "nullable": true,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "limitValue",
+                                      "resetsAt",
+                                      "scope"
+                                    ],
+                                    "additionalProperties": false
                                   },
                                   "originalError": {
                                     "type": "object",
@@ -106629,6 +107952,33 @@
                                   },
                                   "spanId": {
                                     "type": "string"
+                                  },
+                                  "limitInfo": {
+                                    "type": "object",
+                                    "properties": {
+                                      "limitValue": {
+                                        "type": "number"
+                                      },
+                                      "resetsAt": {
+                                        "type": "string"
+                                      },
+                                      "scope": {
+                                        "type": "string"
+                                      },
+                                      "models": {
+                                        "nullable": true,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "limitValue",
+                                      "resetsAt",
+                                      "scope"
+                                    ],
+                                    "additionalProperties": false
                                   },
                                   "originalError": {
                                     "type": "object",
@@ -131366,6 +132716,310 @@
           "permissions": [
             "llmLimit:delete"
           ]
+        }
+      }
+    },
+    "/api/limits/me/default-usage": {
+      "get": {
+        "operationId": "getMyDefaultLimitUsage",
+        "tags": [
+          "Limits"
+        ],
+        "description": "Get the current user's default limit usage (only if no custom user limit exists)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "nullable": true,
+                  "type": "object",
+                  "properties": {
+                    "limitValue": {
+                      "type": "number"
+                    },
+                    "cleanupInterval": {
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
+                    },
+                    "models": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "cost": {
+                          "type": "number"
+                        },
+                        "tokensIn": {
+                          "type": "number"
+                        },
+                        "tokensOut": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "cost",
+                        "tokensIn",
+                        "tokensOut"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "limitValue",
+                    "cleanupInterval",
+                    "models",
+                    "usage"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -176668,6 +178322,33 @@
                               },
                               "spanId": {
                                 "type": "string"
+                              },
+                              "limitInfo": {
+                                "type": "object",
+                                "properties": {
+                                  "limitValue": {
+                                    "type": "number"
+                                  },
+                                  "resetsAt": {
+                                    "type": "string"
+                                  },
+                                  "scope": {
+                                    "type": "string"
+                                  },
+                                  "models": {
+                                    "nullable": true,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "limitValue",
+                                  "resetsAt",
+                                  "scope"
+                                ],
+                                "additionalProperties": false
                               },
                               "originalError": {
                                 "type": "object",

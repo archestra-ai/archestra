@@ -93,10 +93,18 @@ vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
 
 vi.mock("@/lib/llm-models.query", () => ({
   useLlmModelsByProvider: useLlmModelsByProviderMock,
+  useModelsWithApiKeys: () => ({ data: [] }),
 }));
 
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   useAvailableLlmProviderApiKeys: useAvailableLlmProviderApiKeysMock,
+}));
+
+vi.mock("@/lib/limits.query", () => ({
+  useCreateLimit: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDeleteLimit: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useLimits: () => ({ data: [] }),
+  useUpdateLimit: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 vi.mock("@/lib/hooks/use-app-name", () => ({

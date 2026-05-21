@@ -3,12 +3,13 @@
 import { E2eTestId } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
-import { Copy, Eye, Plus, Shield, Trash2, UserCog } from "lucide-react";
+import { Copy, Eye, Pencil, Plus, Shield, Trash2, UserCog } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AuthProviderIcon } from "@/components/auth-provider-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { EntityLimitManager } from "@/components/entity-limit-fields";
 import { FormDialog } from "@/components/form-dialog";
 import { InviteByLinkCard } from "@/components/invite-by-link-card";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
@@ -21,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { RoleSelect } from "@/components/ui/role-select";
 import {
@@ -38,6 +40,7 @@ import {
   useImpersonateUser,
   useImpersonationCandidates,
 } from "@/lib/impersonation.query";
+
 import {
   type Invitation,
   type Member,
@@ -233,6 +236,7 @@ function MembersTab({
     newRole: string;
   } | null>(null);
   const [removingMember, setRemovingMember] = useState<Member | null>(null);
+  const [editingMember, setEditingMember] = useState<Member | null>(null);
 
   const handlePaginationChange = useCallback(
     (newPagination: { pageIndex: number; pageSize: number }) => {
@@ -374,6 +378,12 @@ function MembersTab({
           <TableRowActions
             actions={[
               {
+                icon: <Pencil className="h-4 w-4" />,
+                label: "Edit",
+                permissions: { member: ["update"] },
+                onClick: () => setEditingMember(member),
+              },
+              {
                 icon: <UserCog className="h-4 w-4" />,
                 label: "Change role",
                 permissions: { member: ["update"] },
@@ -479,6 +489,14 @@ function MembersTab({
           }}
           confirmLabel="Remove"
           pendingLabel="Removing..."
+        />
+      )}
+
+      {editingMember && (
+        <EditUserDialog
+          member={editingMember}
+          open={!!editingMember}
+          onOpenChange={(open) => !open && setEditingMember(null)}
         />
       )}
     </>
@@ -746,6 +764,62 @@ function InvitationsTab({
         />
       )}
     </>
+  );
+}
+
+// ===
+// Edit User Dialog
+// ===
+
+function EditUserDialog({
+  member,
+  open,
+  onOpenChange,
+}: {
+  member: Member;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { data: canManageLimits } = useHasPermissions({
+    llmLimit: ["create"],
+  });
+
+  return (
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Edit User"
+      description={`Manage settings for ${member.name || member.email}`}
+      size="small"
+    >
+      <DialogBody className="space-y-4">
+        <div className="space-y-2">
+          <Label>Name</Label>
+          <div className="text-sm">{member.name || "—"}</div>
+        </div>
+        <div className="space-y-2">
+          <Label>Email</Label>
+          <div className="text-sm">{member.email}</div>
+        </div>
+        <div className="space-y-2">
+          <Label>Role</Label>
+          <Badge variant="outline" className="capitalize">
+            {member.role}
+          </Badge>
+        </div>
+        {canManageLimits && (
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">LLM Usage Limits</Label>
+            <EntityLimitManager entityType="user" entityId={member.userId} />
+          </div>
+        )}
+      </DialogBody>
+      <DialogStickyFooter>
+        <Button variant="outline" onClick={() => onOpenChange(false)}>
+          Close
+        </Button>
+      </DialogStickyFooter>
+    </FormDialog>
   );
 }
 

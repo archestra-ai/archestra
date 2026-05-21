@@ -2,11 +2,12 @@
 import { archestraApiSdk, type archestraApiTypes, E2eTestId } from "@shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Key, Link2, Plus, Trash2, Users, Vault } from "lucide-react";
+import { Key, Link2, Pencil, Plus, Trash2, Users, Vault } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useSetSettingsAction } from "@/app/settings/layout";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { EntityLimitManager } from "@/components/entity-limit-fields";
 import { FormDialog } from "@/components/form-dialog";
 import { SearchInput } from "@/components/search-input";
 import {
@@ -15,14 +16,20 @@ import {
 } from "@/components/table-row-actions";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import { DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
+import {
+  DialogBody,
+  DialogForm,
+  DialogStickyFooter,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Textarea } from "@/components/ui/textarea";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+
 import { useTeams } from "@/lib/teams/team.query";
 import { type TeamToken, useTokens } from "@/lib/teams/team-token.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
@@ -50,6 +57,7 @@ export function TeamsList() {
   const queryClient = useQueryClient();
   const byosEnabled = useFeature("byosEnabled");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [membersDialogOpen, setMembersDialogOpen] = useState(false);
   const [externalGroupsDialogOpen, setExternalGroupsDialogOpen] =
@@ -66,6 +74,10 @@ export function TeamsList() {
   const [teamName, setTeamName] = useState("");
   const [teamDescription, setTeamDescription] = useState("");
 
+  const { data: canManageLimits } = useHasPermissions({
+    llmLimit: ["create"],
+  });
+
   const search = searchParams.get("search") || "";
 
   // Tokens query
@@ -80,7 +92,7 @@ export function TeamsList() {
         body: data,
       });
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["teams"] });
       queryClient.invalidateQueries({ queryKey: ["tokens"] });
       setCreateDialogOpen(false);
@@ -90,6 +102,31 @@ export function TeamsList() {
     },
     onError: (error: Error) => {
       toast.error(error.message || "Failed to create team");
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({
+      id,
+      data,
+    }: {
+      id: string;
+      data: { name: string; description?: string };
+    }) => {
+      return await archestraApiSdk.updateTeam({
+        path: { id },
+        body: data,
+      });
+    },
+    onSuccess: async () => {
+      queryClient.invalidateQueries({ queryKey: ["teams"] });
+      queryClient.invalidateQueries({ queryKey: ["tokens"] });
+      setEditDialogOpen(false);
+      setSelectedTeam(null);
+      toast.success("Team updated successfully");
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to update team");
     },
   });
 
@@ -208,6 +245,17 @@ export function TeamsList() {
         const team = row.original;
         const actions: TableRowAction[] = [
           {
+            icon: <Pencil className="h-4 w-4" />,
+            label: "Edit",
+            permissions: { team: ["update"] } as const,
+            onClick: () => {
+              setSelectedTeam(team);
+              setTeamName(team.name);
+              setTeamDescription(team.description || "");
+              setEditDialogOpen(true);
+            },
+          },
+          {
             icon: <Users className="h-4 w-4" />,
             label: "Manage Members",
             permissions: { team: ["update"] } as const,
@@ -308,7 +356,7 @@ export function TeamsList() {
           className="flex min-h-0 flex-1 flex-col"
           onSubmit={handleCreateTeam}
         >
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 space-y-4">
+          <DialogBody className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="name">Team Name *</Label>
               <Input
@@ -327,7 +375,7 @@ export function TeamsList() {
                 onChange={(e) => setTeamDescription(e.target.value)}
               />
             </div>
-          </div>
+          </DialogBody>
           <DialogStickyFooter>
             <Button
               type="button"
@@ -342,6 +390,33 @@ export function TeamsList() {
           </DialogStickyFooter>
         </DialogForm>
       </FormDialog>
+
+      <EditTeamDialog
+        open={editDialogOpen}
+        onOpenChange={(open) => {
+          setEditDialogOpen(open);
+          if (!open) {
+            setSelectedTeam(null);
+          }
+        }}
+        team={selectedTeam}
+        teamName={teamName}
+        setTeamName={setTeamName}
+        teamDescription={teamDescription}
+        setTeamDescription={setTeamDescription}
+        canManageLimits={!!canManageLimits}
+        onSubmit={async () => {
+          if (!selectedTeam) return;
+          await updateMutation.mutateAsync({
+            id: selectedTeam.id,
+            data: {
+              name: teamName,
+              description: teamDescription || undefined,
+            },
+          });
+        }}
+        isPending={updateMutation.isPending}
+      />
 
       <DeleteConfirmDialog
         open={deleteDialogOpen}
@@ -391,5 +466,90 @@ export function TeamsList() {
         />
       )}
     </>
+  );
+}
+
+function EditTeamDialog({
+  open,
+  onOpenChange,
+  team,
+  teamName,
+  setTeamName,
+  teamDescription,
+  setTeamDescription,
+  canManageLimits,
+  onSubmit,
+  isPending,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  team: Team | null;
+  teamName: string;
+  setTeamName: (value: string) => void;
+  teamDescription: string;
+  setTeamDescription: (value: string) => void;
+  canManageLimits: boolean;
+  onSubmit: () => Promise<void>;
+  isPending: boolean;
+}) {
+  return (
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Edit Team"
+      description="Update team details and LLM usage limits"
+      size="medium"
+    >
+      <DialogForm
+        className="flex min-h-0 flex-1 flex-col"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          await onSubmit();
+          onOpenChange(false);
+        }}
+      >
+        <DialogBody className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="edit-team-name">Team Name *</Label>
+            <Input
+              id="edit-team-name"
+              placeholder="Engineering Team"
+              value={teamName}
+              onChange={(e) => setTeamName(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-team-description">Description</Label>
+            <Textarea
+              id="edit-team-description"
+              placeholder="Team for engineering staff..."
+              value={teamDescription}
+              onChange={(e) => setTeamDescription(e.target.value)}
+            />
+          </div>
+          {canManageLimits && (
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">LLM Usage Limits</Label>
+              <EntityLimitManager
+                entityType="team"
+                entityId={team?.id ?? null}
+              />
+            </div>
+          )}
+        </DialogBody>
+        <DialogStickyFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={isPending || !teamName.trim()}>
+            {isPending ? "Saving..." : "Save Changes"}
+          </Button>
+        </DialogStickyFooter>
+      </DialogForm>
+    </FormDialog>
   );
 }

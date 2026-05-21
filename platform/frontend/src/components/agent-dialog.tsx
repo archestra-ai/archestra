@@ -54,6 +54,7 @@ import {
   type AgentToolsEditorRef,
 } from "@/components/agent-tools-editor";
 import { ModelSelector } from "@/components/chat/model-selector";
+import { EntityLimitManager } from "@/components/entity-limit-fields";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
   formatPermissionRequirement,
@@ -137,6 +138,7 @@ import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useConnectors } from "@/lib/knowledge/connector.query";
 import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
+
 import { useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useTeams } from "@/lib/teams/team.query";
@@ -625,6 +627,9 @@ export function AgentDialog({
   const { data: isTeamAdmin } = useHasPermissions({
     [resource]: ["team-admin"],
   });
+  const { data: canManageLimits } = useHasPermissions({
+    llmLimit: ["create"],
+  });
   const agentLabelsRef = useRef<ProfileLabelsRef>(null);
   const agentToolsEditorRef = useRef<AgentToolsEditorRef>(null);
 
@@ -775,6 +780,7 @@ export function AgentDialog({
         setAutoConfigureOnToolDiscovery(false);
         setDualLlmMaxRounds("5");
       }
+
       // Reset counts when dialog opens
       setSelectedToolsCount(0);
       lastAutoSelectedProviderRef.current = null;
@@ -1990,7 +1996,21 @@ export function AgentDialog({
                 </div>
               )}
 
-              {/* Section 5: Advanced (collapsible) — always shown for non-built-in (Labels are universal) */}
+              {/* Section 5: Limits (Agent and LLM Proxy only) */}
+              {canManageLimits &&
+                !isBuiltIn &&
+                !!agent &&
+                (agentType === "agent" || agentType === "llm_proxy") && (
+                  <div className="rounded-lg border bg-card p-4 space-y-4">
+                    <h3 className="text-sm font-semibold">LLM Usage Limits</h3>
+                    <EntityLimitManager
+                      entityType="agent"
+                      entityId={agent.id}
+                    />
+                  </div>
+                )}
+
+              {/* Section 6: Advanced (collapsible) — always shown for non-built-in (Labels are universal) */}
               {!isBuiltIn && (
                 <Collapsible>
                   <div className="rounded-lg border bg-card">

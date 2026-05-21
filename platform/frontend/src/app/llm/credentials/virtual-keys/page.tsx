@@ -20,6 +20,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CopyableCode } from "@/components/copyable-code";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { EntityLimitManager } from "@/components/entity-limit-fields";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
 import { FormDialog } from "@/components/form-dialog";
 import {
@@ -53,6 +54,7 @@ import {
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { formatRelativeTime } from "@/lib/utils/date-time";
@@ -528,6 +530,10 @@ function EditVirtualKeyDialog({
   canReadTeams: boolean;
 }) {
   const updateMutation = useUpdateVirtualApiKey();
+  const { data: canManageLimits } = useHasPermissions({
+    llmLimit: ["create"],
+  });
+
   const [name, setName] = useState("");
   const [expiresAt, setExpiresAt] = useState<Date | null>(null);
   const [scope, setScope] = useState<VirtualKeyScope>(
@@ -567,7 +573,7 @@ function EditVirtualKeyDialog({
     }
 
     try {
-      const result = await updateMutation.mutateAsync({
+      await updateMutation.mutateAsync({
         id: virtualKey.id,
         data: {
           name: name.trim(),
@@ -577,10 +583,7 @@ function EditVirtualKeyDialog({
           providerApiKeys,
         },
       });
-
-      if (result) {
-        onOpenChange(false);
-      }
+      onOpenChange(false);
     } catch {
       // handled by mutation
     }
@@ -648,6 +651,18 @@ function EditVirtualKeyDialog({
             onProviderApiKeyIdsChange={setProviderApiKeyIds}
             providerApiKeys={providerApiKeys}
           />
+
+          {canManageLimits && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">LLM Usage Limits</Label>
+              </div>
+              <EntityLimitManager
+                entityType="virtual_key"
+                entityId={virtualKey?.id ?? null}
+              />
+            </div>
+          )}
         </DialogBody>
         <DialogStickyFooter className="mt-0">
           <Button

@@ -50,12 +50,11 @@ describe("SkillEditorDialog", () => {
     useSkillMock.mockReturnValue({
       data: {
         id: "skill-1",
-        name: "databricks-lakebase",
-        description:
-          "Databricks Lakebase Postgres: projects, scaling, connectivity",
-        content: "# Databricks Lakebase\n\nUse the CLI.",
+        name: "warehouse-postgres",
+        description: "Warehouse Postgres: projects, scaling, connectivity",
+        content: "# Warehouse Postgres\n\nUse the CLI.",
         license: "Apache-2.0: custom",
-        compatibility: "Requires databricks CLI (>= v0.294.0)",
+        compatibility: "Requires warehouse CLI (>= v0.294.0)",
         metadata: {
           "owner:team": "data: platform",
         },
@@ -73,11 +72,11 @@ describe("SkillEditorDialog", () => {
     await waitFor(() => expect(updateSkillMutateAsyncMock).toHaveBeenCalled());
     const payload = updateSkillMutateAsyncMock.mock.calls[0][0];
     expect(payload.body.content).toContain(
-      'description: "Databricks Lakebase Postgres: projects, scaling, connectivity"',
+      'description: "Warehouse Postgres: projects, scaling, connectivity"',
     );
     expect(payload.body.content).toContain('license: "Apache-2.0: custom"');
     expect(payload.body.content).toContain(
-      'compatibility: "Requires databricks CLI (>= v0.294.0)"',
+      'compatibility: "Requires warehouse CLI (>= v0.294.0)"',
     );
     expect(payload.body.content).toContain('  "owner:team": "data: platform"');
   });

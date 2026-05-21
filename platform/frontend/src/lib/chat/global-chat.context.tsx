@@ -433,14 +433,19 @@ function ChatSessionHook({
       // perpetually "running" tool. Drop those dangling parts so the live view
       // matches what the backend persists (and a reload would show).
       if (isAbort) {
-        const stripped = pruneEmptyTrailingAssistantMessage(
-          stripDanglingToolCalls(messages),
-        );
-        setMessages(stripped);
-        // restoreRenderableAssistantParts treats the shrink as a streaming
-        // regression and would resurrect the stripped parts on the next render;
-        // sync the ref so that comparison sees no regression.
-        previousMessagesRef.current = stripped;
+        // The updater form runs against the SDK's live messages, not this
+        // callback's (throttled, possibly stale) closure, so the most recently
+        // streamed text is never rolled back.
+        setMessages((current) => {
+          const stripped = pruneEmptyTrailingAssistantMessage(
+            stripDanglingToolCalls(current),
+          );
+          // restoreRenderableAssistantParts treats the shrink as a streaming
+          // regression and would resurrect the stripped parts on the next
+          // render; sync the ref so that comparison sees no regression.
+          previousMessagesRef.current = stripped;
+          return stripped;
+        });
       }
 
       queryClient.invalidateQueries({

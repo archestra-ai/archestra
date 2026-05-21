@@ -155,14 +155,21 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const streamId = randomUUID();
       const activeStreamKey =
         `${CacheKey.ChatActiveStream}-${conversationId}` as const;
-      void cacheManager
-        .set(activeStreamKey, streamId, TimeInMs.Minute)
-        .catch((error) => {
-          logger.warn(
-            { error, conversationId, streamId },
-            "Failed to register active chat stream",
-          );
-        });
+      // Awaited (not fire-and-forget): the stop endpoint resolves this mapping
+      // to find the stream to abort, and the stream starts producing output
+      // immediately after. If registration lagged, an early stop would read no
+      // mapping and silently no-op. A write failure only degrades stop for this
+      // stream, so it is logged rather than failing the request.
+      // The TTL must outlive the stream (a newer stream overwrites this entry,
+      // a finished one leaves a harmless stale mapping), so it is not refreshed.
+      try {
+        await cacheManager.set(activeStreamKey, streamId, TimeInMs.Hour);
+      } catch (error) {
+        logger.warn(
+          { error, conversationId, streamId },
+          "Failed to register active chat stream",
+        );
+      }
 
       // Flag to prevent duplicate message persistence if both onError and onFinish fire
       let messagesPersisted = false;
@@ -463,8 +470,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               execute: async ({ writer }) => {
                 // Send heartbeat every 5s to prevent connection drops
                 // during long-running tool executions / subagent calls.
-                // Also refresh the active-stream cache entry so a long-running
-                // stream keeps its mapping (the stop endpoint relies on it).
                 const heartbeatInterval = setInterval(() => {
                   try {
                     writer.write({
@@ -474,12 +479,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   } catch {
                     clearInterval(heartbeatInterval);
                   }
-                  void cacheManager
-                    .set(activeStreamKey, streamId, TimeInMs.Minute)
-                    .catch(() => {
-                      // non-critical: a missed refresh only means a stop request
-                      // during this window is a no-op; the next refresh recovers
-                    });
                 }, 5000);
 
                 // Prefetch all UI resources eagerly before streaming starts

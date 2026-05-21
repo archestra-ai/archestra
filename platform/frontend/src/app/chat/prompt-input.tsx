@@ -463,29 +463,35 @@ const PromptInputContent = ({
       const hasContent =
         message.text.trim().length > 0 || message.files.length > 0;
 
-      // empty Enter during streaming would otherwise reach onSubmit; the
-      // textarea no longer blocks Enter so the parent must rely on this guard
-      if (!hasContent) {
-        e.preventDefault();
-        return;
-      }
-
       if (message.text.trim() === "/compact" && onCompactConversation) {
         e.preventDefault();
         runCompactCommand();
         return;
       }
 
+      // while streaming, the submit button is the stop button: an empty submit
+      // must reach the parent's onSubmit so it can abort the stream. a submit
+      // with content is queued for the next turn instead.
       if (status === "submitted" || status === "streaming") {
-        setQueuedMessages((current) => [
-          ...current,
-          {
-            id: nanoid(),
-            scopeKey: queueScopeKey,
-            text: message.text,
-            files: message.files,
-          },
-        ]);
+        if (hasContent) {
+          setQueuedMessages((current) => [
+            ...current,
+            {
+              id: nanoid(),
+              scopeKey: queueScopeKey,
+              text: message.text,
+              files: message.files,
+            },
+          ]);
+          return;
+        }
+        onSubmit(message, e);
+        return;
+      }
+
+      // not streaming: a stray empty submit (e.g. Enter) is a no-op
+      if (!hasContent) {
+        e.preventDefault();
         return;
       }
 

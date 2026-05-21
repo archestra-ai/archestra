@@ -435,3 +435,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @iamank1t
 - @VishalB98
 - @sarthakNITT
+- @munyanezaarmel

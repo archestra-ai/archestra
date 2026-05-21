@@ -1566,7 +1566,7 @@
 * **deps:** bump express-rate-limit from 8.2.1 to 8.3.0 in /platform/mcp_server_docker_image ([#3170](https://github.com/archestra-ai/archestra/issues/3170)) ([52b40fa](https://github.com/archestra-ai/archestra/commit/52b40fafbeab740debce4b7985fb9eaaafa89c34))
 * do not fail sync on the item fetch ([#3211](https://github.com/archestra-ai/archestra/issues/3211)) ([c3eaa6f](https://github.com/archestra-ai/archestra/commit/c3eaa6f6213a8d501d63a62e98ec9322fee97925))
 * fix status reporting ([#3224](https://github.com/archestra-ai/archestra/issues/3224)) ([9463601](https://github.com/archestra-ai/archestra/commit/94636016c92505b896800c729afaafab3aedccd7))
-* gracefull worker shutdown ([#3205](https://github.com/archestra-ai/archestra/issues/3205)) ([87fb0f4](https://github.com/archestra-ai/archestra/commit/87fb0f40c14516e632da0224345b15fb6976cc5f))
+* graceful worker shutdown ([#3205](https://github.com/archestra-ai/archestra/issues/3205)) ([87fb0f4](https://github.com/archestra-ai/archestra/commit/87fb0f40c14516e632da0224345b15fb6976cc5f))
 * human-readable labels in dashboard Source filter ([#3227](https://github.com/archestra-ai/archestra/issues/3227)) ([77aa47a](https://github.com/archestra-ai/archestra/commit/77aa47a021f97185f39e54e18ad6c4da5c8b4dd2))
 * instant ui feedback when sync now button is pressed ([#3209](https://github.com/archestra-ai/archestra/issues/3209)) ([05a1842](https://github.com/archestra-ai/archestra/commit/05a1842d75ad747dd27bf803b6aee33034420c96))
 * iron out kb data model ([#3189](https://github.com/archestra-ai/archestra/issues/3189)) ([002ff83](https://github.com/archestra-ai/archestra/commit/002ff8301007ed572fb859ee77807ce33e544c29))

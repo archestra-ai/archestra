@@ -2,7 +2,6 @@
 
 import {
   type archestraApiTypes,
-  compareModelsForDisplay,
   INPUT_MODALITY_OPTIONS,
   isOpenRouterLatestAlias,
   type ModelInputModality,
@@ -75,6 +74,11 @@ import {
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { formatContextLength } from "@/lib/utils";
 import { useSetModelProvidersAction } from "../layout";
+import {
+  canFilterFreeModelsForApiKey,
+  filterModelsForPage,
+  type ModelsPageModelTypeFilter,
+} from "./models-page-utils";
 
 export default function ModelsPage() {
   const { data: models = [], isPending, refetch } = useModelsWithApiKeys();
@@ -84,9 +88,8 @@ export default function ModelsPage() {
   const [isRefreshingModels, setIsRefreshingModels] = useState(false);
   const [search, setSearch] = useState("");
   const [apiKeyFilter, setApiKeyFilter] = useState<string>("all");
-  const [modelTypeFilter, setModelTypeFilter] = useState<
-    "all" | "chat" | "embedding"
-  >("all");
+  const [modelTypeFilter, setModelTypeFilter] =
+    useState<ModelsPageModelTypeFilter>("all");
   const [freeOnly, setFreeOnly] = useState(false);
   const [editingModel, setEditingModel] = useState<ModelWithApiKeys | null>(
     null,
@@ -110,46 +113,36 @@ export default function ModelsPage() {
     );
   }, [models]);
 
-  // "free only" is an openrouter-specific filter — free models are otherwise
-  // a non-concept, so the toggle shows whenever openrouter is set up.
-  const hasOpenRouterModels = useMemo(
-    () => availableApiKeys.some(([, key]) => key.provider === "openrouter"),
-    [availableApiKeys],
+  const canFilterFreeModels = useMemo(
+    () => canFilterFreeModelsForApiKey({ availableApiKeys, apiKeyFilter }),
+    [availableApiKeys, apiKeyFilter],
   );
 
-  const filteredModels = useMemo(() => {
-    let result = models;
-    if (search) {
-      const q = search.toLowerCase();
-      result = result.filter((m) => m.modelId.toLowerCase().includes(q));
+  useEffect(() => {
+    if (!canFilterFreeModels && freeOnly) {
+      setFreeOnly(false);
     }
-    if (apiKeyFilter !== "all") {
-      result = result.filter((m) =>
-        m.apiKeys.some((k) => k.id === apiKeyFilter),
-      );
-    }
-    if (modelTypeFilter === "embedding") {
-      result = result.filter((m) => m.embeddingDimensions !== null);
-    } else if (modelTypeFilter === "chat") {
-      result = result.filter((m) => m.embeddingDimensions === null);
-    }
-    if (freeOnly && hasOpenRouterModels) {
-      result = result.filter((m) => m.isFree);
-    }
-    // Group by provider, then apply the shared model ordering within each
-    // group (routers, recommended, then the rest alphabetically).
-    return [...result].sort(
-      (a, b) =>
-        a.provider.localeCompare(b.provider) || compareModelsForDisplay(a, b),
-    );
-  }, [
-    models,
-    search,
-    apiKeyFilter,
-    modelTypeFilter,
-    freeOnly,
-    hasOpenRouterModels,
-  ]);
+  }, [canFilterFreeModels, freeOnly]);
+
+  const filteredModels = useMemo(
+    () =>
+      filterModelsForPage({
+        models,
+        search,
+        apiKeyFilter,
+        modelTypeFilter,
+        freeOnly,
+        canFilterFreeModels,
+      }),
+    [
+      models,
+      search,
+      apiKeyFilter,
+      modelTypeFilter,
+      freeOnly,
+      canFilterFreeModels,
+    ],
+  );
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshingModels(true);
@@ -415,7 +408,7 @@ export default function ModelsPage() {
                 },
               ]}
             />
-            {hasOpenRouterModels && (
+            {canFilterFreeModels && (
               <div className="flex items-center gap-2">
                 <Switch
                   id="models-free-only"
@@ -445,7 +438,7 @@ export default function ModelsPage() {
             search ||
               apiKeyFilter !== "all" ||
               modelTypeFilter !== "all" ||
-              (hasOpenRouterModels && freeOnly),
+              (canFilterFreeModels && freeOnly),
           )}
           filteredEmptyMessage="No models match your filters. Try adjusting your search."
           onClearFilters={() => {

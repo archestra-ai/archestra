@@ -30,7 +30,7 @@ The three tools reveal a skill in three steps:
 
 Progressive disclosure leaves the choice to the model. When the user already knows which skill they want, enable **skill slash commands** — a separate organization toggle on the Skills page — and every skill becomes a `/skill-name` command in the chat input.
 
-Typing `/` lists the available skills. Picking one, for example `/pdf-to-markdown convert this report`, activates that skill and sends the rest of the line as the prompt. The skill's `SKILL.md` is injected directly into that turn, so the model follows it without first calling `activate_skill`. Slash commands build on the skill tools, so the toggle is locked until skills are enabled for the organization.
+Typing `/` lists the available skills. Picking one, for example `/pdf-to-markdown convert this report`, activates that skill and sends the rest of the line as the prompt. The prompt is optional — `/pdf-to-markdown` on its own activates a skill meant to run as-is. The skill's `SKILL.md` is injected directly into that turn, so the model follows it without first calling `activate_skill`. Slash commands build on the skill tools, so the toggle is locked until skills are enabled for the organization.
 
 ## Writing a skill
 

@@ -1191,7 +1191,9 @@ export function ChatPageContent({
     }
 
     const hasPendingInitialMessage =
-      !!pendingPromptRef.current || pendingFilesRef.current.length > 0;
+      !!pendingPromptRef.current ||
+      pendingFilesRef.current.length > 0 ||
+      !!pendingSkillRef.current;
     const shouldSendPendingInitialMessage =
       conversationId &&
       conversation?.id === conversationId &&
@@ -1213,10 +1215,7 @@ export function ChatPageContent({
     pendingFilesRef.current = [];
     pendingSkillRef.current = undefined;
 
-    const parts: Array<
-      | { type: "text"; text: string }
-      | { type: "file"; url: string; mediaType: string; filename?: string }
-    > = [];
+    const parts: ChatMessagePart[] = [];
 
     if (promptToSend) {
       parts.push({ type: "text", text: promptToSend });
@@ -1233,7 +1232,7 @@ export function ChatPageContent({
 
     sendMessage({
       role: "user",
-      parts,
+      parts: ensureNonEmptyParts(parts),
       metadata: {
         createdAt: new Date().toISOString(),
         ...(skillToSend ? { skill: skillToSend } : {}),
@@ -1315,8 +1314,10 @@ export function ChatPageContent({
 
     const hasText = message.text?.trim();
     const hasFiles = message.files && message.files.length > 0;
+    // a skill slash command may be sent on its own, with no prompt or files
+    const hasSkill = !!options?.skill;
 
-    if (!sendMessage || (!hasText && !hasFiles)) {
+    if (!sendMessage || (!hasText && !hasFiles && !hasSkill)) {
       return;
     }
 
@@ -1349,10 +1350,7 @@ export function ChatPageContent({
     }
 
     // Build message parts: text first, then file attachments
-    const parts: Array<
-      | { type: "text"; text: string }
-      | { type: "file"; url: string; mediaType: string; filename?: string }
-    > = [];
+    const parts: ChatMessagePart[] = [];
 
     if (hasText) {
       parts.push({ type: "text", text: message.text as string });
@@ -1372,7 +1370,7 @@ export function ChatPageContent({
 
     sendMessage?.({
       role: "user",
-      parts,
+      parts: ensureNonEmptyParts(parts),
       metadata: {
         createdAt: new Date().toISOString(),
         ...(options?.skill ? { skill: options.skill } : {}),
@@ -1494,7 +1492,7 @@ export function ChatPageContent({
       const hasFiles = message.files && message.files.length > 0;
 
       if (
-        (!hasText && !hasFiles) ||
+        (!hasText && !hasFiles && !skill) ||
         !initialAgentId ||
         createConversationMutation.isPending
       ) {
@@ -2386,6 +2384,16 @@ function clearUserPromptQueryParam(params: {
     ? `${params.pathname}?${nextSearchParams.toString()}`
     : params.pathname;
   params.router.replace(nextUrl);
+}
+
+type ChatMessagePart =
+  | { type: "text"; text: string }
+  | { type: "file"; url: string; mediaType: string; filename?: string };
+
+// a bare skill command carries no parts of its own; keep an empty text part
+// so the message is well-formed and the backend can inject the skill
+function ensureNonEmptyParts(parts: ChatMessagePart[]): ChatMessagePart[] {
+  return parts.length === 0 ? [{ type: "text", text: "" }] : parts;
 }
 
 // =========================================================================

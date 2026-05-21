@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   buildUserSystemPromptContext,
   type ChatErrorResponse,
@@ -150,6 +151,27 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } = request;
       const chatAbortController = new AbortController();
 
+      // Per-stream id. The stop signal is keyed by this id (not by conversationId)
+      // so a stale stop flag from an earlier stream can never abort a later one.
+      const streamId = randomUUID();
+      const activeStreamKey =
+        `${CacheKey.ChatActiveStream}-${conversationId}` as const;
+      // Awaited (not fire-and-forget): the stop endpoint resolves this mapping
+      // to find the stream to abort, and the stream starts producing output
+      // immediately after. If registration lagged, an early stop would read no
+      // mapping and silently no-op. A write failure only degrades stop for this
+      // stream, so it is logged rather than failing the request.
+      // The TTL must outlive the stream (a newer stream overwrites this entry,
+      // a finished one leaves a harmless stale mapping), so it is not refreshed.
+      try {
+        await cacheManager.set(activeStreamKey, streamId, TimeInMs.Hour);
+      } catch (error) {
+        logger.warn(
+          { error, conversationId, streamId },
+          "Failed to register active chat stream",
+        );
+      }
+
       // Flag to prevent duplicate message persistence if both onError and onFinish fire
       let messagesPersisted = false;
 
@@ -179,6 +201,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         reply,
         abortController: chatAbortController,
         conversationId,
+        streamId,
       });
 
       // Get conversation
@@ -895,12 +918,19 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id } }, reply) => {
-      // Set stop flag in distributed cache so any pod can detect it on connection close.
-      // When the frontend subsequently calls stop() to close the streaming connection,
-      // the connection-close handler on the pod running the stream will find this flag
-      // and abort the stream.
-      const cacheKey = `${CacheKey.ChatStop}-${id}` as const;
-      await cacheManager.set(cacheKey, true, TimeInMs.Minute);
+      // Resolve the conversation's currently-running stream, then set a stop flag
+      // keyed by that stream's id. Keying by streamId (rather than conversationId)
+      // ensures the flag can only ever abort the stream it was meant for — a stale
+      // flag from an earlier stream targets a different id and is harmless.
+      // The flag lives in the distributed cache so any pod can detect it on
+      // connection close, even when the stream runs on a different pod.
+      const activeStreamKey = `${CacheKey.ChatActiveStream}-${id}` as const;
+      const streamId = await cacheManager.get<string>(activeStreamKey);
+      if (!streamId) {
+        return reply.send({ stopped: false });
+      }
+      const stopKey = `${CacheKey.ChatStop}-${streamId}` as const;
+      await cacheManager.set(stopKey, true, TimeInMs.Minute);
       return reply.send({ stopped: true });
     },
   );
@@ -2514,62 +2544,77 @@ function normalizeDataUrlMediaType(params: {
  * whether the close was caused by the stop button (abort) or by navigating away (ignore).
  *
  * Flow:
- * 1. Frontend stop button → calls POST /stop (sets cache flag) → then calls stop() (closes connection)
+ * 1. Frontend stop button → calls POST /stop (sets `chat-stop-<streamId>`) → then calls stop() (closes connection)
  * 2. Connection close fires on the pod running the stream → checks cache → flag found → abort
  * 3. Navigate away → connection close → checks cache → no flag → stream continues in background
  *
- * Works across pods because the cache is PostgreSQL-backed.
+ * The stop flag is keyed by `streamId`, so it can only abort the stream it was
+ * meant for. Works across pods because the cache is PostgreSQL-backed.
+ *
+ * Returns a cleanup function to call on normal stream finish: it removes the
+ * listeners and clears the distributed cache keys so no stop flag can outlive
+ * its stream.
  */
 function attachRequestAbortListeners(params: {
   request: { raw: NodeJS.EventEmitter };
   reply: { raw: NodeJS.EventEmitter & { writableEnded: boolean } };
   abortController: AbortController;
   conversationId: string;
+  streamId: string;
 }): () => void {
-  const { request, reply, abortController, conversationId } = params;
-  let didCleanup = false;
+  const { request, reply, abortController, conversationId, streamId } = params;
+  const stopKey = `${CacheKey.ChatStop}-${streamId}` as const;
+  let listenersRemoved = false;
+
+  const removeListeners = () => {
+    if (listenersRemoved) {
+      return;
+    }
+    listenersRemoved = true;
+    request.raw.removeListener("close", onConnectionClose);
+    request.raw.removeListener("aborted", onConnectionClose);
+    reply.raw.removeListener("close", onConnectionClose);
+  };
 
   const onConnectionClose = () => {
-    cleanup();
+    removeListeners();
     if (reply.raw.writableEnded || abortController.signal.aborted) {
       return;
     }
 
-    // Check the distributed cache for a stop flag set by the stop endpoint
-    const cacheKey = `${CacheKey.ChatStop}-${conversationId}` as const;
+    // Check the distributed cache for a stop flag set by the stop endpoint.
+    // getAndDelete consumes the flag atomically.
     cacheManager
-      .getAndDelete(cacheKey)
+      .getAndDelete(stopKey)
       .then((stopRequested) => {
         if (stopRequested) {
           logger.info(
-            { conversationId },
+            { conversationId, streamId },
             "Chat stop requested, aborting stream execution",
           );
           abortController.abort();
         } else {
           logger.info(
-            { conversationId },
+            { conversationId, streamId },
             "Chat connection closed (navigate away), stream continues in background",
           );
         }
       })
       .catch((err) => {
         logger.error(
-          { err, conversationId },
+          { err, conversationId, streamId },
           "Failed to check chat stop flag, not aborting",
         );
       });
   };
 
+  // Called on normal stream finish. Clears this stream's stop flag so it cannot
+  // linger. The active-stream key is intentionally left to expire on its own
+  // TTL: deleting it here could clobber a newer stream that already replaced
+  // the mapping for this conversation.
   const cleanup = () => {
-    if (didCleanup) {
-      return;
-    }
-
-    didCleanup = true;
-    request.raw.removeListener("close", onConnectionClose);
-    request.raw.removeListener("aborted", onConnectionClose);
-    reply.raw.removeListener("close", onConnectionClose);
+    removeListeners();
+    void cacheManager.delete(stopKey);
   };
 
   request.raw.on("close", onConnectionClose);

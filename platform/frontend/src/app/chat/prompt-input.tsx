@@ -11,7 +11,6 @@ import {
 } from "@shared";
 import type { ChatStatus } from "ai";
 import { MoreVerticalIcon, PaperclipIcon, XIcon } from "lucide-react";
-import { nanoid } from "nanoid";
 import type { FormEvent, KeyboardEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -68,10 +67,6 @@ import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { useOrganization } from "@/lib/organization.query";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
 import { cn } from "@/lib/utils";
-import {
-  PromptInputQueue,
-  type QueuedPromptInputMessage,
-} from "./prompt-input-queue";
 import {
   buildSkillCommands,
   parseSkillCommand,
@@ -189,10 +184,6 @@ const PromptInputContent = ({
   const [dismissedSlashCommandValue, setDismissedSlashCommandValue] = useState<
     string | null
   >(null);
-  const [queuedMessages, setQueuedMessages] = useState<
-    QueuedPromptInputMessage[]
-  >([]);
-  const isSendingQueuedMessageRef = useRef(false);
 
   // Collapsed/expanded state for the model selector (defaults to collapsed = provider icon only)
   const { isCollapsed: showDefaultLogo, expand: expandModelSelector } =
@@ -266,14 +257,6 @@ const PromptInputContent = ({
   const storageKey = conversationId
     ? conversationStorageKeys(conversationId).draft
     : `archestra_chat_draft_new_${agentId}`;
-  const queueScopeKey = conversationId
-    ? `conversation:${conversationId}`
-    : `new:${agentId}`;
-  const visibleQueuedMessages = useMemo(
-    () =>
-      queuedMessages.filter((message) => message.scopeKey === queueScopeKey),
-    [queuedMessages, queueScopeKey],
-  );
 
   const isRestored = useRef(false);
 
@@ -387,58 +370,11 @@ const PromptInputContent = ({
     void onCompactConversation?.();
   }, [controller.textInput, onCompactConversation, storageKey]);
 
-  const submitQueuedMessage = useCallback(
-    (message: QueuedPromptInputMessage) => {
-      localStorage.removeItem(storageKey);
-      onSubmit(
-        { text: message.text, files: message.files },
-        { preventDefault: () => {} } as FormEvent<HTMLFormElement>,
-        message.skill ? { skill: message.skill } : undefined,
-      );
-    },
-    [onSubmit, storageKey],
-  );
-
-  useEffect(() => {
-    isSendingQueuedMessageRef.current = false;
-    setQueuedMessages((current) =>
-      current.filter((message) => message.scopeKey === queueScopeKey),
-    );
-  }, [queueScopeKey]);
-
-  useEffect(() => {
-    if (status !== "ready") {
-      isSendingQueuedMessageRef.current = false;
-      return;
-    }
-
-    if (visibleQueuedMessages.length === 0) {
-      return;
-    }
-    if (isSendingQueuedMessageRef.current) {
-      return;
-    }
-
-    const [nextMessage] = visibleQueuedMessages;
-    isSendingQueuedMessageRef.current = true;
-    setQueuedMessages((current) =>
-      current.filter((message) => message.id !== nextMessage.id),
-    );
-    try {
-      submitQueuedMessage(nextMessage);
-    } catch {
-      // restore the message so a failed send is not lost silently; the
-      // sending guard stays set so we do not retry in a tight loop — the
-      // next ready transition (guard reset on status change) picks it up
-      setQueuedMessages((current) => [nextMessage, ...current]);
-    }
-  }, [visibleQueuedMessages, status, submitQueuedMessage]);
-
   const selectSlashCommand = useCallback(
     (command: SlashCommand) => {
       if (command.skill) {
-        // a skill command is a prefix — drop it into the input and let the
-        // user type the prompt that the skill should act on
+        // a skill command is a prefix — drop it into the input so the user can
+        // type an optional prompt; submitting it bare activates the skill as-is
         controller.textInput.setInput(`${command.value} `);
         requestAnimationFrame(() => textareaRef.current?.focus());
         return;
@@ -499,16 +435,6 @@ const PromptInputContent = ({
 
   const handleWrappedSubmit = useCallback(
     (message: PromptInputMessage, e: FormEvent<HTMLFormElement>) => {
-      const hasContent =
-        message.text.trim().length > 0 || message.files.length > 0;
-
-      // empty Enter during streaming would otherwise reach onSubmit; the
-      // textarea no longer blocks Enter so the parent must rely on this guard
-      if (!hasContent) {
-        e.preventDefault();
-        return;
-      }
-
       const trimmed = message.text.trim();
 
       if (trimmed === "/compact" && onCompactConversation) {
@@ -517,57 +443,27 @@ const PromptInputContent = ({
         return;
       }
 
-      // a skill command activates the skill; the text after the token is the prompt
+      // a skill command activates the skill; any text after the token is an
+      // optional prompt — a bare skill command sends with an empty prompt
       let outgoing = message;
       let skill: ChatSkillMetadata | undefined;
       const parsed = parseSkillCommand(trimmed, skillCommands);
       if (parsed) {
-        // a bare skill command has nothing to act on yet — keep the user typing
-        if (!parsed.remaining && message.files.length === 0) {
-          e.preventDefault();
-          controller.textInput.setInput(`${parsed.value} `);
-          requestAnimationFrame(() => textareaRef.current?.focus());
-          return;
-        }
         skill = parsed.skill;
         outgoing = { ...message, text: parsed.remaining };
-      }
-
-      if (status === "submitted" || status === "streaming") {
-        setQueuedMessages((current) => [
-          ...current,
-          {
-            id: nanoid(),
-            scopeKey: queueScopeKey,
-            text: outgoing.text,
-            files: outgoing.files,
-            skill,
-          },
-        ]);
-        return;
       }
 
       localStorage.removeItem(storageKey);
       onSubmit(outgoing, e, skill ? { skill } : undefined);
     },
     [
-      controller.textInput,
       onSubmit,
       onCompactConversation,
-      queueScopeKey,
       runCompactCommand,
       skillCommands,
-      status,
       storageKey,
-      textareaRef,
     ],
   );
-
-  const removeQueuedMessage = useCallback((id: string) => {
-    setQueuedMessages((current) =>
-      current.filter((message) => message.id !== id),
-    );
-  }, []);
 
   const handleFileError = useCallback(
     (err: {
@@ -588,11 +484,6 @@ const PromptInputContent = ({
 
   return (
     <div className="relative">
-      <PromptInputQueue
-        className="absolute inset-x-0 bottom-full z-40"
-        messages={visibleQueuedMessages}
-        onRemove={removeQueuedMessage}
-      />
       {isSlashCommandOpen && (
         <div className="absolute inset-x-0 bottom-full z-50 mb-2 overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-lg">
           <PromptInputCommand className="h-auto rounded-none bg-transparent">
@@ -671,7 +562,9 @@ const PromptInputContent = ({
               className="px-4"
               autoFocus
               disabled={submitDisabled || isContextCompacting}
-              disableEnterSubmit={false}
+              disableEnterSubmit={
+                status === "submitted" || status === "streaming"
+              }
               onKeyDown={handleTextareaKeyDown}
               data-testid={E2eTestId.ChatPromptTextarea}
             />

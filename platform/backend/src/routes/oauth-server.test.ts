@@ -5,24 +5,14 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import config, { parseTrustProxy } from "@/config";
+import { parseTrustProxy } from "@/config";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import oauthServerRoutes from "./oauth-server";
 
 describe("OAuth Server - Well-Known Endpoints", () => {
   let app: FastifyInstance;
-  // TODO: temporary workaround to unblock merging. These tests assert the
-  // request-Host fallback path of getPublicRequestOrigin, but in CI
-  // .env.example sets ARCHESTRA_FRONTEND_URL, so config.publicOrigin
-  // short-circuits the fallback. Null it out here so the resolver falls
-  // through to request.host. Revisit once we can promote
-  // ARCHESTRA_FRONTEND_URL to the canonical origin and update these tests
-  // accordingly.
-  let originalPublicOrigin: string | null;
 
   beforeEach(async () => {
-    originalPublicOrigin = config.publicOrigin;
-    config.publicOrigin = null;
     app = Fastify().withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
@@ -30,7 +20,6 @@ describe("OAuth Server - Well-Known Endpoints", () => {
   });
 
   afterEach(async () => {
-    config.publicOrigin = originalPublicOrigin;
     await app.close();
   });
 

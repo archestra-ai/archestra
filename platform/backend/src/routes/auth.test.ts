@@ -18,23 +18,14 @@ vi.mock("@/auth", () => ({
 
 describe("auth routes", () => {
   let app: FastifyInstanceWithZod;
-  // OAuth token-lifetime tests match the resource URL against the token-endpoint
-  // origin computed via getPublicRequestOrigin. Null out config.publicOrigin
-  // (normally set from ARCHESTRA_FRONTEND_URL via .env.example in CI) so the
-  // resolver falls through to request.host instead of the configured frontend
-  // origin.
-  let originalPublicOrigin: string | null;
 
   beforeEach(async () => {
-    originalPublicOrigin = config.publicOrigin;
-    config.publicOrigin = null;
     app = createFastifyInstance();
     const { default: authRoutes } = await import("./auth");
     await app.register(authRoutes);
   });
 
   afterEach(async () => {
-    config.publicOrigin = originalPublicOrigin;
     vi.restoreAllMocks();
     await app.close();
   });

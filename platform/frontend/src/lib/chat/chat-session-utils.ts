@@ -55,6 +55,25 @@ export function restoreRenderableAssistantParts(params: {
 }
 
 /**
+ * Drops a trailing assistant message left with no parts. Mirrors the backend's
+ * persist behavior (an empty last message is not stored), keeping the live view
+ * consistent with what a reload would show — used after stripping dangling tool
+ * parts from a stopped turn.
+ */
+export function pruneEmptyTrailingAssistantMessage(
+  messages: UIMessage[],
+): UIMessage[] {
+  const lastMessage = messages.at(-1);
+  if (
+    lastMessage?.role === "assistant" &&
+    (lastMessage.parts?.length ?? 0) === 0
+  ) {
+    return messages.slice(0, -1);
+  }
+  return messages;
+}
+
+/**
  * Returns true when an assistant message still has content the chat UI can
  * actually render. Empty text parts do not count, but any non-text part does.
  */

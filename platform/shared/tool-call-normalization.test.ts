@@ -127,6 +127,57 @@ describe("stripDanglingToolCalls", () => {
     expect(stripDanglingToolCalls(messages)).toEqual(messages);
   });
 
+  test("removes interrupted input-streaming tool calls with no result", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          { type: "text", text: "Let me check..." },
+          {
+            type: "tool-google__search",
+            toolCallId: "call_1",
+            state: "input-streaming",
+            input: { q: "wea" },
+          },
+        ],
+      },
+    ];
+
+    expect(stripDanglingToolCalls(messages)).toEqual([
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "Let me check..." }],
+      },
+    ]);
+  });
+
+  test("preserves an input-streaming tool call when a matching result exists", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-google__search",
+            toolCallId: "call_1",
+            state: "input-streaming",
+            input: { q: "weather" },
+          },
+          {
+            type: "tool-google__search",
+            toolCallId: "call_1",
+            state: "output-available",
+            output: "sunny",
+          },
+        ],
+      },
+    ];
+
+    expect(stripDanglingToolCalls(messages)).toEqual(messages);
+  });
+
   test("preserves backend tool-call parts when a later tool-result completes them", () => {
     const messages = [
       {

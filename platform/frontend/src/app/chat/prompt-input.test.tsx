@@ -5,12 +5,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   mockUseOrganization,
   mockUseChatPlaceholder,
+  mockUseSkillsPaginated,
   mockTextInputSetInput,
   mockTextInputClear,
   mockControllerState,
 } = vi.hoisted(() => ({
   mockUseOrganization: vi.fn(),
   mockUseChatPlaceholder: vi.fn(),
+  mockUseSkillsPaginated: vi.fn(),
   mockTextInputSetInput: vi.fn(),
   mockTextInputClear: vi.fn(),
   mockControllerState: { value: "" },
@@ -236,7 +238,7 @@ vi.mock("@/lib/chat/chat-placeholder.hook", () => ({
 }));
 
 vi.mock("@/lib/skills/skill.query", () => ({
-  useSkillsPaginated: () => ({ data: undefined, isLoading: false }),
+  useSkillsPaginated: () => mockUseSkillsPaginated(),
 }));
 
 // Mock for useHasPermissions - default to non-admin
@@ -272,6 +274,10 @@ describe("ArchestraPromptInput", () => {
     mockUseChatPlaceholder.mockReturnValue({
       placeholder: "Animated placeholder",
       isAnimating: true,
+    });
+    mockUseSkillsPaginated.mockReturnValue({
+      data: undefined,
+      isLoading: false,
     });
     mockControllerState.value = "";
   });
@@ -548,130 +554,50 @@ describe("ArchestraPromptInput", () => {
       expect(onCompactConversation).toHaveBeenCalledTimes(1);
       expect(mockTextInputClear).toHaveBeenCalled();
     });
+  });
 
-    it("queues a follow-up submitted while the current response is streaming", () => {
-      const onSubmit = vi.fn();
-      mockControllerState.value = "Run this next";
+  describe("skill slash commands", () => {
+    const skill = {
+      id: "skill-1",
+      name: "My Skill",
+      description: "Does things",
+    };
 
-      render(
-        <ArchestraPromptInput
-          {...defaultProps}
-          onSubmit={onSubmit}
-          status="streaming"
-        />,
-      );
-
-      fireEvent.submit(screen.getByTestId("prompt-input"));
-
-      expect(onSubmit).not.toHaveBeenCalled();
-      expect(screen.getByText("Run this next")).toBeInTheDocument();
-      expect(screen.getByLabelText("Queued prompts")).toBeInTheDocument();
-    });
-
-    it("submits the next queued follow-up when the chat is ready again", () => {
-      const onSubmit = vi.fn();
-      mockControllerState.value = "Run after streaming";
-
-      const { rerender } = render(
-        <ArchestraPromptInput
-          {...defaultProps}
-          onSubmit={onSubmit}
-          status="streaming"
-        />,
-      );
-
-      fireEvent.submit(screen.getByTestId("prompt-input"));
-
-      rerender(
-        <ArchestraPromptInput
-          {...defaultProps}
-          onSubmit={onSubmit}
-          status="ready"
-        />,
-      );
-
-      expect(onSubmit).toHaveBeenCalledWith(
-        { text: "Run after streaming", files: [] },
-        expect.objectContaining({ preventDefault: expect.any(Function) }),
-        undefined,
-      );
-    });
-
-    it("keeps the queued follow-up in the queue when submitting it fails", () => {
-      const onSubmit = vi.fn(() => {
-        throw new Error("submit failed");
+    beforeEach(() => {
+      mockUseOrganization.mockReturnValue({
+        data: { skillSlashCommandsEnabled: true },
+        isLoading: false,
       });
-      mockControllerState.value = "Retain on failure";
+      mockUseSkillsPaginated.mockReturnValue({
+        data: { data: [skill] },
+        isLoading: false,
+      });
+    });
 
-      const { rerender } = render(
-        <ArchestraPromptInput
-          {...defaultProps}
-          onSubmit={onSubmit}
-          status="streaming"
-        />,
-      );
+    it("submits a bare skill command with skill metadata and an empty prompt", () => {
+      const onSubmit = vi.fn();
+      mockControllerState.value = "/my-skill";
 
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
       fireEvent.submit(screen.getByTestId("prompt-input"));
-
-      rerender(
-        <ArchestraPromptInput
-          {...defaultProps}
-          onSubmit={onSubmit}
-          status="ready"
-        />,
-      );
 
       expect(onSubmit).toHaveBeenCalledTimes(1);
-      expect(screen.getByText("Retain on failure")).toBeInTheDocument();
+      const [message, , options] = onSubmit.mock.calls[0];
+      expect(message.text).toBe("");
+      expect(options).toEqual({ skill: { id: skill.id, name: skill.name } });
     });
 
-    it("does not submit queued follow-ups after switching conversations", () => {
-      const onConversationASubmit = vi.fn();
-      const onConversationBSubmit = vi.fn();
-      mockControllerState.value = "Keep this in conversation A";
+    it("submits a skill command with the text after the token as the prompt", () => {
+      const onSubmit = vi.fn();
+      mockControllerState.value = "/my-skill summarize the repo";
 
-      const { rerender } = render(
-        <ArchestraPromptInput
-          {...defaultProps}
-          conversationId="conversation-a"
-          onSubmit={onConversationASubmit}
-          status="streaming"
-        />,
-      );
-
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
       fireEvent.submit(screen.getByTestId("prompt-input"));
 
-      expect(
-        screen.getByText("Keep this in conversation A"),
-      ).toBeInTheDocument();
-
-      rerender(
-        <ArchestraPromptInput
-          {...defaultProps}
-          conversationId="conversation-b"
-          onSubmit={onConversationBSubmit}
-          status="ready"
-        />,
-      );
-
-      expect(onConversationASubmit).not.toHaveBeenCalled();
-      expect(onConversationBSubmit).not.toHaveBeenCalled();
-      expect(
-        screen.queryByText("Keep this in conversation A"),
-      ).not.toBeInTheDocument();
-    });
-
-    it("removes queued follow-ups from the prompt queue", () => {
-      mockControllerState.value = "Remove this queued prompt";
-
-      render(<ArchestraPromptInput {...defaultProps} status="streaming" />);
-
-      fireEvent.submit(screen.getByTestId("prompt-input"));
-      fireEvent.click(screen.getByLabelText("Remove queued prompt"));
-
-      expect(
-        screen.queryByText("Remove this queued prompt"),
-      ).not.toBeInTheDocument();
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      const [message, , options] = onSubmit.mock.calls[0];
+      expect(message.text).toBe("summarize the repo");
+      expect(options).toEqual({ skill: { id: skill.id, name: skill.name } });
     });
   });
 });

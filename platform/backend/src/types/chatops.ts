@@ -5,7 +5,7 @@ import type { A2AAttachment } from "@/agents/a2a-executor";
  * ChatOps provider types enum
  * Used for PG ENUM in database schema
  */
-export const ChatOpsProviderTypeSchema = z.enum(["ms-teams", "slack"]);
+export const ChatOpsProviderTypeSchema = z.enum(["ms-teams", "slack", "whatsapp"]);
 export type ChatOpsProviderType = z.infer<typeof ChatOpsProviderTypeSchema>;
 
 export const ChatOpsConnectionModeSchema = z.enum(["webhook", "socket"]);
@@ -507,6 +507,15 @@ export interface MsTeamsDbConfig {
   graphTenantId: string;
   graphClientId: string;
   graphClientSecret: string;
+}
+
+/** WhatsApp config stored as a DB secret */
+export interface WhatsAppDbConfig {
+  enabled: boolean;
+  /** Phone-number → Archestra email mappings so senders can be resolved to users */
+  phoneEmailMappings: Array<{ phone: string; email: string }>;
+  /** Filesystem path for Baileys session storage (defaults to ./data/whatsapp-session) */
+  sessionDir?: string;
 }
 
 /** Slack config stored as a DB secret */

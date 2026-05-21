@@ -1,7 +1,7 @@
 import { SLACK_DEFAULT_CONNECTION_MODE } from "@/agents/chatops/constants";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
-import type { MsTeamsDbConfig, SecretValue, SlackDbConfig } from "@/types";
+import type { MsTeamsDbConfig, SecretValue, SlackDbConfig, WhatsAppDbConfig } from "@/types";
 import SecretModel from "./secret";
 
 /**
@@ -13,6 +13,7 @@ const FORCE_DB = true;
 
 const MS_TEAMS_SECRET_NAME = "chatops-ms-teams";
 const SLACK_SECRET_NAME = "chatops-slack";
+const WHATSAPP_SECRET_NAME = "chatops-whatsapp";
 
 class ChatOpsConfigModel {
   async getMsTeamsConfig(): Promise<MsTeamsDbConfig | null> {
@@ -50,6 +51,15 @@ class ChatOpsConfigModel {
   async saveSlackConfig(value: SlackDbConfig): Promise<void> {
     await this.saveConfig(SLACK_SECRET_NAME, value as unknown as SecretValue);
     logger.info("ChatOpsConfigModel: saved Slack config to DB");
+  }
+
+  async getWhatsAppConfig(): Promise<WhatsAppDbConfig | null> {
+    return this.getConfig<WhatsAppDbConfig>(WHATSAPP_SECRET_NAME);
+  }
+
+  async saveWhatsAppConfig(value: WhatsAppDbConfig): Promise<void> {
+    await this.saveConfig(WHATSAPP_SECRET_NAME, value as unknown as SecretValue);
+    logger.info("ChatOpsConfigModel: saved WhatsApp config to DB");
   }
 
   private async getConfig<T>(secretName: string): Promise<T | null> {

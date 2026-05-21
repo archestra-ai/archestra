@@ -1,5 +1,5 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { handleApiError } from "@/lib/utils";
 
@@ -37,6 +37,71 @@ export function useUpdateChatOpsConfigInQuickstart() {
       // Keep a defensive fallback for unexpected runtime errors.
       console.error("ChatOps config update error:", error);
       toast.error("Failed to update MS Teams configuration");
+    },
+  });
+}
+
+export function useWhatsAppQrCode({ enabled = true }: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: ["chatops", "whatsapp", "qr"],
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getWhatsAppQrCode();
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+    enabled,
+    refetchInterval: false,
+  });
+}
+
+export function useUpdateWhatsAppChatOpsConfig() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (
+      body: NonNullable<archestraApiTypes.UpdateWhatsAppChatOpsConfigData["body"]>,
+    ) => {
+      const { data, error } = await archestraApiSdk.updateWhatsAppChatOpsConfig({ body });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+    onSuccess: (data) => {
+      if (!data?.success) return;
+      toast.success("WhatsApp configuration updated");
+      queryClient.invalidateQueries({ queryKey: ["chatops", "status"] });
+      queryClient.invalidateQueries({ queryKey: ["chatops", "whatsapp", "qr"] });
+    },
+    onError: () => {
+      toast.error("Failed to update WhatsApp configuration");
+    },
+  });
+}
+
+export function useDisconnectWhatsApp() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await archestraApiSdk.disconnectWhatsApp();
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+    onSuccess: () => {
+      toast.success("WhatsApp disconnected");
+      queryClient.invalidateQueries({ queryKey: ["chatops", "status"] });
+      queryClient.invalidateQueries({ queryKey: ["chatops", "whatsapp", "qr"] });
+    },
+    onError: () => {
+      toast.error("Failed to disconnect WhatsApp");
     },
   });
 }

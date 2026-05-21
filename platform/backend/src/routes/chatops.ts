@@ -44,6 +44,7 @@ import {
   constructResponseSchema,
   createSortingQuerySchema,
   type IncomingChatMessage,
+  type WhatsAppDbConfig,
 } from "@/types";
 import {
   ChatOpsChannelBindingResponseSchema,
@@ -1341,6 +1342,110 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
+   * Update WhatsApp chatops config (phone-email mappings, enable/disable).
+   * Saves to DB and reinitializes the chatops manager.
+   */
+  fastify.put(
+    "/api/chatops/config/whatsapp",
+    {
+      schema: {
+        operationId: RouteId.UpdateWhatsAppChatOpsConfig,
+        description: "Update WhatsApp chatops configuration",
+        tags: ["ChatOps"],
+        body: z.object({
+          enabled: z.boolean().optional(),
+          phoneEmailMappings: z
+            .array(
+              z.object({
+                phone: z
+                  .string()
+                  .min(7)
+                  .max(15)
+                  .regex(/^\d+$/, "Phone must contain only digits"),
+                email: z.string().email(),
+              }),
+            )
+            .optional(),
+          sessionDir: z.string().optional(),
+        }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (request, reply) => {
+      const existing = await ChatOpsConfigModel.getWhatsAppConfig();
+      const existingMappings = existing?.phoneEmailMappings ?? [];
+      const newMappings = request.body.phoneEmailMappings;
+      // Append new mappings, letting new entries override existing ones for the same phone
+      const mergedMappings = newMappings
+        ? [
+            ...existingMappings.filter(
+              (e) => !newMappings.some((n) => n.phone === e.phone),
+            ),
+            ...newMappings,
+          ]
+        : existingMappings;
+      const merged: WhatsAppDbConfig = {
+        enabled: request.body.enabled ?? existing?.enabled ?? false,
+        phoneEmailMappings: mergedMappings,
+        sessionDir: request.body.sessionDir ?? existing?.sessionDir,
+      };
+      await ChatOpsConfigModel.saveWhatsAppConfig(merged);
+      await chatOpsManager.reinitialize();
+      return reply.send({ success: true });
+    },
+  );
+
+  /**
+   * Get the current WhatsApp QR code (data URL) and connection status.
+   * Returns null for qrCode when already connected or not yet initialised.
+   */
+  fastify.get(
+    "/api/chatops/config/whatsapp/qr",
+    {
+      schema: {
+        operationId: RouteId.GetWhatsAppQrCode,
+        description: "Get WhatsApp QR code and connection status",
+        tags: ["ChatOps"],
+        response: constructResponseSchema(
+          z.object({
+            status: z.enum(["disconnected", "connecting", "connected"]),
+            qrCode: z.string().nullable(),
+          }),
+        ),
+      },
+    },
+    async (_, reply) => {
+      const provider = chatOpsManager.getWhatsAppProvider();
+      return reply.send({
+        status: provider?.getConnectionStatus() ?? "disconnected",
+        qrCode: provider?.getQrCode() ?? null,
+      });
+    },
+  );
+
+  /**
+   * Disconnect and clear the active WhatsApp session.
+   */
+  fastify.post(
+    "/api/chatops/config/whatsapp/disconnect",
+    {
+      schema: {
+        operationId: RouteId.DisconnectWhatsApp,
+        description: "Disconnect the active WhatsApp session",
+        tags: ["ChatOps"],
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (_, reply) => {
+      const provider = chatOpsManager.getWhatsAppProvider();
+      if (provider) {
+        await provider.disconnect();
+      }
+      return reply.send({ success: true });
+    },
+  );
+
+  /**
    * Refresh channel discovery for a provider.
    * Clears the TTL cache, then triggers immediate discovery if the provider
    * supports it (e.g., Slack). Otherwise channels are re-discovered on the
@@ -1465,6 +1570,16 @@ async function getProviderInfo(providerType: ChatOpsProviderType): Promise<{
                 teamId: provider.getWorkspaceId() ?? undefined,
               }
             : undefined,
+      };
+    }
+    case "whatsapp": {
+      const provider = chatOpsManager.getWhatsAppProvider();
+      return {
+        id: "whatsapp",
+        displayName: "WhatsApp",
+        configured: provider?.isConfigured() ?? false,
+        credentials: undefined,
+        dmInfo: undefined,
       };
     }
   }

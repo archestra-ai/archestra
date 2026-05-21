@@ -93,6 +93,8 @@
     "@shared": "workspace:*",
     "@slack/socket-mode": "^2.0.5",
     "@slack/web-api": "^7.14.1",
+    "@whiskeysockets/baileys": "^6.7.18",
+    "qrcode": "^1.5.4",
     "@smithy/eventstream-codec": "^4.2.11",
     "@smithy/signature-v4": "^5.3.11",
     "@smithy/util-utf8": "^4.2.2",

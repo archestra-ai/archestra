@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, Mail } from "lucide-react";
+import { Bot, Mail, Smartphone } from "lucide-react";
 import { useMemo } from "react";
 import { PageLayout } from "@/components/page-layout";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -55,6 +55,7 @@ export default function AgentTriggersLayout({
     slack: slackActive,
     email: emailActive,
     a2a: a2aActive,
+    whatsApp: whatsAppActive,
   } = useTriggerStatuses();
 
   const tabs = useMemo(() => {
@@ -88,6 +89,18 @@ export default function AgentTriggersLayout({
       },
     ];
 
+    channelTabs.push({
+      label: (
+        <TabLabel
+          icon={Smartphone}
+          label="WhatsApp"
+          active={whatsAppActive}
+        />
+      ),
+      href: "/agents/triggers/whatsapp",
+      active: whatsAppActive,
+    });
+
     // Sort channel tabs by active first, then pin A2A as the final option.
     return [
       ...channelTabs.sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0)),
@@ -97,7 +110,7 @@ export default function AgentTriggersLayout({
         active: a2aActive,
       },
     ];
-  }, [msTeamsActive, slackActive, emailActive, a2aActive]);
+  }, [msTeamsActive, slackActive, emailActive, a2aActive, whatsAppActive]);
 
   if (canReadTriggers === false) {
     return null;

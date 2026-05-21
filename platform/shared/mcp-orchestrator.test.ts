@@ -89,7 +89,7 @@ describe("MCP Orchestrator Validation", () => {
         ["256Ki", "KiB (kibibytes)"],
         ["1Ti", "TiB (tebibytes)"],
         ["1Pi", "PiB (pebibytes)"],
-        ["1Ei", "EiB (exbibytes)"],
+        ["1Ei", "EiB (exibytes)"],
 
         // Decimal suffixes (k, K, M, G, T, P, E)
         ["128M", "MB (megabytes)"],

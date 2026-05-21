@@ -238,6 +238,16 @@ const organizationsTable = pgTable("organization", {
   skillToolsEnabled: boolean("skill_tools_enabled").notNull().default(false),
 
   /**
+   * When true, the org's skills are exposed in chat as slash commands
+   * (`/skill-name`). Invoking one injects the skill's content directly into the
+   * conversation, independent of `skillToolsEnabled` (which only governs the
+   * model-facing `activate_skill` tool).
+   */
+  skillSlashCommandsEnabled: boolean("skill_slash_commands_enabled")
+    .notNull()
+    .default(false),
+
+  /**
    * Validation regex applied to default-scoped field values when installing an
    * MCP server (mirrors `mcp_preset_entries.validation_regex` for the implicit
    * default row). Stored without delimiters or flags. NULL disables validation.

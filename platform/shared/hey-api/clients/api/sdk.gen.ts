@@ -3860,7 +3860,7 @@ export const updateLlmSettings = <ThrowOnError extends boolean = false>(options:
 });
 
 /**
- * Update agent settings (default model, default agent)
+ * Update agent settings (default model, default agent, skill slash commands)
  *
  * Authentication:
  *

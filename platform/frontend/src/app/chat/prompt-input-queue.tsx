@@ -1,5 +1,6 @@
 "use client";
 
+import type { ChatSkillMetadata } from "@shared";
 import type { FileUIPart } from "ai";
 import { Trash2Icon } from "lucide-react";
 import {
@@ -25,6 +26,8 @@ export type QueuedPromptInputMessage = {
   scopeKey: string;
   text: string;
   files: FileUIPart[];
+  /** Skill invoked via slash command, if any. */
+  skill?: ChatSkillMetadata;
 };
 
 type PromptInputQueueProps = {

@@ -160811,6 +160811,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -160868,6 +160871,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -161664,6 +161668,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -161721,6 +161728,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -162789,6 +162797,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -162846,6 +162857,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -163524,6 +163536,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -163581,6 +163596,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -163831,7 +163847,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update agent settings (default model, default agent)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, security engine, file uploads)",
+        "description": "Update agent settings (default model, default agent, skill slash commands)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, security engine, file uploads)",
         "requestBody": {
           "required": true,
           "content": {
@@ -163856,6 +163872,9 @@
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "skillSlashCommandsEnabled": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -164243,6 +164262,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -164300,6 +164322,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -165027,6 +165050,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -165084,6 +165110,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -165744,6 +165771,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -165801,6 +165831,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -166454,6 +166485,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -166511,6 +166545,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -167163,6 +167198,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -167220,6 +167258,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -167872,6 +167911,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -167929,6 +167971,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -168594,6 +168637,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -168651,6 +168697,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -169283,6 +169330,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -169340,6 +169390,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -170285,6 +170336,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -170342,6 +170396,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -178289,10 +178344,11 @@
                 "properties": {
                   "content": {
                     "type": "string",
-                    "minLength": 1
+                    "minLength": 1,
+                    "maxLength": 10485760
                   },
                   "files": {
-                    "default": [],
+                    "maxItems": 500,
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -178302,7 +178358,8 @@
                           "minLength": 1
                         },
                         "content": {
-                          "type": "string"
+                          "type": "string",
+                          "maxLength": 13981016
                         },
                         "encoding": {
                           "type": "string",
@@ -179115,10 +179172,11 @@
                 "properties": {
                   "content": {
                     "type": "string",
-                    "minLength": 1
+                    "minLength": 1,
+                    "maxLength": 10485760
                   },
                   "files": {
-                    "default": [],
+                    "maxItems": 500,
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -179128,7 +179186,8 @@
                           "minLength": 1
                         },
                         "content": {
-                          "type": "string"
+                          "type": "string",
+                          "maxLength": 13981016
                         },
                         "encoding": {
                           "type": "string",

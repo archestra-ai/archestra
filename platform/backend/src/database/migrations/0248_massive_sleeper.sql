@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ADD COLUMN "skill_slash_commands_enabled" boolean DEFAULT false NOT NULL;

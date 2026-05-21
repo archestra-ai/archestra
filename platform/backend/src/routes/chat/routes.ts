@@ -96,6 +96,7 @@ import {
   ProviderError,
   sanitizeChatErrorForFrontend,
 } from "./errors";
+import { injectSkillActivation } from "./inject-skill-activation";
 import { normalizeChatMessages } from "./normalization/normalize-chat-messages";
 
 function getCorrelationLogFields(traceContext: {
@@ -213,12 +214,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = agentId;
 
       // Fetch enabled tool IDs and custom selection status in parallel
-      const [enabledToolIds, hasCustomSelection, slimChatErrorUi] =
-        await Promise.all([
-          ConversationEnabledToolModel.findByConversation(conversationId),
-          ConversationEnabledToolModel.hasCustomSelection(conversationId),
-          OrganizationModel.getSlimChatErrorUi(organizationId),
-        ]);
+      const [
+        enabledToolIds,
+        hasCustomSelection,
+        slimChatErrorUi,
+        organization,
+      ] = await Promise.all([
+        ConversationEnabledToolModel.findByConversation(conversationId),
+        ConversationEnabledToolModel.hasCustomSelection(conversationId),
+        OrganizationModel.getSlimChatErrorUi(organizationId),
+        OrganizationModel.getById(organizationId),
+      ]);
 
       // Fetch MCP tools with enabled tool filtering
       // Pass undefined if no custom selection (use all tools)
@@ -322,12 +328,26 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             agentLlmApiKeyId: agent.llmApiKeyId,
           });
 
+          // When a user invoked a skill via slash command, inject its content
+          // into a copy of the messages before they reach the model. The
+          // original `messages` stay clean for persistence and the visible bubble.
+          // Slash commands depend on skill tools (the injected block references
+          // read_skill_file), so both org flags must be on.
+          const skillSlashCommandsActive =
+            !!organization?.skillSlashCommandsEnabled &&
+            !!organization?.skillToolsEnabled;
+          const messagesForLLM = skillSlashCommandsActive
+            ? await injectSkillActivation({
+                messages: messages as ChatMessage[],
+                organizationId,
+              })
+            : (messages as ChatMessage[]);
+
           // Normalize chat history before replaying it to the model.
           // This dedupes repeated tool parts, drops dangling interrupted tool calls,
           // and strips heavy image/browser payloads that would otherwise bloat context.
-          const normalizedMessagesForLLM = normalizeChatMessages(
-            messages as ChatMessage[],
-          );
+          const normalizedMessagesForLLM =
+            normalizeChatMessages(messagesForLLM);
 
           // Perplexity does NOT support tool calling - it has built-in web search instead
           // @see https://docs.perplexity.ai/api-reference/chat-completions-post

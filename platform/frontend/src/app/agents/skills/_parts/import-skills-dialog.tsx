@@ -545,6 +545,9 @@ export function ImportSkillsDialog({
               onChange={(e) => setRepoUrl(e.target.value)}
               placeholder="github.com/owner/repo"
               autoFocus
+              autoComplete="off"
+              data-1p-ignore
+              data-lpignore="true"
             />
             <p className="text-sm text-muted-foreground">
               Any directory containing a{" "}
@@ -566,6 +569,9 @@ export function ImportSkillsDialog({
               value={path}
               onChange={(e) => setPath(e.target.value)}
               placeholder="packages/skills"
+              autoComplete="off"
+              data-1p-ignore
+              data-lpignore="true"
             />
             <p className="text-sm text-muted-foreground">
               Restrict the scan to <code className="font-mono">SKILL.md</code>{" "}
@@ -585,6 +591,9 @@ export function ImportSkillsDialog({
               value={githubToken}
               onChange={(e) => setGithubToken(e.target.value)}
               placeholder="ghp_…"
+              autoComplete="new-password"
+              data-1p-ignore
+              data-lpignore="true"
             />
             <p className="text-sm text-muted-foreground">
               Required for private repositories. Used only for this import and

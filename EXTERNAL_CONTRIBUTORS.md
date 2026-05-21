@@ -436,3 +436,6 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @VishalB98
 - @sarthakNITT
 - @munyanezaarmel
+- @vishal-tiwari9
+- @kdvsolis
+- @firewine

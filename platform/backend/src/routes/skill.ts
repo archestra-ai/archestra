@@ -16,6 +16,9 @@ import {
 import {
   discoverSkills,
   importSkills,
+  MAX_FILES_PER_SKILL,
+  MAX_SKILL_FILE_BYTES,
+  MAX_SKILL_FILE_CONTENT_CHARS,
   SkillImportError,
 } from "@/skills/github-import";
 import {
@@ -28,9 +31,11 @@ import {
   constructResponseSchema,
   DeleteObjectResponseSchema,
   SelectSkillSchema,
+  type Skill,
   SkillFileEncodingSchema,
   SkillWithFilesSchema,
 } from "@/types";
+import { isUniqueConstraintError } from "@/utils/db";
 
 /** A skill row plus its resource-file count, for the catalog list. */
 const SkillListItemSchema = SelectSkillSchema.extend({
@@ -40,14 +45,19 @@ const SkillListItemSchema = SelectSkillSchema.extend({
 /** Raw resource file as submitted by the in-app editor. */
 const SkillFileInputSchema = z.object({
   path: z.string().min(1),
-  content: z.string(),
+  content: z.string().max(MAX_SKILL_FILE_CONTENT_CHARS),
   encoding: SkillFileEncodingSchema.optional(),
 });
 
-/** Manual create/update payload: raw SKILL.md plus resource files. */
+/**
+ * Manual create/update payload: raw SKILL.md plus resource files.
+ *
+ * `files` is optional: on update, omitting it leaves the existing resource
+ * files untouched; passing `[]` clears them.
+ */
 const SkillManifestInputSchema = z.object({
-  content: z.string().min(1),
-  files: z.array(SkillFileInputSchema).default([]),
+  content: z.string().min(1).max(MAX_SKILL_FILE_BYTES),
+  files: z.array(SkillFileInputSchema).max(MAX_FILES_PER_SKILL).optional(),
 });
 
 const DiscoveredSkillSchema = z.object({
@@ -117,9 +127,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ body, organizationId, user }, reply) => {
       const parsed = parseManifestOrThrow(body.content);
-      await assertNameAvailable(organizationId, parsed.name);
 
-      const files = toSkillFiles(body.files);
       const skill = await SkillModel.createWithFiles({
         skill: {
           organizationId,
@@ -132,8 +140,11 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           metadata: parsed.metadata,
           sourceType: "manual",
         },
-        files,
+        files: toSkillFiles(body.files ?? []),
       });
+      if (!skill) {
+        throw skillNameConflict(parsed.name);
+      }
 
       return reply.send({ ...skill, files: await loadFiles(skill.id) });
     },
@@ -169,25 +180,31 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body, organizationId }, reply) => {
-      const existing = await findSkillOrThrow(id, organizationId);
+      await findSkillOrThrow(id, organizationId);
       const parsed = parseManifestOrThrow(body.content);
 
-      if (parsed.name !== existing.name) {
-        await assertNameAvailable(organizationId, parsed.name);
+      let updated: Skill | null;
+      try {
+        updated = await SkillModel.updateWithFiles({
+          id,
+          skill: {
+            name: parsed.name,
+            description: parsed.description,
+            content: parsed.content,
+            license: parsed.license,
+            compatibility: parsed.compatibility,
+            metadata: parsed.metadata,
+          },
+          files:
+            body.files === undefined ? undefined : toSkillFiles(body.files),
+        });
+      } catch (error) {
+        // only the org+name index — not a duplicate resource-file path
+        if (isUniqueConstraintError(error, "skills_org_name_idx")) {
+          throw skillNameConflict(parsed.name);
+        }
+        throw error;
       }
-
-      const updated = await SkillModel.updateWithFiles({
-        id,
-        skill: {
-          name: parsed.name,
-          description: parsed.description,
-          content: parsed.content,
-          license: parsed.license,
-          compatibility: parsed.compatibility,
-          metadata: parsed.metadata,
-        },
-        files: toSkillFiles(body.files),
-      });
 
       if (!updated) {
         throw new ApiError(404, "Skill not found");
@@ -243,7 +260,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.EnableSkillToolDefaults,
         description:
-          "Enable the Agent Skill tools (`activate_skill`, `read_skill_file`) for this organization. Sets the org-level flag and backfills both tools onto every existing agent. Idempotent.",
+          "Enable the Agent Skill tools (`list_skills`, `activate_skill`, `read_skill_file`) for this organization. Sets the org-level flag and backfills the tools onto every existing agent. Idempotent.",
         tags: ["Skills"],
         response: constructResponseSchema(
           z.object({ enabled: z.literal(true), agentsBackfilled: z.number() }),
@@ -398,17 +415,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
       );
 
-      const created = [];
+      const created: Skill[] = [];
       const skipped: string[] = [];
       for (const item of imported) {
-        const duplicate = await SkillModel.findByName(
-          organizationId,
-          item.parsed.name,
-        );
-        if (duplicate) {
-          skipped.push(item.parsed.name);
-          continue;
-        }
         const skill = await SkillModel.createWithFiles({
           skill: {
             organizationId,
@@ -425,6 +434,10 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
           files: item.files,
         });
+        if (!skill) {
+          skipped.push(item.parsed.name);
+          continue;
+        }
         created.push(skill);
       }
 
@@ -463,11 +476,8 @@ function parseManifestOrThrow(raw: string) {
   }
 }
 
-async function assertNameAvailable(organizationId: string, name: string) {
-  const existing = await SkillModel.findByName(organizationId, name);
-  if (existing) {
-    throw new ApiError(409, `A skill named "${name}" already exists`);
-  }
+function skillNameConflict(name: string): ApiError {
+  return new ApiError(409, `A skill named "${name}" already exists`);
 }
 
 function toSkillFiles(

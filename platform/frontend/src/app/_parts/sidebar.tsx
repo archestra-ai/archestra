@@ -48,6 +48,7 @@ import {
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
+import { useFeature } from "@/lib/config/config.query";
 
 import { useGithubStars } from "@/lib/github/github.query";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
@@ -441,16 +442,30 @@ export function AppSidebar() {
   });
   const showConnect = canReadMcpGateway && canReadLlmProxy;
 
-  // Filter nav groups based on connect permissions
+  // Skills are gated behind the ARCHESTRA_AGENTS_SKILLS_ENABLED env var.
+  const skillsEnabled = useFeature("agentSkillsEnabled") === true;
+
+  // Filter nav groups based on connect permissions and feature flags
   const filteredNavGroups = React.useMemo(() => {
     return contentNavGroups.map((group) => ({
       ...group,
-      items: group.items.filter((item) => {
-        if (item.title === "Connect" && !showConnect) return false;
-        return true;
-      }),
+      items: group.items
+        .filter((item) => {
+          if (item.title === "Connect" && !showConnect) return false;
+          return true;
+        })
+        .map((item) =>
+          item.subItems
+            ? {
+                ...item,
+                subItems: item.subItems.filter(
+                  (sub) => sub.url !== "/agents/skills" || skillsEnabled,
+                ),
+              }
+            : item,
+        ),
     }));
-  }, [showConnect]);
+  }, [showConnect, skillsEnabled]);
 
   // Build additional links for UserButton popout menu
   const userMenuLinks = React.useMemo(() => {

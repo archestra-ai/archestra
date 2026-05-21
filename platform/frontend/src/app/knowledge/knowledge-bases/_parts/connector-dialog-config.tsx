@@ -550,6 +550,9 @@ const INLINE_CONFIG_FIELDS: Record<
                     ? "user@example.com"
                     : "Required for basic auth, leave empty for PAT"
                 }
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
                 {...field}
               />
             </FormControl>
@@ -620,6 +623,9 @@ const INLINE_CONFIG_FIELDS: Record<
                     ? "user@example.com"
                     : "Required for basic auth, leave empty for PAT"
                 }
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
                 {...field}
               />
             </FormControl>
@@ -880,6 +886,9 @@ const INLINE_CONFIG_FIELDS: Record<
                   ? "user@example.com"
                   : "Leave empty to keep existing credentials"
               }
+              autoComplete="off"
+              data-1p-ignore
+              data-lpignore="true"
               {...field}
             />
           </FormControl>

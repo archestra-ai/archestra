@@ -514,7 +514,7 @@ export async function refreshOAuthToken(
       expires_in?: number;
       expires_at?: number;
       token_type?: string;
-      // When using dynamic oauth client registration (for example huggingace mcp), store the client credentials in the secret
+      // When using dynamic oauth client registration (for example huggingface mcp), store the client credentials in the secret
       // to be able to refresh the token.
       client_id?: string;
       client_secret?: string;

@@ -17,6 +17,7 @@ export function makeOrganization(
     theme: "modern-minimal",
     customFont: "inter",
     convertToolResultsToToon: false,
+    skillToolsEnabled: false,
     compressionScope: "organization",
     globalToolPolicy: "permissive",
     allowChatFileUploads: false,

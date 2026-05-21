@@ -231,6 +231,13 @@ const organizationsTable = pgTable("organization", {
   presetEntityDefaultLabel: text("preset_entity_default_label"),
 
   /**
+   * When true, the Agent Skill tools (`activate_skill`, `read_skill_file`) are
+   * assigned to every agent in the org and added to all new agents. Flipped on
+   * by the "Enable and create a new skill" empty-state button on /agents/skills.
+   */
+  skillToolsEnabled: boolean("skill_tools_enabled").notNull().default(false),
+
+  /**
    * Validation regex applied to default-scoped field values when installing an
    * MCP server (mirrors `mcp_preset_entries.validation_regex` for the implicit
    * default row). Stored without delimiters or flags. NULL disables validation.

@@ -78905,6 +78905,9 @@
                         "advancedToolFeaturesEnabled": {
                           "type": "boolean"
                         },
+                        "agentSkillsEnabled": {
+                          "type": "boolean"
+                        },
                         "byosEnabled": {
                           "type": "boolean"
                         },
@@ -78979,6 +78982,7 @@
                       "required": [
                         "orchestratorK8sRuntime",
                         "advancedToolFeaturesEnabled",
+                        "agentSkillsEnabled",
                         "byosEnabled",
                         "byosVaultKvVersion",
                         "azureOpenAiEntraIdEnabled",

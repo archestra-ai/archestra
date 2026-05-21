@@ -22485,6 +22485,7 @@ export type GetConfigResponses = {
         features: {
             orchestratorK8sRuntime: boolean;
             advancedToolFeaturesEnabled: boolean;
+            agentSkillsEnabled: boolean;
             byosEnabled: boolean;
             byosVaultKvVersion: '1' | '2';
             azureOpenAiEntraIdEnabled: boolean;

@@ -286,7 +286,7 @@ export async function getTeamTokenForProfile(
   return (await valueResponse.json()).value;
 }
 
-export type McpTool = {
+type McpTool = {
   name: string;
   description?: string;
   inputSchema?: unknown;

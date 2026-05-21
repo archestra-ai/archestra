@@ -1148,6 +1148,81 @@ describe("mcp server inspect route", () => {
     }
   });
 
+  // Regression: reinstall of a local MCP server with a newly-added prompted
+  // plain_text env var used to land the value only in the K8s secret bag.
+  // On the next pod start, the secret-typed-only filter dropped it, and the
+  // install row's `environmentValues` column was empty, so neither source
+  // carried the value into the pod env.
+  test("reinstall of a local MCP server persists plain prompted env values into mcp_server.environmentValues", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Local Reinstall Plain Prompted Env",
+      serverType: "local",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [
+          {
+            key: "PROMPTED_PLAIN_VALUE",
+            type: "plain_text",
+            promptOnInstallation: true,
+            required: true,
+          },
+        ],
+        transportType: "streamable-http",
+        httpPort: 8080,
+        httpPath: "/mcp",
+      },
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+    // Simulate the install state from before the catalog edit added the
+    // new prompted var (its environmentValues column has no entry for it).
+    await db
+      .update(schema.mcpServersTable)
+      .set({ environmentValues: {} })
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
+    await McpServerUserModel.assignUserToMcpServer(mcpServer.id, user.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${mcpServer.id}/reinstall`,
+      payload: {
+        environmentValues: {
+          PROMPTED_PLAIN_VALUE: "user-entered-at-reinstall",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const [updatedServer] = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
+
+    expect(updatedServer?.environmentValues).toMatchObject({
+      PROMPTED_PLAIN_VALUE: "user-entered-at-reinstall",
+    });
+
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const [serverRow] = await db
+        .select()
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.id, mcpServer.id));
+
+      if (serverRow?.localInstallationStatus !== "pending") {
+        break;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+  });
+
   test("installs a protected remote MCP server with an exchanged enterprise-managed credential on first discovery", async ({
     makeAccount,
     makeIdentityProvider,

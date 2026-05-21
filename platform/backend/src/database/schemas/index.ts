@@ -19,6 +19,7 @@ export { default as chatopsThreadAgentOverrideTable } from "./chatops-thread-age
 export { default as connectorRunsTable } from "./connector-run";
 export { default as conversationsTable } from "./conversation";
 export { default as conversationChatErrorsTable } from "./conversation-chat-error";
+export { default as conversationCompactionsTable } from "./conversation-compaction";
 export { default as conversationEnabledToolsTable } from "./conversation-enabled-tool";
 export {
   conversationShareTeamsTable,
@@ -68,6 +69,8 @@ export { default as scheduleTriggersTable } from "./schedule-trigger";
 export { default as scheduleTriggerRunsTable } from "./schedule-trigger-run";
 export { default as secretsTable } from "./secret";
 export { default as sessionsTable } from "./session";
+export { default as skillsTable } from "./skill";
+export { default as skillFilesTable } from "./skill-file";
 export { default as tasksTable } from "./task";
 export { team as teamsTable, teamMember as teamMembersTable } from "./team";
 export { default as teamExternalGroupsTable } from "./team-external-group";

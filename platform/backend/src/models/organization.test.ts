@@ -383,14 +383,9 @@ describe("OrganizationModel", () => {
     }) => {
       const org = await makeOrganization();
 
-      const updated = await OrganizationModel.patch(org.id, {
-        defaultLlmModel: "gpt-4o",
-        defaultLlmProvider: "openai",
-      });
+      const updated = await OrganizationModel.patch(org.id, {});
 
       expect(updated).not.toBeNull();
-      expect(updated?.defaultLlmModel).toBe("gpt-4o");
-      expect(updated?.defaultLlmProvider).toBe("openai");
     });
 
     test("should set default agent ID", async ({
@@ -433,14 +428,10 @@ describe("OrganizationModel", () => {
       const agent = await makeAgent({ organizationId: org.id });
 
       const updated = await OrganizationModel.patch(org.id, {
-        defaultLlmModel: "claude-opus-4-1-20250805",
-        defaultLlmProvider: "anthropic",
         defaultAgentId: agent.id,
       });
 
       expect(updated).not.toBeNull();
-      expect(updated?.defaultLlmModel).toBe("claude-opus-4-1-20250805");
-      expect(updated?.defaultLlmProvider).toBe("anthropic");
       expect(updated?.defaultAgentId).toBe(agent.id);
     });
   });

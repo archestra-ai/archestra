@@ -24,6 +24,7 @@ const {
   getChatAgentMcpTools,
   createChatConversation,
   updateChatConversation,
+  compactChatConversation,
   deleteChatConversation,
   generateChatConversationTitle,
   getConversationEnabledTools,
@@ -36,6 +37,8 @@ const {
   getInternalMcpCatalogTools,
   bulkAssignTools,
   stopChatStream,
+  getMemberDefaultModel,
+  updateMemberDefaultModel,
 } = archestraApiSdk;
 
 export function mergeUpdatedConversationIntoCache(
@@ -56,17 +59,8 @@ export function mergeUpdatedConversationIntoCache(
   if (variables.title !== undefined) {
     merged.title = updatedConversation.title;
   }
-  if (
-    variables.selectedModel !== undefined ||
-    variables.agentId !== undefined
-  ) {
-    merged.selectedModel = updatedConversation.selectedModel;
-  }
-  if (
-    variables.selectedProvider !== undefined ||
-    variables.agentId !== undefined
-  ) {
-    merged.selectedProvider = updatedConversation.selectedProvider;
+  if (variables.modelId !== undefined || variables.agentId !== undefined) {
+    merged.modelId = updatedConversation.modelId;
   }
   if (variables.chatApiKeyId !== undefined || variables.agentId !== undefined) {
     merged.chatApiKeyId = updatedConversation.chatApiKeyId;
@@ -119,7 +113,6 @@ export function useConversations({
   return useQuery({
     queryKey: ["conversations", search],
     queryFn: async () => {
-      if (!enabled) return [];
       const trimmedSearch = search?.trim();
 
       const { data, error } = await getChatConversations({
@@ -132,6 +125,7 @@ export function useConversations({
       }
       return data;
     },
+    enabled,
     staleTime: search ? 0 : 2_000, // No stale time for searches, 2 seconds otherwise
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -144,15 +138,13 @@ export function useCreateConversation() {
   return useMutation({
     mutationFn: async ({
       agentId,
-      selectedModel,
-      selectedProvider,
+      modelId,
       chatApiKeyId,
     }: NonNullable<archestraApiTypes.CreateChatConversationData["body"]>) => {
       const { data, error } = await createChatConversation({
         body: {
           agentId,
-          selectedModel,
-          selectedProvider,
+          modelId,
           chatApiKeyId: chatApiKeyId ?? undefined,
         },
       });
@@ -183,8 +175,7 @@ export function useUpdateConversation() {
     mutationFn: async ({
       id,
       title,
-      selectedModel,
-      selectedProvider,
+      modelId,
       chatApiKeyId,
       agentId,
       pinnedAt,
@@ -195,8 +186,7 @@ export function useUpdateConversation() {
         path: { id },
         body: {
           title,
-          selectedModel,
-          selectedProvider,
+          modelId,
           chatApiKeyId,
           agentId,
           pinnedAt,
@@ -235,6 +225,52 @@ export function useUpdateConversation() {
   });
 }
 
+/**
+ * The current user's default (model, key) pair — the "member" level of the
+ * model-resolution chain. Used to preselect the model when opening a new chat.
+ */
+export function useMemberDefaultModel() {
+  return useQuery({
+    queryKey: ["member-default-model"],
+    queryFn: async () => {
+      const response = await getMemberDefaultModel();
+      if (response.error) {
+        handleApiError(response.error);
+        return { modelId: null, chatApiKeyId: null };
+      }
+      return response.data;
+    },
+  });
+}
+
+/**
+ * Persist the current user's default (model, key) pair. Fired whenever the
+ * user changes the model in chat so the next new chat reuses their choice
+ * (the "member" level of the model-resolution chain).
+ */
+export function useUpdateMemberDefaultModel() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (body: {
+      modelId: string | null;
+      chatApiKeyId: string | null;
+    }) => {
+      const { data, error } = await updateMemberDefaultModel({ body });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (data) {
+        queryClient.setQueryData(["member-default-model"], data);
+      }
+    },
+  });
+}
+
 export function usePinConversation() {
   const updateMutation = useUpdateConversation();
 
@@ -242,6 +278,35 @@ export function usePinConversation() {
     mutationFn: async ({ id, pinned }: { id: string; pinned: boolean }) => {
       const pinnedAt = pinned ? new Date().toISOString() : null;
       return updateMutation.mutateAsync({ id, pinnedAt });
+    },
+  });
+}
+
+export function useCompactConversation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      const { data, error } = await compactChatConversation({
+        path: { id },
+      });
+
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+
+      return data;
+    },
+    onSuccess: (data, variables) => {
+      if (!data) return;
+      queryClient.setQueryData(
+        ["conversation", variables.id],
+        data.conversation,
+      );
+      queryClient.invalidateQueries({
+        queryKey: ["conversation", variables.id],
+      });
     },
   });
 }

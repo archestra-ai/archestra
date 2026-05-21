@@ -580,6 +580,75 @@ export class McpServerRuntimeManager {
   }
 
   /**
+   * Reinstall the shared K8s Deployment for a multi-tenant local catalog.
+   *
+   * Per-install `restartServer` is a no-op when siblings exist (the sibling
+   * guard in `stopServer` preserves the shared pod). This method is the
+   * catalog-level equivalent: it explicitly tears down and recreates the
+   * shared Deployment so catalog-scope spec edits (image, command, args,
+   * transport) actually roll out. Uses the same delete + create primitive
+   * single-tenant Reinstall uses; the sibling guard is intentionally
+   * bypassed because this is a catalog-level action, not a per-tenant one.
+   *
+   * Tool re-sync is the caller's responsibility (the endpoint runs it for
+   * every install attached to the catalog after the pod is Ready).
+   */
+  async reinstallSharedDeployment(catalogId: string): Promise<void> {
+    logger.info(`Reinstalling shared deployment for catalog: ${catalogId}`);
+
+    const installs = await McpServerModel.findByCatalogId(catalogId);
+    if (installs.length === 0) {
+      logger.info(
+        { catalogId },
+        "No installs attached to catalog; nothing to reinstall",
+      );
+      return;
+    }
+
+    // Pick any install as the representative — they all alias the same
+    // shared Deployment.
+    const representative = installs[0];
+
+    // Stale HTTP MCP sessions for ALL installs become invalid once the
+    // pod is recreated.
+    for (const install of installs) {
+      await McpHttpSessionModel.deleteByMcpServerId(install.id);
+    }
+
+    const k8sDeployment = await this.getOrLoadDeployment(representative.id);
+    if (k8sDeployment) {
+      // Unconditional teardown — explicitly bypasses the
+      // `isSharedMultitenantDeployment` guard that `stopServer` applies.
+      // That guard exists for per-tenant uninstalls; catalog-level
+      // reinstall is authorized to remove the shared pod.
+      await k8sDeployment.stopDeployment();
+      await k8sDeployment.deleteK8sService();
+      await k8sDeployment.deleteK8sSecret();
+      await k8sDeployment.deleteDockerRegistrySecrets();
+    }
+
+    // Clear every sibling's in-memory entry — the K8s objects are gone.
+    for (const install of installs) {
+      this.mcpServerIdToDeploymentMap.delete(install.id);
+    }
+
+    // Match single-tenant restart cadence: brief pause before recreate.
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    await this.startServer(representative);
+
+    const newDeployment = await this.getOrLoadDeployment(representative.id);
+    if (newDeployment) {
+      await newDeployment.waitForDeploymentReady(60, 2000);
+    }
+
+    logger.info(
+      { catalogId, representativeId: representative.id },
+      "Shared deployment reinstalled successfully",
+    );
+  }
+
+  /**
    * Restart a single MCP server deployment
    */
   async restartServer(mcpServerId: string): Promise<void> {
@@ -591,6 +660,35 @@ export class McpServerRuntimeManager {
 
       if (!mcpServer) {
         throw new Error(`MCP server with id ${mcpServerId} not found`);
+      }
+
+      // Multi-tenant catalogs share one K8s deployment across all installs.
+      // A per-install restart has nothing to actually restart here: the
+      // sibling guard in `stopServer` correctly preserves the shared pod,
+      // but `startServer` would then try to create the deployment/service
+      // again and get a 409 from K8s ("already exists"), surfacing as a
+      // bogus "Installation failed" on the install row even though the
+      // pod is healthy.
+      //
+      // For multi-tenant catalogs the authorized path to recreate the
+      // shared pod is `reinstallSharedDeployment` (catalog-level, invoked
+      // by POST /api/internal_mcp_catalog/:id/reinstall). It bypasses the
+      // sibling guard and tears down + recreates the pod for everyone in
+      // one shot. Per-install reinstall on a multi-tenant catalog is a
+      // bookkeeping operation (persist new prompted secrets + tool resync
+      // against the existing pod) and must not touch K8s state.
+      // TODO: ideally it all should live in a single method, and not be split
+      const isShared =
+        await McpServerRuntimeManager.isSharedMultitenantDeployment(
+          mcpServerId,
+        );
+      if (isShared) {
+        await this.getOrLoadDeployment(mcpServerId);
+        logger.info(
+          { mcpServerId },
+          "Skipping K8s deployment restart: multi-tenant catalog has other callers; use reinstallSharedDeployment for catalog-level rollouts",
+        );
+        return;
       }
 
       // Clean up stored HTTP session IDs before stopping the server.

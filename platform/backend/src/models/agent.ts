@@ -233,6 +233,10 @@ class AgentModel {
       await ToolModel.findOrCreateDelegationTool(createdAgent.id);
     }
 
+    // Auto-assign Agent Skill tools if the org has opted in via the
+    // "Enable and create a new skill" empty-state action.
+    await ToolModel.assignSkillToolsToAgent(createdAgent.id, organizationId);
+
     // Get team details and tools for the created agent
     const [teamDetails, assignedTools] = await Promise.all([
       teams && teams.length > 0
@@ -1856,7 +1860,7 @@ class AgentModel {
           incomingEmailSecurityMode: sourceAgent.incomingEmailSecurityMode,
           incomingEmailAllowedDomain: sourceAgent.incomingEmailAllowedDomain,
           llmApiKeyId: null,
-          llmModel: sourceAgent.llmModel,
+          modelId: sourceAgent.modelId,
           identityProviderId: null,
           passthroughHeaders: null,
         },

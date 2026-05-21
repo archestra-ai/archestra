@@ -1006,19 +1006,9 @@ export async function getChatMcpTools({
                       isError: archestraResponse.isError ?? false,
                     });
 
-                    // Check for errors
-                    if (archestraResponse.isError) {
-                      const errorText = archestraResponse.content
-                        .map((item) =>
-                          item.type === "text"
-                            ? item.text
-                            : JSON.stringify(item),
-                        )
-                        .join("\n");
-                      throw new Error(errorText);
-                    }
-
-                    // Convert MCP content to string for AI SDK
+                    // Return errors as tool-result text so the LLM can read
+                    // and recover, instead of throwing (which surfaces as a
+                    // fatal chat error). Matches executeMcpTool behavior.
                     return archestraResponse.content
                       .map((item) =>
                         item.type === "text" ? item.text : JSON.stringify(item),
@@ -1204,17 +1194,6 @@ export async function getChatMcpTools({
                       startTime: agentToolStartTime,
                       isError: response.isError ?? false,
                     });
-
-                    if (response.isError) {
-                      const errorText = response.content
-                        .map((item) =>
-                          item.type === "text"
-                            ? item.text
-                            : JSON.stringify(item),
-                        )
-                        .join("\n");
-                      throw new Error(errorText);
-                    }
 
                     return response.content
                       .map((item) =>

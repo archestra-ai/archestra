@@ -53,7 +53,6 @@ const uiTestMatch = [
   "**/mcp-install.spec.ts",
   "**/quickstart.spec.ts",
   "**/static-credentials-management.spec.ts",
-  "**/test-mcp-server.spec.ts",
   "**/virtual-api-keys.spec.ts",
 ];
 

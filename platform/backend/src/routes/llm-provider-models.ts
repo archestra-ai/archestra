@@ -1,5 +1,6 @@
 import {
   EmbeddingDimensionsSchema,
+  isFreeModel,
   isProviderApiKeyOptional,
   RouteId,
   SupportedProvidersSchema,
@@ -32,12 +33,16 @@ import {
 
 const LlmModelSchema = z.object({
   id: z.string(),
+  /** The models.id UUID — used as the model_id FK on conversations/agents. */
+  dbId: z.string(),
   displayName: z.string(),
   provider: SupportedProvidersSchema,
   createdAt: z.string().optional(),
   capabilities: ModelCapabilitiesSchema.optional(),
   isBest: z.boolean().optional(),
   isFastest: z.boolean().optional(),
+  /** True when the provider charges nothing for this model (both prices are zero). */
+  isFree: z.boolean(),
   embeddingDimensions: EmbeddingDimensionsSchema.nullable().optional(),
 });
 
@@ -134,11 +139,13 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         )
         .map(({ model, isBest, isFastest }) => ({
           id: model.modelId,
+          dbId: model.id,
           displayName: model.description || model.modelId,
           provider: model.provider,
           capabilities: ModelModel.toCapabilities(model),
           isBest,
           isFastest,
+          isFree: isFreeModel(model),
           embeddingDimensions: model.embeddingDimensions,
         }));
 
@@ -206,6 +213,7 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             pricePerMillionOutput: pricing.pricePerMillionOutput,
             isCustomPrice: pricing.isCustomPrice,
             priceSource: pricing.priceSource,
+            isFree: isFreeModel(model),
           };
         }),
         ...unlinkedLlmProxyModels.map((model) => {
@@ -219,6 +227,7 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             pricePerMillionOutput: pricing.pricePerMillionOutput,
             isCustomPrice: pricing.isCustomPrice,
             priceSource: pricing.priceSource,
+            isFree: isFreeModel(model),
           };
         }),
       ];

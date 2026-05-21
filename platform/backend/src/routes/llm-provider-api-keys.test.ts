@@ -200,7 +200,7 @@ describe("GET /api/llm-provider-api-keys/available", () => {
     expect(response.json()).toMatchObject([
       {
         id: apiKey.id,
-        bestModelId: "gpt-4o",
+        bestModelId: model.id,
       },
     ]);
     expect(getBestModelsForApiKeysSpy).toHaveBeenCalledWith([apiKey.id]);

@@ -1,5 +1,4 @@
-import { type archestraApiTypes, isMetadataOnlyEdit } from "@shared";
-import { useState } from "react";
+import type { archestraApiTypes } from "@shared";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,13 +11,9 @@ import {
   useUpdateInternalMcpCatalogItem,
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
-import { CascadeReinstallConfirmDialog } from "./cascade-reinstall-confirm-dialog";
 import { McpCatalogForm } from "./mcp-catalog-form";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import { transformFormToApiData } from "./mcp-catalog-form.utils";
-
-type McpCatalogApiData =
-  archestraApiTypes.CreateInternalMcpCatalogItemData["body"];
 
 interface EditCatalogDialogProps {
   item: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] | null;
@@ -53,8 +48,6 @@ export function EditCatalogContent({
   onDirtyChange,
   submitRef,
 }: EditCatalogContentProps) {
-  const [pendingApiData, setPendingApiData] =
-    useState<McpCatalogApiData | null>(null);
   const updateMutation = useUpdateInternalMcpCatalogItem();
 
   const { data: presets = [] } = useCatalogPresets(item.id);
@@ -64,8 +57,9 @@ export function EditCatalogContent({
     s.catalogId ? affectedCatalogIds.has(s.catalogId) : false,
   ).length;
 
-  const performSave = async (apiData: McpCatalogApiData) => {
-    const { multitenant: _multitenant, ...updateData } = apiData;
+  const onSubmit = async (values: McpCatalogFormValues) => {
+    const { multitenant: _multitenant, ...updateData } =
+      transformFormToApiData(values);
 
     await updateMutation.mutateAsync({
       id: item.id,
@@ -77,74 +71,40 @@ export function EditCatalogContent({
     }
   };
 
-  // The backend cascade gate compares `expandSecrets:true` original vs
-  // raw `Model.update` return; for bag-bearing rows the shapes diverge
-  // and it cascades anyway. Force the modal here so users still see the
-  // confirmation. Mirror in `routes/internal-mcp-catalog.ts`.
-  const hasSecretBag = Boolean(
-    item.presetSecretId ?? item.clientSecretId ?? item.localConfigSecretId,
-  );
-
-  const onSubmit = async (values: McpCatalogFormValues) => {
-    const apiData = transformFormToApiData(values);
-    const skipModal =
-      affectedServerCount === 0 ||
-      (!hasSecretBag && isMetadataOnlyEdit(item, apiData));
-    if (!skipModal) {
-      setPendingApiData(apiData);
-      return;
-    }
-    await performSave(apiData);
-  };
-
   return (
-    <>
-      <McpCatalogForm
-        mode="edit"
-        initialValues={item}
-        onSubmit={onSubmit}
-        embedded={keepOpenOnSave}
-        nameDisabled
-        onDirtyChange={onDirtyChange}
-        submitRef={submitRef}
-        footer={({ isDirty, onReset }) => {
-          if (keepOpenOnSave && !isDirty) return null;
-          const Footer = keepOpenOnSave ? DialogStickyFooter : DialogFooter;
-          return (
-            <Footer className={keepOpenOnSave ? "mt-0" : undefined}>
-              {keepOpenOnSave ? (
-                <Button variant="outline" onClick={onReset} type="button">
-                  Discard changes
-                </Button>
-              ) : (
-                <Button variant="outline" onClick={onClose} type="button">
-                  Cancel
-                </Button>
-              )}
-              <Button
-                type="submit"
-                disabled={updateMutation.isPending || !isDirty}
-              >
-                {updateMutation.isPending ? "Saving..." : "Save Changes"}
+    <McpCatalogForm
+      mode="edit"
+      initialValues={item}
+      onSubmit={onSubmit}
+      embedded={keepOpenOnSave}
+      nameDisabled
+      onDirtyChange={onDirtyChange}
+      submitRef={submitRef}
+      affectedServerCount={affectedServerCount}
+      presetCount={presets.length}
+      footer={({ isDirty, onReset }) => {
+        if (keepOpenOnSave && !isDirty) return null;
+        const Footer = keepOpenOnSave ? DialogStickyFooter : DialogFooter;
+        return (
+          <Footer className={keepOpenOnSave ? "mt-0" : undefined}>
+            {keepOpenOnSave ? (
+              <Button variant="outline" onClick={onReset} type="button">
+                Discard changes
               </Button>
-            </Footer>
-          );
-        }}
-      />
-
-      <CascadeReinstallConfirmDialog
-        open={pendingApiData !== null}
-        onOpenChange={(v) => !v && setPendingApiData(null)}
-        onConfirm={async () => {
-          if (!pendingApiData) return;
-          const apiData = pendingApiData;
-          setPendingApiData(null);
-          await performSave(apiData);
-        }}
-        isPending={updateMutation.isPending}
-        serverCount={affectedServerCount}
-        presetCount={presets.length}
-      />
-    </>
+            ) : (
+              <Button variant="outline" onClick={onClose} type="button">
+                Cancel
+              </Button>
+            )}
+            <Button
+              type="submit"
+              disabled={updateMutation.isPending || !isDirty}
+            >
+              {updateMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </Footer>
+        );
+      }}
+    />
   );
 }

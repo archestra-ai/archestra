@@ -1,10 +1,19 @@
 import { E2eTestId } from "@shared";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockUseOrganization, mockUseChatPlaceholder } = vi.hoisted(() => ({
+const {
+  mockUseOrganization,
+  mockUseChatPlaceholder,
+  mockTextInputSetInput,
+  mockTextInputClear,
+  mockControllerState,
+} = vi.hoisted(() => ({
   mockUseOrganization: vi.fn(),
   mockUseChatPlaceholder: vi.fn(),
+  mockTextInputSetInput: vi.fn(),
+  mockTextInputClear: vi.fn(),
+  mockControllerState: { value: "" },
 }));
 
 // Mock ResizeObserver which is used by Radix UI components
@@ -31,8 +40,25 @@ Object.defineProperty(window, "matchMedia", {
 
 // Mock all the complex dependencies
 vi.mock("@/components/ai-elements/prompt-input", () => ({
-  PromptInput: ({ children }: { children: React.ReactNode }) => (
-    <form data-testid="prompt-input">{children}</form>
+  PromptInput: ({
+    children,
+    onSubmit,
+  }: {
+    children: React.ReactNode;
+    onSubmit?: (
+      message: { text: string; files: [] },
+      event: React.FormEvent<HTMLFormElement>,
+    ) => void;
+  }) => (
+    <form
+      data-testid="prompt-input"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit?.({ text: mockControllerState.value, files: [] }, event);
+      }}
+    >
+      {children}
+    </form>
   ),
   PromptInputActionAddAttachments: ({ label }: { label: string }) => (
     <span>{label}</span>
@@ -68,6 +94,29 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
       {children}
     </button>
   ),
+  PromptInputCommand: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="prompt-command">{children}</div>
+  ),
+  PromptInputCommandEmpty: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  PromptInputCommandGroup: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  PromptInputCommandItem: ({
+    children,
+    onSelect,
+  }: {
+    children: React.ReactNode;
+    onSelect?: () => void;
+  }) => (
+    <button type="button" onClick={onSelect}>
+      {children}
+    </button>
+  ),
+  PromptInputCommandList: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
   PromptInputFooter: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
@@ -83,14 +132,33 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
       Submit {status ?? "unset"}
     </button>
   ),
-  PromptInputTextarea: ({ placeholder }: { placeholder?: string }) => (
-    <textarea placeholder={placeholder} />
+  PromptInputTextarea: ({
+    placeholder,
+    onKeyDown,
+    disabled,
+    "data-testid": testId,
+  }: {
+    placeholder?: string;
+    onKeyDown?: React.KeyboardEventHandler<HTMLTextAreaElement>;
+    disabled?: boolean;
+    "data-testid"?: string;
+  }) => (
+    <textarea
+      data-testid={testId}
+      disabled={disabled}
+      onKeyDown={onKeyDown}
+      placeholder={placeholder}
+    />
   ),
   PromptInputTools: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="prompt-tools">{children}</div>
   ),
   usePromptInputController: () => ({
-    textInput: { setInput: vi.fn() },
+    textInput: {
+      value: mockControllerState.value,
+      setInput: mockTextInputSetInput,
+      clear: mockTextInputClear,
+    },
     attachments: { files: [] },
   }),
   usePromptInputAttachments: () => ({
@@ -201,6 +269,7 @@ describe("ArchestraPromptInput", () => {
       placeholder: "Animated placeholder",
       isAnimating: true,
     });
+    mockControllerState.value = "";
   });
 
   describe("File Upload Button", () => {
@@ -431,6 +500,172 @@ describe("ArchestraPromptInput", () => {
       ).toBeInTheDocument();
       expect(
         screen.queryByPlaceholderText("Animated placeholder"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("should reset slash command selection when the menu reopens", () => {
+      const onCompactConversation = vi.fn();
+      mockControllerState.value = "/";
+
+      const { rerender } = render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          conversationId="conversation-1"
+          onCompactConversation={onCompactConversation}
+        />,
+      );
+
+      fireEvent.keyDown(screen.getByTestId(E2eTestId.ChatPromptTextarea), {
+        key: "ArrowDown",
+      });
+
+      mockControllerState.value = "";
+      rerender(
+        <ArchestraPromptInput
+          {...defaultProps}
+          conversationId="conversation-1"
+          onCompactConversation={onCompactConversation}
+        />,
+      );
+
+      mockControllerState.value = "/";
+      rerender(
+        <ArchestraPromptInput
+          {...defaultProps}
+          conversationId="conversation-1"
+          onCompactConversation={onCompactConversation}
+        />,
+      );
+
+      fireEvent.keyDown(screen.getByTestId(E2eTestId.ChatPromptTextarea), {
+        key: "Enter",
+      });
+
+      expect(onCompactConversation).toHaveBeenCalledTimes(1);
+      expect(mockTextInputClear).toHaveBeenCalled();
+    });
+
+    it("queues a follow-up submitted while the current response is streaming", () => {
+      const onSubmit = vi.fn();
+      mockControllerState.value = "Run this next";
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          onSubmit={onSubmit}
+          status="streaming"
+        />,
+      );
+
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(onSubmit).not.toHaveBeenCalled();
+      expect(screen.getByText("Run this next")).toBeInTheDocument();
+      expect(screen.getByLabelText("Queued prompts")).toBeInTheDocument();
+    });
+
+    it("submits the next queued follow-up when the chat is ready again", () => {
+      const onSubmit = vi.fn();
+      mockControllerState.value = "Run after streaming";
+
+      const { rerender } = render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          onSubmit={onSubmit}
+          status="streaming"
+        />,
+      );
+
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      rerender(
+        <ArchestraPromptInput
+          {...defaultProps}
+          onSubmit={onSubmit}
+          status="ready"
+        />,
+      );
+
+      expect(onSubmit).toHaveBeenCalledWith(
+        { text: "Run after streaming", files: [] },
+        expect.objectContaining({ preventDefault: expect.any(Function) }),
+      );
+    });
+
+    it("keeps the queued follow-up in the queue when submitting it fails", () => {
+      const onSubmit = vi.fn(() => {
+        throw new Error("submit failed");
+      });
+      mockControllerState.value = "Retain on failure";
+
+      const { rerender } = render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          onSubmit={onSubmit}
+          status="streaming"
+        />,
+      );
+
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      rerender(
+        <ArchestraPromptInput
+          {...defaultProps}
+          onSubmit={onSubmit}
+          status="ready"
+        />,
+      );
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      expect(screen.getByText("Retain on failure")).toBeInTheDocument();
+    });
+
+    it("does not submit queued follow-ups after switching conversations", () => {
+      const onConversationASubmit = vi.fn();
+      const onConversationBSubmit = vi.fn();
+      mockControllerState.value = "Keep this in conversation A";
+
+      const { rerender } = render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          conversationId="conversation-a"
+          onSubmit={onConversationASubmit}
+          status="streaming"
+        />,
+      );
+
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(
+        screen.getByText("Keep this in conversation A"),
+      ).toBeInTheDocument();
+
+      rerender(
+        <ArchestraPromptInput
+          {...defaultProps}
+          conversationId="conversation-b"
+          onSubmit={onConversationBSubmit}
+          status="ready"
+        />,
+      );
+
+      expect(onConversationASubmit).not.toHaveBeenCalled();
+      expect(onConversationBSubmit).not.toHaveBeenCalled();
+      expect(
+        screen.queryByText("Keep this in conversation A"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("removes queued follow-ups from the prompt queue", () => {
+      mockControllerState.value = "Remove this queued prompt";
+
+      render(<ArchestraPromptInput {...defaultProps} status="streaming" />);
+
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+      fireEvent.click(screen.getByLabelText("Remove queued prompt"));
+
+      expect(
+        screen.queryByText("Remove this queued prompt"),
       ).not.toBeInTheDocument();
     });
   });

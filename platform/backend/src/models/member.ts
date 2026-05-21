@@ -420,6 +420,55 @@ class MemberModel {
   }
 
   /**
+   * Set the member's default model and API key. The two are a pair — callers
+   * must pass both or neither (see `isModelSelectionComplete`).
+   */
+  static async setDefaultModelSelection(params: {
+    userId: string;
+    organizationId: string;
+    modelId: string | null;
+    apiKeyId: string | null;
+  }) {
+    const { userId, organizationId, modelId, apiKeyId } = params;
+    await db
+      .update(schema.membersTable)
+      .set({ defaultModelId: modelId, defaultChatApiKeyId: apiKeyId })
+      .where(
+        and(
+          eq(schema.membersTable.userId, userId),
+          eq(schema.membersTable.organizationId, organizationId),
+        ),
+      );
+  }
+
+  /**
+   * Get the member's default (model, key) pair. Either both ids are set or
+   * both are null (see `isModelSelectionComplete`).
+   */
+  static async getDefaultModelSelection(
+    userId: string,
+    organizationId: string,
+  ): Promise<{ modelId: string | null; chatApiKeyId: string | null }> {
+    const [member] = await db
+      .select({
+        defaultModelId: schema.membersTable.defaultModelId,
+        defaultChatApiKeyId: schema.membersTable.defaultChatApiKeyId,
+      })
+      .from(schema.membersTable)
+      .where(
+        and(
+          eq(schema.membersTable.userId, userId),
+          eq(schema.membersTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+    return {
+      modelId: member?.defaultModelId ?? null,
+      chatApiKeyId: member?.defaultChatApiKeyId ?? null,
+    };
+  }
+
+  /**
    * Get the default agent ID for a member
    */
   static async getDefaultAgentId(

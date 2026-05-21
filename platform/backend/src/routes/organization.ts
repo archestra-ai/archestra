@@ -1,6 +1,7 @@
 import {
   AUTO_PROVISIONED_INVITATION_STATUS,
   addNomicTaskPrefix,
+  isModelSelectionComplete,
   RouteId,
 } from "@shared";
 import { and, eq, inArray, like } from "drizzle-orm";
@@ -193,6 +194,34 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
         if (!apiKey || apiKey.organizationId !== organizationId) {
           throw new ApiError(404, "API key not found");
+        }
+      }
+
+      // The default model and its API key are a pair: persist both or neither.
+      // Validate the merged result only when this update touches either field.
+      if (
+        body.defaultModelId !== undefined ||
+        body.defaultLlmApiKeyId !== undefined
+      ) {
+        const currentOrg = await OrganizationModel.getById(organizationId);
+        const mergedModelId =
+          body.defaultModelId !== undefined
+            ? body.defaultModelId
+            : (currentOrg?.defaultModelId ?? null);
+        const mergedApiKeyId =
+          body.defaultLlmApiKeyId !== undefined
+            ? body.defaultLlmApiKeyId
+            : (currentOrg?.defaultLlmApiKeyId ?? null);
+        if (
+          !isModelSelectionComplete({
+            modelId: mergedModelId,
+            apiKeyId: mergedApiKeyId,
+          })
+        ) {
+          throw new ApiError(
+            400,
+            "The default model and API key must be set together",
+          );
         }
       }
 

@@ -246,7 +246,7 @@ You can generate an API key from the [Groq Console](https://console.groq.com/key
 
 ## OpenRouter
 
-[OpenRouter](https://openrouter.ai/) provides access to many models via a single OpenAI-compatible API, with optional attribution headers for ranking and analytics.
+[OpenRouter](https://openrouter.ai/) provides access to many models - including **free** ones - via a single OpenAI-compatible API, with optional attribution headers for ranking and analytics.
 
 ### Supported OpenRouter APIs
 
@@ -264,8 +264,9 @@ You can generate an API key from the [Groq Console](https://console.groq.com/key
 | ---------------------------------- | -------- | --------------------------------------------------------------------------- |
 | `ARCHESTRA_OPENROUTER_BASE_URL`    | No       | OpenRouter API base URL (default: `https://openrouter.ai/api/v1`)           |
 | `ARCHESTRA_CHAT_OPENROUTER_API_KEY`| No       | Default API key for OpenRouter (can be overridden per conversation/team/org)|
-| `ARCHESTRA_OPENROUTER_REFERER`     | No       | Attribution header `HTTP-Referer` sent to OpenRouter (recommended)          |
-| `ARCHESTRA_OPENROUTER_TITLE`       | No       | Attribution header `X-Title` sent to OpenRouter (recommended)               |
+| `ARCHESTRA_OPENROUTER_REFERER`     | No       | Attribution header `HTTP-Referer` sent to OpenRouter (default: `https://archestra.ai`) |
+| `ARCHESTRA_OPENROUTER_TITLE`       | No       | App name sent to OpenRouter as `X-OpenRouter-Title` (recommended)           |
+| `ARCHESTRA_OPENROUTER_CATEGORIES`  | No       | Comma-separated OpenRouter marketplace categories sent as `X-OpenRouter-Categories` (default: `general-chat,personal-agent`) |
 
 ### Getting an API Key
 
@@ -273,13 +274,19 @@ You can generate an API key from the [OpenRouter dashboard](https://openrouter.a
 
 ### Popular Models
 
-- `openrouter/auto`
-- `openrouter/openai/gpt-4o-mini`
+- `openrouter/auto` - OpenRouter's Auto Router; picks the best model per request, billed at that model's rate. Marked "Fastest", pinned to the top of the picker.
+- `openrouter/free` - OpenRouter's Free Models Router; see below.
+- `~`-prefixed ids such as `~anthropic/claude-sonnet-latest` are OpenRouter "latest" aliases that always redirect to the newest model in a family. They sync and behave like ordinary models, and are shown with a "Latest" badge in the picker.
 
-### Important Notes
+### Free Models
 
-- **OpenAI-compatible API**: OpenRouter uses the OpenAI Chat Completions request/response format.
-- **Attribution headers**: OpenRouter recommends sending `HTTP-Referer` and `X-Title` headers. Archestra can be configured to send these automatically via `ARCHESTRA_OPENROUTER_REFERER` and `ARCHESTRA_OPENROUTER_TITLE`.
+OpenRouter exposes `:free` model variants that cost nothing. An OpenRouter API key is still required to use them, but OpenRouter doesn't charge for requests that route to free models. Model providers may use the data from free model requests to improve their models, so it may be not suitable for sensitive data.
+
+**Free Models Router** (`openrouter/free`) is OpenRouter's [built-in router](https://openrouter.ai/openrouter/free) that picks a free model per request, filtering for the features the request needs (tool calling, structured outputs, image input). 
+
+When an OpenRouter key is added to an organization that has no default model configured, Archestra sets the Free Models Router as the organization default, giving a zero-cost starting point. An explicitly chosen default is never overridden.
+
+Dynamic-pricing routers (`openrouter/auto`) report no fixed per-token price, so the pricing is dynamic.
 
 ## Mistral AI
 

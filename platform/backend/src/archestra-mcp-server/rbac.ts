@@ -125,6 +125,10 @@ export const TOOL_PERMISSIONS: Record<
   // Meta — permission is enforced on the target tool, not on run_tool itself
   search_tools: null,
   run_tool: null,
+
+  // Skills — available to all (read org-wide skills within the chat session)
+  activate_skill: null,
+  read_skill_file: null,
 };
 
 /**

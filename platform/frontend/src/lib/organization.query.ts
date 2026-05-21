@@ -20,7 +20,8 @@ export const appearanceKeys = {
  * Hook to fetch public appearance settings.
  * Used on login/auth pages where the user is not yet authenticated.
  * Returns theme, customFont, and logo without requiring authentication.
- * On API failure, returns undefined (treated as not loaded) to preserve localStorage values.
+ * On API failure, returns null so React Query has a defined cache value while
+ * callers keep using local fallback appearance values.
  */
 export function useAppearanceSettings(enabled = true) {
   return useQuery({
@@ -29,7 +30,7 @@ export function useAppearanceSettings(enabled = true) {
       const { data, error } = await archestraApiSdk.getAppearanceSettings();
 
       if (error || !data) {
-        return undefined;
+        return null;
       }
 
       return data;

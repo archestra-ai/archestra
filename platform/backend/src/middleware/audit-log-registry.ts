@@ -18,6 +18,7 @@ import OptimizationRuleModel from "@/models/optimization-rule";
 import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
+import SkillModel from "@/models/skill";
 import TeamModel from "@/models/team";
 import TeamTokenModel from "@/models/team-token";
 import ToolModel from "@/models/tool";
@@ -201,6 +202,23 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/optimization-rules/:id": {
     resourceType: "optimizationRule",
     fetchById: (id, orgId) => OptimizationRuleModel.findByIdForAudit(id, orgId),
+  },
+
+  // Skills
+  "/api/skills": {
+    resourceType: "skill",
+    fetchById: (id, orgId) => SkillModel.findByIdForAudit(id, orgId),
+  },
+  "/api/skills/:id": {
+    resourceType: "skill",
+    fetchById: (id, orgId) => SkillModel.findByIdForAudit(id, orgId),
+  },
+  // Enabling skill tools patches the org record — audit as an org-level change
+  // so it appears alongside other org setting mutations in the audit log.
+  "/api/skills/enable-defaults": {
+    resourceType: "organization",
+    resourceIdSource: "organizationContext",
+    fetchById: (id, _orgId) => OrganizationModel.findByIdForAudit(id, _orgId),
   },
 
   // Scheduled agent triggers (sub-routes resolve via `resolveAuditableRouteConfig`)

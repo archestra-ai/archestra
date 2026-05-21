@@ -160,6 +160,24 @@ class SkillModel {
 
     return rows.length > 0;
   }
+
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select()
+      .from(schema.skillsTable)
+      .where(
+        and(
+          eq(schema.skillsTable.id, id),
+          eq(schema.skillsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    return row ?? null;
+  }
 }
 
 function buildOrgFilters(params: {

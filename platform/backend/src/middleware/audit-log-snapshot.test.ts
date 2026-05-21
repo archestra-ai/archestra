@@ -6,6 +6,7 @@ import KnowledgeBaseModel from "@/models/knowledge-base";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import McpServerModel from "@/models/mcp-server";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
+import SkillModel from "@/models/skill";
 import TeamModel from "@/models/team";
 import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
 import TrustedDataPolicyModel from "@/models/trusted-data-policy";
@@ -496,6 +497,34 @@ describe("audit snapshot shape — non-redacted models", () => {
     ).toBeNull();
   });
 
+  test("SkillModel.findByIdForAudit returns expected fields and scopes to org", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const org2 = await makeOrganization();
+
+    const [skill] = await db
+      .insert(schema.skillsTable)
+      .values({
+        organizationId: org.id,
+        name: "My Test Skill",
+        description: "Does things",
+        content: "# My Test Skill\nInstructions here.",
+        sourceType: "manual",
+      })
+      .returning();
+
+    const snap = await SkillModel.findByIdForAudit(skill.id, org.id);
+    expect(snap).not.toBeNull();
+    expect(snap).toHaveProperty("id", skill.id);
+    expect(snap).toHaveProperty("name", "My Test Skill");
+    expect(snap).toHaveProperty("organizationId", org.id);
+    expect(snap).toHaveProperty("sourceType", "manual");
+    expect(snap?.createdAt).toBeInstanceOf(Date);
+
+    expect(await SkillModel.findByIdForAudit(skill.id, org2.id)).toBeNull();
+  });
+
   test("AgentToolModel.findByIdForAudit scopes to organization", async ({
     makeOrganization,
     makeAgent,
@@ -564,6 +593,7 @@ describe("AUDITABLE_ROUTES registry", () => {
       "/api/optimization-rules",
       "/api/schedule-triggers",
       "/api/roles",
+      "/api/skills",
     ];
     for (const pattern of collectionPatterns) {
       expect(

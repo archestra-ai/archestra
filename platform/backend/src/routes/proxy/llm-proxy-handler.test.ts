@@ -15,7 +15,11 @@ import {
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
 import type { PolicyBlockResult } from "@/guardrails/tool-invocation";
-import { LlmProviderApiKeyModel, ModelModel } from "@/models";
+import {
+  LimitValidationService,
+  LlmProviderApiKeyModel,
+  ModelModel,
+} from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   createAnthropicTestClient,
@@ -1023,5 +1027,167 @@ describe("LLM Proxy Handler — CHAT_API_KEY_ID_HEADER fallback", () => {
         baseUrl: "https://runtime.example.com/openai/v1",
       }),
     );
+  });
+});
+
+describe("LLM Proxy Handler — 429 Limit Headers", () => {
+  let app: FastifyInstance;
+  let testAgent: Agent;
+
+  const mockLimitResult = {
+    limit: {
+      limitValue: 10.0,
+      resetsAt: new Date(Date.now() + 3600000).toISOString(),
+      scope: "agent" as const,
+    },
+    refusalMessage: "Token cost limit exceeded",
+    contentMessage: "Agent has exceeded the token cost limit of $10.00",
+  };
+
+  beforeEach(async ({ makeAgent }) => {
+    vi.clearAllMocks();
+
+    app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
+      () => createOpenAiTestClient({}) as never,
+    );
+
+    testAgent = await makeAgent({ name: "Limit Headers Agent" });
+
+    metrics.llm.initializeMetrics([]);
+
+    mockEvaluatePolicies.mockResolvedValue(null);
+    mockGetGlobalToolPolicy.mockResolvedValue("permissive");
+
+    await app.register(openAiProxyRoutes);
+    await ModelModel.upsert({
+      externalId: "openai/gpt-4o",
+      provider: "openai",
+      modelId: "gpt-4o",
+      inputModalities: null,
+      outputModalities: null,
+      customPricePerMillionInput: "2.50",
+      customPricePerMillionOutput: "10.00",
+      lastSyncedAt: new Date(),
+    });
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await app.close();
+  });
+
+  test("429 non-streaming includes limit headers", async () => {
+    vi.spyOn(LimitValidationService, "checkUsageLimits").mockResolvedValue(
+      mockLimitResult,
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${testAgent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "Hello!" }],
+        stream: false,
+      },
+    });
+
+    expect(response.statusCode).toBe(429);
+    const headers = response.headers;
+    expect(headers["x-archestra-limit-value"]).toBe("10.00");
+    expect(headers["x-archestra-limit-resets-at"]).toBe(
+      mockLimitResult.limit.resetsAt,
+    );
+    expect(headers["x-archestra-limit-scope"]).toBe("agent");
+    expect(headers["retry-after"]).toBeDefined();
+    const body = response.json();
+    expect(body.error).toBeDefined();
+    expect(body.error.message).toBe(mockLimitResult.contentMessage);
+    expect(body.error.type).toBe("rate_limit_exceeded");
+    expect(body.error.code).toBe("token_cost_limit_exceeded");
+  });
+
+  test("429 streaming includes limit headers", async () => {
+    vi.spyOn(LimitValidationService, "checkUsageLimits").mockResolvedValue(
+      mockLimitResult,
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${testAgent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "Hello!" }],
+        stream: true,
+      },
+    });
+
+    expect(response.statusCode).toBe(429);
+    const headers = response.headers;
+    expect(headers["x-archestra-limit-value"]).toBe("10.00");
+    expect(headers["x-archestra-limit-resets-at"]).toBe(
+      mockLimitResult.limit.resetsAt,
+    );
+    expect(headers["x-archestra-limit-scope"]).toBe("agent");
+    expect(headers["retry-after"]).toBeDefined();
+  });
+
+  test("200 non-streaming does NOT include limit headers", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${testAgent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "Hello!" }],
+        stream: false,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const headers = response.headers;
+    expect(headers["x-archestra-limit-value"]).toBeUndefined();
+    expect(headers["x-archestra-limit-resets-at"]).toBeUndefined();
+    expect(headers["x-archestra-limit-scope"]).toBeUndefined();
+  });
+
+  test("200 streaming does NOT include limit headers", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${testAgent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "Hello!" }],
+        stream: true,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const headers = response.headers;
+    expect(headers["x-archestra-limit-value"]).toBeUndefined();
+    expect(headers["x-archestra-limit-resets-at"]).toBeUndefined();
+    expect(headers["x-archestra-limit-scope"]).toBeUndefined();
   });
 });

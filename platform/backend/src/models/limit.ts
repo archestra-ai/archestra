@@ -6,11 +6,18 @@ import type {
   Limit,
   LimitCleanupInterval,
   LimitEntityType,
+  LimitInfo,
   LimitType,
   UpdateLimit,
 } from "@/types";
 import AgentTeamModel from "./agent-team";
 import ModelModel from "./model";
+
+interface LimitCheckResult {
+  limit: LimitInfo;
+  refusalMessage: string;
+  contentMessage: string;
+}
 
 type LimitsCleanupOptionsEntities = {
   [K in Exclude<LimitEntityType, "team">]?: string;
@@ -537,12 +544,14 @@ export class LimitValidationService {
    * Check if current usage has already exceeded any token cost limits
    * Returns null if allowed, or [refusalMessage, contentMessage] if blocked
    */
-  static async checkLimitsBeforeRequest(params: {
+  static async checkUsageLimits(params: {
     agentId: string;
     userId?: string;
     virtualKeyId?: string;
-  }): Promise<null | [string, string]> {
-    const { agentId, userId, virtualKeyId } = params;
+    /** The model being used in this request. Limits scoped to specific models are only checked when they match. */
+    model?: string;
+  }): Promise<LimitCheckResult | null> {
+    const { agentId, userId, virtualKeyId, model: requestModel } = params;
 
     try {
       logger.info(
@@ -599,15 +608,19 @@ export class LimitValidationService {
         logger.info(
           `[LimitValidation] Checking virtual-key-level limits for: ${virtualKeyId}`,
         );
-        const vkLimitViolation = await LimitValidationService.checkEntityLimits(
-          "virtual_key",
-          virtualKeyId,
-        );
-        if (vkLimitViolation) {
+        const vkLimitCheckResult =
+          await LimitValidationService.checkEntityLimits(
+            "virtual_key",
+            virtualKeyId,
+            requestModel,
+          );
+
+        if (vkLimitCheckResult) {
           logger.info(
             `[LimitValidation] BLOCKED by virtual-key-level limit for: ${virtualKeyId}`,
           );
-          return vkLimitViolation;
+
+          return vkLimitCheckResult;
         }
         logger.info(
           `[LimitValidation] Virtual-key-level limits OK for: ${virtualKeyId}`,
@@ -618,25 +631,33 @@ export class LimitValidationService {
         logger.info(
           `[LimitValidation] Checking user-level limits for: ${userId}`,
         );
-        const userLimitViolation =
-          await LimitValidationService.checkEntityLimits("user", userId);
-        if (userLimitViolation) {
+        const userLimitCheckResult =
+          await LimitValidationService.checkEntityLimits(
+            "user",
+            userId,
+            requestModel,
+          );
+
+        if (userLimitCheckResult) {
           logger.info(
             `[LimitValidation] BLOCKED by user-level limit for: ${userId}`,
           );
-          return userLimitViolation;
+          return userLimitCheckResult;
         }
+
         if (organizationId) {
-          const defaultUserLimitViolation =
+          const defaultUserLimitCheckResult =
             await LimitValidationService.checkDefaultUserLimit({
               organizationId,
               userId,
+              requestModel,
             });
-          if (defaultUserLimitViolation) {
+
+          if (defaultUserLimitCheckResult) {
             logger.info(
               `[LimitValidation] BLOCKED by default user limit for: ${userId}`,
             );
-            return defaultUserLimitViolation;
+            return defaultUserLimitCheckResult;
           }
         }
         logger.info(`[LimitValidation] User-level limits OK for: ${userId}`);
@@ -645,13 +666,18 @@ export class LimitValidationService {
       logger.info(
         `[LimitValidation] Checking agent-level limits for: ${agentId}`,
       );
-      const agentLimitViolation =
-        await LimitValidationService.checkEntityLimits("agent", agentId);
-      if (agentLimitViolation) {
+      const agentLimitCheckResult =
+        await LimitValidationService.checkEntityLimits(
+          "agent",
+          agentId,
+          requestModel,
+        );
+
+      if (agentLimitCheckResult) {
         logger.info(
           `[LimitValidation] BLOCKED by agent-level limit for: ${agentId}`,
         );
-        return agentLimitViolation;
+        return agentLimitCheckResult;
       }
       logger.info(`[LimitValidation] Agent-level limits OK for: ${agentId}`);
 
@@ -672,50 +698,56 @@ export class LimitValidationService {
           logger.info(
             `[LimitValidation] Checking team limit for team: ${team.id}`,
           );
-          const teamLimitViolation =
-            await LimitValidationService.checkEntityLimits("team", team.id);
-          if (teamLimitViolation) {
+          const teamLimitCheckResult =
+            await LimitValidationService.checkEntityLimits(
+              "team",
+              team.id,
+              requestModel,
+            );
+
+          if (teamLimitCheckResult) {
             logger.info(
               `[LimitValidation] BLOCKED by team-level limit for team: ${team.id}`,
             );
-            return teamLimitViolation;
+            return teamLimitCheckResult;
           }
           logger.info(
             `[LimitValidation] Team-level limits OK for team: ${team.id}`,
           );
         }
+      }
 
-        // Check organization-level limits
-        if (organizationId) {
-          logger.info(
-            `[LimitValidation] Checking organization-level limits for org: ${organizationId}`,
+      // Check organization-level limits (independent of team membership)
+      if (organizationId) {
+        logger.info(
+          `[LimitValidation] Checking organization-level limits for org: ${organizationId}`,
+        );
+        const orgLimitCheckResult =
+          await LimitValidationService.checkEntityLimits(
+            "organization",
+            organizationId,
+            requestModel,
           );
-          const orgLimitViolation =
-            await LimitValidationService.checkEntityLimits(
-              "organization",
-              organizationId,
-            );
-          if (orgLimitViolation) {
-            logger.info(
-              `[LimitValidation] BLOCKED by organization-level limit for org: ${organizationId}`,
-            );
-            return orgLimitViolation;
-          }
+
+        if (orgLimitCheckResult) {
           logger.info(
-            `[LimitValidation] Organization-level limits OK for org: ${organizationId}`,
+            `[LimitValidation] BLOCKED by organization-level limit for org: ${organizationId}`,
           );
+          return orgLimitCheckResult;
         }
+        logger.info(
+          `[LimitValidation] Organization-level limits OK for org: ${organizationId}`,
+        );
       }
 
       logger.info(
         `[LimitValidation] All limits OK for agent: ${agentId} - ALLOWING request`,
       );
-      return null; // No limits exceeded
+      return null;
     } catch (error) {
       logger.error(
         `[LimitValidation] Error checking limits before request: ${error}`,
       );
-      // In case of error, allow the request to proceed
       return null;
     }
   }
@@ -726,7 +758,8 @@ export class LimitValidationService {
   private static async checkEntityLimits(
     entityType: LimitEntityType,
     entityId: string,
-  ): Promise<null | [string, string]> {
+    requestModel?: string,
+  ): Promise<LimitCheckResult | null> {
     try {
       logger.info(
         `[LimitValidation] Querying limits for ${entityType} ${entityId}`,
@@ -741,14 +774,30 @@ export class LimitValidationService {
         `[LimitValidation] Found ${limits.length} token_cost limits for ${entityType} ${entityId}`,
       );
 
-      if (limits.length === 0) {
+      // Filter limits by request model — only check limits that apply to this model
+      const applicableLimits = requestModel
+        ? limits.filter((limit) => {
+            // null model = all-models limit, always applies
+            if (!limit.model) return true;
+            // Specific model list — must contain the request model
+            const models = normalizeLimitModels(limit.model) ?? [];
+            return models.includes(requestModel);
+          })
+        : limits;
+
+      if (applicableLimits.length !== limits.length) {
+        logger.info(
+          `[LimitValidation] Filtered to ${applicableLimits.length}/${limits.length} limits applicable to model ${requestModel ?? "unknown"}`,
+        );
+      }
+
+      if (applicableLimits.length === 0) {
         logger.info(
           `[LimitValidation] No token_cost limits found for ${entityType} ${entityId} - allowing`,
         );
         return null;
       }
-
-      for (const limit of limits) {
+      for (const limit of applicableLimits) {
         logger.info(
           `[LimitValidation] Checking limit ${limit.id} for ${entityType} ${entityId}`,
         );
@@ -863,7 +912,16 @@ Please contact your administrator to increase the limit or wait for the usage to
           const refusalMessage = `${archestraMetadata}
 ${contentMessage}`;
 
-          return [refusalMessage, contentMessage];
+          return {
+            limit: {
+              limitValue: limit.limitValue,
+              resetsAt: computeResetsAt(null, limit.cleanupInterval ?? "1w"),
+              scope: limit.entityType,
+              models: normalizeLimitModels(limit.model),
+            },
+            refusalMessage,
+            contentMessage,
+          };
         } else {
           logger.info(
             `[LimitValidation] Limit OK for ${entityType} ${entityId}: ${comparisonValue} < ${limit.limitValue}`,
@@ -872,7 +930,7 @@ ${contentMessage}`;
       }
 
       logger.info(
-        `[LimitValidation] All ${limits.length} limits OK for ${entityType} ${entityId}`,
+        `[LimitValidation] All ${applicableLimits.length} limits OK for ${entityType} ${entityId}`,
       );
       return null; // No limits exceeded for this entity
     } catch (error) {
@@ -886,7 +944,8 @@ ${contentMessage}`;
   private static async checkDefaultUserLimit(params: {
     organizationId: string;
     userId: string;
-  }): Promise<null | [string, string]> {
+    requestModel?: string;
+  }): Promise<LimitCheckResult | null> {
     try {
       const [organization] = await db
         .select({
@@ -917,6 +976,22 @@ ${contentMessage}`;
         return null;
       }
 
+      // Filter by request model — skip if default limit models don't include the request model
+      if (params.requestModel) {
+        const limitModels = normalizeLimitModels(
+          organization.defaultUserLimitModel,
+        );
+        if (
+          limitModels !== null &&
+          !limitModels.includes(params.requestModel)
+        ) {
+          logger.info(
+            `[LimitValidation] Skipping default user limit for ${params.userId}: model ${params.requestModel} not in [${limitModels.join(", ")}]`,
+          );
+          return null;
+        }
+      }
+
       const usage = await getDefaultUserLimitUsage({
         organizationId: params.organizationId,
         userId: params.userId,
@@ -928,7 +1003,7 @@ ${contentMessage}`;
         return null;
       }
 
-      return buildLimitViolationResponse({
+      const [refusalMessage, contentMessage] = buildLimitViolationResponse({
         entityType: "user",
         entityId: params.userId,
         limitValue: organization.defaultUserLimitValue,
@@ -937,6 +1012,19 @@ ${contentMessage}`;
         totalTokensIn: usage.tokensIn,
         totalTokensOut: usage.tokensOut,
       });
+      return {
+        limit: {
+          limitValue: organization.defaultUserLimitValue,
+          resetsAt: computeResetsAt(
+            null,
+            organization.defaultUserLimitCleanupInterval ?? "1w",
+          ),
+          scope: "user" as const,
+          models: normalizeLimitModels(organization.defaultUserLimitModel),
+        },
+        refusalMessage,
+        contentMessage,
+      };
     } catch (error) {
       logger.error(
         { error, params },
@@ -1127,6 +1215,25 @@ function normalizeLimitModels(models: string[] | null | undefined) {
   }
 
   return models;
+}
+
+function computeResetsAt(
+  lastCleanup: Date | null,
+  interval: LimitCleanupInterval,
+): string {
+  const base = lastCleanup ?? new Date();
+  return new Date(base.getTime() + cleanupIntervalToMs(interval)).toISOString();
+}
+
+function cleanupIntervalToMs(interval: LimitCleanupInterval): number {
+  const ms: Record<LimitCleanupInterval, number> = {
+    "1h": 3_600_000,
+    "12h": 43_200_000,
+    "24h": 86_400_000,
+    "1w": 604_800_000,
+    "1m": 2_592_000_000, // 30 days
+  };
+  return ms[interval];
 }
 
 export default LimitModel;

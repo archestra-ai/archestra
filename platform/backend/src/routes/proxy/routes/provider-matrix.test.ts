@@ -2157,13 +2157,15 @@ describe("LLM proxy provider matrix", () => {
         const agent = await makeAgent({
           name: `${config.providerName} limits`,
         });
-        vi.spyOn(
-          LimitValidationService,
-          "checkLimitsBeforeRequest",
-        ).mockResolvedValue([
-          "Refusal",
-          "The token cost limit has been exceeded.",
-        ]);
+        vi.spyOn(LimitValidationService, "checkUsageLimits").mockResolvedValue({
+          refusalMessage: "Refusal",
+          contentMessage: "The token cost limit has been exceeded.",
+          limit: {
+            limitValue: 1,
+            resetsAt: new Date().toISOString(),
+            scope: "organization",
+          },
+        });
         await setupRoute(agent);
 
         const blockedResponse = await app.inject({

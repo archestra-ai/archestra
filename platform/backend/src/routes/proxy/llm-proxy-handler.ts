@@ -78,6 +78,7 @@ import {
   withSessionContext,
 } from "./llm-proxy-helpers";
 import * as utils from "./utils";
+import { setLimitHeaders } from "./utils/headers/limit-headers";
 import type { SessionSource } from "./utils/headers/session-id";
 
 const {
@@ -456,27 +457,37 @@ export async function handleLLMProxy<
       { resolvedAgentId },
       `[${providerName}Proxy] Checking usage limits`,
     );
-    const limitViolation =
-      await LimitValidationService.checkLimitsBeforeRequest({
-        agentId: resolvedAgentId,
-        userId,
-        virtualKeyId,
-      });
+    const limitResult = await LimitValidationService.checkUsageLimits({
+      agentId: resolvedAgentId,
+      userId,
+      virtualKeyId,
+      model: requestAdapter.getModel(),
+    });
 
-    if (limitViolation) {
-      const [_refusalMessage, contentMessage] = limitViolation;
+    if (limitResult) {
+      // Limit exceeded → 429
       logger.info(
         { resolvedAgentId, reason: "token_cost_limit_exceeded" },
         `${providerName} request blocked due to token cost limit`,
       );
-      return reply.status(429).send({
+      const reply429 = reply.status(429);
+      const tightestLimit = limitResult.limit;
+      setLimitHeaders(reply429, tightestLimit);
+      const resetsAtMs = new Date(tightestLimit.resetsAt).getTime();
+      const delaySeconds = Math.max(
+        0,
+        Math.ceil((resetsAtMs - Date.now()) / 1000),
+      );
+      reply429.header("Retry-After", String(delaySeconds));
+      return reply429.send({
         error: {
-          message: contentMessage,
+          message: limitResult.contentMessage,
           type: "rate_limit_exceeded",
           code: "token_cost_limit_exceeded",
         },
       });
     }
+
     logger.debug(
       { resolvedAgentId },
       `[${providerName}Proxy] Limit check passed`,

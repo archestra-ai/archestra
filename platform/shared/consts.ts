@@ -121,6 +121,15 @@ export const PROVIDER_BASE_URL_HEADER = "X-Archestra-Provider-Base-Url";
  */
 export const CHAT_API_KEY_ID_HEADER = "X-Archestra-Chat-Api-Key-Id";
 
+/**
+ * Response headers for programmatic limit-awareness.
+ * Set on 429 LLM proxy and chat responses.
+ */
+export const LIMIT_VALUE_HEADER = "X-Archestra-Limit-Value";
+export const LIMIT_RESETS_AT_HEADER = "X-Archestra-Limit-Resets-At";
+export const LIMIT_SCOPE_HEADER = "X-Archestra-Limit-Scope";
+export const LIMIT_MODELS_HEADER = "X-Archestra-Limit-Models";
+
 export const DEFAULT_VAULT_TOKEN = "dev-root-token";
 
 export const TimeInMs = {

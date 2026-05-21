@@ -157,3 +157,10 @@ export const LimitWithUsageSchema = SelectLimitSchema.extend({
 });
 
 export type LimitWithUsage = z.infer<typeof LimitWithUsageSchema>;
+
+export interface LimitInfo {
+  limitValue: number;
+  resetsAt: string;
+  scope: LimitEntityType;
+  models?: string[] | null;
+}

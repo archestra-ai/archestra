@@ -1113,9 +1113,9 @@ describe("LimitModel", () => {
 });
 
 describe("LimitValidationService", () => {
-  describe("checkLimitsBeforeRequest", () => {
+  describe("checkUsageLimits", () => {
     test("should return null when no limits are set", async () => {
-      const result = await LimitValidationService.checkLimitsBeforeRequest({
+      const result = await LimitValidationService.checkUsageLimits({
         agentId: "agent-123",
       });
       expect(result).toBeNull();
@@ -1152,13 +1152,13 @@ describe("LimitValidationService", () => {
       // Prevent cleanup from resetting test data
       await LimitModel.patch(vkLimit.id, { lastCleanup: new Date() });
 
-      const result = await LimitValidationService.checkLimitsBeforeRequest({
+      const result = await LimitValidationService.checkUsageLimits({
         agentId: agent.id,
         virtualKeyId: apiKey.id,
       });
 
       expect(result).not.toBeNull();
-      expect(result?.[1]).toContain("virtual_key-level");
+      expect(result?.contentMessage).toContain("virtual_key-level");
     });
 
     test("should check user limits before agent limits", async ({
@@ -1188,13 +1188,13 @@ describe("LimitValidationService", () => {
       // Prevent cleanup from resetting test data
       await LimitModel.patch(userLimit.id, { lastCleanup: new Date() });
 
-      const result = await LimitValidationService.checkLimitsBeforeRequest({
+      const result = await LimitValidationService.checkUsageLimits({
         agentId: agent.id,
         userId: user.id,
       });
 
       expect(result).not.toBeNull();
-      expect(result?.[1]).toContain("user-level");
+      expect(result?.contentMessage).toContain("user-level");
     });
 
     test("should check agent limits before team limits", async ({
@@ -1248,12 +1248,12 @@ describe("LimitValidationService", () => {
       await LimitModel.patch(agentLimit.id, { lastCleanup: new Date() });
       await LimitModel.patch(teamLimit.id, { lastCleanup: new Date() });
 
-      const result = await LimitValidationService.checkLimitsBeforeRequest({
+      const result = await LimitValidationService.checkUsageLimits({
         agentId: agent.id,
       });
 
       expect(result).not.toBeNull();
-      expect(result?.[1]).toContain("agent-level");
+      expect(result?.contentMessage).toContain("agent-level");
     });
 
     test("should check team limits before organization limits", async ({
@@ -1307,12 +1307,12 @@ describe("LimitValidationService", () => {
       await LimitModel.patch(teamLimit.id, { lastCleanup: new Date() });
       await LimitModel.patch(orgLimit.id, { lastCleanup: new Date() });
 
-      const result = await LimitValidationService.checkLimitsBeforeRequest({
+      const result = await LimitValidationService.checkUsageLimits({
         agentId: agent.id,
       });
 
       expect(result).not.toBeNull();
-      expect(result?.[1]).toContain("team-level");
+      expect(result?.contentMessage).toContain("team-level");
     });
 
     test("should return refusal message when limit is exceeded", async ({
@@ -1339,15 +1339,15 @@ describe("LimitValidationService", () => {
       // Prevent cleanup from resetting test data
       await LimitModel.patch(limit.id, { lastCleanup: new Date() });
 
-      const result = await LimitValidationService.checkLimitsBeforeRequest({
+      const result = await LimitValidationService.checkUsageLimits({
         agentId: agent.id,
       });
 
       expect(result).not.toBeNull();
-      const [refusalMessage, contentMessage] = result as unknown as [
-        string,
-        string,
-      ];
+      expect(result?.refusalMessage).toBeDefined();
+      expect(result?.contentMessage).toBeDefined();
+      const refusalMessage = result?.refusalMessage as string;
+      const contentMessage = result?.contentMessage as string;
 
       expect(refusalMessage).toContain(
         "<archestra-limit-type>token_cost</archestra-limit-type>",
@@ -1361,7 +1361,7 @@ describe("LimitValidationService", () => {
     });
 
     test("should handle errors gracefully and allow requests", async () => {
-      const result = await LimitValidationService.checkLimitsBeforeRequest({
+      const result = await LimitValidationService.checkUsageLimits({
         agentId: "invalid-agent-id",
       });
 
@@ -1369,7 +1369,7 @@ describe("LimitValidationService", () => {
     });
 
     test("should handle agents with no team assignments", async () => {
-      const result = await LimitValidationService.checkLimitsBeforeRequest({
+      const result = await LimitValidationService.checkUsageLimits({
         agentId: "orphan-agent-123",
       });
       expect(result).toBeNull();
@@ -1399,12 +1399,12 @@ describe("LimitValidationService", () => {
       // Prevent cleanup from resetting test data
       await LimitModel.patch(limit.id, { lastCleanup: new Date() });
 
-      const result = await LimitValidationService.checkLimitsBeforeRequest({
+      const result = await LimitValidationService.checkUsageLimits({
         agentId: agent.id,
       });
 
       expect(result).not.toBeNull();
-      expect(result?.[1]).toContain("agent-level");
+      expect(result?.contentMessage).toContain("agent-level");
     });
 
     test("allows request when agent all-models limit is not exceeded", async ({
@@ -1420,7 +1420,7 @@ describe("LimitValidationService", () => {
         model: null,
       });
 
-      const result = await LimitValidationService.checkLimitsBeforeRequest({
+      const result = await LimitValidationService.checkUsageLimits({
         agentId: agent.id,
       });
 
@@ -1458,7 +1458,7 @@ describe("LimitValidationService", () => {
       // Prevent cleanup from resetting test data
       await LimitModel.patch(limit.id, { lastCleanup: new Date() });
 
-      const result = await LimitValidationService.checkLimitsBeforeRequest({
+      const result = await LimitValidationService.checkUsageLimits({
         agentId: agent.id,
       });
 
@@ -1498,12 +1498,12 @@ describe("LimitValidationService", () => {
       await LimitModel.patch(specificLimit.id, { lastCleanup: new Date() });
       await LimitModel.patch(allModelsLimit.id, { lastCleanup: new Date() });
 
-      const result = await LimitValidationService.checkLimitsBeforeRequest({
+      const result = await LimitValidationService.checkUsageLimits({
         agentId: agent.id,
       });
 
       expect(result).not.toBeNull();
-      expect(result?.[1]).toContain("agent-level");
+      expect(result?.contentMessage).toContain("agent-level");
     });
 
     test("creates user all-models limit with null model", async ({
@@ -1551,13 +1551,13 @@ describe("LimitValidationService", () => {
       // Prevent cleanup from resetting test data
       await LimitModel.patch(limit.id, { lastCleanup: new Date() });
 
-      const result = await LimitValidationService.checkLimitsBeforeRequest({
+      const result = await LimitValidationService.checkUsageLimits({
         agentId: agent.id,
         userId: user.id,
       });
 
       expect(result).not.toBeNull();
-      expect(result?.[1]).toContain("user-level");
+      expect(result?.contentMessage).toContain("user-level");
     });
 
     test("allows request when user all-models limit is not exceeded", async ({
@@ -1575,7 +1575,7 @@ describe("LimitValidationService", () => {
         model: null,
       });
 
-      const result = await LimitValidationService.checkLimitsBeforeRequest({
+      const result = await LimitValidationService.checkUsageLimits({
         agentId: agent.id,
         userId: user.id,
       });
@@ -1636,13 +1636,13 @@ describe("LimitValidationService", () => {
       // Prevent cleanup from resetting test data
       await LimitModel.patch(limit.id, { lastCleanup: new Date() });
 
-      const result = await LimitValidationService.checkLimitsBeforeRequest({
+      const result = await LimitValidationService.checkUsageLimits({
         agentId: agent.id,
         virtualKeyId: apiKey.id,
       });
 
       expect(result).not.toBeNull();
-      expect(result?.[1]).toContain("virtual_key-level");
+      expect(result?.contentMessage).toContain("virtual_key-level");
     });
 
     test("blocks request when org all-models limit is exceeded", async ({
@@ -1682,12 +1682,1124 @@ describe("LimitValidationService", () => {
         1_000_000,
       );
 
-      const result = await LimitValidationService.checkLimitsBeforeRequest({
+      const result = await LimitValidationService.checkUsageLimits({
         agentId: agent.id,
       });
 
       expect(result).not.toBeNull();
-      expect(result?.[1]).toContain("organization-level");
+      expect(result?.contentMessage).toContain("organization-level");
+    });
+
+    describe("multi-entity limit interactions", () => {
+      test("default user limit blocks when exceeded alongside agent limit", async ({
+        makeAgent,
+        makeOrganization,
+        makeUser,
+        makeMember,
+        makeInteraction,
+      }) => {
+        const org = await makeOrganization();
+        const user = await makeUser();
+        await makeMember(user.id, org.id);
+        const agent = await makeAgent({ organizationId: org.id });
+
+        await OrganizationModel.patch(org.id, {
+          defaultUserLimitValue: 10,
+          defaultUserLimitModel: ["gpt-4o"],
+          defaultUserLimitCleanupInterval: "1w",
+        });
+
+        const agentLimit = await LimitModel.create({
+          entityType: "agent",
+          entityId: agent.id,
+          limitType: "token_cost",
+          limitValue: 1_000,
+          model: ["gpt-4o"],
+        });
+        await LimitModel.patch(agentLimit.id, { lastCleanup: new Date() });
+
+        // Interaction cost $12 exceeds default user limit of $10
+        const interaction = await makeInteraction(agent.id, {
+          model: "gpt-4o",
+          inputTokens: 100,
+          outputTokens: 100,
+        });
+        await db
+          .update(schema.interactionsTable)
+          .set({ userId: user.id, cost: "12" })
+          .where(eq(schema.interactionsTable.id, interaction.id));
+
+        const result = await LimitValidationService.checkUsageLimits({
+          agentId: agent.id,
+          userId: user.id,
+        });
+
+        expect(result).not.toBeNull();
+        expect(result?.limit?.scope).toBe("user");
+        expect(result?.limit?.limitValue).toBe(10);
+      });
+
+      test("default user limit blocks when exceeded alongside agent + team + org limits", async ({
+        makeAgent,
+        makeOrganization,
+        makeUser,
+        makeTeam,
+        makeMember,
+        makeInteraction,
+      }) => {
+        const org = await makeOrganization();
+        const user = await makeUser();
+        const team = await makeTeam(org.id, user.id);
+        const agent = await makeAgent({ organizationId: org.id });
+        await makeMember(user.id, org.id, { role: "admin" });
+        await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+        await OrganizationModel.patch(org.id, {
+          defaultUserLimitValue: 5,
+          defaultUserLimitModel: ["gpt-4o"],
+          defaultUserLimitCleanupInterval: "1w",
+        });
+
+        const agentLimit = await LimitModel.create({
+          entityType: "agent",
+          entityId: agent.id,
+          limitType: "token_cost",
+          limitValue: 100,
+          model: ["gpt-4o"],
+        });
+
+        const teamLimit = await LimitModel.create({
+          entityType: "team",
+          entityId: team.id,
+          limitType: "token_cost",
+          limitValue: 50,
+          model: ["gpt-4o"],
+        });
+
+        await LimitModel.patch(agentLimit.id, { lastCleanup: new Date() });
+        await LimitModel.patch(teamLimit.id, { lastCleanup: new Date() });
+
+        // Interaction cost $6 exceeds default user limit of $5
+        const interaction = await makeInteraction(agent.id, {
+          model: "gpt-4o",
+          inputTokens: 100,
+          outputTokens: 100,
+        });
+        await db
+          .update(schema.interactionsTable)
+          .set({ userId: user.id, cost: "6" })
+          .where(eq(schema.interactionsTable.id, interaction.id));
+
+        const result = await LimitValidationService.checkUsageLimits({
+          agentId: agent.id,
+          userId: user.id,
+        });
+
+        expect(result).not.toBeNull();
+        expect(result?.limit?.scope).toBe("user");
+        expect(result?.limit?.limitValue).toBe(5);
+      });
+
+      test("REGRESSION: org limit is checked even when agent has no teams", async ({
+        makeAgent,
+        makeOrganization,
+        makeUser,
+        makeMember,
+      }) => {
+        const org = await makeOrganization();
+        const user = await makeUser();
+        await makeMember(user.id, org.id);
+        const agent = await makeAgent({ organizationId: org.id });
+        // Agent has NO team assignments
+
+        const orgLimit = await LimitModel.create({
+          entityType: "organization",
+          entityId: org.id,
+          limitType: "token_cost",
+          limitValue: 1,
+          model: ["gpt-4o"],
+        });
+
+        const agentLimit = await LimitModel.create({
+          entityType: "agent",
+          entityId: agent.id,
+          limitType: "token_cost",
+          limitValue: 1_000_000_000,
+          model: ["gpt-4o"],
+        });
+
+        await LimitModel.updateTokenLimitUsage(
+          "organization",
+          org.id,
+          "gpt-4o",
+          1_000_000,
+          1_000_000,
+        );
+
+        await LimitModel.patch(orgLimit.id, { lastCleanup: new Date() });
+        await LimitModel.patch(agentLimit.id, { lastCleanup: new Date() });
+
+        const result = await LimitValidationService.checkUsageLimits({
+          agentId: agent.id,
+          userId: user.id,
+        });
+
+        expect(result).not.toBeNull();
+        expect(result?.limit?.scope).toBe("organization");
+      });
+    });
+
+    describe("model filtering", () => {
+      // === A. checkEntityLimits model filtering per entity type ===
+
+      describe("checkEntityLimits model filtering", () => {
+        test("agent: no model arg — all limits checked regardless of limit.model", async ({
+          makeAgent,
+        }) => {
+          const agent = await makeAgent({ name: "Agent No Model Arg" });
+
+          // null-model limit, exceeded
+          const nullLimit = await LimitModel.create({
+            entityType: "agent",
+            entityId: agent.id,
+            limitType: "token_cost",
+            limitValue: 1,
+            model: null,
+          });
+          await LimitModel.updateTokenLimitUsage(
+            "agent",
+            agent.id,
+            "gpt-4o",
+            1_000_000,
+            1_000_000,
+          );
+          await LimitModel.patch(nullLimit.id, { lastCleanup: new Date() });
+
+          const result = await LimitValidationService.checkUsageLimits({
+            agentId: agent.id,
+          });
+
+          expect(result).not.toBeNull();
+          expect(result?.contentMessage).toContain("agent-level");
+        });
+
+        test("agent: no model arg — specific-model limit still blocks", async ({
+          makeAgent,
+        }) => {
+          const agent = await makeAgent({ name: "Agent Specific No Arg" });
+
+          const limit = await LimitModel.create({
+            entityType: "agent",
+            entityId: agent.id,
+            limitType: "token_cost",
+            limitValue: 1,
+            model: ["gpt-4o"],
+          });
+          await LimitModel.updateTokenLimitUsage(
+            "agent",
+            agent.id,
+            "gpt-4o",
+            1_000_000,
+            1_000_000,
+          );
+          await LimitModel.patch(limit.id, { lastCleanup: new Date() });
+
+          const result = await LimitValidationService.checkUsageLimits({
+            agentId: agent.id,
+          });
+
+          expect(result).not.toBeNull();
+        });
+
+        test("agent: model arg + limit.model=null (all-models) — blocked when exceeded", async ({
+          makeAgent,
+        }) => {
+          const agent = await makeAgent({ name: "Agent All-Models Block" });
+
+          const limit = await LimitModel.create({
+            entityType: "agent",
+            entityId: agent.id,
+            limitType: "token_cost",
+            limitValue: 1,
+            model: null,
+          });
+          await LimitModel.updateTokenLimitUsage(
+            "agent",
+            agent.id,
+            "gpt-4o",
+            1_000_000,
+            1_000_000,
+          );
+          await LimitModel.patch(limit.id, { lastCleanup: new Date() });
+
+          const result = await LimitValidationService.checkUsageLimits({
+            agentId: agent.id,
+            model: "gpt-4o",
+          });
+
+          expect(result).not.toBeNull();
+        });
+
+        test("agent: model arg + limit.model=null (all-models) — allowed when not exceeded", async ({
+          makeAgent,
+        }) => {
+          const agent = await makeAgent({ name: "Agent All-Models Allow" });
+
+          await LimitModel.create({
+            entityType: "agent",
+            entityId: agent.id,
+            limitType: "token_cost",
+            limitValue: 1_000_000_000,
+            model: null,
+          });
+
+          const result = await LimitValidationService.checkUsageLimits({
+            agentId: agent.id,
+            model: "gpt-4o",
+          });
+
+          expect(result).toBeNull();
+        });
+
+        test("agent: model arg matches limit.model — blocked when exceeded", async ({
+          makeAgent,
+        }) => {
+          const agent = await makeAgent({ name: "Agent Match Block" });
+
+          const limit = await LimitModel.create({
+            entityType: "agent",
+            entityId: agent.id,
+            limitType: "token_cost",
+            limitValue: 1,
+            model: ["gpt-4o"],
+          });
+          await LimitModel.updateTokenLimitUsage(
+            "agent",
+            agent.id,
+            "gpt-4o",
+            1_000_000,
+            1_000_000,
+          );
+          await LimitModel.patch(limit.id, { lastCleanup: new Date() });
+
+          const result = await LimitValidationService.checkUsageLimits({
+            agentId: agent.id,
+            model: "gpt-4o",
+          });
+
+          expect(result).not.toBeNull();
+        });
+
+        test("agent: model arg matches limit.model — allowed when not exceeded", async ({
+          makeAgent,
+        }) => {
+          const agent = await makeAgent({ name: "Agent Match Allow" });
+
+          await LimitModel.create({
+            entityType: "agent",
+            entityId: agent.id,
+            limitType: "token_cost",
+            limitValue: 1_000_000_000,
+            model: ["gpt-4o"],
+          });
+
+          const result = await LimitValidationService.checkUsageLimits({
+            agentId: agent.id,
+            model: "gpt-4o",
+          });
+
+          expect(result).toBeNull();
+        });
+
+        test("agent: model arg does NOT match limit.model — limit ignored, allowed", async ({
+          makeAgent,
+        }) => {
+          const agent = await makeAgent({ name: "Agent No Match" });
+
+          const limit = await LimitModel.create({
+            entityType: "agent",
+            entityId: agent.id,
+            limitType: "token_cost",
+            limitValue: 1,
+            model: ["gpt-4o"],
+          });
+          await LimitModel.updateTokenLimitUsage(
+            "agent",
+            agent.id,
+            "gpt-4o",
+            1_000_000,
+            1_000_000,
+          );
+          await LimitModel.patch(limit.id, { lastCleanup: new Date() });
+
+          const result = await LimitValidationService.checkUsageLimits({
+            agentId: agent.id,
+            model: "claude-3",
+          });
+
+          expect(result).toBeNull();
+        });
+
+        test("agent: model arg + multi-model limit.model with match — blocked", async ({
+          makeAgent,
+        }) => {
+          const agent = await makeAgent({ name: "Agent Multi Match" });
+
+          const limit = await LimitModel.create({
+            entityType: "agent",
+            entityId: agent.id,
+            limitType: "token_cost",
+            limitValue: 1,
+            model: ["gpt-4o", "gpt-4o-mini"],
+          });
+          await LimitModel.updateTokenLimitUsage(
+            "agent",
+            agent.id,
+            "gpt-4o-mini",
+            1_000_000,
+            1_000_000,
+          );
+          await LimitModel.patch(limit.id, { lastCleanup: new Date() });
+
+          const result = await LimitValidationService.checkUsageLimits({
+            agentId: agent.id,
+            model: "gpt-4o-mini",
+          });
+
+          expect(result).not.toBeNull();
+        });
+
+        test("agent: model arg + multi-model limit.model with no match — allowed", async ({
+          makeAgent,
+        }) => {
+          const agent = await makeAgent({ name: "Agent Multi No Match" });
+
+          const limit = await LimitModel.create({
+            entityType: "agent",
+            entityId: agent.id,
+            limitType: "token_cost",
+            limitValue: 1,
+            model: ["gpt-4o", "gpt-4o-mini"],
+          });
+          await LimitModel.updateTokenLimitUsage(
+            "agent",
+            agent.id,
+            "gpt-4o",
+            1_000_000,
+            1_000_000,
+          );
+          await LimitModel.patch(limit.id, { lastCleanup: new Date() });
+
+          const result = await LimitValidationService.checkUsageLimits({
+            agentId: agent.id,
+            model: "claude-3",
+          });
+
+          expect(result).toBeNull();
+        });
+
+        test("agent: mixed model scopes — specific-model exceeded blocks matching request only", async ({
+          makeAgent,
+        }) => {
+          const agent = await makeAgent({ name: "Agent Mixed Scope" });
+
+          // All-models limit, not exceeded
+          await LimitModel.create({
+            entityType: "agent",
+            entityId: agent.id,
+            limitType: "token_cost",
+            limitValue: 1_000_000_000,
+            model: null,
+          });
+
+          // gpt-4o specific limit, exceeded
+          const gpt4oLimit = await LimitModel.create({
+            entityType: "agent",
+            entityId: agent.id,
+            limitType: "token_cost",
+            limitValue: 1,
+            model: ["gpt-4o"],
+          });
+          await LimitModel.updateTokenLimitUsage(
+            "agent",
+            agent.id,
+            "gpt-4o",
+            1_000_000,
+            1_000_000,
+          );
+          await LimitModel.patch(gpt4oLimit.id, { lastCleanup: new Date() });
+
+          // gpt-4o request blocked by specific limit
+          const gpt4oResult = await LimitValidationService.checkUsageLimits({
+            agentId: agent.id,
+            model: "gpt-4o",
+          });
+          expect(gpt4oResult).not.toBeNull();
+
+          // gpt-5 request allowed — specific limit doesn't apply, all-models is fine
+          const gpt5Result = await LimitValidationService.checkUsageLimits({
+            agentId: agent.id,
+            model: "gpt-5",
+          });
+          expect(gpt5Result).toBeNull();
+        });
+
+        test("virtual_key: model arg filters limits correctly", async ({
+          makeAgent,
+          makeOrganization,
+          makeSecret,
+          makeLlmProviderApiKey,
+        }) => {
+          const org = await makeOrganization();
+          const agent = await makeAgent({ name: "VK Model Filter" });
+          const secret = await makeSecret();
+          const apiKey = await makeLlmProviderApiKey(org.id, secret.id);
+
+          const limit = await LimitModel.create({
+            entityType: "virtual_key",
+            entityId: apiKey.id,
+            limitType: "token_cost",
+            limitValue: 1,
+            model: ["gpt-4o"],
+          });
+          await LimitModel.updateTokenLimitUsage(
+            "virtual_key",
+            apiKey.id,
+            "gpt-4o",
+            1_000_000,
+            1_000_000,
+          );
+          await LimitModel.patch(limit.id, { lastCleanup: new Date() });
+
+          // Non-matching model — allowed
+          const allowed = await LimitValidationService.checkUsageLimits({
+            agentId: agent.id,
+            virtualKeyId: apiKey.id,
+            model: "claude-3",
+          });
+          expect(allowed).toBeNull();
+
+          // Matching model — blocked
+          const blocked = await LimitValidationService.checkUsageLimits({
+            agentId: agent.id,
+            virtualKeyId: apiKey.id,
+            model: "gpt-4o",
+          });
+          expect(blocked).not.toBeNull();
+          expect(blocked?.contentMessage).toContain("virtual_key-level");
+        });
+
+        test("team: model arg filters limits correctly", async ({
+          makeAgent,
+          makeOrganization,
+          makeUser,
+          makeTeam,
+          makeMember,
+        }) => {
+          const org = await makeOrganization();
+          const user = await makeUser();
+          const team = await makeTeam(org.id, user.id);
+          const agent = await makeAgent({ organizationId: org.id });
+          await makeMember(user.id, org.id, { role: "admin" });
+          await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+          const limit = await LimitModel.create({
+            entityType: "team",
+            entityId: team.id,
+            limitType: "token_cost",
+            limitValue: 1,
+            model: ["gpt-4o"],
+          });
+          await LimitModel.updateTokenLimitUsage(
+            "team",
+            team.id,
+            "gpt-4o",
+            1_000_000,
+            1_000_000,
+          );
+          await LimitModel.patch(limit.id, { lastCleanup: new Date() });
+
+          // Non-matching — allowed
+          const allowed = await LimitValidationService.checkUsageLimits({
+            agentId: agent.id,
+            model: "claude-3",
+          });
+          expect(allowed).toBeNull();
+
+          // Matching — blocked
+          const blocked = await LimitValidationService.checkUsageLimits({
+            agentId: agent.id,
+            model: "gpt-4o",
+          });
+          expect(blocked).not.toBeNull();
+          expect(blocked?.contentMessage).toContain("team-level");
+        });
+
+        test("organization: model arg filters limits correctly", async ({
+          makeAgent,
+          makeOrganization,
+          makeUser,
+          makeMember,
+        }) => {
+          const org = await makeOrganization();
+          const user = await makeUser();
+          const agent = await makeAgent({ organizationId: org.id });
+          await makeMember(user.id, org.id);
+
+          const limit = await LimitModel.create({
+            entityType: "organization",
+            entityId: org.id,
+            limitType: "token_cost",
+            limitValue: 1,
+            model: ["gpt-4o"],
+          });
+          await LimitModel.updateTokenLimitUsage(
+            "organization",
+            org.id,
+            "gpt-4o",
+            1_000_000,
+            1_000_000,
+          );
+          await LimitModel.patch(limit.id, { lastCleanup: new Date() });
+
+          // Non-matching — allowed
+          const allowed = await LimitValidationService.checkUsageLimits({
+            agentId: agent.id,
+            model: "claude-3",
+          });
+          expect(allowed).toBeNull();
+
+          // Matching — blocked
+          const blocked = await LimitValidationService.checkUsageLimits({
+            agentId: agent.id,
+            model: "gpt-4o",
+          });
+          expect(blocked).not.toBeNull();
+          expect(blocked?.contentMessage).toContain("organization-level");
+        });
+
+        test("user: model arg filters limits correctly", async ({
+          makeAgent,
+          makeUser,
+        }) => {
+          const agent = await makeAgent({ name: "User Model Filter" });
+          const user = await makeUser();
+
+          const limit = await LimitModel.create({
+            entityType: "user",
+            entityId: user.id,
+            limitType: "token_cost",
+            limitValue: 1,
+            model: ["gpt-4o"],
+          });
+          await LimitModel.updateTokenLimitUsage(
+            "user",
+            user.id,
+            "gpt-4o",
+            1_000_000,
+            1_000_000,
+          );
+          await LimitModel.patch(limit.id, { lastCleanup: new Date() });
+
+          // Non-matching — allowed
+          const allowed = await LimitValidationService.checkUsageLimits({
+            agentId: agent.id,
+            userId: user.id,
+            model: "claude-3",
+          });
+          expect(allowed).toBeNull();
+
+          // Matching — blocked
+          const blocked = await LimitValidationService.checkUsageLimits({
+            agentId: agent.id,
+            userId: user.id,
+            model: "gpt-4o",
+          });
+          expect(blocked).not.toBeNull();
+          expect(blocked?.contentMessage).toContain("user-level");
+        });
+      });
+
+      // === B. checkDefaultUserLimit model filtering ===
+
+      describe("checkDefaultUserLimit model filtering", () => {
+        test("no request model — default limit always checked and can block", async ({
+          makeAgent,
+          makeOrganization,
+          makeUser,
+          makeMember,
+          makeInteraction,
+        }) => {
+          const org = await makeOrganization();
+          const user = await makeUser();
+          await makeMember(user.id, org.id);
+          const agent = await makeAgent({ organizationId: org.id });
+
+          await OrganizationModel.patch(org.id, {
+            defaultUserLimitValue: 1,
+            defaultUserLimitModel: ["gpt-4o"],
+            defaultUserLimitCleanupInterval: "1w",
+          });
+
+          const interaction = await makeInteraction(agent.id, {
+            model: "gpt-4o",
+            inputTokens: 100,
+            outputTokens: 100,
+          });
+          await db
+            .update(schema.interactionsTable)
+            .set({ userId: user.id, cost: "2" })
+            .where(eq(schema.interactionsTable.id, interaction.id));
+
+          // No model arg — default limit applies
+          const result = await LimitValidationService.checkUsageLimits({
+            agentId: agent.id,
+            userId: user.id,
+          });
+
+          expect(result).not.toBeNull();
+          expect(result?.contentMessage).toContain("user-level");
+        });
+
+        test("request model + null defaultUserLimitModel — limit applies to all models", async ({
+          makeAgent,
+          makeOrganization,
+          makeUser,
+          makeMember,
+          makeInteraction,
+        }) => {
+          const org = await makeOrganization();
+          const user = await makeUser();
+          await makeMember(user.id, org.id);
+          const agent = await makeAgent({ organizationId: org.id });
+
+          await OrganizationModel.patch(org.id, {
+            defaultUserLimitValue: 1,
+            defaultUserLimitModel: null,
+            defaultUserLimitCleanupInterval: "1w",
+          });
+
+          const interaction = await makeInteraction(agent.id, {
+            model: "claude-3",
+            inputTokens: 100,
+            outputTokens: 100,
+          });
+          await db
+            .update(schema.interactionsTable)
+            .set({ userId: user.id, cost: "2" })
+            .where(eq(schema.interactionsTable.id, interaction.id));
+
+          const result = await LimitValidationService.checkUsageLimits({
+            agentId: agent.id,
+            userId: user.id,
+            model: "claude-3",
+          });
+
+          // null model → all-models → limit applies regardless of request model
+          expect(result).not.toBeNull();
+        });
+
+        test("request model + matching defaultUserLimitModel — limit applies", async ({
+          makeAgent,
+          makeOrganization,
+          makeUser,
+          makeMember,
+          makeInteraction,
+        }) => {
+          const org = await makeOrganization();
+          const user = await makeUser();
+          await makeMember(user.id, org.id);
+          const agent = await makeAgent({ organizationId: org.id });
+
+          await OrganizationModel.patch(org.id, {
+            defaultUserLimitValue: 1,
+            defaultUserLimitModel: ["gpt-4o"],
+            defaultUserLimitCleanupInterval: "1w",
+          });
+
+          const interaction = await makeInteraction(agent.id, {
+            model: "gpt-4o",
+            inputTokens: 100,
+            outputTokens: 100,
+          });
+          await db
+            .update(schema.interactionsTable)
+            .set({ userId: user.id, cost: "2" })
+            .where(eq(schema.interactionsTable.id, interaction.id));
+
+          const result = await LimitValidationService.checkUsageLimits({
+            agentId: agent.id,
+            userId: user.id,
+            model: "gpt-4o",
+          });
+
+          expect(result).not.toBeNull();
+        });
+
+        test("request model + non-matching defaultUserLimitModel — limit skipped", async ({
+          makeAgent,
+          makeOrganization,
+          makeUser,
+          makeMember,
+          makeInteraction,
+        }) => {
+          const org = await makeOrganization();
+          const user = await makeUser();
+          await makeMember(user.id, org.id);
+          const agent = await makeAgent({ organizationId: org.id });
+
+          await OrganizationModel.patch(org.id, {
+            defaultUserLimitValue: 1,
+            defaultUserLimitModel: ["gpt-4o"],
+            defaultUserLimitCleanupInterval: "1w",
+          });
+
+          const interaction = await makeInteraction(agent.id, {
+            model: "gpt-4o",
+            inputTokens: 100,
+            outputTokens: 100,
+          });
+          await db
+            .update(schema.interactionsTable)
+            .set({ userId: user.id, cost: "2" })
+            .where(eq(schema.interactionsTable.id, interaction.id));
+
+          // Request claude-3 — default limit is scoped to gpt-4o only → skipped
+          const result = await LimitValidationService.checkUsageLimits({
+            agentId: agent.id,
+            userId: user.id,
+            model: "claude-3",
+          });
+
+          expect(result).toBeNull();
+        });
+
+        test("request model + multi-model defaultUserLimitModel matching — limit applies", async ({
+          makeAgent,
+          makeOrganization,
+          makeUser,
+          makeMember,
+          makeInteraction,
+        }) => {
+          const org = await makeOrganization();
+          const user = await makeUser();
+          await makeMember(user.id, org.id);
+          const agent = await makeAgent({ organizationId: org.id });
+
+          await OrganizationModel.patch(org.id, {
+            defaultUserLimitValue: 1,
+            defaultUserLimitModel: ["gpt-4o", "gpt-4o-mini"],
+            defaultUserLimitCleanupInterval: "1w",
+          });
+
+          const interaction = await makeInteraction(agent.id, {
+            model: "gpt-4o-mini",
+            inputTokens: 100,
+            outputTokens: 100,
+          });
+          await db
+            .update(schema.interactionsTable)
+            .set({ userId: user.id, cost: "2" })
+            .where(eq(schema.interactionsTable.id, interaction.id));
+
+          // gpt-4o-mini matches the multi-model array → limit applies
+          const result = await LimitValidationService.checkUsageLimits({
+            agentId: agent.id,
+            userId: user.id,
+            model: "gpt-4o-mini",
+          });
+
+          expect(result).not.toBeNull();
+        });
+      });
+
+      // === C. End-to-end checkUsageLimits with model arg ===
+
+      describe("end-to-end checkUsageLimits with model arg", () => {
+        test("multiple entity levels with different model scopes — all-models blocks non-matching request", async ({
+          makeAgent,
+          makeOrganization,
+          makeUser,
+          makeTeam,
+          makeMember,
+        }) => {
+          const org = await makeOrganization();
+          const user = await makeUser();
+          const team = await makeTeam(org.id, user.id);
+          const agent = await makeAgent({ organizationId: org.id });
+          await makeMember(user.id, org.id, { role: "admin" });
+          await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+          // Agent limit: all-models, exceeded
+          const agentLimit = await LimitModel.create({
+            entityType: "agent",
+            entityId: agent.id,
+            limitType: "token_cost",
+            limitValue: 1,
+            model: null,
+          });
+          await LimitModel.updateTokenLimitUsage(
+            "agent",
+            agent.id,
+            "gpt-4o",
+            1_000_000,
+            1_000_000,
+          );
+          await LimitModel.patch(agentLimit.id, { lastCleanup: new Date() });
+
+          // Team limit: gpt-4o only, exceeded
+          const teamLimit = await LimitModel.create({
+            entityType: "team",
+            entityId: team.id,
+            limitType: "token_cost",
+            limitValue: 1,
+            model: ["gpt-4o"],
+          });
+          await LimitModel.updateTokenLimitUsage(
+            "team",
+            team.id,
+            "gpt-4o",
+            1_000_000,
+            1_000_000,
+          );
+          await LimitModel.patch(teamLimit.id, { lastCleanup: new Date() });
+
+          // gpt-5 request: agent all-models limit blocks, team gpt-4o limit ignored
+          const result = await LimitValidationService.checkUsageLimits({
+            agentId: agent.id,
+            model: "gpt-5",
+          });
+
+          expect(result).not.toBeNull();
+          expect(result?.contentMessage).toContain("agent-level");
+        });
+
+        test("all limits model-scoped, none match request model — allowed", async ({
+          makeAgent,
+          makeOrganization,
+          makeUser,
+          makeTeam,
+          makeMember,
+        }) => {
+          const org = await makeOrganization();
+          const user = await makeUser();
+          const team = await makeTeam(org.id, user.id);
+          const agent = await makeAgent({ organizationId: org.id });
+          await makeMember(user.id, org.id, { role: "admin" });
+          await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+          // Agent limit: gpt-4o only, exceeded
+          const agentLimit = await LimitModel.create({
+            entityType: "agent",
+            entityId: agent.id,
+            limitType: "token_cost",
+            limitValue: 1,
+            model: ["gpt-4o"],
+          });
+          await LimitModel.updateTokenLimitUsage(
+            "agent",
+            agent.id,
+            "gpt-4o",
+            1_000_000,
+            1_000_000,
+          );
+          await LimitModel.patch(agentLimit.id, { lastCleanup: new Date() });
+
+          // Team limit: gpt-5 only, exceeded
+          const teamLimit = await LimitModel.create({
+            entityType: "team",
+            entityId: team.id,
+            limitType: "token_cost",
+            limitValue: 1,
+            model: ["gpt-5"],
+          });
+          await LimitModel.updateTokenLimitUsage(
+            "team",
+            team.id,
+            "gpt-5",
+            1_000_000,
+            1_000_000,
+          );
+          await LimitModel.patch(teamLimit.id, { lastCleanup: new Date() });
+
+          // Org limit: claude-3 only, exceeded
+          const orgLimit = await LimitModel.create({
+            entityType: "organization",
+            entityId: org.id,
+            limitType: "token_cost",
+            limitValue: 1,
+            model: ["claude-3"],
+          });
+          await LimitModel.updateTokenLimitUsage(
+            "organization",
+            org.id,
+            "claude-3",
+            1_000_000,
+            1_000_000,
+          );
+          await LimitModel.patch(orgLimit.id, { lastCleanup: new Date() });
+
+          // Request claude-3.5 — none match
+          const result = await LimitValidationService.checkUsageLimits({
+            agentId: agent.id,
+            model: "claude-3.5",
+          });
+
+          expect(result).toBeNull();
+        });
+
+        test("model filtering across virtual_key + agent + team + org hierarchy", async ({
+          makeAgent,
+          makeOrganization,
+          makeUser,
+          makeTeam,
+          makeMember,
+          makeSecret,
+          makeLlmProviderApiKey,
+        }) => {
+          const org = await makeOrganization();
+          const user = await makeUser();
+          const team = await makeTeam(org.id, user.id);
+          const agent = await makeAgent({ organizationId: org.id });
+          const secret = await makeSecret();
+          const apiKey = await makeLlmProviderApiKey(org.id, secret.id);
+          await makeMember(user.id, org.id, { role: "admin" });
+          await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+          // VK limit: all-models, exceeded
+          const vkLimit = await LimitModel.create({
+            entityType: "virtual_key",
+            entityId: apiKey.id,
+            limitType: "token_cost",
+            limitValue: 1,
+            model: null,
+          });
+          await LimitModel.updateTokenLimitUsage(
+            "virtual_key",
+            apiKey.id,
+            "gpt-4o",
+            1_000_000,
+            1_000_000,
+          );
+          await LimitModel.patch(vkLimit.id, { lastCleanup: new Date() });
+
+          // Agent limit: gpt-4o only, exceeded
+          const agentLimit = await LimitModel.create({
+            entityType: "agent",
+            entityId: agent.id,
+            limitType: "token_cost",
+            limitValue: 1,
+            model: ["gpt-4o"],
+          });
+          await LimitModel.updateTokenLimitUsage(
+            "agent",
+            agent.id,
+            "gpt-4o",
+            1_000_000,
+            1_000_000,
+          );
+          await LimitModel.patch(agentLimit.id, { lastCleanup: new Date() });
+
+          // claude-3 request: VK all-models blocks (first checked), agent gpt-4o ignored
+          const result = await LimitValidationService.checkUsageLimits({
+            agentId: agent.id,
+            virtualKeyId: apiKey.id,
+            model: "claude-3",
+          });
+
+          expect(result).not.toBeNull();
+          expect(result?.contentMessage).toContain("virtual_key-level");
+        });
+
+        test("model filtering with user-level limit + default user limit interaction", async ({
+          makeAgent,
+          makeOrganization,
+          makeUser,
+          makeMember,
+          makeInteraction,
+        }) => {
+          const org = await makeOrganization();
+          const user = await makeUser();
+          await makeMember(user.id, org.id);
+          const agent = await makeAgent({ organizationId: org.id });
+
+          // Custom user limit for gpt-4o only, generous
+          await LimitModel.create({
+            entityType: "user",
+            entityId: user.id,
+            limitType: "token_cost",
+            limitValue: 1_000_000_000,
+            model: ["gpt-4o"],
+            cleanupInterval: "1w",
+          });
+
+          // Default user limit for gpt-4o only, exceeded — but custom overrides
+          await OrganizationModel.patch(org.id, {
+            defaultUserLimitValue: 1,
+            defaultUserLimitModel: ["gpt-4o"],
+            defaultUserLimitCleanupInterval: "1w",
+          });
+
+          const interaction = await makeInteraction(agent.id, {
+            model: "gpt-4o",
+            inputTokens: 100,
+            outputTokens: 100,
+          });
+          await db
+            .update(schema.interactionsTable)
+            .set({ userId: user.id, cost: "5" })
+            .where(eq(schema.interactionsTable.id, interaction.id));
+
+          // Custom limit takes precedence over default → allowed
+          const result = await LimitValidationService.checkUsageLimits({
+            agentId: agent.id,
+            userId: user.id,
+            model: "gpt-4o",
+          });
+
+          expect(result).toBeNull();
+        });
+
+        test("no model arg — all limits across all entities checked", async ({
+          makeAgent,
+          makeOrganization,
+          makeUser,
+          makeTeam,
+          makeMember,
+        }) => {
+          const org = await makeOrganization();
+          const user = await makeUser();
+          const team = await makeTeam(org.id, user.id);
+          const agent = await makeAgent({ organizationId: org.id });
+          await makeMember(user.id, org.id, { role: "admin" });
+          await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+          // Team limit: gpt-4o only, exceeded
+          const teamLimit = await LimitModel.create({
+            entityType: "team",
+            entityId: team.id,
+            limitType: "token_cost",
+            limitValue: 1,
+            model: ["gpt-4o"],
+          });
+          await LimitModel.updateTokenLimitUsage(
+            "team",
+            team.id,
+            "gpt-4o",
+            1_000_000,
+            1_000_000,
+          );
+          await LimitModel.patch(teamLimit.id, { lastCleanup: new Date() });
+
+          // No model arg — specific-model limits still apply
+          const result = await LimitValidationService.checkUsageLimits({
+            agentId: agent.id,
+          });
+
+          expect(result).not.toBeNull();
+          expect(result?.contentMessage).toContain("team-level");
+        });
+      });
     });
   });
 });
@@ -2068,12 +3180,12 @@ describe("cleanupLimitsIfNeeded", () => {
     const limits = await LimitModel.findAll("user", user.id);
     expect(limits).toHaveLength(0);
 
-    const result = await LimitValidationService.checkLimitsBeforeRequest({
+    const result = await LimitValidationService.checkUsageLimits({
       agentId: agent.id,
       userId: user.id,
     });
     expect(result).not.toBeNull();
-    expect(result?.[1]).toContain("user-level token cost limit");
+    expect(result?.contentMessage).toContain("user-level token cost limit");
   });
 
   test("custom user limits override the inherited default user limit", async ({
@@ -2114,7 +3226,7 @@ describe("cleanupLimitsIfNeeded", () => {
       })
       .where(eq(schema.interactionsTable.id, interaction.id));
 
-    const result = await LimitValidationService.checkLimitsBeforeRequest({
+    const result = await LimitValidationService.checkUsageLimits({
       agentId: agent.id,
       userId: user.id,
     });
@@ -2385,8 +3497,8 @@ describe("cleanupLimitsIfNeeded", () => {
   });
 });
 
-describe("checkLimitsBeforeRequest cleanup integration", () => {
-  test("cleans up all 5 entity types in a single checkLimitsBeforeRequest call", async ({
+describe("checkUsageLimits cleanup integration", () => {
+  test("cleans up all 5 entity types in a single checkUsageLimits call", async ({
     makeAgent,
     makeUser,
     makeOrganization,
@@ -2471,8 +3583,8 @@ describe("checkLimitsBeforeRequest cleanup integration", () => {
       500,
     );
 
-    // Call checkLimitsBeforeRequest which triggers cleanup for all entity types
-    await LimitValidationService.checkLimitsBeforeRequest({
+    // Call checkUsageLimits which triggers cleanup for all entity types
+    await LimitValidationService.checkUsageLimits({
       agentId: agent.id,
       userId: user.id,
       virtualKeyId: apiKey.id,
@@ -2526,7 +3638,7 @@ describe("checkLimitsBeforeRequest cleanup integration", () => {
     await LimitModel.patch(limit.id, { lastCleanup: new Date() });
 
     // Verify limit is exceeded before cleanup
-    const beforeCheck = await LimitValidationService.checkLimitsBeforeRequest({
+    const beforeCheck = await LimitValidationService.checkUsageLimits({
       agentId: agent.id,
     });
     expect(beforeCheck).not.toBeNull();
@@ -2534,8 +3646,8 @@ describe("checkLimitsBeforeRequest cleanup integration", () => {
     // Now set lastCleanup to null so cleanup will reset usage
     await LimitModel.patch(limit.id, { lastCleanup: null });
 
-    // Call checkLimitsBeforeRequest - cleanup should reset usage first
-    const afterCheck = await LimitValidationService.checkLimitsBeforeRequest({
+    // Call checkUsageLimits - cleanup should reset usage first
+    const afterCheck = await LimitValidationService.checkUsageLimits({
       agentId: agent.id,
     });
 
@@ -2604,8 +3716,8 @@ describe("checkLimitsBeforeRequest cleanup integration", () => {
     // Set recent lastCleanup (just now)
     await LimitModel.patch(recentLimit.id, { lastCleanup: new Date() });
 
-    // Call checkLimitsBeforeRequest which triggers cleanup
-    await LimitValidationService.checkLimitsBeforeRequest({
+    // Call checkUsageLimits which triggers cleanup
+    await LimitValidationService.checkUsageLimits({
       agentId: agent.id,
     });
 
@@ -2705,8 +3817,8 @@ describe("checkLimitsBeforeRequest cleanup integration", () => {
       500,
     );
 
-    // Call checkLimitsBeforeRequest with all entity types
-    const result = await LimitValidationService.checkLimitsBeforeRequest({
+    // Call checkUsageLimits with all entity types
+    const result = await LimitValidationService.checkUsageLimits({
       agentId: agent.id,
       userId: user.id,
       virtualKeyId: apiKey.id,
@@ -2766,8 +3878,8 @@ describe("checkLimitsBeforeRequest cleanup integration", () => {
       300,
     );
 
-    // Call checkLimitsBeforeRequest for agent only
-    await LimitValidationService.checkLimitsBeforeRequest({
+    // Call checkUsageLimits for agent only
+    await LimitValidationService.checkUsageLimits({
       agentId: agent.id,
     });
 
@@ -2814,12 +3926,13 @@ describe("checkLimitsBeforeRequest cleanup integration", () => {
 
     await LimitModel.patch(gpt4Limit.id, { lastCleanup: new Date() });
 
-    const result = await LimitValidationService.checkLimitsBeforeRequest({
+    const result = await LimitValidationService.checkUsageLimits({
       agentId: agent.id,
     });
 
     expect(result).not.toBeNull();
-    const [refusalMessage] = result as unknown as [string, string];
+    expect(result?.refusalMessage).toBeDefined();
+    const refusalMessage = result?.refusalMessage as string;
     expect(refusalMessage).toContain(
       "<archestra-limit-type>token_cost</archestra-limit-type>",
     );
@@ -2857,7 +3970,7 @@ describe("checkLimitsBeforeRequest cleanup integration", () => {
     await LimitModel.patch(allModelsLimit.id, { lastCleanup: new Date() });
     await LimitModel.patch(specificLimit.id, { lastCleanup: new Date() });
 
-    const result = await LimitValidationService.checkLimitsBeforeRequest({
+    const result = await LimitValidationService.checkUsageLimits({
       agentId: agent.id,
     });
 
@@ -2883,7 +3996,7 @@ describe("checkLimitsBeforeRequest cleanup integration", () => {
     // Prevent cleanup from resetting test data
     await LimitModel.patch(limit.id, { lastCleanup: new Date() });
 
-    const result = await LimitValidationService.checkLimitsBeforeRequest({
+    const result = await LimitValidationService.checkUsageLimits({
       agentId: agent.id,
     });
 
@@ -2910,7 +4023,7 @@ describe("checkLimitsBeforeRequest cleanup integration", () => {
     // Prevent cleanup from resetting test data
     await LimitModel.patch(limit.id, { lastCleanup: new Date() });
 
-    const result = await LimitValidationService.checkLimitsBeforeRequest({
+    const result = await LimitValidationService.checkUsageLimits({
       agentId: agent.id,
     });
 
@@ -2934,7 +4047,7 @@ describe("checkLimitsBeforeRequest cleanup integration", () => {
     // Prevent cleanup from resetting test data
     await LimitModel.patch(limit.id, { lastCleanup: new Date() });
 
-    const result = await LimitValidationService.checkLimitsBeforeRequest({
+    const result = await LimitValidationService.checkUsageLimits({
       agentId: agent.id,
     });
 
@@ -2965,12 +4078,13 @@ describe("checkLimitsBeforeRequest cleanup integration", () => {
 
     await LimitModel.patch(limit.id, { lastCleanup: new Date() });
 
-    const result = await LimitValidationService.checkLimitsBeforeRequest({
+    const result = await LimitValidationService.checkUsageLimits({
       agentId: agent.id,
     });
 
     expect(result).not.toBeNull();
-    const [refusalMessage] = result as unknown as [string, string];
+    expect(result?.refusalMessage).toBeDefined();
+    const refusalMessage = result?.refusalMessage as string;
     expect(refusalMessage).toContain(
       "<archestra-limit-type>token_cost</archestra-limit-type>",
     );

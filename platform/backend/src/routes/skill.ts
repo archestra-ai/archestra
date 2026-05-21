@@ -2,15 +2,23 @@ import {
   calculatePaginationMeta,
   createPaginatedResponseSchema,
   PaginationQuerySchema,
+  ResourceVisibilityScopeSchema,
   RouteId,
 } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import {
+  getSkillPermissionChecker,
+  requireSkillModifyPermission,
+  type SkillPermissionChecker,
+} from "@/auth/skill-permissions";
 import logger from "@/logging";
 import {
   OrganizationModel,
   SkillFileModel,
   SkillModel,
+  SkillTeamModel,
+  TeamModel,
   ToolModel,
 } from "@/models";
 import {
@@ -37,9 +45,18 @@ import {
 } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
 
-/** A skill row plus its resource-file count, for the catalog list. */
+/** A team a skill is assigned to (for `scope = 'team'` skills). */
+const SkillTeamSchema = z.object({ id: z.string(), name: z.string() });
+
+/** A skill row plus its resource-file count and team assignments. */
 const SkillListItemSchema = SelectSkillSchema.extend({
   fileCount: z.number(),
+  teams: z.array(SkillTeamSchema),
+});
+
+/** A skill with its resource files and team assignments. */
+const SkillDetailSchema = SkillWithFilesSchema.extend({
+  teams: z.array(SkillTeamSchema),
 });
 
 /** Raw resource file as submitted by the in-app editor. */
@@ -50,14 +67,18 @@ const SkillFileInputSchema = z.object({
 });
 
 /**
- * Manual create/update payload: raw SKILL.md plus resource files.
+ * Manual create/update payload: raw SKILL.md, resource files, and the skill's
+ * visibility scope.
  *
  * `files` is optional: on update, omitting it leaves the existing resource
- * files untouched; passing `[]` clears them.
+ * files untouched; passing `[]` clears them. `scope` defaults to `personal`;
+ * `teamIds` is only meaningful for `scope = 'team'`.
  */
 const SkillManifestInputSchema = z.object({
   content: z.string().min(1).max(MAX_SKILL_FILE_BYTES),
   files: z.array(SkillFileInputSchema).max(MAX_FILES_PER_SKILL).optional(),
+  scope: ResourceVisibilityScopeSchema.optional(),
+  teamIds: z.array(z.string()).optional(),
 });
 
 const DiscoveredSkillSchema = z.object({
@@ -86,9 +107,18 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { query: { limit, offset, search, sourceRepo }, organizationId },
+      { query: { limit, offset, search, sourceRepo }, organizationId, user },
       reply,
     ) => {
+      const checker = await getSkillPermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      // Non-admins see only skills within their scope; admins see all.
+      const accessibleSkillIds = checker.isAdmin
+        ? undefined
+        : await SkillTeamModel.getUserAccessibleSkillIds(user.id);
+
       const [skills, total] = await Promise.all([
         SkillModel.findByOrganization({
           organizationId,
@@ -96,18 +126,27 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           offset,
           search,
           sourceRepo,
+          accessibleSkillIds,
         }),
-        SkillModel.countByOrganization({ organizationId, search, sourceRepo }),
+        SkillModel.countByOrganization({
+          organizationId,
+          search,
+          sourceRepo,
+          accessibleSkillIds,
+        }),
       ]);
 
-      const fileCounts = await SkillFileModel.countBySkillIds(
-        skills.map((skill) => skill.id),
-      );
+      const skillIds = skills.map((skill) => skill.id);
+      const [fileCounts, teamsBySkill] = await Promise.all([
+        SkillFileModel.countBySkillIds(skillIds),
+        SkillTeamModel.getTeamDetailsForSkills(skillIds),
+      ]);
 
       return reply.send({
         data: skills.map((skill) => ({
           ...skill,
           fileCount: fileCounts.get(skill.id) ?? 0,
+          teams: teamsBySkill.get(skill.id) ?? [],
         })),
         pagination: calculatePaginationMeta(total, { limit, offset }),
       });
@@ -122,11 +161,29 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Create a skill from a raw SKILL.md and resource files",
         tags: ["Skills"],
         body: SkillManifestInputSchema,
-        response: constructResponseSchema(SkillWithFilesSchema),
+        response: constructResponseSchema(SkillDetailSchema),
       },
     },
     async ({ body, organizationId, user }, reply) => {
       const parsed = parseManifestOrThrow(body.content);
+      const scope = body.scope ?? "personal";
+      const teamIds = scope === "team" ? dedupe(body.teamIds ?? []) : [];
+
+      const checker = await getSkillPermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      const userTeamIds = checker.isAdmin
+        ? []
+        : await TeamModel.getUserTeamIds(user.id);
+      authorizeSkillScope({
+        checker,
+        scope,
+        authorId: user.id,
+        requestedTeamIds: teamIds,
+        userTeamIds,
+        userId: user.id,
+      });
 
       const skill = await SkillModel.createWithFiles({
         skill: {
@@ -139,14 +196,18 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           compatibility: parsed.compatibility,
           metadata: parsed.metadata,
           sourceType: "manual",
+          scope,
         },
         files: toSkillFiles(body.files ?? []),
       });
       if (!skill) {
         throw skillNameConflict(parsed.name);
       }
+      if (teamIds.length > 0) {
+        await SkillTeamModel.syncSkillTeams(skill.id, teamIds);
+      }
 
-      return reply.send({ ...skill, files: await loadFiles(skill.id) });
+      return reply.send(await loadSkillDetail(skill));
     },
   );
 
@@ -158,12 +219,25 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get a skill with its resource files",
         tags: ["Skills"],
         params: z.object({ id: z.string() }),
-        response: constructResponseSchema(SkillWithFilesSchema),
+        response: constructResponseSchema(SkillDetailSchema),
       },
     },
-    async ({ params: { id }, organizationId }, reply) => {
+    async ({ params: { id }, organizationId, user }, reply) => {
       const skill = await findSkillOrThrow(id, organizationId);
-      return reply.send({ ...skill, files: await loadFiles(skill.id) });
+      const checker = await getSkillPermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      // 404 (not 403) so scope is not leaked to users who cannot see the skill.
+      const hasAccess = await SkillTeamModel.userHasSkillAccess({
+        userId: user.id,
+        skillId: skill.id,
+        isSkillAdmin: checker.isAdmin,
+      });
+      if (!hasAccess) {
+        throw new ApiError(404, "Skill not found");
+      }
+      return reply.send(await loadSkillDetail(skill));
     },
   );
 
@@ -172,16 +246,58 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.UpdateSkill,
-        description: "Update a skill's SKILL.md and resource files",
+        description: "Update a skill's SKILL.md, resource files, and scope",
         tags: ["Skills"],
         params: z.object({ id: z.string() }),
         body: SkillManifestInputSchema,
-        response: constructResponseSchema(SkillWithFilesSchema),
+        response: constructResponseSchema(SkillDetailSchema),
       },
     },
-    async ({ params: { id }, body, organizationId }, reply) => {
-      await findSkillOrThrow(id, organizationId);
+    async ({ params: { id }, body, organizationId, user }, reply) => {
+      const existing = await findSkillOrThrow(id, organizationId);
       const parsed = parseManifestOrThrow(body.content);
+
+      const checker = await getSkillPermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      const userTeamIds = checker.isAdmin
+        ? []
+        : await TeamModel.getUserTeamIds(user.id);
+      const existingTeamIds = await SkillTeamModel.getTeamsForSkill(id);
+
+      // 404 if the user cannot even see the skill; 403 if visible but not theirs to modify.
+      const hasAccess = await SkillTeamModel.userHasSkillAccess({
+        userId: user.id,
+        skillId: id,
+        isSkillAdmin: checker.isAdmin,
+      });
+      if (!hasAccess) {
+        throw new ApiError(404, "Skill not found");
+      }
+      requireSkillModifyPermission({
+        checker,
+        scope: existing.scope,
+        authorId: existing.authorId,
+        skillTeamIds: existingTeamIds,
+        userTeamIds,
+        userId: user.id,
+      });
+
+      // Re-authorize against the target scope/teams when the skill is moved.
+      const newScope = body.scope ?? existing.scope;
+      const newTeamIds =
+        newScope === "team" ? dedupe(body.teamIds ?? existingTeamIds) : [];
+      if (newScope !== existing.scope || body.teamIds !== undefined) {
+        authorizeSkillScope({
+          checker,
+          scope: newScope,
+          authorId: existing.authorId,
+          requestedTeamIds: newTeamIds,
+          userTeamIds,
+          userId: user.id,
+        });
+      }
 
       let updated: Skill | null;
       try {
@@ -194,6 +310,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             license: parsed.license,
             compatibility: parsed.compatibility,
             metadata: parsed.metadata,
+            scope: newScope,
           },
           files:
             body.files === undefined ? undefined : toSkillFiles(body.files),
@@ -209,8 +326,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!updated) {
         throw new ApiError(404, "Skill not found");
       }
+      await SkillTeamModel.syncSkillTeams(id, newTeamIds);
 
-      return reply.send({ ...updated, files: await loadFiles(id) });
+      return reply.send(await loadSkillDetail(updated));
     },
   );
 
@@ -244,8 +362,35 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { id }, organizationId }, reply) => {
-      await findSkillOrThrow(id, organizationId);
+    async ({ params: { id }, organizationId, user }, reply) => {
+      const skill = await findSkillOrThrow(id, organizationId);
+
+      const checker = await getSkillPermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      const userTeamIds = checker.isAdmin
+        ? []
+        : await TeamModel.getUserTeamIds(user.id);
+      const teamIds = await SkillTeamModel.getTeamsForSkill(id);
+
+      const hasAccess = await SkillTeamModel.userHasSkillAccess({
+        userId: user.id,
+        skillId: id,
+        isSkillAdmin: checker.isAdmin,
+      });
+      if (!hasAccess) {
+        throw new ApiError(404, "Skill not found");
+      }
+      requireSkillModifyPermission({
+        checker,
+        scope: skill.scope,
+        authorId: skill.authorId,
+        skillTeamIds: teamIds,
+        userTeamIds,
+        userId: user.id,
+      });
+
       const success = await SkillModel.delete(id);
       if (!success) {
         throw new ApiError(404, "Skill not found");
@@ -463,6 +608,52 @@ async function findSkillOrThrow(id: string, organizationId: string) {
 
 async function loadFiles(skillId: string) {
   return await SkillFileModel.findBySkillId(skillId);
+}
+
+/** A skill with its files and team assignments, for detail responses. */
+async function loadSkillDetail(skill: Skill) {
+  const [files, teamsBySkill] = await Promise.all([
+    loadFiles(skill.id),
+    SkillTeamModel.getTeamDetailsForSkills([skill.id]),
+  ]);
+  return { ...skill, files, teams: teamsBySkill.get(skill.id) ?? [] };
+}
+
+function dedupe(values: string[]): string[] {
+  return [...new Set(values)];
+}
+
+/**
+ * Authorize creating/moving a skill to the given scope and teams. Enforces the
+ * 3-tier scope check and, for non-admins, that every assigned team is one the
+ * user belongs to.
+ */
+function authorizeSkillScope(params: {
+  checker: SkillPermissionChecker;
+  scope: "personal" | "team" | "org";
+  authorId: string | null;
+  requestedTeamIds: string[];
+  userTeamIds: string[];
+  userId: string;
+}): void {
+  requireSkillModifyPermission({
+    checker: params.checker,
+    scope: params.scope,
+    authorId: params.authorId,
+    skillTeamIds: params.requestedTeamIds,
+    userTeamIds: params.userTeamIds,
+    userId: params.userId,
+  });
+
+  if (!params.checker.isAdmin && params.scope === "team") {
+    const userTeamIdSet = new Set(params.userTeamIds);
+    if (params.requestedTeamIds.some((id) => !userTeamIdSet.has(id))) {
+      throw new ApiError(
+        403,
+        "You can only assign skills to teams you are a member of",
+      );
+    }
+  }
 }
 
 function parseManifestOrThrow(raw: string) {

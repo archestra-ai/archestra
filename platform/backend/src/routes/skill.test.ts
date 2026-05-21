@@ -1,3 +1,5 @@
+import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME } from "@shared";
+import { SkillModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { MAX_SKILL_FILE_BYTES } from "@/skills/github-import";
@@ -13,6 +15,18 @@ const MANIFEST = [
   "# PDF Processing",
   "Use pdftotext -layout.",
 ].join("\n");
+
+/** A SKILL.md manifest with a custom name (org+name must be unique). */
+function manifestNamed(name: string): string {
+  return [
+    "---",
+    `name: ${name}`,
+    "description: A scoped skill.",
+    "---",
+    "",
+    `# ${name}`,
+  ].join("\n");
+}
 
 describe("skill routes", () => {
   let app: FastifyInstanceWithZod;
@@ -238,6 +252,120 @@ describe("skill routes", () => {
         url: `/api/skills/${created.id}`,
       });
       expect(getResponse.statusCode).toBe(404);
+    });
+  });
+
+  describe("scope", () => {
+    test("a new skill defaults to personal scope owned by the author", async () => {
+      const body = (
+        await app.inject({
+          method: "POST",
+          url: "/api/skills",
+          payload: { content: MANIFEST },
+        })
+      ).json();
+
+      expect(body.scope).toBe("personal");
+      expect(body.authorId).toBe(user.id);
+      expect(body.teams).toEqual([]);
+    });
+
+    test("non-admins cannot create an org-scoped skill", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: { content: MANIFEST, scope: "org" },
+      });
+
+      expect(response.statusCode).toBe(403);
+    });
+
+    test("admins can create an org-scoped skill", async ({ makeMember }) => {
+      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: { content: MANIFEST, scope: "org" },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().scope).toBe("org");
+    });
+
+    test("team-admins can only assign teams they belong to", async ({
+      makeMember,
+      makeTeam,
+      makeTeamMember,
+    }) => {
+      await makeMember(user.id, organizationId, { role: EDITOR_ROLE_NAME });
+      const ownTeam = await makeTeam(organizationId, user.id);
+      await makeTeamMember(ownTeam.id, user.id);
+      const foreignTeam = await makeTeam(organizationId, user.id);
+
+      const ok = await app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: {
+          content: manifestNamed("team-skill"),
+          scope: "team",
+          teamIds: [ownTeam.id],
+        },
+      });
+      expect(ok.statusCode).toBe(200);
+      expect(ok.json().teams).toHaveLength(1);
+
+      const denied = await app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: {
+          content: manifestNamed("foreign-team-skill"),
+          scope: "team",
+          teamIds: [foreignTeam.id],
+        },
+      });
+      expect(denied.statusCode).toBe(403);
+    });
+
+    test("a personal skill is hidden from non-authors", async ({
+      makeUser,
+    }) => {
+      const author = await makeUser();
+      const skill = await SkillModel.createWithFiles({
+        skill: {
+          organizationId,
+          authorId: author.id,
+          name: "someone-elses-skill",
+          description: "private",
+          content: "# private",
+          metadata: {},
+          sourceType: "manual",
+          scope: "personal",
+        },
+        files: [],
+      });
+      if (!skill) throw new Error("seed failed");
+
+      // current request user is not the author and not an admin
+      const getResponse = await app.inject({
+        method: "GET",
+        url: `/api/skills/${skill.id}`,
+      });
+      expect(getResponse.statusCode).toBe(404);
+
+      const listResponse = await app.inject({
+        method: "GET",
+        url: "/api/skills",
+      });
+      expect(
+        listResponse.json().data.map((s: { id: string }) => s.id),
+      ).not.toContain(skill.id);
+
+      const deleteResponse = await app.inject({
+        method: "DELETE",
+        url: `/api/skills/${skill.id}`,
+      });
+      expect(deleteResponse.statusCode).toBe(404);
     });
   });
 });

@@ -1,5 +1,6 @@
 "use client";
 
+import type { ResourceVisibilityScope } from "@shared";
 import {
   ChevronDown,
   ChevronRight,
@@ -26,6 +27,7 @@ import {
   useUpdateSkill,
 } from "@/lib/skills/skill.query";
 import { cn } from "@/lib/utils";
+import { SkillScopeSelector } from "./skill-scope-selector";
 
 interface ResourceFile {
   path: string;
@@ -92,6 +94,8 @@ export function SkillEditorDialog({
 
   const [manifest, setManifest] = useState("");
   const [files, setFiles] = useState<ResourceFile[]>([]);
+  const [scope, setScope] = useState<ResourceVisibilityScope>("personal");
+  const [teamIds, setTeamIds] = useState<string[]>([]);
   // null = the SKILL.md manifest is open; otherwise an index into `files`.
   const [openFileIndex, setOpenFileIndex] = useState<number | null>(null);
   const [filesExpanded, setFilesExpanded] = useState(true);
@@ -127,9 +131,13 @@ export function SkillEditorDialog({
           encoding,
         })),
       );
+      setScope(skill.scope);
+      setTeamIds(skill.teams.map((team) => team.id));
     } else if (!isEdit) {
       setManifest(BLANK_TEMPLATE);
       setFiles([]);
+      setScope("personal");
+      setTeamIds([]);
     }
     setOpenFileIndex(null);
     setAddingIn(null);
@@ -144,7 +152,12 @@ export function SkillEditorDialog({
   const tree = useMemo(() => buildTree(files), [files]);
 
   const handleSave = async () => {
-    const body = { content: manifest, files };
+    const body = {
+      content: manifest,
+      files,
+      scope,
+      teamIds: scope === "team" ? teamIds : [],
+    };
     const result = isEdit
       ? await updateSkill.mutateAsync({ id: skillId, body })
       : await createSkill.mutateAsync(body);
@@ -430,6 +443,15 @@ export function SkillEditorDialog({
               </div>
             )}
           </div>
+
+          {!isPreview && (
+            <SkillScopeSelector
+              scope={scope}
+              onScopeChange={setScope}
+              teamIds={teamIds}
+              onTeamIdsChange={setTeamIds}
+            />
+          )}
         </div>
       )}
     </StandardDialog>

@@ -1074,7 +1074,7 @@ const startWorker = async () => {
     await initializeDatabase();
     cacheManager.start();
 
-    // Sync Archestra MCP branding so the worker recognises branded tool names
+    // Sync Archestra MCP branding so the worker recognizes branded tool names
     // (e.g. "archestra_staging__artifact_write") when executing scheduled tasks.
     // Without this, isToolName() only matches the default "archestra__" prefix
     // and builtin tools fall through to mcpClient.executeToolCall() which fails

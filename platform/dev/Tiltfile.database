@@ -69,7 +69,7 @@ local_resource(
   'db-migrate',
   # NOTE: we need to cd into the backend directory to run the migrate command
   # because otherwise if we run the command from this directory, it is run via turbo, which does not properly
-  # propogate the required environment variables (ie. DATABASE_URL)
+  # propagate the required environment variables (ie. DATABASE_URL)
   # Retry logic: wait for PostgreSQL to be ready before running migrations, then seed
   cmd='''
     for i in {1..30}; do
@@ -124,7 +124,7 @@ local_resource(
   'database-gui',
   # NOTE: we need to cd into the backend directory to run the migrate command
   # because otherwise if we run the command from this directory, it is run via turbo, which does not properly
-  # propogate the required environment variables (ie. DATABASE_URL)
+  # propagate the required environment variables (ie. DATABASE_URL)
   serve_cmd='pnpm db:studio',
   serve_dir='../backend',
   labels=['database'],

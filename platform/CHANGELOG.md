@@ -3655,7 +3655,7 @@
 
 ### Features
 
-* fixed size dialog and better isntructions ([#931](https://github.com/archestra-ai/archestra/issues/931)) ([bd279e9](https://github.com/archestra-ai/archestra/commit/bd279e9b563da08c3f32efa68d595918d63f38eb))
+* fixed size dialog and better instructions ([#931](https://github.com/archestra-ai/archestra/issues/931)) ([bd279e9](https://github.com/archestra-ai/archestra/commit/bd279e9b563da08c3f32efa68d595918d63f38eb))
 * traces panels ([#930](https://github.com/archestra-ai/archestra/issues/930)) ([2fb5d32](https://github.com/archestra-ai/archestra/commit/2fb5d3212c934b5ceb0de16f53badcc943db56ec))
 
 

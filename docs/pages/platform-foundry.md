@@ -19,7 +19,7 @@ Past few months I've been researching a fundamental problem affecting all AI age
 * Ability to externally communicate
 * Access to private data
 
-In all the examples, authors of the agents couldn't rely on probablistic LLM guradrails, so they ended up disabling certain tools when handling untrusted context (domains in one of the cases). This is a partial solution to defend from one attack, not a general defence.
+In all the examples, authors of the agents couldn't rely on probablistic LLM guardrails, so they ended up disabling certain tools when handling untrusted context (domains in one of the cases). This is a partial solution to defend from one attack, not a general defence.
 
 I decided to build an agent in Foundry and see how Azure Guardrails safe enough to protect against these attacks.
 

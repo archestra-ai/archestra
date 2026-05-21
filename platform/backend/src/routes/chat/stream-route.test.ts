@@ -454,6 +454,76 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     );
   });
 
+  test("strips dangling tool parts when persisting a stopped turn", async () => {
+    const { default: MessageModel } = await import("@/models/message");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: "msg-user-1",
+            role: "user",
+            parts: [{ type: "text", text: "search the web" }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+    expect(capturedInnerOnFinish).toBeDefined();
+
+    // Simulate the AI SDK finalizing a stopped turn: the assistant message
+    // carries a tool call that never produced output (interrupted mid-stream).
+    await capturedInnerOnFinish?.({
+      messages: [
+        {
+          id: "msg-user-1",
+          role: "user",
+          parts: [{ type: "text", text: "search the web" }],
+        },
+        {
+          id: "msg-assistant-1",
+          role: "assistant",
+          parts: [
+            { type: "text", text: "Let me search for that." },
+            {
+              type: "tool-web__search",
+              toolCallId: "call_interrupted",
+              state: "input-streaming",
+              input: { q: "weat" },
+            },
+          ],
+        },
+      ],
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const persisted = await MessageModel.findByConversation(conversationId);
+    const assistantMessage = persisted.find((m) => m.role === "assistant");
+    expect(assistantMessage).toBeDefined();
+
+    const parts =
+      (assistantMessage?.content as { parts?: Array<Record<string, unknown>> })
+        ?.parts ?? [];
+    // the dangling tool call is gone, the streamed text is kept
+    expect(parts.some((p) => p.toolCallId === "call_interrupted")).toBe(false);
+    expect(parts.some((p) => p.type === "text")).toBe(true);
+  });
+
+  test("stop endpoint reports stopped:false when no stream is active", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversationId}/stop`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual({ stopped: false });
+  });
+
   test("emits compaction finish when compaction starts but is not beneficial", async () => {
     mockCompactMessagesForChat.mockImplementation(
       async ({ messages, onCompactionStart }) => {

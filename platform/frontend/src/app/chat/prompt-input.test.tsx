@@ -5,12 +5,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   mockUseOrganization,
   mockUseChatPlaceholder,
+  mockUseSkillsPaginated,
   mockTextInputSetInput,
   mockTextInputClear,
   mockControllerState,
 } = vi.hoisted(() => ({
   mockUseOrganization: vi.fn(),
   mockUseChatPlaceholder: vi.fn(),
+  mockUseSkillsPaginated: vi.fn(),
   mockTextInputSetInput: vi.fn(),
   mockTextInputClear: vi.fn(),
   mockControllerState: { value: "" },
@@ -236,7 +238,7 @@ vi.mock("@/lib/chat/chat-placeholder.hook", () => ({
 }));
 
 vi.mock("@/lib/skills/skill.query", () => ({
-  useSkillsPaginated: () => ({ data: undefined, isLoading: false }),
+  useSkillsPaginated: () => mockUseSkillsPaginated(),
 }));
 
 // Mock for useHasPermissions - default to non-admin
@@ -272,6 +274,10 @@ describe("ArchestraPromptInput", () => {
     mockUseChatPlaceholder.mockReturnValue({
       placeholder: "Animated placeholder",
       isAnimating: true,
+    });
+    mockUseSkillsPaginated.mockReturnValue({
+      data: undefined,
+      isLoading: false,
     });
     mockControllerState.value = "";
   });
@@ -547,6 +553,51 @@ describe("ArchestraPromptInput", () => {
 
       expect(onCompactConversation).toHaveBeenCalledTimes(1);
       expect(mockTextInputClear).toHaveBeenCalled();
+    });
+  });
+
+  describe("skill slash commands", () => {
+    const skill = {
+      id: "skill-1",
+      name: "My Skill",
+      description: "Does things",
+    };
+
+    beforeEach(() => {
+      mockUseOrganization.mockReturnValue({
+        data: { skillSlashCommandsEnabled: true },
+        isLoading: false,
+      });
+      mockUseSkillsPaginated.mockReturnValue({
+        data: { data: [skill] },
+        isLoading: false,
+      });
+    });
+
+    it("submits a bare skill command with skill metadata and an empty prompt", () => {
+      const onSubmit = vi.fn();
+      mockControllerState.value = "/my-skill";
+
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      const [message, , options] = onSubmit.mock.calls[0];
+      expect(message.text).toBe("");
+      expect(options).toEqual({ skill: { id: skill.id, name: skill.name } });
+    });
+
+    it("submits a skill command with the text after the token as the prompt", () => {
+      const onSubmit = vi.fn();
+      mockControllerState.value = "/my-skill summarize the repo";
+
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      const [message, , options] = onSubmit.mock.calls[0];
+      expect(message.text).toBe("summarize the repo");
+      expect(options).toEqual({ skill: { id: skill.id, name: skill.name } });
     });
   });
 });

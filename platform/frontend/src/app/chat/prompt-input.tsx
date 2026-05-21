@@ -373,8 +373,8 @@ const PromptInputContent = ({
   const selectSlashCommand = useCallback(
     (command: SlashCommand) => {
       if (command.skill) {
-        // a skill command is a prefix — drop it into the input and let the
-        // user type the prompt that the skill should act on
+        // a skill command is a prefix — drop it into the input so the user can
+        // type an optional prompt; submitting it bare activates the skill as-is
         controller.textInput.setInput(`${command.value} `);
         requestAnimationFrame(() => textareaRef.current?.focus());
         return;
@@ -443,18 +443,12 @@ const PromptInputContent = ({
         return;
       }
 
-      // a skill command activates the skill; the text after the token is the prompt
+      // a skill command activates the skill; any text after the token is an
+      // optional prompt — a bare skill command sends with an empty prompt
       let outgoing = message;
       let skill: ChatSkillMetadata | undefined;
       const parsed = parseSkillCommand(trimmed, skillCommands);
       if (parsed) {
-        // a bare skill command has nothing to act on yet — keep the user typing
-        if (!parsed.remaining && message.files.length === 0) {
-          e.preventDefault();
-          controller.textInput.setInput(`${parsed.value} `);
-          requestAnimationFrame(() => textareaRef.current?.focus());
-          return;
-        }
         skill = parsed.skill;
         outgoing = { ...message, text: parsed.remaining };
       }
@@ -463,13 +457,11 @@ const PromptInputContent = ({
       onSubmit(outgoing, e, skill ? { skill } : undefined);
     },
     [
-      controller.textInput,
       onSubmit,
       onCompactConversation,
       runCompactCommand,
       skillCommands,
       storageKey,
-      textareaRef,
     ],
   );
 

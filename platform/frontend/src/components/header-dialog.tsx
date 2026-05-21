@@ -106,13 +106,10 @@ export function HeaderDialog({
         next.value = "";
       }
       // Server-side validator rejects sensitive + static, so force it off.
-      // When flipping *into* preset, default sensitive on — preset values
-      // otherwise land in plaintext jsonb and there's no other UI escape
-      // hatch. User can toggle it back off explicitly.
+      // Other scopes leave the user's Sensitive toggle alone — it's an
+      // independent concern from where the value lives.
       if (patch.scope === "static") {
         next.sensitive = false;
-      } else if (patch.scope === "preset" && prev.scope !== "preset") {
-        next.sensitive = true;
       }
       return next;
     });

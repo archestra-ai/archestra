@@ -485,6 +485,30 @@ describe("mapProviderError - Gemini (Google AI Studio)", () => {
       );
       expect(result.isRetryable).toBe(false);
     });
+
+    it("keeps original error message as a string when proxy error message contains nested JSON", () => {
+      const nestedProviderError = {
+        error: "invalid_grant",
+        error_description: "reauth related error",
+        error_subtype: "invalid_rapt",
+      };
+      const error = {
+        name: "AI_APICallError",
+        statusCode: 500,
+        responseBody: JSON.stringify({
+          error: {
+            message: JSON.stringify(nestedProviderError),
+            type: "api_internal_server_error",
+          },
+        }),
+        isRetryable: true,
+      };
+
+      const result = mapProviderError(error, "gemini");
+
+      expect(typeof result.originalError?.message).toBe("string");
+      expect(result.originalError?.message).toContain("reauth related error");
+    });
   });
 
   describe("403 - PERMISSION_DENIED", () => {

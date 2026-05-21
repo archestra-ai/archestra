@@ -31,7 +31,10 @@ import {
   useState,
 } from "react";
 import { filterOptimisticToolCalls } from "@/components/chat/chat-messages.utils";
-import { useGenerateConversationTitle } from "@/lib/chat/chat.query";
+import {
+  useConversation,
+  useGenerateConversationTitle,
+} from "@/lib/chat/chat.query";
 import { restoreRenderableAssistantParts } from "@/lib/chat/chat-session-utils";
 import { getChatExternalAgentId } from "@/lib/chat/chat-utils";
 import {
@@ -53,6 +56,23 @@ const RETRYABLE_CLIENT_ERRORS = [
   "No output generated",
   "network",
 ];
+
+export type ContextCompactionState = {
+  isCompacting: boolean;
+  trigger: "auto" | "manual" | null;
+  lastCompaction: {
+    trigger?: "auto" | "manual";
+    compactionId?: string;
+    originalTokenEstimate?: number;
+    compactedTokenEstimate?: number;
+  } | null;
+};
+
+type ContextCompactionRecord = NonNullable<
+  ContextCompactionState["lastCompaction"]
+> & {
+  updateContextTokens?: boolean;
+};
 
 function isRetryableError(error: Error): boolean {
   const msg = error.message;
@@ -96,6 +116,9 @@ interface ChatSession {
   ) => void;
   /** Token usage for the current/last response */
   tokenUsage: TokenUsage | null;
+  contextTokensUsed: number | null;
+  contextCompaction: ContextCompactionState;
+  recordContextCompaction: (compaction: ContextCompactionRecord) => void;
   /** Early UI data from data-tool-ui-start events (toolCallId → resource data incl. pre-fetched HTML) */
   earlyToolUiStarts: Record<
     string,
@@ -322,7 +345,18 @@ function ChatSessionHook({
     }>
   >([]);
   const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null);
+  const [contextTokensUsed, setContextTokensUsed] = useState<number | null>(
+    null,
+  );
+  const [contextCompaction, setContextCompaction] =
+    useState<ContextCompactionState>({
+      isCompacting: false,
+      trigger: null,
+      lastCompaction: null,
+    });
   const generateTitleMutation = useGenerateConversationTitle();
+  // Read from the shared TanStack cache so we only auto-title untitled chats
+  const { data: conversation } = useConversation(conversationId);
   // Track if title generation has been attempted for this conversation
   const titleGenerationAttemptedRef = useRef(false);
   // Track when swap_agent was called so we can auto-poke the new agent on finish
@@ -340,6 +374,25 @@ function ChatSessionHook({
   const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastUserMessageIdRef = useRef<string | null>(null);
   const previousMessagesRef = useRef<UIMessage[]>([]);
+
+  const recordContextCompaction = useCallback(
+    (compaction: ContextCompactionRecord) => {
+      const { updateContextTokens = true, ...lastCompaction } = compaction;
+      setContextCompaction({
+        isCompacting: false,
+        trigger: null,
+        lastCompaction,
+      });
+
+      if (
+        updateContextTokens &&
+        typeof lastCompaction.compactedTokenEstimate === "number"
+      ) {
+        setContextTokensUsed(lastCompaction.compactedTokenEstimate);
+      }
+    },
+    [],
+  );
 
   // Track early UI data from data-tool-ui-start events (toolCallId → resource data)
   const [earlyToolUiStarts, setEarlyToolUiStarts] = useState<
@@ -505,6 +558,34 @@ function ChatSessionHook({
       if (dataPart.type === "data-token-usage") {
         const usage = dataPart.data as TokenUsage;
         setTokenUsage(usage);
+        if (typeof usage.totalTokens === "number") {
+          setContextTokensUsed(usage.totalTokens);
+        }
+      }
+
+      if (dataPart.type === "data-context-compaction-start") {
+        const data = dataPart.data as { trigger?: "auto" | "manual" };
+        setContextCompaction((current) => ({
+          ...current,
+          isCompacting: true,
+          trigger: data.trigger ?? "auto",
+        }));
+      }
+
+      if (dataPart.type === "data-context-compaction-finish") {
+        const data = dataPart.data as {
+          trigger?: "auto" | "manual";
+          compactionId?: string;
+          originalTokenEstimate?: number;
+          compactedTokenEstimate?: number;
+        };
+        recordContextCompaction({
+          ...data,
+          updateContextTokens: data.trigger !== "auto",
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["conversation", conversationId],
+        });
       }
 
       // Handle data-tool-ui-start: backend emits this when a tool call starts streaming,
@@ -571,7 +652,7 @@ function ChatSessionHook({
     );
   }, [stableMessages, optimisticToolCalls.length]);
 
-  // Auto-generate title after first assistant response
+  // Auto-generate title after the first settled exchange
   useEffect(() => {
     // Skip if already attempted or currently generating
     if (
@@ -581,30 +662,34 @@ function ChatSessionHook({
       return;
     }
 
-    // Check if we have at least one user message and one assistant message
-    const userMessages = stableMessages.filter((m) => m.role === "user");
-    const assistantMessages = stableMessages.filter(
+    // Only auto-title a conversation that doesn't have a title yet. This
+    // replaces relying on exact message counts, which breaks when an agent
+    // swap inserts an extra tool-only assistant message and an auto-poke
+    // user message into the first exchange.
+    if (!conversation || conversation.title || status !== "ready") {
+      return;
+    }
+
+    const hasUserMessage = stableMessages.some((m) => m.role === "user");
+    const hasAssistantMessage = stableMessages.some(
       (m) => m.role === "assistant",
     );
 
-    // Only generate title after first exchange (1 user + 1 assistant message)
-    // and when status is ready (not still streaming)
-    if (
-      userMessages.length === 1 &&
-      assistantMessages.length === 1 &&
-      status === "ready"
-    ) {
-      // Check if assistant message has actual text content (not just tool calls)
-      const assistantHasText = assistantMessages[0].parts.some(
-        (part) => part.type === "text" && "text" in part && part.text,
-      );
-
-      if (assistantHasText) {
-        titleGenerationAttemptedRef.current = true;
-        generateTitleMutation.mutate({ id: conversationId });
-      }
+    // Title once a turn has settled. Assistant *text* is intentionally not
+    // required: an agent swap and tool-only answers produce assistant
+    // messages with no text, and the backend titles from the user message
+    // when no assistant text exists.
+    if (hasUserMessage && hasAssistantMessage) {
+      titleGenerationAttemptedRef.current = true;
+      generateTitleMutation.mutate({ id: conversationId });
     }
-  }, [stableMessages, status, conversationId, generateTitleMutation]);
+  }, [
+    stableMessages,
+    status,
+    conversationId,
+    conversation,
+    generateTitleMutation,
+  ]);
 
   // Always keep the session ref up-to-date with the latest values (including
   // function references from useChat which change every render). This is a ref
@@ -624,6 +709,9 @@ function ChatSessionHook({
     optimisticToolCalls,
     setPendingCustomServerToolCall,
     tokenUsage,
+    contextTokensUsed,
+    contextCompaction,
+    recordContextCompaction,
     earlyToolUiStarts,
   };
 
@@ -647,6 +735,9 @@ function ChatSessionHook({
     pendingCustomServerToolCall,
     optimisticToolCalls,
     tokenUsage,
+    contextTokensUsed,
+    contextCompaction,
+    recordContextCompaction,
     earlyToolUiStarts,
     sessionsRef,
     notifySessionUpdate,

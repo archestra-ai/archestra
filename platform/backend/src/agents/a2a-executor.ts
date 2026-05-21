@@ -168,7 +168,7 @@ export async function executeA2AMessage(
     await resolveConversationLlmSelectionForAgent({
       agent: {
         llmApiKeyId: agent.llmApiKeyId,
-        llmModel: agent.llmModel,
+        modelId: agent.modelId,
       },
       organizationId,
       userId,

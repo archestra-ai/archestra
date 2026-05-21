@@ -5,6 +5,48 @@ import { vi } from "vitest";
 // Disable Sentry for tests - prevent sending test data to Sentry
 process.env.NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN = "";
 
+function createTestStorage(): Storage {
+  const entries = new Map<string, string>();
+
+  return {
+    get length() {
+      return entries.size;
+    },
+    clear: vi.fn(() => entries.clear()),
+    getItem: vi.fn((key: string) => entries.get(key) ?? null),
+    key: vi.fn((index: number) => Array.from(entries.keys())[index] ?? null),
+    removeItem: vi.fn((key: string) => entries.delete(key)),
+    setItem: vi.fn((key: string, value: string) =>
+      entries.set(key, String(value)),
+    ),
+  };
+}
+
+if (
+  typeof window !== "undefined" &&
+  typeof window.localStorage?.getItem !== "function"
+) {
+  const localStorage = createTestStorage();
+  const sessionStorage = createTestStorage();
+
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: localStorage,
+  });
+  Object.defineProperty(globalThis, "sessionStorage", {
+    configurable: true,
+    value: sessionStorage,
+  });
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    value: localStorage,
+  });
+  Object.defineProperty(window, "sessionStorage", {
+    configurable: true,
+    value: sessionStorage,
+  });
+}
+
 const originalConsoleError = console.error;
 const originalConsoleWarn = console.warn;
 // biome-ignore lint/suspicious/noConsole: test setup intentionally intercepts console output.

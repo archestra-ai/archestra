@@ -16,6 +16,7 @@ import type {
 } from "@/types";
 import { escapeLikePattern } from "@/utils/sql-search";
 import ConversationChatErrorModel from "./conversation-chat-error";
+import ConversationCompactionModel from "./conversation-compaction";
 import ConversationShareModel from "./conversation-share";
 
 class ConversationModel {
@@ -186,6 +187,7 @@ class ConversationModel {
             share: row.share?.id ? row.share : null,
             messages: [],
             chatErrors: [],
+            compactions: [],
           });
         }
 
@@ -244,6 +246,7 @@ class ConversationModel {
         share: row.share?.id ? row.share : null,
         messages: [], // Messages fetched separately via findById
         chatErrors: [],
+        compactions: [],
       }));
     }
   }
@@ -303,7 +306,10 @@ class ConversationModel {
     }
 
     const firstRow = rows[0];
-    const chatErrors = await ConversationChatErrorModel.findByConversation(id);
+    const [chatErrors, compactions] = await Promise.all([
+      ConversationChatErrorModel.findByConversation(id),
+      ConversationCompactionModel.findByConversation(id),
+    ]);
     const messages = [];
 
     for (const row of rows) {
@@ -319,6 +325,7 @@ class ConversationModel {
       share: firstRow.share?.id ? firstRow.share : null,
       messages,
       chatErrors,
+      compactions,
     };
   }
 
@@ -401,9 +408,10 @@ class ConversationModel {
     }
 
     const firstRow = rows[0];
-    const chatErrors = await ConversationChatErrorModel.findByConversation(
-      params.id,
-    );
+    const [chatErrors, compactions] = await Promise.all([
+      ConversationChatErrorModel.findByConversation(params.id),
+      ConversationCompactionModel.findByConversation(params.id),
+    ]);
     const messages = [];
 
     for (const row of rows) {
@@ -418,6 +426,7 @@ class ConversationModel {
       share: firstRow.share?.id ? firstRow.share : null,
       messages,
       chatErrors,
+      compactions,
     };
   }
 

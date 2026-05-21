@@ -487,10 +487,11 @@ function parseGeminiError(responseBody: string): ParsedGeminiError | null {
         message:
           typeof errorObj.message === "string"
             ? errorObj.message
-            : typeof parsed?.error === "object"
-              ? ((parsed.error as Record<string, unknown>).message as
-                  | string
-                  | undefined)
+            : typeof parsed?.error === "object" &&
+                parsed.error !== null &&
+                typeof (parsed.error as Record<string, unknown>).message ===
+                  "string"
+              ? ((parsed.error as Record<string, unknown>).message as string)
               : undefined,
         details: Array.isArray(details) ? details : undefined,
         // Extract ErrorInfo for specific error reason mapping
@@ -1327,10 +1328,21 @@ function findDeepestMessage(obj: unknown, depth = 0): string | null {
     if (deeper) return deeper;
   }
 
+  if (
+    typeof record.error_description === "string" &&
+    record.error_description.length > 0
+  ) {
+    return record.error_description;
+  }
+
   // Recurse into error object
   if (typeof record.error === "object" && record.error !== null) {
     const deeper = findDeepestMessage(record.error, depth + 1);
     if (deeper) return deeper;
+  }
+
+  if (typeof record.error === "string" && record.error.length > 0) {
+    return record.error;
   }
 
   // If we have a message that looks like JSON, still return it as fallback
@@ -1363,7 +1375,7 @@ function extractErrorMessage(
   }
 
   // Then try to get message from parsed error
-  if (parsedError?.message) {
+  if (typeof parsedError?.message === "string") {
     return parsedError.message;
   }
 

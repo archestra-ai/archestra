@@ -1,7 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,11 +12,13 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import {
+  useCatalogPresets,
   useCreateCatalogPreset,
   useUpdateCatalogPreset,
   useUpdateInternalMcpCatalogItem,
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import type { McpPresetEntryWithAssignedCount } from "@/lib/mcp/mcp-preset-entry.query";
+import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { usePresetEntityName } from "@/lib/organization.query";
 import { PresetFieldInput } from "./preset-field-input";
 import {
@@ -26,6 +28,7 @@ import {
   listCatalogFields,
   validateFieldAgainstRegex,
 } from "./preset-helpers";
+import { ReinstallConfirmBar } from "./reinstall-confirm-bar";
 
 type FieldValue = string | number | boolean | string[];
 type Preset = archestraApiTypes.GetCatalogChildrenResponses["200"][number];
@@ -55,7 +58,8 @@ export function PresetEditorDialog({
 }: PresetEditorDialogProps) {
   const isEdit = preset !== null;
   const isEditingDefaultPreset = preset !== null && preset.id === cat.id;
-  const { singular, defaultValidationRegex } = usePresetEntityName();
+  const presetEntityName = usePresetEntityName();
+  const { singular, defaultValidationRegex } = presetEntityName;
 
   const presetFields = listCatalogFields(cat).filter(
     (f) => f.scope === "preset",
@@ -65,9 +69,34 @@ export function PresetEditorDialog({
   const update = useUpdateCatalogPreset(cat.id);
   const updateParent = useUpdateInternalMcpCatalogItem();
 
+  // Default-preset edits cascade to the parent AND every child preset;
+  // child edits only affect their own preset's installs. Preset value
+  // changes always take the backend's auto-reinstall path.
+  const { data: childPresets = [] } = useCatalogPresets(cat.id);
+  const { data: allServers = [] } = useMcpServers();
+  const affectedCatalogIds = useMemo(() => {
+    if (!isEdit || !preset) return new Set<string>();
+    if (isEditingDefaultPreset) {
+      return new Set<string>([cat.id, ...childPresets.map((p) => p.id)]);
+    }
+    return new Set<string>([preset.id]);
+  }, [isEdit, preset, isEditingDefaultPreset, cat.id, childPresets]);
+  const affectedServerCount = useMemo(
+    () =>
+      allServers.filter(
+        (s) => s.catalogId && affectedCatalogIds.has(s.catalogId),
+      ).length,
+    [allServers, affectedCatalogIds],
+  );
+  // Suffix only matters for default-preset edits — child edits already
+  // name their preset in the dialog title.
+  const otherPresetCount = isEditingDefaultPreset ? childPresets.length : 0;
+
   const [fieldValues, setFieldValues] = useState<Record<string, FieldValue>>(
     {},
   );
+  const [pendingConfirm, setPendingConfirm] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
 
   // For the implicit default row (parent.id === preset.id), there's no preset
   // entry — fall back to the org-wide `presetEntityDefaultValidationRegex`.
@@ -93,7 +122,19 @@ export function PresetEditorDialog({
   useEffect(() => {
     if (!open) return;
     setFieldValues(preset ? { ...preset.presetFieldValues } : {});
+    setPendingConfirm(false);
+    setIsConfirming(false);
   }, [open, preset]);
+
+  async function performSave() {
+    setIsConfirming(true);
+    try {
+      await save();
+    } finally {
+      setIsConfirming(false);
+      setPendingConfirm(false);
+    }
+  }
 
   async function save() {
     if (isEdit && preset) {
@@ -116,6 +157,31 @@ export function PresetEditorDialog({
       });
     }
     onOpenChange(false);
+  }
+
+  // JSON-stringify deep-equal — preset values are primitive and small.
+  const baselineValues = useMemo(
+    () => (preset?.presetFieldValues ?? {}) as Record<string, FieldValue>,
+    [preset],
+  );
+  const isDirty = useMemo(
+    () => JSON.stringify(baselineValues) !== JSON.stringify(fieldValues),
+    [baselineValues, fieldValues],
+  );
+
+  async function handleClickSave() {
+    // No-op save: backend cascade currently restarts pods on any
+    // successful PUT, so let an unedited Save just close the dialog
+    // instead of silently restarting.
+    if (isEdit && !isDirty) {
+      onOpenChange(false);
+      return;
+    }
+    if (isEdit && affectedServerCount > 0 && !pendingConfirm) {
+      setPendingConfirm(true);
+      return;
+    }
+    await performSave();
   }
 
   const isPending =
@@ -149,7 +215,7 @@ export function PresetEditorDialog({
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            save();
+            handleClickSave();
           }}
           autoComplete="off"
           className="contents"
@@ -158,43 +224,65 @@ export function PresetEditorDialog({
             <DialogTitle>{title}</DialogTitle>
           </DialogHeader>
 
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
-            {presetFields.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                To vary settings per {singular}, create a {singular}-scoped env
-                variable or header in the Configuration tab first.
-              </p>
-            ) : (
-              <PresetFieldSections
-                fields={presetFields}
-                values={fieldValues}
-                errors={fieldErrors}
-                hasStoredSecrets={isEdit && preset?.presetSecretId != null}
-                onChange={(key, v) =>
-                  setFieldValues((prev) => {
-                    if (v === undefined) {
-                      const { [key]: _drop, ...rest } = prev;
-                      return rest;
-                    }
-                    return { ...prev, [key]: v };
-                  })
-                }
-              />
-            )}
-          </div>
+          {/* Lock fields while the bar is up or the save is in flight
+              — same drift-prevention as in mcp-catalog-form. */}
+          <fieldset
+            disabled={pendingConfirm || isConfirming}
+            className="contents"
+          >
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
+              {presetFields.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  To vary settings per {singular}, create a {singular}-scoped
+                  env variable or header in the Configuration tab first.
+                </p>
+              ) : (
+                <PresetFieldSections
+                  fields={presetFields}
+                  values={fieldValues}
+                  errors={fieldErrors}
+                  hasStoredSecrets={isEdit && preset?.presetSecretId != null}
+                  onChange={(key, v) =>
+                    setFieldValues((prev) => {
+                      if (v === undefined) {
+                        const { [key]: _drop, ...rest } = prev;
+                        return rest;
+                      }
+                      return { ...prev, [key]: v };
+                    })
+                  }
+                />
+              )}
+            </div>
+          </fieldset>
 
-          <DialogFooter className="border-t px-6 py-3">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isPending || hasErrors}>
-              {isPending ? "Saving…" : isEdit ? "Save changes" : "Save"}
-            </Button>
-          </DialogFooter>
+          {pendingConfirm ? (
+            <ReinstallConfirmBar
+              mode="auto"
+              affectedServerCount={affectedServerCount}
+              presetCount={otherPresetCount}
+              presetEntityName={presetEntityName}
+              isSubmitting={isConfirming}
+              onCancel={() => setPendingConfirm(false)}
+              onConfirm={performSave}
+            />
+          ) : (
+            <DialogFooter className="border-t px-6 py-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={isPending || hasErrors || (isEdit && !isDirty)}
+              >
+                {isPending ? "Saving…" : isEdit ? "Save changes" : "Save"}
+              </Button>
+            </DialogFooter>
+          )}
         </form>
       </DialogContent>
     </Dialog>

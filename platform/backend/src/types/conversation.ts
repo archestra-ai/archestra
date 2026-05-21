@@ -7,6 +7,7 @@ import {
 import { z } from "zod";
 import { schema } from "@/database";
 import { SelectConversationChatErrorSchema } from "./conversation-chat-error";
+import { SelectConversationCompactionSchema } from "./conversation-compaction";
 import { ConversationShareVisibilitySchema } from "./conversation-share";
 
 const ConversationShareSummarySchema = z
@@ -43,6 +44,7 @@ export const SelectConversationSchema = createSelectSchema(
   share: ConversationShareSummarySchema,
   messages: z.array(z.any()), // UIMessage[] from AI SDK
   chatErrors: z.array(SelectConversationChatErrorSchema),
+  compactions: z.array(SelectConversationCompactionSchema),
   ...selectExtendedFields,
 });
 
@@ -67,8 +69,7 @@ export const UpdateConversationSchema = createUpdateSchema(
 )
   .pick({
     title: true,
-    selectedModel: true,
-    selectedProvider: true,
+    modelId: true,
     chatApiKeyId: true,
     agentId: true,
     artifact: true,

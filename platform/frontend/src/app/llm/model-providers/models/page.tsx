@@ -2,7 +2,9 @@
 
 import {
   type archestraApiTypes,
+  compareModelsForDisplay,
   INPUT_MODALITY_OPTIONS,
+  isOpenRouterLatestAlias,
   type ModelInputModality,
   type ModelOutputModality,
   OUTPUT_MODALITY_OPTIONS,
@@ -32,6 +34,8 @@ import {
   BestModelBadge,
   EmbeddingModelBadge,
   FastestModelBadge,
+  FreeModelBadge,
+  LatestModelBadge,
   UnknownCapabilitiesBadge,
 } from "@/components/model-badges";
 import { SearchInput } from "@/components/search-input";
@@ -50,6 +54,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
@@ -68,6 +73,7 @@ import {
   useUpdateModel,
 } from "@/lib/llm-models.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { formatContextLength } from "@/lib/utils";
 import { useSetModelProvidersAction } from "../layout";
 
 export default function ModelsPage() {
@@ -81,33 +87,10 @@ export default function ModelsPage() {
   const [modelTypeFilter, setModelTypeFilter] = useState<
     "all" | "chat" | "embedding"
   >("all");
+  const [freeOnly, setFreeOnly] = useState(false);
   const [editingModel, setEditingModel] = useState<ModelWithApiKeys | null>(
     null,
   );
-
-  const filteredModels = useMemo(() => {
-    let result = models;
-    if (search) {
-      const q = search.toLowerCase();
-      result = result.filter((m) => m.modelId.toLowerCase().includes(q));
-    }
-    if (apiKeyFilter !== "all") {
-      result = result.filter((m) =>
-        m.apiKeys.some((k) => k.id === apiKeyFilter),
-      );
-    }
-    if (modelTypeFilter === "embedding") {
-      result = result.filter((m) => m.embeddingDimensions !== null);
-    } else if (modelTypeFilter === "chat") {
-      result = result.filter((m) => m.embeddingDimensions === null);
-    }
-    // Stable sort so rows don't jump when data refetches after edits
-    return [...result].sort(
-      (a, b) =>
-        a.provider.localeCompare(b.provider) ||
-        a.modelId.localeCompare(b.modelId),
-    );
-  }, [models, search, apiKeyFilter, modelTypeFilter]);
 
   const availableApiKeys = useMemo(() => {
     const keyMap = new Map<
@@ -126,6 +109,47 @@ export default function ModelsPage() {
       a[1].name.localeCompare(b[1].name),
     );
   }, [models]);
+
+  // "free only" is an openrouter-specific filter — free models are otherwise
+  // a non-concept, so the toggle shows whenever openrouter is set up.
+  const hasOpenRouterModels = useMemo(
+    () => availableApiKeys.some(([, key]) => key.provider === "openrouter"),
+    [availableApiKeys],
+  );
+
+  const filteredModels = useMemo(() => {
+    let result = models;
+    if (search) {
+      const q = search.toLowerCase();
+      result = result.filter((m) => m.modelId.toLowerCase().includes(q));
+    }
+    if (apiKeyFilter !== "all") {
+      result = result.filter((m) =>
+        m.apiKeys.some((k) => k.id === apiKeyFilter),
+      );
+    }
+    if (modelTypeFilter === "embedding") {
+      result = result.filter((m) => m.embeddingDimensions !== null);
+    } else if (modelTypeFilter === "chat") {
+      result = result.filter((m) => m.embeddingDimensions === null);
+    }
+    if (freeOnly && hasOpenRouterModels) {
+      result = result.filter((m) => m.isFree);
+    }
+    // Group by provider, then apply the shared model ordering within each
+    // group (routers, recommended, then the rest alphabetically).
+    return [...result].sort(
+      (a, b) =>
+        a.provider.localeCompare(b.provider) || compareModelsForDisplay(a, b),
+    );
+  }, [
+    models,
+    search,
+    apiKeyFilter,
+    modelTypeFilter,
+    freeOnly,
+    hasOpenRouterModels,
+  ]);
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshingModels(true);
@@ -176,18 +200,24 @@ export default function ModelsPage() {
         accessorKey: "modelId",
         size: 280,
         header: "Model ID",
-        cell: ({ row }) => (
-          <div className="min-w-0 space-y-2">
-            <span className="font-mono text-sm">{row.original.modelId}</span>
-            <div className="mt-0.5 flex flex-wrap items-center gap-2">
-              {row.original.isFastest && <FastestModelBadge />}
-              {row.original.isBest && <BestModelBadge />}
-              {row.original.embeddingDimensions !== null && (
-                <EmbeddingModelBadge />
-              )}
+        cell: ({ row }) => {
+          const { modelId, provider, isFree } = row.original;
+          const isLatestAlias = isOpenRouterLatestAlias(provider, modelId);
+          return (
+            <div className="min-w-0 space-y-2">
+              <span className="font-mono text-sm">{modelId}</span>
+              <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                {isFree && <FreeModelBadge />}
+                {isLatestAlias && <LatestModelBadge />}
+                {row.original.isFastest && <FastestModelBadge />}
+                {row.original.isBest && <BestModelBadge />}
+                {row.original.embeddingDimensions !== null && (
+                  <EmbeddingModelBadge />
+                )}
+              </div>
             </div>
-          </div>
-        ),
+          );
+        },
       },
       {
         accessorKey: "apiKeys",
@@ -385,6 +415,21 @@ export default function ModelsPage() {
                 },
               ]}
             />
+            {hasOpenRouterModels && (
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="models-free-only"
+                  checked={freeOnly}
+                  onCheckedChange={setFreeOnly}
+                />
+                <Label
+                  htmlFor="models-free-only"
+                  className="text-sm text-muted-foreground"
+                >
+                  Free only
+                </Label>
+              </div>
+            )}
           </div>
         )}
         <DataTable
@@ -397,13 +442,17 @@ export default function ModelsPage() {
           hideSelectedCount
           isLoading={isPending}
           hasActiveFilters={Boolean(
-            search || apiKeyFilter !== "all" || modelTypeFilter !== "all",
+            search ||
+              apiKeyFilter !== "all" ||
+              modelTypeFilter !== "all" ||
+              (hasOpenRouterModels && freeOnly),
           )}
           filteredEmptyMessage="No models match your filters. Try adjusting your search."
           onClearFilters={() => {
             setSearch("");
             setApiKeyFilter("all");
             setModelTypeFilter("all");
+            setFreeOnly(false);
           }}
           emptyMessage={
             apiKeys.length === 0
@@ -905,17 +954,6 @@ function ModalitySelectField<T extends string>(params: {
       </div>
     </div>
   );
-}
-
-function formatContextLength(contextLength: number | null): string {
-  if (contextLength === null) return "-";
-  if (contextLength >= 1000000) {
-    return `${(contextLength / 1000000).toFixed(contextLength % 1000000 === 0 ? 0 : 1)}M`;
-  }
-  if (contextLength >= 1000) {
-    return `${(contextLength / 1000).toFixed(contextLength % 1000 === 0 ? 0 : 1)}K`;
-  }
-  return contextLength.toString();
 }
 
 function hasUnknownCapabilities(model: ModelWithApiKeys): boolean {

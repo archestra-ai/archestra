@@ -18,6 +18,7 @@ const mockGetChatMcpTools = vi.hoisted(() => vi.fn());
 const mockGetChatMcpToolUiResourceUris = vi.hoisted(() => vi.fn());
 const mockExtractAndIngestDocuments = vi.hoisted(() => vi.fn());
 const mockStartActiveChatSpan = vi.hoisted(() => vi.fn());
+const mockCompactMessagesForChat = vi.hoisted(() => vi.fn());
 
 vi.mock("ai", async (importOriginal) => {
   const actual = await importOriginal<typeof import("ai")>();
@@ -65,6 +66,14 @@ vi.mock("@/observability/tracing", async (importOriginal) => {
   };
 });
 
+vi.mock("./context-compaction", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./context-compaction")>();
+  return {
+    ...actual,
+    compactMessagesForChat: mockCompactMessagesForChat,
+  };
+});
+
 vi.mock("./errors", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./errors")>();
   return {
@@ -93,7 +102,6 @@ describe("POST /api/chat slim error payload", () => {
       const conversation = await makeConversation(agent.id, {
         userId: user.id,
         organizationId,
-        selectedModel: "gpt-4o",
       });
       conversationId = conversation.id;
 
@@ -101,6 +109,14 @@ describe("POST /api/chat slim error payload", () => {
       mockGetChatMcpTools.mockResolvedValue({});
       mockGetChatMcpToolUiResourceUris.mockResolvedValue({});
       mockExtractAndIngestDocuments.mockResolvedValue(undefined);
+      mockCompactMessagesForChat.mockImplementation(
+        async ({ messages }: { messages: unknown[] }) => ({
+          messages,
+          status: "skipped",
+          compaction: null,
+          reason: "below_threshold",
+        }),
+      );
       mockStartActiveChatSpan.mockImplementation(
         async ({ callback }: { callback: () => Promise<Response> }) =>
           callback(),
@@ -182,12 +198,14 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     | ((args: { messages: unknown[] }) => Promise<void> | void)
     | undefined;
   let executionPromise: Promise<void> | undefined;
+  let writerWrites: unknown[];
 
   beforeEach(
     async ({ makeAgent, makeConversation, makeOrganization, makeUser }) => {
       capturedInnerOnError = undefined;
       capturedInnerOnFinish = undefined;
       executionPromise = undefined;
+      writerWrites = [];
 
       user = await makeUser();
       const organization = await makeOrganization({ name: "Test Org" });
@@ -201,7 +219,6 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
       const conversation = await makeConversation(agent.id, {
         userId: user.id,
         organizationId,
-        selectedModel: "gpt-4o",
       });
       conversationId = conversation.id;
 
@@ -209,6 +226,14 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
       mockGetChatMcpTools.mockResolvedValue({});
       mockGetChatMcpToolUiResourceUris.mockResolvedValue({});
       mockExtractAndIngestDocuments.mockResolvedValue(undefined);
+      mockCompactMessagesForChat.mockImplementation(
+        async ({ messages }: { messages: unknown[] }) => ({
+          messages,
+          status: "skipped",
+          compaction: null,
+          reason: "below_threshold",
+        }),
+      );
       mockStartActiveChatSpan.mockImplementation(
         async ({ callback }: { callback: () => Promise<Response> }) =>
           callback(),
@@ -247,7 +272,7 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
           }) => Promise<void>;
         }) => {
           const writer = {
-            write: vi.fn(),
+            write: vi.fn((data: unknown) => writerWrites.push(data)),
             merge: vi.fn(),
           };
           executionPromise = execute({ writer }).catch(() => undefined);
@@ -329,5 +354,144 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     const errorsAfterFinish =
       await ConversationChatErrorModel.findByConversation(conversationId);
     expect(errorsAfterFinish).toHaveLength(1);
+  });
+
+  test("persists user message with new DB id on provider error and allows subsequent PATCH", async ({
+    expect,
+  }) => {
+    const { default: MessageModel } = await import("@/models/message");
+
+    const clientTempId = "client-temp-msg-1";
+    const messageText = "hello from provider-error test";
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: clientTempId,
+            role: "user",
+            parts: [{ type: "text", text: messageText }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+    expect(capturedInnerOnError).toBeDefined();
+
+    capturedInnerOnError?.(new Error("Upstream provider error"));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const persisted = await MessageModel.findByConversation(conversationId);
+    const userMessage = persisted.find((m) => m.role === "user");
+    expect(userMessage).toBeDefined();
+    // The persistence layer assigns a DB id distinct from the client tempId,
+    // which is what makes PATCH /api/chat/messages/:id possible later.
+    expect(userMessage?.id).not.toBe(clientTempId);
+
+    const patchResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/chat/messages/${userMessage?.id}`,
+      payload: { partIndex: 0, text: "Edited after provider error" },
+    });
+    expect(patchResponse.statusCode).toBe(200);
+  });
+
+  test("passes compacted messages to streamText", async () => {
+    const compactedMessages = [
+      {
+        role: "user",
+        parts: [
+          {
+            type: "text",
+            text: "Context summary from earlier in this conversation.",
+          },
+        ],
+      },
+      {
+        id: "recent-user-message",
+        role: "user",
+        parts: [{ type: "text", text: "continue from here" }],
+      },
+    ];
+    mockCompactMessagesForChat.mockResolvedValue({
+      messages: compactedMessages,
+      status: "created",
+      compaction: {
+        id: "compaction-1",
+        trigger: "auto",
+        originalTokenEstimate: 120_000,
+        compactedTokenEstimate: 2_000,
+      },
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: "msg-1",
+            role: "user",
+            parts: [{ type: "text", text: "hello" }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(mockStreamText.mock.calls[0]?.[0].messages).toEqual(
+      compactedMessages,
+    );
+  });
+
+  test("emits compaction finish when compaction starts but is not beneficial", async () => {
+    mockCompactMessagesForChat.mockImplementation(
+      async ({ messages, onCompactionStart }) => {
+        onCompactionStart?.();
+        return {
+          messages,
+          status: "skipped",
+          compaction: null,
+          reason: "not_beneficial",
+        };
+      },
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: "msg-1",
+            role: "user",
+            parts: [{ type: "text", text: "hello" }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(writerWrites).toContainEqual({
+      type: "data-context-compaction-start",
+      data: { trigger: "auto" },
+    });
+    expect(writerWrites).toContainEqual({
+      type: "data-context-compaction-finish",
+      data: { status: "skipped", reason: "not_beneficial" },
+    });
   });
 });

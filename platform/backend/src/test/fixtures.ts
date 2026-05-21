@@ -673,7 +673,7 @@ async function makeConversation(
   overrides: Partial<
     Pick<
       InsertConversation,
-      "userId" | "organizationId" | "title" | "selectedModel" | "chatApiKeyId"
+      "userId" | "organizationId" | "title" | "modelId" | "chatApiKeyId"
     >
   > = {},
 ) {
@@ -685,7 +685,6 @@ async function makeConversation(
       organizationId: `org-${crypto.randomUUID().substring(0, 8)}`,
       agentId,
       title: `Test Conversation ${crypto.randomUUID().substring(0, 8)}`,
-      selectedModel: "gpt-4o",
       createdAt: new Date(),
       updatedAt: new Date(),
       ...overrides,

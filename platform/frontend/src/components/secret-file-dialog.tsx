@@ -43,13 +43,15 @@ interface SecretFileDialogProps {
   onConfirm: (draft: SecretFileDraft) => void;
 }
 
-const EMPTY_DRAFT: SecretFileDraft = {
-  key: "",
-  scope: "installation",
-  required: false,
-  value: "",
-  description: "",
-};
+function makeEmptyDraft(disableInstallation: boolean): SecretFileDraft {
+  return {
+    key: "",
+    scope: disableInstallation ? "static" : "installation",
+    required: !disableInstallation,
+    value: "",
+    description: "",
+  };
+}
 
 export function SecretFileDialog({
   open,
@@ -64,12 +66,14 @@ export function SecretFileDialog({
   onConfirm,
 }: SecretFileDialogProps) {
   const { singular } = usePresetEntityName();
-  const [draft, setDraft] = useState<SecretFileDraft>(initial ?? EMPTY_DRAFT);
+  const [draft, setDraft] = useState<SecretFileDraft>(
+    initial ?? makeEmptyDraft(disableInstallation),
+  );
   const [vaultDialogOpen, setVaultDialogOpen] = useState(false);
 
   useEffect(() => {
-    if (open) setDraft(initial ?? EMPTY_DRAFT);
-  }, [open, initial]);
+    if (open) setDraft(initial ?? makeEmptyDraft(disableInstallation));
+  }, [open, initial, disableInstallation]);
 
   const trimmedKey = draft.key.trim();
   const duplicate = useMemo(
@@ -94,7 +98,8 @@ export function SecretFileDialog({
   function updateDraft(patch: Partial<SecretFileDraft>) {
     setDraft((prev) => {
       const next = { ...prev, ...patch };
-      if (patch.scope && patch.scope !== "installation") next.required = false;
+      if (patch.scope === "installation") next.required = true;
+      else if (patch.scope) next.required = false;
       if (patch.scope && patch.scope !== "static") next.value = "";
       return next;
     });

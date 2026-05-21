@@ -1,6 +1,6 @@
 /**
  * NOTE: this is a bit of a PITA/verbose but in order to properly type everything that we are
- * proxing.. this is kinda necessary.
+ * proxying.. this is kinda necessary.
  *
  * the gemini ts sdk doesn't expose zod schemas for all of this..
  */

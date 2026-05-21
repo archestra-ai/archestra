@@ -36,18 +36,8 @@ const isDevelopment = !isProduction;
 
 const appVersion = process.env.ARCHESTRA_VERSION || packageJson.version;
 
-const frontendUrl = process.env.ARCHESTRA_FRONTEND_URL?.trim();
-
-// Always-defined frontend URL with a localhost default — used for issuer,
-// authorization_endpoint, browser-facing redirects.
-const frontendBaseUrl = frontendUrl || "http://localhost:3000";
-
-// Public origin advertised in OAuth/MCP metadata. Only set when an operator
-// explicitly configures ARCHESTRA_FRONTEND_URL. When null, metadata falls back
-// to the request Host (so local dev and Docker-direct access keep working).
-// Lets deployments behind ingress publish correct URLs without enabling
-// ARCHESTRA_TRUST_PROXY.
-const publicOrigin = frontendUrl ? frontendUrl.replace(/\/$/, "") : null;
+const frontendBaseUrl =
+  process.env.ARCHESTRA_FRONTEND_URL?.trim() || "http://localhost:3000";
 const DEFAULT_POSTHOG_KEY = "phc_FFZO7LacnsvX2exKFWehLDAVaXLBfoBaJypdOuYoTk7";
 const DEFAULT_POSTHOG_HOST = "https://eu.i.posthog.com";
 
@@ -524,7 +514,6 @@ export const getAnalyticsConfig = () => ({
 
 const config = {
   frontendBaseUrl,
-  publicOrigin,
   api: {
     host: isDevelopment ? "127.0.0.1" : "0.0.0.0",
     port: getPortFromUrl(),

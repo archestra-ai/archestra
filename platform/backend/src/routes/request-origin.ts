@@ -1,39 +1,25 @@
 import type { FastifyRequest } from "fastify";
-import config from "@/config";
 
 /**
- * Return the public origin used in OAuth and MCP metadata.
+ * Return the public origin for a request using Fastify's trusted request
+ * accessors instead of reading forwarded headers directly.
  *
- * Resolution order:
+ * Fastify derives `request.host` and `request.protocol` from the raw Host,
+ * X-Forwarded-Host, and X-Forwarded-Proto headers according to the server's
+ * `trustProxy` option. That matters because `ARCHESTRA_TRUST_PROXY` can be:
  *
- * 1. ARCHESTRA_TRUST_PROXY is set → use Fastify's `request.host` /
- *    `request.protocol`. The operator has vouched for the inbound proxy, so
- *    Fastify resolves X-Forwarded-Host / X-Forwarded-Proto into these
- *    accessors, giving an accurate per-request origin (useful for multi-host
- *    ingress).
+ * - false: ignore all forwarded headers
+ * - true: trust forwarded headers from any proxy
+ * - an IP/CIDR list: trust forwarded headers only when the remote proxy matches
  *
- * 2. ARCHESTRA_FRONTEND_URL is set (and proxy trust is off) → use
- *    `config.publicOrigin`. No trusted header source is available, so fall
- *    back to the server-controlled origin instead of a client-supplied raw
- *    Host.
- *
- * 3. Neither is set → use raw `request.host`. Only safe for direct dev /
- *    Docker access where the caller hits the backend directly; production
- *    deployments behind ingress should set one of the two env vars.
- *
- * TODO: revisit this logic to merge and test ARCHESTRA_FRONTEND_URL as the
- * canonical origin without breaking too many tests (today many tests assert
- * the raw-Host fallback path, which prevents ARCHESTRA_FRONTEND_URL from
- * always taking precedence).
+ * Reading `X-Forwarded-*` manually would either ignore CIDR matching or require
+ * duplicating Fastify's proxy-trust implementation. Using these accessors keeps
+ * OAuth and MCP metadata generation aligned with the same proxy trust rules
+ * that Fastify applies to the rest of the request.
  */
 export function getPublicRequestOrigin(request: FastifyRequest): string {
-  const trustProxyEnabled = config.api.trustProxy !== false;
-
-  if (!trustProxyEnabled && config.publicOrigin) {
-    return config.publicOrigin;
-  }
-
   const host = request.host || "localhost";
   const protocol = (request.protocol || "http").replace(/:$/, "");
+
   return `${protocol}://${host}`;
 }

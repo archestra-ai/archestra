@@ -1323,41 +1323,68 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // For local servers, stop the server (this will delete the K8s Secret)
       if (mcpServer.serverType === "local") {
-        try {
-          await McpServerRuntimeManager.stopServer(mcpServerId);
-          logger.info(
-            { mcpServerId },
-            "Stopped K8s deployment and deleted K8s Secret for local MCP server",
-          );
-        } catch (error) {
-          logger.error(
-            { err: error, mcpServerId },
-            "Failed to stop local MCP server deployment",
-          );
-          // Continue with deletion even if pod stop fails
-        }
+        await stopLocalDeployment(mcpServerId);
       }
 
       // Delete database secret if it exists and is for a local server
       // (don't delete OAuth tokens for remote servers)
       if (mcpServer.secretId && mcpServer.serverType === "local") {
-        try {
-          await secretManager().deleteSecret(mcpServer.secretId);
-          logger.info(
-            { mcpServerId },
-            "Deleted database secret for local MCP server",
-          );
-        } catch (error) {
-          logger.error(
-            { err: error, mcpServerId },
-            "Failed to delete database secret",
-          );
-          // Continue with MCP server deletion even if secret deletion fails
-        }
+        await tryDeleteSecret(mcpServerId, mcpServer.secretId);
       }
 
       // Delete the MCP server record
       const success = await McpServerModel.delete(mcpServerId);
+
+      return reply.send({ success });
+    },
+  );
+
+  fastify.post(
+    "/api/mcp_server/:id/revoke-credentials",
+    {
+      schema: {
+        operationId: RouteId.RevokeCredentialsMcpServer,
+        description:
+          "Revoke credentials for an MCP server: stops pods for local servers, clears stored secrets, and deletes the server record while retaining tool assignments",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { id: mcpServerId }, user, headers }, reply) => {
+      const mcpServer = await McpServerModel.findById(mcpServerId);
+
+      if (!mcpServer) {
+        throw new ApiError(404, "MCP server not found");
+      }
+
+      if (mcpServer.serverType === "builtin") {
+        throw new ApiError(
+          400,
+          "Cannot revoke credentials for built-in MCP servers",
+        );
+      }
+
+      await assertScopedLifecycleAuthorization({
+        mcpServer,
+        userId: user.id,
+        headers,
+        action: "revoke",
+      });
+
+      if (mcpServer.serverType === "local") {
+        await stopLocalDeployment(mcpServerId);
+      }
+
+      if (mcpServer.secretId) {
+        await tryDeleteSecret(mcpServerId, mcpServer.secretId);
+      }
+
+      // Delete the server record while retaining AgentTool rows (FK sets mcp_server_id to null)
+      const success =
+        await McpServerModel.revokeCredentials(mcpServerId);
 
       return reply.send({ success });
     },
@@ -2260,6 +2287,36 @@ function getCatalogStaticUserConfigValues(
         String(fieldConfig.default),
       ]),
   );
+}
+
+async function stopLocalDeployment(mcpServerId: string): Promise<void> {
+  try {
+    await McpServerRuntimeManager.stopServer(mcpServerId);
+    logger.info(
+      { mcpServerId },
+      "Stopped K8s deployment and deleted K8s Secret for local MCP server",
+    );
+  } catch (error) {
+    logger.error(
+      { err: error, mcpServerId },
+      "Failed to stop local MCP server deployment",
+    );
+  }
+}
+
+async function tryDeleteSecret(
+  mcpServerId: string,
+  secretId: string,
+): Promise<void> {
+  try {
+    await secretManager().deleteSecret(secretId);
+    logger.info({ mcpServerId }, "Deleted database secret for MCP server");
+  } catch (error) {
+    logger.error(
+      { err: error, mcpServerId },
+      "Failed to delete database secret",
+    );
+  }
 }
 
 function filterInstallUserConfigValues(params: {

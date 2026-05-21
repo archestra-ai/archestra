@@ -80,6 +80,7 @@ export const RouteId = {
   DeleteMcpServer: "deleteMcpServer",
   ReauthenticateMcpServer: "reauthenticateMcpServer",
   ReinstallMcpServer: "reinstallMcpServer",
+  RevokeCredentialsMcpServer: "revokeCredentialsMcpServer",
   GetMcpServerInstallationStatus: "getMcpServerInstallationStatus",
   // MCP Gateway Routes
   McpGatewayGet: "mcpGatewayGet",

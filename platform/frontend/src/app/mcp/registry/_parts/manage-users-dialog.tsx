@@ -8,6 +8,7 @@ import {
 } from "@shared";
 import { format } from "date-fns";
 import {
+  AlertCircle,
   AlertTriangle,
   ChevronDown,
   PlugZap,
@@ -25,6 +26,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogForm,
   DialogHeader,
   DialogStickyFooter,
   DialogTitle,
@@ -74,7 +76,10 @@ import {
   useCatalogPresets,
   useInternalMcpCatalog,
 } from "@/lib/mcp/internal-mcp-catalog.query";
-import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp/mcp-server.query";
+import {
+  useMcpServers,
+  useRevokeMcpServerCredentials,
+} from "@/lib/mcp/mcp-server.query";
 import { usePresetEntityName } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { type DeploymentState, DeploymentStatusDot } from "./deployment-status";
@@ -321,14 +326,24 @@ export function ManageUsersContent({
     return "You can only revoke connections for teams you are a member of";
   };
 
-  const deleteMcpServerMutation = useDeleteMcpServer();
+  const revokeCredentialsMutation = useRevokeMcpServerCredentials();
   const initiateOAuthMutation = useInitiateOAuth();
 
-  const handleRevoke = async (mcpServer: (typeof allServers)[number]) => {
-    await deleteMcpServerMutation.mutateAsync({
-      id: mcpServer.id,
-      name: mcpServer.name,
+  const [revokeTarget, setRevokeTarget] = useState<
+    (typeof allServers)[number] | null
+  >(null);
+
+  const handleRevoke = (mcpServer: (typeof allServers)[number]) => {
+    setRevokeTarget(mcpServer);
+  };
+
+  const confirmRevoke = async () => {
+    if (!revokeTarget) return;
+    await revokeCredentialsMutation.mutateAsync({
+      id: revokeTarget.id,
+      name: revokeTarget.name,
     });
+    setRevokeTarget(null);
   };
 
   const handleReauthenticate = async (
@@ -554,7 +569,7 @@ export function ManageUsersContent({
                       getRevokeTooltip={getRevokeTooltip}
                       handleReauthenticate={handleReauthenticate}
                       handleRevoke={handleRevoke}
-                      isDeleting={deleteMcpServerMutation.isPending}
+                      isDeleting={revokeCredentialsMutation.isPending}
                       deploymentStatuses={deploymentStatuses}
                       onOpenPodLogs={onOpenPodLogs}
                       availableTeamsForShared={split.availableTeamsForShared}
@@ -578,6 +593,55 @@ export function ManageUsersContent({
           </Button>
         </DialogStickyFooter>
       )}
+
+      <Dialog
+        open={revokeTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setRevokeTarget(null);
+        }}
+      >
+        <DialogContent className="max-w-md flex flex-col overflow-hidden">
+          <DialogHeader className="border-b-0">
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-amber-500" />
+              Revoke credentials
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to revoke the credentials for{" "}
+              <strong>
+                {revokeTarget
+                  ? (revokeTarget.teamDetails?.name ||
+                    revokeTarget.ownerEmail ||
+                    "this connection")
+                  : ""}
+              </strong>
+              ? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogForm
+            className="flex min-h-0 flex-1 flex-col"
+            onSubmit={(e) => e.preventDefault()}
+          >
+            <DialogStickyFooter className="mt-0">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setRevokeTarget(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={revokeCredentialsMutation.isPending}
+                onClick={confirmRevoke}
+              >
+                Revoke
+              </Button>
+            </DialogStickyFooter>
+          </DialogForm>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

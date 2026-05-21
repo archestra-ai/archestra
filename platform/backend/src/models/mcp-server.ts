@@ -469,15 +469,7 @@ class McpServerModel {
 
     // Clean up any persisted HTTP session IDs tied to this server.
     // Without this, stale rows can linger until TTL cleanup after uninstall/delete.
-    try {
-      await McpHttpSessionModel.deleteByMcpServerId(id);
-    } catch (error) {
-      logger.error(
-        { err: error },
-        `Failed to clean up MCP HTTP sessions for MCP server ${mcpServer.name}:`,
-      );
-      // Continue with deletion even if session cleanup fails
-    }
+    await McpServerModel.cleanupHttpSessions(id, mcpServer.name);
 
     // Clean up agent_tools that reference this server
     // Must be done before deletion to ensure agents do not retain unusable tool assignments
@@ -504,34 +496,9 @@ class McpServerModel {
       // Continue with deletion even if agent tool cleanup fails
     }
 
-    // For local servers, stop and remove the K8s deployment
-    if (mcpServer.serverType === "local") {
-      try {
-        await McpServerRuntimeManager.removeMcpServer(id);
-        logger.info(
-          `Cleaned up K8s deployment for MCP server: ${mcpServer.name}`,
-        );
-      } catch (error) {
-        logger.error(
-          { err: error },
-          `Failed to clean up K8s deployment for MCP server ${mcpServer.name}:`,
-        );
-        // Continue with deletion even if pod cleanup fails
-      }
-    }
+    await McpServerModel.removeK8sDeploymentIfLocal(id, mcpServer);
 
-    // Delete the MCP server from database
-    logger.info(`Deleting MCP server: ${mcpServer.name} with id: ${id}`);
-    const result = await db
-      .delete(schema.mcpServersTable)
-      .where(eq(schema.mcpServersTable.id, id));
-
-    const deleted = result.rowCount !== null && result.rowCount > 0;
-
-    // If the MCP server was deleted and it had an associated secret, delete the secret
-    if (deleted && mcpServer.secretId) {
-      await secretManager().deleteSecret(mcpServer.secretId);
-    }
+    const deleted = await McpServerModel.deleteDbRecordWithSecrets(id, mcpServer);
 
     // If the MCP server was deleted and had a catalogId, check if this was the last installation
     // If so, clean up all tools for this catalog
@@ -558,6 +525,68 @@ class McpServerModel {
         );
         // Don't fail the deletion if tool cleanup fails
       }
+    }
+
+    return deleted;
+  }
+
+  /**
+   * Delete an MCP server record without removing AgentTool rows effectively removing credentials
+   */
+  static async revokeCredentials(id: string): Promise<boolean> {
+    const mcpServer = await McpServerModel.findById(id);
+    if (!mcpServer) return false;
+
+    await McpServerModel.cleanupHttpSessions(id, mcpServer.name);
+    await McpServerModel.removeK8sDeploymentIfLocal(id, mcpServer);
+
+    return McpServerModel.deleteDbRecordWithSecrets(id, mcpServer);
+  }
+
+  private static async cleanupHttpSessions(
+    id: string,
+    serverName: string,
+  ): Promise<void> {
+    try {
+      await McpHttpSessionModel.deleteByMcpServerId(id);
+    } catch (error) {
+      logger.error(
+        { err: error },
+        `Failed to clean up MCP HTTP sessions for MCP server ${serverName}:`,
+      );
+    }
+  }
+
+  private static async removeK8sDeploymentIfLocal(
+    id: string,
+    mcpServer: McpServer,
+  ): Promise<void> {
+    if (mcpServer.serverType !== "local") return;
+    try {
+      await McpServerRuntimeManager.removeMcpServer(id);
+      logger.info(`Cleaned up K8s deployment for MCP server: ${mcpServer.name}`);
+    } catch (error) {
+      logger.error(
+        { err: error },
+        `Failed to clean up K8s deployment for MCP server ${mcpServer.name}:`,
+      );
+    }
+  }
+
+  private static async deleteDbRecordWithSecrets(
+    id: string,
+    mcpServer: McpServer,
+  ): Promise<boolean> {
+    logger.info(`Deleting MCP server: ${mcpServer.name} with id: ${id}`);
+    const result = await db
+      .delete(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.id, id));
+
+    const deleted = result.rowCount !== null && result.rowCount > 0;
+
+    // If the MCP server was deleted, and it had an associated secret, delete the secret
+    if (deleted && mcpServer.secretId) {
+      await secretManager().deleteSecret(mcpServer.secretId);
     }
 
     return deleted;

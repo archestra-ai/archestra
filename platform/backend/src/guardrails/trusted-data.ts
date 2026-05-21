@@ -59,29 +59,26 @@ export async function evaluateIfContextIsTrusted(
 
   const toolResultUpdates: ToolResultUpdates = {};
   const dualLlmAnalyses: DualLlmAnalysis[] = [];
-  let hasUntrustedData = false;
+  let hasUntrustedData = considerContextUntrusted;
   let usedDualLlm = false;
-  let unsafeContextBoundary: UnsafeContextBoundary | undefined;
+  let unsafeContextBoundary: UnsafeContextBoundary | undefined =
+    considerContextUntrusted
+      ? {
+          kind: "preexisting_untrusted",
+          reason:
+            initialUntrustedReason ??
+            UNSAFE_CONTEXT_BOUNDARY_REASON.agentConfiguredUntrusted,
+        }
+      : undefined;
 
-  // If agent configured to consider context untrusted from the beginning,
-  // mark context as untrusted immediately and skip evaluation
+  // If agent configured context as untrusted from the beginning, preserve that
+  // state while still evaluating tool results so blocked policies can redact
+  // model-facing data before the provider request is sent.
   if (considerContextUntrusted) {
     logger.debug(
       { agentId },
       "[trustedData] evaluateIfContextIsTrusted: context marked untrusted by agent config",
     );
-    return {
-      toolResultUpdates: {},
-      contextIsTrusted: false,
-      usedDualLlm: false,
-      dualLlmAnalyses: [],
-      unsafeContextBoundary: {
-        kind: "preexisting_untrusted",
-        reason:
-          initialUntrustedReason ??
-          UNSAFE_CONTEXT_BOUNDARY_REASON.agentConfiguredUntrusted,
-      },
-    };
   }
 
   // First, collect all tool calls from all messages
@@ -111,12 +108,12 @@ export async function evaluateIfContextIsTrusted(
 
   if (allToolCalls.length === 0) {
     logger.debug(
-      { agentId },
-      "[trustedData] evaluateIfContextIsTrusted: no tool calls found, context is trusted",
+      { agentId, contextIsTrusted: !hasUntrustedData },
+      "[trustedData] evaluateIfContextIsTrusted: no tool calls found",
     );
     return {
       toolResultUpdates,
-      contextIsTrusted: true,
+      contextIsTrusted: !hasUntrustedData,
       usedDualLlm: false,
       dualLlmAnalyses: [],
       unsafeContextBoundary,

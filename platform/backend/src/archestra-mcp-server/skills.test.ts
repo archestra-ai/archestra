@@ -216,4 +216,28 @@ describe("skill tool execution", () => {
     expect(result.isError).toBe(true);
     expect(textOf(result)).toContain("pdf-processing");
   });
+
+  test("read_skill_file hides a file of a skill outside the user's scope", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const author = await makeUser();
+    await seedSkill({
+      skill: { name: "pdf-processing", scope: "personal", authorId: author.id },
+      files: [
+        { path: "references/FORMS.md", content: "# Forms", kind: "reference" },
+      ],
+    });
+
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, { role: MEMBER_ROLE_NAME });
+    const result = await executeArchestraTool(
+      TOOL_READ_SKILL_FILE_FULL_NAME,
+      { skill: "pdf-processing", path: "references/FORMS.md" },
+      { ...context, userId: member.id },
+    );
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("pdf-processing");
+  });
 });

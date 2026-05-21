@@ -178052,6 +178052,10 @@
                               ],
                               "additionalProperties": false
                             }
+                          },
+                          "authorName": {
+                            "nullable": true,
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -178071,7 +178075,8 @@
                           "createdAt",
                           "updatedAt",
                           "fileCount",
-                          "teams"
+                          "teams",
+                          "authorName"
                         ],
                         "additionalProperties": false
                       }
@@ -180293,7 +180298,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Enable the Agent Skill tools (`list_skills`, `activate_skill`, `read_skill_file`) for this organization. Sets the org-level flag and backfills the tools onto every existing agent. Idempotent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:update`: Modify agent skills and their team assignments",
+        "description": "Enable the Agent Skill tools (`list_skills`, `activate_skill`, `read_skill_file`) for this organization. Sets the org-level flag and backfills the tools onto every existing agent. Idempotent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:admin`: Full administrative control over all agent skills, bypassing team restrictions",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -180553,7 +180558,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "skill:update"
+            "skill:admin"
           ]
         }
       }
@@ -181277,6 +181282,20 @@
                   },
                   "skillPaths": {
                     "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "personal",
+                      "team",
+                      "org"
+                    ]
+                  },
+                  "teamIds": {
                     "type": "array",
                     "items": {
                       "type": "string"

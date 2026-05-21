@@ -168,7 +168,7 @@ function SkillsList() {
           scope={row.original.scope}
           teams={row.original.teams}
           authorId={row.original.authorId}
-          authorName={undefined}
+          authorName={row.original.authorName}
           currentUserId={currentUserId}
         />
       ),

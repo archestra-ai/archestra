@@ -367,5 +367,20 @@ describe("skill routes", () => {
       });
       expect(deleteResponse.statusCode).toBe(404);
     });
+
+    test("non-admins cannot import skills as org-scoped", async () => {
+      // scope is authorized before any GitHub call, so this 403s without network
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/skills/github/import",
+        payload: {
+          repoUrl: "github.com/example/skills",
+          skillPaths: ["pdf-processing"],
+          scope: "org",
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+    });
   });
 });

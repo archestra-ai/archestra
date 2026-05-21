@@ -54,7 +54,7 @@ export async function injectSkillActivation({
   const checker = await getSkillPermissionChecker({ userId, organizationId });
   const hasAccess = await SkillTeamModel.userHasSkillAccess({
     userId,
-    skillId: skill.id,
+    skill,
     isSkillAdmin: checker.isAdmin,
   });
   if (!hasAccess) {

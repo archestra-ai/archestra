@@ -72,6 +72,8 @@ For anything bigger than a small repo, narrow the scan with the `path` field and
 
 Every directory with a `SKILL.md` shows up in the result; pick which ones to import — it is not all-or-nothing. Importing many skills at once, or skills with many resource files, can take a while: each file is fetched sequentially.
 
+The visibility **scope** chosen in the dialog applies to every skill in the batch; it defaults to **personal**, so an import is never silently published org-wide.
+
 Each import records the source (`owner/repo@ref:path`) and the resolved commit SHA, so you can later filter the catalog by repo and see exactly which revision landed.
 
 A few behaviors worth knowing:
@@ -85,7 +87,7 @@ A few behaviors worth knowing:
 
 Skills are a first-class RBAC resource — the `skill` resource, with `read`, `create`, `update`, `delete`, `team-admin`, and `admin` actions. They are not tied to the `agent` resource: a role can be granted skill access without agent access, and vice versa.
 
-Every skill carries a visibility **scope**, set in the skill editor, exactly like agents:
+Every skill carries a visibility **scope**, set in the skill editor or the GitHub import dialog, exactly like agents:
 
 - **Personal** — only the author can see, use, or manage the skill.
 - **Team** — members of the assigned teams can see and use it; `skill:team-admin` (in one of those teams) or `skill:admin` can manage it.

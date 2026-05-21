@@ -116,7 +116,7 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
     expect(
       await SkillTeamModel.userHasSkillAccess({
         userId: user.id,
-        skillId: skill.id,
+        skill,
         isSkillAdmin: false,
       }),
     ).toBe(true);
@@ -139,14 +139,14 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
     expect(
       await SkillTeamModel.userHasSkillAccess({
         userId: author.id,
-        skillId: skill.id,
+        skill,
         isSkillAdmin: false,
       }),
     ).toBe(true);
     expect(
       await SkillTeamModel.userHasSkillAccess({
         userId: other.id,
-        skillId: skill.id,
+        skill,
         isSkillAdmin: false,
       }),
     ).toBe(false);
@@ -154,7 +154,7 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
     expect(
       await SkillTeamModel.userHasSkillAccess({
         userId: other.id,
-        skillId: skill.id,
+        skill,
         isSkillAdmin: true,
       }),
     ).toBe(true);
@@ -182,14 +182,14 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
     expect(
       await SkillTeamModel.userHasSkillAccess({
         userId: member.id,
-        skillId: skill.id,
+        skill,
         isSkillAdmin: false,
       }),
     ).toBe(true);
     expect(
       await SkillTeamModel.userHasSkillAccess({
         userId: outsider.id,
-        skillId: skill.id,
+        skill,
         isSkillAdmin: false,
       }),
     ).toBe(false);

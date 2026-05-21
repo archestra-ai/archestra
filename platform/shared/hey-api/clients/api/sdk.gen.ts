@@ -4446,7 +4446,7 @@ export const getSkillSourceRepos = <ThrowOnError extends boolean = false>(option
  *
  * Authorization:
  *
- * `skill:update`: Modify agent skills and their team assignments
+ * `skill:admin`: Full administrative control over all agent skills, bypassing team restrictions
  */
 export const enableSkillToolDefaults = <ThrowOnError extends boolean = false>(options?: Options<EnableSkillToolDefaultsData, ThrowOnError>) => (options?.client ?? client).post<EnableSkillToolDefaultsResponses, EnableSkillToolDefaultsErrors, ThrowOnError>({ url: '/api/skills/enable-defaults', ...options });
 

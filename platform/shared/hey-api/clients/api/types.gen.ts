@@ -46857,6 +46857,7 @@ export type GetSkillsResponses = {
                 id: string;
                 name: string;
             }>;
+            authorName: string | null;
         }>;
         pagination: {
             currentPage: number;
@@ -47686,6 +47687,8 @@ export type ImportGithubSkillsData = {
         path?: string;
         githubToken?: string;
         skillPaths: Array<string>;
+        scope?: 'personal' | 'team' | 'org';
+        teamIds?: Array<string>;
     };
     path?: never;
     query?: never;

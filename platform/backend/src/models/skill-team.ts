@@ -1,5 +1,6 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import type { ResourceVisibilityScope } from "@/types/visibility";
 
 /**
  * Team assignments and scope-based access for skills.
@@ -34,24 +35,22 @@ class SkillTeamModel {
   /**
    * Whether a user can access a specific skill. Admins always can; otherwise
    * org → all, personal → author only, team → member of an assigned team.
+   *
+   * Takes the already-loaded skill row — every caller resolves the skill
+   * before checking access, so there is no need to re-fetch it here.
    */
   static async userHasSkillAccess(params: {
     userId: string;
-    skillId: string;
+    skill: {
+      id: string;
+      scope: ResourceVisibilityScope;
+      authorId: string | null;
+    };
     isSkillAdmin: boolean;
   }): Promise<boolean> {
     if (params.isSkillAdmin) return true;
 
-    const [skill] = await db
-      .select({
-        scope: schema.skillsTable.scope,
-        authorId: schema.skillsTable.authorId,
-      })
-      .from(schema.skillsTable)
-      .where(eq(schema.skillsTable.id, params.skillId));
-
-    if (!skill) return false;
-
+    const { skill } = params;
     switch (skill.scope) {
       case "org":
         return true;
@@ -67,7 +66,7 @@ class SkillTeamModel {
           )
           .where(
             and(
-              eq(schema.skillTeamsTable.skillId, params.skillId),
+              eq(schema.skillTeamsTable.skillId, skill.id),
               eq(schema.teamMembersTable.userId, params.userId),
             ),
           )

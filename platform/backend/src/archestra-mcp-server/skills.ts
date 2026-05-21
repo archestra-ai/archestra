@@ -170,7 +170,7 @@ async function findAccessibleSkill(ctx: UserContext, name: string) {
   const checker = await getSkillPermissionChecker(ctx);
   const hasAccess = await SkillTeamModel.userHasSkillAccess({
     userId: ctx.userId,
-    skillId: skill.id,
+    skill,
     isSkillAdmin: checker.isAdmin,
   });
   return hasAccess ? skill : null;

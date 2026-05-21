@@ -2,6 +2,7 @@ import {
   calculatePaginationMeta,
   createPaginatedResponseSchema,
   PaginationQuerySchema,
+  type ResourceVisibilityScope,
   ResourceVisibilityScopeSchema,
   RouteId,
 } from "@shared";
@@ -20,6 +21,7 @@ import {
   SkillTeamModel,
   TeamModel,
   ToolModel,
+  UserModel,
 } from "@/models";
 import {
   discoverSkills,
@@ -48,10 +50,11 @@ import { isUniqueConstraintError } from "@/utils/db";
 /** A team a skill is assigned to (for `scope = 'team'` skills). */
 const SkillTeamSchema = z.object({ id: z.string(), name: z.string() });
 
-/** A skill row plus its resource-file count and team assignments. */
+/** A skill row plus its resource-file count, team assignments, and author. */
 const SkillListItemSchema = SelectSkillSchema.extend({
   fileCount: z.number(),
   teams: z.array(SkillTeamSchema),
+  authorName: z.string().nullable(),
 });
 
 /** A skill with its resource files and team assignments. */
@@ -137,9 +140,17 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       ]);
 
       const skillIds = skills.map((skill) => skill.id);
-      const [fileCounts, teamsBySkill] = await Promise.all([
+      const authorIds = [
+        ...new Set(
+          skills
+            .map((skill) => skill.authorId)
+            .filter((id): id is string => id !== null),
+        ),
+      ];
+      const [fileCounts, teamsBySkill, authorNames] = await Promise.all([
         SkillFileModel.countBySkillIds(skillIds),
         SkillTeamModel.getTeamDetailsForSkills(skillIds),
+        UserModel.getNamesByIds(authorIds),
       ]);
 
       return reply.send({
@@ -147,6 +158,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ...skill,
           fileCount: fileCounts.get(skill.id) ?? 0,
           teams: teamsBySkill.get(skill.id) ?? [],
+          authorName: skill.authorId
+            ? (authorNames.get(skill.authorId) ?? null)
+            : null,
         })),
         pagination: calculatePaginationMeta(total, { limit, offset }),
       });
@@ -231,7 +245,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // 404 (not 403) so scope is not leaked to users who cannot see the skill.
       const hasAccess = await SkillTeamModel.userHasSkillAccess({
         userId: user.id,
-        skillId: skill.id,
+        skill,
         isSkillAdmin: checker.isAdmin,
       });
       if (!hasAccess) {
@@ -269,7 +283,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // 404 if the user cannot even see the skill; 403 if visible but not theirs to modify.
       const hasAccess = await SkillTeamModel.userHasSkillAccess({
         userId: user.id,
-        skillId: id,
+        skill: existing,
         isSkillAdmin: checker.isAdmin,
       });
       if (!hasAccess) {
@@ -376,7 +390,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const hasAccess = await SkillTeamModel.userHasSkillAccess({
         userId: user.id,
-        skillId: id,
+        skill,
         isSkillAdmin: checker.isAdmin,
       });
       if (!hasAccess) {
@@ -541,6 +555,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           path: z.string().optional(),
           githubToken: z.string().optional(),
           skillPaths: z.array(z.string()).min(1),
+          scope: ResourceVisibilityScopeSchema.optional(),
+          teamIds: z.array(z.string()).optional(),
         }),
         response: constructResponseSchema(
           z.object({
@@ -551,6 +567,28 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body, organizationId, user }, reply) => {
+      // Imported skills carry an explicit scope, authorized like manual create;
+      // when omitted they default to `personal` so a bulk import is never
+      // silently published org-wide.
+      const scope = body.scope ?? "personal";
+      const teamIds = scope === "team" ? dedupe(body.teamIds ?? []) : [];
+
+      const checker = await getSkillPermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      const userTeamIds = checker.isAdmin
+        ? []
+        : await TeamModel.getUserTeamIds(user.id);
+      authorizeSkillScope({
+        checker,
+        scope,
+        authorId: user.id,
+        requestedTeamIds: teamIds,
+        userTeamIds,
+        userId: user.id,
+      });
+
       const imported = await runImport(() =>
         importSkills({
           repoUrl: body.repoUrl,
@@ -576,12 +614,16 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             sourceType: "github",
             sourceRef: item.sourceRef,
             sourceCommit: item.sourceCommit,
+            scope,
           },
           files: item.files,
         });
         if (!skill) {
           skipped.push(item.parsed.name);
           continue;
+        }
+        if (teamIds.length > 0) {
+          await SkillTeamModel.syncSkillTeams(skill.id, teamIds);
         }
         created.push(skill);
       }
@@ -630,7 +672,7 @@ function dedupe(values: string[]): string[] {
  */
 function authorizeSkillScope(params: {
   checker: SkillPermissionChecker;
-  scope: "personal" | "team" | "org";
+  scope: ResourceVisibilityScope;
   authorId: string | null;
   requestedTeamIds: string[];
   userTeamIds: string[];

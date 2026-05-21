@@ -441,6 +441,8 @@ export const RouteId = {
   UpdateWhatsAppChatOpsConfig: "updateWhatsAppChatOpsConfig",
   GetWhatsAppQrCode: "getWhatsAppQrCode",
   DisconnectWhatsApp: "disconnectWhatsApp",
+  SwitchWhatsAppAccount: "switchWhatsAppAccount",
+  DeleteWhatsAppPhoneMapping: "deleteWhatsAppPhoneMapping",
   RefreshChatOpsChannelDiscovery: "refreshChatOpsChannelDiscovery",
 
   // Knowledge Base Routes

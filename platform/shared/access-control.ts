@@ -1018,6 +1018,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DisconnectWhatsApp]: {
     agentTrigger: ["update"],
   },
+  [RouteId.SwitchWhatsAppAccount]: {
+    agentTrigger: ["update"],
+  },
+  [RouteId.DeleteWhatsAppPhoneMapping]: {
+    agentTrigger: ["update"],
+  },
   [RouteId.RefreshChatOpsChannelDiscovery]: {
     agentTrigger: ["read"],
   },

@@ -1,4 +1,4 @@
-export type ChatOpsProvider = "slack" | "ms-teams";
+export type ChatOpsProvider = "slack" | "ms-teams" | "whatsapp";
 
 export interface ProviderConfig {
   provider: ChatOpsProvider;

@@ -1390,7 +1390,12 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         sessionDir: request.body.sessionDir ?? existing?.sessionDir,
       };
       await ChatOpsConfigModel.saveWhatsAppConfig(merged);
-      await chatOpsManager.reinitialize();
+      const sessionDirChanged = request.body.sessionDir !== undefined && request.body.sessionDir !== existing?.sessionDir;
+      if (request.body.enabled === true || sessionDirChanged) {
+        await chatOpsManager.reinitialize();
+      } else {
+        chatOpsManager.getWhatsAppProvider()?.updatePhoneMappings(mergedMappings);
+      }
       return reply.send({ success: true });
     },
   );
@@ -1410,15 +1415,18 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           z.object({
             status: z.enum(["disconnected", "connecting", "connected"]),
             qrCode: z.string().nullable(),
+            phoneEmailMappings: z.array(z.object({ phone: z.string(), email: z.string() })),
           }),
         ),
       },
     },
     async (_, reply) => {
       const provider = chatOpsManager.getWhatsAppProvider();
+      const config = await ChatOpsConfigModel.getWhatsAppConfig();
       return reply.send({
         status: provider?.getConnectionStatus() ?? "disconnected",
         qrCode: provider?.getQrCode() ?? null,
+        phoneEmailMappings: config?.phoneEmailMappings ?? [],
       });
     },
   );
@@ -1441,6 +1449,60 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (provider) {
         await provider.disconnect();
       }
+      return reply.send({ success: true });
+    },
+  );
+
+  /**
+   * Disconnect WhatsApp and delete session files so the next Enable
+   * will show a fresh QR code (used when switching to a different account).
+   */
+  fastify.post(
+    "/api/chatops/config/whatsapp/switch-account",
+    {
+      schema: {
+        operationId: RouteId.SwitchWhatsAppAccount,
+        description: "Disconnect WhatsApp and clear session to allow scanning a different account",
+        tags: ["ChatOps"],
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (_, reply) => {
+      const provider = chatOpsManager.getWhatsAppProvider();
+      if (provider) {
+        await provider.disconnect();
+        provider.clearSession();
+      }
+      return reply.send({ success: true });
+    },
+  );
+
+  /**
+   * Remove a single phone→email mapping from the WhatsApp config.
+   */
+  fastify.delete(
+    "/api/chatops/config/whatsapp/phone-mapping/:phone",
+    {
+      schema: {
+        operationId: RouteId.DeleteWhatsAppPhoneMapping,
+        description: "Remove a WhatsApp phone-email mapping",
+        tags: ["ChatOps"],
+        params: z.object({ phone: z.string() }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (request, reply) => {
+      const { phone } = request.params;
+      const existing = await ChatOpsConfigModel.getWhatsAppConfig();
+      const filtered = (existing?.phoneEmailMappings ?? []).filter(
+        (m) => m.phone !== phone,
+      );
+      await ChatOpsConfigModel.saveWhatsAppConfig({
+        enabled: existing?.enabled ?? false,
+        phoneEmailMappings: filtered,
+        sessionDir: existing?.sessionDir,
+      });
+      chatOpsManager.getWhatsAppProvider()?.updatePhoneMappings(filtered);
       return reply.send({ success: true });
     },
   );
@@ -1577,7 +1639,7 @@ async function getProviderInfo(providerType: ChatOpsProviderType): Promise<{
       return {
         id: "whatsapp",
         displayName: "WhatsApp",
-        configured: provider?.isConfigured() ?? false,
+        configured: provider?.getConnectionStatus() === "connected",
         credentials: undefined,
         dmInfo: undefined,
       };

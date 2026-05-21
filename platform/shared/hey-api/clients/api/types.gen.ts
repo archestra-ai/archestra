@@ -21470,7 +21470,7 @@ export type GetChatOpsStatusResponses = {
      */
     200: {
         providers: Array<{
-            id: 'ms-teams' | 'slack';
+            id: 'ms-teams' | 'slack' | 'whatsapp';
             displayName: string;
             configured: boolean;
             credentials?: {
@@ -21497,7 +21497,7 @@ export type ListChatOpsBindingsData = {
     body?: never;
     path?: never;
     query?: {
-        provider?: 'ms-teams' | 'slack';
+        provider?: 'ms-teams' | 'slack' | 'whatsapp';
         workspaceId?: string;
         search?: string;
         status?: 'configured' | 'unassigned';
@@ -21582,7 +21582,7 @@ export type ListChatOpsBindingsResponses = {
         data: Array<{
             id: string;
             organizationId: string;
-            provider: 'ms-teams' | 'slack';
+            provider: 'ms-teams' | 'slack' | 'whatsapp';
             channelId: string;
             workspaceId: string | null;
             channelName: string | null;
@@ -21697,7 +21697,7 @@ export type BulkUpdateChatOpsBindingsResponses = {
     200: Array<{
         id: string;
         organizationId: string;
-        provider: 'ms-teams' | 'slack';
+        provider: 'ms-teams' | 'slack' | 'whatsapp';
         channelId: string;
         workspaceId: string | null;
         channelName: string | null;
@@ -21880,7 +21880,7 @@ export type UpdateChatOpsBindingResponses = {
     200: {
         id: string;
         organizationId: string;
-        provider: 'ms-teams' | 'slack';
+        provider: 'ms-teams' | 'slack' | 'whatsapp';
         channelId: string;
         workspaceId: string | null;
         channelName: string | null;
@@ -21897,7 +21897,7 @@ export type UpdateChatOpsBindingResponse = UpdateChatOpsBindingResponses[keyof U
 
 export type CreateChatOpsDmBindingData = {
     body: {
-        provider: 'ms-teams' | 'slack';
+        provider: 'ms-teams' | 'slack' | 'whatsapp';
         agentId: string | null;
     };
     path?: never;
@@ -21977,7 +21977,7 @@ export type CreateChatOpsDmBindingResponses = {
     200: {
         id: string;
         organizationId: string;
-        provider: 'ms-teams' | 'slack';
+        provider: 'ms-teams' | 'slack' | 'whatsapp';
         channelId: string;
         workspaceId: string | null;
         channelName: string | null;
@@ -22170,9 +22170,282 @@ export type UpdateSlackChatOpsConfigResponses = {
 
 export type UpdateSlackChatOpsConfigResponse = UpdateSlackChatOpsConfigResponses[keyof UpdateSlackChatOpsConfigResponses];
 
+export type UpdateWhatsAppChatOpsConfigData = {
+    body: {
+        enabled?: boolean;
+        phoneEmailMappings?: Array<{
+            phone: string;
+            email: string;
+        }>;
+        sessionDir?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/chatops/config/whatsapp';
+};
+
+export type UpdateWhatsAppChatOpsConfigErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateWhatsAppChatOpsConfigError = UpdateWhatsAppChatOpsConfigErrors[keyof UpdateWhatsAppChatOpsConfigErrors];
+
+export type UpdateWhatsAppChatOpsConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type UpdateWhatsAppChatOpsConfigResponse = UpdateWhatsAppChatOpsConfigResponses[keyof UpdateWhatsAppChatOpsConfigResponses];
+
+export type DeleteWhatsAppPhoneMappingData = {
+    body?: never;
+    path: {
+        phone: string;
+    };
+    query?: never;
+    url: '/api/chatops/config/whatsapp/phone-mapping/{phone}';
+};
+
+export type DeleteWhatsAppPhoneMappingResponses = {
+    200: {
+        success: boolean;
+    };
+};
+
+export type GetWhatsAppQrCodeData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chatops/config/whatsapp/qr';
+};
+
+export type GetWhatsAppQrCodeErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetWhatsAppQrCodeError = GetWhatsAppQrCodeErrors[keyof GetWhatsAppQrCodeErrors];
+
+export type GetWhatsAppQrCodeResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        status: 'disconnected' | 'connecting' | 'connected';
+        qrCode: string | null;
+        phoneEmailMappings: Array<{ phone: string; email: string }>;
+    };
+};
+
+export type GetWhatsAppQrCodeResponse = GetWhatsAppQrCodeResponses[keyof GetWhatsAppQrCodeResponses];
+
+export type DisconnectWhatsAppData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chatops/config/whatsapp/disconnect';
+};
+
+export type DisconnectWhatsAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DisconnectWhatsAppError = DisconnectWhatsAppErrors[keyof DisconnectWhatsAppErrors];
+
+export type DisconnectWhatsAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DisconnectWhatsAppResponse = DisconnectWhatsAppResponses[keyof DisconnectWhatsAppResponses];
+
 export type RefreshChatOpsChannelDiscoveryData = {
     body: {
-        provider: 'ms-teams' | 'slack';
+        provider: 'ms-teams' | 'slack' | 'whatsapp';
     };
     path?: never;
     query?: never;

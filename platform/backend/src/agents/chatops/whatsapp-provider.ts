@@ -1,11 +1,5 @@
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import type { WAMessage } from "@whiskeysockets/baileys";
-import makeWASocket, {
-  DisconnectReason,
-  fetchLatestBaileysVersion,
-  makeInMemoryStore,
-  useMultiFileAuthState,
-} from "@whiskeysockets/baileys";
 import type { A2AAttachment } from "@/agents/a2a-executor";
 import logger from "@/logging";
 import type {
@@ -32,12 +26,14 @@ class WhatsAppProvider implements ChatOpsProvider {
   readonly displayName = "WhatsApp";
 
   private config: WhatsAppDbConfig;
-  private sock: ReturnType<typeof makeWASocket> | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private sock: any | null = null;
   private qrCode: string | null = null;
   private connectionStatus: "disconnected" | "connecting" | "connected" =
     "disconnected";
   private eventHandler: ChatOpsEventHandler | null = null;
-  private store = makeInMemoryStore({});
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private store: any = null;
   private pendingApprovals = new Map<
     string,
     { taskId: string; toolName: string; originalMessage: IncomingChatMessage }
@@ -59,6 +55,10 @@ class WhatsAppProvider implements ChatOpsProvider {
     this.eventHandler = handler;
   }
 
+  updatePhoneMappings(mappings: { phone: string; email: string }[]): void {
+    this.config.phoneEmailMappings = mappings;
+  }
+
   getQrCode(): string | null {
     return this.qrCode;
   }
@@ -71,6 +71,13 @@ class WhatsAppProvider implements ChatOpsProvider {
     this.intentionalDisconnect = true;
     this.reconnecting = false;
     await this.cleanup();
+  }
+
+  clearSession(): void {
+    if (existsSync(this.sessionDir)) {
+      rmSync(this.sessionDir, { recursive: true, force: true });
+      logger.info("[WhatsApp] Session cleared");
+    }
   }
 
   // ===
@@ -316,6 +323,15 @@ class WhatsAppProvider implements ChatOpsProvider {
 
   private async startSocket(): Promise<void> {
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mod = ((await import("@whiskeysockets/baileys")) as any).default as any;
+      const makeWASocket = mod.makeWASocket ?? mod.default;
+      const { DisconnectReason, fetchLatestBaileysVersion, makeInMemoryStore, useMultiFileAuthState } = mod;
+
+      if (!this.store) {
+        this.store = makeInMemoryStore({});
+      }
+
       const { state, saveCreds } = await useMultiFileAuthState(this.sessionDir);
       const { version } = await fetchLatestBaileysVersion();
 
@@ -327,7 +343,7 @@ class WhatsAppProvider implements ChatOpsProvider {
 
       this.store.bind(this.sock.ev);
 
-      this.sock.ev.on("connection.update", async (update) => {
+      this.sock.ev.on("connection.update", async (update: any) => {
         const { connection, lastDisconnect, qr } = update;
 
         if (qr) {
@@ -354,22 +370,35 @@ class WhatsAppProvider implements ChatOpsProvider {
               | { output?: { statusCode?: number } }
               | undefined
           )?.output?.statusCode;
-          const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+          const loggedOut = statusCode === DisconnectReason.loggedOut;
           logger.info(
-            { statusCode, shouldReconnect },
+            { statusCode, loggedOut },
             "[WhatsApp] Connection closed",
           );
-          if (shouldReconnect && !this.reconnecting && !this.intentionalDisconnect) {
+          if (this.intentionalDisconnect) return;
+          if (loggedOut) {
+            // Session was invalidated by WhatsApp — clear stale files so the
+            // next startSocket() shows a fresh QR instead of silently failing.
+            this.clearSession();
+          }
+          if (!this.reconnecting) {
             this.reconnecting = true;
-            await this.startSocket();
-            this.reconnecting = false;
+            setTimeout(() => {
+              this.startSocket()
+                .catch((err) =>
+                  logger.error({ error: errorMessage(err) }, "[WhatsApp] Reconnect failed"),
+                )
+                .finally(() => {
+                  this.reconnecting = false;
+                });
+            }, 1500);
           }
         }
       });
 
       this.sock.ev.on("creds.update", saveCreds);
 
-      this.sock.ev.on("messages.upsert", async ({ messages, type }) => {
+      this.sock.ev.on("messages.upsert", async ({ messages, type }: { messages: WAMessage[]; type: string }) => {
         if (type !== "notify") return;
         for (const msg of messages) {
           if (!msg.message) continue;

@@ -106,6 +106,50 @@ export function useDisconnectWhatsApp() {
   });
 }
 
+export function useDeleteWhatsAppPhoneMapping() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (phone: string) => {
+      const { data, error } = await archestraApiSdk.deleteWhatsAppPhoneMapping({ path: { phone } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["chatops", "whatsapp", "qr"] });
+    },
+    onError: () => {
+      toast.error("Failed to remove phone mapping");
+    },
+  });
+}
+
+export function useSwitchWhatsAppAccount() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await archestraApiSdk.switchWhatsAppAccount();
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+    onSuccess: () => {
+      toast.success("WhatsApp session cleared — scan a new QR to connect a different account");
+      queryClient.invalidateQueries({ queryKey: ["chatops", "status"] });
+      queryClient.invalidateQueries({ queryKey: ["chatops", "whatsapp", "qr"] });
+    },
+    onError: () => {
+      toast.error("Failed to switch WhatsApp account");
+    },
+  });
+}
+
 export function useUpdateSlackChatOpsConfig() {
   const queryClient = useQueryClient();
 

@@ -133,7 +133,7 @@ export async function selectRuntimeModelFromDialog(
     }
 
     await expect(
-      exactModelOption.first().or(displayNameModelOption.first()),
+      exactModelOption.or(displayNameModelOption).first(),
     ).toBeVisible();
   }).toPass({ timeout: 25_000, intervals: [500, 1000, 2000, 5000] });
 

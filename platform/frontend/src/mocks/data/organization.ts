@@ -18,6 +18,7 @@ export function makeOrganization(
     customFont: "inter",
     convertToolResultsToToon: false,
     skillToolsEnabled: false,
+    skillSlashCommandsEnabled: false,
     compressionScope: "organization",
     globalToolPolicy: "permissive",
     allowChatFileUploads: false,

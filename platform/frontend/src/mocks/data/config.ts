@@ -19,6 +19,7 @@ export function makeConfig(
     features: {
       orchestratorK8sRuntime: false,
       advancedToolFeaturesEnabled: false,
+      agentSkillsEnabled: false,
       byosEnabled: false,
       byosVaultKvVersion: "1",
       azureOpenAiEntraIdEnabled: false,

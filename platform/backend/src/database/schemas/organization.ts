@@ -231,11 +231,22 @@ const organizationsTable = pgTable("organization", {
   presetEntityDefaultLabel: text("preset_entity_default_label"),
 
   /**
-   * When true, the Agent Skill tools (`activate_skill`, `read_skill_file`) are
-   * assigned to every agent in the org and added to all new agents. Flipped on
+   * When true, the Agent Skill tools (`list_skills`, `activate_skill`,
+   * `read_skill_file`) are assigned to every agent in the org and added to all
+   * new agents. Flipped on
    * by the "Enable and create a new skill" empty-state button on /agents/skills.
    */
   skillToolsEnabled: boolean("skill_tools_enabled").notNull().default(false),
+
+  /**
+   * When true, the org's skills are exposed in chat as slash commands
+   * (`/skill-name`). Invoking one injects the skill's content directly into the
+   * conversation, independent of `skillToolsEnabled` (which only governs the
+   * model-facing `activate_skill` tool).
+   */
+  skillSlashCommandsEnabled: boolean("skill_slash_commands_enabled")
+    .notNull()
+    .default(false),
 
   /**
    * Validation regex applied to default-scoped field values when installing an

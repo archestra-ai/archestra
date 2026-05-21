@@ -1,6 +1,7 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
 import {
   TOOL_ACTIVATE_SKILL_FULL_NAME,
+  TOOL_LIST_SKILLS_FULL_NAME,
   TOOL_READ_SKILL_FILE_FULL_NAME,
 } from "@shared";
 import { SkillModel } from "@/models";
@@ -50,16 +51,17 @@ describe("skill tool execution", () => {
     });
   }
 
-  test("both skill tools are registered as Archestra tools", () => {
+  test("all three skill tools are registered as Archestra tools", () => {
     const names = getArchestraMcpTools().map((tool) => tool.name);
+    expect(names).toContain(TOOL_LIST_SKILLS_FULL_NAME);
     expect(names).toContain(TOOL_ACTIVATE_SKILL_FULL_NAME);
     expect(names).toContain(TOOL_READ_SKILL_FILE_FULL_NAME);
   });
 
-  test("activate_skill with no name lists the org catalog", async () => {
+  test("list_skills lists the org catalog", async () => {
     await seedSkill();
     const result = await executeArchestraTool(
-      TOOL_ACTIVATE_SKILL_FULL_NAME,
+      TOOL_LIST_SKILLS_FULL_NAME,
       {},
       context,
     );
@@ -69,9 +71,9 @@ describe("skill tool execution", () => {
     expect(textOf(result)).toContain("pdf-processing");
   });
 
-  test("activate_skill reports when the org has no skills", async () => {
+  test("list_skills reports when the org has no skills", async () => {
     const result = await executeArchestraTool(
-      TOOL_ACTIVATE_SKILL_FULL_NAME,
+      TOOL_LIST_SKILLS_FULL_NAME,
       {},
       context,
     );

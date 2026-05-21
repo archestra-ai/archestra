@@ -235,6 +235,10 @@ vi.mock("@/lib/chat/chat-placeholder.hook", () => ({
   useChatPlaceholder: (...args: unknown[]) => mockUseChatPlaceholder(...args),
 }));
 
+vi.mock("@/lib/skills/skill.query", () => ({
+  useSkillsPaginated: () => ({ data: undefined, isLoading: false }),
+}));
+
 // Mock for useHasPermissions - default to non-admin
 const mockUseHasPermissions = vi.fn().mockReturnValue({
   data: false,
@@ -589,6 +593,7 @@ describe("ArchestraPromptInput", () => {
       expect(onSubmit).toHaveBeenCalledWith(
         { text: "Run after streaming", files: [] },
         expect.objectContaining({ preventDefault: expect.any(Function) }),
+        undefined,
       );
     });
 

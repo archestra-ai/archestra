@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type ChatSkillMetadata,
   E2eTestId,
   getAcceptedFileTypes,
   getSupportedFileTypesDescription,
@@ -65,16 +66,23 @@ import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useModelSelectorDisplay } from "@/lib/chat/use-model-selector-display.hook";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { useOrganization } from "@/lib/organization.query";
+import { useSkillsPaginated } from "@/lib/skills/skill.query";
 import { cn } from "@/lib/utils";
 import {
   PromptInputQueue,
   type QueuedPromptInputMessage,
 } from "./prompt-input-queue";
+import {
+  buildSkillCommands,
+  parseSkillCommand,
+  type SkillCommand,
+} from "./skill-commands";
 
-interface ArchestraPromptInputProps {
+export interface ArchestraPromptInputProps {
   onSubmit: (
     message: PromptInputMessage,
     e: FormEvent<HTMLFormElement>,
+    options?: { skill?: ChatSkillMetadata },
   ) => void;
   status: ChatStatus;
   selectedModel: string;
@@ -130,15 +138,15 @@ type SlashCommand = {
   value: string;
   name: string;
   description: string;
+  /** Set for skill commands; absent for built-in commands like /compact. */
+  skill?: ChatSkillMetadata;
 };
 
-const SLASH_COMMANDS: SlashCommand[] = [
-  {
-    value: "/compact",
-    name: "compact",
-    description: "summarize conversation to prevent hitting the context limit",
-  },
-];
+const COMPACT_COMMAND: SlashCommand = {
+  value: "/compact",
+  name: "compact",
+  description: "summarize conversation to prevent hitting the context limit",
+};
 
 // Inner component that has access to the controller context
 const PromptInputContent = ({
@@ -227,6 +235,26 @@ const PromptInputContent = ({
     placeholders: orgData?.chatPlaceholders,
   });
 
+  // Skills exposed as slash commands, gated by the org flag.
+  const skillSlashCommandsEnabled = orgData?.skillSlashCommandsEnabled ?? false;
+  const { data: skillsData } = useSkillsPaginated(
+    { limit: 100 },
+    { enabled: skillSlashCommandsEnabled },
+  );
+  const skillCommands = useMemo<SkillCommand[]>(() => {
+    if (!skillSlashCommandsEnabled || !skillsData?.data) {
+      return [];
+    }
+    return buildSkillCommands(skillsData.data);
+  }, [skillSlashCommandsEnabled, skillsData]);
+
+  // /compact only applies to an existing conversation; skill commands work anywhere.
+  const slashCommands = useMemo<SlashCommand[]>(() => {
+    const compact =
+      conversationId && onCompactConversation ? [COMPACT_COMMAND] : [];
+    return [...compact, ...skillCommands];
+  }, [conversationId, onCompactConversation, skillCommands]);
+
   // RBAC: check if user can see agent picker and provider settings in chat
   const { data: canSeeAgentPicker } = useHasPermissions({
     chatAgentPicker: ["enable"],
@@ -302,10 +330,12 @@ const PromptInputContent = ({
   // 1. Organization must allow file uploads (allowFileUploads)
   // 2. Model must support at least one file type (modelSupportsFiles)
   const showFileUploadButton = allowFileUploads && modelSupportsFiles;
+  // The picker stays open while the user is still typing the command token;
+  // once a space is entered they have moved on to the prompt body.
   const isSlashCommandOpen =
-    !!conversationId &&
-    !!onCompactConversation &&
+    slashCommands.length > 0 &&
     controller.textInput.value.startsWith("/") &&
+    !/\s/.test(controller.textInput.value) &&
     controller.textInput.value !== dismissedSlashCommandValue;
 
   // reset the Escape dismissal once the user edits the input — typing more
@@ -325,11 +355,11 @@ const PromptInputContent = ({
 
     const query = controller.textInput.value.trim().toLowerCase();
     if (query === "/") {
-      return SLASH_COMMANDS;
+      return slashCommands;
     }
 
-    return SLASH_COMMANDS.filter((command) => command.value.startsWith(query));
-  }, [controller.textInput.value, isSlashCommandOpen]);
+    return slashCommands.filter((command) => command.value.startsWith(query));
+  }, [controller.textInput.value, isSlashCommandOpen, slashCommands]);
 
   const selectedCommandIndex =
     visibleSlashCommands.length === 0
@@ -360,9 +390,11 @@ const PromptInputContent = ({
   const submitQueuedMessage = useCallback(
     (message: QueuedPromptInputMessage) => {
       localStorage.removeItem(storageKey);
-      onSubmit({ text: message.text, files: message.files }, {
-        preventDefault: () => {},
-      } as FormEvent<HTMLFormElement>);
+      onSubmit(
+        { text: message.text, files: message.files },
+        { preventDefault: () => {} } as FormEvent<HTMLFormElement>,
+        message.skill ? { skill: message.skill } : undefined,
+      );
     },
     [onSubmit, storageKey],
   );
@@ -404,11 +436,18 @@ const PromptInputContent = ({
 
   const selectSlashCommand = useCallback(
     (command: SlashCommand) => {
+      if (command.skill) {
+        // a skill command is a prefix — drop it into the input and let the
+        // user type the prompt that the skill should act on
+        controller.textInput.setInput(`${command.value} `);
+        requestAnimationFrame(() => textareaRef.current?.focus());
+        return;
+      }
       if (command.value === "/compact") {
         runCompactCommand();
       }
     },
-    [runCompactCommand],
+    [controller.textInput, runCompactCommand, textareaRef],
   );
 
   const handleTextareaKeyDown = useCallback(
@@ -463,10 +502,28 @@ const PromptInputContent = ({
       const hasContent =
         message.text.trim().length > 0 || message.files.length > 0;
 
-      if (message.text.trim() === "/compact" && onCompactConversation) {
+      const trimmed = message.text.trim();
+
+      if (trimmed === "/compact" && onCompactConversation) {
         e.preventDefault();
         runCompactCommand();
         return;
+      }
+
+      // a skill command activates the skill; the text after the token is the prompt
+      let outgoing = message;
+      let skill: ChatSkillMetadata | undefined;
+      const parsed = parseSkillCommand(trimmed, skillCommands);
+      if (parsed) {
+        // a bare skill command has nothing to act on yet — keep the user typing
+        if (!parsed.remaining && message.files.length === 0) {
+          e.preventDefault();
+          controller.textInput.setInput(`${parsed.value} `);
+          requestAnimationFrame(() => textareaRef.current?.focus());
+          return;
+        }
+        skill = parsed.skill;
+        outgoing = { ...message, text: parsed.remaining };
       }
 
       // while streaming, the submit button is the stop button: an empty submit
@@ -479,12 +536,14 @@ const PromptInputContent = ({
             {
               id: nanoid(),
               scopeKey: queueScopeKey,
-              text: message.text,
-              files: message.files,
+              text: outgoing.text,
+              files: outgoing.files,
+              skill,
             },
           ]);
           return;
         }
+
         onSubmit(message, e);
         return;
       }
@@ -496,15 +555,18 @@ const PromptInputContent = ({
       }
 
       localStorage.removeItem(storageKey);
-      onSubmit(message, e);
+      onSubmit(outgoing, e, skill ? { skill } : undefined);
     },
     [
+      controller.textInput,
       onSubmit,
       onCompactConversation,
       queueScopeKey,
       runCompactCommand,
+      skillCommands,
       status,
       storageKey,
+      textareaRef,
     ],
   );
 
@@ -548,7 +610,7 @@ const PromptInputContent = ({
               <PromptInputCommandGroup className="p-1">
                 {visibleSlashCommands.map((command, index) => (
                   <PromptInputCommandItem
-                    key={command.value}
+                    key={command.skill?.id ?? command.value}
                     value={command.value}
                     ref={(node) => {
                       commandItemRefs.current[index] = node;
@@ -574,7 +636,7 @@ const PromptInputContent = ({
                         </div>
                       </div>
                     </div>
-                    {isContextCompacting && (
+                    {isContextCompacting && command.value === "/compact" && (
                       <span className="text-xs text-muted-foreground">
                         Running
                       </span>

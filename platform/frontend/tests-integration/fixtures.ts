@@ -1,10 +1,24 @@
 import { test as base } from "@playwright/test";
 import { MswControl } from "./helpers/msw-control";
+import { AgentsPage } from "./pages/agents-page";
+import { LlmProviderApiKeysPage } from "./pages/llm-provider-api-keys-page";
 import { McpRegistryPage } from "./pages/mcp-registry-page";
+import { VirtualKeysPage } from "./pages/virtual-keys-page";
+
+// Biome's useImportType rule otherwise rewrites these to `import type` because
+// the class identifiers only appear in `new X(page)` positions, which it
+// classifies as type-shaped. The runtime constructors are required at fixture
+// build time — keep value imports.
+void AgentsPage;
+void LlmProviderApiKeysPage;
+void VirtualKeysPage;
 
 type Fixtures = {
+  agentsPage: AgentsPage;
+  llmKeysPage: LlmProviderApiKeysPage;
   mcpRegistryPage: McpRegistryPage;
   mswControl: MswControl;
+  virtualKeysPage: VirtualKeysPage;
 };
 
 type AutoFixtures = {
@@ -18,8 +32,17 @@ type AutoFixtures = {
 };
 
 export const test = base.extend<Fixtures & AutoFixtures>({
+  agentsPage: async ({ page }, use) => {
+    await use(new AgentsPage(page));
+  },
+  llmKeysPage: async ({ page }, use) => {
+    await use(new LlmProviderApiKeysPage(page));
+  },
   mcpRegistryPage: async ({ page }, use) => {
     await use(new McpRegistryPage(page));
+  },
+  virtualKeysPage: async ({ page }, use) => {
+    await use(new VirtualKeysPage(page));
   },
   mswControl: async ({ request, page, baseURL }, use) => {
     if (!baseURL) {

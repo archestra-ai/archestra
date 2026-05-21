@@ -359,8 +359,19 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ organizationId }, reply) => {
-      const repos = await SkillModel.findDistinctSourceRepos(organizationId);
+    async ({ organizationId, user }, reply) => {
+      const checker = await getSkillPermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      const accessibleSkillIds = checker.isAdmin
+        ? undefined
+        : await SkillTeamModel.getUserAccessibleSkillIds(user.id);
+
+      const repos = await SkillModel.findDistinctSourceRepos({
+        organizationId,
+        accessibleSkillIds,
+      });
       return reply.send({ repos });
     },
   );

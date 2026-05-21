@@ -58,15 +58,17 @@ class SkillModel {
    * from the `source_ref` provenance column (formatted as
    * `owner/repo@ref:path`).
    */
-  static async findDistinctSourceRepos(
-    organizationId: string,
-  ): Promise<string[]> {
+  static async findDistinctSourceRepos(params: {
+    organizationId: string;
+    /** when set, restricts results to these skill IDs (scope filtering). */
+    accessibleSkillIds?: string[];
+  }): Promise<string[]> {
     const rows = await db
       .selectDistinct({ sourceRef: schema.skillsTable.sourceRef })
       .from(schema.skillsTable)
       .where(
         and(
-          eq(schema.skillsTable.organizationId, organizationId),
+          ...buildOrgFilters(params),
           isNotNull(schema.skillsTable.sourceRef),
         ),
       );

@@ -34,7 +34,7 @@ I built a simple Foundry agent to help manage GitHub issues. The setup:
 - Assigned Foundry's guardrails enabled: `Risks with controls:  Jailbreak (1), Indirect prompt injections (1)...`
 ![Screenshot: Foundry agent configuration with GitHub MCP tool and guardrails](/docs/platform-foundry-01.webp)
 
-Similarly I could build an agent that is triggered by an incomming email, reads docs and sends email back. This is a typical enterprise use case when agent processes incoming potentially untrusted information and takes action based on their content. 
+Similarly I could build an agent that is triggered by an incoming email, reads docs and sends email back. This is a typical enterprise use case when agent processes incoming potentially untrusted information and takes action based on their content. 
 
 
 

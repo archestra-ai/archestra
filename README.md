@@ -97,7 +97,7 @@ Isolating dangerous tool responses from the main agent to prevent prompt injecti
 <img src="docs/assets/dual-llm.webp" alt="Dual-LLM sub-agent" />
 </div>
 
-## 🚫 Non-probabalistic security to prevent data exfiltration
+## 🚫 Non-probabilistic security to prevent data exfiltration
 
 Models could consume prompt injections via MCP uncontrollably (read your inbox, read your GitHub issues, read your customer's inquiries) and follow them resulting in data exfiltration.
 

@@ -14,12 +14,12 @@ Why probabilistic guardrails are not secure enough to stop prompt injections. Wi
 
 Microsoft Foundry (Azure AI Foundry) is Microsoft's enterprise AI development platform that provides a suite of tools within Azure for creating and managing AI Agents and Workflows using including hosted models, pre-built connectors, prompt builder and LLM guardrails.
 
-Past few months I've been researching a fundamental problem affecting all AI agents called "lethal trifecta". This vulnerability happens when tool result contains indirect prompt injection that causes sensitive data leakage and task drift. Numerous agents were compromised [this way](https://github.com/archestra-ai/archestra?tab=readme-ov-file#-non-probabalistic-security-to-prevent-data-exfiltration). The lethal trifecta occurs when the agent simultaneously has:
+Past few months I've been researching a fundamental problem affecting all AI agents called "lethal trifecta". This vulnerability happens when tool result contains indirect prompt injection that causes sensitive data leakage and task drift. Numerous agents were compromised [this way](https://github.com/archestra-ai/archestra?tab=readme-ov-file#-non-probabilistic-security-to-prevent-data-exfiltration). The lethal trifecta occurs when the agent simultaneously has:
 * Access to untrusted context
 * Ability to externally communicate
 * Access to private data
 
-In all the examples, authors of the agents couldn't rely on probablistic LLM guardrails, so they ended up disabling certain tools when handling untrusted context (domains in one of the cases). This is a partial solution to defend from one attack, not a general defence.
+In all the examples, authors of the agents couldn't rely on probabilistic LLM guardrails, so they ended up disabling certain tools when handling untrusted context (domains in one of the cases). This is a partial solution to defend from one attack, not a general defence.
 
 I decided to build an agent in Foundry and see how Azure Guardrails safe enough to protect against these attacks.
 

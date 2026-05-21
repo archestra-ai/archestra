@@ -36,9 +36,9 @@ function TooltipTrigger({
 
 function TooltipContent({
   className,
-  sideOffset = 0,
+  sideOffset = 6,
   children,
-  noArrow = false,
+  noArrow = true,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Content> & {
   noArrow?: boolean;

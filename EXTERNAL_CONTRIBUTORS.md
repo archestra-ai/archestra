@@ -434,3 +434,12 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @mouseos
 - @iamank1t
 - @VishalB98
+- @sarthakNITT
+- @munyanezaarmel
+- @vishal-tiwari9
+- @kdvsolis
+- @firewine
+- @pragnyanramtha
+- @faizankhan2
+- @KhouaneAchourTalet
+- @aggmoulik

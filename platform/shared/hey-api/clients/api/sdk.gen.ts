@@ -3860,7 +3860,7 @@ export const updateLlmSettings = <ThrowOnError extends boolean = false>(options:
 });
 
 /**
- * Update agent settings (default model, default agent)
+ * Update agent settings (default model, default agent, skill slash commands)
  *
  * Authentication:
  *
@@ -4438,7 +4438,7 @@ export const updateSkill = <ThrowOnError extends boolean = false>(options: Optio
 export const getSkillSourceRepos = <ThrowOnError extends boolean = false>(options?: Options<GetSkillSourceReposData, ThrowOnError>) => (options?.client ?? client).get<GetSkillSourceReposResponses, GetSkillSourceReposErrors, ThrowOnError>({ url: '/api/skills/source-repos', ...options });
 
 /**
- * Enable the Agent Skill tools (`activate_skill`, `read_skill_file`) for this organization. Sets the org-level flag and backfills both tools onto every existing agent. Idempotent.
+ * Enable the Agent Skill tools (`list_skills`, `activate_skill`, `read_skill_file`) for this organization. Sets the org-level flag and backfills the tools onto every existing agent. Idempotent.
  *
  * Authentication:
  *

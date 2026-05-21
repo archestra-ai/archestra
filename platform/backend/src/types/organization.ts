@@ -364,6 +364,7 @@ export const UpdateAgentSettingsSchema = z.object({
   defaultModelId: z.string().uuid().nullable().optional(),
   defaultLlmApiKeyId: z.string().uuid().nullable().optional(),
   defaultAgentId: z.string().uuid().nullable().optional(),
+  skillSlashCommandsEnabled: z.boolean().optional(),
 });
 
 export const UpdateKnowledgeSettingsSchema = z.object({

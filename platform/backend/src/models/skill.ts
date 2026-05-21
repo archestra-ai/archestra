@@ -94,16 +94,27 @@ class SkillModel {
     return result ?? null;
   }
 
-  /** Create a skill and its bundled resource files in one transaction. */
+  /**
+   * Create a skill and its bundled resource files in one transaction.
+   *
+   * Returns `null` when a skill with the same name already exists in the
+   * organization. The insert is atomic (`ON CONFLICT DO NOTHING` on the
+   * org+name unique index), so this is race-free against concurrent creates.
+   */
   static async createWithFiles(params: {
     skill: InsertSkill;
     files: Omit<InsertSkillFile, "skillId">[];
-  }): Promise<Skill> {
+  }): Promise<Skill | null> {
     return await db.transaction(async (tx) => {
       const [skill] = await tx
         .insert(schema.skillsTable)
         .values(params.skill)
+        .onConflictDoNothing({
+          target: [schema.skillsTable.organizationId, schema.skillsTable.name],
+        })
         .returning();
+
+      if (!skill) return null;
 
       if (params.files.length > 0) {
         await tx

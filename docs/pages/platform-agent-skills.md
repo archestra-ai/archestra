@@ -3,7 +3,7 @@ title: Skills
 category: Agents
 order: 8
 description: Reusable SKILL.md instruction sets that agents load on demand
-lastUpdated: 2026-05-18
+lastUpdated: 2026-05-21
 ---
 
 <!--
@@ -14,17 +14,23 @@ Agent Skills are markdown instruction sets an agent loads on demand. A skill is 
 
 This keeps specialized knowledge out of every system prompt. Write the steps for parsing a PDF or drafting a release note once; any agent in the org can pull it in mid-chat and pay the token cost only when the skill actually runs.
 
-## Progressive disclosure via two tools
+## Progressive disclosure via three tools
 
-Skills are off until an admin enables them for the organization. Enabling assigns `activate_skill` and `read_skill_file` to every existing agent and to every agent created afterwards, and exposes both tools on each agent's MCP gateway so external clients see them too. Either tool can still be dropped from an individual agent's tool picker.
+Skills are off until an admin enables them for the organization. Enabling assigns `list_skills`, `activate_skill`, and `read_skill_file` to every existing agent and to every agent created afterwards, and exposes the tools on each agent's MCP gateway so external clients see them too. Any tool can still be dropped from an individual agent's tool picker.
 
-The two tools reveal a skill in three steps:
+The three tools reveal a skill in three steps:
 
-- `activate_skill` with no arguments returns the catalog — one line per skill (`name` + `description`).
+- `list_skills` returns the catalog — one line per skill (`name` + `description`).
 - `activate_skill` with a name returns that skill's `SKILL.md` and the list of bundled resource paths.
 - `read_skill_file` fetches one resource at a time.
 
 > **No runtime in Archestra (yet).** Archestra only reads skill files — `read_skill_file` returns scripts as text and binaries as base64, never executes them. They are stored intact so external clients that have their own runtime (Claude Code, n8n, etc.) can pull them down and run them.
+
+## Invoking a skill from chat
+
+Progressive disclosure leaves the choice to the model. When the user already knows which skill they want, enable **skill slash commands** — a separate organization toggle on the Skills page — and every skill becomes a `/skill-name` command in the chat input.
+
+Typing `/` lists the available skills. Picking one, for example `/pdf-to-markdown convert this report`, activates that skill and sends the rest of the line as the prompt. The prompt is optional — `/pdf-to-markdown` on its own activates a skill meant to run as-is. The skill's `SKILL.md` is injected directly into that turn, so the model follows it without first calling `activate_skill`. Slash commands build on the skill tools, so the toggle is locked until skills are enabled for the organization.
 
 ## Writing a skill
 

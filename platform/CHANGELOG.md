@@ -3206,7 +3206,7 @@
 
 * multiple conditions in one optimization rule ([#1318](https://github.com/archestra-ai/archestra/issues/1318)) ([a5c9413](https://github.com/archestra-ai/archestra/commit/a5c9413bba90221635862b8666c1a1934104d9dd))
 * provider in token pricing ([#1340](https://github.com/archestra-ai/archestra/issues/1340)) ([d30abdd](https://github.com/archestra-ai/archestra/commit/d30abddbe899f4c39036d9e911da0bdd8254c399))
-* readabe UI of optimization rules ([#1312](https://github.com/archestra-ai/archestra/issues/1312)) ([42a43dd](https://github.com/archestra-ai/archestra/commit/42a43dd6eb2c464bcacd65dc42e02385903e4525))
+* readable UI of optimization rules ([#1312](https://github.com/archestra-ai/archestra/issues/1312)) ([42a43dd](https://github.com/archestra-ai/archestra/commit/42a43dd6eb2c464bcacd65dc42e02385903e4525))
 * SSO (OIDC/OAuth2/SAML) support ([#1271](https://github.com/archestra-ai/archestra/issues/1271)) ([4e8429c](https://github.com/archestra-ai/archestra/commit/4e8429cf4efb3db91c3f19f24d7d0c1caf9aca1c))
 * vault secrets manager ([#1300](https://github.com/archestra-ai/archestra/issues/1300)) ([7b0cb1d](https://github.com/archestra-ai/archestra/commit/7b0cb1db04f76b084284098104bb4014baf5fe10))
 

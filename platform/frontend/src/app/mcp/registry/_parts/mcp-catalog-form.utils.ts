@@ -35,12 +35,8 @@ export function transformFormToApiData(
   // Handle local configuration
   if (values.serverType === "local" && values.localConfig) {
     // Parse arguments string into array
-    const argumentsArray = values.localConfig.arguments
-      ? values.localConfig.arguments
-          .split("\n")
-          .map((arg) => arg.trim())
-          .filter((arg) => arg.length > 0)
-      : [];
+    // Supports both JSON array format (e.g. ["--port", "8080"]) and one-per-line format
+    const argumentsArray = parseArgumentsString(values.localConfig.arguments);
 
     data.localConfig = {
       command: values.localConfig.command || undefined,
@@ -961,4 +957,49 @@ export function stripEnvVarQuotes(value: string): string {
   }
 
   return value;
+}
+
+/**
+ * Parses the arguments textarea string into an array of argument strings.
+ *
+ * Supports two input formats:
+ * 1. JSON array format: `["--port", "8080", "--verbose"]`
+ *    Useful when copying from MCP catalogs that display args in JSON.
+ * 2. One-per-line format:
+ *    ```
+ *    --port
+ *    8080
+ *    --verbose
+ *    ```
+ *
+ * Falls back to line-by-line parsing if JSON parsing fails or input is not a JSON array.
+ *
+ * @param value - Raw textarea string value
+ * @returns Parsed array of argument strings
+ */
+export function parseArgumentsString(value: string | undefined): string[] {
+  if (!value?.trim()) return [];
+
+  const trimmed = value.trim();
+
+  // Attempt JSON array parse if input looks like a JSON array
+  if (trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (
+        Array.isArray(parsed) &&
+        parsed.every((item) => typeof item === "string")
+      ) {
+        return parsed.filter((arg) => arg.length > 0);
+      }
+    } catch {
+      // Not valid JSON — fall through to line-by-line parsing
+    }
+  }
+
+  // Default: one argument per line
+  return trimmed
+    .split("\n")
+    .map((arg) => arg.trim())
+    .filter((arg) => arg.length > 0);
 }

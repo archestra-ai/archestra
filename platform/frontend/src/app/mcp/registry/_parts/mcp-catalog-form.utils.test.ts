@@ -1003,3 +1003,70 @@ describe("transformFormToApiData - secret env var preservation", () => {
     expect(env[1]?.value ?? "").toBe("");
   });
 });
+
+describe("parseArgumentsString", () => {
+  const { parseArgumentsString } = await import("./mcp-catalog-form.utils");
+
+  it("returns empty array for undefined input", () => {
+    expect(parseArgumentsString(undefined)).toEqual([]);
+  });
+
+  it("returns empty array for empty string", () => {
+    expect(parseArgumentsString("")).toEqual([]);
+  });
+
+  it("returns empty array for whitespace-only string", () => {
+    expect(parseArgumentsString("   \n  ")).toEqual([]);
+  });
+
+  it("parses one-per-line format", () => {
+    expect(parseArgumentsString("/path/to/server.js\n--verbose")).toEqual([
+      "/path/to/server.js",
+      "--verbose",
+    ]);
+  });
+
+  it("trims whitespace from lines", () => {
+    expect(parseArgumentsString("  --port  \n  8080  ")).toEqual([
+      "--port",
+      "8080",
+    ]);
+  });
+
+  it("filters empty lines in one-per-line format", () => {
+    expect(parseArgumentsString("--port\n\n8080\n")).toEqual([
+      "--port",
+      "8080",
+    ]);
+  });
+
+  it("parses valid JSON array format", () => {
+    expect(
+      parseArgumentsString('["--port", "8080", "--verbose"]'),
+    ).toEqual(["--port", "8080", "--verbose"]);
+  });
+
+  it("parses JSON array with whitespace", () => {
+    expect(
+      parseArgumentsString('  ["npx", "-y", "@modelcontextprotocol/server"]  '),
+    ).toEqual(["npx", "-y", "@modelcontextprotocol/server"]);
+  });
+
+  it("filters empty strings in JSON array", () => {
+    expect(parseArgumentsString('["--port", "", "8080"]')).toEqual([
+      "--port",
+      "8080",
+    ]);
+  });
+
+  it("falls back to line-by-line if JSON is invalid", () => {
+    expect(parseArgumentsString("[--port\n8080")).toEqual([
+      "[--port",
+      "8080",
+    ]);
+  });
+
+  it("falls back to line-by-line if JSON is not a string array", () => {
+    expect(parseArgumentsString("[1, 2, 3]")).toEqual(["[1, 2, 3]"]);
+  });
+});

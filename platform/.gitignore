@@ -3,6 +3,7 @@ dist
 node_modules
 build
 .next
+.next-*
 next-env.d.ts
 
 # Logs

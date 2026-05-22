@@ -91,6 +91,10 @@ interface RemoteServerInstallDialogProps {
    * the existing install needs values for them.
    */
   isReinstall?: boolean;
+  /** Scope of the install being reinstalled (locks the scope picker). */
+  existingScope?: McpServerInstallScope;
+  /** Team of the install being reinstalled (null for personal/org). */
+  existingTeamId?: string | null;
   /** Pre-select a specific team in the credential type selector */
   preselectedTeamId?: string | null;
   /**
@@ -112,6 +116,8 @@ export function RemoteServerInstallDialog({
   isInstalling,
   isReauth = false,
   isReinstall = false,
+  existingScope,
+  existingTeamId,
   preselectedTeamId,
   preselectedCatalogId,
   personalOnly = false,
@@ -483,6 +489,9 @@ export function RemoteServerInstallDialog({
         catalogId={selectedCatalogId || catalogItem?.id}
         onScopeChange={setScope}
         onCanInstallChange={setCanInstall}
+        isReinstall={isReinstall}
+        existingScope={existingScope}
+        existingTeamId={existingTeamId}
         preselectedTeamId={preselectedTeamId}
         personalOnly={personalOnly}
         orgOnly={orgOnly}

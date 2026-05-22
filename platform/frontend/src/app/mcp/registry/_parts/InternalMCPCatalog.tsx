@@ -1081,6 +1081,10 @@ export function InternalMCPCatalog({
     } else if (hasPromptedUserConfig) {
       setSelectedCatalogItem(catalogItem);
       setReinstallServerId(installedServer.id);
+      setReinstallServerTeamId(installedServer.teamId ?? null);
+      setReinstallServerScope(
+        (installedServer as unknown as { scope?: McpServerInstallScope }).scope,
+      );
       openDialog("remote-install");
     } else {
       setCatalogItemForReinstall(catalogItem);
@@ -1533,6 +1537,8 @@ export function InternalMCPCatalog({
           setSelectedCatalogItem(null);
           setReauthServerId(null);
           setReinstallServerId(null);
+          setReinstallServerTeamId(null);
+          setReinstallServerScope(undefined);
           setPreselectedTeamId(null);
           setPreselectedCatalogId(null);
           setInstallPersonalOnly(false);
@@ -1547,6 +1553,8 @@ export function InternalMCPCatalog({
         }
         isReauth={!!reauthServerId}
         isReinstall={!!reinstallServerId && !reauthServerId}
+        existingTeamId={reinstallServerTeamId}
+        existingScope={reinstallServerScope}
         preselectedTeamId={preselectedTeamId}
         preselectedCatalogId={preselectedCatalogId}
         personalOnly={installPersonalOnly}

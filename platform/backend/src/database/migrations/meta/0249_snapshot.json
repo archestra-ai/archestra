@@ -1,5 +1,5 @@
 {
-  "id": "2aec09c8-9f50-46b8-a82b-2b161f6b3aa1",
+  "id": "59c51277-e9b5-4c35-81d4-a1b53da80013",
   "prevId": "6e52d8a3-0d10-42f7-9a9b-ee5d549464f0",
   "version": "7",
   "dialect": "postgresql",
@@ -1652,17 +1652,42 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
+        "event_sequence": {
+          "name": "event_sequence",
+          "type": "bigserial",
+          "primaryKey": false,
+          "notNull": true
+        },
         "organization_id": {
           "name": "organization_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "actor_user_id": {
-          "name": "actor_user_id",
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "actor_id": {
+          "name": "actor_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "actor_type": {
+          "name": "actor_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
         },
         "actor_name": {
           "name": "actor_name",
@@ -1682,6 +1707,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "outcome": {
+          "name": "outcome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
         "resource_type": {
           "name": "resource_type",
           "type": "text",
@@ -1694,14 +1725,14 @@
           "primaryKey": false,
           "notNull": false
         },
-        "prior_state": {
-          "name": "prior_state",
+        "before": {
+          "name": "before",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
-        "post_state": {
-          "name": "post_state",
+        "after": {
+          "name": "after",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false
@@ -1730,9 +1761,15 @@
           "primaryKey": false,
           "notNull": false
         },
-        "ip_address": {
-          "name": "ip_address",
+        "request_id": {
+          "name": "request_id",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_ip": {
+          "name": "source_ip",
+          "type": "inet",
           "primaryKey": false,
           "notNull": false
         },
@@ -1741,18 +1778,11 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
         }
       },
       "indexes": {
-        "audit_logs_org_created_at_idx": {
-          "name": "audit_logs_org_created_at_idx",
+        "audit_logs_org_created_at_seq_idx": {
+          "name": "audit_logs_org_created_at_seq_idx",
           "columns": [
             {
               "expression": "organization_id",
@@ -1762,6 +1792,12 @@
             },
             {
               "expression": "created_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            },
+            {
+              "expression": "event_sequence",
               "isExpression": false,
               "asc": false,
               "nulls": "last"
@@ -1782,7 +1818,7 @@
               "nulls": "last"
             },
             {
-              "expression": "actor_user_id",
+              "expression": "actor_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1853,6 +1889,33 @@
           "method": "btree",
           "with": {}
         },
+        "audit_logs_org_outcome_created_at_idx": {
+          "name": "audit_logs_org_outcome_created_at_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "outcome",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "audit_logs_created_at_idx": {
           "name": "audit_logs_created_at_idx",
           "columns": [
@@ -1883,12 +1946,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "audit_logs_actor_user_id_user_id_fk": {
-          "name": "audit_logs_actor_user_id_user_id_fk",
+        "audit_logs_actor_id_user_id_fk": {
+          "name": "audit_logs_actor_id_user_id_fk",
           "tableFrom": "audit_logs",
           "tableTo": "user",
           "columnsFrom": [
-            "actor_user_id"
+            "actor_id"
           ],
           "columnsTo": [
             "id"

@@ -132,6 +132,8 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   list_skills: ToolGroup.Skills,
   activate_skill: ToolGroup.Skills,
   read_skill_file: ToolGroup.Skills,
+  create_skill: ToolGroup.Skills,
+  update_skill: ToolGroup.Skills,
 };
 
 // === Script entry point ===

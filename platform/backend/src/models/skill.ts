@@ -1,4 +1,14 @@
-import { and, count, desc, eq, ilike, isNotNull, like, or } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNotNull,
+  like,
+  or,
+} from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertSkill, InsertSkillFile, Skill, UpdateSkill } from "@/types";
 
@@ -9,6 +19,8 @@ class SkillModel {
     offset?: number;
     search?: string;
     sourceRepo?: string;
+    /** When set, restricts results to these skill IDs (scope filtering). */
+    accessibleSkillIds?: string[];
   }): Promise<Skill[]> {
     let query = db
       .select()
@@ -31,6 +43,7 @@ class SkillModel {
     organizationId: string;
     search?: string;
     sourceRepo?: string;
+    accessibleSkillIds?: string[];
   }): Promise<number> {
     const [result] = await db
       .select({ count: count() })
@@ -45,15 +58,17 @@ class SkillModel {
    * from the `source_ref` provenance column (formatted as
    * `owner/repo@ref:path`).
    */
-  static async findDistinctSourceRepos(
-    organizationId: string,
-  ): Promise<string[]> {
+  static async findDistinctSourceRepos(params: {
+    organizationId: string;
+    /** when set, restricts results to these skill IDs (scope filtering). */
+    accessibleSkillIds?: string[];
+  }): Promise<string[]> {
     const rows = await db
       .selectDistinct({ sourceRef: schema.skillsTable.sourceRef })
       .from(schema.skillsTable)
       .where(
         and(
-          eq(schema.skillsTable.organizationId, organizationId),
+          ...buildOrgFilters(params),
           isNotNull(schema.skillsTable.sourceRef),
         ),
       );
@@ -177,11 +192,15 @@ function buildOrgFilters(params: {
   organizationId: string;
   search?: string;
   sourceRepo?: string;
+  accessibleSkillIds?: string[];
 }) {
   const normalizedSearch = params.search?.trim();
   const normalizedSourceRepo = params.sourceRepo?.trim();
   return [
     eq(schema.skillsTable.organizationId, params.organizationId),
+    ...(params.accessibleSkillIds !== undefined
+      ? [inArray(schema.skillsTable.id, params.accessibleSkillIds)]
+      : []),
     ...(normalizedSearch
       ? [
           or(

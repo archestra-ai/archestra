@@ -414,6 +414,37 @@ describe("skill routes", () => {
         [teamA.id, teamB.id].sort(),
       );
     });
+
+    test("rejects clearing all teams of a team-scoped skill", async ({
+      makeMember,
+      makeTeam,
+    }) => {
+      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      const team = await makeTeam(organizationId, user.id);
+      const skill = await seedImportedSkill({
+        organizationId,
+        name: "to-be-emptied",
+        sourceRef: "x/y@main:SKILL.md",
+        scope: "team",
+        teamIds: [team.id],
+      });
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/skills/${skill.id}`,
+        payload: {
+          content: manifestNamed("to-be-emptied"),
+          scope: "team",
+          teamIds: [],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      // the existing assignment is left intact
+      expect(await SkillTeamModel.getTeamsForSkill(skill.id)).toEqual([
+        team.id,
+      ]);
+    });
   });
 
   describe("DELETE /api/skills/:id", () => {
@@ -562,6 +593,29 @@ describe("skill routes", () => {
       expect(await SkillTeamModel.getTeamsForSkill(created.id)).toEqual([
         team.id,
       ]);
+    });
+
+    test("rejects a team-scoped skill created with no teams", async ({
+      makeMember,
+    }) => {
+      // admins bypass the team-membership check, so an empty team list is not
+      // caught there — the explicit team validation must reject it.
+      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: {
+          content: manifestNamed("teamless-skill"),
+          scope: "team",
+          teamIds: [],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(
+        await SkillModel.findByName(organizationId, "teamless-skill"),
+      ).toBeNull();
     });
 
     test("a personal skill is hidden from non-authors", async ({

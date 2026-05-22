@@ -45,7 +45,10 @@ import {
   SkillFileEncodingSchema,
   SkillWithFilesSchema,
 } from "@/types";
-import { isUniqueConstraintError } from "@/utils/db";
+import {
+  isForeignKeyConstraintError,
+  isUniqueConstraintError,
+} from "@/utils/db";
 
 /** A team a skill is assigned to (for `scope = 'team'` skills). */
 const SkillTeamSchema = z.object({ id: z.string(), name: z.string() });
@@ -201,24 +204,26 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userTeamIds,
         userId: user.id,
       });
-      await assertTeamsInOrg(teamIds, organizationId);
+      await assertSkillTeams({ scope, teamIds, organizationId });
 
-      const skill = await SkillModel.createWithFiles({
-        skill: {
-          organizationId,
-          authorId: user.id,
-          name: parsed.name,
-          description: parsed.description,
-          content: parsed.content,
-          license: parsed.license,
-          compatibility: parsed.compatibility,
-          metadata: parsed.metadata,
-          sourceType: "manual",
-          scope,
-        },
-        files: toSkillFiles(body.files ?? []),
-        teamIds,
-      });
+      const skill = await withTeamFkErrorMapped(() =>
+        SkillModel.createWithFiles({
+          skill: {
+            organizationId,
+            authorId: user.id,
+            name: parsed.name,
+            description: parsed.description,
+            content: parsed.content,
+            license: parsed.license,
+            compatibility: parsed.compatibility,
+            metadata: parsed.metadata,
+            sourceType: "manual",
+            scope,
+          },
+          files: toSkillFiles(body.files ?? []),
+          teamIds,
+        }),
+      );
       if (!skill) {
         throw skillNameConflict(parsed.name);
       }
@@ -320,7 +325,11 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userTeamIds,
           userId: user.id,
         });
-        await assertTeamsInOrg(newTeamIds, organizationId);
+        await assertSkillTeams({
+          scope: newScope,
+          teamIds: newTeamIds,
+          organizationId,
+        });
       }
 
       let updated: Skill | null;
@@ -351,7 +360,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Skill not found");
       }
       if (scopeChanged || teamsChanged) {
-        await SkillTeamModel.syncSkillTeams(id, newTeamIds);
+        await withTeamFkErrorMapped(() =>
+          SkillTeamModel.syncSkillTeams(id, newTeamIds),
+        );
       }
 
       return reply.send(await loadSkillDetail(updated));
@@ -615,7 +626,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userTeamIds,
         userId: user.id,
       });
-      await assertTeamsInOrg(teamIds, organizationId);
+      await assertSkillTeams({ scope, teamIds, organizationId });
 
       const imported = await runImport(() =>
         importSkills({
@@ -629,24 +640,26 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const created: Skill[] = [];
       const skipped: string[] = [];
       for (const item of imported) {
-        const skill = await SkillModel.createWithFiles({
-          skill: {
-            organizationId,
-            authorId: user.id,
-            name: item.parsed.name,
-            description: item.parsed.description,
-            content: item.parsed.content,
-            license: item.parsed.license,
-            compatibility: item.parsed.compatibility,
-            metadata: item.parsed.metadata,
-            sourceType: "github",
-            sourceRef: item.sourceRef,
-            sourceCommit: item.sourceCommit,
-            scope,
-          },
-          files: item.files,
-          teamIds,
-        });
+        const skill = await withTeamFkErrorMapped(() =>
+          SkillModel.createWithFiles({
+            skill: {
+              organizationId,
+              authorId: user.id,
+              name: item.parsed.name,
+              description: item.parsed.description,
+              content: item.parsed.content,
+              license: item.parsed.license,
+              compatibility: item.parsed.compatibility,
+              metadata: item.parsed.metadata,
+              sourceType: "github",
+              sourceRef: item.sourceRef,
+              sourceCommit: item.sourceCommit,
+              scope,
+            },
+            files: item.files,
+            teamIds,
+          }),
+        );
         if (!skill) {
           skipped.push(item.parsed.name);
           continue;
@@ -699,24 +712,55 @@ function sameTeamSet(a: string[], b: string[]): boolean {
 }
 
 /**
- * Ensure every requested team exists and belongs to the organization, so a
- * stale/deleted team id fails with a clean 400 instead of an FK violation
- * mid-transaction.
+ * Validate a skill's team assignments before persisting. Only meaningful for
+ * `team` scope: such a skill must have at least one team (otherwise it is
+ * invisible to everyone, including its author), and every team must exist
+ * within the organization — a stale/deleted id fails with a clean 400 instead
+ * of an FK violation mid-transaction.
  */
-async function assertTeamsInOrg(
-  teamIds: string[],
-  organizationId: string,
-): Promise<void> {
-  if (teamIds.length === 0) return;
-  const teams = await TeamModel.findByIds(teamIds);
+async function assertSkillTeams(params: {
+  scope: ResourceVisibilityScope;
+  teamIds: string[];
+  organizationId: string;
+}): Promise<void> {
+  if (params.scope !== "team") return;
+
+  if (params.teamIds.length === 0) {
+    throw new ApiError(
+      400,
+      "A team-scoped skill must be assigned to at least one team",
+    );
+  }
+
+  const teams = await TeamModel.findByIds(params.teamIds);
   const validIds = new Set(
     teams
-      .filter((team) => team.organizationId === organizationId)
+      .filter((team) => team.organizationId === params.organizationId)
       .map((team) => team.id),
   );
-  const missing = teamIds.filter((id) => !validIds.has(id));
+  const missing = params.teamIds.filter((id) => !validIds.has(id));
   if (missing.length > 0) {
     throw new ApiError(400, `Unknown team id(s): ${missing.join(", ")}`);
+  }
+}
+
+/**
+ * Run a skill write, converting a `skill_team` foreign-key violation — a team
+ * deleted between {@link assertSkillTeams} and the insert — into a clean 400.
+ */
+async function withTeamFkErrorMapped<T>(
+  operation: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (isForeignKeyConstraintError(error)) {
+      throw new ApiError(
+        400,
+        "One or more of the selected teams no longer exist",
+      );
+    }
+    throw error;
   }
 }
 

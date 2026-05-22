@@ -1,4 +1,4 @@
-import { ConversationModel } from "@/models";
+import { MessageModel } from "@/models";
 import ActiveChatRunModel from "@/models/chat-active-run";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -20,12 +20,8 @@ describe("chat active-run routes", () => {
       const conversation = await makeConversation(agent.id, {
         userId: user.id,
         organizationId,
-        selectedModel: "test-vllm-model",
       });
       conversationId = conversation.id;
-      await ConversationModel.update(conversationId, user.id, organizationId, {
-        selectedProvider: "vllm",
-      });
 
       app = createFastifyInstance();
       app.addHook("onRequest", async (request) => {
@@ -79,6 +75,9 @@ describe("chat active-run routes", () => {
 
     expect(response.statusCode).toBe(409);
     expect(response.json().error.message).toContain("active response");
+    await expect(
+      MessageModel.findByConversation(conversationId),
+    ).resolves.toHaveLength(0);
   });
 
   test("stop marks an accessible running active run with stopRequestedAt", async () => {

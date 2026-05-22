@@ -996,7 +996,7 @@ describe("chat active run config", () => {
 
     expect(cfg.chat.activeRun).toMatchObject({
       replayPollIntervalMs: 500,
-      stopPollIntervalMs: 500,
+      stopPollIntervalMs: 30_000,
       pollingCompatibilityEnabled: false,
       notifyDatabaseUrl: "",
     });
@@ -1027,6 +1027,16 @@ describe("chat active run config", () => {
     const { default: cfg } = await import("./config");
 
     expect(cfg.chat.activeRun.pollingCompatibilityEnabled).toBe(false);
+  });
+
+  test("uses short stop polling default in polling compatibility mode", async () => {
+    delete process.env.ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS;
+    process.env.ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED =
+      "true";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.chat.activeRun.stopPollIntervalMs).toBe(500);
   });
 });
 

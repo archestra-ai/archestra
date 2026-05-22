@@ -1,5 +1,5 @@
 {
-  "id": "3c05e83f-ed07-4ba8-88d3-73ab960f207f",
+  "id": "e78f36b5-314c-4a0c-bdd6-1d38fb6aa404",
   "prevId": "326254e8-7821-4b92-8a1c-bbf033b3362a",
   "version": "7",
   "dialect": "postgresql",
@@ -1812,29 +1812,7 @@
           "default": "now()"
         }
       },
-      "indexes": {
-        "chat_active_run_events_run_id_seq_idx": {
-          "name": "chat_active_run_events_run_id_seq_idx",
-          "columns": [
-            {
-              "expression": "run_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "seq",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
         "chat_active_run_events_run_id_chat_active_runs_id_fk": {
           "name": "chat_active_run_events_run_id_chat_active_runs_id_fk",
@@ -1955,6 +1933,38 @@
           ],
           "isUnique": true,
           "where": "\"chat_active_runs\".\"status\" = 'running'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "chat_active_runs_running_updated_at_idx": {
+          "name": "chat_active_runs_running_updated_at_idx",
+          "columns": [
+            {
+              "expression": "updated_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"chat_active_runs\".\"status\" = 'running'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "chat_active_runs_terminal_updated_at_idx": {
+          "name": "chat_active_runs_terminal_updated_at_idx",
+          "columns": [
+            {
+              "expression": "updated_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"chat_active_runs\".\"status\" != 'running'",
           "concurrently": false,
           "method": "btree",
           "with": {}

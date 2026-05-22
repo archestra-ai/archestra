@@ -838,7 +838,11 @@ const config = {
       }),
       stopPollIntervalMs: parseActiveChatRunPollIntervalMs({
         value: process.env.ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS,
-        defaultValue: 500,
+        defaultValue:
+          process.env
+            .ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED === "true"
+            ? 500
+            : 30_000,
         envName: "ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS",
       }),
       pollingCompatibilityEnabled:

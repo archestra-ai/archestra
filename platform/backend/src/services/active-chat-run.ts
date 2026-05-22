@@ -10,10 +10,13 @@ import {
 const EVENT_FLUSH_INTERVAL_MS = 100;
 const EVENT_BATCH_SIZE = 16;
 const STALE_RUNNING_MS = 10 * 60 * 1000;
+const TERMINAL_CLEANUP_INTERVAL_MS = 60 * 1000;
 export const ACTIVE_CHAT_RUN_TERMINAL_RETENTION_MS = 60 * 60 * 1000;
 export const ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS = 2 * 60 * 1000;
 
 export class ActiveChatRunService {
+  private nextTerminalCleanupAt = 0;
+
   constructor(
     private readonly notifier: ActiveChatRunNotifier,
     private readonly replayPollIntervalMs: number,
@@ -25,6 +28,13 @@ export class ActiveChatRunService {
     userId: string;
     organizationId: string;
   }) {
+    this.cleanupTerminalRunsIfNeeded(params.conversationId);
+
+    const run = await ActiveChatRunModel.create(params);
+    if (run) {
+      return run;
+    }
+
     try {
       await ActiveChatRunModel.markStaleRunningAsFailed(STALE_RUNNING_MS);
     } catch (error) {
@@ -33,15 +43,6 @@ export class ActiveChatRunService {
         "Failed to mark stale active chat runs as failed",
       );
     }
-
-    void ActiveChatRunModel.deleteTerminalOlderThan(
-      ACTIVE_CHAT_RUN_TERMINAL_RETENTION_MS,
-    ).catch((error) => {
-      logger.warn(
-        { error, conversationId: params.conversationId },
-        "Failed to clean up old terminal chat runs",
-      );
-    });
 
     return ActiveChatRunModel.create(params);
   }
@@ -66,6 +67,7 @@ export class ActiveChatRunService {
       status: "completed" | "failed" | "cancelled";
       error?: string | null;
     }>;
+    abortController?: AbortController;
   }): void {
     void (async () => {
       const writer = new ActiveChatRunEventBatcher(params.runId, () =>
@@ -89,6 +91,15 @@ export class ActiveChatRunService {
         });
         await this.notifyEvent(params.runId);
       } catch (error) {
+        if (!params.abortController?.signal.aborted) {
+          params.abortController?.abort();
+        }
+        await reader.cancel().catch((cancelError) => {
+          logger.warn(
+            { cancelError, runId: params.runId },
+            "Failed to cancel active chat run event reader after drain error",
+          );
+        });
         await writer.flush().catch((flushError) => {
           logger.error(
             { flushError, runId: params.runId },
@@ -227,6 +238,23 @@ export class ActiveChatRunService {
   private async notifyStop(runId: string): Promise<void> {
     await this.notifier.notifyStop(runId).catch((error) => {
       logger.warn({ error, runId }, "Failed to notify active chat run stop");
+    });
+  }
+
+  private cleanupTerminalRunsIfNeeded(conversationId: string): void {
+    const now = Date.now();
+    if (now < this.nextTerminalCleanupAt) {
+      return;
+    }
+
+    this.nextTerminalCleanupAt = now + TERMINAL_CLEANUP_INTERVAL_MS;
+    void ActiveChatRunModel.deleteTerminalOlderThan(
+      ACTIVE_CHAT_RUN_TERMINAL_RETENTION_MS,
+    ).catch((error) => {
+      logger.warn(
+        { error, conversationId },
+        "Failed to clean up old terminal chat runs",
+      );
     });
   }
 }

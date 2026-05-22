@@ -41,6 +41,12 @@ const chatActiveRunsTable = pgTable(
     )
       .on(table.conversationId)
       .where(sql`${table.status} = 'running'`),
+    runningUpdatedAtIdx: index("chat_active_runs_running_updated_at_idx")
+      .on(table.updatedAt)
+      .where(sql`${table.status} = 'running'`),
+    terminalUpdatedAtIdx: index("chat_active_runs_terminal_updated_at_idx")
+      .on(table.updatedAt)
+      .where(sql`${table.status} != 'running'`),
   }),
 );
 
@@ -57,10 +63,6 @@ const chatActiveRunEventsTable = pgTable(
   },
   (table) => ({
     runSeqUnique: unique("chat_active_run_events_run_id_seq_uidx").on(
-      table.runId,
-      table.seq,
-    ),
-    runSeqIdx: index("chat_active_run_events_run_id_seq_idx").on(
       table.runId,
       table.seq,
     ),

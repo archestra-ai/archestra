@@ -49,10 +49,13 @@ export class InMemoryActiveChatRunNotifier extends PollingActiveChatRunNotifier 
 }
 
 export class PostgresActiveChatRunNotifier extends InMemoryActiveChatRunNotifier {
-  private client: pg.Client | null = null;
+  private client: PgClient | null = null;
   private connectPromise: Promise<void> | null = null;
 
-  constructor(private readonly connectionString: string) {
+  constructor(
+    private readonly connectionString: string,
+    private readonly clientFactory: PgClientFactory = createDefaultPgClient,
+  ) {
     super();
   }
 
@@ -62,6 +65,16 @@ export class PostgresActiveChatRunNotifier extends InMemoryActiveChatRunNotifier
 
   override async notifyStop(runId: string): Promise<void> {
     await this.notify(STOP_CHANNEL, runId);
+  }
+
+  override async waitForEvent(params: WaitForRunParams): Promise<void> {
+    await this.ensureListening("event", params.runId);
+    await super.waitForEvent(params);
+  }
+
+  override async waitForStop(params: WaitForRunParams): Promise<void> {
+    await this.ensureListening("stop", params.runId);
+    await super.waitForStop(params);
   }
 
   async close(): Promise<void> {
@@ -100,15 +113,11 @@ export class PostgresActiveChatRunNotifier extends InMemoryActiveChatRunNotifier
     await this.connectPromise;
   }
 
-  private createClient(): pg.Client {
-    const client = new pg.Client({
-      connectionString: this.connectionString,
-      keepAlive: true,
-      keepAliveInitialDelayMillis: 10_000,
-    });
+  private createClient(): PgClient {
+    const client = this.clientFactory(this.connectionString);
 
     client.on("notification", (notification) => {
-      this.handleNotification(notification);
+      this.handleNotification(notification as pg.Notification);
     });
     client.on("error", (error) => {
       logger.warn({ error }, "Active chat run notify connection error");
@@ -124,7 +133,7 @@ export class PostgresActiveChatRunNotifier extends InMemoryActiveChatRunNotifier
     return client;
   }
 
-  private async connectClient(client: pg.Client): Promise<void> {
+  private async connectClient(client: PgClient): Promise<void> {
     try {
       await client.connect();
       await client.query(`LISTEN ${EVENT_CHANNEL}`);
@@ -135,7 +144,7 @@ export class PostgresActiveChatRunNotifier extends InMemoryActiveChatRunNotifier
     }
   }
 
-  private async resetClient(client: pg.Client | null): Promise<void> {
+  private async resetClient(client: PgClient | null): Promise<void> {
     if (!client || this.client !== client) {
       return;
     }
@@ -162,6 +171,18 @@ export class PostgresActiveChatRunNotifier extends InMemoryActiveChatRunNotifier
       void super.notifyStop(runId);
     }
   }
+
+  private async ensureListening(kind: "event" | "stop", runId: string) {
+    try {
+      await this.ensureConnected();
+    } catch (error) {
+      await this.resetClient(this.client);
+      logger.warn(
+        { error, kind, runId },
+        "Failed to ensure active chat run listener connection",
+      );
+    }
+  }
 }
 
 export function createActiveChatRunNotifier(): ActiveChatRunNotifier {
@@ -183,6 +204,15 @@ interface WaitForRunParams {
   timeoutMs: number;
   abortSignal?: AbortSignal;
 }
+
+interface PgClient {
+  connect(): Promise<unknown>;
+  end(): Promise<unknown>;
+  query(queryText: string, values?: unknown[]): Promise<unknown>;
+  on(event: string, listener: (...args: unknown[]) => void): unknown;
+}
+
+type PgClientFactory = (connectionString: string) => PgClient;
 
 class RunWaiters {
   private readonly waiters = new Map<string, Set<() => void>>();
@@ -242,6 +272,15 @@ function parseRunId(payload: string | undefined): string | null {
   } catch {
     return null;
   }
+}
+
+function createDefaultPgClient(connectionString: string): PgClient {
+  return new pg.Client({
+    connectionString,
+    connectionTimeoutMillis: 1_000,
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10_000,
+  });
 }
 
 function sleepWithAbort(ms: number, abortSignal?: AbortSignal): Promise<void> {

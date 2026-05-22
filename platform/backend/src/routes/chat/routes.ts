@@ -163,21 +163,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const streamId = randomUUID();
       const activeStreamKey =
         `${CacheKey.ChatActiveStream}-${conversationId}` as const;
-      // Awaited (not fire-and-forget): the stop endpoint resolves this mapping
-      // to find the stream to abort, and the stream starts producing output
-      // immediately after. If registration lagged, an early stop would read no
-      // mapping and silently no-op. A write failure only degrades stop for this
-      // stream, so it is logged rather than failing the request.
-      // The TTL must outlive the stream (a newer stream overwrites this entry,
-      // a finished one leaves a harmless stale mapping), so it is not refreshed.
-      try {
-        await cacheManager.set(activeStreamKey, streamId, TimeInMs.Hour);
-      } catch (error) {
-        logger.warn(
-          { error, conversationId, streamId },
-          "Failed to register active chat stream",
-        );
-      }
+      let removeAbortListeners = () => {};
 
       // Flag to prevent duplicate message persistence if both onError and onFinish fire
       let messagesPersisted = false;
@@ -196,19 +182,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         } else {
           logger.error({ err, conversationId }, "Chat response stream error");
         }
-      });
-
-      // When the HTTP connection closes (stop button or navigate away), check if
-      // a stop was explicitly requested via the distributed cache. This works across
-      // pods because the cache is PostgreSQL-backed: the stop endpoint sets the flag
-      // (possibly on a different pod), then the frontend's stop() closes the stream
-      // connection which fires on THIS pod where the stream is running.
-      const removeAbortListeners = attachRequestAbortListeners({
-        request,
-        reply,
-        abortController: chatAbortController,
-        conversationId,
-        streamId,
       });
 
       // Get conversation
@@ -247,6 +220,35 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         runId: activeRun.id,
         conversationId,
         abortController: chatAbortController,
+      });
+
+      // Awaited (not fire-and-forget): the stop endpoint resolves this mapping
+      // to find the stream to abort, and the stream starts producing output
+      // immediately after. If registration lagged, an early stop would read no
+      // mapping and silently no-op. A write failure only degrades stop for this
+      // stream, so it is logged rather than failing the request.
+      // The TTL must outlive the stream (a newer stream overwrites this entry,
+      // a finished one leaves a harmless stale mapping), so it is not refreshed.
+      try {
+        await cacheManager.set(activeStreamKey, streamId, TimeInMs.Hour);
+      } catch (error) {
+        logger.warn(
+          { error, conversationId, streamId },
+          "Failed to register active chat stream",
+        );
+      }
+
+      // When the HTTP connection closes (stop button or navigate away), check if
+      // a stop was explicitly requested via the distributed cache. This works across
+      // pods because the cache is PostgreSQL-backed: the stop endpoint sets the flag
+      // (possibly on a different pod), then the frontend's stop() closes the stream
+      // connection which fires on THIS pod where the stream is running.
+      removeAbortListeners = attachRequestAbortListeners({
+        request,
+        reply,
+        abortController: chatAbortController,
+        conversationId,
+        streamId,
       });
 
       try {
@@ -915,6 +917,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               runId: activeRun.id,
               conversationId,
               stream: persistenceStream as ReadableStream<UIMessageChunk>,
+              abortController: chatAbortController,
               getTerminalStatus: async () => {
                 const latestRun = await ActiveChatRunModel.findById(
                   activeRun.id,
@@ -965,6 +968,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
         });
       } catch (error) {
+        if (!chatAbortController.signal.aborted) {
+          chatAbortController.abort();
+        }
         stopActiveRunPolling();
         await ActiveChatRunModel.markTerminal({
           runId: activeRun.id,

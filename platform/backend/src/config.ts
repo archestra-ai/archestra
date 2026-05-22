@@ -472,6 +472,46 @@ export const parseSampleRate = (
 };
 
 /**
+ * Hostnames that `getPublicRequestOrigin` is willing to return when forwarded
+ * headers are trusted. Derived from:
+ *
+ *   - ARCHESTRA_FRONTEND_URL              (single URL, frontend origin)
+ *   - NEXT_PUBLIC_ARCHESTRA_API_BASE_URL  (comma-separated list, mirrors the
+ *                                          frontend's `getExternalProxyUrls`)
+ *
+ * Returned as a set of normalized `host` strings (lowercased; default ports
+ * stripped — i.e. matching what `new URL(...).host` produces).
+ *
+ * An empty set means "no allowlist configured" → accept any forwarded host
+ * (used for local dev where neither env var is set).
+ * @public — exported for testability
+ */
+export const getAllowedPublicHosts = (): Set<string> => {
+  const hosts = new Set<string>();
+
+  const addHostFromUrl = (raw: string) => {
+    try {
+      hosts.add(new URL(raw).host.toLowerCase());
+    } catch {
+      // ignore malformed values
+    }
+  };
+
+  const frontendUrl = process.env.ARCHESTRA_FRONTEND_URL?.trim();
+  if (frontendUrl) addHostFromUrl(frontendUrl);
+
+  const externalUrls = process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL?.trim();
+  if (externalUrls) {
+    for (const url of externalUrls.split(",")) {
+      const trimmed = url.trim();
+      if (trimmed) addHostFromUrl(trimmed);
+    }
+  }
+
+  return hosts;
+};
+
+/**
  * Parse ARCHESTRA_TRUST_PROXY into the value Fastify's trustProxy option accepts.
  *
  * Fastify supports:

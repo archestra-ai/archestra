@@ -295,8 +295,9 @@ type McpTool = {
 /**
  * Polls initialize (+ optional tool listing) until the MCP gateway accepts
  * external-JWT auth for this agent. After `agents.identityProviderId` is set,
- * the gateway's JWT-verifier cache refreshes asynchronously, so the first
- * initialize calls can return 401. ~80 s total backoff covers cold-cache CI.
+ * the JWKS keys must be fetched from the IdP on the first validation attempt;
+ * in CI that endpoint is a cold WireMock pod and the first verify can fail
+ * for tens of seconds. ~150 s total backoff covers the worst observed cases.
  */
 export async function waitForMcpGatewayJwtReady(params: {
   request: APIRequestContext;
@@ -307,8 +308,8 @@ export async function waitForMcpGatewayJwtReady(params: {
 }): Promise<McpTool[]> {
   const requireToolsListed = params.requireToolsListed !== false;
   const delaysMs = [
-    0, 500, 1000, 2000, 4000, 8000, 8000, 8000, 8000, 8000, 8000, 8000, 8000,
-    8000,
+    0, 500, 1000, 2000, 4000, 8000, 8000, 8000, 10_000, 10_000, 10_000, 10_000,
+    15_000, 15_000, 15_000, 15_000, 15_000, 15_000,
   ];
   let lastError: unknown;
 

@@ -405,10 +405,9 @@ describe("auth routes", () => {
     );
 
     const originalTrustProxy = config.api.trustProxy;
-    const originalAllowlist = process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL;
+    const originalAllowlist = process.env.ARCHESTRA_API_BASE_URL;
     config.api.trustProxy = true;
-    process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL =
-      "https://backend.example.com";
+    process.env.ARCHESTRA_API_BASE_URL = "https://backend.example.com";
     await app.close();
     app = await createAuthTestApp();
 
@@ -436,9 +435,9 @@ describe("auth routes", () => {
     } finally {
       config.api.trustProxy = originalTrustProxy;
       if (originalAllowlist === undefined) {
-        delete process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL;
+        delete process.env.ARCHESTRA_API_BASE_URL;
       } else {
-        process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL = originalAllowlist;
+        process.env.ARCHESTRA_API_BASE_URL = originalAllowlist;
       }
     }
   });
@@ -545,10 +544,9 @@ describe("auth routes", () => {
     );
 
     const originalTrustProxy = config.api.trustProxy;
-    const originalAllowlist = process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL;
+    const originalAllowlist = process.env.ARCHESTRA_API_BASE_URL;
     config.api.trustProxy = true;
-    process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL =
-      "https://gateway.example.com";
+    process.env.ARCHESTRA_API_BASE_URL = "https://gateway.example.com";
     await app.close();
     app = await createAuthTestApp();
 
@@ -577,9 +575,9 @@ describe("auth routes", () => {
     } finally {
       config.api.trustProxy = originalTrustProxy;
       if (originalAllowlist === undefined) {
-        delete process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL;
+        delete process.env.ARCHESTRA_API_BASE_URL;
       } else {
-        process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL = originalAllowlist;
+        process.env.ARCHESTRA_API_BASE_URL = originalAllowlist;
       }
     }
   });

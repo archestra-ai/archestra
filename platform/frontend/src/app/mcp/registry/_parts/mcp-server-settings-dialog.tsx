@@ -267,7 +267,26 @@ export function McpServerSettingsDialog({
     [guardDirty],
   );
 
-  const handleClose = () => onOpenChange(false);
+  // Funnels every close path through the dirty guard: Close X button
+  // (calls handleClose), Esc key, and outside-click (both produce
+  // onOpenChange(false) from Radix). Without this wrapper the guard
+  // only catches tab navigation, so a dirty config edit could be
+  // silently dropped by Esc, clicking outside, or the X button.
+  const handleCloseAttempt = useCallback(
+    (nextOpen: boolean) => {
+      if (nextOpen) {
+        onOpenChange(true);
+      } else {
+        guardDirty(() => onOpenChange(false));
+      }
+    },
+    [guardDirty, onOpenChange],
+  );
+
+  const handleClose = useCallback(
+    () => handleCloseAttempt(false),
+    [handleCloseAttempt],
+  );
 
   // Deployment summary for sidebar header
   const summary = computeDeploymentStatusSummary(
@@ -277,7 +296,7 @@ export function McpServerSettingsDialog({
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open} onOpenChange={handleCloseAttempt}>
         <DialogContent
           className="max-w-6xl h-[85vh] flex flex-row p-0 gap-0 overflow-hidden"
           showCloseButton={false}

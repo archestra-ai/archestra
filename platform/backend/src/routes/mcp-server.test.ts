@@ -78,7 +78,12 @@ async function drainPendingReinstall(mcpServerId: string): Promise<void> {
       .from(schema.mcpServersTable)
       .where(eq(schema.mcpServersTable.id, mcpServerId));
 
-    if (serverRow?.localInstallationStatus !== "pending") {
+    if (!serverRow) {
+      throw new Error(
+        `drainPendingReinstall(${mcpServerId}): mcp_server row not found`,
+      );
+    }
+    if (serverRow.localInstallationStatus !== "pending") {
       return;
     }
 

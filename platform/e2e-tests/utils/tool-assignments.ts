@@ -207,7 +207,10 @@ async function openCatalogToolAssignment({
     await expect(visibleTokenSelect).toBeVisible({ timeout: 15_000 });
   }
 
-  await visibleTokenSelect.click();
+  // Surrounding capability rows re-render briefly when the catalog selection
+  // commits — observed "element was detached / not stable" failures here.
+  // Force the click since visibility is already asserted above.
+  await visibleTokenSelect.click({ force: true });
 }
 
 function escapeRegExp(value: string): string {

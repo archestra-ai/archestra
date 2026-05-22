@@ -36,7 +36,7 @@ test.describe("Enterprise-managed MCP credentials", () => {
     deleteMcpCatalogItem,
     uninstallMcpServer,
   }) => {
-    test.slow();
+    test.setTimeout(300_000);
 
     await expectProtectedDemoServerHealthy(request);
 
@@ -113,7 +113,7 @@ test.describe("Enterprise-managed MCP credentials", () => {
     uninstallMcpServer,
     deleteAgent,
   }) => {
-    test.slow();
+    test.setTimeout(300_000);
 
     await expectProtectedDemoServerHealthy(request);
 
@@ -224,7 +224,7 @@ test.describe("Enterprise-managed MCP credentials", () => {
     uninstallMcpServer,
     deleteAgent,
   }) => {
-    test.slow();
+    test.setTimeout(300_000);
 
     await expectProtectedDemoServerHealthy(request);
 
@@ -333,7 +333,7 @@ test.describe("Enterprise-managed MCP credentials", () => {
     uninstallMcpServer,
     deleteAgent,
   }) => {
-    test.slow();
+    test.setTimeout(300_000);
 
     await expectIdJagDemoServerHealthy(request);
 

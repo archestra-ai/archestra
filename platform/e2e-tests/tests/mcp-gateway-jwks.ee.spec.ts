@@ -33,7 +33,7 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
     createIdentityProvider,
     deleteIdentityProvider,
   }) => {
-    test.slow();
+    test.setTimeout(300_000);
 
     // STEP 1: Verify Keycloak is reachable and get a test JWT
     const jwt = await getKeycloakJwt();

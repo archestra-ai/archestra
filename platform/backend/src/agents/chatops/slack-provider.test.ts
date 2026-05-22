@@ -492,6 +492,137 @@ describe("SlackProvider.sendReply", () => {
       thread_ts: "1111111111.000000",
     });
   });
+
+  test("splits into thread follow-ups when markdown expansion would exceed Slack's 50-block cap", async () => {
+    const provider = createProvider();
+    const postMessage = vi
+      .fn()
+      .mockResolvedValueOnce({ ts: "1000.000001" })
+      .mockResolvedValueOnce({ ts: "1000.000002" })
+      .mockResolvedValueOnce({ ts: "1000.000003" })
+      .mockResolvedValueOnce({ ts: "1000.000004" });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = { chat: { postMessage } };
+
+    // Mirrors the actual repro from prod logs: 1 H1 + 55 sections of
+    // (H2 heading + 5-row table). Slack expands the markdown block into one
+    // Block Kit block per heading and one per table → 1 + 55*2 = 111 expanded
+    // blocks, which exceeds Slack's 50-per-message cap.
+    const section = (n: number) =>
+      `## Table ${n}\n| A | B | C |\n|---|---|---|\n| 1 | 2 | 3 |\n| 4 | 5 | 6 |\n| 7 | 8 | 9 |`;
+    const text = `# 55 Markdown Tables\n\n${Array.from({ length: 55 }, (_, i) =>
+      section(i + 1),
+    ).join("\n\n")}`;
+
+    const result = await provider.sendReply({
+      originalMessage: {
+        messageId: "9999999999.000000",
+        channelId: "C12345",
+        workspaceId: "T12345",
+        threadId: "1111111111.000000",
+        senderId: "U_SENDER",
+        senderName: "Test User",
+        text: "give me 55 tables",
+        rawText: "give me 55 tables",
+        timestamp: new Date(),
+        isThreadReply: false,
+      },
+      text,
+      footer: "🤖 Agent",
+    });
+
+    // First message's ts is returned to callers.
+    expect(result).toBe("1000.000001");
+
+    // Must have split into at least 2 messages (single message would expand
+    // to 111+ blocks server-side and Slack would reject with invalid_blocks).
+    const callCount = postMessage.mock.calls.length;
+    expect(callCount).toBeGreaterThanOrEqual(2);
+
+    // All messages thread under the original thread.
+    for (const [args] of postMessage.mock.calls) {
+      expect(args.thread_ts).toBe("1111111111.000000");
+      expect(args.channel).toBe("C12345");
+    }
+
+    // Non-final messages carry a "continued in a message below" context block.
+    for (let i = 0; i < callCount - 1; i++) {
+      const args = postMessage.mock.calls[i][0];
+      const lastBlock = args.blocks[args.blocks.length - 1];
+      expect(lastBlock).toEqual({
+        type: "context",
+        elements: [
+          {
+            type: "plain_text",
+            text: "continued in a message below",
+            emoji: true,
+          },
+        ],
+      });
+    }
+
+    // Final message carries the agent footer.
+    const finalArgs = postMessage.mock.calls[callCount - 1][0];
+    const finalFooter = finalArgs.blocks[finalArgs.blocks.length - 1];
+    expect(finalFooter).toEqual({
+      type: "context",
+      elements: [{ type: "plain_text", text: "🤖 Agent", emoji: true }],
+    });
+
+    // Every section's heading should appear exactly once across the split
+    // messages — no content lost, no duplication.
+    const allMarkdownText = postMessage.mock.calls
+      .flatMap(([args]) => args.blocks)
+      .filter((b: { type: string }) => b.type === "markdown")
+      .map((b: { text: string }) => b.text)
+      .join("\n\n");
+    for (let i = 1; i <= 55; i++) {
+      const occurrences = allMarkdownText.split(`## Table ${i}\n`).length - 1;
+      expect(occurrences).toBe(1);
+    }
+  });
+
+  test("follow-ups thread under the first message when the original wasn't a thread", async () => {
+    const provider = createProvider();
+    const postMessage = vi
+      .fn()
+      .mockResolvedValueOnce({ ts: "2000.000001" })
+      .mockResolvedValueOnce({ ts: "2000.000002" })
+      .mockResolvedValueOnce({ ts: "2000.000003" });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = { chat: { postMessage } };
+
+    const section = (n: number) =>
+      `## Table ${n}\n| A | B |\n|---|---|\n| 1 | 2 |`;
+    const text = Array.from({ length: 55 }, (_, i) => section(i + 1)).join(
+      "\n\n",
+    );
+
+    await provider.sendReply({
+      originalMessage: {
+        messageId: "9999999999.000000",
+        channelId: "C12345",
+        workspaceId: "T12345",
+        // No threadId — first post lands top-level.
+        senderId: "U_SENDER",
+        senderName: "Test User",
+        text: "long reply",
+        rawText: "long reply",
+        timestamp: new Date(),
+        isThreadReply: false,
+      },
+      text,
+    });
+
+    expect(postMessage.mock.calls.length).toBeGreaterThanOrEqual(2);
+    const firstArgs = postMessage.mock.calls[0][0];
+    const secondArgs = postMessage.mock.calls[1][0];
+
+    // First post is top-level (no thread).
+    expect(firstArgs.thread_ts).toBeUndefined();
+    // Subsequent posts thread under the first message's ts.
+    expect(secondArgs.thread_ts).toBe("2000.000001");
+  });
 });
 
 // =============================================================================

@@ -165,6 +165,15 @@ function formatNumericInput(value: string) {
   return Number(value).toLocaleString("en-US");
 }
 
+function formatResetAtLabel(resetAt: Date) {
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(resetAt);
+}
+
 export default function LimitsPage() {
   const setActionButton = useSetCostsAction();
   const { data: limits = [], isPending } = useLimits();
@@ -501,17 +510,30 @@ export default function LimitsPage() {
             (row.original.cleanupInterval as LimitCleanupInterval | null) ??
             DEFAULT_LIMIT_CLEANUP_INTERVAL;
           const resetLabel = getLimitResetLabel(row.original, cleanupInterval);
+          const resetAtLabel = getLimitResetAtLabel(
+            row.original,
+            cleanupInterval,
+          );
           return (
             <div className="flex flex-col items-start gap-1">
               <span>{CLEANUP_INTERVAL_LABELS[cleanupInterval]}</span>
               {resetLabel && (
-                <Badge
-                  variant="outline"
-                  className="text-xs font-normal text-muted-foreground"
-                  data-testid="limits-table-reset-badge"
-                >
-                  {resetLabel}
-                </Badge>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge
+                      variant="outline"
+                      className="cursor-default text-xs font-normal text-muted-foreground"
+                      data-testid="limits-table-reset-badge"
+                    >
+                      {resetLabel}
+                    </Badge>
+                  </TooltipTrigger>
+                  {resetAtLabel && (
+                    <TooltipContent>
+                      <span>Next reset: {resetAtLabel}</span>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
               )}
             </div>
           );
@@ -955,6 +977,32 @@ export function getLimitResetLabel(
   cleanupInterval: LimitCleanupInterval,
   now = new Date(),
 ): string | null {
+  const resetAt = getLimitResetAt(limit, cleanupInterval);
+  if (!resetAt) {
+    return null;
+  }
+
+  const remainingMs = resetAt.getTime() - now.getTime();
+
+  if (remainingMs <= 0) {
+    return "resets soon";
+  }
+
+  return `resets in ${formatRelativeDuration(remainingMs)}`;
+}
+
+export function getLimitResetAtLabel(
+  limit: Pick<LimitData, "lastCleanup">,
+  cleanupInterval: LimitCleanupInterval,
+): string | null {
+  const resetAt = getLimitResetAt(limit, cleanupInterval);
+  return resetAt ? formatResetAtLabel(resetAt) : null;
+}
+
+function getLimitResetAt(
+  limit: Pick<LimitData, "lastCleanup">,
+  cleanupInterval: LimitCleanupInterval,
+): Date | null {
   if (!limit.lastCleanup) {
     return null;
   }
@@ -964,14 +1012,7 @@ export function getLimitResetLabel(
     return null;
   }
 
-  const resetAtMs = lastCleanupMs + CLEANUP_INTERVAL_MS[cleanupInterval];
-  const remainingMs = resetAtMs - now.getTime();
-
-  if (remainingMs <= 0) {
-    return "resets soon";
-  }
-
-  return `resets in ${formatRelativeDuration(remainingMs)}`;
+  return new Date(lastCleanupMs + CLEANUP_INTERVAL_MS[cleanupInterval]);
 }
 
 function formatRelativeDuration(durationMs: number) {

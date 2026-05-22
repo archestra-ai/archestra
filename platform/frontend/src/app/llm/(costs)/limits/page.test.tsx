@@ -1,6 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import LimitsPage, { getLimitModels, getLimitResetLabel } from "./page";
+import LimitsPage, {
+  getLimitModels,
+  getLimitResetAtLabel,
+  getLimitResetLabel,
+} from "./page";
 
 const mockSetCostsAction = vi.fn();
 const mockUseLimits = vi.fn();
@@ -401,6 +405,9 @@ describe("LimitsPage", () => {
     expect(screen.getByTestId("limits-table-reset-badge")).toHaveTextContent(
       "resets in 30m",
     );
+    expect(screen.getByText(/next reset:/i)).toHaveTextContent(
+      /Jan 1, 1:00 AM|Jan 1, 01:00/,
+    );
   });
 
   it("shows multiple model badges for limits with multiple models", () => {
@@ -598,5 +605,25 @@ describe("getLimitResetLabel", () => {
         new Date("2026-01-01T02:00:00Z"),
       ),
     ).toBe("resets soon");
+  });
+});
+
+describe("getLimitResetAtLabel", () => {
+  it("returns null when the reset time cannot be calculated", () => {
+    expect(
+      getLimitResetAtLabel({ lastCleanup: null } as never, "1h"),
+    ).toBeNull();
+    expect(
+      getLimitResetAtLabel({ lastCleanup: "not-a-date" } as never, "1h"),
+    ).toBeNull();
+  });
+
+  it("formats the exact reset time", () => {
+    expect(
+      getLimitResetAtLabel(
+        { lastCleanup: "2026-01-01T00:00:00Z" } as never,
+        "1h",
+      ),
+    ).toMatch(/Jan 1, 1:00 AM|Jan 1, 01:00/);
   });
 });

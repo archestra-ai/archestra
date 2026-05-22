@@ -72,6 +72,8 @@ For anything bigger than a small repo, narrow the scan with the `path` field and
 
 Every directory with a `SKILL.md` shows up in the result; pick which ones to import — it is not all-or-nothing. Importing many skills at once, or skills with many resource files, can take a while: each file is fetched sequentially.
 
+The visibility **scope** chosen in the dialog applies to every skill in the batch; it defaults to **personal**, so an import is never silently published org-wide.
+
 Each import records the source (`owner/repo@ref:path`) and the resolved commit SHA, so you can later filter the catalog by repo and see exactly which revision landed.
 
 A few behaviors worth knowing:
@@ -80,6 +82,20 @@ A few behaviors worth knowing:
 - **One snapshot per session.** The repo tree is cached for five minutes, so what you previewed is what you import even if upstream moves in between.
 - **Per-file 10 MB cap, 500 files per skill.** Binary assets are preserved (base64-encoded), so images and fonts round-trip.
 - **No background sync.** Re-import to pull in upstream changes; your edits are never overwritten.
+
+## Permissions and scope
+
+Skills are a first-class RBAC resource — the `skill` resource, with `read`, `create`, `update`, `delete`, `team-admin`, and `admin` actions. They are not tied to the `agent` resource: a role can be granted skill access without agent access, and vice versa.
+
+Every skill carries a visibility **scope**, set in the skill editor or the GitHub import dialog, exactly like agents:
+
+- **Personal** — only the author can see, use, or manage the skill.
+- **Team** — members of the assigned teams can see and use it; `skill:team-admin` (in one of those teams) or `skill:admin` can manage it.
+- **Organization** — everyone in the org can see and use it; only `skill:admin` can manage it.
+
+`skill:read` governs *using* a skill — listing it, activating it, or invoking its slash command in chat. A user only ever sees skills inside their scope (org-wide skills, their own personal skills, and skills in their teams); `list_skills`, `activate_skill`, and the `/skill-name` slash commands are all filtered the same way. `skill:admin` bypasses scope and sees every skill.
+
+Creating an org-scoped skill requires `skill:admin`; creating a team-scoped skill requires `skill:team-admin` and membership in the teams it is assigned to. By default the predefined roles grant: **admin** — full control; **editor** — create/update/delete plus team sharing; **member** — create and manage their own personal skills, and read everything in scope.
 
 ## Compatibility
 

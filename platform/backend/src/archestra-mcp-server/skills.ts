@@ -4,8 +4,9 @@ import {
   TOOL_READ_SKILL_FILE_SHORT_NAME,
 } from "@shared";
 import { z } from "zod";
+import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import logger from "@/logging";
-import { SkillFileModel, SkillModel } from "@/models";
+import { SkillFileModel, SkillModel, SkillTeamModel } from "@/models";
 import {
   escapeXmlAttr,
   escapeXmlText,
@@ -58,14 +59,12 @@ const registry = defineArchestraTools([
       "to load its full instructions.",
     schema: ListSkillsSchema,
     async handler({ context }) {
-      const organizationId = requireOrganization(context);
-      if (!organizationId) {
-        return errorResult(
-          "This tool requires organization context. It can only be used within an authenticated session.",
-        );
+      const ctx = requireUserContext(context);
+      if (!ctx) {
+        return errorResult("This tool requires an authenticated user session.");
       }
 
-      return listSkillCatalog(organizationId);
+      return listSkillCatalog(ctx);
     },
   }),
   defineArchestraTool({
@@ -78,14 +77,12 @@ const registry = defineArchestraTools([
       "before attempting the task it covers.",
     schema: ActivateSkillSchema,
     async handler({ args, context }) {
-      const organizationId = requireOrganization(context);
-      if (!organizationId) {
-        return errorResult(
-          "This tool requires organization context. It can only be used within an authenticated session.",
-        );
+      const ctx = requireUserContext(context);
+      if (!ctx) {
+        return errorResult("This tool requires an authenticated user session.");
       }
 
-      const skill = await SkillModel.findByName(organizationId, args.name);
+      const skill = await findAccessibleSkill(ctx, args.name);
       if (!skill) {
         return errorResult(
           `No skill named "${args.name}" exists. Call list_skills to see available skills.`,
@@ -94,7 +91,11 @@ const registry = defineArchestraTools([
 
       const files = await SkillFileModel.findBySkillId(skill.id);
       logger.info(
-        { organizationId, skillName: skill.name, fileCount: files.length },
+        {
+          organizationId: ctx.organizationId,
+          skillName: skill.name,
+          fileCount: files.length,
+        },
         "[Skills] Skill activated",
       );
 
@@ -110,14 +111,12 @@ const registry = defineArchestraTools([
       "returned as readable text — they are not executed.",
     schema: ReadSkillFileSchema,
     async handler({ args, context }) {
-      const organizationId = requireOrganization(context);
-      if (!organizationId) {
-        return errorResult(
-          "This tool requires organization context. It can only be used within an authenticated session.",
-        );
+      const ctx = requireUserContext(context);
+      if (!ctx) {
+        return errorResult("This tool requires an authenticated user session.");
       }
 
-      const skill = await SkillModel.findByName(organizationId, args.skill);
+      const skill = await findAccessibleSkill(ctx, args.skill);
       if (!skill) {
         return errorResult(`No skill named "${args.skill}" exists.`);
       }
@@ -148,12 +147,45 @@ const registry = defineArchestraTools([
 
 // ===== Internal helpers =====
 
-function requireOrganization(context: ArchestraContext): string | null {
-  return context.organizationId ?? null;
+interface UserContext {
+  organizationId: string;
+  userId: string;
 }
 
-async function listSkillCatalog(organizationId: string) {
-  const skills = await SkillModel.findByOrganization({ organizationId });
+/** A skill MCP tool needs both an org and a user to enforce scope. */
+function requireUserContext(context: ArchestraContext): UserContext | null {
+  if (!context.organizationId || !context.userId) return null;
+  return { organizationId: context.organizationId, userId: context.userId };
+}
+
+/**
+ * Look up a skill by name and return it only if the user can access it under
+ * the skill's scope. Returns null otherwise — callers surface a generic
+ * "no skill named …" so an inaccessible skill's existence is not leaked.
+ */
+async function findAccessibleSkill(ctx: UserContext, name: string) {
+  const skill = await SkillModel.findByName(ctx.organizationId, name);
+  if (!skill) return null;
+
+  const checker = await getSkillPermissionChecker(ctx);
+  const hasAccess = await SkillTeamModel.userHasSkillAccess({
+    userId: ctx.userId,
+    skill,
+    isSkillAdmin: checker.isAdmin,
+  });
+  return hasAccess ? skill : null;
+}
+
+async function listSkillCatalog(ctx: UserContext) {
+  const checker = await getSkillPermissionChecker(ctx);
+  const accessibleSkillIds = checker.isAdmin
+    ? undefined
+    : await SkillTeamModel.getUserAccessibleSkillIds(ctx.userId);
+
+  const skills = await SkillModel.findByOrganization({
+    organizationId: ctx.organizationId,
+    accessibleSkillIds,
+  });
   if (skills.length === 0) {
     return successResult(
       "No skills are available in this organization. Skills can be added under Agents → Skills.",

@@ -1570,20 +1570,20 @@ Required RBAC permission: None (no additional RBAC permission required)
 
 | Tool | Description | Required RBAC Permission |
 |------|-------------|--------------------------|
-| `list_skills` | List the Agent Skills available in this organization — one line per skill (name and description). | None (no additional RBAC permission required) |
-| `activate_skill` | Load a specialized Agent Skill — a reusable SKILL.md instruction set. | None (no additional RBAC permission required) |
-| `read_skill_file` | Read a bundled resource file from a skill. | None (no additional RBAC permission required) |
+| `list_skills` | List the Agent Skills available in this organization — one line per skill (name and description). | `skill:read` |
+| `activate_skill` | Load a specialized Agent Skill — a reusable SKILL.md instruction set. | `skill:read` |
+| `read_skill_file` | Read a bundled resource file from a skill. | `skill:read` |
 
 #### list_skills
 
-Required RBAC permission: None (no additional RBAC permission required)
+Required RBAC permission: `skill:read`
 
 This tool takes no arguments.
 
 
 #### activate_skill
 
-Required RBAC permission: None (no additional RBAC permission required)
+Required RBAC permission: `skill:read`
 
 ##### Input
 
@@ -1594,7 +1594,7 @@ Required RBAC permission: None (no additional RBAC permission required)
 
 #### read_skill_file
 
-Required RBAC permission: None (no additional RBAC permission required)
+Required RBAC permission: `skill:read`
 
 ##### Input
 

@@ -1682,18 +1682,44 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userConfig: catalogItem.userConfig,
           userConfigValues,
         });
-        // Validate required environment variables
+        // Build the post-merge plain-env view once: existing column,
+        // overridden by request body, with empty string treated as the
+        // delete signal. Reused below to validate required vars and to
+        // persist back to mcp_server.environmentValues.
+        const mergedPlainEnv: Record<string, string> = {
+          ...(mcpServer.environmentValues ?? {}),
+        };
+        for (const envDef of catalogItem.localConfig?.environment ?? []) {
+          if (envDef.promptOnInstallation && envDef.type !== "secret") {
+            const value = environmentValues?.[envDef.key];
+            if (value === "") {
+              delete mergedPlainEnv[envDef.key];
+            } else if (value !== undefined && value !== null) {
+              mergedPlainEnv[envDef.key] = String(value);
+            }
+          }
+        }
+
+        // Validate required environment variables against the effective
+        // post-merge state for plain types — a required var already on
+        // the row stays satisfied when the body only carries newly-added
+        // vars. Secret-typed required vars are still checked against the
+        // body alone; the existing secret bag is merged below but not
+        // consulted here.
         if (catalogItem.localConfig?.environment) {
           const requiredEnvVars = catalogItem.localConfig.environment.filter(
             (env) => env.promptOnInstallation && env.required,
           );
 
           const missingEnvVars = requiredEnvVars.filter((env) => {
-            const value = environmentValues?.[env.key];
+            const value =
+              env.type === "secret"
+                ? environmentValues?.[env.key]
+                : mergedPlainEnv[env.key];
             if (env.type === "boolean") {
               return !value;
             }
-            return !value?.trim();
+            return typeof value !== "string" || !value.trim();
           });
 
           if (missingEnvVars.length > 0) {
@@ -1795,29 +1821,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Updated MCP server secrets for reinstall",
         );
 
-        // Persist plain (non-secret) prompted env values onto the install
-        // row's column so startServer can overlay them on every (re)deploy —
-        // the runtime manager's secret-bag reload keeps only secret-typed
-        // keys, so plain values would otherwise vanish on pod restart.
-        //
-        // Merge instead of replace: the install dialog drops empty fields
-        // before submitting, so a partial reinstall (user adds the new
-        // required var, leaves other prompted-plain fields blank because
-        // the dialog doesn't pre-fill them) must not erase keys already
-        // on the row. Only override keys the request actually carried.
-        if (catalogItem.serverType === "local" && environmentValues) {
-          const merged: Record<string, string> = {
-            ...(mcpServer.environmentValues ?? {}),
-          };
-          for (const envDef of catalogItem.localConfig?.environment ?? []) {
-            if (envDef.promptOnInstallation && envDef.type !== "secret") {
-              const value = environmentValues[envDef.key];
-              if (value !== undefined && value !== null && value !== "") {
-                merged[envDef.key] = String(value);
-              }
-            }
-          }
-          await McpServerModel.update(id, { environmentValues: merged });
+        // Persist the merged plain-env view onto the install row's column
+        // so startServer can overlay it on every (re)deploy — the runtime
+        // manager's secret-bag reload keeps only secret-typed keys, so
+        // plain values would otherwise vanish on pod restart.
+        if (catalogItem.serverType === "local") {
+          await McpServerModel.update(id, {
+            environmentValues: mergedPlainEnv,
+          });
         }
       }
 

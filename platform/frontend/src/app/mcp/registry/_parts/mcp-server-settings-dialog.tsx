@@ -209,10 +209,14 @@ export function McpServerSettingsDialog({
   // ManageUsersContent (filters credential sections). Hidden unless the org
   // has the preset term configured AND the catalog has ≥ 1 preset child.
   // The literal "All" is a sentinel for "no filter".
-  const presetLabelOptions = ["All", "default", ...presets.map((p) => p.name)];
+  const presetLabelOptions = [
+    "All",
+    presetEntityName.defaultLabel,
+    ...presets.map((p) => p.childName ?? p.name),
+  ];
   const presetIdByLabel = new Map<string, string>([
-    ["default", item.id],
-    ...presets.map((p) => [p.name, p.id] as const),
+    [presetEntityName.defaultLabel, item.id],
+    ...presets.map((p) => [p.childName ?? p.name, p.id] as const),
   ]);
   const [pageSelectedPreset, setPageSelectedPreset] = useState<string>("All");
   // Keep the selector in sync when the dialog opens deep-linked to a
@@ -223,8 +227,14 @@ export function McpServerSettingsDialog({
     const init = clickedServerId ?? logsInitialServerId;
     if (!init) return;
     const found = installs.find((i) => i.id === init);
-    if (found) setPageSelectedPreset(found.presetLabel ?? "default");
-  }, [clickedServerId, logsInitialServerId, installs]);
+    if (found)
+      setPageSelectedPreset(found.presetLabel ?? presetEntityName.defaultLabel);
+  }, [
+    clickedServerId,
+    logsInitialServerId,
+    installs,
+    presetEntityName.defaultLabel,
+  ]);
   const presetSelectorVisible =
     presetEntityName.configured &&
     presets.length > 0 &&
@@ -443,7 +453,7 @@ export function McpServerSettingsDialog({
                   }
                   onControlledPresetFilterChange={(presetId) => {
                     if (presetId === "all") {
-                      setPageSelectedPreset("default");
+                      setPageSelectedPreset(presetEntityName.defaultLabel);
                       return;
                     }
                     for (const [label, id] of presetIdByLabel) {

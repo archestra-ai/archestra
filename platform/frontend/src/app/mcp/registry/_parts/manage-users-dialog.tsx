@@ -179,14 +179,15 @@ export function ManageUsersContent({
     plural: presetPlural,
     singular: presetSingular,
     configured: presetTermConfigured,
+    defaultLabel,
   } = usePresetEntityName();
 
   // Map of presetId → preset row. Parent is the "default" preset.
   const presetEntries = [
-    { id: catalogId, name: "default", isDefault: true },
+    { id: catalogId, name: defaultLabel, isDefault: true },
     ...childPresets.map((c) => ({
       id: c.id,
-      name: c.name,
+      name: c.childName ?? c.name,
       isDefault: false,
     })),
   ];

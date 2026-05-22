@@ -3,8 +3,9 @@ import {
   ChatMessageMetadataSchema,
   type ChatMessagePart,
 } from "@shared";
+import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import logger from "@/logging";
-import { SkillFileModel, SkillModel } from "@/models";
+import { SkillFileModel, SkillModel, SkillTeamModel } from "@/models";
 import { formatSkillActivation } from "@/skills/skill-activation";
 
 /**
@@ -14,15 +15,17 @@ import { formatSkillActivation } from "@/skills/skill-activation";
  *
  * Returns a shallow copy with the block applied; the original `messages` (used
  * for persistence and the visible bubble) are left untouched. If the org flag
- * is off, the metadata is absent, or the skill cannot be resolved, the input is
- * returned unchanged.
+ * is off, the metadata is absent, or the skill cannot be resolved or accessed
+ * by the user (per its scope), the input is returned unchanged.
  */
 export async function injectSkillActivation({
   messages,
   organizationId,
+  userId,
 }: {
   messages: ChatMessage[];
   organizationId: string;
+  userId: string;
 }): Promise<ChatMessage[]> {
   const lastUserIndex = messages.findLastIndex(
     (message) => message.role === "user",
@@ -43,6 +46,21 @@ export async function injectSkillActivation({
     logger.warn(
       { organizationId, skillId: skillRef.id },
       "[Skills] Slash-command skill not found for org; sending message unchanged",
+    );
+    return messages;
+  }
+
+  // Enforce the skill's scope — a slash command must not bypass RBAC.
+  const checker = await getSkillPermissionChecker({ userId, organizationId });
+  const hasAccess = await SkillTeamModel.userHasSkillAccess({
+    userId,
+    skill,
+    isSkillAdmin: checker.isAdmin,
+  });
+  if (!hasAccess) {
+    logger.warn(
+      { organizationId, userId, skillId: skill.id },
+      "[Skills] User lacks access to slash-command skill; sending message unchanged",
     );
     return messages;
   }

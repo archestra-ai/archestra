@@ -1,3 +1,4 @@
+import { ResourceVisibilityScopeSchema } from "@shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -30,6 +31,7 @@ const SkillMetadataSchema = z.record(z.string(), z.string());
 
 export const SelectSkillSchema = createSelectSchema(schema.skillsTable, {
   sourceType: SkillSourceTypeSchema,
+  scope: ResourceVisibilityScopeSchema,
   metadata: SkillMetadataSchema,
 });
 
@@ -37,6 +39,7 @@ export const SelectSkillSchema = createSelectSchema(schema.skillsTable, {
 // to keep defaulted columns optional in insert/update payloads.
 export const InsertSkillSchema = createInsertSchema(schema.skillsTable, {
   sourceType: SkillSourceTypeSchema.optional(),
+  scope: ResourceVisibilityScopeSchema.optional(),
   metadata: SkillMetadataSchema.optional(),
 }).omit({
   id: true,
@@ -46,6 +49,7 @@ export const InsertSkillSchema = createInsertSchema(schema.skillsTable, {
 
 export const UpdateSkillSchema = createUpdateSchema(schema.skillsTable, {
   sourceType: SkillSourceTypeSchema.optional(),
+  scope: ResourceVisibilityScopeSchema.optional(),
   metadata: SkillMetadataSchema.optional(),
 }).omit({
   id: true,

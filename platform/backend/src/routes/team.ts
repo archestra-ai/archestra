@@ -8,7 +8,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasAnyAgentTypeAdminPermission, hasPermission } from "@/auth";
 import config from "@/config";
-import { AgentToolModel, TeamModel } from "@/models";
+import { AgentToolModel, OrganizationModel, TeamModel } from "@/models";
 import {
   AddTeamExternalGroupBodySchema,
   AddTeamMemberBodySchema,
@@ -22,6 +22,28 @@ import {
   SelectTeamSchema,
   UpdateTeamBodySchema,
 } from "@/types";
+
+// requireTeamCompressionScope rejects team-level convertToolResultsToToon=true
+// writes when the organization's compressionScope is not "team" — the runtime
+// TOON cascade (routes/proxy/utils/toon-conversion.ts) only consults team
+// flags under team scope, so setting it under "organization" scope would be
+// silently inert. Returning 400 here surfaces the misconfiguration at
+// write-time instead of at first-request time.
+async function requireTeamCompressionScope(
+  organizationId: string,
+  convertToolResultsToToon: boolean | undefined,
+): Promise<void> {
+  if (convertToolResultsToToon !== true) {
+    return;
+  }
+  const org = await OrganizationModel.getById(organizationId);
+  if (org && org.compressionScope !== "team") {
+    throw new ApiError(
+      400,
+      `convertToolResultsToToon=true requires organization.compressionScope to be "team" (currently "${org.compressionScope}"). Update the organization first, or omit the field.`,
+    );
+  }
+}
 
 const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -84,13 +106,25 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectTeamSchema),
       },
     },
-    async ({ body: { name, description }, user, organizationId }, reply) => {
+    async (
+      {
+        body: { name, description, convertToolResultsToToon },
+        user,
+        organizationId,
+      },
+      reply,
+    ) => {
+      await requireTeamCompressionScope(
+        organizationId,
+        convertToolResultsToToon,
+      );
       return reply.send(
         await TeamModel.create({
           name,
           description,
           organizationId,
           createdBy: user.id,
+          convertToolResultsToToon,
         }),
       );
     },
@@ -174,6 +208,11 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         }
       }
+
+      await requireTeamCompressionScope(
+        organizationId,
+        body.convertToolResultsToToon,
+      );
 
       const team = await TeamModel.update(id, body);
 

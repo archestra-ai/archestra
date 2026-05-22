@@ -25,6 +25,7 @@ export const UpdateTeamSchema = createUpdateSchema(schema.teamsTable);
 export const CreateTeamBodySchema = z.object({
   name: z.string().min(1, "Team name is required"),
   description: z.string().optional(),
+  convertToolResultsToToon: z.boolean().optional(),
 });
 
 export const UpdateTeamBodySchema = z.object({

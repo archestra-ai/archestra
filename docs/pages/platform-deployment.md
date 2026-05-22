@@ -704,7 +704,7 @@ spec:
     name: default
 ```
 
-Available resource groups: `mcp`, `agent`, `policy`. Each ships in both cluster-scoped (`*.archestra.crossplane.io`) and namespaced (`*.archestra.m.crossplane.io`) variants. For `ToolBatch` and `ToolInvocationPolicyDefault`, read per-tool UUIDs from `status.atProvider.toolIdByName` on the reconciled `ServerInstallation`.
+Full resource reference: [Crossplane provider README](https://github.com/archestra-ai/terraform-provider-archestra/blob/main/crossplane/README.md).
 
 ## Environment Variables
 

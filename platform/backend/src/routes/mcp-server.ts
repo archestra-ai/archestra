@@ -1796,9 +1796,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
 
         // Persist plain (non-secret) prompted env values onto the install
-        // row's column so startServer can overlay them on every (re)deploy
-        // — the secret-typed-only filter at manager.ts:226 drops plain
-        // values when loading from the K8s secret bag.
+        // row's column so startServer can overlay them on every (re)deploy —
+        // the runtime manager's secret-bag reload keeps only secret-typed
+        // keys, so plain values would otherwise vanish on pod restart.
         //
         // Merge instead of replace: the install dialog drops empty fields
         // before submitting, so a partial reinstall (user adds the new

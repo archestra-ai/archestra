@@ -110,15 +110,19 @@ class SkillModel {
   }
 
   /**
-   * Create a skill and its bundled resource files in one transaction.
+   * Create a skill, its bundled resource files, and its team assignments in
+   * one transaction.
    *
    * Returns `null` when a skill with the same name already exists in the
    * organization. The insert is atomic (`ON CONFLICT DO NOTHING` on the
    * org+name unique index), so this is race-free against concurrent creates.
+   * When `teamIds` is supplied the team rows are inserted in the same
+   * transaction, so a failed assignment cannot leave a scoped skill orphaned.
    */
   static async createWithFiles(params: {
     skill: InsertSkill;
     files: Omit<InsertSkillFile, "skillId">[];
+    teamIds?: string[];
   }): Promise<Skill | null> {
     return await db.transaction(async (tx) => {
       const [skill] = await tx
@@ -135,6 +139,14 @@ class SkillModel {
         await tx
           .insert(schema.skillFilesTable)
           .values(params.files.map((file) => ({ ...file, skillId: skill.id })));
+      }
+
+      if (params.teamIds && params.teamIds.length > 0) {
+        await tx
+          .insert(schema.skillTeamsTable)
+          .values(
+            params.teamIds.map((teamId) => ({ skillId: skill.id, teamId })),
+          );
       }
 
       return skill;

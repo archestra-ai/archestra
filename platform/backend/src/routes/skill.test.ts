@@ -376,6 +376,44 @@ describe("skill routes", () => {
       expect(response.statusCode).toBe(200);
       expect(response.json().files).toEqual([]);
     });
+
+    test("a content-only edit does not 403 a team-admin who belongs to only one assigned team", async ({
+      makeMember,
+      makeTeam,
+      makeTeamMember,
+    }) => {
+      // editor holds skill:team-admin — may manage team-scoped skills
+      await makeMember(user.id, organizationId, { role: EDITOR_ROLE_NAME });
+      const teamA = await makeTeam(organizationId, user.id);
+      const teamB = await makeTeam(organizationId, user.id);
+      await makeTeamMember(teamA.id, user.id);
+
+      const skill = await seedImportedSkill({
+        organizationId,
+        name: "multi-team-skill",
+        sourceRef: "x/y@main:SKILL.md",
+        scope: "team",
+        authorId: user.id,
+        teamIds: [teamA.id, teamB.id],
+      });
+
+      // a content-only edit that echoes the full team list back must not be
+      // rejected just because the author is not a member of every team.
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/skills/${skill.id}`,
+        payload: {
+          content: manifestNamed("multi-team-skill"),
+          scope: "team",
+          teamIds: [teamA.id, teamB.id],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect((await SkillTeamModel.getTeamsForSkill(skill.id)).sort()).toEqual(
+        [teamA.id, teamB.id].sort(),
+      );
+    });
   });
 
   describe("DELETE /api/skills/:id", () => {
@@ -474,6 +512,56 @@ describe("skill routes", () => {
         },
       });
       expect(denied.statusCode).toBe(403);
+    });
+
+    test("rejects a team-scoped skill with an unknown team id without orphaning it", async ({
+      makeMember,
+    }) => {
+      // admins bypass the team-membership check, so an unknown id reaches the
+      // existence validation rather than 403-ing first.
+      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: {
+          content: manifestNamed("orphan-check"),
+          scope: "team",
+          teamIds: ["does-not-exist"],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      // the skill row must not have been committed
+      expect(
+        await SkillModel.findByName(organizationId, "orphan-check"),
+      ).toBeNull();
+    });
+
+    test("persists team assignments atomically with the skill", async ({
+      makeMember,
+      makeTeam,
+      makeTeamMember,
+    }) => {
+      await makeMember(user.id, organizationId, { role: EDITOR_ROLE_NAME });
+      const team = await makeTeam(organizationId, user.id);
+      await makeTeamMember(team.id, user.id);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: {
+          content: manifestNamed("atomic-team-skill"),
+          scope: "team",
+          teamIds: [team.id],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const created = response.json();
+      expect(await SkillTeamModel.getTeamsForSkill(created.id)).toEqual([
+        team.id,
+      ]);
     });
 
     test("a personal skill is hidden from non-authors", async ({

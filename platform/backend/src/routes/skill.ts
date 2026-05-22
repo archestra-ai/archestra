@@ -120,7 +120,10 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Non-admins see only skills within their scope; admins see all.
       const accessibleSkillIds = checker.isAdmin
         ? undefined
-        : await SkillTeamModel.getUserAccessibleSkillIds(user.id);
+        : await SkillTeamModel.getUserAccessibleSkillIds({
+            organizationId,
+            userId: user.id,
+          });
 
       const [skills, total] = await Promise.all([
         SkillModel.findByOrganization({
@@ -198,6 +201,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userTeamIds,
         userId: user.id,
       });
+      await assertTeamsInOrg(teamIds, organizationId);
 
       const skill = await SkillModel.createWithFiles({
         skill: {
@@ -213,12 +217,10 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           scope,
         },
         files: toSkillFiles(body.files ?? []),
+        teamIds,
       });
       if (!skill) {
         throw skillNameConflict(parsed.name);
-      }
-      if (teamIds.length > 0) {
-        await SkillTeamModel.syncSkillTeams(skill.id, teamIds);
       }
 
       return reply.send(await loadSkillDetail(skill));
@@ -244,6 +246,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       // 404 (not 403) so scope is not leaked to users who cannot see the skill.
       const hasAccess = await SkillTeamModel.userHasSkillAccess({
+        organizationId,
         userId: user.id,
         skill,
         isSkillAdmin: checker.isAdmin,
@@ -282,6 +285,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // 404 if the user cannot even see the skill; 403 if visible but not theirs to modify.
       const hasAccess = await SkillTeamModel.userHasSkillAccess({
+        organizationId,
         userId: user.id,
         skill: existing,
         isSkillAdmin: checker.isAdmin,
@@ -298,11 +302,16 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
 
-      // Re-authorize against the target scope/teams when the skill is moved.
+      // Re-authorize and re-sync teams only when scope or team assignments
+      // actually change. A content-only edit that echoes the existing teams
+      // must not 403 a non-admin author or needlessly rewrite team rows.
       const newScope = body.scope ?? existing.scope;
       const newTeamIds =
         newScope === "team" ? dedupe(body.teamIds ?? existingTeamIds) : [];
-      if (newScope !== existing.scope || body.teamIds !== undefined) {
+      const scopeChanged = newScope !== existing.scope;
+      const teamsChanged =
+        newScope === "team" && !sameTeamSet(newTeamIds, existingTeamIds);
+      if (scopeChanged || teamsChanged) {
         authorizeSkillScope({
           checker,
           scope: newScope,
@@ -311,6 +320,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userTeamIds,
           userId: user.id,
         });
+        await assertTeamsInOrg(newTeamIds, organizationId);
       }
 
       let updated: Skill | null;
@@ -340,7 +350,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!updated) {
         throw new ApiError(404, "Skill not found");
       }
-      await SkillTeamModel.syncSkillTeams(id, newTeamIds);
+      if (scopeChanged || teamsChanged) {
+        await SkillTeamModel.syncSkillTeams(id, newTeamIds);
+      }
 
       return reply.send(await loadSkillDetail(updated));
     },
@@ -366,7 +378,10 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       const accessibleSkillIds = checker.isAdmin
         ? undefined
-        : await SkillTeamModel.getUserAccessibleSkillIds(user.id);
+        : await SkillTeamModel.getUserAccessibleSkillIds({
+            organizationId,
+            userId: user.id,
+          });
 
       const repos = await SkillModel.findDistinctSourceRepos({
         organizationId,
@@ -400,6 +415,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const teamIds = await SkillTeamModel.getTeamsForSkill(id);
 
       const hasAccess = await SkillTeamModel.userHasSkillAccess({
+        organizationId,
         userId: user.id,
         skill,
         isSkillAdmin: checker.isAdmin,
@@ -599,6 +615,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userTeamIds,
         userId: user.id,
       });
+      await assertTeamsInOrg(teamIds, organizationId);
 
       const imported = await runImport(() =>
         importSkills({
@@ -628,13 +645,11 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             scope,
           },
           files: item.files,
+          teamIds,
         });
         if (!skill) {
           skipped.push(item.parsed.name);
           continue;
-        }
-        if (teamIds.length > 0) {
-          await SkillTeamModel.syncSkillTeams(skill.id, teamIds);
         }
         created.push(skill);
       }
@@ -674,6 +689,35 @@ async function loadSkillDetail(skill: Skill) {
 
 function dedupe(values: string[]): string[] {
   return [...new Set(values)];
+}
+
+/** Whether two team-id lists contain the same set of ids. */
+function sameTeamSet(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const setB = new Set(b);
+  return a.every((id) => setB.has(id));
+}
+
+/**
+ * Ensure every requested team exists and belongs to the organization, so a
+ * stale/deleted team id fails with a clean 400 instead of an FK violation
+ * mid-transaction.
+ */
+async function assertTeamsInOrg(
+  teamIds: string[],
+  organizationId: string,
+): Promise<void> {
+  if (teamIds.length === 0) return;
+  const teams = await TeamModel.findByIds(teamIds);
+  const validIds = new Set(
+    teams
+      .filter((team) => team.organizationId === organizationId)
+      .map((team) => team.id),
+  );
+  const missing = teamIds.filter((id) => !validIds.has(id));
+  if (missing.length > 0) {
+    throw new ApiError(400, `Unknown team id(s): ${missing.join(", ")}`);
+  }
 }
 
 /**

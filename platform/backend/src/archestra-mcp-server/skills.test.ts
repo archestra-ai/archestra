@@ -446,4 +446,70 @@ describe("skill tool execution", () => {
     const skill = await SkillModel.findByName(organizationId, "my-skill");
     expect(skill?.content).toBe("Second draft.");
   });
+
+  describe("org/team-token sessions (no user)", () => {
+    test("list_skills returns only org-scoped skills", async ({ makeUser }) => {
+      const author = await makeUser();
+      await seedSkill({ skill: { name: "shared-skill", scope: "org" } });
+      await seedSkill({
+        skill: {
+          name: "private-skill",
+          scope: "personal",
+          authorId: author.id,
+        },
+      });
+
+      const result = await executeArchestraTool(
+        TOOL_LIST_SKILLS_FULL_NAME,
+        {},
+        { ...context, userId: undefined },
+      );
+
+      expect(result.isError).toBe(false);
+      expect(textOf(result)).toContain("shared-skill");
+      expect(textOf(result)).not.toContain("private-skill");
+    });
+
+    test("activate_skill loads an org-scoped skill", async () => {
+      await seedSkill({ skill: { name: "pdf-processing", scope: "org" } });
+
+      const result = await executeArchestraTool(
+        TOOL_ACTIVATE_SKILL_FULL_NAME,
+        { name: "pdf-processing" },
+        { ...context, userId: undefined },
+      );
+
+      expect(result.isError).toBe(false);
+      expect(textOf(result)).toContain("# PDF Processing");
+    });
+
+    test("activate_skill hides a personal skill", async ({ makeUser }) => {
+      const author = await makeUser();
+      await seedSkill({
+        skill: {
+          name: "pdf-processing",
+          scope: "personal",
+          authorId: author.id,
+        },
+      });
+
+      const result = await executeArchestraTool(
+        TOOL_ACTIVATE_SKILL_FULL_NAME,
+        { name: "pdf-processing" },
+        { ...context, userId: undefined },
+      );
+
+      expect(result.isError).toBe(true);
+    });
+
+    test("create_skill still requires an authenticated user", async () => {
+      const result = await executeArchestraTool(
+        TOOL_CREATE_SKILL_FULL_NAME,
+        { content: manifest("org-token-skill") },
+        { ...context, userId: undefined },
+      );
+
+      expect(result.isError).toBe(true);
+    });
+  });
 });

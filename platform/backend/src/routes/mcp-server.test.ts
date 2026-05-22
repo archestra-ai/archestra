@@ -1061,28 +1061,12 @@ describe("mcp server inspect route", () => {
     expect(connectAndGetToolsMock).not.toHaveBeenCalled();
   });
 
-  // Bug capture: reinstall of a REMOTE MCP server does not persist
-  // `userConfigValues` from the request body. The route's value-
-  // persistence branch in `backend/src/routes/mcp-server.ts:1598-1602`
-  // is gated on `mcpServer.serverType === "local"` — for remote
-  // installs, the body's `userConfigValues` is silently dropped and
-  // the secret is never updated. End-user symptom: admin edits a
-  // remote catalog to add a new required header, clicks Reinstall,
-  // the pod restarts but the new header has no value, all tool calls
-  // start failing 401/403.
-  //
-  // Mirrors the existing local-server test
-  // ("reinstalls a local MCP server with prompted header user config")
-  // and the remote-reauth test
-  // ("re-authenticates a remote MCP server with provided user config values")
-  // both of which persist values correctly via their respective code
-  // paths. Reinstall-on-remote is the missing third case.
-  //
-  // Marked `test.fails` because the assertion is the correct behavior
-  // the route should have. When the bug is fixed, this test will pass
-  // and Vitest will fail with "test was expected to fail, but passed"
-  // — that's the cue to remove the `test.fails` marker.
-  test.fails("[bug] reinstall of a remote MCP server persists userConfigValues into the install's secret", async ({
+  // Regression: the reinstall route used to short-circuit value persistence
+  // for remote serverType, dropping any `userConfigValues` in the request
+  // body. End-user symptom was an admin adding a new required header to a
+  // remote catalog, clicking Reinstall, and the pod coming back with no
+  // value for the new header.
+  test("reinstall of a remote MCP server persists userConfigValues into the install's secret", async ({
     makeInternalMcpCatalog,
     makeMcpServer,
   }) => {
@@ -1106,11 +1090,8 @@ describe("mcp server inspect route", () => {
       ownerId: user.id,
       catalogId: catalog.id,
     });
-    // makeMcpServer hardcodes `serverType: "local"`. The route gates its
-    // value-persistence branch on the install row's serverType, not the
-    // catalog's, so we have to force it here for the bug to actually
-    // reproduce. Without this update the install is treated as local
-    // and the local branch persists the value — the bug doesn't appear.
+    // makeMcpServer hardcodes `serverType: "local"`; force remote so this
+    // test exercises the remote code path of the route.
     await db
       .update(schema.mcpServersTable)
       .set({ serverType: "remote" })

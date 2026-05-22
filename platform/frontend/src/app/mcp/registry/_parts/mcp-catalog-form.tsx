@@ -80,7 +80,6 @@ import {
   MCP_CONFIG_AUTOCOMPLETE,
   MCP_SECRET_AUTOCOMPLETE,
 } from "@/lib/mcp/mcp-form-autocomplete";
-import { usePresetEntityName } from "@/lib/organization.query";
 import { useGetSecret } from "@/lib/secrets.query";
 import { useTeams } from "@/lib/teams/team.query";
 import {
@@ -138,11 +137,6 @@ interface McpCatalogFormProps {
    * to 0 (no confirm bar — used for create mode and standalone previews).
    */
   affectedServerCount?: number;
-  /**
-   * Number of preset children alongside the parent catalog. Used in the
-   * confirm bar to say "across N <presets>". Defaults to 0.
-   */
-  presetCount?: number;
 }
 
 export function McpCatalogForm({
@@ -157,7 +151,6 @@ export function McpCatalogForm({
   submitRef,
   embedded = false,
   affectedServerCount = 0,
-  presetCount = 0,
 }: McpCatalogFormProps) {
   const localConfigSecretId =
     initialValues?.serverType === "local"
@@ -186,7 +179,6 @@ export function McpCatalogForm({
     useFeature("advancedToolFeaturesEnabled") === true;
   const isEnterpriseCoreEnabled = useEnterpriseFeature("core");
   const appName = useAppName();
-  const presetEntityName = usePresetEntityName();
   const mcpAuthDocsUrl = getFrontendDocsUrl(
     DocsPage.McpAuthentication,
     "upstream-mcp-server-authentication",
@@ -2232,8 +2224,6 @@ export function McpCatalogForm({
             mode={pendingSubmit.mode}
             isMultitenant={isMultitenant}
             affectedServerCount={affectedServerCount}
-            presetCount={presetCount}
-            presetEntityName={presetEntityName}
             isSubmitting={isConfirming}
             onCancel={() => setPendingSubmit(null)}
             onConfirm={async () => {

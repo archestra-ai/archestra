@@ -452,3 +452,8 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @khozakhulile27-netizen
 - @ttrubel
 - @akai07
+- @sFn-00
+- @Amhitox
+- @Soild211
+- @albaraamurad051-ship-it
+- @john-iceverg

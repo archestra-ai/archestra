@@ -459,3 +459,6 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @john-iceverg
 - @BeInLife
 - @jrignacio
+- @yuvrajjain2
+- @stefanochieli
+- @Morthblanc

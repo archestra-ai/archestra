@@ -849,6 +849,36 @@ export function InternalMCPCatalog({
       return;
     }
 
+    // Reinstall mode. Scope and team are fixed on the existing row, so
+    // result.scope / result.teamId from the dialog are dropped here.
+    if (reinstallServerId) {
+      const target = (installedServers ?? []).find(
+        (s) => s.id === reinstallServerId,
+      );
+      const targetId = reinstallServerId;
+      setInstallingItemId(catalogItem.id);
+      setInstallingServerIds((prev) => new Set(prev).add(targetId));
+      closeDialog("remote-install");
+      setSelectedCatalogItem(null);
+      setReinstallServerId(null);
+
+      try {
+        await reinstallMutation.mutateAsync({
+          id: targetId,
+          name: target?.name ?? catalogItem.name,
+          ...credentialPayload,
+        });
+      } finally {
+        setInstallingItemId(null);
+        setInstallingServerIds((prev) => {
+          const next = new Set(prev);
+          next.delete(targetId);
+          return next;
+        });
+      }
+      return;
+    }
+
     setInstallingItemId(catalogItem.id);
 
     await installMutation.mutateAsync({
@@ -1016,13 +1046,17 @@ export function InternalMCPCatalog({
           ],
     );
 
-    // For local servers: open the install dialog (reinstall mode) when the
-    // dialog will actually render an input — prompted env var on a single-
-    // tenant catalog, or a promptable userConfig (header) field. Filters
-    // mirror the dialog's own render filters so the two stay in sync; if
-    // they drift again, the user can be left clicking a confirm dialog
-    // when they actually owe credentials.
-    // For remote servers: show confirmation dialog (may need OAuth re-auth).
+    // Open the install dialog in reinstall mode whenever there are prompted
+    // fields the user owes values for — otherwise the simple "Reinstall
+    // Required" confirmation modal is enough. Filters mirror each dialog's
+    // own render filters so the two stay in sync; if they drift, the user
+    // can be left clicking a confirm dialog when they actually owe input.
+    const hasPromptedUserConfig = Object.values(
+      catalogItem.userConfig ?? {},
+    ).some(
+      (field) => field.promptOnInstallation !== false && !field.promptOnPreset,
+    );
+
     if (catalogItem.serverType === "local") {
       const hasPromptedEnv =
         !catalogItem.multitenant &&
@@ -1030,13 +1064,6 @@ export function InternalMCPCatalog({
           (env) => env.promptOnInstallation !== false && !env.promptOnPreset,
         ) ??
           false);
-
-      const hasPromptedUserConfig = Object.values(
-        catalogItem.userConfig ?? {},
-      ).some(
-        (field) =>
-          field.promptOnInstallation !== false && !field.promptOnPreset,
-      );
 
       if (hasPromptedEnv || hasPromptedUserConfig) {
         setLocalServerCatalogItem(catalogItem);
@@ -1051,8 +1078,11 @@ export function InternalMCPCatalog({
         setCatalogItemForReinstall(catalogItem);
         openDialog("reinstall");
       }
+    } else if (hasPromptedUserConfig) {
+      setSelectedCatalogItem(catalogItem);
+      setReinstallServerId(installedServer.id);
+      openDialog("remote-install");
     } else {
-      // Remote server - show confirmation dialog (may need OAuth re-auth)
       setCatalogItemForReinstall(catalogItem);
       openDialog("reinstall");
     }
@@ -1502,6 +1532,7 @@ export function InternalMCPCatalog({
           closeDialog("remote-install");
           setSelectedCatalogItem(null);
           setReauthServerId(null);
+          setReinstallServerId(null);
           setPreselectedTeamId(null);
           setPreselectedCatalogId(null);
           setInstallPersonalOnly(false);
@@ -1509,8 +1540,13 @@ export function InternalMCPCatalog({
         }}
         onConfirm={handleRemoteServerInstallConfirm}
         catalogItem={selectedCatalogItem}
-        isInstalling={installMutation.isPending || reauthMutation.isPending}
+        isInstalling={
+          installMutation.isPending ||
+          reauthMutation.isPending ||
+          reinstallMutation.isPending
+        }
         isReauth={!!reauthServerId}
+        isReinstall={!!reinstallServerId && !reauthServerId}
         preselectedTeamId={preselectedTeamId}
         preselectedCatalogId={preselectedCatalogId}
         personalOnly={installPersonalOnly}

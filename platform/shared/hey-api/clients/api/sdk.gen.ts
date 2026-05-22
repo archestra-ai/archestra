@@ -4354,7 +4354,7 @@ export const checkSecretsConnectivity = <ThrowOnError extends boolean = false>(o
  *
  * Authorization:
  *
- * `agent:read`: View and list agents
+ * `skill:read`: View and use agent skills within your scope (org, your teams, your own)
  */
 export const getSkills = <ThrowOnError extends boolean = false>(options?: Options<GetSkillsData, ThrowOnError>) => (options?.client ?? client).get<GetSkillsResponses, GetSkillsErrors, ThrowOnError>({ url: '/api/skills', ...options });
 
@@ -4367,7 +4367,7 @@ export const getSkills = <ThrowOnError extends boolean = false>(options?: Option
  *
  * Authorization:
  *
- * `agent:create`: Create new agents
+ * `skill:create`: Create new agent skills
  */
 export const createSkill = <ThrowOnError extends boolean = false>(options: Options<CreateSkillData, ThrowOnError>) => (options.client ?? client).post<CreateSkillResponses, CreateSkillErrors, ThrowOnError>({
     url: '/api/skills',
@@ -4387,7 +4387,7 @@ export const createSkill = <ThrowOnError extends boolean = false>(options: Optio
  *
  * Authorization:
  *
- * `agent:delete`: Delete agents
+ * `skill:delete`: Delete agent skills
  */
 export const deleteSkill = <ThrowOnError extends boolean = false>(options: Options<DeleteSkillData, ThrowOnError>) => (options.client ?? client).delete<DeleteSkillResponses, DeleteSkillErrors, ThrowOnError>({ url: '/api/skills/{id}', ...options });
 
@@ -4400,12 +4400,12 @@ export const deleteSkill = <ThrowOnError extends boolean = false>(options: Optio
  *
  * Authorization:
  *
- * `agent:read`: View and list agents
+ * `skill:read`: View and use agent skills within your scope (org, your teams, your own)
  */
 export const getSkill = <ThrowOnError extends boolean = false>(options: Options<GetSkillData, ThrowOnError>) => (options.client ?? client).get<GetSkillResponses, GetSkillErrors, ThrowOnError>({ url: '/api/skills/{id}', ...options });
 
 /**
- * Update a skill's SKILL.md and resource files
+ * Update a skill's SKILL.md, resource files, and scope
  *
  * Authentication:
  *
@@ -4413,7 +4413,7 @@ export const getSkill = <ThrowOnError extends boolean = false>(options: Options<
  *
  * Authorization:
  *
- * `agent:update`: Modify agent configuration and settings
+ * `skill:update`: Modify agent skills and their team assignments
  */
 export const updateSkill = <ThrowOnError extends boolean = false>(options: Options<UpdateSkillData, ThrowOnError>) => (options.client ?? client).put<UpdateSkillResponses, UpdateSkillErrors, ThrowOnError>({
     url: '/api/skills/{id}',
@@ -4433,7 +4433,7 @@ export const updateSkill = <ThrowOnError extends boolean = false>(options: Optio
  *
  * Authorization:
  *
- * `agent:read`: View and list agents
+ * `skill:read`: View and use agent skills within your scope (org, your teams, your own)
  */
 export const getSkillSourceRepos = <ThrowOnError extends boolean = false>(options?: Options<GetSkillSourceReposData, ThrowOnError>) => (options?.client ?? client).get<GetSkillSourceReposResponses, GetSkillSourceReposErrors, ThrowOnError>({ url: '/api/skills/source-repos', ...options });
 
@@ -4446,7 +4446,7 @@ export const getSkillSourceRepos = <ThrowOnError extends boolean = false>(option
  *
  * Authorization:
  *
- * `agent:update`: Modify agent configuration and settings
+ * `skill:admin`: Full administrative control over all agent skills, bypassing team restrictions
  */
 export const enableSkillToolDefaults = <ThrowOnError extends boolean = false>(options?: Options<EnableSkillToolDefaultsData, ThrowOnError>) => (options?.client ?? client).post<EnableSkillToolDefaultsResponses, EnableSkillToolDefaultsErrors, ThrowOnError>({ url: '/api/skills/enable-defaults', ...options });
 
@@ -4459,7 +4459,7 @@ export const enableSkillToolDefaults = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `agent:read`: View and list agents
+ * `skill:read`: View and use agent skills within your scope (org, your teams, your own)
  */
 export const discoverGithubSkills = <ThrowOnError extends boolean = false>(options: Options<DiscoverGithubSkillsData, ThrowOnError>) => (options.client ?? client).post<DiscoverGithubSkillsResponses, DiscoverGithubSkillsErrors, ThrowOnError>({
     url: '/api/skills/github/discover',
@@ -4479,7 +4479,7 @@ export const discoverGithubSkills = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `agent:read`: View and list agents
+ * `skill:read`: View and use agent skills within your scope (org, your teams, your own)
  */
 export const previewGithubSkill = <ThrowOnError extends boolean = false>(options: Options<PreviewGithubSkillData, ThrowOnError>) => (options.client ?? client).post<PreviewGithubSkillResponses, PreviewGithubSkillErrors, ThrowOnError>({
     url: '/api/skills/github/preview',
@@ -4499,7 +4499,7 @@ export const previewGithubSkill = <ThrowOnError extends boolean = false>(options
  *
  * Authorization:
  *
- * `agent:create`: Create new agents
+ * `skill:create`: Create new agent skills
  */
 export const importGithubSkills = <ThrowOnError extends boolean = false>(options: Options<ImportGithubSkillsData, ThrowOnError>) => (options.client ?? client).post<ImportGithubSkillsResponses, ImportGithubSkillsErrors, ThrowOnError>({
     url: '/api/skills/github/import',

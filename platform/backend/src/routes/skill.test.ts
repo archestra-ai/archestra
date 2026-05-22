@@ -1,8 +1,11 @@
+import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
+import { SkillModel, SkillTeamModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { MAX_SKILL_FILE_BYTES } from "@/skills/github-import";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
+import type { ResourceVisibilityScope } from "@/types/visibility";
 
 const MANIFEST = [
   "---",
@@ -13,6 +16,47 @@ const MANIFEST = [
   "# PDF Processing",
   "Use pdftotext -layout.",
 ].join("\n");
+
+/** A SKILL.md manifest with a custom name (org+name must be unique). */
+function manifestNamed(name: string): string {
+  return [
+    "---",
+    `name: ${name}`,
+    "description: A scoped skill.",
+    "---",
+    "",
+    `# ${name}`,
+  ].join("\n");
+}
+
+async function seedImportedSkill(params: {
+  organizationId: string;
+  name: string;
+  sourceRef: string;
+  scope: ResourceVisibilityScope;
+  authorId?: string | null;
+  teamIds?: string[];
+}) {
+  const skill = await SkillModel.createWithFiles({
+    skill: {
+      organizationId: params.organizationId,
+      authorId: params.authorId ?? null,
+      name: params.name,
+      description: `${params.name} description`,
+      content: `# ${params.name}`,
+      metadata: {},
+      sourceType: "github",
+      sourceRef: params.sourceRef,
+      scope: params.scope,
+    },
+    files: [],
+  });
+  if (!skill) throw new Error("seed failed");
+  if (params.teamIds?.length) {
+    await SkillTeamModel.syncSkillTeams(skill.id, params.teamIds);
+  }
+  return skill;
+}
 
 describe("skill routes", () => {
   let app: FastifyInstanceWithZod;
@@ -135,6 +179,125 @@ describe("skill routes", () => {
     });
   });
 
+  describe("GET /api/skills/source-repos", () => {
+    test("non-admins see repositories only for skills within their scope", async ({
+      makeMember,
+      makeTeam,
+      makeTeamMember,
+      makeUser,
+    }) => {
+      await makeMember(user.id, organizationId, { role: MEMBER_ROLE_NAME });
+      const otherAuthor = await makeUser();
+      const team = await makeTeam(organizationId, user.id);
+      await makeTeamMember(team.id, user.id);
+      const inaccessibleTeam = await makeTeam(organizationId, otherAuthor.id);
+
+      await seedImportedSkill({
+        organizationId,
+        name: "org-imported",
+        sourceRef: "shared/org-repo@main:SKILL.md",
+        scope: "org",
+      });
+      await seedImportedSkill({
+        organizationId,
+        name: "own-imported",
+        sourceRef: "mine/personal-repo@main:SKILL.md",
+        scope: "personal",
+        authorId: user.id,
+      });
+      await seedImportedSkill({
+        organizationId,
+        name: "team-imported",
+        sourceRef: "team/team-repo@main:SKILL.md",
+        scope: "team",
+        teamIds: [team.id],
+      });
+      await seedImportedSkill({
+        organizationId,
+        name: "private-imported",
+        sourceRef: "secret/private-repo@main:SKILL.md",
+        scope: "personal",
+        authorId: otherAuthor.id,
+      });
+      await seedImportedSkill({
+        organizationId,
+        name: "inaccessible-team-imported",
+        sourceRef: "secret/team-repo@main:SKILL.md",
+        scope: "team",
+        teamIds: [inaccessibleTeam.id],
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/skills/source-repos",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().repos).toEqual([
+        "mine/personal-repo",
+        "shared/org-repo",
+        "team/team-repo",
+      ]);
+    });
+
+    test("admins see repositories from all skills in the organization", async ({
+      makeMember,
+      makeUser,
+    }) => {
+      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      const otherAuthor = await makeUser();
+
+      await seedImportedSkill({
+        organizationId,
+        name: "org-imported",
+        sourceRef: "shared/org-repo@main:SKILL.md",
+        scope: "org",
+      });
+      await seedImportedSkill({
+        organizationId,
+        name: "private-imported",
+        sourceRef: "secret/private-repo@main:SKILL.md",
+        scope: "personal",
+        authorId: otherAuthor.id,
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/skills/source-repos",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().repos).toEqual([
+        "secret/private-repo",
+        "shared/org-repo",
+      ]);
+    });
+
+    test("non-admins with no accessible imported skills see no repositories", async ({
+      makeMember,
+      makeUser,
+    }) => {
+      await makeMember(user.id, organizationId, { role: MEMBER_ROLE_NAME });
+      const otherAuthor = await makeUser();
+
+      await seedImportedSkill({
+        organizationId,
+        name: "private-imported",
+        sourceRef: "secret/private-repo@main:SKILL.md",
+        scope: "personal",
+        authorId: otherAuthor.id,
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/skills/source-repos",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().repos).toEqual([]);
+    });
+  });
+
   describe("PUT /api/skills/:id", () => {
     test("updates the manifest and replaces resource files", async () => {
       const created = (
@@ -238,6 +401,135 @@ describe("skill routes", () => {
         url: `/api/skills/${created.id}`,
       });
       expect(getResponse.statusCode).toBe(404);
+    });
+  });
+
+  describe("scope", () => {
+    test("a new skill defaults to personal scope owned by the author", async () => {
+      const body = (
+        await app.inject({
+          method: "POST",
+          url: "/api/skills",
+          payload: { content: MANIFEST },
+        })
+      ).json();
+
+      expect(body.scope).toBe("personal");
+      expect(body.authorId).toBe(user.id);
+      expect(body.teams).toEqual([]);
+    });
+
+    test("non-admins cannot create an org-scoped skill", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: { content: MANIFEST, scope: "org" },
+      });
+
+      expect(response.statusCode).toBe(403);
+    });
+
+    test("admins can create an org-scoped skill", async ({ makeMember }) => {
+      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: { content: MANIFEST, scope: "org" },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().scope).toBe("org");
+    });
+
+    test("team-admins can only assign teams they belong to", async ({
+      makeMember,
+      makeTeam,
+      makeTeamMember,
+    }) => {
+      await makeMember(user.id, organizationId, { role: EDITOR_ROLE_NAME });
+      const ownTeam = await makeTeam(organizationId, user.id);
+      await makeTeamMember(ownTeam.id, user.id);
+      const foreignTeam = await makeTeam(organizationId, user.id);
+
+      const ok = await app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: {
+          content: manifestNamed("team-skill"),
+          scope: "team",
+          teamIds: [ownTeam.id],
+        },
+      });
+      expect(ok.statusCode).toBe(200);
+      expect(ok.json().teams).toHaveLength(1);
+
+      const denied = await app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: {
+          content: manifestNamed("foreign-team-skill"),
+          scope: "team",
+          teamIds: [foreignTeam.id],
+        },
+      });
+      expect(denied.statusCode).toBe(403);
+    });
+
+    test("a personal skill is hidden from non-authors", async ({
+      makeUser,
+    }) => {
+      const author = await makeUser();
+      const skill = await SkillModel.createWithFiles({
+        skill: {
+          organizationId,
+          authorId: author.id,
+          name: "someone-elses-skill",
+          description: "private",
+          content: "# private",
+          metadata: {},
+          sourceType: "manual",
+          scope: "personal",
+        },
+        files: [],
+      });
+      if (!skill) throw new Error("seed failed");
+
+      // current request user is not the author and not an admin
+      const getResponse = await app.inject({
+        method: "GET",
+        url: `/api/skills/${skill.id}`,
+      });
+      expect(getResponse.statusCode).toBe(404);
+
+      const listResponse = await app.inject({
+        method: "GET",
+        url: "/api/skills",
+      });
+      expect(
+        listResponse.json().data.map((s: { id: string }) => s.id),
+      ).not.toContain(skill.id);
+
+      const deleteResponse = await app.inject({
+        method: "DELETE",
+        url: `/api/skills/${skill.id}`,
+      });
+      expect(deleteResponse.statusCode).toBe(404);
+    });
+
+    test("non-admins cannot import skills as org-scoped", async () => {
+      // scope is authorized before any GitHub call, so this 403s without network
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/skills/github/import",
+        payload: {
+          repoUrl: "github.com/example/skills",
+          skillPaths: ["pdf-processing"],
+          scope: "org",
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
     });
   });
 });

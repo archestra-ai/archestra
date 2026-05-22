@@ -85,6 +85,12 @@ interface RemoteServerInstallDialogProps {
   isInstalling: boolean;
   /** When true, shows re-authentication mode (info banner, different title) */
   isReauth?: boolean;
+  /**
+   * Reinstall mode — same form layout as reauth but submits to the reinstall
+   * route. Used when a catalog edit added new required userConfig fields and
+   * the existing install needs values for them.
+   */
+  isReinstall?: boolean;
   /** Pre-select a specific team in the credential type selector */
   preselectedTeamId?: string | null;
   /**
@@ -105,6 +111,7 @@ export function RemoteServerInstallDialog({
   catalogItem,
   isInstalling,
   isReauth = false,
+  isReinstall = false,
   preselectedTeamId,
   preselectedCatalogId,
   personalOnly = false,
@@ -150,6 +157,7 @@ export function RemoteServerInstallDialog({
       : (presets.find((p) => p.id === selectedCatalogId) ?? null);
   const needsFillStep =
     !isReauth &&
+    !isReinstall &&
     !!catalogItem &&
     presetHasUnfilledFields(catalogItem, selectedPreset);
   const [step, setStep] = useState<"fill-preset" | "install">(
@@ -399,7 +407,11 @@ export function RemoteServerInstallDialog({
           <div className="flex items-end gap-2">
             <User className="h-5 w-5" />
             <span>
-              {isReauth ? "Re-authenticate" : "Install Server"}
+              {isReauth
+                ? "Re-authenticate"
+                : isReinstall
+                  ? "Reinstall Server"
+                  : "Install Server"}
               <span className="text-muted-foreground ml-2 font-normal">
                 {catalogItem.name}
               </span>
@@ -431,10 +443,14 @@ export function RemoteServerInstallDialog({
               {isInstalling
                 ? isReauth
                   ? "Updating..."
-                  : "Installing..."
+                  : isReinstall
+                    ? "Reinstalling..."
+                    : "Installing..."
                 : isReauth
                   ? "Update Credentials"
-                  : "Install"}
+                  : isReinstall
+                    ? "Reinstall"
+                    : "Install"}
             </Button>
           </>
         ) : null
@@ -451,6 +467,17 @@ export function RemoteServerInstallDialog({
         </Alert>
       )}
 
+      {isReinstall && (
+        <Alert className="border-amber-500/50 bg-amber-500/10">
+          <AlertTriangle className="h-4 w-4 text-amber-500" />
+          <AlertDescription>
+            This server's catalog now requires values that weren't asked for at
+            install time. Provide them below to finish the reinstall; existing
+            tool assignments are preserved.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <SelectMcpServerCredentialTypeAndTeams
         onTeamChange={setSelectedTeamId}
         catalogId={selectedCatalogId || catalogItem?.id}
@@ -459,9 +486,9 @@ export function RemoteServerInstallDialog({
         preselectedTeamId={preselectedTeamId}
         personalOnly={personalOnly}
         orgOnly={orgOnly}
-        hasPresets={hasPresets && !isReauth}
+        hasPresets={hasPresets && !isReauth && !isReinstall}
         presetPicker={
-          !isReauth && catalogItem && hasPresets ? (
+          !isReauth && !isReinstall && catalogItem && hasPresets ? (
             <InstallPresetPicker
               parent={catalogItem}
               value={selectedCatalogId}

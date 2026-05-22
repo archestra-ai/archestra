@@ -219,5 +219,6 @@ function makeConversation(
     messages: [],
     chatErrors: [],
     ...overrides,
+    compactions: overrides.compactions ?? [],
   };
 }

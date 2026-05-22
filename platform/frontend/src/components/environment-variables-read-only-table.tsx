@@ -123,7 +123,7 @@ export function EnvironmentVariablesReadOnlyTable<
             }}
             className={`${gridClass} group items-center border-b py-3 text-xs last:border-b-0 cursor-pointer hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
           >
-            <div className="font-mono">
+            <div className="min-w-0 truncate font-mono">
               {key || (
                 <span className="text-muted-foreground italic">unnamed</span>
               )}
@@ -140,7 +140,7 @@ export function EnvironmentVariablesReadOnlyTable<
                 <span className="text-muted-foreground">—</span>
               )}
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 truncate">
               <ValueCell
                 scope={scope}
                 type={type}
@@ -149,7 +149,7 @@ export function EnvironmentVariablesReadOnlyTable<
                 useExternalSecretsManager={useExternalSecretsManager}
               />
             </div>
-            <div className="line-clamp-2 text-muted-foreground">
+            <div className="min-w-0 line-clamp-2 text-muted-foreground">
               {description || <span className="italic">no description</span>}
             </div>
             <Button

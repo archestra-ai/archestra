@@ -1,4 +1,8 @@
-import type { SupportedProvider } from "@shared";
+import {
+  FAST_MODELS,
+  OPENROUTER_FREE_MODEL_ID,
+  type SupportedProvider,
+} from "@shared";
 import { vi } from "vitest";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import {
@@ -576,8 +580,7 @@ describe("resolveFastModelName", () => {
   test("returns hardcoded FAST_MODELS fallback when no chatApiKeyId", async () => {
     const result = await resolveFastModelName("anthropic", undefined);
 
-    // Should return the hardcoded fast model for anthropic
-    expect(result).toBe("claude-haiku-4-5-20251001");
+    expect(result).toBe(FAST_MODELS.anthropic);
   });
 
   test("returns fastest model from DB when chatApiKeyId is provided", async () => {
@@ -605,7 +608,7 @@ describe("resolveFastModelName", () => {
 
     const result = await resolveFastModelName("openai", "key-456");
 
-    expect(result).toBe("gpt-4o-mini");
+    expect(result).toBe(FAST_MODELS.openai);
   });
 
   test("falls back to hardcoded model when DB lookup throws", async () => {
@@ -616,6 +619,22 @@ describe("resolveFastModelName", () => {
 
     const result = await resolveFastModelName("openai", "key-789");
 
-    expect(result).toBe("gpt-4o-mini");
+    expect(result).toBe(FAST_MODELS.openai);
+  });
+
+  test("always uses the free router for OpenRouter, bypassing the DB lookup", async () => {
+    const getFastestModel = vi.spyOn(
+      LlmProviderApiKeyModelLinkModel,
+      "getFastestModel",
+    );
+
+    expect(await resolveFastModelName("openrouter", undefined)).toBe(
+      OPENROUTER_FREE_MODEL_ID,
+    );
+    expect(await resolveFastModelName("openrouter", "key-123")).toBe(
+      OPENROUTER_FREE_MODEL_ID,
+    );
+    // openrouter/auto (the marked "fastest" model) is paid — never resolved here.
+    expect(getFastestModel).not.toHaveBeenCalled();
   });
 });

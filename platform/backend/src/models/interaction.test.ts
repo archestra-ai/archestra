@@ -2052,6 +2052,59 @@ describe("InteractionModel", () => {
       expect(allSessions.data).toHaveLength(4);
     });
 
+    test("marks mixed-source chat sessions without promoting compaction to the session source", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "mixed-chat-session",
+        source: "chat",
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "mixed-chat-session",
+        source: "chat:compaction",
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.data[0].source).toBeNull();
+      expect(sessions.data[0].sources).toEqual(
+        expect.arrayContaining(["chat", "chat:compaction"]),
+      );
+    });
+
     test("returns empty when filtering by source with no matches", async ({
       makeAdmin,
     }) => {

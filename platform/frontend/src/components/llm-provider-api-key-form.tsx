@@ -556,6 +556,9 @@ export function LlmProviderApiKeyForm({
                 id="llm-provider-api-key-name"
                 placeholder={providerConfig.name}
                 disabled={isPending}
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
                 {...form.register("name")}
               />
             </div>

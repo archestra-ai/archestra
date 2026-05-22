@@ -191,6 +191,41 @@ function AgentToolsList({ agentId }: { agentId: string }) {
   );
 }
 
+type BuiltInAgentId =
+  (typeof BUILT_IN_AGENT_IDS)[keyof typeof BUILT_IN_AGENT_IDS];
+
+function getBuiltInAgentConfigForSave(params: {
+  builtInAgentName: BuiltInAgentId;
+  autoConfigureOnToolDiscovery: boolean;
+  maxRounds: number;
+}) {
+  switch (params.builtInAgentName) {
+    case BUILT_IN_AGENT_IDS.POLICY_CONFIG:
+      return {
+        name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+        autoConfigureOnToolDiscovery: params.autoConfigureOnToolDiscovery,
+      };
+    case BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN:
+      return {
+        name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+        maxRounds: params.maxRounds,
+      };
+    case BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE:
+      return {
+        name: BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
+      };
+    case BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION:
+      return {
+        name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
+      };
+    default: {
+      // exhaustive check: a new BUILT_IN_AGENT_ID will fail the build here
+      const _exhaustive: never = params.builtInAgentName;
+      throw new Error(`Unsupported built-in agent: ${String(_exhaustive)}`);
+    }
+  }
+}
+
 // Single subagent pill with popover
 interface SubagentPillProps {
   agent: Agent;
@@ -911,20 +946,12 @@ export function AgentDialog({
         });
       }
 
-      if (agent && isBuiltIn) {
-        const builtInAgentConfig = isPolicyConfigBuiltIn
-          ? {
-              name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-              autoConfigureOnToolDiscovery,
-            }
-          : isDualLlmMainBuiltIn
-            ? {
-                name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
-                maxRounds: parsedDualLlmMaxRounds,
-              }
-            : {
-                name: BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
-              };
+      if (agent && isBuiltIn && builtInAgentName) {
+        const builtInAgentConfig = getBuiltInAgentConfigForSave({
+          builtInAgentName,
+          autoConfigureOnToolDiscovery,
+          maxRounds: parsedDualLlmMaxRounds,
+        });
 
         const updated = await updateAgent.mutateAsync({
           id: agent.id,
@@ -1093,7 +1120,7 @@ export function AgentDialog({
     dualLlmMaxRounds,
     isDualLlmMainBuiltIn,
     isInternalAgent,
-    isPolicyConfigBuiltIn,
+    builtInAgentName,
     showSecurity,
     isAdmin,
     selectedDelegationTargetIds,

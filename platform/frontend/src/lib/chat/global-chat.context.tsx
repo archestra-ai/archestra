@@ -8,6 +8,7 @@ import {
   makeSwapAgentPokeText,
   SWAP_AGENT_FAILED_POKE_TEXT,
   SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
+  stripDanglingToolCalls,
   TOOL_ARTIFACT_WRITE_SHORT_NAME,
   TOOL_CREATE_AGENT_SHORT_NAME,
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME,
@@ -35,7 +36,10 @@ import {
   useConversation,
   useGenerateConversationTitle,
 } from "@/lib/chat/chat.query";
-import { restoreRenderableAssistantParts } from "@/lib/chat/chat-session-utils";
+import {
+  pruneEmptyTrailingAssistantMessage,
+  restoreRenderableAssistantParts,
+} from "@/lib/chat/chat-session-utils";
 import { getChatExternalAgentId } from "@/lib/chat/chat-utils";
 import {
   extractSwapTargetAgentName,
@@ -56,6 +60,23 @@ const RETRYABLE_CLIENT_ERRORS = [
   "No output generated",
   "network",
 ];
+
+export type ContextCompactionState = {
+  isCompacting: boolean;
+  trigger: "auto" | "manual" | null;
+  lastCompaction: {
+    trigger?: "auto" | "manual";
+    compactionId?: string;
+    originalTokenEstimate?: number;
+    compactedTokenEstimate?: number;
+  } | null;
+};
+
+type ContextCompactionRecord = NonNullable<
+  ContextCompactionState["lastCompaction"]
+> & {
+  updateContextTokens?: boolean;
+};
 
 function isRetryableError(error: Error): boolean {
   const msg = error.message;
@@ -99,6 +120,9 @@ interface ChatSession {
   ) => void;
   /** Token usage for the current/last response */
   tokenUsage: TokenUsage | null;
+  contextTokensUsed: number | null;
+  contextCompaction: ContextCompactionState;
+  recordContextCompaction: (compaction: ContextCompactionRecord) => void;
   /** Early UI data from data-tool-ui-start events (toolCallId → resource data incl. pre-fetched HTML) */
   earlyToolUiStarts: Record<
     string,
@@ -325,6 +349,15 @@ function ChatSessionHook({
     }>
   >([]);
   const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null);
+  const [contextTokensUsed, setContextTokensUsed] = useState<number | null>(
+    null,
+  );
+  const [contextCompaction, setContextCompaction] =
+    useState<ContextCompactionState>({
+      isCompacting: false,
+      trigger: null,
+      lastCompaction: null,
+    });
   const generateTitleMutation = useGenerateConversationTitle();
   // Read from the shared TanStack cache so we only auto-title untitled chats
   const { data: conversation } = useConversation(conversationId);
@@ -345,6 +378,25 @@ function ChatSessionHook({
   const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastUserMessageIdRef = useRef<string | null>(null);
   const previousMessagesRef = useRef<UIMessage[]>([]);
+
+  const recordContextCompaction = useCallback(
+    (compaction: ContextCompactionRecord) => {
+      const { updateContextTokens = true, ...lastCompaction } = compaction;
+      setContextCompaction({
+        isCompacting: false,
+        trigger: null,
+        lastCompaction,
+      });
+
+      if (
+        updateContextTokens &&
+        typeof lastCompaction.compactedTokenEstimate === "number"
+      ) {
+        setContextTokensUsed(lastCompaction.compactedTokenEstimate);
+      }
+    },
+    [],
+  );
 
   // Track early UI data from data-tool-ui-start events (toolCallId → resource data)
   const [earlyToolUiStarts, setEarlyToolUiStarts] = useState<
@@ -373,8 +425,29 @@ function ChatSessionHook({
 
     experimental_throttle: 100,
     id: conversationId,
-    onFinish: ({ message }) => {
+    onFinish: ({ message, isAbort }) => {
       setOptimisticToolCalls([]);
+
+      // When the user stops mid-tool-call, the assistant message is left with a
+      // tool part that never produced output, which the UI renders as a
+      // perpetually "running" tool. Drop those dangling parts so the live view
+      // matches what the backend persists (and a reload would show).
+      if (isAbort) {
+        // The updater form runs against the SDK's live messages, not this
+        // callback's (throttled, possibly stale) closure, so the most recently
+        // streamed text is never rolled back.
+        setMessages((current) => {
+          const stripped = pruneEmptyTrailingAssistantMessage(
+            stripDanglingToolCalls(current),
+          );
+          // restoreRenderableAssistantParts treats the shrink as a streaming
+          // regression and would resurrect the stripped parts on the next
+          // render; sync the ref so that comparison sees no regression.
+          previousMessagesRef.current = stripped;
+          return stripped;
+        });
+      }
+
       queryClient.invalidateQueries({
         queryKey: ["conversation", conversationId],
       });
@@ -510,6 +583,34 @@ function ChatSessionHook({
       if (dataPart.type === "data-token-usage") {
         const usage = dataPart.data as TokenUsage;
         setTokenUsage(usage);
+        if (typeof usage.totalTokens === "number") {
+          setContextTokensUsed(usage.totalTokens);
+        }
+      }
+
+      if (dataPart.type === "data-context-compaction-start") {
+        const data = dataPart.data as { trigger?: "auto" | "manual" };
+        setContextCompaction((current) => ({
+          ...current,
+          isCompacting: true,
+          trigger: data.trigger ?? "auto",
+        }));
+      }
+
+      if (dataPart.type === "data-context-compaction-finish") {
+        const data = dataPart.data as {
+          trigger?: "auto" | "manual";
+          compactionId?: string;
+          originalTokenEstimate?: number;
+          compactedTokenEstimate?: number;
+        };
+        recordContextCompaction({
+          ...data,
+          updateContextTokens: data.trigger !== "auto",
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["conversation", conversationId],
+        });
       }
 
       // Handle data-tool-ui-start: backend emits this when a tool call starts streaming,
@@ -633,6 +734,9 @@ function ChatSessionHook({
     optimisticToolCalls,
     setPendingCustomServerToolCall,
     tokenUsage,
+    contextTokensUsed,
+    contextCompaction,
+    recordContextCompaction,
     earlyToolUiStarts,
   };
 
@@ -656,6 +760,9 @@ function ChatSessionHook({
     pendingCustomServerToolCall,
     optimisticToolCalls,
     tokenUsage,
+    contextTokensUsed,
+    contextCompaction,
+    recordContextCompaction,
     earlyToolUiStarts,
     sessionsRef,
     notifySessionUpdate,

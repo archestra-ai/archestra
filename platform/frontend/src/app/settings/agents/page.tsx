@@ -161,7 +161,11 @@ export default function AgentSettingsPage() {
     return allModels.map((model) => ({
       value: model.dbId,
       model: model.displayName ?? model.id,
+      modelId: model.id,
       provider: model.provider,
+      isFree: model.isFree,
+      isFastest: model.isFastest,
+      isBest: model.isBest,
     }));
   }, [allModels]);
 
@@ -169,6 +173,7 @@ export default function AgentSettingsPage() {
     () => availableKeys.find((key) => key.id === selectedApiKeyId) ?? null,
     [availableKeys, selectedApiKeyId],
   );
+  const canFilterFreeModels = selectedApiKey?.provider === "openrouter";
 
   const agentItems = useMemo(() => {
     const items: AgentSelectItem[] = [
@@ -266,6 +271,7 @@ export default function AgentSettingsPage() {
                   value={defaultModel}
                   onValueChange={setDefaultModel}
                   options={modelItems}
+                  freeFilterable={canFilterFreeModels}
                   placeholder={
                     !selectedApiKeyId
                       ? "Select API key first..."

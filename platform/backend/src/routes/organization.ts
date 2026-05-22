@@ -181,7 +181,8 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.UpdateAgentSettings,
-        description: "Update agent settings (default model, default agent)",
+        description:
+          "Update agent settings (default model, default agent, skill slash commands)",
         tags: ["Organization"],
         body: UpdateAgentSettingsSchema,
         response: constructResponseSchema(SelectOrganizationSchema),
@@ -229,6 +230,18 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const agent = await AgentModel.findById(body.defaultAgentId);
         if (!agent || agent.organizationId !== organizationId) {
           throw new ApiError(404, "Agent not found");
+        }
+      }
+
+      // Skill slash commands inject skill content that points at read_skill_file,
+      // so they require the skill tools to be enabled for the organization.
+      if (body.skillSlashCommandsEnabled === true) {
+        const currentOrg = await OrganizationModel.getById(organizationId);
+        if (!currentOrg?.skillToolsEnabled) {
+          throw new ApiError(
+            400,
+            "Enable skills for this organization before exposing them as slash commands",
+          );
         }
       }
 

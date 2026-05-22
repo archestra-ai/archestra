@@ -108,6 +108,9 @@ export const TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME = "swap_to_default_agent";
 export const TOOL_ARTIFACT_WRITE_SHORT_NAME = "artifact_write";
 export const TOOL_SEARCH_TOOLS_SHORT_NAME = "search_tools";
 export const TOOL_RUN_TOOL_SHORT_NAME = "run_tool";
+export const TOOL_LIST_SKILLS_SHORT_NAME = "list_skills";
+export const TOOL_ACTIVATE_SKILL_SHORT_NAME = "activate_skill";
+export const TOOL_READ_SKILL_FILE_SHORT_NAME = "read_skill_file";
 
 export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_WHOAMI_SHORT_NAME,
@@ -173,6 +176,9 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_ARTIFACT_WRITE_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_LIST_SKILLS_SHORT_NAME,
+  TOOL_ACTIVATE_SKILL_SHORT_NAME,
+  TOOL_READ_SKILL_FILE_SHORT_NAME,
 ] as const;
 
 export type ArchestraToolShortName =
@@ -312,6 +318,12 @@ export const TOOL_SEARCH_TOOLS_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_SEARCH_TOOLS_SHORT_NAME}` as const;
 export const TOOL_RUN_TOOL_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_RUN_TOOL_SHORT_NAME}` as const;
+export const TOOL_LIST_SKILLS_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_LIST_SKILLS_SHORT_NAME}` as const;
+export const TOOL_ACTIVATE_SKILL_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_ACTIVATE_SKILL_SHORT_NAME}` as const;
+export const TOOL_READ_SKILL_FILE_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_READ_SKILL_FILE_SHORT_NAME}` as const;
 
 export const DEFAULT_ARCHESTRA_TOOL_NAMES: readonly string[] = [
   TOOL_ARTIFACT_WRITE_FULL_NAME,
@@ -323,6 +335,17 @@ export const DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_ARTIFACT_WRITE_SHORT_NAME,
   TOOL_TODO_WRITE_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+] as const satisfies readonly ArchestraToolShortName[];
+
+/**
+ * Agent Skill tools — only assigned to agents once an org admin opts in via
+ * the "Enable and create a new skill" empty-state action on /agents/skills
+ * (sets `organization.skillToolsEnabled`).
+ */
+export const SKILL_ARCHESTRA_TOOL_SHORT_NAMES = [
+  TOOL_LIST_SKILLS_SHORT_NAME,
+  TOOL_ACTIVATE_SKILL_SHORT_NAME,
+  TOOL_READ_SKILL_FILE_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];
 
 export function isArchestraMcpServerTool(

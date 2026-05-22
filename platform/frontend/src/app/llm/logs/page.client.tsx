@@ -382,12 +382,7 @@ function SessionsTable({
       {
         id: "source",
         header: "Source",
-        cell: ({ row }) => (
-          <SourceBadge
-            source={row.original.source}
-            className="max-w-[12.5rem]"
-          />
-        ),
+        cell: ({ row }) => <SessionSourceBadge session={row.original} />,
       },
       {
         id: "time",
@@ -559,5 +554,33 @@ function SessionsTable({
         }}
       />
     </div>
+  );
+}
+
+function SessionSourceBadge({ session }: { session: SessionData }) {
+  const sources = Array.from(
+    new Set(
+      session.sources?.filter((source): source is InteractionSource =>
+        Boolean(source),
+      ) ?? [],
+    ),
+  );
+
+  if (sources.length <= 1) {
+    return (
+      <SourceBadge
+        source={session.source ?? sources[0]}
+        className="max-w-[12.5rem]"
+      />
+    );
+  }
+
+  return (
+    <Badge variant="outline" className="max-w-[12.5rem] text-xs">
+      <span className="flex min-w-0 items-center gap-1.5">
+        <Layers className="h-3 w-3 shrink-0" />
+        <span className="truncate">Mixed Sources</span>
+      </span>
+    </Badge>
   );
 }

@@ -142,5 +142,6 @@ function makeConversation(): archestraApiTypes.GetChatConversationResponses["200
     share: null,
     messages: [],
     chatErrors: [],
+    compactions: [],
   };
 }

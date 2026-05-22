@@ -11,7 +11,9 @@ type AuditLogsQuery = NonNullable<archestraApiTypes.GetAuditLogsData["query"]>;
 type AuditLogsResponse = archestraApiTypes.GetAuditLogsResponses["200"];
 
 export type AuditLog = AuditLogsResponse["data"][number];
-export type AuditAction = AuditLog["action"];
+export type AuditEventName = AuditLog["action"];
+export type AuditActorType = AuditLog["actorType"];
+export type AuditOutcome = AuditLog["outcome"];
 
 export const AUDIT_LOG_QUERY_KEY = ["audit-logs"] as const;
 
@@ -33,8 +35,10 @@ export function useAuditLogs({
   sortDirection = "desc",
   startDate,
   endDate,
-  actorUserId,
+  actorId,
   action,
+  outcome,
+  actorType,
   resourceType,
   search,
 }: {
@@ -43,8 +47,10 @@ export function useAuditLogs({
   sortDirection?: AuditLogsQuery["sortDirection"];
   startDate?: string;
   endDate?: string;
-  actorUserId?: string;
-  action?: AuditAction;
+  actorId?: string;
+  action?: AuditEventName;
+  outcome?: AuditOutcome;
+  actorType?: AuditActorType;
   resourceType?: string;
   search?: string;
 } = {}) {
@@ -57,8 +63,10 @@ export function useAuditLogs({
         sortDirection,
         startDate,
         endDate,
-        actorUserId,
+        actorId,
         action,
+        outcome,
+        actorType,
         resourceType,
         search,
       },
@@ -71,8 +79,10 @@ export function useAuditLogs({
           ...(sortDirection ? { sortDirection } : {}),
           ...(startDate ? { startDate } : {}),
           ...(endDate ? { endDate } : {}),
-          ...(actorUserId ? { actorUserId } : {}),
+          ...(actorId ? { actorId } : {}),
           ...(action ? { action } : {}),
+          ...(outcome ? { outcome } : {}),
+          ...(actorType ? { actorType } : {}),
           ...(resourceType ? { resourceType } : {}),
           ...(search ? { search } : {}),
         },

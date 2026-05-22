@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useMemo } from "react";
+import { CopyButton } from "@/components/copy-button";
 import { FormDialog } from "@/components/form-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,8 +11,11 @@ import type { AuditLog } from "@/lib/audit-log/audit-log.query";
 import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils";
 import {
   ACTION_BADGE_VARIANT,
+  ACTOR_TYPE_LABEL,
   formatAction,
   formatResourceType,
+  OUTCOME_BADGE_VARIANT,
+  OUTCOME_LABEL,
 } from "./audit-log-action-labels";
 import {
   AuditLogDiffView,
@@ -53,11 +57,7 @@ export function AuditLogDetailDialog({
 function AuditLogDetailBody({ event }: { event: AuditLog }) {
   const isAuthEvent = event.resourceType === "auth";
   const diffSummary = useMemo(
-    () =>
-      summarizeAuditDiffHints(
-        event.priorState ?? null,
-        event.postState ?? null,
-      ),
+    () => summarizeAuditDiffHints(event.before ?? null, event.after ?? null),
     [event],
   );
 
@@ -65,14 +65,7 @@ function AuditLogDetailBody({ event }: { event: AuditLog }) {
     <div className="space-y-6">
       <DetailGrid>
         <DetailRow label="When">
-          <div className="space-y-1">
-            <div className="font-mono text-xs">
-              {formatDate({ date: event.createdAt })}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              {formatRelativeTimeFromNow(event.createdAt)}
-            </div>
-          </div>
+          <WhenBlock event={event} />
         </DetailRow>
 
         <DetailRow label="Actor">
@@ -80,9 +73,14 @@ function AuditLogDetailBody({ event }: { event: AuditLog }) {
         </DetailRow>
 
         <DetailRow label="Action">
-          <Badge variant={ACTION_BADGE_VARIANT[event.action]}>
-            {formatAction(event.action)}
-          </Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={ACTION_BADGE_VARIANT[event.action]}>
+              {formatAction(event.action)}
+            </Badge>
+            <Badge variant={OUTCOME_BADGE_VARIANT[event.outcome]}>
+              {OUTCOME_LABEL[event.outcome]}
+            </Badge>
+          </div>
         </DetailRow>
 
         <DetailRow label="Resource">
@@ -106,8 +104,8 @@ function AuditLogDetailBody({ event }: { event: AuditLog }) {
           <p className="text-xs text-muted-foreground">{diffSummary}</p>
         )}
         <AuditLogDiffView
-          prior={event.priorState ?? null}
-          post={event.postState ?? null}
+          before={event.before ?? null}
+          after={event.after ?? null}
         />
       </section>
     </div>
@@ -141,8 +139,44 @@ function DetailRow({
   );
 }
 
+function WhenBlock({ event }: { event: AuditLog }) {
+  const occurredTs = new Date(event.occurredAt).getTime();
+  const createdTs = new Date(event.createdAt).getTime();
+  const isSame = occurredTs === createdTs;
+
+  return (
+    <div className="space-y-2">
+      <div>
+        <div className="text-xs text-muted-foreground uppercase tracking-wide mb-0.5">
+          Occurred
+        </div>
+        <div className="font-mono text-xs">
+          {formatDate({ date: event.occurredAt })}
+        </div>
+        <div className="text-xs text-muted-foreground">
+          {formatRelativeTimeFromNow(event.occurredAt)}
+        </div>
+      </div>
+      <div>
+        <div className="text-xs text-muted-foreground uppercase tracking-wide mb-0.5">
+          Recorded
+        </div>
+        {isSame ? (
+          <div className="text-xs text-muted-foreground italic">
+            same as occurred
+          </div>
+        ) : (
+          <div className="font-mono text-xs">
+            {formatDate({ date: event.createdAt })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ActorBlock({ event }: { event: AuditLog }) {
-  const { actorName, actorEmail } = event;
+  const { actorName, actorEmail, actorType } = event;
   if (!actorName && !actorEmail) {
     return <span className="text-muted-foreground">Deleted user</span>;
   }
@@ -152,6 +186,9 @@ function ActorBlock({ event }: { event: AuditLog }) {
       {actorEmail && (
         <div className="text-xs text-muted-foreground">{actorEmail}</div>
       )}
+      <div className="text-xs text-muted-foreground">
+        {ACTOR_TYPE_LABEL[actorType]}
+      </div>
     </div>
   );
 }
@@ -195,19 +232,26 @@ function WhereBlock({ event }: { event: AuditLog }) {
           Status: <code className="font-mono">{event.httpStatus}</code>
         </div>
       )}
+      {event.requestId && (
+        <div className="flex items-center gap-1 text-muted-foreground">
+          <span>Request ID:</span>
+          <code className="font-mono">{event.requestId}</code>
+          <CopyButton text={event.requestId} size={12} />
+        </div>
+      )}
     </div>
   );
 }
 
 function SourceBlock({ event }: { event: AuditLog }) {
-  if (!event.ipAddress && !event.userAgent) {
+  if (!event.sourceIp && !event.userAgent) {
     return <span className="text-muted-foreground">—</span>;
   }
   return (
     <div className="space-y-1 text-xs">
-      {event.ipAddress && (
+      {event.sourceIp && (
         <div>
-          IP: <code className="font-mono">{event.ipAddress}</code>
+          IP: <code className="font-mono">{event.sourceIp}</code>
         </div>
       )}
       {event.userAgent && (

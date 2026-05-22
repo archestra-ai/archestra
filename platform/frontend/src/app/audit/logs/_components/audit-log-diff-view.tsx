@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 
-/** Top-level audit `prior_state` / `post_state` payloads from the API. */
+/** Top-level audit `before` / `after` payloads from the API. */
 export type AuditSnapshot = Record<string, unknown>;
 
 type DiffKind = "context" | "added" | "removed";
@@ -29,32 +29,32 @@ function assignStableRowKeys(lines: DiffLine[]): DiffLineWithKey[] {
 }
 
 interface AuditLogDiffViewProps {
-  prior: AuditSnapshot | null;
-  post: AuditSnapshot | null;
+  before: AuditSnapshot | null;
+  after: AuditSnapshot | null;
   /** Optional label shown in the empty state. */
   emptyMessage?: string;
 }
 
 /**
  * Renders a git-diff-style view of two JSON snapshots produced by the audit
- * log's `prior_state` / `post_state` columns.
+ * log's `before` / `after` columns.
  *
  * The output is **valid-looking JSON** wrapped in `{ … }` with quoted keys,
  * full context lines, and `+` / `-` glyphs only on changed lines — mirroring
  * the diff-tool aesthetic the issue maintainer asked for.
  *
  * - Both null → "no tracked changes" empty state (typical of auth events).
- * - Prior null → every line tagged `added` (create).
- * - Post null → every line tagged `removed` (delete).
+ * - Before null → every line tagged `added` (create).
+ * - After null → every line tagged `removed` (delete).
  * - Both populated → unified diff with full context.
  */
 export function AuditLogDiffView({
-  prior,
-  post,
+  before,
+  after,
   emptyMessage = "No tracked changes for this event.",
 }: AuditLogDiffViewProps) {
-  const bothNull = prior === null && post === null;
-  const lines = bothNull ? [] : computeDiffLines(prior, post);
+  const bothNull = before === null && after === null;
+  const lines = bothNull ? [] : computeDiffLines(before, after);
   const keyedLines = assignStableRowKeys(lines);
 
   if (bothNull) {
@@ -117,19 +117,19 @@ function indentSpaces(level: number): string {
 }
 
 function computeDiffLines(
-  prior: AuditSnapshot | null,
-  post: AuditSnapshot | null,
+  before: AuditSnapshot | null,
+  after: AuditSnapshot | null,
 ): DiffLine[] {
-  if (prior === null && post !== null) {
-    return renderFullBlock(post, "added");
+  if (before === null && after !== null) {
+    return renderFullBlock(after, "added");
   }
-  if (post === null && prior !== null) {
-    return renderFullBlock(prior, "removed");
+  if (after === null && before !== null) {
+    return renderFullBlock(before, "removed");
   }
-  if (prior === null || post === null) {
+  if (before === null || after === null) {
     return [];
   }
-  return diffObjectAsBlock(prior, post, 0, false);
+  return diffObjectAsBlock(before, after, 0, false);
 }
 
 /**
@@ -138,41 +138,45 @@ function computeDiffLines(
  * parent object/array).
  */
 function diffObjectAsBlock(
-  prior: AuditSnapshot,
-  post: AuditSnapshot,
+  before: AuditSnapshot,
+  after: AuditSnapshot,
   indent: number,
   terminated: boolean,
 ): DiffLine[] {
   const out: DiffLine[] = [{ kind: "context", indent, text: "{" }];
-  const keys = orderedUnionKeys(prior, post);
+  const keys = orderedUnionKeys(before, after);
 
   keys.forEach((key, i) => {
     const isLast = i === keys.length - 1;
-    const hasPrior = Object.hasOwn(prior, key);
-    const hasPost = Object.hasOwn(post, key);
+    const hasBefore = Object.hasOwn(before, key);
+    const hasAfter = Object.hasOwn(after, key);
 
-    if (hasPrior && !hasPost) {
-      out.push(...renderField(key, prior[key], "removed", indent + 1, !isLast));
+    if (hasBefore && !hasAfter) {
+      out.push(
+        ...renderField(key, before[key], "removed", indent + 1, !isLast),
+      );
       return;
     }
-    if (!hasPrior && hasPost) {
-      out.push(...renderField(key, post[key], "added", indent + 1, !isLast));
+    if (!hasBefore && hasAfter) {
+      out.push(...renderField(key, after[key], "added", indent + 1, !isLast));
       return;
     }
 
-    const priorValue = prior[key];
-    const postValue = post[key];
+    const beforeValue = before[key];
+    const afterValue = after[key];
 
-    if (deepEqual(priorValue, postValue)) {
-      out.push(...renderField(key, priorValue, "context", indent + 1, !isLast));
+    if (deepEqual(beforeValue, afterValue)) {
+      out.push(
+        ...renderField(key, beforeValue, "context", indent + 1, !isLast),
+      );
       return;
     }
 
     // Both sides have the key with different values.
-    if (isPlainObject(priorValue) && isPlainObject(postValue)) {
+    if (isPlainObject(beforeValue) && isPlainObject(afterValue)) {
       const nested = diffObjectAsBlock(
-        priorValue,
-        postValue,
+        beforeValue,
+        afterValue,
         indent + 1,
         !isLast,
       );
@@ -187,16 +191,16 @@ function diffObjectAsBlock(
       return;
     }
 
-    if (Array.isArray(priorValue) && Array.isArray(postValue)) {
+    if (Array.isArray(beforeValue) && Array.isArray(afterValue)) {
       out.push(
-        ...diffArrayAsBlock(key, priorValue, postValue, indent + 1, !isLast),
+        ...diffArrayAsBlock(key, beforeValue, afterValue, indent + 1, !isLast),
       );
       return;
     }
 
     // Mixed types or primitive vs primitive → emit removed then added.
-    out.push(...renderField(key, priorValue, "removed", indent + 1, !isLast));
-    out.push(...renderField(key, postValue, "added", indent + 1, !isLast));
+    out.push(...renderField(key, beforeValue, "removed", indent + 1, !isLast));
+    out.push(...renderField(key, afterValue, "added", indent + 1, !isLast));
   });
 
   out.push({ kind: "context", indent, text: terminated ? "}," : "}" });
@@ -205,13 +209,13 @@ function diffObjectAsBlock(
 
 /**
  * Position-by-position array diff. Equal elements stay as context; mismatches
- * render the prior element as removed immediately followed by the post
+ * render the before element as removed immediately followed by the after
  * element as added — like `git diff` on a sorted list.
  */
 function diffArrayAsBlock(
   key: string,
-  prior: unknown[],
-  post: unknown[],
+  before: unknown[],
+  after: unknown[],
   indent: number,
   terminated: boolean,
 ): DiffLine[] {
@@ -219,14 +223,14 @@ function diffArrayAsBlock(
     { kind: "context", indent, text: `${quoteKey(key)}: [` },
   ];
 
-  const max = Math.max(prior.length, post.length);
+  const max = Math.max(before.length, after.length);
   for (let i = 0; i < max; i++) {
     const isLast = i === max - 1;
-    const inPrior = i < prior.length;
-    const inPost = i < post.length;
-    if (inPrior && inPost) {
-      const a = prior[i];
-      const b = post[i];
+    const inBefore = i < before.length;
+    const inAfter = i < after.length;
+    if (inBefore && inAfter) {
+      const a = before[i];
+      const b = after[i];
       if (deepEqual(a, b)) {
         out.push(...renderValueAsItem(a, "context", indent + 1, !isLast));
       } else {
@@ -235,10 +239,10 @@ function diffArrayAsBlock(
           ...renderValueAsItem(b, "added", indent + 1, !isLast),
         );
       }
-    } else if (inPrior) {
-      out.push(...renderValueAsItem(prior[i], "removed", indent + 1, !isLast));
-    } else if (inPost) {
-      out.push(...renderValueAsItem(post[i], "added", indent + 1, !isLast));
+    } else if (inBefore) {
+      out.push(...renderValueAsItem(before[i], "removed", indent + 1, !isLast));
+    } else if (inAfter) {
+      out.push(...renderValueAsItem(after[i], "added", indent + 1, !isLast));
     }
   }
 
@@ -247,7 +251,7 @@ function diffArrayAsBlock(
 }
 
 /**
- * Renders a `prior` (or `post`) snapshot as a single-kind block — used for
+ * Renders a `before` (or `after`) snapshot as a single-kind block — used for
  * create / delete events where the other side is null.
  */
 function renderFullBlock(value: AuditSnapshot, kind: DiffKind): DiffLine[] {
@@ -433,13 +437,13 @@ const AUDIT_DIFF_METADATA_KEYS = new Set(["updatedAt", "createdAt"]);
  * snapshots (shown above the diff for update events).
  */
 export function summarizeAuditDiffHints(
-  prior: AuditSnapshot | null,
-  post: AuditSnapshot | null,
+  before: AuditSnapshot | null,
+  after: AuditSnapshot | null,
 ): string | null {
-  if (prior === null && post === null) return null;
+  if (before === null && after === null) return null;
 
-  if (prior === null && post !== null) {
-    const keys = Object.keys(post).filter(
+  if (before === null && after !== null) {
+    const keys = Object.keys(after).filter(
       (k) => !AUDIT_DIFF_METADATA_KEYS.has(k),
     );
     if (keys.length === 0) {
@@ -448,8 +452,8 @@ export function summarizeAuditDiffHints(
     return `Created — captured fields: ${keys.sort().join(", ")}.`;
   }
 
-  if (post === null && prior !== null) {
-    const keys = Object.keys(prior).filter(
+  if (after === null && before !== null) {
+    const keys = Object.keys(before).filter(
       (k) => !AUDIT_DIFF_METADATA_KEYS.has(k),
     );
     if (keys.length === 0) {
@@ -458,18 +462,18 @@ export function summarizeAuditDiffHints(
     return `Deleted — had fields: ${keys.sort().join(", ")}.`;
   }
 
-  if (prior !== null && post !== null) {
-    const keys = new Set([...Object.keys(prior), ...Object.keys(post)]);
+  if (before !== null && after !== null) {
+    const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
     const substantive: string[] = [];
     for (const key of keys) {
       if (AUDIT_DIFF_METADATA_KEYS.has(key)) continue;
-      if (!deepEqual(prior[key], post[key])) substantive.push(key);
+      if (!deepEqual(before[key], after[key])) substantive.push(key);
     }
     if (substantive.length > 0) {
       return `Changed: ${substantive.sort().join(", ")}.`;
     }
     for (const key of AUDIT_DIFF_METADATA_KEYS) {
-      if (keys.has(key) && !deepEqual(prior[key], post[key])) {
+      if (keys.has(key) && !deepEqual(before[key], after[key])) {
         return "Only timestamp fields changed; all other captured fields match.";
       }
     }

@@ -19,8 +19,10 @@ import {
 } from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import {
-  type AuditAction,
+  type AuditActorType,
+  type AuditEventName,
   type AuditLog,
+  type AuditOutcome,
   useAuditLogs,
 } from "@/lib/audit-log/audit-log.query";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
@@ -28,10 +30,15 @@ import { useMembersPaginated } from "@/lib/member.query";
 import { formatDate } from "@/lib/utils";
 import {
   ACTION_BADGE_VARIANT,
+  ACTOR_TYPE_LABEL,
   ALL_ACTIONS,
+  ALL_ACTOR_TYPES,
+  ALL_OUTCOMES,
   formatAction,
   formatResourceType,
   KNOWN_RESOURCE_TYPES,
+  OUTCOME_BADGE_VARIANT,
+  OUTCOME_LABEL,
 } from "./audit-log-action-labels";
 import { AuditLogDetailDialog } from "./audit-log-detail-dialog";
 
@@ -61,9 +68,15 @@ export function AuditLogTable() {
   const searchFromUrl = searchParams.get("search");
   const actionFromUrl = (searchParams.get("action") ?? ALL_VALUE) as
     | typeof ALL_VALUE
-    | AuditAction;
+    | AuditEventName;
   const resourceTypeFromUrl = searchParams.get("resourceType") ?? ALL_VALUE;
-  const actorFromUrl = searchParams.get("actorUserId") ?? ALL_VALUE;
+  const actorFromUrl = searchParams.get("actorId") ?? ALL_VALUE;
+  const outcomeFromUrl = (searchParams.get("outcome") ?? ALL_VALUE) as
+    | typeof ALL_VALUE
+    | AuditOutcome;
+  const actorTypeFromUrl = (searchParams.get("actorType") ?? ALL_VALUE) as
+    | typeof ALL_VALUE
+    | AuditActorType;
 
   const [pagination, setPagination] = useState({
     pageIndex: 0,
@@ -120,7 +133,23 @@ export function AuditLogTable() {
   const handleActorChange = useCallback(
     (value: string) => {
       setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-      updateUrlParams({ actorUserId: value === ALL_VALUE ? null : value });
+      updateUrlParams({ actorId: value === ALL_VALUE ? null : value });
+    },
+    [updateUrlParams],
+  );
+
+  const handleOutcomeChange = useCallback(
+    (value: string) => {
+      setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+      updateUrlParams({ outcome: value === ALL_VALUE ? null : value });
+    },
+    [updateUrlParams],
+  );
+
+  const handleActorTypeChange = useCallback(
+    (value: string) => {
+      setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+      updateUrlParams({ actorType: value === ALL_VALUE ? null : value });
     },
     [updateUrlParams],
   );
@@ -128,11 +157,19 @@ export function AuditLogTable() {
   const sortDirection = sorting[0]?.desc === false ? "asc" : "desc";
 
   const action = (ALL_ACTIONS as readonly string[]).includes(actionFromUrl)
-    ? (actionFromUrl as AuditAction)
+    ? (actionFromUrl as AuditEventName)
     : undefined;
   const resourceType =
     resourceTypeFromUrl === ALL_VALUE ? undefined : resourceTypeFromUrl;
-  const actorUserId = actorFromUrl === ALL_VALUE ? undefined : actorFromUrl;
+  const actorId = actorFromUrl === ALL_VALUE ? undefined : actorFromUrl;
+  const outcome = (ALL_OUTCOMES as readonly string[]).includes(outcomeFromUrl)
+    ? (outcomeFromUrl as AuditOutcome)
+    : undefined;
+  const actorType = (ALL_ACTOR_TYPES as readonly string[]).includes(
+    actorTypeFromUrl,
+  )
+    ? (actorTypeFromUrl as AuditActorType)
+    : undefined;
 
   const { data: response, isFetching } = useAuditLogs({
     limit: pagination.pageSize,
@@ -140,8 +177,10 @@ export function AuditLogTable() {
     sortDirection,
     startDate: dateTimePicker.startDateParam,
     endDate: dateTimePicker.endDateParam,
-    actorUserId,
+    actorId,
     action,
+    outcome,
+    actorType,
     resourceType,
     search: searchFromUrl ?? undefined,
   });
@@ -178,6 +217,25 @@ export function AuditLogTable() {
       ...KNOWN_RESOURCE_TYPES.map((r) => ({
         value: r,
         label: formatResourceType(r),
+      })),
+    ],
+    [],
+  );
+
+  const outcomeOptions = useMemo(
+    () => [
+      { value: ALL_VALUE, label: "All outcomes" },
+      ...ALL_OUTCOMES.map((o) => ({ value: o, label: OUTCOME_LABEL[o] })),
+    ],
+    [],
+  );
+
+  const actorTypeOptions = useMemo(
+    () => [
+      { value: ALL_VALUE, label: "All actor types" },
+      ...ALL_ACTOR_TYPES.map((t) => ({
+        value: t,
+        label: ACTOR_TYPE_LABEL[t],
       })),
     ],
     [],
@@ -230,6 +288,18 @@ export function AuditLogTable() {
         ),
       },
       {
+        id: "outcome",
+        header: "Outcome",
+        cell: ({ row }) => (
+          <Badge
+            variant={OUTCOME_BADGE_VARIANT[row.original.outcome]}
+            className="text-xs"
+          >
+            {OUTCOME_LABEL[row.original.outcome]}
+          </Badge>
+        ),
+      },
+      {
         id: "resource",
         header: "Resource",
         cell: ({ row }) => {
@@ -248,11 +318,11 @@ export function AuditLogTable() {
         id: "where",
         header: "Where",
         cell: ({ row }) => {
-          const { ipAddress, userAgent } = row.original;
-          if (!ipAddress && !userAgent) {
+          const { sourceIp, userAgent } = row.original;
+          if (!sourceIp && !userAgent) {
             return <span className="text-xs text-muted-foreground">—</span>;
           }
-          const ipDisplay = ipAddress ?? "—";
+          const ipDisplay = sourceIp ?? "—";
           if (!userAgent) {
             return (
               <code className="text-xs text-muted-foreground">{ipDisplay}</code>
@@ -279,8 +349,10 @@ export function AuditLogTable() {
   const hasFilters =
     !!searchFromUrl ||
     action !== undefined ||
+    outcome !== undefined ||
+    actorType !== undefined ||
     resourceType !== undefined ||
-    actorUserId !== undefined ||
+    actorId !== undefined ||
     dateTimePicker.startDate !== undefined;
 
   const clearFilters = useCallback(() => {
@@ -289,8 +361,10 @@ export function AuditLogTable() {
     updateUrlParams({
       search: null,
       action: null,
+      outcome: null,
+      actorType: null,
       resourceType: null,
-      actorUserId: null,
+      actorId: null,
       startDate: null,
       endDate: null,
       page: "1",
@@ -313,6 +387,20 @@ export function AuditLogTable() {
           className="w-[180px]"
         />
         <SearchableSelect
+          value={outcome ?? ALL_VALUE}
+          onValueChange={handleOutcomeChange}
+          placeholder="Filter by outcome"
+          items={outcomeOptions}
+          className="w-[160px]"
+        />
+        <SearchableSelect
+          value={actorType ?? ALL_VALUE}
+          onValueChange={handleActorTypeChange}
+          placeholder="Filter by actor type"
+          items={actorTypeOptions}
+          className="w-[170px]"
+        />
+        <SearchableSelect
           value={resourceType ?? ALL_VALUE}
           onValueChange={handleResourceChange}
           placeholder="Filter by resource"
@@ -320,7 +408,7 @@ export function AuditLogTable() {
           className="w-[200px]"
         />
         <SearchableSelect
-          value={actorUserId ?? ALL_VALUE}
+          value={actorId ?? ALL_VALUE}
           onValueChange={handleActorChange}
           placeholder="Filter by actor"
           items={memberOptions}

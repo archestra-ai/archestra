@@ -12,7 +12,7 @@ import {
 
 describe("AuditLogDiffView", () => {
   it("renders the empty state when both snapshots are null", () => {
-    render(<AuditLogDiffView prior={null} post={null} />);
+    render(<AuditLogDiffView before={null} after={null} />);
     expect(
       screen.getByText("No tracked changes for this event."),
     ).toBeInTheDocument();
@@ -20,14 +20,18 @@ describe("AuditLogDiffView", () => {
 
   it("uses a custom empty message when provided", () => {
     render(
-      <AuditLogDiffView prior={null} post={null} emptyMessage="Custom empty" />,
+      <AuditLogDiffView
+        before={null}
+        after={null}
+        emptyMessage="Custom empty"
+      />,
     );
     expect(screen.getByText("Custom empty")).toBeInTheDocument();
   });
 
-  it("renders a full + block when prior is null (create event)", () => {
+  it("renders a full + block when before is null (create event)", () => {
     render(
-      <AuditLogDiffView prior={null} post={{ name: "Agent A", id: "abc" }} />,
+      <AuditLogDiffView before={null} after={{ name: "Agent A", id: "abc" }} />,
     );
 
     const added = screen.getAllByRole("listitem");
@@ -41,9 +45,12 @@ describe("AuditLogDiffView", () => {
     expect(added[1]).toHaveTextContent(`"id": "abc"`);
   });
 
-  it("renders a full - block when post is null (delete event)", () => {
+  it("renders a full - block when after is null (delete event)", () => {
     render(
-      <AuditLogDiffView prior={{ name: "Old name", id: "abc" }} post={null} />,
+      <AuditLogDiffView
+        before={{ name: "Old name", id: "abc" }}
+        after={null}
+      />,
     );
 
     const removed = screen.getAllByRole("listitem");
@@ -56,12 +63,12 @@ describe("AuditLogDiffView", () => {
   it("shows unchanged fields as context and marks changed fields on update", () => {
     render(
       <AuditLogDiffView
-        prior={{
+        before={{
           id: "abc",
           name: "Engineering Team Agent",
           description: "Same",
         }}
-        post={{ id: "abc", name: "My Agent", description: "Same" }}
+        after={{ id: "abc", name: "My Agent", description: "Same" }}
       />,
     );
 
@@ -81,11 +88,11 @@ describe("AuditLogDiffView", () => {
     expect(items[3]).toHaveTextContent(`"description": "Same"`);
   });
 
-  it("renders nothing when prior and post are deeply equal", () => {
+  it("renders nothing when before and after are deeply equal", () => {
     render(
       <AuditLogDiffView
-        prior={{ id: "abc", tags: ["a", "b"] }}
-        post={{ id: "abc", tags: ["a", "b"] }}
+        before={{ id: "abc", tags: ["a", "b"] }}
+        after={{ id: "abc", tags: ["a", "b"] }}
       />,
     );
 
@@ -97,8 +104,8 @@ describe("AuditLogDiffView", () => {
   it("emits added/removed lines for keys that exist on only one side", () => {
     render(
       <AuditLogDiffView
-        prior={{ id: "abc", legacyFlag: true }}
-        post={{ id: "abc", newFlag: false }}
+        before={{ id: "abc", legacyFlag: true }}
+        after={{ id: "abc", newFlag: false }}
       />,
     );
 
@@ -116,8 +123,8 @@ describe("AuditLogDiffView", () => {
   it("emits JSON-shaped output with quoted keys and trailing commas on create", () => {
     render(
       <AuditLogDiffView
-        prior={null}
-        post={{ name: "Agent A", id: "abc", enabled: true }}
+        before={null}
+        after={{ name: "Agent A", id: "abc", enabled: true }}
       />,
     );
 
@@ -137,8 +144,8 @@ describe("AuditLogDiffView", () => {
   it("JSON-escapes keys with special characters via quoteKey", () => {
     render(
       <AuditLogDiffView
-        prior={null}
-        post={{ 'weird "key" with spaces': "value" }}
+        before={null}
+        after={{ 'weird "key" with spaces': "value" }}
       />,
     );
 
@@ -152,8 +159,8 @@ describe("AuditLogDiffView", () => {
   it("array diff: insertion at end renders only an added item at that index", () => {
     render(
       <AuditLogDiffView
-        prior={{ tags: ["a", "b"] }}
-        post={{ tags: ["a", "b", "c"] }}
+        before={{ tags: ["a", "b"] }}
+        after={{ tags: ["a", "b", "c"] }}
       />,
     );
 
@@ -171,8 +178,8 @@ describe("AuditLogDiffView", () => {
   it("array diff: deletion at end renders only a removed item at that index", () => {
     render(
       <AuditLogDiffView
-        prior={{ tags: ["a", "b", "c"] }}
-        post={{ tags: ["a", "b"] }}
+        before={{ tags: ["a", "b", "c"] }}
+        after={{ tags: ["a", "b"] }}
       />,
     );
 
@@ -185,8 +192,8 @@ describe("AuditLogDiffView", () => {
   it("array diff: replacement at a given index renders removed + added on that index only", () => {
     render(
       <AuditLogDiffView
-        prior={{ tags: ["a", "X", "c"] }}
-        post={{ tags: ["a", "Y", "c"] }}
+        before={{ tags: ["a", "X", "c"] }}
+        after={{ tags: ["a", "Y", "c"] }}
       />,
     );
 
@@ -206,11 +213,11 @@ describe("AuditLogDiffView", () => {
   it("recurses into nested objects and only emits changed leaf keys", () => {
     render(
       <AuditLogDiffView
-        prior={{
+        before={{
           id: "abc",
           config: { region: "us-east-1", retries: 3 },
         }}
-        post={{
+        after={{
           id: "abc",
           config: { region: "us-east-1", retries: 5 },
         }}

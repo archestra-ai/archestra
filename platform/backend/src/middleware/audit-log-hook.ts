@@ -199,6 +199,7 @@ const AUDIT_DENYLIST_PREFIXES = [
   "/api/chat",
   "/api/browser-stream/",
   "/api/secrets/check-connectivity",
+  "/api/members/default-model",
 ];
 
 function shouldSkip(method: string, url: string, user: unknown): boolean {

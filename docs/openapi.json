@@ -50759,27 +50759,134 @@
               "type": "string"
             },
             "in": "query",
-            "name": "actorUserId",
+            "name": "actorId",
             "required": false,
-            "description": "Filter by actor user ID"
+            "description": "Filter by actor ID"
           },
           {
             "schema": {
               "type": "string",
               "enum": [
-                "create",
-                "update",
-                "delete",
-                "sign_in",
-                "sign_out",
-                "sign_up",
-                "sso_callback"
+                "agent.created",
+                "agent.updated",
+                "agent.deleted",
+                "agentTool.created",
+                "agentTool.updated",
+                "agentTool.deleted",
+                "agentTool.bulk_assigned",
+                "apiKey.created",
+                "apiKey.deleted",
+                "chatOpsBinding.created",
+                "chatOpsBinding.updated",
+                "chatOpsBinding.deleted",
+                "chatOpsBinding.refreshed",
+                "chatOpsConfig.updated",
+                "connector.created",
+                "connector.updated",
+                "connector.deleted",
+                "identityProvider.created",
+                "identityProvider.updated",
+                "identityProvider.deleted",
+                "internalMcpCatalog.created",
+                "internalMcpCatalog.updated",
+                "internalMcpCatalog.deleted",
+                "invitation.created",
+                "invitation.deleted",
+                "knowledgeBase.created",
+                "knowledgeBase.updated",
+                "knowledgeBase.deleted",
+                "limit.created",
+                "limit.updated",
+                "limit.deleted",
+                "llmModel.updated",
+                "llmModel.synced",
+                "llmOauthClient.created",
+                "llmOauthClient.updated",
+                "llmOauthClient.deleted",
+                "llmProviderApiKey.created",
+                "llmProviderApiKey.deleted",
+                "mcpServer.created",
+                "mcpServer.updated",
+                "mcpServer.deleted",
+                "mcpServer.reinstalled",
+                "mcpServerInstallationRequest.created",
+                "mcpServerInstallationRequest.updated",
+                "member.created",
+                "member.role_updated",
+                "member.deleted",
+                "optimizationRule.created",
+                "optimizationRule.updated",
+                "optimizationRule.deleted",
+                "organization.updated",
+                "role.created",
+                "role.updated",
+                "role.deleted",
+                "scheduleTrigger.created",
+                "scheduleTrigger.updated",
+                "scheduleTrigger.deleted",
+                "skill.created",
+                "skill.updated",
+                "skill.deleted",
+                "skill.imported",
+                "team.created",
+                "team.updated",
+                "team.deleted",
+                "teamToken.rotated",
+                "tool.deleted",
+                "toolInvocationPolicy.created",
+                "toolInvocationPolicy.updated",
+                "toolInvocationPolicy.deleted",
+                "toolInvocationPolicy.bulk_defaulted",
+                "toolInvocationPolicy.auto_configured",
+                "trustedDataPolicy.created",
+                "trustedDataPolicy.updated",
+                "trustedDataPolicy.deleted",
+                "trustedDataPolicy.bulk_defaulted",
+                "userToken.rotated",
+                "virtualApiKey.created",
+                "virtualApiKey.deleted",
+                "auth.signed_in",
+                "auth.signed_out",
+                "auth.signed_up",
+                "auth.sso_callback",
+                "unknown.created",
+                "unknown.updated",
+                "unknown.deleted"
               ]
             },
             "in": "query",
             "name": "action",
             "required": false,
-            "description": "Filter by action type"
+            "description": "Filter by action type (dotted name, e.g. agent.created)"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "success",
+                "failure",
+                "denied"
+              ]
+            },
+            "in": "query",
+            "name": "outcome",
+            "required": false,
+            "description": "Filter by outcome (success, failure, or denied)"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "user",
+                "api_key",
+                "system",
+                "sso"
+              ]
+            },
+            "in": "query",
+            "name": "actorType",
+            "required": false,
+            "description": "Filter by actor type (user, api_key, sso, or system)"
           },
           {
             "schema": {
@@ -50788,7 +50895,7 @@
             "in": "query",
             "name": "resourceType",
             "required": false,
-            "description": "Filter by resource type (e.g. agent, auth, role)"
+            "description": "Filter by resource type (e.g. agent, role)"
           },
           {
             "schema": {
@@ -50853,12 +50960,34 @@
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
+                          "eventSequence": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
                           "organizationId": {
                             "type": "string"
                           },
-                          "actorUserId": {
+                          "occurredAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "actorId": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "actorType": {
+                            "type": "string",
+                            "enum": [
+                              "user",
+                              "api_key",
+                              "system",
+                              "sso"
+                            ]
                           },
                           "actorName": {
                             "nullable": true,
@@ -50871,13 +51000,99 @@
                           "action": {
                             "type": "string",
                             "enum": [
-                              "create",
-                              "update",
-                              "delete",
-                              "sign_in",
-                              "sign_out",
-                              "sign_up",
-                              "sso_callback"
+                              "agent.created",
+                              "agent.updated",
+                              "agent.deleted",
+                              "agentTool.created",
+                              "agentTool.updated",
+                              "agentTool.deleted",
+                              "agentTool.bulk_assigned",
+                              "apiKey.created",
+                              "apiKey.deleted",
+                              "chatOpsBinding.created",
+                              "chatOpsBinding.updated",
+                              "chatOpsBinding.deleted",
+                              "chatOpsBinding.refreshed",
+                              "chatOpsConfig.updated",
+                              "connector.created",
+                              "connector.updated",
+                              "connector.deleted",
+                              "identityProvider.created",
+                              "identityProvider.updated",
+                              "identityProvider.deleted",
+                              "internalMcpCatalog.created",
+                              "internalMcpCatalog.updated",
+                              "internalMcpCatalog.deleted",
+                              "invitation.created",
+                              "invitation.deleted",
+                              "knowledgeBase.created",
+                              "knowledgeBase.updated",
+                              "knowledgeBase.deleted",
+                              "limit.created",
+                              "limit.updated",
+                              "limit.deleted",
+                              "llmModel.updated",
+                              "llmModel.synced",
+                              "llmOauthClient.created",
+                              "llmOauthClient.updated",
+                              "llmOauthClient.deleted",
+                              "llmProviderApiKey.created",
+                              "llmProviderApiKey.deleted",
+                              "mcpServer.created",
+                              "mcpServer.updated",
+                              "mcpServer.deleted",
+                              "mcpServer.reinstalled",
+                              "mcpServerInstallationRequest.created",
+                              "mcpServerInstallationRequest.updated",
+                              "member.created",
+                              "member.role_updated",
+                              "member.deleted",
+                              "optimizationRule.created",
+                              "optimizationRule.updated",
+                              "optimizationRule.deleted",
+                              "organization.updated",
+                              "role.created",
+                              "role.updated",
+                              "role.deleted",
+                              "scheduleTrigger.created",
+                              "scheduleTrigger.updated",
+                              "scheduleTrigger.deleted",
+                              "skill.created",
+                              "skill.updated",
+                              "skill.deleted",
+                              "skill.imported",
+                              "team.created",
+                              "team.updated",
+                              "team.deleted",
+                              "teamToken.rotated",
+                              "tool.deleted",
+                              "toolInvocationPolicy.created",
+                              "toolInvocationPolicy.updated",
+                              "toolInvocationPolicy.deleted",
+                              "toolInvocationPolicy.bulk_defaulted",
+                              "toolInvocationPolicy.auto_configured",
+                              "trustedDataPolicy.created",
+                              "trustedDataPolicy.updated",
+                              "trustedDataPolicy.deleted",
+                              "trustedDataPolicy.bulk_defaulted",
+                              "userToken.rotated",
+                              "virtualApiKey.created",
+                              "virtualApiKey.deleted",
+                              "auth.signed_in",
+                              "auth.signed_out",
+                              "auth.signed_up",
+                              "auth.sso_callback",
+                              "unknown.created",
+                              "unknown.updated",
+                              "unknown.deleted"
+                            ]
+                          },
+                          "outcome": {
+                            "type": "string",
+                            "enum": [
+                              "success",
+                              "failure",
+                              "denied"
                             ]
                           },
                           "resourceType": {
@@ -50888,12 +51103,12 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "priorState": {
+                          "before": {
                             "nullable": true,
                             "type": "object",
                             "additionalProperties": {}
                           },
-                          "postState": {
+                          "after": {
                             "nullable": true,
                             "type": "object",
                             "additionalProperties": {}
@@ -50916,37 +51131,42 @@
                             "minimum": -2147483648,
                             "maximum": 2147483647
                           },
-                          "ipAddress": {
+                          "requestId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "sourceIp": {
                             "nullable": true,
                             "type": "string"
                           },
                           "userAgent": {
                             "nullable": true,
                             "type": "string"
-                          },
-                          "createdAt": {
-                            "type": "string",
-                            "format": "date-time"
                           }
                         },
                         "required": [
                           "id",
+                          "eventSequence",
                           "organizationId",
-                          "actorUserId",
+                          "occurredAt",
+                          "createdAt",
+                          "actorId",
+                          "actorType",
                           "actorName",
                           "actorEmail",
                           "action",
+                          "outcome",
                           "resourceType",
                           "resourceId",
-                          "priorState",
-                          "postState",
+                          "before",
+                          "after",
                           "httpMethod",
                           "httpPath",
                           "httpRoute",
                           "httpStatus",
-                          "ipAddress",
-                          "userAgent",
-                          "createdAt"
+                          "requestId",
+                          "sourceIp",
+                          "userAgent"
                         ],
                         "additionalProperties": false
                       }

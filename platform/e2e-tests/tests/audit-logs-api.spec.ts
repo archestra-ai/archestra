@@ -300,9 +300,9 @@ test.describe("Audit log API", () => {
         action: "agent.created",
         limit: 100,
       });
-      expect(
-        byAction.data.every((r) => r.action === "agent.created"),
-      ).toBe(true);
+      expect(byAction.data.every((r) => r.action === "agent.created")).toBe(
+        true,
+      );
 
       const bySearch = await fetchAuditLogs(makeApiRequest, adminRequest, {
         search: agent.id,
@@ -338,9 +338,7 @@ test.describe("Audit log API", () => {
         limit: 50,
       });
       expect(successOnly.data.length).toBeGreaterThan(0);
-      expect(
-        successOnly.data.every((r) => r.outcome === "success"),
-      ).toBe(true);
+      expect(successOnly.data.every((r) => r.outcome === "success")).toBe(true);
     } finally {
       await deleteAgent(adminRequest, agent.id);
     }
@@ -372,9 +370,7 @@ test.describe("Audit log API", () => {
       const row = await waitForAuditRow(
         makeApiRequest,
         adminRequest,
-        (r) =>
-          r.resourceId === agent.id &&
-          r.outcome === "denied",
+        (r) => r.resourceId === agent.id && r.outcome === "denied",
         { resourceType: "agent", limit: 50 },
       );
 

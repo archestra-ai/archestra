@@ -32,6 +32,8 @@ import VirtualApiKeyModel from "@/models/virtual-api-key";
  * The `findByIdForAudit` method is used by the audit hook to capture
  * before/after snapshots. The model value passed here is the class itself
  * (static side), not an instance.
+ *
+ * @public
  */
 export type AuditableModel = {
   findByIdForAudit(
@@ -40,7 +42,7 @@ export type AuditableModel = {
   ): Promise<Record<string, unknown> | null>;
 };
 
-export type AuditDecision =
+type AuditDecision =
   | { audited: true; model: AuditableModel }
   | { audited: false; reason: string };
 

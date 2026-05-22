@@ -1,3 +1,4 @@
+import { vi } from "vitest";
 import db, { schema } from "@/database";
 import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
@@ -10,7 +11,6 @@ import SkillModel from "@/models/skill";
 import TeamModel from "@/models/team";
 import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
 import TrustedDataPolicyModel from "@/models/trusted-data-policy";
-import { vi } from "vitest";
 import { describe, expect, test } from "@/test";
 import { AuditEventNameSchema } from "@/types/audit-log";
 import { AUDIT_DECISIONS, type AuditableModel } from "./audit-decisions";
@@ -659,11 +659,15 @@ describe("AUDIT_DECISIONS — compile-time + runtime invariants", () => {
         .model;
 
       const methodNames = Object.getOwnPropertyNames(model).filter(
+        // biome-ignore lint/suspicious/noExplicitAny: test instrumentation
         (prop) => typeof (model as any)[prop] === "function",
       );
 
       const spies = methodNames.map((methodName) =>
-        vi.spyOn(model as any, methodName).mockImplementation(() => Promise.resolve(null)),
+        vi
+          // biome-ignore lint/suspicious/noExplicitAny: test instrumentation
+          .spyOn(model as any, methodName)
+          .mockImplementation(() => Promise.resolve(null)),
       );
 
       let found = false;

@@ -98,6 +98,27 @@ else:
     serve_env=frontend_env_vars
   )
 
+  # Second frontend instance dedicated to Playwright integration tests
+  # (frontend/tests-integration). Uses MSW for all API calls, so it does NOT
+  # need the backend or DB. Runs on :3010 with a separate .next-pw dist dir
+  # so the lock at <distDir>/dev/lock doesn't collide with the main dev
+  # server's `.next/dev/lock`. Pointing the SDK base URL at an unreachable
+  # port surfaces any escaped (un-mocked) request as ECONNREFUSED instead of
+  # silently hitting the real backend.
+  local_resource(
+    dev_resource_name + '-frontend-int-tests',
+    serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; cd ../frontend && pnpm exec next dev -H 127.0.0.1 -p 3010 & wait $!',
+    serve_cmd_bat='cd ..\\frontend && pnpm exec next dev -H 127.0.0.1 -p 3010',
+    labels=['dev'],
+    deps=['../.env'],
+    serve_env={
+      'NEXT_DIST_DIR': '.next-pw',
+      'NEXT_PUBLIC_API_MOCKING': 'enabled',
+      'ARCHESTRA_INTERNAL_API_BASE_URL': 'http://127.0.0.1:1',
+      'NEXT_PUBLIC_SENTRY_DSN': '',
+    }
+  )
+
 # Port-forward for MCP servers using streamable-http transport
 # Docker Desktop / kind K8s don't expose NodePorts on localhost, so we use
 # kubectl port-forward (which goes through the K8s API server) to make them accessible.

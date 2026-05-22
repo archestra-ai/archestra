@@ -192,10 +192,9 @@ describe("OAuth Server - Well-Known Endpoints", () => {
         process.env = {
           ...originalEnv,
           ARCHESTRA_TRUST_PROXY: "true",
-          // gateway.example.com is the public origin in this scenario; it
-          // must appear in the allowlist for getPublicRequestOrigin to honor
-          // X-Forwarded-Host.
-          NEXT_PUBLIC_ARCHESTRA_API_BASE_URL: "https://gateway.example.com",
+          // Public origins used by tests in this describe.
+          NEXT_PUBLIC_ARCHESTRA_API_BASE_URL:
+            "https://gateway.example.com,https://archestra.example.com",
         };
         proxyApp = Fastify({
           trustProxy: parseTrustProxy(process.env.ARCHESTRA_TRUST_PROXY),

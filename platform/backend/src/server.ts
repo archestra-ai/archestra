@@ -57,6 +57,7 @@ import { seedRequiredStartingData } from "@/database/seed";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import { enterpriseLicenseMiddleware } from "@/middleware";
+import { initAuditDecisions } from "@/middleware/audit-decisions";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { initAuditRegistry } from "@/middleware/audit-log-registry";
 import OrganizationModel from "@/models/organization";
@@ -835,10 +836,11 @@ const startWebServer = async () => {
    */
   fastify.register(enterpriseLicenseMiddleware);
 
-  // Extend the audit registry with EE routes (identity providers) if applicable,
-  // then register the audit hooks. Done before routes so the hooks are active
-  // for all subsequent request processing.
+  // Extend the audit registry and audit decisions with EE entries
+  // (identity providers) if applicable, then register the audit hooks.
+  // Done before routes so the hooks are active for all subsequent requests.
   await initAuditRegistry();
+  await initAuditDecisions();
   registerAuditLogHook(fastify);
 
   try {

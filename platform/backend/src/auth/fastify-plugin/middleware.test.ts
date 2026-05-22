@@ -2,7 +2,7 @@ import * as Sentry from "@sentry/node";
 import { SupportedProviders } from "@shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { vi } from "vitest";
-import { describe, expect, test } from "@/test";
+import { describe, expect, test, afterEach } from "@/test";
 import { Authnz } from "./middleware";
 
 // Mock Sentry
@@ -510,12 +510,10 @@ describe("Authnz", () => {
         updatedAt: new Date(),
         image: null,
         twoFactorEnabled: null,
-      });
+      } as Awaited<ReturnType<typeof UserModel.getById>>);
 
       // Allow any authenticated user by giving the operationId empty permissions.
-      const testOpId = "__authMethodSessionTest__" as Parameters<
-        typeof requiredEndpointPermissionsMap.GetAuditLogs.__proto__.constructor
-      >[0];
+      const testOpId = "__authMethodSessionTest__" as any;
       // biome-ignore lint/suspicious/noExplicitAny: test instrumentation
       (requiredEndpointPermissionsMap as any)[testOpId] = {};
 
@@ -571,11 +569,9 @@ describe("Authnz", () => {
         updatedAt: new Date(),
         image: null,
         twoFactorEnabled: null,
-      });
+      } as Awaited<ReturnType<typeof UserModel.getById>>);
 
-      const testOpId = "__authMethodApiKeyTest__" as Parameters<
-        typeof requiredEndpointPermissionsMap.GetAuditLogs.__proto__.constructor
-      >[0];
+      const testOpId = "__authMethodApiKeyTest__" as any;
       // biome-ignore lint/suspicious/noExplicitAny: test instrumentation
       (requiredEndpointPermissionsMap as any)[testOpId] = {};
 

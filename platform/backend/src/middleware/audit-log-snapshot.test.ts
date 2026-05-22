@@ -10,9 +10,13 @@ import SkillModel from "@/models/skill";
 import TeamModel from "@/models/team";
 import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
 import TrustedDataPolicyModel from "@/models/trusted-data-policy";
+import { vi } from "vitest";
 import { describe, expect, test } from "@/test";
+import { AuditEventNameSchema } from "@/types/audit-log";
+import { AUDIT_DECISIONS, type AuditableModel } from "./audit-decisions";
 import {
   AUDITABLE_ROUTES,
+  deriveAction,
   resolveAuditableRouteConfig,
 } from "./audit-log-registry";
 
@@ -620,5 +624,129 @@ describe("resolveAuditableRouteConfig", () => {
     );
     expect(cfg?.resourceType).toBe("connector");
     expect(cfg?.fetchById).toBeDefined();
+  });
+});
+
+describe("AUDIT_DECISIONS — compile-time + runtime invariants", () => {
+  test("every table in schema appears in AUDIT_DECISIONS (compile-time enforced by `satisfies`)", () => {
+    // The `satisfies` clause in audit-decisions.ts is the primary guard.
+    // This test is a runtime smoke check that fails loudly if the satisfies
+    // clause is deleted or if the schema gains a table that wasn't covered.
+    const schemaKeys = Object.keys(schema).sort();
+    const decisionKeys = Object.keys(AUDIT_DECISIONS).sort();
+    expect(decisionKeys).toEqual(schemaKeys);
+  });
+
+  test("every audited:true table has a model with findByIdForAudit", () => {
+    for (const [name, decision] of Object.entries(AUDIT_DECISIONS)) {
+      if (decision.audited) {
+        expect(
+          typeof decision.model.findByIdForAudit,
+          `${name}.model.findByIdForAudit must be a function`,
+        ).toBe("function");
+      }
+    }
+  });
+
+  test("every audited:true table has at least one route in AUDITABLE_ROUTES that references its model", async () => {
+    // Closes the gap the satisfies-clause alone cannot catch: a table can be
+    // marked audited:true but have no entry in AUDITABLE_ROUTES.
+    // We check this by spying on all static methods of the model and calling
+    // each route's fetchById function to see if any model method is invoked.
+    for (const [name, decision] of Object.entries(AUDIT_DECISIONS)) {
+      if (!decision.audited) continue;
+      const model = (decision as { audited: true; model: AuditableModel })
+        .model;
+
+      const methodNames = Object.getOwnPropertyNames(model).filter(
+        (prop) => typeof (model as any)[prop] === "function",
+      );
+
+      const spies = methodNames.map((methodName) =>
+        vi.spyOn(model as any, methodName).mockImplementation(() => Promise.resolve(null)),
+      );
+
+      let found = false;
+      for (const cfg of Object.values(AUDITABLE_ROUTES)) {
+        if (!cfg.fetchById) continue;
+
+        for (const spy of spies) spy.mockClear();
+
+        try {
+          await cfg.fetchById("fake-id", "fake-org");
+        } catch {
+          // Ignore errors
+        }
+
+        if (spies.some((spy) => spy.mock.calls.length > 0)) {
+          found = true;
+          break;
+        }
+      }
+
+      for (const spy of spies) spy.mockRestore();
+
+      expect(
+        found,
+        `Table "${name}" is audited:true but no route in AUDITABLE_ROUTES references its model. ` +
+          "Either add a route entry with fetchById pointing at the model, " +
+          "or change the decision to audited:false with a reason.",
+      ).toBe(true);
+    }
+  });
+
+  test("every audited:false table has a non-empty reason", () => {
+    for (const [name, decision] of Object.entries(AUDIT_DECISIONS)) {
+      if (!decision.audited) {
+        expect(
+          decision.reason.length,
+          `${name}.reason must be a non-empty string`,
+        ).toBeGreaterThan(0);
+      }
+    }
+  });
+});
+
+describe("AUDITABLE_ROUTES vocabulary completeness", () => {
+  test("every AUDITABLE_ROUTES entry resolves to a known AuditEventName for each HTTP verb", () => {
+    // Verifies that hard-coded action overrides and method-derived actions
+    // are all members of the closed AuditEventNameSchema enum. This catches
+    // typos in action strings and enum drift when names are renamed.
+    const methods = ["POST", "PUT", "PATCH", "DELETE"] as const;
+
+    for (const [pattern, cfg] of Object.entries(AUDITABLE_ROUTES)) {
+      // Hard-coded action wins — validate it directly.
+      if (cfg.action !== undefined) {
+        expect(
+          AuditEventNameSchema.safeParse(cfg.action).success,
+          `Route ${pattern}: hard-coded action "${cfg.action}" is not in AuditEventNameSchema`,
+        ).toBe(true);
+      }
+
+      // Per-method overrides — validate each present entry.
+      if (cfg.actionByMethod) {
+        for (const [method, action] of Object.entries(cfg.actionByMethod)) {
+          if (action !== undefined) {
+            expect(
+              AuditEventNameSchema.safeParse(action).success,
+              `Route ${pattern} (${method}): actionByMethod "${action}" is not in AuditEventNameSchema`,
+            ).toBe(true);
+          }
+        }
+      }
+
+      // Method-derived fallback — only validate when deriveAction returns a
+      // non-null candidate (resource type maps to a known verb).
+      for (const method of methods) {
+        if (cfg.action !== undefined) continue;
+        if (cfg.actionByMethod?.[method] !== undefined) continue;
+        const derived = deriveAction(cfg.resourceType, method);
+        if (derived === null) continue;
+        expect(
+          AuditEventNameSchema.safeParse(derived).success,
+          `Route ${pattern} (${method}): derived action "${derived}" is not in AuditEventNameSchema`,
+        ).toBe(true);
+      }
+    }
   });
 });

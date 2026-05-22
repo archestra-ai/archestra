@@ -5,22 +5,27 @@ const AUDIT_LOGS_PATH = "/api/audit-logs";
 
 type AuditLogRow = {
   id: string;
+  eventSequence: number;
   organizationId: string;
-  actorUserId: string | null;
+  occurredAt: string;
+  createdAt: string;
+  actorId: string | null;
+  actorType: string;
   actorName: string | null;
   actorEmail: string | null;
   action: string;
+  outcome: string;
   resourceType: string | null;
   resourceId: string | null;
-  priorState: Record<string, unknown> | null;
-  postState: Record<string, unknown> | null;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
   httpMethod: string | null;
   httpPath: string | null;
   httpRoute: string | null;
   httpStatus: number | null;
-  ipAddress: string | null;
+  requestId: string | null;
+  sourceIp: string | null;
   userAgent: string | null;
-  createdAt: string;
 };
 
 type AuditLogsResponse = {
@@ -84,7 +89,7 @@ async function waitForAuditRow(
 }
 
 test.describe("Audit log API", () => {
-  test("records an agent create with priorState=null and a populated postState", async ({
+  test("records an agent create with before=null and a populated after", async ({
     adminRequest,
     makeApiRequest,
     createAgent,
@@ -99,26 +104,31 @@ test.describe("Audit log API", () => {
         makeApiRequest,
         adminRequest,
         (r) => r.resourceId === agent.id,
-        { resourceType: "agent", action: "create", limit: 50 },
+        { resourceType: "agent", action: "agent.created", limit: 50 },
       );
 
       expect(row, "audit row for agent create not found").toBeDefined();
-      expect(row?.action).toBe("create");
+      expect(row?.action).toBe("agent.created");
+      expect(row?.outcome).toBe("success");
       expect(row?.resourceType).toBe("agent");
       expect(row?.httpMethod).toBe("POST");
       expect(row?.httpStatus).toBeGreaterThanOrEqual(200);
       expect(row?.httpStatus).toBeLessThan(300);
-      expect(row?.priorState).toBeNull();
-      expect(row?.postState).not.toBeNull();
-      expect(row?.postState).toMatchObject({ id: agent.id });
+      expect(row?.before).toBeNull();
+      expect(row?.after).not.toBeNull();
+      expect(row?.after).toMatchObject({ id: agent.id });
       // Denormalized actor snapshot must be present.
       expect(row?.actorEmail).toBeTruthy();
+      // New fields must be populated.
+      expect(row?.actorType).toBe("user");
+      expect(row?.occurredAt).toBeTruthy();
+      expect(typeof row?.eventSequence).toBe("number");
     } finally {
       await deleteAgent(adminRequest, agent.id);
     }
   });
 
-  test("records an agent update with priorState and postState differing on the changed field", async ({
+  test("records an agent update with before and after differing on the changed field", async ({
     adminRequest,
     makeApiRequest,
     createAgent,
@@ -141,21 +151,22 @@ test.describe("Audit log API", () => {
         makeApiRequest,
         adminRequest,
         (r) => r.resourceId === agent.id,
-        { resourceType: "agent", action: "update", limit: 50 },
+        { resourceType: "agent", action: "agent.updated", limit: 50 },
       );
 
       expect(row, "audit row for agent update not found").toBeDefined();
-      expect(row?.action).toBe("update");
-      expect(row?.priorState).not.toBeNull();
-      expect(row?.postState).not.toBeNull();
-      expect((row?.priorState as { name?: string })?.name).toBe(initialName);
-      expect((row?.postState as { name?: string })?.name).toBe(renamed);
+      expect(row?.action).toBe("agent.updated");
+      expect(row?.outcome).toBe("success");
+      expect(row?.before).not.toBeNull();
+      expect(row?.after).not.toBeNull();
+      expect((row?.before as { name?: string })?.name).toBe(initialName);
+      expect((row?.after as { name?: string })?.name).toBe(renamed);
     } finally {
       await deleteAgent(adminRequest, agent.id);
     }
   });
 
-  test("records an agent delete with priorState populated and postState null", async ({
+  test("records an agent delete with before populated and after null", async ({
     adminRequest,
     makeApiRequest,
     createAgent,
@@ -171,14 +182,15 @@ test.describe("Audit log API", () => {
       makeApiRequest,
       adminRequest,
       (r) => r.resourceId === agent.id,
-      { resourceType: "agent", action: "delete", limit: 50 },
+      { resourceType: "agent", action: "agent.deleted", limit: 50 },
     );
 
     expect(row, "audit row for agent delete not found").toBeDefined();
-    expect(row?.action).toBe("delete");
-    expect(row?.priorState).not.toBeNull();
-    expect((row?.priorState as { id?: string })?.id).toBe(agent.id);
-    expect(row?.postState).toBeNull();
+    expect(row?.action).toBe("agent.deleted");
+    expect(row?.outcome).toBe("success");
+    expect(row?.before).not.toBeNull();
+    expect((row?.before as { id?: string })?.id).toBe(agent.id);
+    expect(row?.after).toBeNull();
   });
 
   test("does not record a row for GET reads", async ({
@@ -270,7 +282,7 @@ test.describe("Audit log API", () => {
         makeApiRequest,
         adminRequest,
         (r) => r.resourceId === agent.id,
-        { resourceType: "agent", action: "create", limit: 50 },
+        { resourceType: "agent", action: "agent.created", limit: 50 },
       );
       expect(seeded).toBeDefined();
 
@@ -285,10 +297,12 @@ test.describe("Audit log API", () => {
       );
 
       const byAction = await fetchAuditLogs(makeApiRequest, adminRequest, {
-        action: "create",
+        action: "agent.created",
         limit: 100,
       });
-      expect(byAction.data.every((r) => r.action === "create")).toBe(true);
+      expect(
+        byAction.data.every((r) => r.action === "agent.created"),
+      ).toBe(true);
 
       const bySearch = await fetchAuditLogs(makeApiRequest, adminRequest, {
         search: agent.id,
@@ -297,6 +311,192 @@ test.describe("Audit log API", () => {
       expect(bySearch.data.some((r) => r.resourceId === agent.id)).toBe(true);
     } finally {
       await deleteAgent(adminRequest, agent.id);
+    }
+  });
+
+  test("outcome filter narrows to matching rows", async ({
+    adminRequest,
+    makeApiRequest,
+    createAgent,
+    deleteAgent,
+  }) => {
+    // Seed a successful mutation to guarantee at least one success row.
+    const name = `audit-outcome-${Date.now()}`;
+    const created = await createAgent(adminRequest, name, "personal");
+    const agent = (await created.json()) as { id: string };
+
+    try {
+      await waitForAuditRow(
+        makeApiRequest,
+        adminRequest,
+        (r) => r.resourceId === agent.id,
+        { resourceType: "agent", action: "agent.created", limit: 50 },
+      );
+
+      const successOnly = await fetchAuditLogs(makeApiRequest, adminRequest, {
+        outcome: "success",
+        limit: 50,
+      });
+      expect(successOnly.data.length).toBeGreaterThan(0);
+      expect(
+        successOnly.data.every((r) => r.outcome === "success"),
+      ).toBe(true);
+    } finally {
+      await deleteAgent(adminRequest, agent.id);
+    }
+  });
+
+  test("denied mutation from member produces outcome=denied audit row", async ({
+    adminRequest,
+    memberRequest,
+    makeApiRequest,
+    createAgent,
+    deleteAgent,
+  }) => {
+    // Admin creates an agent.
+    const name = `audit-denied-${Date.now()}`;
+    const created = await createAgent(adminRequest, name, "personal");
+    const agent = (await created.json()) as { id: string };
+
+    try {
+      // Member attempts to delete — expect 403.
+      const deleteResp = await makeApiRequest({
+        request: memberRequest,
+        method: "delete",
+        urlSuffix: `/api/agents/${agent.id}`,
+        ignoreStatusCheck: true,
+      });
+      expect(deleteResp.status()).toBe(403);
+
+      // Wait for the denied audit row to appear.
+      const row = await waitForAuditRow(
+        makeApiRequest,
+        adminRequest,
+        (r) =>
+          r.resourceId === agent.id &&
+          r.outcome === "denied",
+        { resourceType: "agent", limit: 50 },
+      );
+
+      expect(row, "audit row for denied agent delete not found").toBeDefined();
+      expect(row?.action).toBe("agent.deleted");
+      expect(row?.outcome).toBe("denied");
+      expect(row?.httpStatus).toBe(403);
+      // Before should be captured (preHandler ran); after should be null (denied).
+      expect(row?.after).toBeNull();
+    } finally {
+      await deleteAgent(adminRequest, agent.id);
+    }
+  });
+
+  test("event_sequence provides deterministic ordering for same-org rows", async ({
+    adminRequest,
+    makeApiRequest,
+    createAgent,
+    deleteAgent,
+  }) => {
+    // Create two agents rapidly so they land with close timestamps.
+    const name1 = `audit-seq-a-${Date.now()}`;
+    const name2 = `audit-seq-b-${Date.now()}`;
+    const [created1, created2] = await Promise.all([
+      createAgent(adminRequest, name1, "personal"),
+      createAgent(adminRequest, name2, "personal"),
+    ]);
+    const agent1 = (await created1.json()) as { id: string };
+    const agent2 = (await created2.json()) as { id: string };
+
+    try {
+      // Wait until both rows appear.
+      await waitForAuditRow(
+        makeApiRequest,
+        adminRequest,
+        (r) => r.resourceId === agent1.id,
+        { action: "agent.created", limit: 50 },
+      );
+      await waitForAuditRow(
+        makeApiRequest,
+        adminRequest,
+        (r) => r.resourceId === agent2.id,
+        { action: "agent.created", limit: 50 },
+      );
+
+      // Fetch the latest rows; event_sequence should be strictly descending.
+      const logs = await fetchAuditLogs(makeApiRequest, adminRequest, {
+        action: "agent.created",
+        limit: 10,
+      });
+
+      const sequences = logs.data.map((r) => r.eventSequence);
+      for (let i = 1; i < sequences.length; i++) {
+        expect(
+          sequences[i - 1],
+          `event_sequence must be strictly descending: ${sequences[i - 1]} > ${sequences[i]}`,
+        ).toBeGreaterThan(sequences[i]);
+      }
+    } finally {
+      await Promise.all([
+        deleteAgent(adminRequest, agent1.id),
+        deleteAgent(adminRequest, agent2.id),
+      ]);
+    }
+  });
+
+  test("API-key authenticated mutation records actor_type=api_key", async ({
+    adminRequest,
+    makeApiRequest,
+    createApiKey,
+    deleteApiKey,
+  }) => {
+    // 1. Create an API key
+    const apiKeyResp = await createApiKey(adminRequest, "audit-test-key");
+    const { id: keyId, key } = (await apiKeyResp.json()) as {
+      id: string;
+      key: string;
+    };
+
+    let agentId: string | undefined;
+
+    try {
+      // 2. Make a mutation using the API key
+      const agentName = `audit-apikey-${Date.now()}`;
+      const agentResp = await makeApiRequest({
+        request: adminRequest, // Using adminRequest but overriding headers
+        method: "post",
+        urlSuffix: "/api/agents",
+        data: { name: agentName, scope: "personal", teams: [] },
+        headers: {
+          Authorization: key, // API key goes here
+          "Content-Type": "application/json",
+        },
+      });
+      const agent = (await agentResp.json()) as { id: string };
+      agentId = agent.id;
+
+      // 3. Wait for the audit row
+      const row = await waitForAuditRow(
+        makeApiRequest,
+        adminRequest,
+        (r) => r.resourceId === agent.id,
+        { actorType: "api_key", limit: 50 },
+      );
+
+      // 4. Assert the actor details
+      expect(row, "audit row for API key mutation not found").toBeDefined();
+      expect(row?.actorType).toBe("api_key");
+      expect(row?.action).toBe("agent.created");
+      expect(row?.outcome).toBe("success");
+      // The actorId for an API key is the key's ID
+      expect(row?.actorId).toBe(keyId);
+    } finally {
+      if (agentId) {
+        await makeApiRequest({
+          request: adminRequest,
+          method: "delete",
+          urlSuffix: `/api/agents/${agentId}`,
+          ignoreStatusCheck: true,
+        });
+      }
+      await deleteApiKey(adminRequest, keyId);
     }
   });
 });

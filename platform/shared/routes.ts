@@ -487,6 +487,10 @@ export const RouteId = {
   ImportGithubSkills: "importGithubSkills",
   GetSkillSourceRepos: "getSkillSourceRepos",
   EnableSkillToolDefaults: "enableSkillToolDefaults",
+
+  // Audit Log Routes
+  GetAuditLogs: "getAuditLogs",
+  GetAuditLog: "getAuditLog",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

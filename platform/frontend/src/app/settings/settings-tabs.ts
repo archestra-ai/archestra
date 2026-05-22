@@ -43,5 +43,8 @@ export function useSettingsTabs() {
     ...(permissionMap?.["/settings/organization"]
       ? [{ label: "Organization", href: "/settings/organization" }]
       : []),
+    ...(permissionMap?.["/settings/audit-logs"]
+      ? [{ label: "Audit Log", href: "/settings/audit-logs" }]
+      : []),
   ];
 }

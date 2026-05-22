@@ -39,6 +39,11 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
     description:
       'Control what other users see when getting connection instructions on the "Connect" page.',
   },
+  "/settings/audit-logs": {
+    title: "Audit Log",
+    description:
+      "View an audit trail of who did what, when, and from where across the platform.",
+  },
   "/settings/organization": {
     title: "Organization",
     description:

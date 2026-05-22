@@ -1,10 +1,16 @@
 import {
   TOOL_ACTIVATE_SKILL_SHORT_NAME,
+  TOOL_LIST_SKILLS_SHORT_NAME,
   TOOL_READ_SKILL_FILE_SHORT_NAME,
 } from "@shared";
 import { z } from "zod";
 import logger from "@/logging";
 import { SkillFileModel, SkillModel } from "@/models";
+import {
+  escapeXmlAttr,
+  escapeXmlText,
+  formatSkillActivation,
+} from "@/skills/skill-activation";
 import {
   defineArchestraTool,
   defineArchestraTools,
@@ -16,22 +22,23 @@ import type { ArchestraContext } from "./types";
 /**
  * Agent Skills chat tools.
  *
- * `activate_skill` and `read_skill_file` implement the progressive-disclosure
- * tiers of the Agent Skills spec: the catalog is listed on a no-argument
- * `activate_skill` call, the SKILL.md body is returned when a skill is named,
- * and bundled resource files are fetched individually via `read_skill_file`.
+ * `list_skills`, `activate_skill`, and `read_skill_file` implement the
+ * progressive-disclosure tiers of the Agent Skills spec: `list_skills` returns
+ * the catalog, `activate_skill` returns a named skill's SKILL.md body, and
+ * bundled resource files are fetched individually via `read_skill_file`.
  * Scripts are returned as readable text — they are not executed.
  *
  * @see https://agentskills.io/specification
  */
 
+const ListSkillsSchema = z.object({});
+
 const ActivateSkillSchema = z.object({
   name: z
     .string()
-    .optional()
-    .describe(
-      "The skill to load. Omit to list the skills available in this organization.",
-    ),
+    .trim()
+    .min(1)
+    .describe("The skill to load, as named by list_skills."),
 });
 
 const ReadSkillFileSchema = z.object({
@@ -43,13 +50,32 @@ const ReadSkillFileSchema = z.object({
 
 const registry = defineArchestraTools([
   defineArchestraTool({
+    shortName: TOOL_LIST_SKILLS_SHORT_NAME,
+    title: "List Skills",
+    description:
+      "List the Agent Skills available in this organization — one line per " +
+      "skill (name and description). Call activate_skill with a skill name " +
+      "to load its full instructions.",
+    schema: ListSkillsSchema,
+    async handler({ context }) {
+      const organizationId = requireOrganization(context);
+      if (!organizationId) {
+        return errorResult(
+          "This tool requires organization context. It can only be used within an authenticated session.",
+        );
+      }
+
+      return listSkillCatalog(organizationId);
+    },
+  }),
+  defineArchestraTool({
     shortName: TOOL_ACTIVATE_SKILL_SHORT_NAME,
     title: "Activate Skill",
     description:
       "Load a specialized Agent Skill — a reusable SKILL.md instruction set. " +
-      "Call with no arguments to list the skills available in this " +
-      "organization, then call again with a skill name to load its full " +
-      "instructions. Activate a skill before attempting the task it covers.",
+      "Call list_skills first to discover what is available, then call this " +
+      "with a skill name to load its full instructions. Activate a skill " +
+      "before attempting the task it covers.",
     schema: ActivateSkillSchema,
     async handler({ args, context }) {
       const organizationId = requireOrganization(context);
@@ -59,14 +85,10 @@ const registry = defineArchestraTools([
         );
       }
 
-      if (!args.name) {
-        return listSkillCatalog(organizationId);
-      }
-
       const skill = await SkillModel.findByName(organizationId, args.name);
       if (!skill) {
         return errorResult(
-          `No skill named "${args.name}" exists. Call activate_skill with no arguments to list available skills.`,
+          `No skill named "${args.name}" exists. Call list_skills to see available skills.`,
         );
       }
 
@@ -76,26 +98,7 @@ const registry = defineArchestraTools([
         "[Skills] Skill activated",
       );
 
-      const resources =
-        files.length > 0
-          ? `\n<skill_resources>\n${files
-              .map((file) => `${file.path} (${file.kind})`)
-              .join(
-                "\n",
-              )}\n</skill_resources>\nUse read_skill_file to load any resource you need.`
-          : "";
-
-      const compatibility = skill.compatibility
-        ? `\n<skill_compatibility>${skill.compatibility}</skill_compatibility>\n` +
-          "If this environment cannot meet that requirement, tell the user " +
-          "and proceed with what is possible."
-        : "";
-
-      return successResult(
-        `<skill_content name="${skill.name}">\n${skill.content}\n</skill_content>` +
-          compatibility +
-          resources,
-      );
+      return successResult(formatSkillActivation({ skill, files }));
     },
   }),
   defineArchestraTool({
@@ -127,16 +130,17 @@ const registry = defineArchestraTools([
       }
 
       if (file.encoding === "base64") {
+        const approxKb = Math.round((file.content.length * 3) / 4 / 1024);
         return successResult(
-          `<skill_file skill="${skill.name}" path="${file.path}" encoding="base64">\n` +
-            `Binary asset, ${file.content.length} base64 chars. ` +
-            "Not loaded inline — fetch the raw bytes through the platform " +
-            "if you need to use this file.\n</skill_file>",
+          `<skill_file skill="${escapeXmlAttr(skill.name)}" path="${escapeXmlAttr(file.path)}" encoding="base64">\n` +
+            `This is a binary asset (~${approxKb} KB) and cannot be read as ` +
+            "text. It is bundled with the skill for redistribution, not for " +
+            "inline use by the model.\n</skill_file>",
         );
       }
 
       return successResult(
-        `<skill_file skill="${skill.name}" path="${file.path}">\n${file.content}\n</skill_file>`,
+        `<skill_file skill="${escapeXmlAttr(skill.name)}" path="${escapeXmlAttr(file.path)}">\n${file.content}\n</skill_file>`,
       );
     },
   }),
@@ -157,12 +161,17 @@ async function listSkillCatalog(organizationId: string) {
   }
 
   const catalog = skills
-    .map((skill) => `<skill name="${skill.name}">${skill.description}</skill>`)
+    .map(
+      (skill) =>
+        `<skill name="${escapeXmlAttr(skill.name)}">${escapeXmlText(
+          skill.description,
+        )}</skill>`,
+    )
     .join("\n");
 
   return successResult(
     `<available_skills>\n${catalog}\n</available_skills>\n` +
-      "Call activate_skill again with one of these names to load its instructions.",
+      "Call activate_skill with one of these names to load its instructions.",
   );
 }
 

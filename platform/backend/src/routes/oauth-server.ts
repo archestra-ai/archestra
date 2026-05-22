@@ -10,20 +10,19 @@ import { getPublicRequestOrigin } from "./request-origin";
 /**
  * OAuth 2.1 well-known discovery endpoints.
  *
- * Both handlers below advertise URLs that an MCP client follows during the
- * OAuth discovery chain.
+ * Server-to-server endpoints (token, registration, jwks) use the request Host header
+ * so they work from Docker containers (host.docker.internal:9000).
+ *
+ * The authorization_endpoint uses the frontend base URL (e.g. http://localhost:3000)
+ * because it's browser-facing — the browser needs to reach it AND have session cookies
+ * available. The frontend's catch-all /api/auth proxy forwards to the backend.
  */
 const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
-   * MCP OAuth discovery chain — step 2 of 3 (RFC 9728 Protected Resource Metadata).
+   * RFC 9728 - OAuth Protected Resource Metadata
    * GET /.well-known/oauth-protected-resource/*
    *
-   * MCP client arrives here via the URL advertised in step 1 (the
-   * WWW-Authenticate header set by the MCP gateway on 401). The response
-   * tells the client:
-   *   - `resource`: the canonical URL of the MCP resource being protected
-   *   - `authorization_servers`: where to fetch OAuth endpoint metadata
-   *      (step 3 — see the /.well-known/oauth-authorization-server handler below)
+   * MCP clients hit this to discover which authorization server protects the resource.
    */
   fastify.get(
     "/.well-known/oauth-protected-resource/*",
@@ -71,18 +70,10 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
-   * MCP OAuth discovery chain — step 3 of 3 (RFC 8414 Authorization Server Metadata).
+   * RFC 8414 - OAuth Authorization Server Metadata
    * GET /.well-known/oauth-authorization-server
    *
-   * MCP client arrives here via one of the `authorization_servers` URLs
-   * advertised in step 2 (the protected-resource handler above). The
-   * response gives the client the four endpoint URLs it needs to run the
-   * OAuth dance:
-   *   - `authorization_endpoint`: browser hits this to grant consent; the
-   *      frontend's catch-all /api/auth proxy forwards the request (with
-   *      the user's session cookie) to this backend.
-   *   - `token_endpoint`, `registration_endpoint`, `jwks_uri`: server-to-server
-   *      calls from the MCP client during the OAuth dance.
+   * MCP clients hit this to discover OAuth endpoints (authorize, token, register, jwks).
    */
   fastify.get(
     "/.well-known/oauth-authorization-server",

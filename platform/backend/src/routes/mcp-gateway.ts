@@ -26,12 +26,8 @@ import { getPublicRequestOrigin } from "./request-origin";
 // =============================================================================
 
 /**
- * MCP OAuth discovery chain — step 1 of 3 (RFC 9728).
- *
- * Called when a request to the MCP gateway arrives without a valid token.
- * Sets the 401's WWW-Authenticate header to advertise the protected-resource
- * metadata URL, which the MCP client then fetches in step 2 (handled by
- * `/.well-known/oauth-protected-resource` in oauth-server.ts).
+ * Sets the WWW-Authenticate header with the OAuth protected resource metadata URL.
+ * Per RFC 9728, this tells clients where to discover the authorization server.
  */
 function setWWWAuthenticateHeader(
   request: FastifyRequest,

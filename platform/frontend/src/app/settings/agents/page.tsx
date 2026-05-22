@@ -173,6 +173,7 @@ export default function AgentSettingsPage() {
     () => availableKeys.find((key) => key.id === selectedApiKeyId) ?? null,
     [availableKeys, selectedApiKeyId],
   );
+  const canFilterFreeModels = selectedApiKey?.provider === "openrouter";
 
   const agentItems = useMemo(() => {
     const items: AgentSelectItem[] = [
@@ -270,7 +271,7 @@ export default function AgentSettingsPage() {
                   value={defaultModel}
                   onValueChange={setDefaultModel}
                   options={modelItems}
-                  freeFilterable
+                  freeFilterable={canFilterFreeModels}
                   placeholder={
                     !selectedApiKeyId
                       ? "Select API key first..."

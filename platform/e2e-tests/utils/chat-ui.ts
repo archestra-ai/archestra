@@ -133,7 +133,7 @@ export async function selectRuntimeModelFromDialog(
     }
 
     await expect(
-      exactModelOption.first().or(displayNameModelOption.first()),
+      exactModelOption.or(displayNameModelOption).first(),
     ).toBeVisible();
   }).toPass({ timeout: 25_000, intervals: [500, 1000, 2000, 5000] });
 
@@ -159,8 +159,11 @@ export async function selectRuntimeModelFromDialog(
 function buildModelOptionPattern(model: RuntimeChatModel): RegExp {
   const displayName = escapeRegExp(model.displayName);
   const modelId = escapeRegExp(model.id);
+  // Lone-name alternatives use (?![-\w]) so e.g. id "sonar" does not match a
+  // sibling option's "sonar-deep-research". Without this guard the click-time
+  // fallback could land on the wrong model.
   return new RegExp(
-    `${displayName}\\s*\\(${modelId}\\)|${modelId}|${displayName}`,
+    `${displayName}\\s*\\(${modelId}\\)|${modelId}(?![-\\w])|${displayName}(?![-\\w])`,
     "i",
   );
 }

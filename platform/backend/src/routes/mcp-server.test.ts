@@ -1223,6 +1223,85 @@ describe("mcp server inspect route", () => {
     }
   });
 
+  // Regression: the install dialog drops empty fields before submitting,
+  // so a partial reinstall (user fills only the new prompted var, leaves
+  // the others blank because the dialog doesn't pre-fill from the row)
+  // must not erase entries already on `environmentValues`.
+  test("reinstall preserves existing plain env values that the request body did not carry", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Local Reinstall Partial Submission",
+      serverType: "local",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [
+          {
+            key: "EXISTING_VAR",
+            type: "plain_text",
+            promptOnInstallation: true,
+            required: false,
+          },
+          {
+            key: "NEW_REQUIRED_VAR",
+            type: "plain_text",
+            promptOnInstallation: true,
+            required: true,
+          },
+        ],
+        transportType: "streamable-http",
+        httpPort: 8080,
+        httpPath: "/mcp",
+      },
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+    await db
+      .update(schema.mcpServersTable)
+      .set({ environmentValues: { EXISTING_VAR: "set-at-original-install" } })
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
+    await McpServerUserModel.assignUserToMcpServer(mcpServer.id, user.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${mcpServer.id}/reinstall`,
+      payload: {
+        environmentValues: {
+          NEW_REQUIRED_VAR: "user-fills-only-this",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const [updatedServer] = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
+
+    expect(updatedServer?.environmentValues).toMatchObject({
+      EXISTING_VAR: "set-at-original-install",
+      NEW_REQUIRED_VAR: "user-fills-only-this",
+    });
+
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const [serverRow] = await db
+        .select()
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.id, mcpServer.id));
+
+      if (serverRow?.localInstallationStatus !== "pending") {
+        break;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+  });
+
   test("installs a protected remote MCP server with an exchanged enterprise-managed credential on first discovery", async ({
     makeAccount,
     makeIdentityProvider,

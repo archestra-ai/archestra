@@ -1795,25 +1795,29 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Updated MCP server secrets for reinstall",
         );
 
-        // Mirror of the install route's environmentValues persistence
-        // (lines 705-723). Plain (non-secret) prompted env values also
-        // need to land on the install row's column — `startServer`
-        // overlays it on every (re)deploy because the secret-typed-only
-        // filter at manager.ts:226 drops plain values when loading from
-        // the K8s secret bag.
+        // Persist plain (non-secret) prompted env values onto the install
+        // row's column so startServer can overlay them on every (re)deploy
+        // — the secret-typed-only filter at manager.ts:226 drops plain
+        // values when loading from the K8s secret bag.
+        //
+        // Merge instead of replace: the install dialog drops empty fields
+        // before submitting, so a partial reinstall (user adds the new
+        // required var, leaves other prompted-plain fields blank because
+        // the dialog doesn't pre-fill them) must not erase keys already
+        // on the row. Only override keys the request actually carried.
         if (catalogItem.serverType === "local" && environmentValues) {
-          const installEnvironmentValues: Record<string, string> = {};
+          const merged: Record<string, string> = {
+            ...(mcpServer.environmentValues ?? {}),
+          };
           for (const envDef of catalogItem.localConfig?.environment ?? []) {
             if (envDef.promptOnInstallation && envDef.type !== "secret") {
               const value = environmentValues[envDef.key];
               if (value !== undefined && value !== null && value !== "") {
-                installEnvironmentValues[envDef.key] = String(value);
+                merged[envDef.key] = String(value);
               }
             }
           }
-          await McpServerModel.update(id, {
-            environmentValues: installEnvironmentValues,
-          });
+          await McpServerModel.update(id, { environmentValues: merged });
         }
       }
 

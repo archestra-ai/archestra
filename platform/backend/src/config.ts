@@ -473,20 +473,16 @@ export const parseSampleRate = (
 
 /**
  * Hostnames that `getPublicRequestOrigin` is willing to return when forwarded
- * headers are trusted. Derived from:
- *
- *   - ARCHESTRA_FRONTEND_URL              (single URL, frontend origin)
- *   - NEXT_PUBLIC_ARCHESTRA_API_BASE_URL  (comma-separated list, mirrors the
- *                                          frontend's `getExternalProxyUrls`)
+ * headers are trusted. Always contains the frontend origin (`frontendBaseUrl`,
+ * which defaults to http://localhost:3000 when ARCHESTRA_FRONTEND_URL is
+ * unset) plus every URL in `NEXT_PUBLIC_ARCHESTRA_API_BASE_URL` — the same
+ * comma-separated list the frontend's `getExternalProxyUrls` reads.
  *
  * Returned as a set of normalized `host` strings (lowercased; default ports
  * stripped — i.e. matching what `new URL(...).host` produces).
- *
- * An empty set means "no allowlist configured" → accept any forwarded host
- * (used for local dev where neither env var is set).
  * @public — exported for testability
  */
-export const getAllowedPublicHosts = (): Set<string> => {
+export const getMCPGatewayOauthAllowedPublicHosts = (): Set<string> => {
   const hosts = new Set<string>();
 
   const addHostFromUrl = (raw: string) => {
@@ -497,8 +493,7 @@ export const getAllowedPublicHosts = (): Set<string> => {
     }
   };
 
-  const frontendUrl = process.env.ARCHESTRA_FRONTEND_URL?.trim();
-  if (frontendUrl) addHostFromUrl(frontendUrl);
+  addHostFromUrl(frontendBaseUrl);
 
   const externalUrls = process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL?.trim();
   if (externalUrls) {

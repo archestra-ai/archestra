@@ -1,46 +1,32 @@
 import type { FastifyRequest } from "fastify";
 
-import { getAllowedPublicHosts } from "@/config";
+import config, { getMCPGatewayOauthAllowedPublicHosts } from "@/config";
 import logger from "@/logging";
 
 /**
- * Return the public origin for a request, scoped to OAuth / MCP metadata
- * responses. Operates independently of Fastify's global `trustProxy` option,
- * so callers can honor reverse-proxy headers here without exposing
- * `request.ip` / `request.host` / etc. elsewhere in the app to header
- * spoofing.
- *
- * The host allowlist is the trust mechanism. `getAllowedPublicHosts()` is
- * derived from `ARCHESTRA_FRONTEND_URL` and `NEXT_PUBLIC_ARCHESTRA_API_BASE_URL`
- * — the set of hostnames the operator has declared as legitimate public
- * origins for this deployment. Forwarded values are only honored when the
- * resulting host is in that set.
- *
- * Decision tree:
- *   1. If neither `X-Forwarded-Proto` nor `X-Forwarded-Host` is present, the
- *      direct Host header and socket TLS state are used.
- *   2. Otherwise, the candidate host is the first comma-separated value of
- *      `X-Forwarded-Host` (matching Fastify), or the direct Host header when
- *      `X-Forwarded-Host` is absent.
- *   3. If the allowlist is non-empty and the candidate host is not in it,
- *      forwarded values are dropped and we fall back to the direct origin.
- *   4. An empty allowlist (neither env var set) accepts any host — local-dev
- *      default. Operators are expected to set `NEXT_PUBLIC_ARCHESTRA_API_BASE_URL`
- *      (and/or `ARCHESTRA_FRONTEND_URL`) in production.
+ * Return the public origin for a request. This is used to build the OAuth protected resource metadata URL.
+ * It's needed to nmake sure mcp gateway oauth works out of the box, without the need to set ARCHESTRA_TRUST_PROXY. (it's too broad)
+ * Idea is to scope publc oriing only to Oauth and additionally validate hosts to prevent X-Forwarded-Host header spoofing.
+ * 
+ * The code which gets the origin is taken form the fastify.
+ * 
+ * MUST BE USED ONLY FOR MCP GATEWAY OAUTH.
  */
 export function getPublicRequestOrigin(request: FastifyRequest): string {
+  // Get the direct origin from the request firs
   const directProtocol = deriveProtocol(request);
   const directHost = request.headers.host ?? "localhost";
   const direct = `${directProtocol}://${directHost}`;
 
+  // Get the forwarded origin from the request headers
   const forwardedProto = pickFirstForwarded(
     request.headers["x-forwarded-proto"],
   );
   const forwardedHost = pickFirstForwarded(request.headers["x-forwarded-host"]);
   if (!forwardedProto && !forwardedHost) return direct;
-
   const protocol = (forwardedProto ?? directProtocol).replace(/:$/, "");
 
+  // Build a candidate host from the forwarded origin
   let candidateHost: string;
   if (forwardedHost) {
     try {
@@ -52,8 +38,16 @@ export function getPublicRequestOrigin(request: FastifyRequest): string {
     candidateHost = directHost;
   }
 
-  const allowed = getAllowedPublicHosts();
-  if (allowed.size > 0 && !allowed.has(candidateHost.toLowerCase())) {
+  // If trustProxy is set, the candidate is returned as-is.
+  // It's needed not to break any existing setups which already ARCHESTRA_TRUST_PROXY=true.
+  // Once we are happy with how scoped validation works, we can remove this alongside with the trustProxy.
+  if (config.api.trustProxy) {
+    return `${protocol}://${candidateHost}`;
+  }
+
+  // Check if the candidate host is in the allowed list
+  const allowed = getMCPGatewayOauthAllowedPublicHosts();
+  if (!allowed.has(candidateHost.toLowerCase())) {
     if (forwardedHost) {
       logger.warn(
         { forwardedHost: candidateHost, allowed: Array.from(allowed) },

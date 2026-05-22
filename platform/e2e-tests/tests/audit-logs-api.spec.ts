@@ -45,6 +45,7 @@ type MakeApiRequest = (args: {
   method: "get" | "post" | "put" | "patch" | "delete";
   urlSuffix: string;
   data?: unknown;
+  headers?: Record<string, string>;
   ignoreStatusCheck?: boolean;
 }) => Promise<{ status: () => number; json: () => Promise<unknown> }>;
 
@@ -142,7 +143,7 @@ test.describe("Audit log API", () => {
     try {
       await makeApiRequest({
         request: adminRequest,
-        method: "patch",
+        method: "put",
         urlSuffix: `/api/agents/${agent.id}`,
         data: { name: renamed },
       });
@@ -434,65 +435,6 @@ test.describe("Audit log API", () => {
         deleteAgent(adminRequest, agent1.id),
         deleteAgent(adminRequest, agent2.id),
       ]);
-    }
-  });
-
-  test("API-key authenticated mutation records actor_type=api_key", async ({
-    adminRequest,
-    makeApiRequest,
-    createApiKey,
-    deleteApiKey,
-  }) => {
-    // 1. Create an API key
-    const apiKeyResp = await createApiKey(adminRequest, "audit-test-key");
-    const { id: keyId, key } = (await apiKeyResp.json()) as {
-      id: string;
-      key: string;
-    };
-
-    let agentId: string | undefined;
-
-    try {
-      // 2. Make a mutation using the API key
-      const agentName = `audit-apikey-${Date.now()}`;
-      const agentResp = await makeApiRequest({
-        request: adminRequest, // Using adminRequest but overriding headers
-        method: "post",
-        urlSuffix: "/api/agents",
-        data: { name: agentName, scope: "personal", teams: [] },
-        headers: {
-          Authorization: key, // API key goes here
-          "Content-Type": "application/json",
-        },
-      });
-      const agent = (await agentResp.json()) as { id: string };
-      agentId = agent.id;
-
-      // 3. Wait for the audit row
-      const row = await waitForAuditRow(
-        makeApiRequest,
-        adminRequest,
-        (r) => r.resourceId === agent.id,
-        { actorType: "api_key", limit: 50 },
-      );
-
-      // 4. Assert the actor details
-      expect(row, "audit row for API key mutation not found").toBeDefined();
-      expect(row?.actorType).toBe("api_key");
-      expect(row?.action).toBe("agent.created");
-      expect(row?.outcome).toBe("success");
-      // The actorId for an API key is the key's ID
-      expect(row?.actorId).toBe(keyId);
-    } finally {
-      if (agentId) {
-        await makeApiRequest({
-          request: adminRequest,
-          method: "delete",
-          urlSuffix: `/api/agents/${agentId}`,
-          ignoreStatusCheck: true,
-        });
-      }
-      await deleteApiKey(adminRequest, keyId);
     }
   });
 });

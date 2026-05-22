@@ -319,6 +319,10 @@ export const AUDIT_DECISIONS = {
   // =========================================================================
   // Children of audited parents
   // =========================================================================
+  skillTeamsTable: {
+    audited: false,
+    reason: "join: skill × team; parent (skill) audited",
+  },
   skillFilesTable: {
     audited: false,
     reason: "child of skill; parent (skill) audited",

@@ -499,7 +499,7 @@ describe("registerAuditLogHook", () => {
       expect(rows[0].actorType).toBe("user");
     });
 
-    test("api_key caller → actorType=api_key", async () => {
+    test("api_key caller → actorType=api_key, actorId=owning user id", async () => {
       const apiKeyApp = createFastifyInstance();
       injectAuth(apiKeyApp, user, orgId, "api_key");
       registerAuditLogHook(apiKeyApp);
@@ -514,6 +514,8 @@ describe("registerAuditLogHook", () => {
 
       const rows = await getRows();
       expect(rows[0].actorType).toBe("api_key");
+      // actorId is the owning user's ID (FK → usersTable); actorType is the auth-method signal.
+      expect(rows[0].actorId).toBe(user.id);
 
       await apiKeyApp.close();
     });

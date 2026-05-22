@@ -113,10 +113,12 @@ test.describe("Audit log UI", {
     ).toHaveCount(0);
 
     // Direct navigation should be blocked by the page-permission guard;
-    // member ends up redirected away from /audit/logs.
+    // the member stays at the URL but sees the 403 forbidden page.
     await goToMemberPage(AUDIT_LOGS_PATH);
     await memberPage.waitForLoadState("domcontentloaded");
-    expect(memberPage.url()).not.toContain(AUDIT_LOGS_PATH);
+    await expect(
+      memberPage.getByText("You don't have permission to access this page."),
+    ).toBeVisible({ timeout: 10_000 });
   });
 
   test("editor does not see the Audit tab", async ({

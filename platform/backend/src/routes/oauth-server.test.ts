@@ -193,7 +193,7 @@ describe("OAuth Server - Well-Known Endpoints", () => {
           ...originalEnv,
           ARCHESTRA_TRUST_PROXY: "true",
           // Public origins used by tests in this describe.
-          NEXT_PUBLIC_ARCHESTRA_API_BASE_URL:
+          ARCHESTRA_API_BASE_URL:
             "https://gateway.example.com,https://archestra.example.com",
         };
         proxyApp = Fastify({

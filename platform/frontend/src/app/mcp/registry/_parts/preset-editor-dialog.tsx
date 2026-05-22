@@ -88,10 +88,6 @@ export function PresetEditorDialog({
       ).length,
     [allServers, affectedCatalogIds],
   );
-  // Suffix only matters for default-preset edits — child edits already
-  // name their preset in the dialog title.
-  const otherPresetCount = isEditingDefaultPreset ? childPresets.length : 0;
-
   const [fieldValues, setFieldValues] = useState<Record<string, FieldValue>>(
     {},
   );
@@ -260,8 +256,6 @@ export function PresetEditorDialog({
             <ReinstallConfirmBar
               mode="auto"
               affectedServerCount={affectedServerCount}
-              presetCount={otherPresetCount}
-              presetEntityName={presetEntityName}
               isSubmitting={isConfirming}
               onCancel={() => setPendingConfirm(false)}
               onConfirm={performSave}

@@ -55,9 +55,13 @@ export async function assignCatalogCredentialToGateway(params: {
     catalogItemName: params.catalogItemName,
     gatewayName: params.gatewayName,
   });
-  await params.page
-    .getByRole("option", { name: params.credentialName })
-    .click();
+  const credentialOption = params.page.getByRole("option", {
+    name: params.credentialName,
+  });
+  await expect(credentialOption).toBeVisible({ timeout: 10_000 });
+  // Same DOM-detach issue as the visibleTokenSelect click above — the
+  // capability row re-renders briefly when the credential dropdown opens.
+  await credentialOption.click({ force: true });
   await params.page.keyboard.press("Escape");
   await params.page.waitForTimeout(200);
   await saveOpenProfileDialog(params.page);

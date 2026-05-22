@@ -7,7 +7,9 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { AuditLogModel } from "@/models";
 import {
-  AuditActionSchema,
+  AuditActorTypeSchema,
+  AuditEventNameSchema,
+  AuditOutcomeSchema,
   constructResponseSchema,
   SelectAuditLogSchema,
   SortDirectionSchema,
@@ -34,17 +36,20 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .datetime()
               .optional()
               .describe("Filter events on or before this date (ISO 8601)"),
-            actorUserId: z
-              .string()
-              .optional()
-              .describe("Filter by actor user ID"),
-            action: AuditActionSchema.optional().describe(
-              "Filter by action type",
+            actorId: z.string().optional().describe("Filter by actor ID"),
+            action: AuditEventNameSchema.optional().describe(
+              "Filter by action type (dotted name, e.g. agent.created)",
+            ),
+            outcome: AuditOutcomeSchema.optional().describe(
+              "Filter by outcome (success, failure, or denied)",
+            ),
+            actorType: AuditActorTypeSchema.optional().describe(
+              "Filter by actor type (user, api_key, sso, or system)",
             ),
             resourceType: z
               .string()
               .optional()
-              .describe("Filter by resource type (e.g. agent, auth, role)"),
+              .describe("Filter by resource type (e.g. agent, role)"),
             search: z
               .string()
               .optional()
@@ -66,8 +71,10 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         query: {
           startDate,
           endDate,
-          actorUserId,
+          actorId,
           action,
+          outcome,
+          actorType,
           resourceType,
           search,
           limit,
@@ -85,8 +92,10 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         sortDirection,
         startDate: startDate ? new Date(startDate) : undefined,
         endDate: endDate ? new Date(endDate) : undefined,
-        actorUserId,
+        actorId,
         action,
+        outcome,
+        actorType,
         resourceType,
         search,
       });

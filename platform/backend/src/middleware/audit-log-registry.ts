@@ -26,6 +26,7 @@ import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
 import TrustedDataPolicyModel from "@/models/trusted-data-policy";
 import UserTokenModel from "@/models/user-token";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
+import { type AuditEventName, AuditEventNameSchema } from "@/types/audit-log";
 
 export type AuditResourceIdSource =
   | "organizationContext"
@@ -49,12 +50,53 @@ export type AuditableRouteConfig = {
     id: string,
     organizationId: string,
   ) => Promise<Record<string, unknown> | null>;
+  /**
+   * Hard-coded action name; wins over actionByMethod and method-derivation.
+   * Use for routes whose HTTP verb does not map to the semantic action
+   * (rotations, syncs, imports, reinstalls, bulk ops).
+   */
+  action?: AuditEventName;
+  /**
+   * Per-method action override; falls through to deriveAction when absent.
+   * Useful when a single route pattern handles multiple verbs with different
+   * semantics.
+   */
+  actionByMethod?: Partial<
+    Record<"POST" | "PUT" | "PATCH" | "DELETE", AuditEventName>
+  >;
 };
+
+/**
+ * Derives a dotted audit event name from a resource type and HTTP method.
+ * Returns null when the candidate name is not in the closed AuditEventNameSchema
+ * (i.e., the resource type is unknown or the method doesn't map to a verb).
+ *
+ * @public — consumed by audit-log-hook.ts and audit-log-snapshot.test.ts
+ */
+export function deriveAction(
+  resourceType: string | null,
+  method: string,
+): AuditEventName | null {
+  if (!resourceType) return null;
+  const verb =
+    method === "POST"
+      ? "created"
+      : method === "PUT" || method === "PATCH"
+        ? "updated"
+        : method === "DELETE"
+          ? "deleted"
+          : null;
+  if (!verb) return null;
+  const candidate = `${resourceType}.${verb}`;
+  return AuditEventNameSchema.safeParse(candidate).success
+    ? (candidate as AuditEventName)
+    : null;
+}
 
 /**
  * Maps Fastify parameterized route patterns to their resource type and an
  * optional snapshot fetcher.  The audit preHandler hook uses `fetchById` to
- * capture `prior_state`; the onResponse hook uses it again for `post_state`.
+ * capture `before`; the onResponse hook uses it again for `after`.
  *
  * Rules:
  * - POST routes (no :id in path) register without `fetchById`; the hook
@@ -93,6 +135,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   },
   "/api/mcp_server/:id": {
     resourceType: "mcpServer",
+    fetchById: (id, orgId) => McpServerModel.findByIdForAudit(id, orgId),
+  },
+  // Explicit entry prevents walk-up from inheriting mcpServer.created verb.
+  "/api/mcp_server/:id/reinstall": {
+    resourceType: "mcpServer",
+    action: "mcpServer.reinstalled",
     fetchById: (id, orgId) => McpServerModel.findByIdForAudit(id, orgId),
   },
 
@@ -213,12 +261,19 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "skill",
     fetchById: (id, orgId) => SkillModel.findByIdForAudit(id, orgId),
   },
-  // Enabling skill tools patches the org record — audit as an org-level change
-  // so it appears alongside other org setting mutations in the audit log.
+  // Enabling skill slash commands patches the org record — audit as org-level change.
   "/api/skills/enable-defaults": {
     resourceType: "organization",
+    action: "organization.updated",
     resourceIdSource: "organizationContext",
     fetchById: (id, _orgId) => OrganizationModel.findByIdForAudit(id, _orgId),
+  },
+  // GitHub import has distinct semantics from a plain create.
+  "/api/skills/github/import": {
+    resourceType: "skill",
+    action: "skill.imported",
+    resourceIdSource: "organizationContext",
+    fetchById: (id, orgId) => SkillModel.findByIdForAudit(id, orgId),
   },
 
   // Scheduled agent triggers (sub-routes resolve via `resolveAuditableRouteConfig`)
@@ -244,15 +299,16 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
       MemberModel.findByUserIdForAudit(userId, orgId),
   },
 
-  // Team / org tokens
+  // Team / org tokens — rotation is semantically distinct from a generic update.
   "/api/tokens/:tokenId/rotate": {
     resourceType: "teamToken",
+    action: "teamToken.rotated",
     resourceIdParam: "tokenId",
     fetchById: (id, orgId) => TeamTokenModel.findByIdForAudit(id, orgId),
   },
-
   "/api/user-tokens/me/rotate": {
     resourceType: "userToken",
+    action: "userToken.rotated",
     resourceIdSource: "currentUserPersonalToken",
     fetchById: (id, orgId) => UserTokenModel.findByIdForAudit(id, orgId),
   },
@@ -276,9 +332,10 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) => LlmOauthClientModel.findByIdForAudit(id, orgId),
   },
 
-  // LLM model catalog (admin)
+  // LLM model catalog (admin) — sync has distinct semantics from a generic update.
   "/api/llm-models/sync": {
     resourceType: "llmModel",
+    action: "llmModel.synced",
     resourceIdSource: "organizationContext",
     fetchById: (_id, _orgId) => ModelModel.snapshotModelCatalogForAudit(),
   },
@@ -351,8 +408,10 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (_id, _orgId) =>
       chatOpsConfigModel.getRedactedSnapshotForAudit(),
   },
+  // Channel discovery refresh is semantically distinct from a generic binding update.
   "/api/chatops/channel-discovery/refresh": {
     resourceType: "chatOpsBinding",
+    action: "chatOpsBinding.refreshed",
     resourceIdSource: "organizationContext",
     fetchById: (_id, orgId) =>
       ChatOpsChannelBindingModel.findBindingsFingerprintForOrganization(orgId),
@@ -361,12 +420,14 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   // Autonomy policy bulk defaults (org-scoped tool footprint)
   "/api/tool-invocation/bulk-default": {
     resourceType: "toolInvocationPolicy",
+    action: "toolInvocationPolicy.bulk_defaulted",
     resourceIdSource: "organizationContext",
     fetchById: (id, _orgId) =>
       ToolInvocationPolicyModel.findDefaultPoliciesSnapshotForOrganization(id),
   },
   "/api/trusted-data-policies/bulk-default": {
     resourceType: "trustedDataPolicy",
+    action: "trustedDataPolicy.bulk_defaulted",
     resourceIdSource: "organizationContext",
     fetchById: (id, _orgId) =>
       TrustedDataPolicyModel.findDefaultPoliciesSnapshotForOrganization(id),
@@ -375,12 +436,14 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   // Agent tool bulk / auto-policy (assignment counts + default policy maps)
   "/api/agents/tools/bulk-assign": {
     resourceType: "agentTool",
+    action: "agentTool.bulk_assigned",
     resourceIdSource: "organizationContext",
     fetchById: (id, _orgId) =>
       AgentToolModel.countAssignmentsForOrganization(id),
   },
   "/api/agent-tools/auto-configure-policies": {
     resourceType: "toolInvocationPolicy",
+    action: "toolInvocationPolicy.auto_configured",
     resourceIdSource: "organizationContext",
     fetchById: async (orgId, _orgId) => {
       const [tip, tdp] = await Promise.all([

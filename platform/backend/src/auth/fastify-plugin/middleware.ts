@@ -282,6 +282,7 @@ export class Authnz {
           // Populate the request decorators
           request.user = user;
           request.organizationId = organizationId;
+          request.authMethod = "session";
           logger.trace(
             { userId: user.id, organizationId },
             "[Authnz] populateUserInfo: populated from session",
@@ -320,6 +321,7 @@ export class Authnz {
             // Populate the request decorators
             request.user = user;
             request.organizationId = organizationId;
+            request.authMethod = "api_key";
             logger.trace(
               { userId: user.id, organizationId },
               "[Authnz] populateUserInfo: populated from API key",

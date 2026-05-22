@@ -17,8 +17,10 @@ import {
   type PaginatedResult,
 } from "@/database/utils/pagination";
 import type {
-  AuditAction,
+  AuditActorType,
+  AuditEventName,
   AuditLog,
+  AuditOutcome,
   InsertAuditLog,
   SortDirection,
 } from "@/types";
@@ -55,8 +57,10 @@ class AuditLogModel {
     sortDirection?: SortDirection;
     startDate?: Date;
     endDate?: Date;
-    actorUserId?: string;
-    action?: AuditAction;
+    actorId?: string;
+    action?: AuditEventName;
+    outcome?: AuditOutcome;
+    actorType?: AuditActorType;
     resourceType?: string;
     search?: string;
   }): Promise<PaginatedResult<AuditLog>> {
@@ -67,8 +71,10 @@ class AuditLogModel {
       sortDirection = "desc",
       startDate,
       endDate,
-      actorUserId,
+      actorId,
       action,
+      outcome,
+      actorType,
       resourceType,
       search,
     } = opts;
@@ -83,11 +89,17 @@ class AuditLogModel {
     if (endDate) {
       conditions.push(lte(schema.auditLogsTable.createdAt, endDate));
     }
-    if (actorUserId) {
-      conditions.push(eq(schema.auditLogsTable.actorUserId, actorUserId));
+    if (actorId) {
+      conditions.push(eq(schema.auditLogsTable.actorId, actorId));
     }
     if (action) {
       conditions.push(eq(schema.auditLogsTable.action, action));
+    }
+    if (outcome) {
+      conditions.push(eq(schema.auditLogsTable.outcome, outcome));
+    }
+    if (actorType) {
+      conditions.push(eq(schema.auditLogsTable.actorType, actorType));
     }
     if (resourceType) {
       conditions.push(eq(schema.auditLogsTable.resourceType, resourceType));
@@ -100,17 +112,26 @@ class AuditLogModel {
     }
 
     const whereClause = and(...conditions);
+
+    // Two-column sort: created_at tiebroken by event_sequence (postgres-assigned
+    // bigserial, always monotonic). The matching index covers both columns.
     const orderBy =
       sortDirection === "asc"
-        ? asc(schema.auditLogsTable.createdAt)
-        : desc(schema.auditLogsTable.createdAt);
+        ? [
+            asc(schema.auditLogsTable.createdAt),
+            asc(schema.auditLogsTable.eventSequence),
+          ]
+        : [
+            desc(schema.auditLogsTable.createdAt),
+            desc(schema.auditLogsTable.eventSequence),
+          ];
 
     const [data, [{ total }]] = await Promise.all([
       db
         .select()
         .from(schema.auditLogsTable)
         .where(whereClause)
-        .orderBy(orderBy)
+        .orderBy(...orderBy)
         .limit(limit)
         .offset(offset),
       db

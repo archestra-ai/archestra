@@ -3,6 +3,11 @@
  * - Requires a successful permission check for RouteId.GetAuditLogs (admin-only).
  * - Returns paginated audit rows strictly scoped to request.organizationId.
  * - Query filters map to AuditLogModel.findPaginated; invalid pagination/sortDirection → 400.
+ * - actorId, action (dotted), outcome, actorType filters narrow results; unknown filter
+ *   values that fail the closed enum are rejected with 400.
+ * - Legacy actorUserId param is not accepted by the route; it is silently ignored
+ *   (Fastify strips unknown query params) — the regression guard verifies results are
+ *   NOT narrowed when only actorUserId is passed.
  * - 403 when hasPermission denies the request.
  */
 
@@ -37,19 +42,22 @@ function seedRow(
   > = {},
 ) {
   return AuditLogModel.create({
-    actorUserId: null,
+    actorId: null,
+    actorType: "user",
     actorName: "Test Actor",
     actorEmail: "actor@example.com",
-    action: "sign_in",
-    resourceType: "auth",
+    action: "auth.signed_in",
+    outcome: "success",
+    occurredAt: new Date(),
+    resourceType: null,
     resourceId: null,
-    priorState: null,
-    postState: null,
+    before: null,
+    after: null,
     httpMethod: null,
     httpPath: "/api/auth/sign-in/email",
     httpRoute: null,
     httpStatus: null,
-    ipAddress: null,
+    sourceIp: null,
     userAgent: null,
     ...overrides,
     organizationId,
@@ -79,8 +87,6 @@ describe("GET /api/audit-logs", () => {
     });
 
     // Simulate the permission gate that fastifyAuthPlugin normally provides.
-    // Throwing ApiError is the correct Fastify pattern — the server's error
-    // handler converts it to a 403 JSON response without a "double send" race.
     app.addHook("preHandler", async (request) => {
       const result = await hasPermissionMock(undefined, request.headers);
       if (!result?.success) {
@@ -179,46 +185,134 @@ describe("GET /api/audit-logs", () => {
     expect(body.data.some((r: AuditLog) => r.id === otherRow.id)).toBe(false);
   });
 
-  test("actorUserId filter narrows results", async ({ makeUser }) => {
+  test("actorId filter narrows results", async ({ makeUser }) => {
     const targetUser = await makeUser();
     const targeted = await seedRow(organizationId, {
-      actorUserId: targetUser.id,
+      actorId: targetUser.id,
     });
-    await seedRow(organizationId, { actorUserId: null });
+    await seedRow(organizationId, { actorId: null });
 
     const response = await app.inject({
       method: "GET",
-      url: `/api/audit-logs?actorUserId=${targetUser.id}`,
+      url: `/api/audit-logs?actorId=${targetUser.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data.length).toBeGreaterThan(0);
+    expect(body.data.every((r: AuditLog) => r.actorId === targetUser.id)).toBe(
+      true,
+    );
+    expect(body.data.some((r: AuditLog) => r.id === targeted.id)).toBe(true);
+  });
+
+  test("legacy actorUserId param is ignored — does not narrow results (regression guard)", async ({
+    makeUser,
+  }) => {
+    const user1 = await makeUser();
+    const user2 = await makeUser();
+
+    await seedRow(organizationId, { actorId: user1.id });
+    await seedRow(organizationId, { actorId: user2.id });
+
+    // actorUserId is no longer a recognised param; it must NOT silently filter.
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/audit-logs?actorUserId=${user1.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    // Both rows must be present — if actorUserId were re-wired as a filter
+    // only one row would come back and this assertion would catch the regression.
+    expect(body.pagination.total).toBe(2);
+  });
+
+  test("outcome filter narrows results to matching outcome", async () => {
+    const deniedRow = await seedRow(organizationId, { outcome: "denied" });
+    await seedRow(organizationId, { outcome: "success" });
+    await seedRow(organizationId, { outcome: "failure" });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/audit-logs?outcome=denied",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data.length).toBeGreaterThan(0);
+    expect(body.data.every((r: AuditLog) => r.outcome === "denied")).toBe(true);
+    expect(body.data.some((r: AuditLog) => r.id === deniedRow.id)).toBe(true);
+  });
+
+  test("invalid outcome value is rejected with 400", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/audit-logs?outcome=partial",
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  test("actorType filter narrows results to matching actor type", async () => {
+    const apiKeyRow = await seedRow(organizationId, { actorType: "api_key" });
+    await seedRow(organizationId, { actorType: "user" });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/audit-logs?actorType=api_key",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data.length).toBeGreaterThan(0);
+    expect(body.data.every((r: AuditLog) => r.actorType === "api_key")).toBe(
+      true,
+    );
+    expect(body.data.some((r: AuditLog) => r.id === apiKeyRow.id)).toBe(true);
+  });
+
+  test("invalid actorType value is rejected with 400", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/audit-logs?actorType=robot",
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  test("action filter narrows results", async () => {
+    const signInRow = await seedRow(organizationId, {
+      action: "auth.signed_in",
+    });
+    await seedRow(organizationId, { action: "auth.signed_out" });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/audit-logs?action=auth.signed_in",
     });
 
     expect(response.statusCode).toBe(200);
     const body = response.json();
     expect(body.data.length).toBeGreaterThan(0);
     expect(
-      body.data.every((r: AuditLog) => r.actorUserId === targetUser.id),
+      body.data.every((r: AuditLog) => r.action === "auth.signed_in"),
     ).toBe(true);
-    expect(body.data.some((r: AuditLog) => r.id === targeted.id)).toBe(true);
+    expect(body.data.some((r: AuditLog) => r.id === signInRow.id)).toBe(true);
   });
 
-  test("action filter narrows results", async () => {
-    const signInRow = await seedRow(organizationId, { action: "sign_in" });
-    await seedRow(organizationId, { action: "sign_out" });
-
+  test("invalid action value (non-dotted legacy name) is rejected with 400", async () => {
     const response = await app.inject({
       method: "GET",
-      url: "/api/audit-logs?action=sign_in",
+      url: "/api/audit-logs?action=create",
     });
 
-    expect(response.statusCode).toBe(200);
-    const body = response.json();
-    expect(body.data.length).toBeGreaterThan(0);
-    expect(body.data.every((r: AuditLog) => r.action === "sign_in")).toBe(true);
-    expect(body.data.some((r: AuditLog) => r.id === signInRow.id)).toBe(true);
+    expect(response.statusCode).toBe(400);
   });
 
   test("resourceType filter narrows results", async () => {
     const agentRow = await seedRow(organizationId, { resourceType: "agent" });
-    await seedRow(organizationId, { resourceType: "auth" });
+    await seedRow(organizationId, { resourceType: null });
 
     const response = await app.inject({
       method: "GET",
@@ -269,30 +363,58 @@ describe("GET /api/audit-logs", () => {
 
   test("combined action + resourceType filters AND together", async () => {
     await seedRow(organizationId, {
-      action: "create",
+      action: "agent.created",
       resourceType: "agent",
       resourceId: "match-both",
     });
     await seedRow(organizationId, {
-      action: "delete",
+      action: "agent.deleted",
       resourceType: "agent",
       resourceId: "wrong-action",
     });
     await seedRow(organizationId, {
-      action: "create",
+      action: "agent.created",
       resourceType: "role",
       resourceId: "wrong-type",
     });
 
     const response = await app.inject({
       method: "GET",
-      url: "/api/audit-logs?action=create&resourceType=agent",
+      url: "/api/audit-logs?action=agent.created&resourceType=agent",
     });
 
     expect(response.statusCode).toBe(200);
     const body = response.json();
     expect(body.data).toHaveLength(1);
     expect(body.data[0].resourceId).toBe("match-both");
+  });
+
+  test("combined outcome + actorType filters AND together", async () => {
+    await seedRow(organizationId, {
+      outcome: "denied",
+      actorType: "api_key",
+      resourceId: "match",
+    });
+    await seedRow(organizationId, {
+      outcome: "success",
+      actorType: "api_key",
+      resourceId: "wrong-outcome",
+    });
+    await seedRow(organizationId, {
+      outcome: "denied",
+      actorType: "user",
+      resourceId: "wrong-type",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/audit-logs?outcome=denied&actorType=api_key",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].resourceId).toBe("match");
   });
 
   test("limit and offset produce stable, non-overlapping pages", async () => {
@@ -349,11 +471,11 @@ describe("GET /api/audit-logs", () => {
   });
 
   test("returns empty data when no rows match the filter", async () => {
-    await seedRow(organizationId, { action: "sign_in" });
+    await seedRow(organizationId, { action: "auth.signed_in" });
 
     const response = await app.inject({
       method: "GET",
-      url: "/api/audit-logs?action=sign_up",
+      url: "/api/audit-logs?action=auth.signed_up",
     });
 
     expect(response.statusCode).toBe(200);
@@ -371,7 +493,7 @@ describe("GET /api/audit-logs", () => {
     expect(response.statusCode).toBe(400);
   });
 
-  test("sortBy is not an accepted query param (regression guard for the cleanup)", async () => {
+  test("sortBy is not an accepted query param (regression guard)", async () => {
     await seedRow(organizationId);
 
     const response = await app.inject({
@@ -417,11 +539,9 @@ describe("GET /api/audit-logs", () => {
     expect(response.statusCode).toBe(200);
     const body = response.json();
     expect(body.data.length).toBeGreaterThan(0);
-    const timestamps = body.data.map((r: AuditLog) =>
-      new Date(r.createdAt).getTime(),
-    );
-    for (let i = 1; i < timestamps.length; i++) {
-      expect(timestamps[i]).toBeGreaterThanOrEqual(timestamps[i - 1]);
+    const sequences = body.data.map((r: AuditLog) => r.eventSequence);
+    for (let i = 1; i < sequences.length; i++) {
+      expect(sequences[i]).toBeGreaterThanOrEqual(sequences[i - 1]);
     }
   });
 });

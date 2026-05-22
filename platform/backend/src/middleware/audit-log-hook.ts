@@ -2,15 +2,19 @@ import logger from "@/logging";
 import AuditLogModel from "@/models/audit-log";
 import UserTokenModel from "@/models/user-token";
 import type { FastifyInstanceWithZod } from "@/server";
-import type { AuditAction } from "@/types";
+import type { AuditEventName, AuditOutcome } from "@/types";
 import {
   type AuditableRouteConfig,
+  deriveAction,
   resolveAuditableRouteConfig,
 } from "./audit-log-registry";
 
 export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
   fastify.addHook("preHandler", async (request) => {
     if (shouldSkip(request.method, request.url, request.user)) return;
+
+    // Always stamp event time before the handler executes.
+    request.auditOccurredAt = new Date();
 
     const routePattern = request.routeOptions.url;
     const cfg = resolveAuditableRouteConfig(routePattern);
@@ -19,7 +23,7 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
     const id = await resolveAuditedResourceId(request, cfg);
     if (!id) return;
 
-    request.auditPriorState = sanitizeAuditSnapshot(
+    request.auditBefore = sanitizeAuditSnapshot(
       await cfg.fetchById(id, request.organizationId).catch((err) => {
         logger.error({ err }, "audit: fetchById (prior) failed");
         return null;
@@ -28,7 +32,7 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
   });
 
   // Capture the created resource's id from POST response bodies so the
-  // onResponse hook can call fetchById to populate post_state.
+  // onResponse hook can call fetchById to populate `after`.
   fastify.addHook("onSend", async (request, _reply, payload) => {
     if (request.method !== "POST" || typeof payload !== "string")
       return payload;
@@ -57,46 +61,53 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
 
   fastify.addHook("onResponse", async (request, reply) => {
     if (shouldSkip(request.method, request.url, request.user)) return;
-    if (reply.statusCode >= 400) return;
 
+    // 4xx/5xx mutations are now recorded — outcome column carries the signal.
     const routePattern = request.routeOptions.url;
     const cfg = resolveAuditableRouteConfig(routePattern);
-    const action = httpMethodToAction(request.method);
-    if (!action) return;
+    const outcome = deriveOutcome(reply.statusCode);
+    const action = resolveActionName(cfg, request.method);
 
     const id =
       (cfg ? await resolveAuditedResourceId(request, cfg) : null) ??
       request.auditResponseBodyId ??
       null;
 
-    const postState = await resolvePostState({
-      method: request.method,
-      id,
-      organizationId: request.organizationId,
-      cfg,
-    });
+    const after =
+      outcome === "success"
+        ? await resolveAfterState({
+            method: request.method,
+            id,
+            organizationId: request.organizationId,
+            cfg,
+          })
+        : null;
 
-    const ipAddress = extractIp(request);
+    const sourceIp = extractIp(request);
     const userAgent =
       (request.headers["user-agent"] as string | undefined) ?? null;
     const httpPath = request.url.slice(0, 2048);
 
     const payload = {
       organizationId: request.organizationId,
-      actorUserId: request.user.id,
+      actorId: request.user.id,
+      actorType: request.authMethod ?? "user",
       actorName: request.user.name ?? null,
       actorEmail: request.user.email,
       action,
+      outcome,
       resourceType: cfg?.resourceType ?? null,
       resourceId: id,
-      priorState: sanitizeAuditSnapshot(request.auditPriorState ?? null),
-      postState: sanitizeAuditSnapshot(postState),
+      before: sanitizeAuditSnapshot(request.auditBefore ?? null),
+      after: sanitizeAuditSnapshot(after),
       httpMethod: request.method,
       httpPath,
       httpRoute: routePattern ?? null,
       httpStatus: reply.statusCode,
-      ipAddress,
+      requestId: request.id,
+      sourceIp,
       userAgent,
+      occurredAt: request.auditOccurredAt ?? new Date(),
     };
 
     void AuditLogModel.create(payload).catch((err) => {
@@ -111,6 +122,48 @@ const AUDIT_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 /** Cap on the response body size we'll JSON.parse just to harvest a created id. */
 const AUDIT_ONSEND_MAX_PARSE_BYTES = 64 * 1024;
+
+function deriveOutcome(statusCode: number): AuditOutcome {
+  if (statusCode >= 200 && statusCode < 300) return "success";
+  if (statusCode === 401 || statusCode === 403) return "denied";
+  return "failure";
+}
+
+function resolveActionName(
+  cfg: AuditableRouteConfig | undefined,
+  method: string,
+): AuditEventName {
+  if (cfg?.action) return cfg.action;
+  const byMethod =
+    cfg?.actionByMethod?.[method as "POST" | "PUT" | "PATCH" | "DELETE"];
+  if (byMethod) return byMethod;
+  const derived = deriveAction(cfg?.resourceType ?? null, method);
+  if (derived) return derived;
+  const unknown = fallbackUnknownAction(method);
+  logger.warn(
+    {
+      method,
+      resourceType: cfg?.resourceType ?? null,
+      fallbackAction: unknown,
+    },
+    "audit: no action resolved for mutating route; using fallback. Add an entry to AUDITABLE_ROUTES.",
+  );
+  return unknown;
+}
+
+function fallbackUnknownAction(method: string): AuditEventName {
+  switch (method) {
+    case "POST":
+      return "unknown.created";
+    case "PUT":
+    case "PATCH":
+      return "unknown.updated";
+    case "DELETE":
+      return "unknown.deleted";
+    default:
+      return "unknown.created";
+  }
+}
 
 /**
  * Pull a created resource's id from a typical create-response body. Handles
@@ -152,20 +205,6 @@ function shouldSkip(method: string, url: string, user: unknown): boolean {
   if (AUDIT_DENYLIST_PREFIXES.some((p) => url.startsWith(p))) return true;
   if (!user) return true;
   return false;
-}
-
-function httpMethodToAction(method: string): AuditAction | null {
-  switch (method) {
-    case "POST":
-      return "create";
-    case "PUT":
-    case "PATCH":
-      return "update";
-    case "DELETE":
-      return "delete";
-    default:
-      return null;
-  }
 }
 
 async function resolveAuditedResourceId(
@@ -224,7 +263,7 @@ function extractIp(request: {
   return null;
 }
 
-async function resolvePostState(params: {
+async function resolveAfterState(params: {
   method: string;
   id: string | null;
   organizationId: string;

@@ -448,3 +448,10 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @vadik49b
 - @JayashTripathy
 - @Duman142
+- @marox-cyber
+- @khozakhulile27-netizen
+- @ttrubel
+- @akai07
+- @sFn-00
+- @Amhitox
+- @Soild211

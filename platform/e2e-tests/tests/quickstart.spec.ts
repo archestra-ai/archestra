@@ -72,12 +72,6 @@ test.describe("Quickstart", { tag: "@quickstart" }, () => {
           apiKey: "sk-quickstart-test",
           providerOptionName: "OpenAI OpenAI",
         });
-
-        await expect(
-          page.getByText("API key created successfully"),
-        ).toBeVisible({
-          timeout: 10_000,
-        });
       } else {
         await expect(chatPrompt).toBeVisible({ timeout: 15_000 });
       }

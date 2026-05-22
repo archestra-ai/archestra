@@ -7,12 +7,24 @@ import logger from "@/logging";
  * Return the public origin for a request. This is used to build the OAuth protected resource metadata URL.
  * It's needed to nmake sure mcp gateway oauth works out of the box, without the need to set ARCHESTRA_TRUST_PROXY. (it's too broad)
  * Idea is to scope publc oriing only to Oauth and additionally validate hosts to prevent X-Forwarded-Host header spoofing.
- * 
+ *
  * The code which gets the origin is taken form the fastify.
- * 
+ *
  * MUST BE USED ONLY FOR MCP GATEWAY OAUTH.
  */
 export function getPublicRequestOrigin(request: FastifyRequest): string {
+  const result = computePublicRequestOrigin(request);
+  const directProtocol = deriveProtocol(request);
+  const directHost = request.headers.host ?? "localhost";
+  const direct = `${directProtocol}://${directHost}`;
+  logger.info(
+    { direct, result },
+    "getPublicRequestOrigin: direct and returned result",
+  );
+  return result;
+}
+
+function computePublicRequestOrigin(request: FastifyRequest): string {
   // Get the direct origin from the request firs
   const directProtocol = deriveProtocol(request);
   const directHost = request.headers.host ?? "localhost";

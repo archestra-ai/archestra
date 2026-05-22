@@ -2,7 +2,7 @@ import logger from "@/logging";
 import AuditLogModel from "@/models/audit-log";
 import UserTokenModel from "@/models/user-token";
 import type { FastifyInstanceWithZod } from "@/server";
-import type { AuditEventName, AuditOutcome } from "@/types";
+import type { AuditActorType, AuditEventName, AuditOutcome } from "@/types";
 import {
   type AuditableRouteConfig,
   deriveAction,
@@ -87,11 +87,13 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
     const userAgent =
       (request.headers["user-agent"] as string | undefined) ?? null;
     const httpPath = request.url.slice(0, 2048);
+    const actorType: AuditActorType =
+      request.authMethod === "api_key" ? "api_key" : "user";
 
     const payload = {
       organizationId: request.organizationId,
       actorId: request.user.id,
-      actorType: request.authMethod ?? "user",
+      actorType,
       actorName: request.user.name ?? null,
       actorEmail: request.user.email,
       action,

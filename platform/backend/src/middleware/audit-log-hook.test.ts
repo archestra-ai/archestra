@@ -101,7 +101,7 @@ vi.mock("./audit-log-registry", async () => {
   function deriveAction(
     resourceType: string | null,
     method: string,
-  ): import("./audit-log-registry").AuditEventName | null {
+  ): import("@/types/audit-log").AuditEventName | null {
     if (!resourceType) return null;
     const verb =
       method === "POST"
@@ -114,7 +114,7 @@ vi.mock("./audit-log-registry", async () => {
     if (!verb) return null;
     const candidate = `${resourceType}.${verb}`;
     return AuditEventNameSchema.safeParse(candidate).success
-      ? (candidate as import("./audit-log-registry").AuditEventName)
+      ? (candidate as import("@/types/audit-log").AuditEventName)
       : null;
   }
 

@@ -36,7 +36,7 @@ import InvitationModel from "@/models/invitation";
 import MemberModel from "@/models/member";
 import SessionModel from "@/models/session";
 import UserModel from "@/models/user";
-import type { AuditAction } from "@/types/audit-log";
+import type { AuditEventName } from "@/types/audit-log";
 import { linkedIdentityProviderPlugin } from "./linked-idp";
 
 const { ssoConfig, syncSsoRole, syncSsoTeams } = config.enterpriseFeatures.core
@@ -914,24 +914,28 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
           if (resolved?.user && resolved?.session) {
             await AuditLogModel.create({
               organizationId: canceledInvitation.organizationId,
-              actorUserId: resolved.user.id,
+              actorId: resolved.user.id,
+              actorType: "user",
               actorName: resolved.user.name ?? null,
               actorEmail: resolved.user.email,
-              action: "delete",
+              action: "invitation.deleted",
+              outcome: "success",
               resourceType: "invitation",
               resourceId: canceledInvitation.id,
-              priorState: {
+              before: {
                 email: canceledInvitation.email,
                 role: canceledInvitation.role ?? null,
                 status: canceledInvitation.status,
               },
-              postState: null,
+              after: null,
               httpMethod: "POST",
               httpPath: path,
               httpRoute: null,
               httpStatus: null,
-              ipAddress: resolveAuthClientIp(request),
+              requestId: null,
+              sourceIp: resolveAuthClientIp(request),
               userAgent: request.headers.get("user-agent") ?? null,
+              occurredAt: new Date(),
             });
           }
         } catch (err) {
@@ -971,20 +975,24 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
           );
           await AuditLogModel.create({
             organizationId: orgId,
-            actorUserId: resolved.user.id,
+            actorId: resolved.user.id,
+            actorType: "user",
             actorName: resolved.user.name ?? null,
             actorEmail: resolved.user.email,
-            action: "create",
+            action: "invitation.created",
+            outcome: "success",
             resourceType: "invitation",
             resourceId: invitation?.id ?? null,
-            priorState: null,
-            postState: { email, role: role ?? null },
+            before: null,
+            after: { email, role: role ?? null },
             httpMethod: "POST",
             httpPath: path,
             httpRoute: null,
             httpStatus: null,
-            ipAddress: resolveAuthClientIp(request),
+            requestId: null,
+            sourceIp: resolveAuthClientIp(request),
             userAgent: request.headers.get("user-agent") ?? null,
+            occurredAt: new Date(),
           });
         }
       } catch (err) {
@@ -1012,14 +1020,16 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
           if (invitation) {
             await AuditLogModel.create({
               organizationId: invitation.organizationId,
-              actorUserId: resolved.user.id,
+              actorId: resolved.user.id,
+              actorType: "user",
               actorName: resolved.user.name ?? null,
               actorEmail: resolved.user.email,
-              action: "create",
+              action: "member.created",
+              outcome: "success",
               resourceType: "member",
               resourceId: invitationId,
-              priorState: null,
-              postState: {
+              before: null,
+              after: {
                 email: invitation.email,
                 role: invitation.role ?? null,
                 invitationId,
@@ -1028,8 +1038,10 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
               httpPath: path,
               httpRoute: null,
               httpStatus: null,
-              ipAddress: resolveAuthClientIp(request),
+              requestId: null,
+              sourceIp: resolveAuthClientIp(request),
               userAgent: request.headers.get("user-agent") ?? null,
+              occurredAt: new Date(),
             });
           }
         }
@@ -1063,20 +1075,24 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
           if (member) {
             await AuditLogModel.create({
               organizationId: member.organizationId,
-              actorUserId: resolved.user.id,
+              actorId: resolved.user.id,
+              actorType: "user",
               actorName: resolved.user.name ?? null,
               actorEmail: resolved.user.email,
-              action: "update",
+              action: "member.role_updated",
+              outcome: "success",
               resourceType: "member",
               resourceId: stash.memberId,
-              priorState: { role: stash.priorRole },
-              postState: { role: newRole },
+              before: { role: stash.priorRole },
+              after: { role: newRole },
               httpMethod: "POST",
               httpPath: path,
               httpRoute: null,
               httpStatus: null,
-              ipAddress: resolveAuthClientIp(request),
+              requestId: null,
+              sourceIp: resolveAuthClientIp(request),
               userAgent: request.headers.get("user-agent") ?? null,
+              occurredAt: new Date(),
             });
           }
         }
@@ -1100,24 +1116,28 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         if (resolved?.user && resolved?.session) {
           await AuditLogModel.create({
             organizationId: stash.organizationId,
-            actorUserId: resolved.user.id,
+            actorId: resolved.user.id,
+            actorType: "user",
             actorName: resolved.user.name ?? null,
             actorEmail: resolved.user.email,
-            action: "delete",
+            action: "member.deleted",
+            outcome: "success",
             resourceType: "member",
             resourceId: stash.memberId,
-            priorState: {
+            before: {
               email: stash.email,
               name: stash.name,
               role: stash.role,
             },
-            postState: null,
+            after: null,
             httpMethod: "POST",
             httpPath: path,
             httpRoute: null,
             httpStatus: null,
-            ipAddress: resolveAuthClientIp(request),
+            requestId: null,
+            sourceIp: resolveAuthClientIp(request),
             userAgent: request.headers.get("user-agent") ?? null,
+            occurredAt: new Date(),
           });
         }
       } catch (err) {
@@ -1159,7 +1179,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
       void writeAuthAuditLog({
         user: fromBefore.user,
         session: fromBefore.session,
-        action: "sign_out",
+        action: "auth.signed_out",
         path,
         request,
       }).catch((err) =>
@@ -1181,7 +1201,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
       void writeAuthAuditLog({
         user: sessionCtx.user,
         session: sessionCtx.session,
-        action: "sign_out",
+        action: "auth.signed_out",
         path,
         request,
       }).catch((err) =>
@@ -1207,7 +1227,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
           void writeAuthAuditLog({
             user: resolved.user,
             session: resolved.session,
-            action: "sign_out",
+            action: "auth.signed_out",
             path,
             request,
           }).catch((err) =>
@@ -1270,7 +1290,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
       void writeAuthAuditLog({
         user,
         session,
-        action: "sign_up",
+        action: "auth.signed_up",
         path,
         request,
       }).catch((err) =>
@@ -1312,9 +1332,9 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
 
       // Audit: successful sign-in or SSO callback (fires after domain check so
       // rejected SSO logins that throw above never produce a row)
-      const authAction: AuditAction = path.startsWith("/sso/callback")
-        ? "sso_callback"
-        : "sign_in";
+      const authAction: AuditEventName = path.startsWith("/sso/callback")
+        ? "auth.sso_callback"
+        : "auth.signed_in";
       void writeAuthAuditLog({
         user,
         session,
@@ -1551,7 +1571,7 @@ async function cleanupRejectedSsoLogin(params: {
 async function writeAuthAuditLog(params: {
   user: { id: string; name?: string | null; email: string };
   session: { id: string; activeOrganizationId?: string | null };
-  action: AuditAction;
+  action: AuditEventName;
   path: string;
   request?: Request;
   providerId?: string;
@@ -1570,37 +1590,46 @@ async function writeAuthAuditLog(params: {
     return;
   }
 
-  const ipAddress = resolveAuthClientIp(request);
+  const sourceIp = resolveAuthClientIp(request);
   const userAgent = request?.headers.get("user-agent") ?? null;
 
-  let postState: Record<string, unknown> | null = null;
-  if (action === "sign_in" || action === "sso_callback") {
-    postState = { sessionId: session.id };
+  // SSO callbacks are actor_type="sso"; all other auth events are actor_type="user".
+  const actorType = action === "auth.sso_callback" ? "sso" : "user";
+
+  let after: Record<string, unknown> | null = null;
+  if (action === "auth.signed_in" || action === "auth.sso_callback") {
+    after = { sessionId: session.id };
     if (providerId) {
-      postState.providerId = providerId;
+      after.providerId = providerId;
     }
-  } else if (action === "sign_out") {
-    postState = { sessionId: session.id, ended: true };
-  } else if (action === "sign_up") {
-    postState = { sessionId: session.id, userId: user.id };
+  } else if (action === "auth.signed_out") {
+    after = { sessionId: session.id, ended: true };
+  } else if (action === "auth.signed_up") {
+    after = { sessionId: session.id, userId: user.id };
   }
 
   await AuditLogModel.create({
     organizationId,
-    actorUserId: user.id,
+    actorId: user.id,
+    actorType,
     actorName: user.name ?? null,
     actorEmail: user.email,
     action,
+    outcome: "success",
     resourceType: "auth",
     resourceId: user.id,
-    priorState: null,
-    postState,
+    before: null,
+    after,
     httpMethod: "POST",
     httpPath: path,
     httpRoute: null,
     httpStatus: null,
-    ipAddress,
+    // better-auth operates on Web Request objects; Fastify's request.id is not
+    // accessible here. requestId is null for all auth-surface audit rows.
+    requestId: null,
+    sourceIp,
     userAgent,
+    occurredAt: new Date(),
   });
 }
 

@@ -1955,7 +1955,7 @@ describe("auth event audit logging", () => {
     await new Promise((r) => setTimeout(r, 50));
   }
 
-  test("sign-in produces one audit row with action=sign_in", async ({
+  test("sign-in produces one audit row with action=auth.signed_in", async ({
     makeUser,
     makeOrganization,
     makeMember,
@@ -1985,21 +1985,25 @@ describe("auth event audit logging", () => {
       offset: 0,
     });
 
-    const auditRows = data.filter((r) => r.action === "sign_in");
+    const auditRows = data.filter((r) => r.action === "auth.signed_in");
     expect(auditRows).toHaveLength(1);
-    expect(auditRows[0].action).toBe("sign_in");
+    expect(auditRows[0].action).toBe("auth.signed_in");
     expect(auditRows[0].resourceType).toBe("auth");
-    expect(auditRows[0].actorUserId).toBe(user.id);
+    expect(auditRows[0].actorId).toBe(user.id);
+    expect(auditRows[0].actorType).toBe("user");
+    expect(auditRows[0].outcome).toBe("success");
     expect(auditRows[0].organizationId).toBe(org.id);
     expect(auditRows[0].httpMethod).toBe("POST");
     expect(auditRows[0].actorEmail).toBe(user.email);
-    expect(auditRows[0].postState).toMatchObject({
+    expect(auditRows[0].after).toMatchObject({
       sessionId: "sess-signin-audit",
     });
-    expect(auditRows[0].priorState).toBeNull();
+    expect(auditRows[0].before).toBeNull();
+    expect(auditRows[0].occurredAt).toBeInstanceOf(Date);
+    expect(auditRows[0].requestId).toBeNull();
   });
 
-  test("sign-out produces one audit row with action=sign_out", async ({
+  test("sign-out produces one audit row with action=auth.signed_out", async ({
     makeUser,
     makeOrganization,
     makeMember,
@@ -2029,16 +2033,20 @@ describe("auth event audit logging", () => {
       offset: 0,
     });
 
-    const rows = data.filter((r) => r.action === "sign_out");
+    const rows = data.filter((r) => r.action === "auth.signed_out");
     expect(rows).toHaveLength(1);
     expect(rows[0].resourceType).toBe("auth");
-    expect(rows[0].actorUserId).toBe(user.id);
+    expect(rows[0].actorId).toBe(user.id);
+    expect(rows[0].actorType).toBe("user");
+    expect(rows[0].outcome).toBe("success");
     expect(rows[0].httpMethod).toBe("POST");
-    expect(rows[0].postState).toMatchObject({
+    expect(rows[0].after).toMatchObject({
       sessionId: "sess-signout-audit",
       ended: true,
     });
-    expect(rows[0].priorState).toBeNull();
+    expect(rows[0].before).toBeNull();
+    expect(rows[0].occurredAt).toBeInstanceOf(Date);
+    expect(rows[0].requestId).toBeNull();
   });
 
   test("sign-out with /api/auth/sign-out path uses pre-hook session stash when after hook has no session", async ({
@@ -2088,16 +2096,16 @@ describe("auth event audit logging", () => {
       offset: 0,
     });
 
-    const rows = data.filter((r) => r.action === "sign_out");
+    const rows = data.filter((r) => r.action === "auth.signed_out");
     expect(rows.length).toBeGreaterThanOrEqual(1);
-    const row = rows.find((r) => r.actorUserId === user.id);
-    expect(row?.postState).toMatchObject({
+    const row = rows.find((r) => r.actorId === user.id);
+    expect(row?.after).toMatchObject({
       sessionId: "sess-stash-audit",
       ended: true,
     });
   });
 
-  test("SSO callback produces one audit row with action=sso_callback and providerId", async ({
+  test("SSO callback produces one audit row with action=auth.sso_callback and actor_type=sso", async ({
     makeUser,
     makeOrganization,
     makeMember,
@@ -2131,19 +2139,23 @@ describe("auth event audit logging", () => {
       offset: 0,
     });
 
-    const auditRows = data.filter((r) => r.action === "sso_callback");
+    const auditRows = data.filter((r) => r.action === "auth.sso_callback");
     expect(auditRows).toHaveLength(1);
-    expect(auditRows[0].action).toBe("sso_callback");
+    expect(auditRows[0].action).toBe("auth.sso_callback");
     expect(auditRows[0].resourceType).toBe("auth");
-    expect(auditRows[0].actorUserId).toBe(user.id);
+    expect(auditRows[0].actorId).toBe(user.id);
+    expect(auditRows[0].actorType).toBe("sso");
+    expect(auditRows[0].outcome).toBe("success");
     expect(auditRows[0].httpMethod).toBe("POST");
-    expect(auditRows[0].postState).toMatchObject({
+    expect(auditRows[0].after).toMatchObject({
       sessionId: "sess-sso-audit",
       providerId: "audit-idp",
     });
+    expect(auditRows[0].occurredAt).toBeInstanceOf(Date);
+    expect(auditRows[0].requestId).toBeNull();
   });
 
-  test("sign-up with valid invitation produces one audit row with action=sign_up", async ({
+  test("sign-up with valid invitation produces one audit row with action=auth.signed_up", async ({
     makeUser,
     makeOrganization,
     makeInvitation,
@@ -2183,19 +2195,23 @@ describe("auth event audit logging", () => {
       offset: 0,
     });
 
-    const auditRows = data.filter((r) => r.action === "sign_up");
+    const auditRows = data.filter((r) => r.action === "auth.signed_up");
     expect(auditRows).toHaveLength(1);
-    expect(auditRows[0].action).toBe("sign_up");
+    expect(auditRows[0].action).toBe("auth.signed_up");
     expect(auditRows[0].resourceType).toBe("auth");
-    expect(auditRows[0].actorUserId).toBe(newUser.id);
+    expect(auditRows[0].actorId).toBe(newUser.id);
+    expect(auditRows[0].actorType).toBe("user");
+    expect(auditRows[0].outcome).toBe("success");
     expect(auditRows[0].organizationId).toBe(org.id);
     expect(auditRows[0].httpMethod).toBe("POST");
     expect(auditRows[0].actorEmail).toBe(newUser.email);
-    expect(auditRows[0].postState).toEqual({
+    expect(auditRows[0].after).toEqual({
       sessionId: "sess-signup-audit",
       userId: newUser.id,
     });
-    expect(auditRows[0].priorState).toBeNull();
+    expect(auditRows[0].before).toBeNull();
+    expect(auditRows[0].occurredAt).toBeInstanceOf(Date);
+    expect(auditRows[0].requestId).toBeNull();
   });
 
   test("sign-in with no newSession (failed auth) produces zero rows", async ({
@@ -2264,8 +2280,8 @@ describe("auth event audit logging", () => {
     });
 
     expect(data).toHaveLength(1);
-    expect(data[0].action).toBe("sign_out");
-    expect(data[0].actorUserId).toBe(user.id);
+    expect(data[0].action).toBe("auth.signed_out");
+    expect(data[0].actorId).toBe(user.id);
     expect(getSessionSpy).toHaveBeenCalled();
 
     getSessionSpy.mockRestore();
@@ -2352,7 +2368,7 @@ describe("auth event audit logging", () => {
         limit: 1,
         offset: 0,
       });
-      return data[0]?.ipAddress;
+      return data[0]?.sourceIp;
     }
 
     test("records x-archestra-client-ip when set (the Fastify-injected, server-controlled header)", async ({
@@ -2441,16 +2457,18 @@ describe("auth event audit logging", () => {
       offset: 0,
     });
 
-    const rows = data.filter((r) => r.action === "sign_up");
+    const rows = data.filter((r) => r.action === "auth.signed_up");
     expect(rows).toHaveLength(1);
-    expect(rows[0].actorUserId).toBe(user.id);
+    expect(rows[0].actorId).toBe(user.id);
+    expect(rows[0].actorType).toBe("user");
+    expect(rows[0].outcome).toBe("success");
     expect(rows[0].resourceType).toBe("auth");
     expect(rows[0].httpMethod).toBe("POST");
     expect(acceptSpy).not.toHaveBeenCalled();
     acceptSpy.mockRestore();
   });
 
-  test("invite-member produces audit row with action=create on invitation", async ({
+  test("invite-member produces audit row with action=invitation.created", async ({
     makeUser,
     makeOrganization,
     makeInvitation,
@@ -2500,16 +2518,21 @@ describe("auth event audit logging", () => {
     });
 
     const rows = data.filter(
-      (r) => r.resourceType === "invitation" && r.action === "create",
+      (r) =>
+        r.resourceType === "invitation" && r.action === "invitation.created",
     );
     expect(rows).toHaveLength(1);
-    expect(rows[0].actorUserId).toBe(admin.id);
+    expect(rows[0].actorId).toBe(admin.id);
+    expect(rows[0].actorType).toBe("user");
+    expect(rows[0].outcome).toBe("success");
     expect(rows[0].resourceId).toBe(invitation.id);
-    expect(rows[0].postState).toMatchObject({
+    expect(rows[0].after).toMatchObject({
       email: "invite-audit-new@example.com",
       role: "member",
     });
-    expect(rows[0].priorState).toBeNull();
+    expect(rows[0].before).toBeNull();
+    expect(rows[0].occurredAt).toBeInstanceOf(Date);
+    expect(rows[0].requestId).toBeNull();
   });
 
   test("invite-member picks the most recent pending invitation when stale rows exist for the same email", async ({
@@ -2566,14 +2589,15 @@ describe("auth event audit logging", () => {
     });
 
     const rows = data.filter(
-      (r) => r.resourceType === "invitation" && r.action === "create",
+      (r) =>
+        r.resourceType === "invitation" && r.action === "invitation.created",
     );
     expect(rows).toHaveLength(1);
     expect(rows[0].resourceId).toBe(fresh.id);
     expect(rows[0].resourceId).not.toBe(stale.id);
   });
 
-  test("cancel-invitation produces audit row with action=delete on invitation", async ({
+  test("cancel-invitation produces audit row with action=invitation.deleted", async ({
     makeUser,
     makeOrganization,
     makeInvitation,
@@ -2618,20 +2642,25 @@ describe("auth event audit logging", () => {
     });
 
     const rows = data.filter(
-      (r) => r.resourceType === "invitation" && r.action === "delete",
+      (r) =>
+        r.resourceType === "invitation" && r.action === "invitation.deleted",
     );
     expect(rows).toHaveLength(1);
-    expect(rows[0].actorUserId).toBe(admin.id);
+    expect(rows[0].actorId).toBe(admin.id);
+    expect(rows[0].actorType).toBe("user");
+    expect(rows[0].outcome).toBe("success");
     expect(rows[0].resourceId).toBe(invitation.id);
-    expect(rows[0].priorState).toMatchObject({
+    expect(rows[0].before).toMatchObject({
       email: "cancel-audit-user@example.com",
       role: "editor",
       status: "pending",
     });
-    expect(rows[0].postState).toBeNull();
+    expect(rows[0].after).toBeNull();
+    expect(rows[0].occurredAt).toBeInstanceOf(Date);
+    expect(rows[0].requestId).toBeNull();
   });
 
-  test("accept-invitation produces audit row with action=create on member", async ({
+  test("accept-invitation produces audit row with action=member.created", async ({
     makeUser,
     makeOrganization,
     makeInvitation,
@@ -2679,20 +2708,24 @@ describe("auth event audit logging", () => {
     });
 
     const rows = data.filter(
-      (r) => r.resourceType === "member" && r.action === "create",
+      (r) => r.resourceType === "member" && r.action === "member.created",
     );
     expect(rows).toHaveLength(1);
-    expect(rows[0].actorUserId).toBe(joiner.id);
+    expect(rows[0].actorId).toBe(joiner.id);
+    expect(rows[0].actorType).toBe("user");
+    expect(rows[0].outcome).toBe("success");
     expect(rows[0].resourceId).toBe(invitation.id);
-    expect(rows[0].postState).toMatchObject({
+    expect(rows[0].after).toMatchObject({
       email: "accept-audit-joiner@example.com",
       role: "editor",
       invitationId: invitation.id,
     });
-    expect(rows[0].priorState).toBeNull();
+    expect(rows[0].before).toBeNull();
+    expect(rows[0].occurredAt).toBeInstanceOf(Date);
+    expect(rows[0].requestId).toBeNull();
   });
 
-  test("update-member role produces audit row with priorState and postState", async ({
+  test("update-member role produces audit row with before and after", async ({
     makeUser,
     makeOrganization,
     makeMember,
@@ -2744,13 +2777,17 @@ describe("auth event audit logging", () => {
     });
 
     const rows = data.filter(
-      (r) => r.resourceType === "member" && r.action === "update",
+      (r) => r.resourceType === "member" && r.action === "member.role_updated",
     );
     expect(rows).toHaveLength(1);
-    expect(rows[0].actorUserId).toBe(admin.id);
+    expect(rows[0].actorId).toBe(admin.id);
+    expect(rows[0].actorType).toBe("user");
+    expect(rows[0].outcome).toBe("success");
     expect(rows[0].resourceId).toBe(member.id);
-    expect(rows[0].priorState).toMatchObject({ role: "member" });
-    expect(rows[0].postState).toMatchObject({ role: "editor" });
+    expect(rows[0].before).toMatchObject({ role: "member" });
+    expect(rows[0].after).toMatchObject({ role: "editor" });
+    expect(rows[0].occurredAt).toBeInstanceOf(Date);
+    expect(rows[0].requestId).toBeNull();
   });
 
   test("update-member with unchanged role produces no audit row", async ({
@@ -2802,11 +2839,14 @@ describe("auth event audit logging", () => {
       offset: 0,
     });
     expect(
-      data.filter((r) => r.resourceType === "member" && r.action === "update"),
+      data.filter(
+        (r) =>
+          r.resourceType === "member" && r.action === "member.role_updated",
+      ),
     ).toHaveLength(0);
   });
 
-  test("remove-member produces audit row with email/name/role in priorState", async ({
+  test("remove-member produces audit row with email/name/role in before", async ({
     makeUser,
     makeOrganization,
     makeMember,
@@ -2861,17 +2901,21 @@ describe("auth event audit logging", () => {
     });
 
     const rows = data.filter(
-      (r) => r.resourceType === "member" && r.action === "delete",
+      (r) => r.resourceType === "member" && r.action === "member.deleted",
     );
     expect(rows).toHaveLength(1);
-    expect(rows[0].actorUserId).toBe(admin.id);
+    expect(rows[0].actorId).toBe(admin.id);
+    expect(rows[0].actorType).toBe("user");
+    expect(rows[0].outcome).toBe("success");
     expect(rows[0].resourceId).toBe(member.id);
-    expect(rows[0].priorState).toMatchObject({
+    expect(rows[0].before).toMatchObject({
       email: target.email,
       name: target.name,
       role: "editor",
     });
-    expect(rows[0].postState).toBeNull();
+    expect(rows[0].after).toBeNull();
+    expect(rows[0].occurredAt).toBeInstanceOf(Date);
+    expect(rows[0].requestId).toBeNull();
   });
 
   test("remove-member by email address produces audit row", async ({
@@ -2927,11 +2971,11 @@ describe("auth event audit logging", () => {
     });
 
     const rows = data.filter(
-      (r) => r.resourceType === "member" && r.action === "delete",
+      (r) => r.resourceType === "member" && r.action === "member.deleted",
     );
     expect(rows).toHaveLength(1);
     expect(rows[0].resourceId).toBe(member.id);
-    expect(rows[0].priorState).toMatchObject({
+    expect(rows[0].before).toMatchObject({
       email: target.email,
       role: "member",
     });
@@ -2968,7 +3012,7 @@ describe("auth event audit logging", () => {
       offset: 0,
     });
 
-    const auditRows = data.filter((r) => r.action === "sign_in");
+    const auditRows = data.filter((r) => r.action === "auth.signed_in");
     expect(auditRows).toHaveLength(1);
     expect(auditRows[0].organizationId).toBe(org.id);
   });

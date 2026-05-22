@@ -99,6 +99,48 @@ export function presetHasUnfilledFields(
 }
 
 /**
+ * Compile a preset-entry's `validationRegex` source into a `RegExp`.
+ * Returns `null` when the source is empty/null or fails to compile (caller
+ * treats both as "no validation").
+ */
+export function compileValidationRegex(
+  source: string | null | undefined,
+): RegExp | null {
+  if (!source) return null;
+  try {
+    return new RegExp(source);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Returns the validation error message for a single field value against the
+ * preset's regex, or `null` if it passes. Only string-valued fields are
+ * checked (numbers and booleans bypass — the regex is meant for free-text
+ * values like URLs, hostnames, env names).
+ *
+ * `presetTerm` is the org-configured singular term — e.g. "Environment",
+ * "Tenant" — surfaced verbatim in the error message so the wording matches the
+ * admin's vocabulary instead of the hard-coded "preset".
+ */
+export function validateFieldAgainstRegex(params: {
+  value: string;
+  regex: RegExp | null;
+  required: boolean;
+  valueType: FieldValueType;
+  presetTerm: string;
+}): string | null {
+  const { value, regex, required, valueType, presetTerm } = params;
+  if (!regex) return null;
+  if (valueType !== "string") return null;
+  if (!value) return required ? "Required" : null;
+  return regex.test(value)
+    ? null
+    : `Value does not match the ${presetTerm} Validation Rule`;
+}
+
+/**
  * Frontend mirror of `assertCanEditCatalogPresets` (backend):
  * an mcpServerInstallation admin, OR the author of a personal-scope catalog.
  */

@@ -11,6 +11,7 @@ import { z } from "zod";
 import { schema } from "@/database";
 import { sanitizeSvg } from "@/utils/sanitize-svg";
 import { LimitCleanupIntervalSchema } from "./limit";
+import { ValidationRegexSchema } from "./mcp-preset-entry";
 
 const DATA_URI_PREFIX = "data:image/png;base64,";
 const GIF_DATA_URI_PREFIX = "data:image/gif;base64,";
@@ -314,6 +315,8 @@ const extendedFields = {
   connectionBaseUrls: z.array(ConnectionBaseUrlSchema).nullable(),
   presetEntityName: z.string().nullable(),
   presetEntityNamePlural: z.string().nullable(),
+  presetEntityDefaultLabel: z.string().nullable(),
+  presetEntityDefaultValidationRegex: z.string().nullable(),
 };
 
 export const SelectOrganizationSchema = createSelectSchema(
@@ -358,10 +361,10 @@ export const UpdateLlmSettingsSchema = z.object({
 });
 
 export const UpdateAgentSettingsSchema = z.object({
-  defaultLlmModel: z.string().nullable().optional(),
-  defaultLlmProvider: SupportedProvidersSchema.nullable().optional(),
+  defaultModelId: z.string().uuid().nullable().optional(),
   defaultLlmApiKeyId: z.string().uuid().nullable().optional(),
   defaultAgentId: z.string().uuid().nullable().optional(),
+  skillSlashCommandsEnabled: z.boolean().optional(),
 });
 
 export const UpdateKnowledgeSettingsSchema = z.object({
@@ -434,6 +437,14 @@ export const UpdatePresetEntityNameSchema = z
       });
     }
   });
+
+export const UpdatePresetEntityDefaultLabelSchema = z.object({
+  presetEntityDefaultLabel: z.string().trim().min(1).max(50).nullable(),
+});
+
+export const UpdatePresetEntityDefaultValidationRegexSchema = z.object({
+  presetEntityDefaultValidationRegex: ValidationRegexSchema.nullable(),
+});
 
 export const CompleteOnboardingSchema = z.object({
   onboardingComplete: z.literal(true),

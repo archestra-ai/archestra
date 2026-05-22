@@ -1,6 +1,9 @@
 export * from "./agents";
 export * from "./archestra-mcp-server";
 export * from "./built-in-agents";
+export * from "./cascade-scenarios";
+export * from "./catalog-runtime-fields";
+export * from "./catalog-shape-fixtures";
 export * from "./chat";
 export * from "./chat-error";
 export * from "./consts";
@@ -22,6 +25,7 @@ export * from "./mcp-orchestrator";
 export * from "./mcp-server-config";
 export * from "./mcp-tool-error";
 export * from "./model-constants";
+export * from "./model-resolution";
 export * from "./oauth";
 export * from "./organization-appearance";
 export * from "./pagination";

@@ -3,6 +3,7 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
+  CONTEXT_COMPACTION_SYSTEM_PROMPT,
   DUAL_LLM_MAIN_SYSTEM_PROMPT,
   DUAL_LLM_QUARANTINE_SYSTEM_PROMPT,
   PLAYWRIGHT_MCP_CATALOG_ID,
@@ -98,6 +99,16 @@ export async function syncBuiltInAgents(): Promise<void> {
       systemPrompt: DUAL_LLM_QUARANTINE_SYSTEM_PROMPT,
       builtInAgentConfig: {
         name: BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
+      } as const,
+    },
+    {
+      builtInAgentId: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
+      name: BUILT_IN_AGENT_NAMES.CONTEXT_COMPACTION,
+      description:
+        "Summarizes older chat context into a durable handoff so long-running conversations can continue near model context limits",
+      systemPrompt: CONTEXT_COMPACTION_SYSTEM_PROMPT,
+      builtInAgentConfig: {
+        name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
       } as const,
     },
   ];

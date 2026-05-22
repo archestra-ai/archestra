@@ -9,25 +9,29 @@ import {
   shouldResetInitialChatState,
 } from "./chat-initial-state";
 
+// Mock LlmModel: `id` is the provider model string, `dbId` the models.id UUID.
+const model = (id: string, dbId: string, provider: string, isBest = false) =>
+  ({ id, dbId, provider, isBest }) as never;
+
 describe("resolveInitialAgentState", () => {
   test("returns org default model for an agent without its own model", () => {
     const result = resolveInitialAgentState({
       agent: { id: "agent-1" },
       modelsByProvider: {
-        openai: [{ id: "gpt-4.1", provider: "openai" } as never],
+        openai: [model("gpt-4.1", "uuid-gpt", "openai")],
       },
       chatApiKeys: [{ id: "key-1", provider: "openai" }],
       organization: {
-        defaultLlmModel: "gpt-4.1",
+        defaultModelId: "uuid-gpt",
         defaultLlmApiKeyId: "key-1",
       },
+      memberDefault: null,
     });
 
     expect(result).toEqual({
       agentId: "agent-1",
-      modelId: "gpt-4.1",
+      modelId: "uuid-gpt",
       apiKeyId: "key-1",
-      modelSource: "organization",
     });
   });
 
@@ -35,26 +39,50 @@ describe("resolveInitialAgentState", () => {
     const result = resolveInitialAgentState({
       agent: {
         id: "agent-1",
-        llmModel: "claude-3-5-sonnet",
+        modelId: "uuid-sonnet",
         llmApiKeyId: "key-2",
       },
       modelsByProvider: {
-        anthropic: [
-          { id: "claude-3-5-sonnet", provider: "anthropic" } as never,
-        ],
+        anthropic: [model("claude-3-5-sonnet", "uuid-sonnet", "anthropic")],
       },
       chatApiKeys: [{ id: "key-2", provider: "anthropic" }],
       organization: {
-        defaultLlmModel: "gpt-4.1",
+        defaultModelId: "uuid-gpt",
         defaultLlmApiKeyId: "key-1",
       },
+      memberDefault: null,
     });
 
     expect(result).toEqual({
       agentId: "agent-1",
-      modelId: "claude-3-5-sonnet",
+      modelId: "uuid-sonnet",
       apiKeyId: "key-2",
-      modelSource: "agent",
+    });
+  });
+
+  test("prefers the member default over the agent-configured model", () => {
+    const result = resolveInitialAgentState({
+      agent: {
+        id: "agent-1",
+        modelId: "uuid-sonnet",
+        llmApiKeyId: "key-2",
+      },
+      modelsByProvider: {
+        anthropic: [model("claude-3-5-sonnet", "uuid-sonnet", "anthropic")],
+        openai: [model("gpt-4.1", "uuid-gpt", "openai")],
+      },
+      chatApiKeys: [
+        { id: "key-1", provider: "openai" },
+        { id: "key-2", provider: "anthropic" },
+      ],
+      organization: null,
+      memberDefault: { modelId: "uuid-gpt", chatApiKeyId: "key-1" },
+    });
+
+    expect(result).toEqual({
+      agentId: "agent-1",
+      modelId: "uuid-gpt",
+      apiKeyId: "key-1",
     });
   });
 });
@@ -129,11 +157,11 @@ describe("resolveInitialAgentSelection", () => {
 });
 
 describe("getProviderForModelId", () => {
-  test("returns the model provider when present", () => {
+  test("returns the model provider for a model UUID", () => {
     expect(
       getProviderForModelId({
-        modelId: "gpt-4.1",
-        chatModels: [{ id: "gpt-4.1", provider: "openai" } as never],
+        modelId: "uuid-gpt",
+        chatModels: [model("gpt-4.1", "uuid-gpt", "openai")],
       }),
     ).toBe("openai");
   });
@@ -142,19 +170,19 @@ describe("getProviderForModelId", () => {
 describe("resolveChatModelState", () => {
   test("includes provider information when chat models are supplied", () => {
     const result = resolveChatModelState({
-      agent: { id: "agent-1", llmModel: "gpt-4.1", llmApiKeyId: "key-1" },
+      agent: { id: "agent-1", modelId: "uuid-gpt", llmApiKeyId: "key-1" },
       modelsByProvider: {
-        openai: [{ id: "gpt-4.1", provider: "openai" } as never],
+        openai: [model("gpt-4.1", "uuid-gpt", "openai")],
       },
       chatApiKeys: [{ id: "key-1", provider: "openai" }],
       organization: null,
-      chatModels: [{ id: "gpt-4.1", provider: "openai" } as never],
+      memberDefault: null,
+      chatModels: [model("gpt-4.1", "uuid-gpt", "openai")],
     });
 
     expect(result).toEqual({
-      modelId: "gpt-4.1",
+      modelId: "uuid-gpt",
       apiKeyId: "key-1",
-      modelSource: "agent",
       provider: "openai",
     });
   });
@@ -167,13 +195,13 @@ describe("resolvePreferredModelForProvider", () => {
         provider: "openai",
         modelsByProvider: {
           openai: [
-            { id: "gpt-4.1-mini", provider: "openai" } as never,
-            { id: "gpt-4.1", provider: "openai", isBest: true } as never,
+            model("gpt-4.1-mini", "uuid-mini", "openai"),
+            model("gpt-4.1", "uuid-gpt", "openai", true),
           ],
         },
       }),
     ).toEqual({
-      modelId: "gpt-4.1",
+      modelId: "uuid-gpt",
       provider: "openai",
     });
   });
@@ -193,14 +221,12 @@ describe("buildCreateConversationInput", () => {
     expect(
       buildCreateConversationInput({
         agentId: "agent-1",
-        modelId: "gpt-4.1",
+        modelId: "uuid-gpt",
         chatApiKeyId: "key-1",
-        chatModels: [{ id: "gpt-4.1", provider: "openai" } as never],
       }),
     ).toEqual({
       agentId: "agent-1",
-      selectedModel: "gpt-4.1",
-      selectedProvider: "openai",
+      modelId: "uuid-gpt",
       chatApiKeyId: "key-1",
     });
   });
@@ -211,12 +237,10 @@ describe("buildCreateConversationInput", () => {
         agentId: "agent-1",
         modelId: "",
         chatApiKeyId: null,
-        chatModels: [],
       }),
     ).toEqual({
       agentId: "agent-1",
-      selectedModel: undefined,
-      selectedProvider: undefined,
+      modelId: undefined,
       chatApiKeyId: undefined,
     });
   });
@@ -227,7 +251,6 @@ describe("buildCreateConversationInput", () => {
         agentId: null,
         modelId: "",
         chatApiKeyId: null,
-        chatModels: [],
       }),
     ).toBeNull();
   });

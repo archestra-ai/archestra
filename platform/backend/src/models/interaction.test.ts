@@ -66,7 +66,6 @@ describe("InteractionModel", () => {
         userId: user.id,
         organizationId: org.id,
         agentId: agent.id,
-        selectedModel: "gpt-4",
       });
       await ConversationChatErrorModel.create({
         conversationId: conversation.id,
@@ -1663,7 +1662,6 @@ describe("InteractionModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "UniqueConversationTitle789 about quantum physics",
-        selectedModel: "gpt-4",
       });
 
       // Create an interaction linked to the conversation via sessionId
@@ -1701,7 +1699,6 @@ describe("InteractionModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Discussion about cooking",
-        selectedModel: "gpt-4",
       });
 
       await InteractionModel.create({
@@ -1756,7 +1753,6 @@ describe("InteractionModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Discussion about SharedSearchTerm",
-        selectedModel: "gpt-4",
       });
 
       await InteractionModel.create({
@@ -1782,7 +1778,6 @@ describe("InteractionModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Another discussion",
-        selectedModel: "gpt-4",
       });
 
       await InteractionModel.create({
@@ -1810,7 +1805,6 @@ describe("InteractionModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Unrelated conversation",
-        selectedModel: "gpt-4",
       });
 
       await InteractionModel.create({
@@ -1869,7 +1863,6 @@ describe("InteractionModel", () => {
           organizationId: org.id,
           agentId: agent.id,
           title: `${searchTerm} conversation ${i}`,
-          selectedModel: "gpt-4",
         });
 
         await InteractionModel.create({
@@ -1896,7 +1889,6 @@ describe("InteractionModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Unrelated title",
-        selectedModel: "gpt-4",
       });
 
       await InteractionModel.create({
@@ -2058,6 +2050,59 @@ describe("InteractionModel", () => {
         true,
       );
       expect(allSessions.data).toHaveLength(4);
+    });
+
+    test("marks mixed-source chat sessions without promoting compaction to the session source", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "mixed-chat-session",
+        source: "chat",
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "mixed-chat-session",
+        source: "chat:compaction",
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.data[0].source).toBeNull();
+      expect(sessions.data[0].sources).toEqual(
+        expect.arrayContaining(["chat", "chat:compaction"]),
+      );
     });
 
     test("returns empty when filtering by source with no matches", async ({

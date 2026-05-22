@@ -20,7 +20,8 @@ export const appearanceKeys = {
  * Hook to fetch public appearance settings.
  * Used on login/auth pages where the user is not yet authenticated.
  * Returns theme, customFont, and logo without requiring authentication.
- * On API failure, returns undefined (treated as not loaded) to preserve localStorage values.
+ * On API failure, returns null so React Query has a defined cache value while
+ * callers keep using local fallback appearance values.
  */
 export function useAppearanceSettings(enabled = true) {
   return useQuery({
@@ -29,7 +30,7 @@ export function useAppearanceSettings(enabled = true) {
       const { data, error } = await archestraApiSdk.getAppearanceSettings();
 
       if (error || !data) {
-        return undefined;
+        return null;
       }
 
       return data;
@@ -504,10 +505,75 @@ export function useUpdatePresetEntityName(
 }
 
 /**
+ * Update the org-wide custom label for the implicit "default" preset row.
+ * Pass null to reset to the built-in "Default" label.
+ */
+export function useUpdatePresetEntityDefaultLabel(
+  onSuccessMessage: string,
+  onErrorMessage: string,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: archestraApiTypes.UpdatePresetEntityDefaultLabelData["body"],
+    ) => {
+      const { data: updatedOrganization, error } =
+        await archestraApiSdk.updatePresetEntityDefaultLabel({ body: data });
+
+      if (error) {
+        toast.error(onErrorMessage);
+        return null;
+      }
+
+      return updatedOrganization;
+    },
+    onSuccess: (updatedOrganization) => {
+      if (!updatedOrganization) return;
+      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      toast.success(onSuccessMessage);
+    },
+  });
+}
+
+/**
+ * Update the validation regex for the implicit "default" preset row. Pass null
+ * to disable.
+ */
+export function useUpdatePresetEntityDefaultValidationRegex(
+  onSuccessMessage: string,
+  onErrorMessage: string,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: archestraApiTypes.UpdatePresetEntityDefaultValidationRegexData["body"],
+    ) => {
+      const { data: updatedOrganization, error } =
+        await archestraApiSdk.updatePresetEntityDefaultValidationRegex({
+          body: data,
+        });
+
+      if (error) {
+        toast.error(onErrorMessage);
+        return null;
+      }
+
+      return updatedOrganization;
+    },
+    onSuccess: (updatedOrganization) => {
+      if (!updatedOrganization) return;
+      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      toast.success(onSuccessMessage);
+    },
+  });
+}
+
+/**
  * Returns the org-configured display label for catalog presets.
  * When unconfigured, `configured` is false and `singular`/`plural` fall back to
  * "Preset"/"Presets" — callers should use `configured` to gate UI that should
- * stay hidden until an admin has chosen a name.
+ * stay hidden until an admin has chosen a name. `defaultLabel` falls back to
+ * "Default" when admins have not customized it.
  */
 export function usePresetEntityName() {
   const { data: organization } = useOrganization();
@@ -518,6 +584,9 @@ export function usePresetEntityName() {
     configured,
     singular: configured ? singular : "Preset",
     plural: configured ? plural : "Presets",
+    defaultLabel: organization?.presetEntityDefaultLabel ?? "Default",
+    defaultValidationRegex:
+      organization?.presetEntityDefaultValidationRegex ?? null,
   };
 }
 

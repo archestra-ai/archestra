@@ -50,7 +50,6 @@ export async function serializeAgentForExport(
       considerContextUntrusted: agent.considerContextUntrusted,
       toolAssignmentMode: agent.toolAssignmentMode,
       toolExposureMode: agent.toolExposureMode,
-      llmModel: agent.llmModel,
       incomingEmailEnabled: agent.incomingEmailEnabled,
       incomingEmailSecurityMode: agent.incomingEmailSecurityMode,
       incomingEmailAllowedDomain: agent.incomingEmailAllowedDomain,

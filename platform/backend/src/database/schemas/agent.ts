@@ -19,6 +19,7 @@ import type {
 } from "@/types/agent";
 import identityProvidersTable from "./identity-provider";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
+import modelsTable from "./model";
 import usersTable from "./user";
 
 /**
@@ -90,8 +91,12 @@ const agentsTable = pgTable(
         onDelete: "set null",
       },
     ),
-    /** Model ID for LLM calls */
+    /** @deprecated Superseded by `modelId` (FK). Retained, no longer read or written. */
     llmModel: text("llm_model"),
+    /** FK to models(id) — the agent's default model. ON DELETE SET NULL. */
+    modelId: uuid("model_id").references(() => modelsTable.id, {
+      onDelete: "set null",
+    }),
 
     /** Optional Identity Provider for JWKS-based JWT validation on MCP Gateway requests */
     identityProviderId: text("identity_provider_id").references(

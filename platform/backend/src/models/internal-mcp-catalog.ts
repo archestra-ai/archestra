@@ -26,6 +26,20 @@ import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpServerModel from "./mcp-server";
 import SecretModel from "./secret";
 
+/**
+ * Data-access layer for `internal_mcp_catalog` — the org's private registry
+ * of MCP server templates (root rows) and their child **presets** (rows
+ * with a non-NULL `parentCatalogItemId` that inherit the parent's template
+ * columns and overlay their own preset field values / secrets).
+ *
+ * Owns CRUD for both flavors, name composition for child rows
+ * (`${parent.name}-${childName}`), persistence of preset field values and
+ * the per-row preset secret bundle, validation of incoming values against
+ * the parent's `userConfig` / `localConfig.environment` schema, and joins
+ * against labels and team assignments. Mutations on a parent that need to
+ * fan out to downstream installs go through the cascade helpers exposed
+ * here.
+ */
 class InternalMcpCatalogModel {
   static async create(
     catalogItem: InsertInternalMcpCatalog,

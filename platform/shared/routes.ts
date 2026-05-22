@@ -57,6 +57,7 @@ export const RouteId = {
   GetInternalMcpCatalogItem: "getInternalMcpCatalogItem",
   GetInternalMcpCatalogTools: "getInternalMcpCatalogTools",
   UpdateInternalMcpCatalogItem: "updateInternalMcpCatalogItem",
+  ReinstallInternalMcpCatalogItem: "reinstallInternalMcpCatalogItem",
   DeleteInternalMcpCatalogItem: "deleteInternalMcpCatalogItem",
   DeleteInternalMcpCatalogItemByName: "deleteInternalMcpCatalogItemByName",
   GetInternalMcpCatalogLabelKeys: "getInternalMcpCatalogLabelKeys",
@@ -274,6 +275,7 @@ export const RouteId = {
   ForkChatConversation: "forkChatConversation",
   UpdateChatConversation: "updateChatConversation",
   DeleteChatConversation: "deleteChatConversation",
+  CompactChatConversation: "compactChatConversation",
   GenerateChatConversationTitle: "generateChatConversationTitle",
   GetChatMcpTools: "getChatMcpTools",
   UpdateChatMessage: "updateChatMessage",
@@ -356,10 +358,14 @@ export const RouteId = {
 
   // Preset Entity Name Routes (organization-level - configurable label for catalog presets)
   UpdatePresetEntityName: "updatePresetEntityName",
+  UpdatePresetEntityDefaultLabel: "updatePresetEntityDefaultLabel",
+  UpdatePresetEntityDefaultValidationRegex:
+    "updatePresetEntityDefaultValidationRegex",
 
   // Org-level preset entries (Production / Staging / Development buckets)
   ListMcpPresetEntries: "listMcpPresetEntries",
   CreateMcpPresetEntry: "createMcpPresetEntry",
+  UpdateMcpPresetEntry: "updateMcpPresetEntry",
   DeleteMcpPresetEntry: "deleteMcpPresetEntry",
 
   // Knowledge Settings Routes (organization-level)
@@ -380,6 +386,8 @@ export const RouteId = {
 
   // Member Routes
   GetMemberDefaultAgent: "getMemberDefaultAgent",
+  GetMemberDefaultModel: "getMemberDefaultModel",
+  UpdateMemberDefaultModel: "updateMemberDefaultModel",
 
   // User Routes
   GetUserPermissions: "getUserPermissions",
@@ -467,6 +475,18 @@ export const RouteId = {
 
   // Invitation Routes
   CheckInvitation: "checkInvitation",
+
+  // Agent Skill Routes
+  GetSkills: "getSkills",
+  CreateSkill: "createSkill",
+  GetSkill: "getSkill",
+  UpdateSkill: "updateSkill",
+  DeleteSkill: "deleteSkill",
+  DiscoverGithubSkills: "discoverGithubSkills",
+  PreviewGithubSkill: "previewGithubSkill",
+  ImportGithubSkills: "importGithubSkills",
+  GetSkillSourceRepos: "getSkillSourceRepos",
+  EnableSkillToolDefaults: "enableSkillToolDefaults",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

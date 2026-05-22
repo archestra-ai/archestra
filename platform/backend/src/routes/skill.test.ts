@@ -1,0 +1,243 @@
+import type { FastifyInstanceWithZod } from "@/server";
+import { createFastifyInstance } from "@/server";
+import { MAX_SKILL_FILE_BYTES } from "@/skills/github-import";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import type { User } from "@/types";
+
+const MANIFEST = [
+  "---",
+  "name: pdf-processing",
+  "description: Extract text from PDF files.",
+  "---",
+  "",
+  "# PDF Processing",
+  "Use pdftotext -layout.",
+].join("\n");
+
+describe("skill routes", () => {
+  let app: FastifyInstanceWithZod;
+  let user: User;
+  let organizationId: string;
+
+  beforeEach(async ({ makeOrganization, makeUser }) => {
+    user = await makeUser();
+    organizationId = (await makeOrganization()).id;
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (request as typeof request & { user: unknown }).user = user;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
+    });
+
+    const { default: skillRoutes } = await import("./skill");
+    await app.register(skillRoutes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  describe("POST /api/skills", () => {
+    test("creates a skill from a SKILL.md manifest", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: { content: MANIFEST },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.name).toBe("pdf-processing");
+      expect(body.description).toBe("Extract text from PDF files.");
+      expect(body.content).toContain("# PDF Processing");
+      expect(body.sourceType).toBe("manual");
+      expect(body.authorId).toBe(user.id);
+      expect(body.files).toEqual([]);
+    });
+
+    test("stores resource files with derived kinds", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: {
+          content: MANIFEST,
+          files: [
+            { path: "references/FORMS.md", content: "# Forms" },
+            { path: "scripts/run.py", content: "print(1)" },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const files = response.json().files;
+      expect(files).toHaveLength(2);
+      const byPath = Object.fromEntries(
+        files.map((f: { path: string; kind: string }) => [f.path, f.kind]),
+      );
+      expect(byPath["references/FORMS.md"]).toBe("reference");
+      expect(byPath["scripts/run.py"]).toBe("script");
+    });
+
+    test("rejects a manifest with no frontmatter", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: { content: "# no frontmatter" },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    test("rejects a duplicate skill name", async () => {
+      await app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: { content: MANIFEST },
+      });
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: { content: MANIFEST },
+      });
+
+      expect(response.statusCode).toBe(409);
+    });
+
+    test("rejects a manifest larger than the size cap", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: { content: MANIFEST + "x".repeat(MAX_SKILL_FILE_BYTES) },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+  });
+
+  describe("GET /api/skills", () => {
+    test("lists skills with a resource file count", async () => {
+      await app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: {
+          content: MANIFEST,
+          files: [{ path: "references/FORMS.md", content: "# Forms" }],
+        },
+      });
+
+      const response = await app.inject({ method: "GET", url: "/api/skills" });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.data).toHaveLength(1);
+      expect(body.data[0].fileCount).toBe(1);
+    });
+  });
+
+  describe("PUT /api/skills/:id", () => {
+    test("updates the manifest and replaces resource files", async () => {
+      const created = (
+        await app.inject({
+          method: "POST",
+          url: "/api/skills",
+          payload: {
+            content: MANIFEST,
+            files: [{ path: "references/OLD.md", content: "old" }],
+          },
+        })
+      ).json();
+
+      const updatedManifest = MANIFEST.replace(
+        "Extract text from PDF files.",
+        "Extract text and tables from PDF files.",
+      );
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/skills/${created.id}`,
+        payload: {
+          content: updatedManifest,
+          files: [{ path: "references/NEW.md", content: "new" }],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.description).toBe("Extract text and tables from PDF files.");
+      expect(body.files).toHaveLength(1);
+      expect(body.files[0].path).toBe("references/NEW.md");
+    });
+
+    test("leaves resource files untouched when `files` is omitted", async () => {
+      const created = (
+        await app.inject({
+          method: "POST",
+          url: "/api/skills",
+          payload: {
+            content: MANIFEST,
+            files: [{ path: "references/KEEP.md", content: "keep" }],
+          },
+        })
+      ).json();
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/skills/${created.id}`,
+        payload: { content: MANIFEST },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.files).toHaveLength(1);
+      expect(body.files[0].path).toBe("references/KEEP.md");
+    });
+
+    test("clears resource files when `files` is an empty array", async () => {
+      const created = (
+        await app.inject({
+          method: "POST",
+          url: "/api/skills",
+          payload: {
+            content: MANIFEST,
+            files: [{ path: "references/GONE.md", content: "gone" }],
+          },
+        })
+      ).json();
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/skills/${created.id}`,
+        payload: { content: MANIFEST, files: [] },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().files).toEqual([]);
+    });
+  });
+
+  describe("DELETE /api/skills/:id", () => {
+    test("deletes a skill", async () => {
+      const created = (
+        await app.inject({
+          method: "POST",
+          url: "/api/skills",
+          payload: { content: MANIFEST },
+        })
+      ).json();
+
+      const response = await app.inject({
+        method: "DELETE",
+        url: `/api/skills/${created.id}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ success: true });
+
+      const getResponse = await app.inject({
+        method: "GET",
+        url: `/api/skills/${created.id}`,
+      });
+      expect(getResponse.statusCode).toBe(404);
+    });
+  });
+});

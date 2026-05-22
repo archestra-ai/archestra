@@ -124,6 +124,21 @@ const internalMcpCatalogTable = pgTable(
     presetSecretId: uuid("preset_secret_id").references(() => secretTable.id, {
       onDelete: "set null",
     }),
+    /**
+     * To re-install multi-tenant self-hosted MCPs.
+     *
+     * Set to `true` when an admin/owner edits a catalog-scope execution
+     * field (image, command, args, transport) on a `multitenant: true` +
+     * `serverType: "local"` catalog. Cleared by the catalog-reinstall
+     * endpoint after the shared K8s Deployment is updated and tools are
+     * re-synced for every install attached to this catalog.
+     *
+     * Not used for single-tenant or remote catalogs — those keep using
+     * the per-install `mcp_server.reinstall_required` flag.
+     */
+    catalogReinstallRequired: boolean("catalog_reinstall_required")
+      .notNull()
+      .default(false),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

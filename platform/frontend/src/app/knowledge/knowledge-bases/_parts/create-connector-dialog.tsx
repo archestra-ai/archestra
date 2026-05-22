@@ -387,6 +387,9 @@ export function CreateConnectorDialog({
                             <Input
                               type="password"
                               placeholder={apiTokenPlaceholder}
+                              autoComplete="new-password"
+                              data-1p-ignore
+                              data-lpignore="true"
                               {...field}
                             />
                           </FormControl>

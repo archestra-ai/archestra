@@ -59,14 +59,16 @@ interface EnvironmentVariableDialogProps {
   onConfirm: (draft: EnvVarDraft) => void;
 }
 
-const EMPTY_DRAFT: EnvVarDraft = {
-  key: "",
-  type: "plain_text",
-  scope: "installation",
-  required: false,
-  description: "",
-  value: "",
-};
+function makeEmptyDraft(disableInstallation: boolean): EnvVarDraft {
+  return {
+    key: "",
+    type: "plain_text",
+    scope: disableInstallation ? "static" : "installation",
+    required: !disableInstallation,
+    description: "",
+    value: "",
+  };
+}
 
 export function EnvironmentVariableDialog({
   open,
@@ -81,14 +83,16 @@ export function EnvironmentVariableDialog({
   onConfirm,
 }: EnvironmentVariableDialogProps) {
   const { singular } = usePresetEntityName();
-  const [draft, setDraft] = useState<EnvVarDraft>(initial ?? EMPTY_DRAFT);
+  const [draft, setDraft] = useState<EnvVarDraft>(
+    initial ?? makeEmptyDraft(disableInstallation),
+  );
   const [vaultDialogOpen, setVaultDialogOpen] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setDraft(initial ?? EMPTY_DRAFT);
+      setDraft(initial ?? makeEmptyDraft(disableInstallation));
     }
-  }, [open, initial]);
+  }, [open, initial, disableInstallation]);
 
   const trimmedKey = draft.key.trim();
   const duplicate = useMemo(
@@ -118,7 +122,9 @@ export function EnvironmentVariableDialog({
   function updateDraft(patch: Partial<EnvVarDraft>) {
     setDraft((prev) => {
       const next = { ...prev, ...patch };
-      if (patch.scope && patch.scope !== "installation") {
+      if (patch.scope === "installation") {
+        next.required = true;
+      } else if (patch.scope) {
         next.required = false;
       }
       if (patch.scope && patch.scope !== "static") {

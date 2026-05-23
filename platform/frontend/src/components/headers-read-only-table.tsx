@@ -9,6 +9,7 @@ import type {
 } from "react-hook-form";
 import type { FieldScopeValue } from "@/components/field-scope-select";
 import { Button } from "@/components/ui/button";
+import { usePresetEntityName } from "@/lib/organization.query";
 
 interface HeadersReadOnlyTableProps<TFieldValues extends FieldValues> {
   form: { watch: UseFormWatch<TFieldValues> };
@@ -20,7 +21,7 @@ interface HeadersReadOnlyTableProps<TFieldValues extends FieldValues> {
 }
 
 const GRID_CLASS =
-  "grid grid-cols-[1.6fr_0.6fr_1.4fr_0.5fr_2.5fr_auto] gap-3 px-4";
+  "grid grid-cols-[1.6fr_1.4fr_0.6fr_0.5fr_0.7fr_2.2fr_auto] gap-3 px-4";
 
 export function HeadersReadOnlyTable<TFieldValues extends FieldValues>({
   form,
@@ -35,9 +36,10 @@ export function HeadersReadOnlyTable<TFieldValues extends FieldValues>({
         className={`${GRID_CLASS} border-b py-2.5 text-xs font-medium text-foreground`}
       >
         <div>Header name</div>
-        <div>Required</div>
         <div>Value</div>
+        <div>Required</div>
         <div>Bearer</div>
+        <div>Sensitive</div>
         <div>Description</div>
         <div className="w-9" />
       </div>
@@ -73,6 +75,11 @@ export function HeadersReadOnlyTable<TFieldValues extends FieldValues>({
             `${fieldNamePrefix}.${index}.includeBearerPrefix` as FieldPath<TFieldValues>,
           ),
         );
+        const sensitive = Boolean(
+          form.watch(
+            `${fieldNamePrefix}.${index}.sensitive` as FieldPath<TFieldValues>,
+          ),
+        );
         const description = form.watch(
           `${fieldNamePrefix}.${index}.description` as FieldPath<TFieldValues>,
         ) as string | undefined;
@@ -92,10 +99,13 @@ export function HeadersReadOnlyTable<TFieldValues extends FieldValues>({
             }}
             className={`${GRID_CLASS} group items-center border-b py-3 text-xs last:border-b-0 cursor-pointer hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
           >
-            <div className="font-mono">
+            <div className="min-w-0 truncate font-mono">
               {headerName || (
                 <span className="text-muted-foreground italic">unnamed</span>
               )}
+            </div>
+            <div className="min-w-0 truncate">
+              <ValueCell scope={scope} value={value} />
             </div>
             <div>
               {scope === "installation" && required ? (
@@ -104,9 +114,6 @@ export function HeadersReadOnlyTable<TFieldValues extends FieldValues>({
                 <span className="text-muted-foreground">—</span>
               )}
             </div>
-            <div className="min-w-0">
-              <ValueCell scope={scope} value={value} />
-            </div>
             <div>
               {includeBearerPrefix ? (
                 <Check className="h-3.5 w-3.5 text-foreground" />
@@ -114,7 +121,14 @@ export function HeadersReadOnlyTable<TFieldValues extends FieldValues>({
                 <span className="text-muted-foreground">—</span>
               )}
             </div>
-            <div className="line-clamp-2 text-muted-foreground">
+            <div>
+              {sensitive ? (
+                <Check className="h-3.5 w-3.5 text-foreground" />
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              )}
+            </div>
+            <div className="min-w-0 line-clamp-2 text-muted-foreground">
               {description || <span className="italic">no description</span>}
             </div>
             <Button
@@ -144,11 +158,12 @@ function ValueCell({
   scope: FieldScopeValue;
   value: string | undefined;
 }) {
+  const { singular } = usePresetEntityName();
   if (scope === "installation") {
     return <span className="text-muted-foreground">per-installation</span>;
   }
   if (scope === "preset") {
-    return <span className="text-muted-foreground">per-preset</span>;
+    return <span className="text-muted-foreground">per-{singular}</span>;
   }
   if (!value) {
     return <span className="text-muted-foreground italic">not set</span>;

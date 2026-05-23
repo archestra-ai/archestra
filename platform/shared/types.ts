@@ -28,6 +28,7 @@ export const ApiErrorTypeSchema = z.enum([
   "api_not_found_error",
   "unknown_api_error",
   "api_conflict_error",
+  "api_payload_too_large_error",
 ]);
 
 /**
@@ -61,6 +62,9 @@ export class ApiError extends Error {
         break;
       case 409:
         this.type = "api_conflict_error";
+        break;
+      case 413:
+        this.type = "api_payload_too_large_error";
         break;
       default:
         this.type = "unknown_api_error";

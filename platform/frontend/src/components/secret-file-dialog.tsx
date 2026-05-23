@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { MCP_SECRET_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
+import { usePresetEntityName } from "@/lib/organization.query";
 
 const ExternalSecretSelector = lazy(
   () =>
@@ -42,13 +43,15 @@ interface SecretFileDialogProps {
   onConfirm: (draft: SecretFileDraft) => void;
 }
 
-const EMPTY_DRAFT: SecretFileDraft = {
-  key: "",
-  scope: "installation",
-  required: false,
-  value: "",
-  description: "",
-};
+function makeEmptyDraft(disableInstallation: boolean): SecretFileDraft {
+  return {
+    key: "",
+    scope: disableInstallation ? "static" : "installation",
+    required: !disableInstallation,
+    value: "",
+    description: "",
+  };
+}
 
 export function SecretFileDialog({
   open,
@@ -62,12 +65,15 @@ export function SecretFileDialog({
   onClose,
   onConfirm,
 }: SecretFileDialogProps) {
-  const [draft, setDraft] = useState<SecretFileDraft>(initial ?? EMPTY_DRAFT);
+  const { singular } = usePresetEntityName();
+  const [draft, setDraft] = useState<SecretFileDraft>(
+    initial ?? makeEmptyDraft(disableInstallation),
+  );
   const [vaultDialogOpen, setVaultDialogOpen] = useState(false);
 
   useEffect(() => {
-    if (open) setDraft(initial ?? EMPTY_DRAFT);
-  }, [open, initial]);
+    if (open) setDraft(initial ?? makeEmptyDraft(disableInstallation));
+  }, [open, initial, disableInstallation]);
 
   const trimmedKey = draft.key.trim();
   const duplicate = useMemo(
@@ -92,7 +98,8 @@ export function SecretFileDialog({
   function updateDraft(patch: Partial<SecretFileDraft>) {
     setDraft((prev) => {
       const next = { ...prev, ...patch };
-      if (patch.scope && patch.scope !== "installation") next.required = false;
+      if (patch.scope === "installation") next.required = true;
+      else if (patch.scope) next.required = false;
       if (patch.scope && patch.scope !== "static") next.value = "";
       return next;
     });
@@ -169,8 +176,8 @@ export function SecretFileDialog({
         )}
         {draft.scope === "preset" && (
           <ScopeCallout
-            title="An admin sets this for each preset"
-            body="Each preset that uses this server supplies its own value."
+            title={`An admin sets this for each ${singular}`}
+            body={`Each ${singular} that uses this server supplies its own value.`}
           />
         )}
         {draft.scope === "static" && (

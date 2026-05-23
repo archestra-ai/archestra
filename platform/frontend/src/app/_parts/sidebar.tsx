@@ -43,12 +43,12 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
-  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
+import { useFeature } from "@/lib/config/config.query";
 
 import { useGithubStars } from "@/lib/github/github.query";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
@@ -98,8 +98,15 @@ const contentNavGroups: NavGroup[] = [
         icon: Bot,
         customIsActive: (pathname: string) =>
           pathname.startsWith("/agents") &&
-          !pathname.startsWith("/agents/triggers"),
+          !pathname.startsWith("/agents/triggers") &&
+          !pathname.startsWith("/agents/skills"),
         subItems: [
+          {
+            title: "Skills",
+            url: "/agents/skills",
+            customIsActive: (pathname: string) =>
+              pathname.startsWith("/agents/skills"),
+          },
           {
             title: "Scheduled",
             url: "/scheduled-tasks",
@@ -435,16 +442,30 @@ export function AppSidebar() {
   });
   const showConnect = canReadMcpGateway && canReadLlmProxy;
 
-  // Filter nav groups based on connect permissions
+  // Skills are gated behind the ARCHESTRA_AGENTS_SKILLS_ENABLED env var.
+  const skillsEnabled = useFeature("agentSkillsEnabled") === true;
+
+  // Filter nav groups based on connect permissions and feature flags
   const filteredNavGroups = React.useMemo(() => {
     return contentNavGroups.map((group) => ({
       ...group,
-      items: group.items.filter((item) => {
-        if (item.title === "Connect" && !showConnect) return false;
-        return true;
-      }),
+      items: group.items
+        .filter((item) => {
+          if (item.title === "Connect" && !showConnect) return false;
+          return true;
+        })
+        .map((item) =>
+          item.subItems
+            ? {
+                ...item,
+                subItems: item.subItems.filter(
+                  (sub) => sub.url !== "/agents/skills" || skillsEnabled,
+                ),
+              }
+            : item,
+        ),
     }));
-  }, [showConnect]);
+  }, [showConnect, skillsEnabled]);
 
   // Build additional links for UserButton popout menu
   const userMenuLinks = React.useMemo(() => {
@@ -468,11 +489,10 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="pt-4 group-data-[collapsible=icon]:pt-2 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:gap-1">
-        <div className="flex items-center justify-between group-data-[collapsible=icon]:hidden">
-          <SidebarPrefetchLink href="/chat" className="flex-1 min-w-0">
-            <AppLogo centered={false} />
+        <div className="group-data-[collapsible=icon]:hidden">
+          <SidebarPrefetchLink href="/chat" className="block min-w-0">
+            <AppLogo />
           </SidebarPrefetchLink>
-          <SidebarTrigger className="size-7 cursor-pointer" />
         </div>
         <SidebarPrefetchLink
           href="/chat"
@@ -480,7 +500,6 @@ export function AppSidebar() {
         >
           <img src={appIconLogo} alt="Logo" className="size-7" />
         </SidebarPrefetchLink>
-        <SidebarTrigger className="hidden group-data-[collapsible=icon]:flex size-8 cursor-pointer" />
       </SidebarHeader>
       <SidebarContent>
         {isAuthenticated && permissionMap && (

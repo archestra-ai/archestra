@@ -27,10 +27,10 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
       });
 
       const fallbackFirstModel = await ModelModel.create({
-        externalId: "openai/gpt-4.1-mini",
+        externalId: "openai/gpt-5.4-mini",
         provider: "openai",
-        modelId: "gpt-4.1-mini",
-        description: "GPT-4.1 Mini",
+        modelId: "gpt-5.4-mini",
+        description: "GPT-5.4 Mini",
         contextLength: 128000,
         inputModalities: ["text"],
         outputModalities: ["text"],
@@ -40,10 +40,10 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
         lastSyncedAt: new Date(),
       });
       const fallbackSecondModel = await ModelModel.create({
-        externalId: "openai/o3",
+        externalId: "openai/gpt-5.4",
         provider: "openai",
-        modelId: "o3",
-        description: "o3",
+        modelId: "gpt-5.4",
+        description: "GPT-5.4",
         contextLength: 200000,
         inputModalities: ["text"],
         outputModalities: ["text"],
@@ -53,10 +53,10 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
         lastSyncedAt: new Date(),
       });
       const bestCandidateModel = await ModelModel.create({
-        externalId: "openai/gpt-4.1",
+        externalId: "openai/gpt-5.5",
         provider: "openai",
-        modelId: "gpt-4.1",
-        description: "GPT-4.1",
+        modelId: "gpt-5.5",
+        description: "GPT-5.5",
         contextLength: 128000,
         inputModalities: ["text"],
         outputModalities: ["text"],
@@ -86,7 +86,7 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
         ]);
 
       expect(bestModels.get(bestMarkedKey.id)?.id).toBe(bestCandidateModel.id);
-      expect(bestModels.get(fallbackKey.id)?.id).toBe(fallbackFirstModel.id);
+      expect(bestModels.get(fallbackKey.id)?.id).toBe(fallbackSecondModel.id);
     });
   });
 
@@ -115,10 +115,10 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
 
       // Create a model and link it
       const model = await ModelModel.create({
-        externalId: "openai/gpt-4o",
+        externalId: "openai/gpt-5.5",
         provider: "openai",
-        modelId: "gpt-4o",
-        description: "GPT-4o",
+        modelId: "gpt-5.5",
+        description: "GPT-5.5",
         contextLength: 128000,
         inputModalities: ["text"],
         outputModalities: ["text"],
@@ -153,10 +153,10 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
         provider: "openai",
       });
       const linkedModel = await ModelModel.create({
-        externalId: "openai/gpt-4o",
+        externalId: "openai/gpt-5.5",
         provider: "openai",
-        modelId: "gpt-4o",
-        description: "GPT-4o",
+        modelId: "gpt-5.5",
+        description: "GPT-5.5",
         contextLength: 128000,
         inputModalities: ["text"],
         outputModalities: ["text"],
@@ -171,10 +171,10 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
 
       // Create an orphaned model (no API key link)
       await ModelModel.create({
-        externalId: "openai/gpt-3.5-turbo",
+        externalId: "openai/gpt-5.4-mini",
         provider: "openai",
-        modelId: "gpt-3.5-turbo",
-        description: "GPT-3.5 Turbo",
+        modelId: "gpt-5.4-mini",
+        description: "GPT-5.4 Mini",
         contextLength: 16000,
         inputModalities: ["text"],
         outputModalities: ["text"],
@@ -190,7 +190,7 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
       // Only the linked model should be returned
       expect(result).toHaveLength(1);
       expect(result[0].model.id).toBe(linkedModel.id);
-      expect(result[0].model.modelId).toBe("gpt-4o");
+      expect(result[0].model.modelId).toBe("gpt-5.5");
     });
 
     test("orphaned models appear after API key deletion due to cascade", async ({
@@ -206,10 +206,10 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
         provider: "anthropic",
       });
       const model = await ModelModel.create({
-        externalId: "anthropic/claude-3-sonnet",
+        externalId: "anthropic/claude-opus-4-7",
         provider: "anthropic",
-        modelId: "claude-3-sonnet",
-        description: "Claude 3 Sonnet",
+        modelId: "claude-opus-4-7",
+        description: "Claude Opus 4.7",
         contextLength: 200000,
         inputModalities: ["text"],
         outputModalities: ["text"],
@@ -254,10 +254,10 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
       });
 
       const model = await ModelModel.create({
-        externalId: "openai/gpt-4.1",
+        externalId: "openai/gpt-5.5",
         provider: "openai",
-        modelId: "gpt-4.1",
-        description: "GPT-4.1",
+        modelId: "gpt-5.5",
+        description: "GPT-5.5",
         contextLength: 128000,
         inputModalities: ["text"],
         outputModalities: ["text"],

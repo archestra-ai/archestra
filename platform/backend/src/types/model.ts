@@ -198,5 +198,7 @@ export const ModelWithApiKeysSchema = SelectModelSchema.extend({
   isCustomPrice: z.boolean(),
   /** Source of the effective price */
   priceSource: PriceSourceSchema,
+  /** True when the provider charges nothing for this model (both raw prices are zero). */
+  isFree: z.boolean(),
 });
 export type ModelWithApiKeys = z.infer<typeof ModelWithApiKeysSchema>;

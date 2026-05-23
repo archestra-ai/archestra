@@ -1,11 +1,11 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { usePresetEntityName } from "@/lib/organization.query";
 
 const {
   createCatalogChild,
   createInternalMcpCatalogItem,
-  deleteCatalogChild,
   deleteInternalMcpCatalogItem,
   getCatalogChildren,
   getDeploymentYamlPreview,
@@ -14,6 +14,7 @@ const {
   getInternalMcpCatalogLabelValues,
   getInternalMcpCatalogTools,
   getK8sImagePullSecrets,
+  reinstallInternalMcpCatalogItem,
   resetDeploymentYaml,
   updateCatalogChild,
   updateInternalMcpCatalogItem,
@@ -110,6 +111,34 @@ export function useUpdateInternalMcpCatalogItem() {
     onError: (error) => {
       console.error("Edit error:", error);
       toast.error("Failed to update catalog item");
+    },
+  });
+}
+
+/**
+ * Reinstall the shared K8s Deployment for a multi-tenant local catalog.
+ * Recreates the pod with the current catalog spec and cascades tool sync
+ * to every install attached to the catalog. Only callable when
+ * `catalog.catalogReinstallRequired === true`.
+ */
+export function useReinstallInternalMcpCatalogItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const response = await reinstallInternalMcpCatalogItem({
+        path: { id },
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+      queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
+      toast.success("Catalog reinstalled successfully");
+    },
+    onError: (error) => {
+      console.error("Catalog reinstall error:", error);
+      toast.error("Failed to reinstall catalog");
     },
   });
 }
@@ -260,6 +289,7 @@ export function useCatalogPresets(catalogId: string | null) {
 
 export function useCreateCatalogPreset(catalogId: string) {
   const queryClient = useQueryClient();
+  const { singular } = usePresetEntityName();
   return useMutation({
     mutationFn: async (
       data: archestraApiTypes.CreateCatalogChildData["body"],
@@ -274,17 +304,18 @@ export function useCreateCatalogPreset(catalogId: string) {
       queryClient.invalidateQueries({
         queryKey: ["mcp-catalog", catalogId, "presets"],
       });
-      toast.success("Preset created");
+      toast.success(`${singular} created`);
     },
     onError: (error) => {
       console.error("Create preset error:", error);
-      toast.error("Failed to create preset");
+      toast.error(`Failed to create ${singular}`);
     },
   });
 }
 
 export function useUpdateCatalogPreset(catalogId: string) {
   const queryClient = useQueryClient();
+  const { singular } = usePresetEntityName();
   return useMutation({
     mutationFn: async (params: {
       presetId: string;
@@ -301,34 +332,11 @@ export function useUpdateCatalogPreset(catalogId: string) {
         queryKey: ["mcp-catalog", catalogId, "presets"],
       });
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
-      toast.success("Preset updated");
+      toast.success(`${singular} updated`);
     },
     onError: (error) => {
       console.error("Update preset error:", error);
-      toast.error("Failed to update preset");
-    },
-  });
-}
-
-export function useDeleteCatalogPreset(catalogId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (presetId: string) => {
-      const response = await deleteCatalogChild({
-        path: { catalogId, childId: presetId },
-      });
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["mcp-catalog", catalogId, "presets"],
-      });
-      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
-      toast.success("Preset deleted");
-    },
-    onError: (error) => {
-      console.error("Delete preset error:", error);
-      toast.error("Failed to delete preset");
+      toast.error(`Failed to update ${singular}`);
     },
   });
 }

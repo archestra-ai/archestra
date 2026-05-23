@@ -20,10 +20,7 @@ export function stripDanglingToolCalls<
     }
 
     const sanitizedParts = message.parts.filter((part) => {
-      if (
-        typeof part.toolCallId !== "string" ||
-        !isInputAvailableToolPart(part)
-      ) {
+      if (typeof part.toolCallId !== "string" || !isPendingToolPart(part)) {
         return true;
       }
 
@@ -67,6 +64,12 @@ function isCompletedToolPart(part: ToolPartLike) {
   );
 }
 
-function isInputAvailableToolPart(part: ToolPartLike) {
-  return part.state === "input-available" || part.type === "tool-call";
+// a tool part that has not yet produced output: still streaming its input,
+// input fully received but not executed, or a bare tool-call part.
+function isPendingToolPart(part: ToolPartLike) {
+  return (
+    part.state === "input-streaming" ||
+    part.state === "input-available" ||
+    part.type === "tool-call"
+  );
 }

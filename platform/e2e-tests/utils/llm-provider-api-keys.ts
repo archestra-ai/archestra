@@ -60,6 +60,13 @@ export async function createLlmProviderApiKey(
   }
 
   await clickButton({ page, options: { name: "Test & Create" } });
+  // The success toast confirms the upstream test passed and the row will be
+  // populated by the next refetch — observing it first turns a single 30 s
+  // poll on the row into two cheaper waits and surfaces clearer errors when
+  // "Test & Create" itself fails.
+  await expect(page.getByText("API key created successfully")).toBeVisible({
+    timeout: 30_000,
+  });
   await expect(
     page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${params.name}`),
   ).toBeVisible({ timeout: 30_000 });

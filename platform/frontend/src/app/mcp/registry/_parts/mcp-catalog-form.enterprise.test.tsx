@@ -29,6 +29,10 @@ vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: vi.fn(() => ({ data: true })),
 }));
 
+vi.mock("@/lib/organization.query", () => ({
+  usePresetEntityName: vi.fn(() => ({ singular: "Preset", plural: "Presets" })),
+}));
+
 vi.mock("@/lib/auth/identity-provider.query.ee", () => ({
   useIdentityProviders: useIdentityProvidersMock,
 }));

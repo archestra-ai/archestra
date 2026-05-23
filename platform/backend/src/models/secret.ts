@@ -1,5 +1,6 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted, softDeleteById } from "@/database/utils/soft-delete";
 import type { InsertSecret, SelectSecret, UpdateSecret } from "@/types";
 import {
   decryptSecretValue,
@@ -37,7 +38,9 @@ class SecretModel {
     const [secret] = await db
       .select()
       .from(schema.secretsTable)
-      .where(eq(schema.secretsTable.id, id));
+      .where(
+        and(notDeleted(schema.secretsTable), eq(schema.secretsTable.id, id)),
+      );
 
     return decryptSecretRow(secret ?? null);
   }
@@ -49,7 +52,12 @@ class SecretModel {
     const [secret] = await db
       .select()
       .from(schema.secretsTable)
-      .where(eq(schema.secretsTable.name, name));
+      .where(
+        and(
+          notDeleted(schema.secretsTable),
+          eq(schema.secretsTable.name, name),
+        ),
+      );
 
     return decryptSecretRow(secret ?? null);
   }
@@ -62,7 +70,12 @@ class SecretModel {
     const rows = await db
       .select()
       .from(schema.secretsTable)
-      .where(inArray(schema.secretsTable.id, ids));
+      .where(
+        and(
+          notDeleted(schema.secretsTable),
+          inArray(schema.secretsTable.id, ids),
+        ),
+      );
     return rows.map((row) => decryptSecretRow(row));
   }
 
@@ -80,7 +93,9 @@ class SecretModel {
     const [updatedSecret] = await db
       .update(schema.secretsTable)
       .set(values)
-      .where(eq(schema.secretsTable.id, id))
+      .where(
+        and(notDeleted(schema.secretsTable), eq(schema.secretsTable.id, id)),
+      )
       .returning();
 
     return decryptSecretRow(updatedSecret);
@@ -90,11 +105,10 @@ class SecretModel {
    * Delete a secret by ID
    */
   static async delete(id: string): Promise<boolean> {
-    const result = await db
-      .delete(schema.secretsTable)
-      .where(eq(schema.secretsTable.id, id));
-
-    return result.rowCount !== null && result.rowCount > 0;
+    return await softDeleteById({
+      table: schema.secretsTable,
+      id,
+    });
   }
 }
 

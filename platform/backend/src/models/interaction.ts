@@ -21,6 +21,7 @@ import {
   createPaginatedResult,
   type PaginatedResult,
 } from "@/database/utils/pagination";
+import { notDeleted } from "@/database/utils/soft-delete";
 import logger from "@/logging";
 import type {
   InsertInteraction,
@@ -163,7 +164,12 @@ async function getAgentNamesById(
   const agents = await db
     .select({ id: schema.agentsTable.id, name: schema.agentsTable.name })
     .from(schema.agentsTable)
-    .where(inArray(schema.agentsTable.id, agentIds));
+    .where(
+      and(
+        notDeleted(schema.agentsTable),
+        inArray(schema.agentsTable.id, agentIds),
+      ),
+    );
 
   return new Map(agents.map((a) => [a.id, a.name]));
 }
@@ -688,7 +694,12 @@ class InteractionModel {
           const existingOrgLimits = await db
             .select({ entityId: schema.limitsTable.entityId })
             .from(schema.limitsTable)
-            .where(eq(schema.limitsTable.entityType, "organization"))
+            .where(
+              and(
+                notDeleted(schema.limitsTable),
+                eq(schema.limitsTable.entityType, "organization"),
+              ),
+            )
             .limit(1);
 
           if (existingOrgLimits.length > 0) {
@@ -713,7 +724,12 @@ class InteractionModel {
         const teams = await db
           .select()
           .from(schema.teamsTable)
-          .where(inArray(schema.teamsTable.id, agentTeamIds));
+          .where(
+            and(
+              notDeleted(schema.teamsTable),
+              inArray(schema.teamsTable.id, agentTeamIds),
+            ),
+          );
 
         // Update organization-level token cost limits (from first team's organization)
         if (teams.length > 0 && teams[0].organizationId) {

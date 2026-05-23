@@ -1,9 +1,10 @@
 import { CONTEXT_EXTERNAL_AGENT_ID, CONTEXT_TEAM_IDS } from "@shared";
-import { desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { get } from "lodash-es";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import db, { schema } from "@/database";
 import type { ResultPolicyCondition } from "@/database/schemas/trusted-data-policy";
+import { notDeleted, softDeleteById } from "@/database/utils/soft-delete";
 import logger from "@/logging";
 import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
 import type {
@@ -44,6 +45,7 @@ class TrustedDataPolicyModel {
     return db
       .select()
       .from(schema.trustedDataPoliciesTable)
+      .where(notDeleted(schema.trustedDataPoliciesTable))
       .orderBy(desc(schema.trustedDataPoliciesTable.createdAt));
   }
 
@@ -53,7 +55,12 @@ class TrustedDataPolicyModel {
     const [policy] = await db
       .select()
       .from(schema.trustedDataPoliciesTable)
-      .where(eq(schema.trustedDataPoliciesTable.id, id));
+      .where(
+        and(
+          notDeleted(schema.trustedDataPoliciesTable),
+          eq(schema.trustedDataPoliciesTable.id, id),
+        ),
+      );
     return policy || null;
   }
 
@@ -64,7 +71,12 @@ class TrustedDataPolicyModel {
     const [updatedPolicy] = await db
       .update(schema.trustedDataPoliciesTable)
       .set(policy)
-      .where(eq(schema.trustedDataPoliciesTable.id, id))
+      .where(
+        and(
+          notDeleted(schema.trustedDataPoliciesTable),
+          eq(schema.trustedDataPoliciesTable.id, id),
+        ),
+      )
       .returning();
 
     if (updatedPolicy) {
@@ -88,12 +100,10 @@ class TrustedDataPolicyModel {
       return false;
     }
 
-    const result = await db
-      .delete(schema.trustedDataPoliciesTable)
-      .where(eq(schema.trustedDataPoliciesTable.id, id))
-      .returning({ id: schema.trustedDataPoliciesTable.id });
-
-    const deleted = result.length > 0;
+    const deleted = await softDeleteById({
+      table: schema.trustedDataPoliciesTable,
+      id,
+    });
 
     if (deleted) {
       // Clear auto-configured timestamp for this tool
@@ -142,7 +152,12 @@ class TrustedDataPolicyModel {
     const existingPolicies = await db
       .select()
       .from(schema.trustedDataPoliciesTable)
-      .where(inArray(schema.trustedDataPoliciesTable.toolId, toolIds));
+      .where(
+        and(
+          notDeleted(schema.trustedDataPoliciesTable),
+          inArray(schema.trustedDataPoliciesTable.toolId, toolIds),
+        ),
+      );
 
     // Filter to only default policies (empty conditions array)
     const defaultPolicies = existingPolicies.filter(
@@ -458,7 +473,10 @@ class TrustedDataPolicyModel {
       .from(schema.toolsTable)
       .leftJoin(
         schema.trustedDataPoliciesTable,
-        eq(schema.toolsTable.id, schema.trustedDataPoliciesTable.toolId),
+        and(
+          eq(schema.toolsTable.id, schema.trustedDataPoliciesTable.toolId),
+          notDeleted(schema.trustedDataPoliciesTable),
+        ),
       )
       .where(inArray(schema.toolsTable.name, toolNames));
 

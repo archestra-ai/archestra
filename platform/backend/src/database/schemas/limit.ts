@@ -9,6 +9,7 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import type { LimitCleanupInterval, LimitEntityType, LimitType } from "@/types";
+import { deletedAtColumn } from "../utils/soft-delete";
 
 const limitsTable = pgTable(
   "limits",
@@ -36,6 +37,7 @@ const limitsTable = pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
+    deletedAt: deletedAtColumn(),
   },
   (table) => ({
     entityIdx: index("limits_entity_idx").on(table.entityType, table.entityId),

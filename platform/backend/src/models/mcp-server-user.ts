@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/utils/soft-delete";
 
 class McpServerUserModel {
   /**
@@ -9,7 +10,16 @@ class McpServerUserModel {
     const mcpServerUsers = await db
       .select({ mcpServerId: schema.mcpServerUsersTable.mcpServerId })
       .from(schema.mcpServerUsersTable)
-      .where(eq(schema.mcpServerUsersTable.userId, userId));
+      .innerJoin(
+        schema.mcpServersTable,
+        eq(schema.mcpServerUsersTable.mcpServerId, schema.mcpServersTable.id),
+      )
+      .where(
+        and(
+          eq(schema.mcpServerUsersTable.userId, userId),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
 
     return mcpServerUsers.map((su) => su.mcpServerId);
   }
@@ -24,10 +34,15 @@ class McpServerUserModel {
     const mcpServerUser = await db
       .select()
       .from(schema.mcpServerUsersTable)
+      .innerJoin(
+        schema.mcpServersTable,
+        eq(schema.mcpServerUsersTable.mcpServerId, schema.mcpServersTable.id),
+      )
       .where(
         and(
           eq(schema.mcpServerUsersTable.mcpServerId, mcpServerId),
           eq(schema.mcpServerUsersTable.userId, userId),
+          notDeleted(schema.mcpServersTable),
         ),
       )
       .limit(1);

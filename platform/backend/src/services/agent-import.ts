@@ -1,5 +1,6 @@
 import { and, eq, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/utils/soft-delete";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import logger from "@/logging";
 import {
@@ -158,6 +159,7 @@ async function resolveAgentName(
       and(
         eq(schema.agentsTable.name, requestedName),
         eq(schema.agentsTable.organizationId, organizationId),
+        notDeleted(schema.agentsTable),
       ),
     )
     .limit(1);
@@ -177,6 +179,7 @@ async function resolveAgentName(
         and(
           eq(schema.agentsTable.name, candidate),
           eq(schema.agentsTable.organizationId, organizationId),
+          notDeleted(schema.agentsTable),
         ),
       )
       .limit(1);
@@ -328,6 +331,7 @@ async function resolveAndAssignDelegations(
           eq(schema.agentsTable.name, ref.targetAgentName),
           eq(schema.agentsTable.organizationId, organizationId),
           eq(schema.agentsTable.agentType, "agent"),
+          notDeleted(schema.agentsTable),
         ),
       )
       .limit(1);

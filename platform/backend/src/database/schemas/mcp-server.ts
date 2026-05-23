@@ -13,6 +13,7 @@ import type {
   LocalMcpServerInstallationStatus,
   ResourceVisibilityScope,
 } from "@/types";
+import { deletedAtColumn } from "../utils/soft-delete";
 import mcpCatalogTable from "./internal-mcp-catalog";
 import secretTable from "./secret";
 import { team } from "./team";
@@ -81,6 +82,7 @@ const mcpServerTable = pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
+    deletedAt: deletedAtColumn(),
   },
   (table) => [index("mcp_server_scope_idx").on(table.scope)],
 );

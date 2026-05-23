@@ -17,6 +17,7 @@ import type {
   ToolAssignmentMode,
   ToolExposureMode,
 } from "@/types/agent";
+import { deletedAtColumn } from "../utils/soft-delete";
 import identityProvidersTable from "./identity-provider";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 import modelsTable from "./model";
@@ -134,11 +135,12 @@ const agentsTable = pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
+    deletedAt: deletedAtColumn(),
   },
   (table) => [
     uniqueIndex("agents_slug_idx")
       .on(table.slug)
-      .where(sql`${table.slug} IS NOT NULL`),
+      .where(sql`${table.slug} IS NOT NULL AND ${table.deletedAt} IS NULL`),
     index("agents_organization_id_idx").on(table.organizationId),
     index("agents_agent_type_idx").on(table.agentType),
     index("agents_identity_provider_id_idx").on(table.identityProviderId),
@@ -147,7 +149,7 @@ const agentsTable = pgTable(
     uniqueIndex("agents_personal_gateway_per_member_idx")
       .on(table.organizationId, table.authorId)
       .where(
-        sql`${table.agentType} = 'mcp_gateway' AND ${table.isPersonalGateway} = true`,
+        sql`${table.agentType} = 'mcp_gateway' AND ${table.isPersonalGateway} = true AND ${table.deletedAt} IS NULL`,
       ),
   ],
 );

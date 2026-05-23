@@ -1,5 +1,6 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/utils/soft-delete";
 import type { AgentAccessContext } from "@/types";
 
 export async function findAgentAccessContextById(
@@ -13,7 +14,9 @@ export async function findAgentAccessContextById(
       authorId: schema.agentsTable.authorId,
     })
     .from(schema.agentsTable)
-    .where(eq(schema.agentsTable.id, agentId))
+    .where(
+      and(notDeleted(schema.agentsTable), eq(schema.agentsTable.id, agentId)),
+    )
     .limit(1);
 
   return agent ?? null;

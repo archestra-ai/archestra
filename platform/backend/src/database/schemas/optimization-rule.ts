@@ -13,6 +13,7 @@ import type {
   OptimizationRuleConditions,
   OptimizationRuleEntityType,
 } from "@/types";
+import { deletedAtColumn } from "../utils/soft-delete";
 
 const optimizationRulesTable = pgTable(
   "optimization_rules",
@@ -33,6 +34,7 @@ const optimizationRulesTable = pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
+    deletedAt: deletedAtColumn(),
   },
   (table) => ({
     entityIdx: index("optimization_rules_entity_idx").on(

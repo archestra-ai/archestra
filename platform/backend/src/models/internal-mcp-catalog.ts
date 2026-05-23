@@ -600,7 +600,7 @@ class InternalMcpCatalogModel {
       const servers = await McpServerModel.findByCatalogId(catalogId);
       // Deleting each server cascades its tools.
       for (const server of servers) {
-        await McpServerModel.delete(server.id);
+        await McpServerModel.delete(server.id, { hard: true });
       }
     }
 

@@ -1,4 +1,5 @@
 import { boolean, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { deletedAtColumn } from "../utils/soft-delete";
 import organizationsTable from "./organization";
 import usersTable from "./user";
 
@@ -16,6 +17,7 @@ export const team = pgTable("team", {
   updatedAt: timestamp("updated_at")
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
+  deletedAt: deletedAtColumn(),
   convertToolResultsToToon: boolean("convert_tool_results_to_toon")
     .notNull()
     .default(false),

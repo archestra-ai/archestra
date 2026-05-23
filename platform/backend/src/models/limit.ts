@@ -1,5 +1,6 @@
 import { and, eq, inArray, lt, or, type SQL, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted, softDeleteById } from "@/database/utils/soft-delete";
 import logger from "@/logging";
 import type {
   CreateLimit,
@@ -109,6 +110,8 @@ class LimitModel {
       );
     }
 
+    whereConditions.push(notDeleted(schema.limitsTable));
+
     if (entityType) {
       whereConditions.push(eq(schema.limitsTable.entityType, entityType));
     }
@@ -206,7 +209,9 @@ class LimitModel {
     const [limit] = await db
       .select()
       .from(schema.limitsTable)
-      .where(eq(schema.limitsTable.id, id));
+      .where(
+        and(notDeleted(schema.limitsTable), eq(schema.limitsTable.id, id)),
+      );
 
     return limit || null;
   }
@@ -231,7 +236,7 @@ class LimitModel {
     const [limit] = await db
       .update(schema.limitsTable)
       .set(patchData)
-      .where(eq(schema.limitsTable.id, id))
+      .where(and(notDeleted(schema.limitsTable), eq(schema.limitsTable.id, id)))
       .returning();
 
     return limit || null;
@@ -247,9 +252,10 @@ class LimitModel {
       return false;
     }
 
-    await db.delete(schema.limitsTable).where(eq(schema.limitsTable.id, id));
-
-    return true;
+    return await softDeleteById({
+      table: schema.limitsTable,
+      id,
+    });
   }
 
   /**
@@ -303,6 +309,7 @@ class LimitModel {
         .from(schema.limitsTable)
         .where(
           and(
+            notDeleted(schema.limitsTable),
             eq(schema.limitsTable.entityType, entityType),
             eq(schema.limitsTable.entityId, entityId),
             eq(schema.limitsTable.limitType, "token_cost"),
@@ -449,6 +456,7 @@ class LimitModel {
       .from(schema.limitsTable)
       .where(
         and(
+          notDeleted(schema.limitsTable),
           ...scopeConditions,
           or(
             sql`${schema.limitsTable.lastCleanup} IS NULL`,
@@ -478,7 +486,12 @@ class LimitModel {
       const limits = await tx
         .update(schema.limitsTable)
         .set({ lastCleanup: now, updatedAt: now })
-        .where(inArray(schema.limitsTable.id, limitIds))
+        .where(
+          and(
+            notDeleted(schema.limitsTable),
+            inArray(schema.limitsTable.id, limitIds),
+          ),
+        )
         .returning({
           id: schema.limitsTable.id,
           limitType: schema.limitsTable.limitType,
@@ -518,6 +531,7 @@ class LimitModel {
       .from(schema.limitsTable)
       .where(
         and(
+          notDeleted(schema.limitsTable),
           eq(schema.limitsTable.entityType, entityType),
           eq(schema.limitsTable.entityId, entityId),
           eq(schema.limitsTable.limitType, limitType),
@@ -561,7 +575,12 @@ export class LimitValidationService {
         const teams = await db
           .select()
           .from(schema.teamsTable)
-          .where(inArray(schema.teamsTable.id, agentTeamIds));
+          .where(
+            and(
+              notDeleted(schema.teamsTable),
+              inArray(schema.teamsTable.id, agentTeamIds),
+            ),
+          );
         if (teams.length > 0 && teams[0].organizationId) {
           organizationId = teams[0].organizationId;
         }
@@ -569,7 +588,12 @@ export class LimitValidationService {
         const [agent] = await db
           .select({ organizationId: schema.agentsTable.organizationId })
           .from(schema.agentsTable)
-          .where(eq(schema.agentsTable.id, agentId))
+          .where(
+            and(
+              notDeleted(schema.agentsTable),
+              eq(schema.agentsTable.id, agentId),
+            ),
+          )
           .limit(1);
         if (agent?.organizationId) {
           organizationId = agent.organizationId;
@@ -663,7 +687,12 @@ export class LimitValidationService {
         const teams = await db
           .select()
           .from(schema.teamsTable)
-          .where(inArray(schema.teamsTable.id, agentTeamIds));
+          .where(
+            and(
+              notDeleted(schema.teamsTable),
+              inArray(schema.teamsTable.id, agentTeamIds),
+            ),
+          );
         logger.info(
           `[LimitValidation] Found ${teams.length} teams for agent ${agentId}: ${teams.map((t) => `${t.id}(org:${t.organizationId})`).join(", ")}`,
         );
@@ -959,6 +988,7 @@ function buildOrganizationLimitScopeCondition(organizationId: string): SQL {
         SELECT 1 FROM ${schema.teamsTable}
         WHERE ${schema.teamsTable.id} = ${schema.limitsTable.entityId}
           AND ${schema.teamsTable.organizationId} = ${organizationId}
+          AND ${schema.teamsTable.deletedAt} IS NULL
       )`,
     ),
     and(
@@ -967,6 +997,7 @@ function buildOrganizationLimitScopeCondition(organizationId: string): SQL {
         SELECT 1 FROM ${schema.agentsTable}
         WHERE ${schema.agentsTable.id}::text = ${schema.limitsTable.entityId}
           AND ${schema.agentsTable.organizationId} = ${organizationId}
+          AND ${schema.agentsTable.deletedAt} IS NULL
       )`,
     ),
     and(

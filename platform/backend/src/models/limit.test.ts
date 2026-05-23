@@ -421,7 +421,7 @@ describe("LimitModel", () => {
   });
 
   describe("delete", () => {
-    test("can delete a limit", async ({ makeAgent }) => {
+    test("soft deletes a limit", async ({ makeAgent }) => {
       const agent = await makeAgent({ name: "Test Agent" });
 
       const limit = await LimitModel.create({
@@ -437,6 +437,19 @@ describe("LimitModel", () => {
 
       const found = await LimitModel.findById(limit.id);
       expect(found).toBeNull();
+
+      const { default: db, schema } = await import("@/database");
+      const { eq } = await import("drizzle-orm");
+      const [row] = await db
+        .select({
+          id: schema.limitsTable.id,
+          deletedAt: schema.limitsTable.deletedAt,
+        })
+        .from(schema.limitsTable)
+        .where(eq(schema.limitsTable.id, limit.id));
+
+      expect(row?.id).toBe(limit.id);
+      expect(row?.deletedAt).toBeInstanceOf(Date);
     });
 
     test("returns false for non-existent limit", async () => {

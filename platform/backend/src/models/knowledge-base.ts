@@ -1,5 +1,6 @@
 import { and, count, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted, softDeleteById } from "@/database/utils/soft-delete";
 import type {
   InsertKnowledgeBase,
   KnowledgeBase,
@@ -15,6 +16,7 @@ class KnowledgeBaseModel {
   }): Promise<KnowledgeBase[]> {
     const normalizedSearch = params.search?.trim();
     const filters = [
+      notDeleted(schema.knowledgeBasesTable),
       eq(schema.knowledgeBasesTable.organizationId, params.organizationId),
       ...(normalizedSearch
         ? [
@@ -50,7 +52,12 @@ class KnowledgeBaseModel {
     const [result] = await db
       .select()
       .from(schema.knowledgeBasesTable)
-      .where(eq(schema.knowledgeBasesTable.id, id));
+      .where(
+        and(
+          notDeleted(schema.knowledgeBasesTable),
+          eq(schema.knowledgeBasesTable.id, id),
+        ),
+      );
 
     return result ?? null;
   }
@@ -60,7 +67,12 @@ class KnowledgeBaseModel {
     return await db
       .select()
       .from(schema.knowledgeBasesTable)
-      .where(inArray(schema.knowledgeBasesTable.id, ids));
+      .where(
+        and(
+          notDeleted(schema.knowledgeBasesTable),
+          inArray(schema.knowledgeBasesTable.id, ids),
+        ),
+      );
   }
 
   static async create(data: InsertKnowledgeBase): Promise<KnowledgeBase> {
@@ -79,19 +91,34 @@ class KnowledgeBaseModel {
     const [result] = await db
       .update(schema.knowledgeBasesTable)
       .set(data)
-      .where(eq(schema.knowledgeBasesTable.id, id))
+      .where(
+        and(
+          notDeleted(schema.knowledgeBasesTable),
+          eq(schema.knowledgeBasesTable.id, id),
+        ),
+      )
       .returning();
 
     return result ?? null;
   }
 
   static async delete(id: string): Promise<boolean> {
-    const rows = await db
-      .delete(schema.knowledgeBasesTable)
-      .where(eq(schema.knowledgeBasesTable.id, id))
-      .returning({ id: schema.knowledgeBasesTable.id });
+    return await db.transaction(async (tx) => {
+      const deleted = await softDeleteById({
+        table: schema.knowledgeBasesTable,
+        id,
+        tx,
+      });
+      if (!deleted) {
+        return false;
+      }
 
-    return rows.length > 0;
+      await tx
+        .delete(schema.agentKnowledgeBasesTable)
+        .where(eq(schema.agentKnowledgeBasesTable.knowledgeBaseId, id));
+
+      return true;
+    });
   }
 
   static async countByOrganization(params: {
@@ -100,6 +127,7 @@ class KnowledgeBaseModel {
   }): Promise<number> {
     const normalizedSearch = params.search?.trim();
     const filters = [
+      notDeleted(schema.knowledgeBasesTable),
       eq(schema.knowledgeBasesTable.organizationId, params.organizationId),
       ...(normalizedSearch
         ? [
@@ -130,6 +158,7 @@ class KnowledgeBaseModel {
       .from(schema.knowledgeBasesTable)
       .where(
         and(
+          notDeleted(schema.knowledgeBasesTable),
           eq(schema.knowledgeBasesTable.name, name),
           eq(schema.knowledgeBasesTable.organizationId, organizationId),
         ),

@@ -25,6 +25,7 @@ import {
   createPaginatedResult,
   type PaginatedResult,
 } from "@/database/utils/pagination";
+import { notDeleted } from "@/database/utils/soft-delete";
 import type {
   AgentTool,
   AgentToolFilters,
@@ -289,7 +290,17 @@ class AgentToolModel {
         schema.teamMembersTable,
         eq(schema.mcpServersTable.teamId, schema.teamMembersTable.teamId),
       )
-      .where(eq(schema.teamMembersTable.userId, userId));
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.mcpServersTable.teamId, schema.teamsTable.id),
+      )
+      .where(
+        and(
+          notDeleted(schema.mcpServersTable),
+          notDeleted(schema.teamsTable),
+          eq(schema.teamMembersTable.userId, userId),
+        ),
+      );
 
     const teamAccessibleIds = teamAccessibleServers.map((s) => s.mcpServerId);
 
@@ -310,6 +321,7 @@ class AgentToolModel {
           )
           .where(
             and(
+              notDeleted(schema.mcpServersTable),
               eq(schema.mcpServersTable.scope, "org"),
               eq(schema.internalMcpCatalogTable.organizationId, organizationId),
             ),
@@ -1011,7 +1023,12 @@ class AgentToolModel {
       const mcpServerIds = await db
         .select({ id: schema.mcpServersTable.id })
         .from(schema.mcpServersTable)
-        .where(eq(schema.mcpServersTable.ownerId, filters.mcpServerOwnerId))
+        .where(
+          and(
+            notDeleted(schema.mcpServersTable),
+            eq(schema.mcpServersTable.ownerId, filters.mcpServerOwnerId),
+          ),
+        )
         .then((rows) => rows.map((r) => r.id));
 
       if (mcpServerIds.length > 0) {
@@ -1185,7 +1202,12 @@ class AgentToolModel {
     const userServers = await db
       .select({ id: schema.mcpServersTable.id })
       .from(schema.mcpServersTable)
-      .where(eq(schema.mcpServersTable.ownerId, userId));
+      .where(
+        and(
+          notDeleted(schema.mcpServersTable),
+          eq(schema.mcpServersTable.ownerId, userId),
+        ),
+      );
 
     if (userServers.length === 0) {
       return 0;

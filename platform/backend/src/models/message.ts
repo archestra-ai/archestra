@@ -1,5 +1,6 @@
 import { and, eq, gt, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/utils/soft-delete";
 import type { InsertMessage, Message } from "@/types";
 
 type DbExecutor =
@@ -17,7 +18,12 @@ class MessageModel {
     await db
       .update(schema.conversationsTable)
       .set({ updatedAt: new Date() })
-      .where(eq(schema.conversationsTable.id, conversationId));
+      .where(
+        and(
+          notDeleted(schema.conversationsTable),
+          eq(schema.conversationsTable.id, conversationId),
+        ),
+      );
   }
 
   static async create(data: InsertMessage): Promise<Message> {

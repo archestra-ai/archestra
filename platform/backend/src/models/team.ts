@@ -1,6 +1,7 @@
 import { MEMBER_ROLE_NAME } from "@shared";
 import { and, count, eq, getTableColumns, ilike, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted, softDeleteById } from "@/database/utils/soft-delete";
 import logger from "@/logging";
 import type {
   InsertTeam,
@@ -62,7 +63,12 @@ class TeamModel {
     const teams = await db
       .select()
       .from(schema.teamsTable)
-      .where(eq(schema.teamsTable.organizationId, organizationId));
+      .where(
+        and(
+          notDeleted(schema.teamsTable),
+          eq(schema.teamsTable.organizationId, organizationId),
+        ),
+      );
 
     // Batch fetch all members for all teams in one query
     const teamIds = teams.map((t) => t.id);
@@ -96,6 +102,7 @@ class TeamModel {
     );
 
     const filters = [
+      notDeleted(schema.teamsTable),
       eq(schema.teamsTable.organizationId, organizationId),
       ...(name ? [ilike(schema.teamsTable.name, `%${name}%`)] : []),
     ];
@@ -147,6 +154,7 @@ class TeamModel {
       .from(schema.teamsTable)
       .where(
         and(
+          notDeleted(schema.teamsTable),
           eq(schema.teamsTable.name, name),
           eq(schema.teamsTable.organizationId, organizationId),
         ),
@@ -176,7 +184,7 @@ class TeamModel {
     const [team] = await db
       .select()
       .from(schema.teamsTable)
-      .where(eq(schema.teamsTable.id, id))
+      .where(and(notDeleted(schema.teamsTable), eq(schema.teamsTable.id, id)))
       .limit(1);
 
     if (!team) {
@@ -207,7 +215,12 @@ class TeamModel {
     const teams = await db
       .select()
       .from(schema.teamsTable)
-      .where(inArray(schema.teamsTable.id, teamIds));
+      .where(
+        and(
+          notDeleted(schema.teamsTable),
+          inArray(schema.teamsTable.id, teamIds),
+        ),
+      );
 
     logger.debug({ count: teams.length }, "TeamModel.findByIds: completed");
     return teams.map((team) => ({
@@ -227,7 +240,7 @@ class TeamModel {
         ...input,
         updatedAt: new Date(),
       })
-      .where(eq(schema.teamsTable.id, id))
+      .where(and(notDeleted(schema.teamsTable), eq(schema.teamsTable.id, id)))
       .returning();
 
     if (!updatedTeam) {
@@ -246,11 +259,10 @@ class TeamModel {
    */
   static async delete(id: string): Promise<boolean> {
     logger.debug({ id }, "TeamModel.delete: deleting team");
-    const rows = await db
-      .delete(schema.teamsTable)
-      .where(eq(schema.teamsTable.id, id))
-      .returning({ id: schema.teamsTable.id });
-    const deleted = rows.length > 0;
+    const deleted = await softDeleteById({
+      table: schema.teamsTable,
+      id,
+    });
     logger.debug({ id, deleted }, "TeamModel.delete: completed");
     return deleted;
   }
@@ -408,7 +420,12 @@ class TeamModel {
       db
         .select()
         .from(schema.teamsTable)
-        .where(inArray(schema.teamsTable.id, teamIds)),
+        .where(
+          and(
+            notDeleted(schema.teamsTable),
+            inArray(schema.teamsTable.id, teamIds),
+          ),
+        ),
       TeamModel.getTeamMembersBatch(teamIds),
     ]);
 
@@ -441,6 +458,7 @@ class TeamModel {
 
     const filters = [
       eq(schema.teamMembersTable.userId, userId),
+      notDeleted(schema.teamsTable),
       ...(name ? [ilike(schema.teamsTable.name, `%${name}%`)] : []),
     ];
 
@@ -494,10 +512,15 @@ class TeamModel {
     const [membership] = await db
       .select()
       .from(schema.teamMembersTable)
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.teamMembersTable.teamId, schema.teamsTable.id),
+      )
       .where(
         and(
           eq(schema.teamMembersTable.teamId, teamId),
           eq(schema.teamMembersTable.userId, userId),
+          notDeleted(schema.teamsTable),
         ),
       )
       .limit(1);
@@ -528,10 +551,15 @@ class TeamModel {
     const [membership] = await db
       .select({ teamId: schema.teamMembersTable.teamId })
       .from(schema.teamMembersTable)
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.teamMembersTable.teamId, schema.teamsTable.id),
+      )
       .where(
         and(
           inArray(schema.teamMembersTable.teamId, teamIds),
           eq(schema.teamMembersTable.userId, userId),
+          notDeleted(schema.teamsTable),
         ),
       )
       .limit(1);
@@ -559,10 +587,15 @@ class TeamModel {
     const rows = await db
       .select({ userId: schema.teamMembersTable.userId })
       .from(schema.teamMembersTable)
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.teamMembersTable.teamId, schema.teamsTable.id),
+      )
       .where(
         and(
           inArray(schema.teamMembersTable.teamId, params.teamIds),
           inArray(schema.teamMembersTable.userId, params.userIds),
+          notDeleted(schema.teamsTable),
         ),
       );
 
@@ -582,7 +615,16 @@ class TeamModel {
     const teamMemberships = await db
       .select({ teamId: schema.teamMembersTable.teamId })
       .from(schema.teamMembersTable)
-      .where(eq(schema.teamMembersTable.userId, userId));
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.teamMembersTable.teamId, schema.teamsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.teamMembersTable.userId, userId),
+          notDeleted(schema.teamsTable),
+        ),
+      );
 
     const teamIds = teamMemberships.map((membership) => membership.teamId);
     logger.debug(
@@ -615,7 +657,16 @@ class TeamModel {
     const teammates = await db
       .select({ userId: schema.teamMembersTable.userId })
       .from(schema.teamMembersTable)
-      .where(inArray(schema.teamMembersTable.teamId, userTeamIds));
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.teamMembersTable.teamId, schema.teamsTable.id),
+      )
+      .where(
+        and(
+          inArray(schema.teamMembersTable.teamId, userTeamIds),
+          notDeleted(schema.teamsTable),
+        ),
+      );
 
     // Return unique user IDs (excluding the user themselves)
     const teammateIds = [...new Set(teammates.map((t) => t.userId))];
@@ -644,7 +695,12 @@ class TeamModel {
         schema.teamsTable,
         eq(schema.agentTeamsTable.teamId, schema.teamsTable.id),
       )
-      .where(eq(schema.agentTeamsTable.agentId, agentId));
+      .where(
+        and(
+          eq(schema.agentTeamsTable.agentId, agentId),
+          notDeleted(schema.teamsTable),
+        ),
+      );
 
     logger.debug(
       { agentId, count: agentTeams.length },
@@ -906,6 +962,7 @@ class TeamModel {
           eq(schema.teamMembersTable.userId, userId),
           eq(schema.teamMembersTable.syncedFromSso, true),
           eq(schema.teamsTable.organizationId, organizationId),
+          notDeleted(schema.teamsTable),
         ),
       );
 

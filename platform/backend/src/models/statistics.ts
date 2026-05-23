@@ -1,6 +1,7 @@
 import type { StatisticsTimeFrame } from "@shared";
 import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/utils/soft-delete";
 import type {
   AgentStatistics,
   CostSavingsStatistics,
@@ -388,6 +389,7 @@ class StatisticsModel {
           schema.membersTable.organizationId,
         ),
       )
+      .where(notDeleted(schema.teamsTable))
       .groupBy(schema.teamsTable.id);
 
     // Get agent counts per team
@@ -401,6 +403,7 @@ class StatisticsModel {
         schema.agentTeamsTable,
         eq(schema.teamsTable.id, schema.agentTeamsTable.teamId),
       )
+      .where(notDeleted(schema.teamsTable))
       .groupBy(schema.teamsTable.id);
 
     // Aggregate data by team

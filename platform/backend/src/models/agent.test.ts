@@ -22,6 +22,47 @@ describe("AgentModel", () => {
     expect(await AgentModel.findAll()).toHaveLength(2);
   });
 
+  describe("delete", () => {
+    test("soft deletes an agent and allows reusing its slug", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await AgentModel.create({
+        name: "Reusable Gateway",
+        organizationId: org.id,
+        agentType: "mcp_gateway",
+        teams: [],
+        scope: "org",
+      });
+
+      const deleted = await AgentModel.delete(agent.id);
+      expect(deleted).toBe(true);
+      expect(await AgentModel.findById(agent.id)).toBeNull();
+
+      const { eq } = await import("drizzle-orm");
+      const [row] = await db
+        .select({
+          id: schema.agentsTable.id,
+          deletedAt: schema.agentsTable.deletedAt,
+        })
+        .from(schema.agentsTable)
+        .where(eq(schema.agentsTable.id, agent.id));
+
+      expect(row?.id).toBe(agent.id);
+      expect(row?.deletedAt).toBeInstanceOf(Date);
+
+      const replacement = await AgentModel.create({
+        name: "Reusable Gateway",
+        organizationId: org.id,
+        agentType: "mcp_gateway",
+        teams: [],
+        scope: "org",
+      });
+
+      expect(replacement.slug).toBe(agent.slug);
+    });
+  });
+
   describe("findBasicByOrganizationIdAndIds", () => {
     test("returns only agents from the requested organization", async ({
       makeOrganization,

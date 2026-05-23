@@ -38,6 +38,7 @@ import {
   createPaginatedResult,
   type PaginatedResult,
 } from "@/database/utils/pagination";
+import { notDeleted } from "@/database/utils/soft-delete";
 import logger from "@/logging";
 import type {
   AssignedTool,
@@ -833,7 +834,12 @@ class ToolModel {
     const agents = await db
       .select({ id: schema.agentsTable.id })
       .from(schema.agentsTable)
-      .where(eq(schema.agentsTable.organizationId, organizationId));
+      .where(
+        and(
+          notDeleted(schema.agentsTable),
+          eq(schema.agentsTable.organizationId, organizationId),
+        ),
+      );
 
     for (const agent of agents) {
       await AgentToolModel.createManyIfNotExists(agent.id, toolIds);
@@ -1694,7 +1700,12 @@ class ToolModel {
     const [targetAgent] = await db
       .select({ id: schema.agentsTable.id, name: schema.agentsTable.name })
       .from(schema.agentsTable)
-      .where(eq(schema.agentsTable.id, targetAgentId))
+      .where(
+        and(
+          notDeleted(schema.agentsTable),
+          eq(schema.agentsTable.id, targetAgentId),
+        ),
+      )
       .limit(1);
 
     if (!targetAgent) {

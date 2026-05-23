@@ -1,4 +1,5 @@
 import { index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { deletedAtColumn } from "../utils/soft-delete";
 
 const knowledgeBasesTable = pgTable(
   "knowledge_bases",
@@ -13,6 +14,7 @@ const knowledgeBasesTable = pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
+    deletedAt: deletedAtColumn(),
   },
   (table) => [
     index("knowledge_bases_organization_id_idx").on(table.organizationId),

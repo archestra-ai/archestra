@@ -190,7 +190,7 @@ describe("ConversationModel", () => {
     expect(Array.isArray(updated?.messages)).toBe(true);
   });
 
-  test("can delete a conversation", async ({
+  test("soft deletes a conversation", async ({
     makeUser,
     makeOrganization,
     makeAgent,
@@ -214,6 +214,19 @@ describe("ConversationModel", () => {
       organizationId: org.id,
     });
     expect(found).toBeNull();
+
+    const { default: db, schema } = await import("@/database");
+    const { eq } = await import("drizzle-orm");
+    const [row] = await db
+      .select({
+        id: schema.conversationsTable.id,
+        deletedAt: schema.conversationsTable.deletedAt,
+      })
+      .from(schema.conversationsTable)
+      .where(eq(schema.conversationsTable.id, created.id));
+
+    expect(row?.id).toBe(created.id);
+    expect(row?.deletedAt).toBeInstanceOf(Date);
   });
 
   test("returns conversations ordered by updatedAt descending", async ({

@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { describe, expect, test } from "@/test";
 import KnowledgeBaseModel from "./knowledge-base";
 
@@ -264,7 +265,7 @@ describe("KnowledgeBaseModel", () => {
   });
 
   describe("delete", () => {
-    test("deletes a knowledge base", async ({
+    test("soft deletes a knowledge base", async ({
       makeOrganization,
       makeKnowledgeBase,
     }) => {
@@ -273,9 +274,20 @@ describe("KnowledgeBaseModel", () => {
 
       await KnowledgeBaseModel.delete(kb.id);
 
-      // Verify record is actually gone (PGlite may not return accurate rowCount)
       const found = await KnowledgeBaseModel.findById(kb.id);
       expect(found).toBeNull();
+
+      const { default: db, schema } = await import("@/database");
+      const [row] = await db
+        .select({
+          id: schema.knowledgeBasesTable.id,
+          deletedAt: schema.knowledgeBasesTable.deletedAt,
+        })
+        .from(schema.knowledgeBasesTable)
+        .where(eq(schema.knowledgeBasesTable.id, kb.id));
+
+      expect(row?.id).toBe(kb.id);
+      expect(row?.deletedAt).toBeInstanceOf(Date);
     });
 
     test("returns false for non-existent id", async () => {

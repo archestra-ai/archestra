@@ -22,6 +22,7 @@ describe("OptimizationRuleModel.matchByRules", () => {
         enabled: true,
         createdAt: new Date(),
         updatedAt: new Date(),
+        deletedAt: null,
       },
     ];
 
@@ -47,6 +48,7 @@ describe("OptimizationRuleModel.matchByRules", () => {
         enabled: true,
         createdAt: new Date(),
         updatedAt: new Date(),
+        deletedAt: null,
       },
     ];
 
@@ -73,6 +75,7 @@ describe("OptimizationRuleModel.matchByRules", () => {
         enabled: true,
         createdAt: new Date(),
         updatedAt: new Date(),
+        deletedAt: null,
       },
     ];
 
@@ -99,6 +102,7 @@ describe("OptimizationRuleModel.matchByRules", () => {
         enabled: true,
         createdAt: new Date(),
         updatedAt: new Date(),
+        deletedAt: null,
       },
       {
         id: "test-rule-2",
@@ -110,6 +114,7 @@ describe("OptimizationRuleModel.matchByRules", () => {
         enabled: true,
         createdAt: new Date(),
         updatedAt: new Date(),
+        deletedAt: null,
       },
     ];
 
@@ -136,6 +141,7 @@ describe("OptimizationRuleModel.matchByRules", () => {
         enabled: false, // Disabled
         createdAt: new Date(),
         updatedAt: new Date(),
+        deletedAt: null,
       },
     ];
 

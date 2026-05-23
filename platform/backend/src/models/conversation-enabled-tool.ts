@@ -1,5 +1,6 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/utils/soft-delete";
 import logger from "@/logging";
 
 class ConversationEnabledToolModel {
@@ -16,8 +17,21 @@ class ConversationEnabledToolModel {
     const enabledTools = await db
       .select({ toolId: schema.conversationEnabledToolsTable.toolId })
       .from(schema.conversationEnabledToolsTable)
+      .innerJoin(
+        schema.conversationsTable,
+        eq(
+          schema.conversationEnabledToolsTable.conversationId,
+          schema.conversationsTable.id,
+        ),
+      )
       .where(
-        eq(schema.conversationEnabledToolsTable.conversationId, conversationId),
+        and(
+          notDeleted(schema.conversationsTable),
+          eq(
+            schema.conversationEnabledToolsTable.conversationId,
+            conversationId,
+          ),
+        ),
       );
 
     const toolIds = enabledTools.map((t) => t.toolId);
@@ -46,7 +60,12 @@ class ConversationEnabledToolModel {
           schema.conversationsTable.hasCustomToolSelection,
       })
       .from(schema.conversationsTable)
-      .where(eq(schema.conversationsTable.id, conversationId))
+      .where(
+        and(
+          notDeleted(schema.conversationsTable),
+          eq(schema.conversationsTable.id, conversationId),
+        ),
+      )
       .limit(1);
 
     const hasCustom = result[0]?.hasCustomToolSelection ?? false;
@@ -97,7 +116,12 @@ class ConversationEnabledToolModel {
       await tx
         .update(schema.conversationsTable)
         .set({ hasCustomToolSelection: true })
-        .where(eq(schema.conversationsTable.id, conversationId));
+        .where(
+          and(
+            notDeleted(schema.conversationsTable),
+            eq(schema.conversationsTable.id, conversationId),
+          ),
+        );
 
       // Delete all existing enabled tool entries
       await tx
@@ -140,7 +164,12 @@ class ConversationEnabledToolModel {
       await tx
         .update(schema.conversationsTable)
         .set({ hasCustomToolSelection: false })
-        .where(eq(schema.conversationsTable.id, conversationId));
+        .where(
+          and(
+            notDeleted(schema.conversationsTable),
+            eq(schema.conversationsTable.id, conversationId),
+          ),
+        );
 
       // Delete all enabled tool entries
       await tx

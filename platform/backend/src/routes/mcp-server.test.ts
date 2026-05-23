@@ -1361,6 +1361,77 @@ describe("mcp server inspect route", () => {
     await drainPendingReinstall(mcpServer.id);
   });
 
+  // Same shape as the plain-env case above but for secret-typed required
+  // env vars: a partial reinstall body shouldn't be rejected when the
+  // missing secret is already on the install's secret bag.
+  test("reinstall accepts a body that omits required secret env vars already on the install's secret bag", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Local Reinstall Required Secret From Bag",
+      serverType: "local",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [
+          {
+            key: "EXISTING_SECRET",
+            type: "secret",
+            promptOnInstallation: true,
+            required: true,
+          },
+          {
+            key: "NEW_REQUIRED",
+            type: "plain_text",
+            promptOnInstallation: true,
+            required: true,
+          },
+        ],
+        transportType: "streamable-http",
+        httpPort: 8080,
+        httpPath: "/mcp",
+      },
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+    const existingBag = await secretManager().createSecret(
+      { EXISTING_SECRET: "in-the-bag" },
+      `${mcpServer.name}-existing-bag`,
+    );
+    await db
+      .update(schema.mcpServersTable)
+      .set({ secretId: existingBag.id })
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
+    await McpServerUserModel.assignUserToMcpServer(mcpServer.id, user.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${mcpServer.id}/reinstall`,
+      payload: {
+        environmentValues: { NEW_REQUIRED: "user-fills-only-the-new-one" },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const [updatedServer] = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
+    const storedSecret = await secretManager().getSecret(
+      updatedServer.secretId!,
+    );
+    expect(storedSecret?.secret).toMatchObject({
+      EXISTING_SECRET: "in-the-bag",
+      NEW_REQUIRED: "user-fills-only-the-new-one",
+    });
+
+    await drainPendingReinstall(mcpServer.id);
+  });
+
   // An explicit empty string for a prompted plain key clears it from the
   // row. Distinguishes "user wants to delete this value" from "user didn't
   // touch this field" (the latter signaled by omitting the key entirely).

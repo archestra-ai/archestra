@@ -1700,22 +1700,41 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
-        // Validate required environment variables against the effective
-        // post-merge state for plain types — a required var already on
-        // the row stays satisfied when the body only carries newly-added
-        // vars. Secret-typed required vars are still checked against the
-        // body alone; the existing secret bag is merged below but not
-        // consulted here.
+        // Fetch the existing secret bag once so validation below and the
+        // non-BYOS merge can both consult it. BYOS replaces the bag
+        // wholesale (vault references are re-supplied per request), so it
+        // doesn't need the existing state.
+        const existingSecrets: Record<string, unknown> =
+          !isByosVault && mcpServer.secretId
+            ? ((await secretManager().getSecret(mcpServer.secretId))?.secret ??
+              {})
+            : {};
+
+        // Validate required env vars against the effective post-merge state.
+        // Plain types come from `mergedPlainEnv` (column + body, empty =
+        // clear). Secret types in non-BYOS mode are satisfied by the existing
+        // bag if the body omits them; BYOS still requires the body alone.
         if (catalogItem.localConfig?.environment) {
           const requiredEnvVars = catalogItem.localConfig.environment.filter(
             (env) => env.promptOnInstallation && env.required,
           );
 
           const missingEnvVars = requiredEnvVars.filter((env) => {
-            const value =
-              env.type === "secret"
-                ? environmentValues?.[env.key]
-                : mergedPlainEnv[env.key];
+            if (env.type === "secret") {
+              const submitted = environmentValues?.[env.key];
+              if (isByosVault) {
+                return !submitted?.trim();
+              }
+              if (submitted === "") {
+                return true;
+              }
+              if (typeof submitted === "string" && submitted.trim()) {
+                return false;
+              }
+              const existing = existingSecrets[env.key];
+              return typeof existing !== "string" || !existing.trim();
+            }
+            const value = mergedPlainEnv[env.key];
             if (env.type === "boolean") {
               return !value;
             }
@@ -1785,12 +1804,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             await McpServerModel.update(id, { secretId: secret.id });
           }
         } else {
-          // Non-BYOS mode: merge new values with existing secret
-          const existingSecrets = mcpServer.secretId
-            ? (await secretManager().getSecret(mcpServer.secretId))?.secret ||
-              {}
-            : {};
-
+          // Non-BYOS mode: merge new values with the existing bag fetched
+          // above for validation.
           const mergedSecrets = {
             ...existingSecrets,
             ...catalogStaticUserConfigValues,

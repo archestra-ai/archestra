@@ -466,3 +466,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @MITHRAN-BALACHANDER
 - @Mandeep0402
 - @amitkdwivedi1992-wq
+- @Daniel-Dis

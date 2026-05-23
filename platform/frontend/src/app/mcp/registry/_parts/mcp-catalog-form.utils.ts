@@ -12,6 +12,30 @@ import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 type McpCatalogApiData =
   archestraApiTypes.CreateInternalMcpCatalogItemData["body"];
 
+export function parseLocalConfigArguments(value?: string): string[] {
+  const trimmedValue = value?.trim();
+  if (!trimmedValue) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(trimmedValue);
+    if (Array.isArray(parsed)) {
+      return parsed
+        .filter((arg): arg is string => typeof arg === "string")
+        .map((arg) => arg.trim())
+        .filter((arg) => arg.length > 0);
+    }
+  } catch {
+    // Fall back to the legacy newline-delimited format.
+  }
+
+  return trimmedValue
+    .split("\n")
+    .map((arg) => arg.trim())
+    .filter((arg) => arg.length > 0);
+}
+
 // Transform function to convert form values to API format
 export function transformFormToApiData(
   values: McpCatalogFormValues,
@@ -34,13 +58,9 @@ export function transformFormToApiData(
 
   // Handle local configuration
   if (values.serverType === "local" && values.localConfig) {
-    // Parse arguments string into array
-    const argumentsArray = values.localConfig.arguments
-      ? values.localConfig.arguments
-          .split("\n")
-          .map((arg) => arg.trim())
-          .filter((arg) => arg.length > 0)
-      : [];
+    const argumentsArray = parseLocalConfigArguments(
+      values.localConfig.arguments,
+    );
 
     data.localConfig = {
       command: values.localConfig.command || undefined,

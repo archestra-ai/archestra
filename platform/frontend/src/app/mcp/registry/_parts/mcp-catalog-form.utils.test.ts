@@ -1,9 +1,31 @@
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import {
+  parseLocalConfigArguments,
   transformCatalogItemToFormValues,
   transformExternalCatalogToFormValues,
   transformFormToApiData,
 } from "./mcp-catalog-form.utils";
+
+describe("parseLocalConfigArguments", () => {
+  it("keeps supporting newline-delimited arguments", () => {
+    expect(
+      parseLocalConfigArguments("server.js\n--verbose\n\n  --debug  "),
+    ).toEqual(["server.js", "--verbose", "--debug"]);
+  });
+
+  it("accepts catalog-style JSON argument arrays", () => {
+    expect(parseLocalConfigArguments('["-y", "pulumi-mcp"]')).toEqual([
+      "-y",
+      "pulumi-mcp",
+    ]);
+  });
+
+  it("falls back to newline parsing for non-array JSON", () => {
+    expect(parseLocalConfigArguments('{"arg":"value"}')).toEqual([
+      '{"arg":"value"}',
+    ]);
+  });
+});
 
 describe("transformFormToApiData", () => {
   it("maps custom auth and additional headers into userConfig", () => {
@@ -52,6 +74,48 @@ describe("transformFormToApiData", () => {
         sensitive: false,
       }),
     });
+  });
+
+  it("parses JSON local config arguments into the API payload", () => {
+    const values: McpCatalogFormValues = {
+      name: "JSON Args MCP",
+      description: "",
+      icon: null,
+      serverType: "local",
+      serverUrl: "",
+      authMethod: "none",
+      includeBearerPrefix: true,
+      authHeaderName: "",
+      additionalHeaders: [],
+      oauthConfig: undefined,
+      enterpriseManagedConfig: null,
+      localConfig: {
+        command: "npx",
+        arguments: '["-y", "pulumi-mcp"]',
+        environment: [],
+        envFrom: [],
+        dockerImage: "",
+        transportType: "stdio",
+        httpPort: "",
+        httpPath: "",
+        serviceAccount: "",
+        imagePullSecrets: [],
+      },
+      deploymentSpecYaml: "",
+      originalDeploymentSpecYaml: "",
+      oauthClientSecretVaultPath: "",
+      oauthClientSecretVaultKey: "",
+      localConfigVaultPath: "",
+      localConfigVaultKey: "",
+      labels: [],
+      scope: "personal",
+      teams: [],
+    };
+
+    expect(transformFormToApiData(values).localConfig?.arguments).toEqual([
+      "-y",
+      "pulumi-mcp",
+    ]);
   });
 
   it("includes OAuth discovery overrides in the API payload", () => {

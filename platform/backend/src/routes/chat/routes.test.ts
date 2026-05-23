@@ -26,8 +26,10 @@ vi.mock("@/models/llm-provider-api-key-model", () => ({
   default: { getFastestModel: mockGetFastestModel },
 }));
 
+import { FAST_MODELS } from "@shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { createDirectLLMModel } from "@/clients/llm-client";
+import type { ChatMessage } from "@/types";
 import {
   __test,
   buildChatStopConditions,
@@ -465,6 +467,39 @@ describe("getMessagesNotYetPersisted", () => {
     expect(newMessages).toHaveLength(1);
     expect(newMessages[0]?.id).toBe("assistant-1");
   });
+
+  it("does not re-persist live messages linked by persisted message metadata", () => {
+    const newMessages = __test.getMessagesNotYetPersisted({
+      existingMessages: [
+        {
+          id: "22222222-2222-2222-2222-222222222222",
+          content: {
+            id: "",
+            role: "assistant",
+            parts: [{ type: "text", text: "already saved" }],
+          },
+        },
+      ],
+      uiMessages: [
+        {
+          id: "live-assistant-1",
+          role: "assistant",
+          metadata: {
+            persistedMessageId: "22222222-2222-2222-2222-222222222222",
+          },
+          parts: [{ type: "text", text: "already saved" }],
+        } as ChatMessage,
+        {
+          id: "new-user-1",
+          role: "user",
+          parts: [{ type: "text", text: "next" }],
+        },
+      ],
+    });
+
+    expect(newMessages).toHaveLength(1);
+    expect(newMessages[0]?.id).toBe("new-user-1");
+  });
 });
 
 describe("extractFirstMessages", () => {
@@ -755,7 +790,7 @@ describe("generateConversationTitle", () => {
 
     expect(mockGetFastestModel).not.toHaveBeenCalled();
     expect(createDirectLLMModel).toHaveBeenCalledWith(
-      expect.objectContaining({ modelName: "claude-haiku-4-5-20251001" }),
+      expect.objectContaining({ modelName: FAST_MODELS.anthropic }),
     );
   });
 
@@ -774,7 +809,7 @@ describe("generateConversationTitle", () => {
 
     expect(mockGetFastestModel).toHaveBeenCalledWith("api-key-456");
     expect(createDirectLLMModel).toHaveBeenCalledWith(
-      expect.objectContaining({ modelName: "gpt-4o-mini" }),
+      expect.objectContaining({ modelName: FAST_MODELS.openai }),
     );
   });
 
@@ -793,7 +828,7 @@ describe("generateConversationTitle", () => {
 
     expect(mockGetFastestModel).toHaveBeenCalledWith("api-key-789");
     expect(createDirectLLMModel).toHaveBeenCalledWith(
-      expect.objectContaining({ modelName: "gemini-2.0-flash-001" }),
+      expect.objectContaining({ modelName: FAST_MODELS.gemini }),
     );
   });
 });

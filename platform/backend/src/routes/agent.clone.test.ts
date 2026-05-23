@@ -486,7 +486,6 @@ describe("clone agent route", () => {
       knowledgeBaseIds: [],
       connectorIds: [],
       llmApiKeyId: null,
-      llmModel: "gpt-4",
     });
 
     const response = await app.inject({
@@ -498,7 +497,6 @@ describe("clone agent route", () => {
     const cloned = response.json() as Agent;
 
     expect(cloned.llmApiKeyId).toBeNull();
-    expect(cloned.llmModel).toBe("gpt-4");
   });
 
   test("clones identityProviderId for MCP gateway", async ({

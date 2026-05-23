@@ -1,4 +1,5 @@
 import type { UIMessage } from "@ai-sdk/react";
+import type { archestraApiTypes } from "@shared";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -189,6 +190,7 @@ vi.mock("@/lib/mcp/archestra-mcp-server", () => ({
   }),
 }));
 
+import { PERSISTED_MESSAGE_ID_METADATA_KEY } from "@/lib/chat/chat-utils";
 import { ChatMessages } from "./chat-messages";
 
 describe("ChatMessages", () => {
@@ -222,6 +224,30 @@ describe("ChatMessages", () => {
     );
 
     expect(screen.getByText("Switched to GitHub Agent")).toBeInTheDocument();
+  });
+
+  it("keeps the loading logo visible for the whole streaming response", () => {
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={
+          [
+            {
+              id: "assistant-1",
+              role: "assistant",
+              parts: [{ type: "text", text: "partial response" }],
+            },
+          ] as UIMessage[]
+        }
+        status="streaming"
+      />,
+    );
+
+    const loadingLogo = screen.getByAltText("Loading logo");
+    expect(loadingLogo).toBeInTheDocument();
+    expect(loadingLogo).toHaveClass(
+      "[animation:archestra-chat-logo-bounce_700ms_ease-in-out_200ms_infinite]",
+    );
   });
 
   it("deduplicates adjacent swap dividers for the same target", () => {
@@ -400,6 +426,82 @@ describe("ChatMessages", () => {
     const error = screen.getByTestId("inline-chat-error");
 
     expect(retry.compareDocumentPosition(error)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
+  it("renders context compaction feedback after existing messages", () => {
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "keep this visible first" }],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        contextCompactionFeedback={{
+          status: "skipped",
+          message:
+            "Only the latest user turn is available, so there is no completed earlier context to compact yet.",
+        }}
+      />,
+    );
+
+    const message = screen.getByText("keep this visible first");
+    const feedback = screen.getByText(
+      "Only the latest user turn is available, so there is no completed earlier context to compact yet.",
+    );
+
+    expect(message.compareDocumentPosition(feedback)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
+  it("renders compaction timeline events anchored by persisted message metadata", () => {
+    const messages = [
+      {
+        id: "client-assistant-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "visible assistant response" }],
+        metadata: {
+          [PERSISTED_MESSAGE_ID_METADATA_KEY]: "db-assistant-1",
+        },
+      },
+    ] as UIMessage[];
+    const compactions: archestraApiTypes.GetChatConversationResponses["200"]["compactions"] =
+      [
+        {
+          id: "compaction-1",
+          conversationId: "conv-1",
+          summary: "older context summary",
+          compactedThroughMessageId: "db-assistant-1",
+          trigger: "manual",
+          provider: "openai",
+          model: "gpt-4o-mini",
+          originalTokenEstimate: 120,
+          compactedTokenEstimate: 35,
+          createdAt: "2026-05-19T12:00:00.000Z",
+        },
+      ];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        compactions={compactions}
+      />,
+    );
+
+    const message = screen.getByText("visible assistant response");
+    const compaction = screen.getByText("Conversation context compacted");
+
+    expect(message.compareDocumentPosition(compaction)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
   });

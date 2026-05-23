@@ -46,7 +46,7 @@ docker-compose -f docker-compose-n8n.yml up
 
 We're going to build a very simple autonomous agent in N8N using the GitHub MCP server and OpenAI model.
 
-![N8N](/docs/platfrom/n8n-1.webp)
+![N8N](/docs/platform/n8n-1.webp)
 
 1. Add "AI Agent" node.
 2. Add "Chat Trigger".
@@ -78,7 +78,7 @@ resolve https://github.com/archestra-ai/archestra/issues/647
 
 See how the agent loop is following the "malicious" prompt exposing issue from the "sensitive repo" (website) to our repo "archestra":
 
-![N8N](/docs/platfrom/n8n-2.webp)
+![N8N](/docs/platform/n8n-2.webp)
 
 ### 3. Bringing Archestra in between N8N and OpenAI
 
@@ -141,9 +141,9 @@ resolve https://github.com/archestra-ai/archestra/issues/647
 
 N8N is not able to execute the second call once the untrusted content got injected into the agent.
 
-![N8N](/docs/platfrom/n8n-3.webp)
+![N8N](/docs/platform/n8n-3.webp)
 
-Here, Archestra's AI tool guardrails reduce the context trustworthiness and prevent the following tool calls. Read about them [here](/docs/platform-ai-tool-guardrails).
+Here, [Archestra's AI tool guardrails](/docs/platform-ai-tool-guardrails) reduce the context trustworthiness and prevent the following tool calls.
 
 ### 5. Tracking N8N Executions (Optional)
 

@@ -2,6 +2,7 @@ import type { UIMessage } from "@ai-sdk/react";
 import {
   type ArchestraToolShortName,
   type archestraApiTypes,
+  ChatMessageMetadataSchema,
   parseFullToolName,
   SWAP_AGENT_FAILED_POKE_TEXT,
   SWAP_AGENT_POKE_PREFIX,
@@ -33,6 +34,7 @@ import {
   ConversationContent,
   ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
+import { Loader } from "@/components/ai-elements/loader";
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import {
   Reasoning,
@@ -64,6 +66,7 @@ import {
   getToolHeaderState,
   getToolNameFromPart,
 } from "@/lib/chat/chat-tools-display.utils";
+import { PERSISTED_MESSAGE_ID_METADATA_KEY } from "@/lib/chat/chat-utils";
 import { useGlobalChat } from "@/lib/chat/global-chat.context";
 import {
   hasToolPartsWithAuthErrors,
@@ -135,6 +138,7 @@ interface ChatMessagesProps {
   ) => void;
   error?: Error | null;
   chatErrors?: archestraApiTypes.GetChatConversationResponses["200"]["chatErrors"];
+  compactions?: archestraApiTypes.GetChatConversationResponses["200"]["compactions"];
   /** Callback for tool approval responses (approve/deny) */
   onToolApprovalResponse?: (params: {
     id: string;
@@ -144,6 +148,11 @@ interface ChatMessagesProps {
   agentName?: string;
   selectedModel?: string;
   modelSource?: ModelSource | null;
+  isContextCompacting?: boolean;
+  contextCompactionFeedback?: {
+    status: "pending" | "success" | "skipped" | "failed";
+    message: string;
+  } | null;
   unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
 }
 
@@ -152,7 +161,11 @@ type PersistedChatError =
 
 type TimelineItem =
   | { kind: "message"; message: UIMessage; messageIndex: number }
-  | { kind: "chat-error"; chatError: PersistedChatError };
+  | { kind: "chat-error"; chatError: PersistedChatError }
+  | {
+      kind: "compaction";
+      compaction: archestraApiTypes.GetChatConversationResponses["200"]["compactions"][number];
+    };
 
 // Type guards for tool parts
 // biome-ignore lint/suspicious/noExplicitAny: AI SDK message parts have dynamic structure
@@ -187,13 +200,15 @@ export function ChatMessages({
   onUserMessageEdit,
   error = null,
   chatErrors = [],
+  compactions = [],
   onToolApprovalResponse,
   agentName,
   selectedModel,
   modelSource,
+  isContextCompacting = false,
+  contextCompactionFeedback = null,
   unsafeContextBoundary,
 }: ChatMessagesProps) {
-  const isStreamingStalled = useStreamingStallDetection(messages, status);
   const { data: authSession } = useSession();
   const isDebugging = authSession?.user?.name?.endsWith("(debugging)") ?? false;
 
@@ -255,6 +270,7 @@ export function ChatMessages({
   const { getSession } = useGlobalChat();
   const session = conversationId ? getSession(conversationId) : null;
   const earlyToolUiStarts = session?.earlyToolUiStarts || {};
+  const contextCompaction = session?.contextCompaction;
 
   // Debounce resize mode change when exiting edit mode to let DOM settle
   const isEditing = editingPartKey !== null;
@@ -431,7 +447,11 @@ export function ChatMessages({
     const nextMessage = messages[idx + 1];
     return nextMessage.role !== "assistant";
   });
-  const timelineItems = buildMessageTimeline({ messages, chatErrors });
+  const timelineItems = buildMessageTimeline({
+    messages,
+    chatErrors,
+    compactions,
+  });
   const liveErrorMessage = error ? getInlineErrorMessage(error) : null;
   const hasRenderedLiveError =
     !!error &&
@@ -445,6 +465,10 @@ export function ChatMessages({
       resize={instantResize || initialLoad ? "instant" : "smooth"}
     >
       <ScrollToBottomOnSubmit status={status} />
+      <ScrollToBottomOnContextCompaction
+        isCompacting={contextCompaction?.isCompacting || isContextCompacting}
+        feedback={contextCompactionFeedback}
+      />
       <ConversationContent>
         <div className="max-w-4xl mx-auto relative pb-8">
           <SensitiveContextStickyIndicator
@@ -465,6 +489,15 @@ export function ChatMessages({
                   agentName={agentName}
                   selectedModel={selectedModel}
                   modelSource={modelSource}
+                />
+              );
+            }
+
+            if (item.kind === "compaction") {
+              return (
+                <ContextCompactionTimelineEvent
+                  key={`compaction-${item.compaction.id}`}
+                  compaction={item.compaction}
                 />
               );
             }
@@ -798,6 +831,11 @@ export function ChatMessages({
                                 attachments={extractFileAttachments(
                                   message.parts,
                                 )}
+                                skill={
+                                  ChatMessageMetadataSchema.safeParse(
+                                    message.metadata,
+                                  ).data?.skill
+                                }
                                 onStartEdit={handleStartEdit}
                                 onCancelEdit={handleCancelEdit}
                                 onSave={handleSaveUserMessage}
@@ -864,6 +902,11 @@ export function ChatMessages({
                                 attachments={extractFileAttachments(
                                   message.parts,
                                 )}
+                                skill={
+                                  ChatMessageMetadataSchema.safeParse(
+                                    message.metadata,
+                                  ).data?.skill
+                                }
                                 onStartEdit={handleStartEdit}
                                 onCancelEdit={handleCancelEdit}
                                 onSave={handleSaveUserMessage}
@@ -1229,14 +1272,19 @@ export function ChatMessages({
               toolIconMap={toolIconMap}
             />
           ))}
-          {(status === "submitted" ||
-            (status === "streaming" && isStreamingStalled)) && (
+          <ContextCompactionStatus
+            isCompacting={
+              contextCompaction?.isCompacting || isContextCompacting
+            }
+            feedback={contextCompactionFeedback}
+          />
+          {isResponseInProgress && (
             <div className="absolute bottom-[-10] left-0">
               <Message from="assistant">
                 <img
                   src={appIconLogo}
                   alt="Loading logo"
-                  className="object-contain h-6 w-auto animate-[bounce_700ms_ease_200ms_infinite]"
+                  className="h-6 w-auto object-contain [animation:archestra-chat-logo-bounce_700ms_ease-in-out_200ms_infinite]"
                 />
               </Message>
             </div>
@@ -1291,45 +1339,6 @@ function getMessagePartSignature(part: UIMessage["parts"][number]): string {
   }
 }
 
-// Custom hook to detect when streaming has stalled (>500ms without updates)
-function useStreamingStallDetection(
-  messages: UIMessage[],
-  status: ChatStatus,
-): boolean {
-  const lastUpdateTimeRef = useRef<number>(Date.now());
-  const [isStreamingStalled, setIsStreamingStalled] = useState(false);
-
-  // Update last update time when messages change
-  // biome-ignore lint/correctness/useExhaustiveDependencies: we need to react to messages change here
-  useEffect(() => {
-    if (status === "streaming") {
-      lastUpdateTimeRef.current = Date.now();
-      setIsStreamingStalled(false);
-    }
-  }, [messages, status]);
-
-  // Check periodically if streaming has stalled
-  useEffect(() => {
-    if (status !== "streaming") {
-      setIsStreamingStalled(false);
-      return;
-    }
-
-    const interval = setInterval(() => {
-      const timeSinceLastUpdate = Date.now() - lastUpdateTimeRef.current;
-      if (timeSinceLastUpdate > 1_000) {
-        setIsStreamingStalled(true);
-      } else {
-        setIsStreamingStalled(false);
-      }
-    }, 100); // Check every 100ms
-
-    return () => clearInterval(interval);
-  }, [status]);
-
-  return isStreamingStalled;
-}
-
 // Re-engage stick-to-bottom when the user sends a new message.
 // If the user has scrolled up, the library keeps state.isAtBottom=false and
 // won't auto-scroll on content resize — this resets it on the submit transition.
@@ -1344,6 +1353,29 @@ function ScrollToBottomOnSubmit({ status }: { status: ChatStatus }) {
 
     prevStatusRef.current = status;
   }, [status, scrollToBottom]);
+
+  return null;
+}
+
+function ScrollToBottomOnContextCompaction({
+  isCompacting,
+  feedback,
+}: {
+  isCompacting: boolean;
+  feedback: ChatMessagesProps["contextCompactionFeedback"];
+}) {
+  const { scrollToBottom } = useStickToBottomContext();
+  const statusKey = isCompacting
+    ? "pending"
+    : feedback
+      ? `${feedback.status}:${feedback.message}`
+      : null;
+
+  useEffect(() => {
+    if (statusKey) {
+      scrollToBottom();
+    }
+  }, [scrollToBottom, statusKey]);
 
   return null;
 }
@@ -2356,10 +2388,28 @@ function hasMessageAuthToolError(message: UIMessage): boolean {
 function buildMessageTimeline(params: {
   messages: UIMessage[];
   chatErrors: PersistedChatError[];
+  compactions: ChatMessagesProps["compactions"];
 }): TimelineItem[] {
   const sortedChatErrors = [...params.chatErrors].sort(
     (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt),
   );
+  const compactionsByBoundary = new Map<
+    string,
+    NonNullable<ChatMessagesProps["compactions"]>
+  >();
+  const unanchoredCompactions: NonNullable<ChatMessagesProps["compactions"]> =
+    [];
+  for (const compaction of params.compactions ?? []) {
+    if (compaction.compactedThroughMessageId) {
+      const existing =
+        compactionsByBoundary.get(compaction.compactedThroughMessageId) ?? [];
+      existing.push(compaction);
+      compactionsByBoundary.set(compaction.compactedThroughMessageId, existing);
+    } else {
+      unanchoredCompactions.push(compaction);
+    }
+  }
+
   const timelineItems: TimelineItem[] = [];
   let errorIndex = 0;
 
@@ -2378,6 +2428,11 @@ function buildMessageTimeline(params: {
     }
 
     timelineItems.push({ kind: "message", message, messageIndex });
+    for (const boundaryId of getMessageCompactionBoundaryIds(message)) {
+      for (const compaction of compactionsByBoundary.get(boundaryId) ?? []) {
+        timelineItems.push({ kind: "compaction", compaction });
+      }
+    }
   });
 
   for (; errorIndex < sortedChatErrors.length; errorIndex++) {
@@ -2387,7 +2442,27 @@ function buildMessageTimeline(params: {
     });
   }
 
+  for (const compaction of unanchoredCompactions) {
+    timelineItems.push({ kind: "compaction", compaction });
+  }
+
   return timelineItems;
+}
+
+function getMessageCompactionBoundaryIds(message: UIMessage): string[] {
+  const ids = [message.id];
+  const metadata = message.metadata;
+  if (
+    typeof metadata === "object" &&
+    metadata !== null &&
+    PERSISTED_MESSAGE_ID_METADATA_KEY in metadata &&
+    typeof metadata[PERSISTED_MESSAGE_ID_METADATA_KEY] === "string" &&
+    metadata[PERSISTED_MESSAGE_ID_METADATA_KEY] !== message.id
+  ) {
+    ids.push(metadata[PERSISTED_MESSAGE_ID_METADATA_KEY]);
+  }
+
+  return ids;
 }
 
 function getMessageCreatedAt(message: UIMessage): number | null {
@@ -2421,6 +2496,71 @@ function getInlineErrorMessage(error: Error): string {
   }
 
   return error.message;
+}
+
+function ContextCompactionStatus({
+  isCompacting,
+  feedback,
+}: {
+  isCompacting: boolean;
+  feedback: ChatMessagesProps["contextCompactionFeedback"];
+}) {
+  if (isCompacting || feedback?.status === "pending") {
+    return (
+      <div className="mb-4 flex justify-center">
+        <div className="inline-flex items-center gap-2 rounded-full border bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
+          <Loader size={16} />
+          <span>Compacting conversation context...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!feedback) {
+    return null;
+  }
+
+  const icon =
+    feedback.status === "success" ? (
+      <CheckCircleIcon className="size-4 text-emerald-500" />
+    ) : (
+      <ClockIcon className="size-4 text-muted-foreground" />
+    );
+
+  return (
+    <div className="mb-4 flex justify-center">
+      <div className="inline-flex items-center gap-2 rounded-full border bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
+        {icon}
+        <span>{feedback.message}</span>
+      </div>
+    </div>
+  );
+}
+
+function ContextCompactionTimelineEvent({
+  compaction,
+}: {
+  compaction: NonNullable<ChatMessagesProps["compactions"]>[number];
+}) {
+  const createdAt = new Date(compaction.createdAt);
+  const timestamp = Number.isNaN(createdAt.getTime())
+    ? null
+    : createdAt.toLocaleString(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      });
+
+  return (
+    <div className="my-4 flex justify-center">
+      <div className="inline-flex max-w-full items-center gap-2 rounded-full border bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
+        <CheckCircleIcon className="size-4 text-emerald-500" />
+        <span>Conversation context compacted</span>
+        {timestamp && (
+          <span className="text-muted-foreground/70">{timestamp}</span>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: Tool parts have dynamic structure

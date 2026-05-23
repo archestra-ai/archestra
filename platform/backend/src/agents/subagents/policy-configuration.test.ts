@@ -4,7 +4,7 @@ import { vi } from "vitest";
 import db, { schema } from "@/database";
 import AgentModel from "@/models/agent";
 import { beforeEach, describe, expect, test } from "@/test";
-import { resolveSmartDefaultLlm } from "@/utils/llm-resolution";
+import { resolveBestAvailableLlm } from "@/utils/llm-resolution";
 import { PolicyConfigurationService } from "./policy-configuration";
 
 vi.mock("@/clients/llm-client", () => ({
@@ -19,7 +19,7 @@ vi.mock("ai", () => ({
 }));
 
 vi.mock("@/utils/llm-resolution", () => ({
-  resolveSmartDefaultLlm: vi.fn(),
+  resolveBestAvailableLlm: vi.fn(),
   resolveConfiguredAgentLlm: vi.fn(),
 }));
 
@@ -42,11 +42,11 @@ describe("PolicyConfigurationService", () => {
     vi.clearAllMocks();
     service = new PolicyConfigurationService();
     // Default: no LLM available
-    vi.mocked(resolveSmartDefaultLlm).mockResolvedValue(null);
+    vi.mocked(resolveBestAvailableLlm).mockResolvedValue(null);
   });
 
   describe("resolveLlm", () => {
-    test("returns null when resolveSmartDefaultLlm returns null", async ({
+    test("returns null when resolveBestAvailableLlm returns null", async ({
       makeOrganization,
     }) => {
       const org = await makeOrganization();
@@ -56,12 +56,12 @@ describe("PolicyConfigurationService", () => {
       expect(result).toBeNull();
     });
 
-    test("returns resolved config when resolveSmartDefaultLlm returns a result", async ({
+    test("returns resolved config when resolveBestAvailableLlm returns a result", async ({
       makeOrganization,
     }) => {
       const org = await makeOrganization();
 
-      vi.mocked(resolveSmartDefaultLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
+      vi.mocked(resolveBestAvailableLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
 
       const result = await service.resolveLlm({ organizationId: org.id });
 
@@ -76,7 +76,7 @@ describe("PolicyConfigurationService", () => {
         userId: "user-123",
       });
 
-      expect(resolveSmartDefaultLlm).toHaveBeenCalledWith({
+      expect(resolveBestAvailableLlm).toHaveBeenCalledWith({
         organizationId: org.id,
         userId: "user-123",
       });
@@ -101,7 +101,7 @@ describe("PolicyConfigurationService", () => {
     test("returns error when tool not found", async ({ makeOrganization }) => {
       const org = await makeOrganization();
 
-      vi.mocked(resolveSmartDefaultLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
+      vi.mocked(resolveBestAvailableLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
 
       const result = await service.configurePoliciesForTool({
         toolId: "nonexistent-tool",
@@ -119,7 +119,7 @@ describe("PolicyConfigurationService", () => {
     }) => {
       const org = await makeOrganization();
 
-      vi.mocked(resolveSmartDefaultLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
+      vi.mocked(resolveBestAvailableLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
       vi.spyOn(AgentModel, "getBuiltInAgent").mockResolvedValue(
         MOCK_BUILT_IN_AGENT as never,
       );
@@ -183,7 +183,7 @@ describe("PolicyConfigurationService", () => {
     }) => {
       const org = await makeOrganization();
 
-      vi.mocked(resolveSmartDefaultLlm).mockResolvedValue({
+      vi.mocked(resolveBestAvailableLlm).mockResolvedValue({
         provider: "openai",
         apiKey: "sk-openai-test-key",
         modelName: "gpt-4o",
@@ -231,7 +231,7 @@ describe("PolicyConfigurationService", () => {
     }) => {
       const org = await makeOrganization();
 
-      vi.mocked(resolveSmartDefaultLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
+      vi.mocked(resolveBestAvailableLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
       vi.spyOn(AgentModel, "getBuiltInAgent").mockResolvedValue(
         MOCK_BUILT_IN_AGENT as never,
       );
@@ -266,7 +266,7 @@ describe("PolicyConfigurationService", () => {
     }) => {
       const org = await makeOrganization();
 
-      vi.mocked(resolveSmartDefaultLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
+      vi.mocked(resolveBestAvailableLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
       vi.spyOn(AgentModel, "getBuiltInAgent").mockResolvedValue(
         MOCK_BUILT_IN_AGENT as never,
       );
@@ -309,7 +309,7 @@ describe("PolicyConfigurationService", () => {
     }) => {
       const org = await makeOrganization();
 
-      vi.mocked(resolveSmartDefaultLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
+      vi.mocked(resolveBestAvailableLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
       vi.spyOn(AgentModel, "getBuiltInAgent").mockResolvedValue(
         MOCK_BUILT_IN_AGENT as never,
       );

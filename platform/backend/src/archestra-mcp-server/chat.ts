@@ -398,7 +398,7 @@ async function handleSwapAgent(params: {
       const llmSelection = await resolveConversationLlmSelectionForAgent({
         agent: {
           llmApiKeyId: targetAgent.llmApiKeyId ?? null,
-          llmModel: targetAgent.llmModel ?? null,
+          modelId: targetAgent.modelId ?? null,
         },
         organizationId: context.organizationId,
         userId: context.userId,
@@ -413,8 +413,7 @@ async function handleSwapAgent(params: {
         {
           agentId: targetAgent.id,
           chatApiKeyId: llmSelection.chatApiKeyId,
-          selectedModel: llmSelection.selectedModel,
-          selectedProvider: llmSelection.selectedProvider,
+          modelId: llmSelection.modelId,
         },
       );
       if (!updated) {
@@ -548,7 +547,7 @@ async function handleSwapToDefaultAgent(params: {
       const llmSelection = await resolveConversationLlmSelectionForAgent({
         agent: {
           llmApiKeyId: targetAgent.llmApiKeyId ?? null,
-          llmModel: targetAgent.llmModel ?? null,
+          modelId: targetAgent.modelId ?? null,
         },
         organizationId: context.organizationId,
         userId: context.userId,
@@ -561,8 +560,7 @@ async function handleSwapToDefaultAgent(params: {
         {
           agentId: defaultAgentId,
           chatApiKeyId: llmSelection.chatApiKeyId,
-          selectedModel: llmSelection.selectedModel,
-          selectedProvider: llmSelection.selectedProvider,
+          modelId: llmSelection.modelId,
         },
       );
       if (!updated) {

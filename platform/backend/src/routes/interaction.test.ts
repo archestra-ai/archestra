@@ -91,7 +91,6 @@ describe("interaction routes", () => {
       userId: currentUser.id,
       organizationId,
       agentId: agent.id,
-      selectedModel: "gpt-4",
     });
     await ConversationChatErrorModel.create({
       conversationId: conversation.id,

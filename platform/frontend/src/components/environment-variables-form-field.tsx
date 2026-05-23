@@ -303,14 +303,14 @@ export function EnvironmentVariablesFormField<
                       <div className="text-muted-foreground">
                         {type === "configMap" ? "ConfigMap" : "Secret"}
                       </div>
-                      <div className="font-mono">
+                      <div className="min-w-0 truncate font-mono">
                         {name || (
                           <span className="text-muted-foreground italic">
                             unnamed
                           </span>
                         )}
                       </div>
-                      <div className="font-mono text-muted-foreground">
+                      <div className="min-w-0 truncate font-mono text-muted-foreground">
                         {prefix || <span className="italic">—</span>}
                       </div>
                       <Button

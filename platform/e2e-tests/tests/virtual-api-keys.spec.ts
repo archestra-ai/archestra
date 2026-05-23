@@ -1,4 +1,8 @@
-import { E2eTestId, getVirtualKeyRowTestId } from "@shared";
+import {
+  E2eTestId,
+  getDeleteVirtualKeyButtonTestId,
+  getVirtualKeyRowTestId,
+} from "@shared";
 import { expect, test } from "../fixtures";
 import {
   clickButton,
@@ -20,6 +24,7 @@ test.describe("Provider Settings - Virtual API Keys", () => {
   test.describe.configure({ mode: "serial" });
 
   let parentKeyName: string;
+  let virtualKeyName: string;
 
   test("Can create a virtual key from the Virtual API Keys tab", async ({
     page,
@@ -27,7 +32,7 @@ test.describe("Provider Settings - Virtual API Keys", () => {
     request,
   }) => {
     parentKeyName = makeRandomString(8, "VK Parent");
-    const virtualKeyName = makeRandomString(8, "VK Test");
+    virtualKeyName = makeRandomString(8, "VK Test");
 
     await deleteVisibleProviderKeys(request, TEST_PROVIDER);
     await goToLlmProviderApiKeysPage(page);
@@ -63,11 +68,19 @@ test.describe("Provider Settings - Virtual API Keys", () => {
   test("Can delete a virtual key", async ({ page }) => {
     await goToVirtualKeysPage(page);
 
-    const deleteButton = page.getByRole("button", { name: /delete/i }).first();
-    if (await deleteButton.isVisible()) {
+    if (virtualKeyName) {
+      const rowTestId = getVirtualKeyRowTestId(virtualKeyName);
+      const deleteButton = page.getByTestId(
+        getDeleteVirtualKeyButtonTestId(virtualKeyName),
+      );
+      await expect(deleteButton).toBeVisible({ timeout: 15_000 });
       await deleteButton.click();
       await clickButton({ page, options: { name: "Delete" } });
-      await page.waitForLoadState("domcontentloaded");
+      // wait for the row to fully disappear so the parent key dialog
+      // below does not see the virtual key as still blocking
+      await expect(page.getByTestId(rowTestId)).toBeHidden({
+        timeout: 15_000,
+      });
     }
 
     if (parentKeyName) {
@@ -80,16 +93,18 @@ test.describe("Provider Settings - Virtual API Keys", () => {
 test.describe("Provider Settings - Virtual Keys for Keyless Provider", () => {
   test.describe.configure({ mode: "serial" });
 
+  let keylessVirtualKeyName: string;
+
   test("Can create a virtual key for a keyless (no API key) provider", async ({
     page,
     makeRandomString,
   }) => {
-    const virtualKeyName = makeRandomString(8, "Keyless VK");
+    keylessVirtualKeyName = makeRandomString(8, "Keyless VK");
 
     await goToVirtualKeysPage(page);
 
     await createVirtualKey(page, {
-      name: virtualKeyName,
+      name: keylessVirtualKeyName,
       parentProvider: "gemini",
     });
 
@@ -103,18 +118,22 @@ test.describe("Provider Settings - Virtual Keys for Keyless Provider", () => {
 
     await clickButton({ page, options: { name: "Close" }, first: true });
     await expect(
-      page.getByTestId(getVirtualKeyRowTestId(virtualKeyName)),
+      page.getByTestId(getVirtualKeyRowTestId(keylessVirtualKeyName)),
     ).toBeVisible();
   });
 
-  test("Cleanup keyless parent key", async ({ page }) => {
+  test("Cleanup keyless virtual key", async ({ page }) => {
+    if (!keylessVirtualKeyName) return;
+
     await goToVirtualKeysPage(page);
 
-    const deleteButton = page.getByRole("button", { name: /delete/i }).first();
-    if (await deleteButton.isVisible()) {
-      await deleteButton.click();
-      await clickButton({ page, options: { name: "Delete" } });
-      await page.waitForLoadState("domcontentloaded");
-    }
+    const rowTestId = getVirtualKeyRowTestId(keylessVirtualKeyName);
+    const deleteButton = page.getByTestId(
+      getDeleteVirtualKeyButtonTestId(keylessVirtualKeyName),
+    );
+    await expect(deleteButton).toBeVisible({ timeout: 15_000 });
+    await deleteButton.click();
+    await clickButton({ page, options: { name: "Delete" } });
+    await expect(page.getByTestId(rowTestId)).toBeHidden({ timeout: 15_000 });
   });
 });

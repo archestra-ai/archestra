@@ -22,6 +22,7 @@ import type {
   OrganizationChatLink,
   OrganizationCompressionScope,
 } from "@/types";
+import modelsTable from "./model";
 
 const organizationsTable = pgTable("organization", {
   id: text("id").primaryKey(),
@@ -86,11 +87,15 @@ const organizationsTable = pgTable("organization", {
   /** LLM model used for reranking (e.g. "gpt-4o") */
   rerankerModel: text("reranker_model"),
 
-  /** Organization-wide default LLM model ID (e.g. "gpt-4o") */
+  /** @deprecated Superseded by `defaultModelId` (FK). Retained, no longer read or written. */
   defaultLlmModel: text("default_llm_model"),
-
-  /** Provider for the default LLM model (e.g. "openai") */
+  /** @deprecated Superseded by `defaultModelId` (FK). Retained, no longer read or written. */
   defaultLlmProvider: text("default_llm_provider").$type<SupportedProvider>(),
+
+  /** Organization-wide default model. FK to models(id) ON DELETE SET NULL. */
+  defaultModelId: uuid("default_model_id").references(() => modelsTable.id, {
+    onDelete: "set null",
+  }),
 
   /**
    * Chat API key used for the default LLM model.
@@ -144,8 +149,11 @@ const organizationsTable = pgTable("organization", {
     .notNull()
     .default(true),
 
-  /** Square icon logo (28x28px recommended) for collapsed sidebar and chat loading indicator */
+  /** Square icon logo (28x28px recommended) for collapsed sidebar and chat loading indicator. PNG or SVG. */
   iconLogo: text("icon_logo"),
+
+  /** Dark-mode variant of the icon logo. Falls back to `iconLogo` when not set. */
+  iconLogoDark: text("icon_logo_dark"),
 
   /** Support contact message shown in chat error cards */
   chatErrorSupportMessage: text("chat_error_support_message"),
@@ -205,6 +213,49 @@ const organizationsTable = pgTable("organization", {
   connectionBaseUrls: jsonb("connection_base_urls").$type<
     ConnectionBaseUrl[]
   >(),
+
+  /**
+   * Custom label admins choose for the child-configuration entity of every
+   * catalog item (internally still called "preset"). When both singular and
+   * plural are set, the catalog UI exposes the per-item presets section and
+   * replaces "Preset"/"presets" copy. Both must be set together — partial
+   * values are rejected at the API.
+   */
+  presetEntityName: text("preset_entity_name"),
+  presetEntityNamePlural: text("preset_entity_name_plural"),
+
+  /**
+   * Custom display label for the implicit "default" preset row (parent catalog
+   * item). NULL falls back to "Default" in the UI.
+   */
+  presetEntityDefaultLabel: text("preset_entity_default_label"),
+
+  /**
+   * When true, the Agent Skill tools (`list_skills`, `activate_skill`,
+   * `read_skill_file`) are assigned to every agent in the org and added to all
+   * new agents. Flipped on
+   * by the "Enable and create a new skill" empty-state button on /agents/skills.
+   */
+  skillToolsEnabled: boolean("skill_tools_enabled").notNull().default(false),
+
+  /**
+   * When true, the org's skills are exposed in chat as slash commands
+   * (`/skill-name`). Invoking one injects the skill's content directly into the
+   * conversation, independent of `skillToolsEnabled` (which only governs the
+   * model-facing `activate_skill` tool).
+   */
+  skillSlashCommandsEnabled: boolean("skill_slash_commands_enabled")
+    .notNull()
+    .default(false),
+
+  /**
+   * Validation regex applied to default-scoped field values when installing an
+   * MCP server (mirrors `mcp_preset_entries.validation_regex` for the implicit
+   * default row). Stored without delimiters or flags. NULL disables validation.
+   */
+  presetEntityDefaultValidationRegex: text(
+    "preset_entity_default_validation_regex",
+  ),
 });
 
 export default organizationsTable;

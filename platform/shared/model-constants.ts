@@ -129,12 +129,11 @@ export const PERPLEXITY_MODELS = [
 /**
  * MiniMax model definitions — single source of truth.
  * MiniMax does not provide a /v1/models endpoint, so models are maintained here.
- * @see https://www.minimaxi.com/en/news
+ * @see https://platform.minimax.io/docs/guides/models-intro
  */
 export const MINIMAX_MODELS = [
-  { id: "MiniMax-M2", displayName: "MiniMax-M2" },
-  { id: "MiniMax-M2.1", displayName: "MiniMax-M2.1" },
-  { id: "MiniMax-M2.1-lightning", displayName: "MiniMax-M2.1-lightning" },
+  { id: "MiniMax-M2.7", displayName: "MiniMax-M2.7" },
+  { id: "MiniMax-M2.7-highspeed", displayName: "MiniMax-M2.7-highspeed" },
   { id: "MiniMax-M2.5", displayName: "MiniMax-M2.5" },
   { id: "MiniMax-M2.5-highspeed", displayName: "MiniMax-M2.5-highspeed" },
 ] as const;
@@ -164,14 +163,31 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
 };
 
 /**
+ * OpenRouter's built-in "Auto Router" — routes each request to a model OpenRouter
+ * picks dynamically, billed at that model's rate. Not free.
+ */
+export const OPENROUTER_AUTO_MODEL_ID = "openrouter/auto";
+
+/**
+ * OpenRouter's built-in "Free Models Router" — routes each request to a free
+ * model OpenRouter picks, filtering for the features the request needs. Always
+ * zero-cost; used as the auto-default for fresh OpenRouter organizations.
+ */
+export const OPENROUTER_FREE_MODEL_ID = "openrouter/free";
+
+/**
+ * Prefix of OpenRouter "latest" alias ids (e.g. `~anthropic/claude-sonnet-latest`)
+ * that always redirect to the newest model in a family.
+ */
+export const OPENROUTER_LATEST_ALIAS_PREFIX = "~";
+
+/**
  * Pattern-based model markers per provider.
  * Patterns are substrings that model IDs must contain (case-insensitive).
  * Used to identify "fastest" (lightweight, low latency) and "best" (highest quality) models.
  *
  * IMPORTANT: Patterns are checked in array order (first match wins).
  * More specific patterns should come before general ones.
- *
- * Note: For OpenAI "best", we use "4o-2" to match "gpt-4o-2024..." but NOT "gpt-4o-mini-...".
  */
 export const MODEL_MARKER_PATTERNS: Record<
   SupportedProvider,
@@ -181,86 +197,79 @@ export const MODEL_MARKER_PATTERNS: Record<
   }
 > = {
   anthropic: {
-    fastest: ["haiku-4", "haiku"],
-    best: ["opus-4-6", "opus-4-5", "opus-4", "opus", "sonnet"],
+    fastest: ["haiku-4-5-20251001", "haiku-4-5"],
+    best: ["opus-4-7"],
   },
   openai: {
-    fastest: ["gpt-4o-mini", "gpt-3.5"],
-    best: [
-      "gpt-5.4",
-      "gpt-5.3",
-      "gpt-5.2",
-      "gpt-5",
-      "o3",
-      "o1",
-      "4o-2",
-      "gpt-4-turbo",
-    ],
+    fastest: ["gpt-5.4-nano", "gpt-5.4-mini"],
+    best: ["gpt-5.5-pro", "gpt-5.5"],
   },
   gemini: {
-    fastest: ["flash"],
-    best: ["pro", "ultra"],
+    fastest: ["gemini-3.1-flash-lite", "gemini-3.5-flash"],
+    best: ["gemini-3.1-pro-preview"],
   },
   cerebras: {
-    fastest: ["llama-3.3-70b"],
-    best: ["llama-3.3-70b"],
+    fastest: ["llama3.1-8b"],
+    best: ["zai-glm-4.7"],
   },
   cohere: {
-    fastest: ["command-light"],
-    best: ["command-r-plus", "command-r"],
+    fastest: ["command-r7b-12-2024"],
+    best: ["command-a-plus-05-2026"],
   },
   mistral: {
-    fastest: ["mistral-small", "ministral"],
-    best: ["mistral-large"],
+    fastest: ["mistral-small-2603"],
+    best: ["mistral-medium-2604"],
   },
   perplexity: {
     fastest: ["sonar"],
-    best: ["sonar-pro", "sonar-reasoning-pro", "sonar-reasoning"],
+    best: ["sonar-deep-research", "sonar-reasoning-pro", "sonar-pro"],
   },
   groq: {
-    fastest: ["llama-3.1-8b", "gemma2-9b"],
-    best: ["llama-3.3-70b", "llama-3.1-70b"],
+    fastest: ["openai/gpt-oss-20b", "llama-3.1-8b-instant"],
+    best: ["openai/gpt-oss-120b"],
   },
   xai: {
-    fastest: ["fast", "grok-code"],
-    best: ["grok-4"],
+    fastest: ["grok-4.3"],
+    best: ["grok-4.3"],
   },
   openrouter: {
     fastest: ["openrouter/auto"],
     best: [
-      "openai/gpt-4.1",
-      "openai/gpt-4o",
-      "anthropic/claude-3.7",
-      "anthropic/claude-3-opus",
+      "anthropic/claude-opus-4.7",
+      "openai/gpt-5.5-pro",
+      "openai/gpt-5.5",
+      "google/gemini-3.1-pro-preview",
+      "x-ai/grok-4.3",
+      "deepseek/deepseek-v4-pro",
     ],
   },
   ollama: {
-    fastest: ["llama3.2", "phi"],
-    best: ["llama3.1", "mixtral"],
+    fastest: ["gpt-oss:20b", "llama3.2:3b", "phi4-mini"],
+    best: ["gpt-oss:120b", "llama4:maverick", "llama4:scout", "qwen3:235b"],
   },
   vllm: {
-    fastest: ["llama3.2", "phi"],
-    best: ["llama3.1", "mixtral"],
+    fastest: ["gpt-oss-20b", "llama-3.2-3b", "phi-4-mini"],
+    best: ["gpt-oss-120b", "llama-4-maverick", "llama-4-scout", "qwen3-235b"],
   },
   zhipuai: {
-    fastest: ["glm-4-flash", "glm-flash"],
-    best: ["glm-4-plus", "glm-4"],
+    fastest: ["glm-4.7-flash"],
+    best: ["glm-5.1"],
   },
   deepseek: {
-    fastest: ["deepseek-chat"],
-    best: ["deepseek-reasoner"],
+    fastest: ["deepseek-v4-flash"],
+    best: ["deepseek-v4-pro"],
   },
   minimax: {
-    fastest: ["minimax-m2.5-highspeed", "minimax-m2.1-lightning"],
-    best: ["minimax-m2.5", "minimax-m2.1", "minimax-m2"],
+    fastest: ["minimax-m2.7-highspeed"],
+    best: ["minimax-m2.7"],
   },
   azure: {
-    fastest: ["gpt-4o-mini"],
-    best: ["gpt-4o", "o3"],
+    fastest: ["gpt-5.4-nano", "gpt-5.4-mini"],
+    best: ["gpt-5.5"],
   },
   bedrock: {
-    fastest: ["nova-lite", "nova-micro", "haiku"],
-    best: ["nova-pro", "sonnet", "opus"],
+    fastest: ["amazon.nova-2-lite-v1:0", "amazon.nova-lite-v1:0"],
+    best: ["anthropic.claude-opus-4-7"],
   },
 };
 
@@ -273,22 +282,22 @@ export const MODEL_MARKER_PATTERNS: Record<
  */
 export const FAST_MODELS: Record<SupportedProvider, string> = {
   anthropic: "claude-haiku-4-5-20251001",
-  openai: "gpt-4o-mini",
+  openai: "gpt-5.4-mini",
   openrouter: "openrouter/auto",
-  gemini: "gemini-2.0-flash-001",
-  cerebras: "llama-3.3-70b", // Cerebras focuses on speed, all their models are fast
-  cohere: "command-light", // Cohere's fast model
+  gemini: "gemini-3.5-flash",
+  cerebras: "llama3.1-8b", // cerebras focuses on speed, all their models are fast
+  cohere: "command-r7b-12-2024", // cohere's fast model
   vllm: "default", // vLLM uses whatever model is deployed
-  ollama: "llama3.2", // Common fast model for Ollama
-  zhipuai: "glm-4-flash", // Zhipu's fast model
-  minimax: "MiniMax-M2.5-highspeed", // MiniMax's fastest model
-  deepseek: "deepseek-chat", // DeepSeek's fast model
-  bedrock: "amazon.nova-lite-v1:0", // Bedrock's fast model, available in all regions for on-demand inference
-  mistral: "mistral-small-latest", // Mistral's fast model
-  perplexity: "sonar", // Perplexity's fast model
-  groq: "llama-3.1-8b-instant", // Groq's fast model
-  xai: "grok-code-fast-1", // xAI's fast model
-  azure: "gpt-4o-mini",
+  ollama: "llama3.2", // common fast model for Ollama
+  zhipuai: "glm-4.7-flash", // zhipu's fast model
+  minimax: "MiniMax-M2.7-highspeed", // minimax's fastest model
+  deepseek: "deepseek-v4-flash", // deepSeek's fast model
+  bedrock: "amazon.nova-2-lite-v1:0", // bedrock's fast model
+  mistral: "mistral-small-2603", // mistral's fast model
+  perplexity: "sonar", // perplexity's fast model
+  groq: "llama-3.1-8b-instant", // groq's fast model
+  xai: "grok-4.3", // xAI's fast model
+  azure: "gpt-5.4-mini",
 };
 
 /**
@@ -296,23 +305,23 @@ export const FAST_MODELS: Record<SupportedProvider, string> = {
  * Using Record<SupportedProvider, string> ensures a compile-time error when a new provider is added.
  */
 export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
-  anthropic: "claude-opus-4-6-20250918",
-  openai: "gpt-5.4",
+  anthropic: "claude-opus-4-7",
+  openai: "gpt-5.5",
   openrouter: "openrouter/auto",
-  gemini: "gemini-2.5-pro",
-  cohere: "command-r-08-2024",
-  groq: "llama-3.1-8b-instant",
-  xai: "grok-4",
+  gemini: "gemini-3.1-pro-preview",
+  cohere: "command-a-plus-05-2026",
+  groq: "openai/gpt-oss-120b",
+  xai: "grok-4.3",
   ollama: "llama3.2",
   vllm: "default",
-  cerebras: "llama-4-scout-17b-16e-instruct",
-  mistral: "mistral-large-latest",
+  cerebras: "zai-glm-4.7",
+  mistral: "mistral-medium-2604",
   perplexity: "sonar-pro",
-  zhipuai: "glm-4-plus",
-  deepseek: "deepseek-chat",
-  bedrock: "anthropic.claude-opus-4-1-20250805-v1:0",
-  minimax: "MiniMax-M2.5",
-  azure: "gpt-4o",
+  zhipuai: "glm-5.1",
+  deepseek: "deepseek-v4-pro",
+  bedrock: "anthropic.claude-opus-4-7",
+  minimax: "MiniMax-M2.7",
+  azure: "gpt-5.5",
 };
 /**
  * Maps models.dev provider IDs to Archestra provider names.

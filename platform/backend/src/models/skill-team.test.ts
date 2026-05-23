@@ -1,0 +1,197 @@
+import { SkillModel, SkillTeamModel } from "@/models";
+import { describe, expect, test } from "@/test";
+import type { ResourceVisibilityScope } from "@/types/visibility";
+
+async function seedSkill(params: {
+  organizationId: string;
+  name: string;
+  scope: ResourceVisibilityScope;
+  authorId?: string | null;
+  teamIds?: string[];
+}) {
+  const skill = await SkillModel.createWithFiles({
+    skill: {
+      organizationId: params.organizationId,
+      authorId: params.authorId ?? null,
+      name: params.name,
+      description: `${params.name} description`,
+      content: `# ${params.name}`,
+      metadata: {},
+      sourceType: "manual",
+      scope: params.scope,
+    },
+    files: [],
+  });
+  if (!skill) throw new Error("failed to seed skill");
+  if (params.teamIds?.length) {
+    await SkillTeamModel.syncSkillTeams(skill.id, params.teamIds);
+  }
+  return skill;
+}
+
+describe("SkillTeamModel.getUserAccessibleSkillIds", () => {
+  test("returns org skills, own personal skills, and team skills", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const other = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+
+    const orgSkill = await seedSkill({
+      organizationId: org.id,
+      name: "org-skill",
+      scope: "org",
+    });
+    const ownSkill = await seedSkill({
+      organizationId: org.id,
+      name: "own-skill",
+      scope: "personal",
+      authorId: user.id,
+    });
+    const teamSkill = await seedSkill({
+      organizationId: org.id,
+      name: "team-skill",
+      scope: "team",
+      teamIds: [team.id],
+    });
+    const othersPersonal = await seedSkill({
+      organizationId: org.id,
+      name: "others-skill",
+      scope: "personal",
+      authorId: other.id,
+    });
+
+    const accessible = new Set(
+      await SkillTeamModel.getUserAccessibleSkillIds(user.id),
+    );
+
+    expect(accessible.has(orgSkill.id)).toBe(true);
+    expect(accessible.has(ownSkill.id)).toBe(true);
+    expect(accessible.has(teamSkill.id)).toBe(true);
+    expect(accessible.has(othersPersonal.id)).toBe(false);
+  });
+
+  test("excludes team skills for non-members", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const outsider = await makeUser();
+    const team = await makeTeam(org.id, owner.id);
+
+    const teamSkill = await seedSkill({
+      organizationId: org.id,
+      name: "team-skill",
+      scope: "team",
+      teamIds: [team.id],
+    });
+
+    const accessible = new Set(
+      await SkillTeamModel.getUserAccessibleSkillIds(outsider.id),
+    );
+    expect(accessible.has(teamSkill.id)).toBe(false);
+  });
+});
+
+describe("SkillTeamModel.userHasSkillAccess", () => {
+  test("org skills are accessible to everyone", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const skill = await seedSkill({
+      organizationId: org.id,
+      name: "org-skill",
+      scope: "org",
+    });
+
+    expect(
+      await SkillTeamModel.userHasSkillAccess({
+        userId: user.id,
+        skill,
+        isSkillAdmin: false,
+      }),
+    ).toBe(true);
+  });
+
+  test("personal skills are accessible only to the author", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const author = await makeUser();
+    const other = await makeUser();
+    const skill = await seedSkill({
+      organizationId: org.id,
+      name: "personal-skill",
+      scope: "personal",
+      authorId: author.id,
+    });
+
+    expect(
+      await SkillTeamModel.userHasSkillAccess({
+        userId: author.id,
+        skill,
+        isSkillAdmin: false,
+      }),
+    ).toBe(true);
+    expect(
+      await SkillTeamModel.userHasSkillAccess({
+        userId: other.id,
+        skill,
+        isSkillAdmin: false,
+      }),
+    ).toBe(false);
+    // admins bypass scope
+    expect(
+      await SkillTeamModel.userHasSkillAccess({
+        userId: other.id,
+        skill,
+        isSkillAdmin: true,
+      }),
+    ).toBe(true);
+  });
+
+  test("team skills are accessible only to team members", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const org = await makeOrganization();
+    const member = await makeUser();
+    const outsider = await makeUser();
+    const team = await makeTeam(org.id, member.id);
+    await makeTeamMember(team.id, member.id);
+
+    const skill = await seedSkill({
+      organizationId: org.id,
+      name: "team-skill",
+      scope: "team",
+      teamIds: [team.id],
+    });
+
+    expect(
+      await SkillTeamModel.userHasSkillAccess({
+        userId: member.id,
+        skill,
+        isSkillAdmin: false,
+      }),
+    ).toBe(true);
+    expect(
+      await SkillTeamModel.userHasSkillAccess({
+        userId: outsider.id,
+        skill,
+        isSkillAdmin: false,
+      }),
+    ).toBe(false);
+  });
+});

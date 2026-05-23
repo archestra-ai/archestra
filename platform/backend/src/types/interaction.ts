@@ -356,6 +356,7 @@ export const SessionSummarySchema = z.object({
   sessionId: z.string().nullable(),
   sessionSource: z.string().nullable(),
   source: InteractionSourceSchema.nullable(),
+  sources: z.array(InteractionSourceSchema),
   interactionId: z.string().nullable(), // Only set for single interactions (null session)
   requestCount: z.number(),
   totalInputTokens: z.number(),

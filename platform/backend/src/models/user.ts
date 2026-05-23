@@ -4,7 +4,7 @@ import {
   type Permissions,
   type PredefinedRoleName,
 } from "@shared";
-import { eq, getTableColumns } from "drizzle-orm";
+import { eq, getTableColumns, inArray } from "drizzle-orm";
 import { betterAuth } from "@/auth";
 import config from "@/config";
 import db, { schema, type Transaction } from "@/database";
@@ -91,6 +91,16 @@ class UserModel {
       .limit(1);
     logger.trace({ found: !!user }, "UserModel.getById: completed");
     return user;
+  }
+
+  /** Display names for several users in one query, keyed by user id. */
+  static async getNamesByIds(ids: string[]): Promise<Map<string, string>> {
+    if (ids.length === 0) return new Map();
+    const rows = await db
+      .select({ id: schema.usersTable.id, name: schema.usersTable.name })
+      .from(schema.usersTable)
+      .where(inArray(schema.usersTable.id, ids));
+    return new Map(rows.map((row) => [row.id, row.name]));
   }
 
   /**

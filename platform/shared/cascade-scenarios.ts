@@ -245,6 +245,19 @@ export const CASCADE_SCENARIOS: CascadeScenario[] = [
       "`description` is in METADATA_ONLY_CATALOG_FIELDS. No runtime field changed. Install keeps running on its current config.",
   },
   {
+    id: "labels-only-clean-local",
+    shape: "envprobeCleanLocal",
+    userAction: "Admin edits labels on a clean local catalog",
+    edit: setLabels([
+      { key: "team", value: "platform" },
+      { key: "env", value: "prod" },
+    ]),
+    expected: "skip",
+    sharedPredicate: "metadata-only-diff",
+    rationale:
+      "`labels` is in METADATA_ONLY_CATALOG_FIELDS. Labels live in a separate junction table (`mcp_catalog_labels`) and never get propagated to the pod spec, env vars, headers, image, command, or any other runtime concern. Pure organizational metadata — install keeps running on its current config.",
+  },
+  {
     id: "desc-only-docker-only-streamable-http",
     shape: "hdrprobeDockerOnly",
     userAction:

@@ -10,6 +10,7 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
+import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import {
   type TableRowAction,
@@ -33,7 +34,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import {
   useOrganization,
   useUpdateAgentSettings,
@@ -97,6 +98,8 @@ function SkillsList() {
 
   const [editingSkillId, setEditingSkillId] = useState<string | null>(null);
   const [deletingSkill, setDeletingSkill] = useState<SkillItem | null>(null);
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
 
   const items = skills?.data ?? [];
   const pagination = skills?.pagination;
@@ -157,6 +160,20 @@ function SkillsList() {
       },
     },
     {
+      id: "visibility",
+      size: 160,
+      header: "Visibility",
+      cell: ({ row }) => (
+        <ResourceVisibilityBadge
+          scope={row.original.scope}
+          teams={row.original.teams}
+          authorId={row.original.authorId}
+          authorName={row.original.authorName}
+          currentUserId={currentUserId}
+        />
+      ),
+    },
+    {
       id: "files",
       size: 150,
       header: () => <div className="text-right">Files</div>,
@@ -177,12 +194,14 @@ function SkillsList() {
           {
             icon: <Pencil className="h-4 w-4" />,
             label: "Edit",
+            permissions: { skill: ["update"] },
             onClick: () => setEditingSkillId(skill.id),
           },
           {
             icon: <Trash2 className="h-4 w-4" />,
             label: "Delete",
             variant: "destructive",
+            permissions: { skill: ["delete"] },
             onClick: () => setDeletingSkill(skill),
           },
         ];
@@ -205,7 +224,7 @@ function SkillsList() {
         description=""
         actionButton={
           !showEmptyState && (
-            <PermissionButton permissions={{ agent: ["create"] }} asChild>
+            <PermissionButton permissions={{ skill: ["create"] }} asChild>
               <Link href="/agents/skills/new">
                 <Plus className="h-4 w-4" />
                 Add new skill
@@ -380,7 +399,7 @@ function SkillsEmptyState() {
         )}
         <div className="flex items-center justify-center">
           {alreadyEnabled ? (
-            <PermissionButton permissions={{ agent: ["create"] }} asChild>
+            <PermissionButton permissions={{ skill: ["create"] }} asChild>
               <Link href="/agents/skills/new">
                 <Plus className="mr-2 h-4 w-4" />
                 Add your first skill
@@ -388,7 +407,7 @@ function SkillsEmptyState() {
             </PermissionButton>
           ) : (
             <PermissionButton
-              permissions={{ agent: ["update"] }}
+              permissions={{ skill: ["admin"] }}
               onClick={handleEnableAndCreate}
               disabled={enableDefaults.isPending}
             >

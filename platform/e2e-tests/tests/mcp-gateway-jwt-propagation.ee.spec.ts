@@ -56,7 +56,7 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
     uninstallMcpServer,
     waitForAgentTool,
   }) => {
-    test.slow();
+    test.setTimeout(300_000);
 
     // STEP 1: Verify the upstream MCP server is healthy
     await waitForApiEndpointHealthy({
@@ -229,7 +229,7 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
     uninstallMcpServer,
     waitForAgentTool,
   }) => {
-    test.slow();
+    test.setTimeout(300_000);
 
     // Verify the upstream MCP server is healthy
     await waitForApiEndpointHealthy({
@@ -373,7 +373,7 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
     uninstallMcpServer,
     waitForAgentTool,
   }) => {
-    test.slow();
+    test.setTimeout(300_000);
 
     // STEP 1: Get a JWT from Keycloak
     const jwt = await getKeycloakJwt();

@@ -47,6 +47,7 @@ import {
   ConversationShareModel,
   LlmProviderApiKeyModel,
   MemberModel,
+  MemoryItemModel,
   MessageModel,
   OrganizationModel,
   ScheduleTriggerModel,
@@ -289,6 +290,27 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         promptContext,
       );
 
+      // Load user's saved memories and append to system prompt
+      let memoryContext: string = "";
+      try {
+        const memories = await MemoryItemModel.findByUser({
+          organizationId,
+          userId: user.id,
+          limit: 50,
+        });
+        if (memories.length > 0) {
+          const memoryLines = memories.map(
+            (m) =>
+              `- ${m.namespace ? `[${m.namespace}] ` : ""}${m.content}`,
+          );
+          memoryContext =
+            "The following memories have been saved about this user:\n" +
+            memoryLines.join("\n");
+        }
+      } catch {
+        // Non-fatal — continue without memory context
+      }
+
       let toolResultInstructions: string = "";
       // Add MCP UI instruction when tools are available
       if (Object.keys(mcpTools).length > 0) {
@@ -300,7 +322,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "When a tool execution is not approved by the user, do not retry it. Explain what happened and ask the user what they'd like to do instead.";
 
       systemPrompt =
-        [renderedPrompt, toolDenialInstruction, toolResultInstructions]
+        [renderedPrompt, memoryContext, toolDenialInstruction, toolResultInstructions]
           .filter(Boolean)
           .join("\n\n") || undefined;
 

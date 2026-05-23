@@ -134,6 +134,11 @@ export const TOOL_PERMISSIONS: Record<
   // makes a personal skill, update_skill re-checks the target skill's scope.
   create_skill: { resource: "skill", action: "create" },
   update_skill: { resource: "skill", action: "update" },
+
+  // Memory — available to all authenticated users (personal data only)
+  save_memory: null,
+  recall_memories: null,
+  delete_memory: null,
 };
 
 /**

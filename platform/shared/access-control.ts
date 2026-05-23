@@ -37,6 +37,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   llmOauthClient: ["read", "create", "update", "delete", "admin"],
   llmModel: ["read", "update"],
   llmLimit: ["read", "create", "update", "delete"],
+  memoryItem: ["read", "create", "update", "delete"],
   optimizationRule: ["read", "create", "update", "delete"],
   llmCost: ["read"],
 
@@ -91,6 +92,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   llmOauthClient: ["read", "create", "update", "delete"],
   llmModel: ["read", "update"],
   llmLimit: ["read", "create", "update", "delete"],
+  memoryItem: ["read", "create", "update", "delete"],
   optimizationRule: ["read", "create", "update", "delete"],
   llmCost: ["read"],
 
@@ -145,6 +147,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   llmOauthClient: ["read"],
   llmModel: ["read"],
   llmLimit: [],
+  memoryItem: ["read", "create", "update", "delete"],
   optimizationRule: [],
   llmCost: [],
 
@@ -296,6 +299,10 @@ export const permissionDescriptions: Record<string, string> = {
   "llmLimit:create": "Create new usage limits",
   "llmLimit:update": "Modify existing usage limits",
   "llmLimit:delete": "Remove usage limits",
+  "memoryItem:read": "View saved memories",
+  "memoryItem:create": "Save new memories",
+  "memoryItem:update": "Edit saved memories",
+  "memoryItem:delete": "Delete saved memories",
   "optimizationRule:read": "View optimization rules",
   "optimizationRule:create": "Create new optimization rules",
   "optimizationRule:update": "Modify optimization rules",
@@ -830,6 +837,18 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteLimit]: {
     llmLimit: ["delete"],
   },
+  [RouteId.GetMemoryItems]: {
+    memoryItem: ["read"],
+  },
+  [RouteId.CreateMemoryItem]: {
+    memoryItem: ["create"],
+  },
+  [RouteId.UpdateMemoryItem]: {
+    memoryItem: ["update"],
+  },
+  [RouteId.DeleteMemoryItem]: {
+    memoryItem: ["delete"],
+  },
   [RouteId.GetOptimizationRules]: {
     optimizationRule: ["read"],
   },
@@ -1169,6 +1188,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/llm": { llmSettings: ["read"] },
   "/settings/agents": { agentSettings: ["read"] },
   "/settings/knowledge": { knowledgeSettings: ["read"] },
+  "/settings/memory": { memoryItem: ["read"] },
   "/settings/users": { member: ["read"] },
   "/settings/teams": { team: ["read"] },
   "/settings/roles": { ac: ["read"] },

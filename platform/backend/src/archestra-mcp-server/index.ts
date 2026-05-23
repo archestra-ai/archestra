@@ -39,6 +39,10 @@ import {
   tools as mcpServerTools,
 } from "./mcp-servers";
 import {
+  toolEntries as memoryToolEntries,
+  tools as memoryTools,
+} from "./memory";
+import {
   toolEntries as policyToolEntries,
   tools as policyTools,
 } from "./policies";
@@ -79,6 +83,7 @@ const toolEntries: Partial<
   ...searchToolEntries,
   ...runToolEntries,
   ...skillToolEntries,
+  ...memoryToolEntries,
 };
 
 export function getArchestraMcpTools() {
@@ -96,6 +101,7 @@ export function getArchestraMcpTools() {
     ...searchToolTools,
     ...runToolTools,
     ...skillTools,
+    ...memoryTools,
   ];
 
   if (archestraMcpBranding.toolPrefix === ARCHESTRA_TOOL_PREFIX) {

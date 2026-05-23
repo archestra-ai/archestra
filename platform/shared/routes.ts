@@ -328,6 +328,12 @@ export const RouteId = {
   UpdateLimit: "updateLimit",
   DeleteLimit: "deleteLimit",
 
+  // Memory Item Routes
+  GetMemoryItems: "getMemoryItems",
+  CreateMemoryItem: "createMemoryItem",
+  UpdateMemoryItem: "updateMemoryItem",
+  DeleteMemoryItem: "deleteMemoryItem",
+
   // Organization Routes
   GetOrganization: "getOrganization",
   GetOnboardingStatus: "getOnboardingStatus",

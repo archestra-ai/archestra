@@ -27,6 +27,7 @@ export { default as mcpServerRoutes } from "./mcp-server";
 export { default as mcpServerInstallationRequestRoutes } from "./mcp-server-installation-requests";
 export { default as mcpToolCallRoutes } from "./mcp-tool-call";
 export { default as memberRoutes } from "./member";
+export { default as memoryItemRoutes } from "./memory-item";
 export { default as oauthRoutes } from "./oauth";
 export { default as oauthServerRoutes } from "./oauth-server";
 export { default as optimizationRuleRoutes } from "./optimization-rule";

@@ -39,6 +39,7 @@ export { default as McpServerModel } from "./mcp-server";
 export { default as McpServerInstallationRequestModel } from "./mcp-server-installation-request";
 export { default as McpToolCallModel } from "./mcp-tool-call";
 export { default as MemberModel } from "./member";
+export { default as MemoryItemModel } from "./memory-item";
 export { default as MessageModel } from "./message";
 export { default as ModelModel } from "./model";
 export { default as OAuthAccessTokenModel } from "./oauth-access-token";

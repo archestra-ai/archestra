@@ -52,6 +52,9 @@ export { default as ScheduleTriggerRunModel } from "./schedule-trigger-run";
 export { default as SecretModel } from "./secret";
 /** @public — re-exported for testability (consumed by src/test/fixtures.ts) */
 export { default as SessionModel } from "./session";
+export { default as SkillModel } from "./skill";
+export { default as SkillFileModel } from "./skill-file";
+export { default as SkillTeamModel } from "./skill-team";
 export { default as StatisticsModel } from "./statistics";
 export { default as TaskModel } from "./task";
 export { default as TeamModel } from "./team";

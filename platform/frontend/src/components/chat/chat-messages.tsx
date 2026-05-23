@@ -2,6 +2,7 @@ import type { UIMessage } from "@ai-sdk/react";
 import {
   type ArchestraToolShortName,
   type archestraApiTypes,
+  ChatMessageMetadataSchema,
   parseFullToolName,
   SWAP_AGENT_FAILED_POKE_TEXT,
   SWAP_AGENT_POKE_PREFIX,
@@ -830,6 +831,11 @@ export function ChatMessages({
                                 attachments={extractFileAttachments(
                                   message.parts,
                                 )}
+                                skill={
+                                  ChatMessageMetadataSchema.safeParse(
+                                    message.metadata,
+                                  ).data?.skill
+                                }
                                 onStartEdit={handleStartEdit}
                                 onCancelEdit={handleCancelEdit}
                                 onSave={handleSaveUserMessage}
@@ -896,6 +902,11 @@ export function ChatMessages({
                                 attachments={extractFileAttachments(
                                   message.parts,
                                 )}
+                                skill={
+                                  ChatMessageMetadataSchema.safeParse(
+                                    message.metadata,
+                                  ).data?.skill
+                                }
                                 onStartEdit={handleStartEdit}
                                 onCancelEdit={handleCancelEdit}
                                 onSave={handleSaveUserMessage}

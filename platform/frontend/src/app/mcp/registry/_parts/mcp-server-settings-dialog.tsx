@@ -159,7 +159,6 @@ export function McpServerSettingsDialog({
     navItems.push({
       id: "presets",
       label: presetEntityName.plural,
-      badge: presets.length + 1,
     });
   }
   if (showConnections) {
@@ -210,10 +209,14 @@ export function McpServerSettingsDialog({
   // ManageUsersContent (filters credential sections). Hidden unless the org
   // has the preset term configured AND the catalog has ≥ 1 preset child.
   // The literal "All" is a sentinel for "no filter".
-  const presetLabelOptions = ["All", "default", ...presets.map((p) => p.name)];
+  const presetLabelOptions = [
+    "All",
+    presetEntityName.defaultLabel,
+    ...presets.map((p) => p.childName ?? p.name),
+  ];
   const presetIdByLabel = new Map<string, string>([
-    ["default", item.id],
-    ...presets.map((p) => [p.name, p.id] as const),
+    [presetEntityName.defaultLabel, item.id],
+    ...presets.map((p) => [p.childName ?? p.name, p.id] as const),
   ]);
   const [pageSelectedPreset, setPageSelectedPreset] = useState<string>("All");
   // Keep the selector in sync when the dialog opens deep-linked to a
@@ -224,8 +227,14 @@ export function McpServerSettingsDialog({
     const init = clickedServerId ?? logsInitialServerId;
     if (!init) return;
     const found = installs.find((i) => i.id === init);
-    if (found) setPageSelectedPreset(found.presetLabel ?? "default");
-  }, [clickedServerId, logsInitialServerId, installs]);
+    if (found)
+      setPageSelectedPreset(found.presetLabel ?? presetEntityName.defaultLabel);
+  }, [
+    clickedServerId,
+    logsInitialServerId,
+    installs,
+    presetEntityName.defaultLabel,
+  ]);
   const presetSelectorVisible =
     presetEntityName.configured &&
     presets.length > 0 &&
@@ -258,7 +267,26 @@ export function McpServerSettingsDialog({
     [guardDirty],
   );
 
-  const handleClose = () => onOpenChange(false);
+  // Funnels every close path through the dirty guard: Close X button
+  // (calls handleClose), Esc key, and outside-click (both produce
+  // onOpenChange(false) from Radix). Without this wrapper the guard
+  // only catches tab navigation, so a dirty config edit could be
+  // silently dropped by Esc, clicking outside, or the X button.
+  const handleCloseAttempt = useCallback(
+    (nextOpen: boolean) => {
+      if (nextOpen) {
+        onOpenChange(true);
+      } else {
+        guardDirty(() => onOpenChange(false));
+      }
+    },
+    [guardDirty, onOpenChange],
+  );
+
+  const handleClose = useCallback(
+    () => handleCloseAttempt(false),
+    [handleCloseAttempt],
+  );
 
   // Deployment summary for sidebar header
   const summary = computeDeploymentStatusSummary(
@@ -268,7 +296,7 @@ export function McpServerSettingsDialog({
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open} onOpenChange={handleCloseAttempt}>
         <DialogContent
           className="max-w-6xl h-[85vh] flex flex-row p-0 gap-0 overflow-hidden"
           showCloseButton={false}
@@ -444,7 +472,7 @@ export function McpServerSettingsDialog({
                   }
                   onControlledPresetFilterChange={(presetId) => {
                     if (presetId === "all") {
-                      setPageSelectedPreset("default");
+                      setPageSelectedPreset(presetEntityName.defaultLabel);
                       return;
                     }
                     for (const [label, id] of presetIdByLabel) {

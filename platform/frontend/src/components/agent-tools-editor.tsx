@@ -43,6 +43,7 @@ import {
   useInternalMcpCatalog,
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServersGroupedByCatalog } from "@/lib/mcp/mcp-server.query";
+import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
 import {
   getDefaultArchestraToolIds,
@@ -221,7 +222,12 @@ const AgentToolsEditorContent = forwardRef<
   // Track whether default tools have been pre-selected for new agent creation
   const defaultToolsInitializedRef = useRef(false);
 
-  // Pre-select default Archestra tools when creating a new agent (no agentId)
+  const { data: organization } = useOrganization();
+  const skillToolsEnabled = organization?.skillToolsEnabled === true;
+
+  // Pre-select default Archestra tools when creating a new agent (no agentId).
+  // When the org has opted into skills, also pre-select the skill tools so the
+  // form matches what AgentModel.create will assign server-side.
   useEffect(() => {
     if (agentId) return; // Only for new agent creation
     if (defaultToolsInitializedRef.current) return; // Only initialize once
@@ -232,6 +238,7 @@ const AgentToolsEditorContent = forwardRef<
     const result = getDefaultArchestraToolIds(
       catalogItems,
       toolsByCatalogIndex,
+      { includeSkillTools: skillToolsEnabled },
     );
     if (!result) return;
 
@@ -247,7 +254,13 @@ const AgentToolsEditorContent = forwardRef<
     });
     onSelectedCountChange?.(result.toolIds.size);
     setPendingVersion((v) => v + 1);
-  }, [agentId, catalogItems, toolCountQueries, onSelectedCountChange]);
+  }, [
+    agentId,
+    catalogItems,
+    toolCountQueries,
+    onSelectedCountChange,
+    skillToolsEnabled,
+  ]);
 
   // Calculate total selected count from pending changes
   const calculateTotalSelectedCount = useCallback(() => {

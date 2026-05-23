@@ -521,6 +521,9 @@ export function LlmProviderApiKeyForm({
                 id="llm-provider-api-key-name"
                 placeholder={providerConfig.name}
                 disabled={isPending}
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
                 {...form.register("name")}
               />
             </div>
@@ -642,6 +645,9 @@ export function LlmProviderApiKeyForm({
                     type="password"
                     placeholder={providerConfig.placeholder}
                     disabled={isPending}
+                    autoComplete="new-password"
+                    data-1p-ignore
+                    data-lpignore="true"
                     className={
                       showConfiguredStyling ? "border-green-500 pr-10" : ""
                     }

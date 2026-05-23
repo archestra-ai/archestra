@@ -1,6 +1,7 @@
 "use client";
 
-import { AlertTriangle, FileText, Paperclip } from "lucide-react";
+import type { ChatSkillMetadata } from "@shared";
+import { AlertTriangle, FileText, Paperclip, Sparkles } from "lucide-react";
 import Link from "next/link";
 import {
   type KeyboardEventHandler,
@@ -12,6 +13,7 @@ import {
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import { MessageActions } from "@/components/chat/message-actions";
 import { UserMessageText } from "@/components/chat/user-message-text";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -35,6 +37,8 @@ interface EditableUserMessageProps {
   isEditing: boolean;
   editDisabled?: boolean;
   attachments?: FileAttachment[];
+  /** Skill the user invoked via slash command for this message, if any. */
+  skill?: ChatSkillMetadata;
   onStartEdit: (partKey: string, messageId: string) => void;
   onCancelEdit: () => void;
   onSave: (
@@ -52,6 +56,7 @@ export function EditableUserMessage({
   isEditing,
   editDisabled = false,
   attachments = [],
+  skill,
   onStartEdit,
   onCancelEdit,
   onSave,
@@ -204,6 +209,13 @@ export function EditableUserMessage({
       onMouseLeave={() => setIsRegenerateConfirming(false)}
     >
       <div className="relative flex flex-col items-end pb-2 w-full">
+        {/* Skill invoked via slash command */}
+        {skill && (
+          <Badge variant="secondary" className="mb-2 gap-1 text-xs">
+            <Sparkles className="h-3 w-3" />
+            {skill.name}
+          </Badge>
+        )}
         {/* Image attachments above the message bubble */}
         {imageAttachments.length > 0 && (
           <div className="flex flex-wrap gap-1 justify-end mb-2">

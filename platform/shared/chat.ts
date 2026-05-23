@@ -37,7 +37,25 @@ export type ChatMessage = {
   id?: string;
   role: "system" | "user" | "assistant" | "tool";
   parts?: ChatMessagePart[];
+  metadata?: unknown;
 };
+
+/**
+ * The skill a user explicitly invoked via slash command, carried on the user
+ * message's metadata. The backend uses it to inject the skill's activation
+ * block; the chat UI uses it to badge the message.
+ */
+export const ChatSkillMetadataSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+});
+
+export type ChatSkillMetadata = z.infer<typeof ChatSkillMetadataSchema>;
+
+/** Chat message metadata. Permissive — only the keys we own are typed. */
+export const ChatMessageMetadataSchema = z
+  .object({ skill: ChatSkillMetadataSchema.optional() })
+  .passthrough();
 
 // ============================================================================
 // Zod Schemas for Model Modalities

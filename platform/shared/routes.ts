@@ -475,6 +475,18 @@ export const RouteId = {
 
   // Invitation Routes
   CheckInvitation: "checkInvitation",
+
+  // Agent Skill Routes
+  GetSkills: "getSkills",
+  CreateSkill: "createSkill",
+  GetSkill: "getSkill",
+  UpdateSkill: "updateSkill",
+  DeleteSkill: "deleteSkill",
+  DiscoverGithubSkills: "discoverGithubSkills",
+  PreviewGithubSkill: "previewGithubSkill",
+  ImportGithubSkills: "importGithubSkills",
+  GetSkillSourceRepos: "getSkillSourceRepos",
+  EnableSkillToolDefaults: "enableSkillToolDefaults",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

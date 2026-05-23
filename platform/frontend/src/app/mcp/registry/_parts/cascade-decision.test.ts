@@ -36,13 +36,8 @@ describe("cascade scenarios — frontend full-outcome sweep", () => {
     // install set; the exact count doesn't influence the decision
     // (it only feeds the bar's copy). All scenarios assume at least
     // one install — there's no point cascading otherwise.
-    //
-    // `labelsChanged` is computed by the form from its labels state.
-    // None of the current scenarios touch labels, so it's always false
-    // here. A future label-only scenario would set this to true.
     const outcome = computeCascadeOutcome(prev, next, {
       affectedServerCount: 1,
-      labelsChanged: false,
     });
 
     const frontendExpected =
@@ -244,7 +239,6 @@ describe("computeCascadeOutcome — `mounted` flip routes to auto, not manual", 
     expect(
       computeCascadeOutcome(base, flipped, {
         affectedServerCount: 1,
-        labelsChanged: false,
       }),
     ).toBe("auto");
   });
@@ -563,7 +557,6 @@ describe("API-shape prev vs transform-shape next — shape-mismatch regression",
     expect(
       computeCascadeOutcome(apiPrev, transformedNext, {
         affectedServerCount: 3,
-        labelsChanged: false,
       }),
     ).toBe("skip");
   });
@@ -588,7 +581,6 @@ describe("API-shape prev vs transform-shape next — shape-mismatch regression",
     expect(
       computeCascadeOutcome(apiPrev, transformedNext, {
         affectedServerCount: 3,
-        labelsChanged: false,
       }),
     ).toBe("skip");
   });
@@ -611,7 +603,6 @@ describe("API-shape prev vs transform-shape next — shape-mismatch regression",
     expect(
       computeCascadeOutcome(apiPrev, transformedNext, {
         affectedServerCount: 3,
-        labelsChanged: false,
       }),
     ).toBe("auto");
   });

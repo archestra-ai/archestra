@@ -167,7 +167,7 @@ export function McpServerCard({
   // Gate the Install button when the default preset (the parent catalog
   // itself) has unfilled preset-scoped fields and the current user cannot
   // edit them — clicking Install would land on Step 1 and 403 on save.
-  const { singular: presetSingular } = usePresetEntityName();
+  const { singular: presetSingular, defaultLabel } = usePresetEntityName();
   const presetSingularLower = presetSingular.toLowerCase();
   const { canEdit: canEditPresets } = useCanEditCatalogPresets(
     variant !== "builtin" ? item : null,
@@ -295,9 +295,9 @@ export function McpServerCard({
     personalServersAcrossPresets.length > 0 || !!personalServer;
 
   const presetNameByCatalogId = new Map<string, string>();
-  presetNameByCatalogId.set(item.id, item.name);
+  presetNameByCatalogId.set(item.id, defaultLabel);
   for (const p of presets) {
-    presetNameByCatalogId.set(p.id, p.name);
+    presetNameByCatalogId.set(p.id, p.childName ?? p.name);
   }
 
   // Iterate over presets (the parent catalog item + its child presets) and pick
@@ -375,7 +375,7 @@ export function McpServerCard({
     ...s,
     presetLabel:
       s.catalogId === item.id
-        ? "default"
+        ? defaultLabel
         : (presetNameByCatalogId.get(s.catalogId) ?? null),
   }));
 
@@ -392,7 +392,7 @@ export function McpServerCard({
         name: s.name,
         presetLabel:
           s.catalogId === item.id
-            ? "default"
+            ? defaultLabel
             : (presetNameByCatalogId.get(s.catalogId) ?? null),
       })),
     );
@@ -468,7 +468,7 @@ export function McpServerCard({
           name: s.name,
           presetLabel:
             s.catalogId === item.id
-              ? "default"
+              ? defaultLabel
               : (presetNameByCatalogId.get(s.catalogId) ?? null),
         })),
         { alsoReinstallCatalog: true },

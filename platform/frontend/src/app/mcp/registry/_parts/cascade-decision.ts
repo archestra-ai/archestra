@@ -70,9 +70,6 @@ export type ComputeCascadeOutcomeOptions = {
   /** Number of installs the backend cascade would touch. When 0, no
    *  cascade is possible regardless of what changed → always "skip". */
   affectedServerCount: number;
-  /** Labels are tracked outside react-hook-form in the catalog edit
-   *  form, so the form passes its own dirty-flag in. */
-  labelsChanged: boolean;
 };
 
 /**
@@ -85,7 +82,7 @@ export type ComputeCascadeOutcomeOptions = {
 export function computeCascadeOutcome(
   prev: CascadeSnapshot,
   next: CascadeSnapshot,
-  { affectedServerCount, labelsChanged }: ComputeCascadeOutcomeOptions,
+  { affectedServerCount }: ComputeCascadeOutcomeOptions,
 ): CascadeOutcome {
   if (affectedServerCount === 0) return "skip";
 
@@ -101,7 +98,7 @@ export function computeCascadeOutcome(
   // checks pass, the remaining diffs may be entirely forward-
   // compatible (added-optional, demoted required → optional, pure
   // metadata, or truly nothing).
-  if (onlyForwardCompatibleDiff(prev, next, labelsChanged)) return "skip";
+  if (onlyForwardCompatibleDiff(prev, next)) return "skip";
 
   // ── Auto ─────────────────────────────────────────────────────────
   // A breaking diff exists but doesn't need a user re-prompt. The
@@ -271,10 +268,7 @@ export function requiredUserConfigChanged(
 function onlyForwardCompatibleDiff(
   prev: CascadeSnapshot,
   next: CascadeSnapshot,
-  labelsChanged: boolean,
 ): boolean {
-  if (labelsChanged) return false;
-
   // Prompted env-var changes are schema-evolution compatible.
   if (promptedEnvVarsChanged(prev, next)) return false;
   // …but a runtime-only `mounted` flip still requires a pod restart

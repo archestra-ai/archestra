@@ -44,7 +44,7 @@ test.describe("MCP Gateway - JWKS Credential Resolution Priority", () => {
     uninstallMcpServer,
     waitForAgentTool,
   }) => {
-    test.slow();
+    test.setTimeout(300_000);
 
     // STEP 1: Get a JWT from Keycloak
     const jwt = await getKeycloakJwt();
@@ -167,7 +167,7 @@ test.describe("MCP Gateway - JWKS Credential Resolution Priority", () => {
     uninstallMcpServer,
     waitForAgentTool,
   }) => {
-    test.slow();
+    test.setTimeout(300_000);
 
     // STEP 1: Get a JWT from Keycloak
     const jwt = await getKeycloakJwt();

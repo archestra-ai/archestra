@@ -4,7 +4,6 @@ import { AlertTriangle, Loader2 } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { DialogStickyFooter } from "@/components/ui/dialog";
-import type { usePresetEntityName } from "@/lib/organization.query";
 
 /**
  * Inline confirm surface that replaces the host form's footer when a
@@ -19,8 +18,6 @@ export function ReinstallConfirmBar({
   mode,
   isMultitenant = false,
   affectedServerCount,
-  presetCount,
-  presetEntityName,
   isSubmitting,
   onCancel,
   onConfirm,
@@ -28,18 +25,10 @@ export function ReinstallConfirmBar({
   mode: "manual" | "auto";
   isMultitenant?: boolean;
   affectedServerCount: number;
-  presetCount: number;
-  presetEntityName: ReturnType<typeof usePresetEntityName>;
   isSubmitting: boolean;
   onCancel: () => void;
   onConfirm: () => void | Promise<void>;
 }) {
-  const totalPresetCount = presetCount + 1;
-  const presetNoun =
-    totalPresetCount === 1
-      ? presetEntityName.singular.toLowerCase()
-      : presetEntityName.plural.toLowerCase();
-
   // If Save was clicked while scrolled mid-form, the new footer would
   // sit off-screen — user would read it as "nothing happened".
   const barRef = useRef<HTMLDivElement | null>(null);
@@ -68,46 +57,40 @@ export function ReinstallConfirmBar({
       window.removeEventListener("keydown", handler, { capture: true });
   }, [isSubmitting, onCancel, onConfirm]);
 
-  const title =
-    mode === "manual" ? "Reinstall required" : "Servers will reinstall";
-
-  const confirmLabel =
-    mode === "manual" ? "Save and mark for reinstall" : "Save and reinstall";
-
-  const subjectText = isMultitenant ? (
-    <>The shared deployment</>
-  ) : (
-    <>
-      <strong>{affectedServerCount}</strong>{" "}
-      {affectedServerCount === 1 ? "install" : "installs"}
-      {/* "across N" only makes sense with >1 install — a single
-          install only lives in one place, suffix would mislead. */}
-      {presetCount > 0 && affectedServerCount > 1 ? (
-        <>
-          {" "}
-          across <strong>{totalPresetCount}</strong> {presetNoun}
-        </>
-      ) : null}
-    </>
-  );
-
   const isPlural = !isMultitenant && affectedServerCount > 1;
-  const pronoun = isPlural ? "They" : "It";
-  const possessive = isPlural ? "their" : "its";
-  const eachSuffix = isPlural ? " on each" : "";
+  const installNoun = `install${isPlural ? "s" : ""}`;
+
+  const title =
+    mode === "manual"
+      ? isMultitenant
+        ? "Save change — shared deployment will need a Reinstall"
+        : `Save change — ${affectedServerCount} ${installNoun} will need a Reinstall`
+      : isMultitenant
+        ? "Restart the shared deployment now?"
+        : `Restart ${affectedServerCount} ${installNoun} now?`;
+
+  const confirmLabel = mode === "manual" ? "Save change" : "Save and restart";
 
   const body =
     mode === "manual" ? (
-      <>
-        {subjectText} will be marked for reinstall. {pronoun} keep
-        {isPlural ? "" : "s"} running on {possessive} current configuration
-        until you click <strong>Reinstall</strong>
-        {eachSuffix}.
-      </>
+      isMultitenant ? (
+        <>
+          Your change needs a new value. The deployment keeps running on the old
+          config until someone clicks <strong>Reinstall</strong> and provides
+          the value.
+        </>
+      ) : (
+        <>
+          Your change needs a new value. The {installNoun}{" "}
+          {isPlural ? "keep" : "keeps"} running on the old config until someone
+          clicks <strong>Reinstall</strong>
+          {isPlural ? " on each" : ""} and provides the value.
+        </>
+      )
     ) : (
       <>
-        {subjectText} will reinstall now. {pronoun} may briefly restart or
-        become unavailable.
+        {isPlural ? "Each will" : "It'll"} briefly go offline, then come back on
+        the new config. You don't need to do anything else.
       </>
     );
 

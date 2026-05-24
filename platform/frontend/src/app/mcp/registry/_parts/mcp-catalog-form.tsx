@@ -80,7 +80,6 @@ import {
   MCP_CONFIG_AUTOCOMPLETE,
   MCP_SECRET_AUTOCOMPLETE,
 } from "@/lib/mcp/mcp-form-autocomplete";
-import { usePresetEntityName } from "@/lib/organization.query";
 import { useGetSecret } from "@/lib/secrets.query";
 import { useTeams } from "@/lib/teams/team.query";
 import {
@@ -138,11 +137,6 @@ interface McpCatalogFormProps {
    * to 0 (no confirm bar — used for create mode and standalone previews).
    */
   affectedServerCount?: number;
-  /**
-   * Number of preset children alongside the parent catalog. Used in the
-   * confirm bar to say "across N <presets>". Defaults to 0.
-   */
-  presetCount?: number;
 }
 
 export function McpCatalogForm({
@@ -157,7 +151,6 @@ export function McpCatalogForm({
   submitRef,
   embedded = false,
   affectedServerCount = 0,
-  presetCount = 0,
 }: McpCatalogFormProps) {
   const localConfigSecretId =
     initialValues?.serverType === "local"
@@ -186,7 +179,6 @@ export function McpCatalogForm({
     useFeature("advancedToolFeaturesEnabled") === true;
   const isEnterpriseCoreEnabled = useEnterpriseFeature("core");
   const appName = useAppName();
-  const presetEntityName = usePresetEntityName();
   const mcpAuthDocsUrl = getFrontendDocsUrl(
     DocsPage.McpAuthentication,
     "upstream-mcp-server-authentication",
@@ -723,7 +715,7 @@ export function McpCatalogForm({
       const outcome = computeCascadeOutcome(
         (initialValues ?? {}) as CascadeSnapshot,
         transformFormToApiData(values) as CascadeSnapshot,
-        { affectedServerCount, labelsChanged: areLabelsChanged },
+        { affectedServerCount },
       );
       if (outcome !== "skip") {
         setPendingSubmit({ values, mode: outcome });
@@ -741,11 +733,29 @@ export function McpCatalogForm({
         autoComplete={MCP_CONFIG_AUTOCOMPLETE}
         data-1p-ignore="true"
       >
-        {/* Lock fields during the bar's save so the user can't drift
-            values away from the snapshot the API will see. */}
+        {/* Lock fields while the confirm bar is up AND during the save
+            itself — keeps the snapshot the bar describes in sync with
+            what the user sees on screen, and prevents silent data loss
+            when a mid-bar edit gets dropped on confirm (the save uses
+            `pendingSubmit.values`, the snapshot taken at first-save
+            time, not the current form state). Matches the same pattern
+            in `preset-editor-dialog.tsx`.
+
+            `disabled` covers native form controls (input/select/button)
+            but not the custom `<div role="button">` rows in the env-var
+            and header tables (they CAN'T be real <button>s because they
+            contain a nested delete <button>, and button-in-button is
+            invalid HTML — see comments in those table components).
+            `inert` blocks click + focus + keyboard for the entire
+            subtree, catching the row-as-div case. The `opacity-60`
+            class gives the user-visible "this is locked" signal that
+            `inert` alone doesn't provide. */}
         <fieldset
-          disabled={isConfirming}
-          className="flex min-h-0 min-w-0 flex-1 flex-col m-0 p-0 border-0"
+          disabled={pendingSubmit !== null || isConfirming}
+          inert={pendingSubmit !== null || isConfirming}
+          className={`flex min-h-0 min-w-0 flex-1 flex-col m-0 p-0 border-0 transition-opacity ${
+            pendingSubmit !== null || isConfirming ? "opacity-60" : ""
+          }`}
         >
           <div
             className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-6 ${embedded ? "space-y-6 pt-6 pb-0" : "space-y-6 py-6"}`}
@@ -2214,8 +2224,6 @@ export function McpCatalogForm({
             mode={pendingSubmit.mode}
             isMultitenant={isMultitenant}
             affectedServerCount={affectedServerCount}
-            presetCount={presetCount}
-            presetEntityName={presetEntityName}
             isSubmitting={isConfirming}
             onCancel={() => setPendingSubmit(null)}
             onConfirm={async () => {

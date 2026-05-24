@@ -49,6 +49,30 @@ describe("normalizeChatMessages", () => {
     ).toHaveLength(1);
   });
 
+  test("drops a dangling input-streaming tool call (stopped mid-stream)", () => {
+    const messages = [
+      {
+        id: "msg1",
+        role: "assistant" as const,
+        parts: [
+          { type: "text", text: "Looking that up." },
+          {
+            type: "tool-archestra__create_agent",
+            toolCallId: "call_interrupted",
+            state: "input-streaming",
+            input: { name: "Ag" },
+          },
+        ],
+      },
+    ];
+
+    const result = normalizeChatMessages(messages);
+
+    expect(result[0].parts).toEqual([
+      { type: "text", text: "Looking that up." },
+    ]);
+  });
+
   test("preserves distinct tool parts when toolCallIds differ", () => {
     const messages = [
       {

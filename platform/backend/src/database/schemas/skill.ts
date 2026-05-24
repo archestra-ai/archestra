@@ -8,15 +8,17 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type { SkillSourceType } from "@/types/skill";
+import type { ResourceVisibilityScope } from "@/types/visibility";
 import usersTable from "./user";
 
 /**
  * Agent Skills: reusable SKILL.md instruction sets.
  *
- * A skill is an organization-level resource. It holds the catalog metadata
+ * A skill belongs to an organization and carries a visibility `scope`
+ * (`personal`/`team`/`org`) like agents. It holds the catalog metadata
  * (`name`/`description`, surfaced to the model) plus the SKILL.md markdown
  * body (`content`, loaded on activation). Bundled resource files live in the
- * `skill_files` table; agent attachments live in `agent_skill`.
+ * `skill_files` table; team assignments live in `skill_team`.
  *
  * @see https://agentskills.io/specification
  */
@@ -29,6 +31,15 @@ const skillsTable = pgTable(
     authorId: text("author_id").references(() => usersTable.id, {
       onDelete: "set null",
     }),
+    /**
+     * Visibility/management scope: `personal` (author only), `team` (members of
+     * the assigned teams, see `skill_team`), or `org` (everyone). Mirrors the
+     * `agents.scope` model.
+     */
+    scope: text("scope")
+      .$type<ResourceVisibilityScope>()
+      .notNull()
+      .default("personal"),
     /** Short identifier surfaced in the skill catalog. */
     name: text("name").notNull(),
     /** One-line summary the model uses to decide when to activate. */
@@ -61,6 +72,7 @@ const skillsTable = pgTable(
   },
   (table) => [
     index("skills_organization_id_idx").on(table.organizationId),
+    index("skills_scope_idx").on(table.scope),
     uniqueIndex("skills_org_name_idx").on(table.organizationId, table.name),
   ],
 );

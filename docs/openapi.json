@@ -78905,6 +78905,9 @@
                         "advancedToolFeaturesEnabled": {
                           "type": "boolean"
                         },
+                        "agentSkillsEnabled": {
+                          "type": "boolean"
+                        },
                         "byosEnabled": {
                           "type": "boolean"
                         },
@@ -78979,6 +78982,7 @@
                       "required": [
                         "orchestratorK8sRuntime",
                         "advancedToolFeaturesEnabled",
+                        "agentSkillsEnabled",
                         "byosEnabled",
                         "byosVaultKvVersion",
                         "azureOpenAiEntraIdEnabled",
@@ -160811,6 +160815,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -160868,6 +160875,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -161664,6 +161672,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -161721,6 +161732,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -162789,6 +162801,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -162846,6 +162861,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -163524,6 +163540,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -163581,6 +163600,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -163831,7 +163851,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update agent settings (default model, default agent)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, security engine, file uploads)",
+        "description": "Update agent settings (default model, default agent, skill slash commands)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, security engine, file uploads)",
         "requestBody": {
           "required": true,
           "content": {
@@ -163856,6 +163876,9 @@
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "skillSlashCommandsEnabled": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -164243,6 +164266,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -164300,6 +164326,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -165027,6 +165054,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -165084,6 +165114,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -165744,6 +165775,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -165801,6 +165835,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -166454,6 +166489,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -166511,6 +166549,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -167163,6 +167202,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -167220,6 +167262,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -167872,6 +167915,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -167929,6 +167975,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -168594,6 +168641,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -168651,6 +168701,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -169283,6 +169334,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -169340,6 +169394,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -170285,6 +170340,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -170342,6 +170400,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -177852,7 +177911,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "List all agent skills for the organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "description": "List all agent skills for the organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View and use agent skills within your scope (org, your teams, your own)",
         "parameters": [
           {
             "schema": {
@@ -177918,6 +177977,14 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "personal",
+                              "team",
+                              "org"
+                            ]
+                          },
                           "name": {
                             "type": "string"
                           },
@@ -177966,12 +178033,36 @@
                           },
                           "fileCount": {
                             "type": "number"
+                          },
+                          "teams": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "authorName": {
+                            "nullable": true,
+                            "type": "string"
                           }
                         },
                         "required": [
                           "id",
                           "organizationId",
                           "authorId",
+                          "scope",
                           "name",
                           "description",
                           "content",
@@ -177983,7 +178074,9 @@
                           "sourceCommit",
                           "createdAt",
                           "updatedAt",
-                          "fileCount"
+                          "fileCount",
+                          "teams",
+                          "authorName"
                         ],
                         "additionalProperties": false
                       }
@@ -178270,7 +178363,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agent:read"
+            "skill:read"
           ]
         }
       },
@@ -178279,7 +178372,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Create a skill from a raw SKILL.md and resource files\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:create`: Create new agents",
+        "description": "Create a skill from a raw SKILL.md and resource files\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:create`: Create new agent skills",
         "requestBody": {
           "required": true,
           "content": {
@@ -178289,10 +178382,11 @@
                 "properties": {
                   "content": {
                     "type": "string",
-                    "minLength": 1
+                    "minLength": 1,
+                    "maxLength": 10485760
                   },
                   "files": {
-                    "default": [],
+                    "maxItems": 500,
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -178302,7 +178396,8 @@
                           "minLength": 1
                         },
                         "content": {
-                          "type": "string"
+                          "type": "string",
+                          "maxLength": 13981016
                         },
                         "encoding": {
                           "type": "string",
@@ -178316,6 +178411,20 @@
                         "path",
                         "content"
                       ]
+                    }
+                  },
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "personal",
+                      "team",
+                      "org"
+                    ]
+                  },
+                  "teamIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
                     }
                   }
                 },
@@ -178345,6 +178454,14 @@
                     "authorId": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
                     },
                     "name": {
                       "type": "string"
@@ -178444,12 +178561,32 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "teams": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
                     "id",
                     "organizationId",
                     "authorId",
+                    "scope",
                     "name",
                     "description",
                     "content",
@@ -178461,7 +178598,8 @@
                     "sourceCommit",
                     "createdAt",
                     "updatedAt",
-                    "files"
+                    "files",
+                    "teams"
                   ],
                   "additionalProperties": false
                 }
@@ -178700,7 +178838,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agent:create"
+            "skill:create"
           ]
         }
       }
@@ -178711,7 +178849,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Get a skill with its resource files\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "description": "Get a skill with its resource files\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View and use agent skills within your scope (org, your teams, your own)",
         "parameters": [
           {
             "schema": {
@@ -178741,6 +178879,14 @@
                     "authorId": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
                     },
                     "name": {
                       "type": "string"
@@ -178840,12 +178986,32 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "teams": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
                     "id",
                     "organizationId",
                     "authorId",
+                    "scope",
                     "name",
                     "description",
                     "content",
@@ -178857,7 +179023,8 @@
                     "sourceCommit",
                     "createdAt",
                     "updatedAt",
-                    "files"
+                    "files",
+                    "teams"
                   ],
                   "additionalProperties": false
                 }
@@ -179096,7 +179263,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agent:read"
+            "skill:read"
           ]
         }
       },
@@ -179105,7 +179272,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Update a skill's SKILL.md and resource files\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:update`: Modify agent configuration and settings",
+        "description": "Update a skill's SKILL.md, resource files, and scope\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:update`: Modify agent skills and their team assignments",
         "requestBody": {
           "required": true,
           "content": {
@@ -179115,10 +179282,11 @@
                 "properties": {
                   "content": {
                     "type": "string",
-                    "minLength": 1
+                    "minLength": 1,
+                    "maxLength": 10485760
                   },
                   "files": {
-                    "default": [],
+                    "maxItems": 500,
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -179128,7 +179296,8 @@
                           "minLength": 1
                         },
                         "content": {
-                          "type": "string"
+                          "type": "string",
+                          "maxLength": 13981016
                         },
                         "encoding": {
                           "type": "string",
@@ -179142,6 +179311,20 @@
                         "path",
                         "content"
                       ]
+                    }
+                  },
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "personal",
+                      "team",
+                      "org"
+                    ]
+                  },
+                  "teamIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
                     }
                   }
                 },
@@ -179182,6 +179365,14 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
+                    },
                     "name": {
                       "type": "string"
                     },
@@ -179280,12 +179471,32 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "teams": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
                     "id",
                     "organizationId",
                     "authorId",
+                    "scope",
                     "name",
                     "description",
                     "content",
@@ -179297,7 +179508,8 @@
                     "sourceCommit",
                     "createdAt",
                     "updatedAt",
-                    "files"
+                    "files",
+                    "teams"
                   ],
                   "additionalProperties": false
                 }
@@ -179536,7 +179748,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agent:update"
+            "skill:update"
           ]
         }
       },
@@ -179545,7 +179757,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Delete a skill and its resource files\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:delete`: Delete agents",
+        "description": "Delete a skill and its resource files\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:delete`: Delete agent skills",
         "parameters": [
           {
             "schema": {
@@ -179808,7 +180020,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agent:delete"
+            "skill:delete"
           ]
         }
       }
@@ -179819,7 +180031,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "List distinct GitHub repositories that skills in this organization were imported from\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "description": "List distinct GitHub repositories that skills in this organization were imported from\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View and use agent skills within your scope (org, your teams, your own)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -180075,7 +180287,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agent:read"
+            "skill:read"
           ]
         }
       }
@@ -180086,7 +180298,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Enable the Agent Skill tools (`activate_skill`, `read_skill_file`) for this organization. Sets the org-level flag and backfills both tools onto every existing agent. Idempotent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:update`: Modify agent configuration and settings",
+        "description": "Enable the Agent Skill tools (`list_skills`, `activate_skill`, `read_skill_file`) for this organization. Sets the org-level flag and backfills the tools onto every existing agent. Idempotent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:admin`: Full administrative control over all agent skills, bypassing team restrictions",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -180346,7 +180558,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agent:update"
+            "skill:admin"
           ]
         }
       }
@@ -180357,7 +180569,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Discover skills in a GitHub repository\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "description": "Discover skills in a GitHub repository\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View and use agent skills within your scope (org, your teams, your own)",
         "requestBody": {
           "required": true,
           "content": {
@@ -180676,7 +180888,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agent:read"
+            "skill:read"
           ]
         }
       }
@@ -180687,7 +180899,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Fetch a single skill's manifest and files from GitHub without persisting it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "description": "Fetch a single skill's manifest and files from GitHub without persisting it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View and use agent skills within your scope (org, your teams, your own)",
         "requestBody": {
           "required": true,
           "content": {
@@ -181039,7 +181251,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agent:read"
+            "skill:read"
           ]
         }
       }
@@ -181050,7 +181262,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Import selected skills from a GitHub repository\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:create`: Create new agents",
+        "description": "Import selected skills from a GitHub repository\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:create`: Create new agent skills",
         "requestBody": {
           "required": true,
           "content": {
@@ -181070,6 +181282,20 @@
                   },
                   "skillPaths": {
                     "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "personal",
+                      "team",
+                      "org"
+                    ]
+                  },
+                  "teamIds": {
                     "type": "array",
                     "items": {
                       "type": "string"
@@ -181108,6 +181334,14 @@
                           "authorId": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "personal",
+                              "team",
+                              "org"
+                            ]
                           },
                           "name": {
                             "type": "string"
@@ -181160,6 +181394,7 @@
                           "id",
                           "organizationId",
                           "authorId",
+                          "scope",
                           "name",
                           "description",
                           "content",
@@ -181423,7 +181658,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agent:create"
+            "skill:create"
           ]
         }
       }

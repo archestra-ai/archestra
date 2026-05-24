@@ -1,4 +1,14 @@
-import { and, count, desc, eq, ilike, isNotNull, like, or } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNotNull,
+  like,
+  or,
+} from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertSkill, InsertSkillFile, Skill, UpdateSkill } from "@/types";
 
@@ -9,6 +19,8 @@ class SkillModel {
     offset?: number;
     search?: string;
     sourceRepo?: string;
+    /** When set, restricts results to these skill IDs (scope filtering). */
+    accessibleSkillIds?: string[];
   }): Promise<Skill[]> {
     let query = db
       .select()
@@ -31,6 +43,7 @@ class SkillModel {
     organizationId: string;
     search?: string;
     sourceRepo?: string;
+    accessibleSkillIds?: string[];
   }): Promise<number> {
     const [result] = await db
       .select({ count: count() })
@@ -45,15 +58,17 @@ class SkillModel {
    * from the `source_ref` provenance column (formatted as
    * `owner/repo@ref:path`).
    */
-  static async findDistinctSourceRepos(
-    organizationId: string,
-  ): Promise<string[]> {
+  static async findDistinctSourceRepos(params: {
+    organizationId: string;
+    /** when set, restricts results to these skill IDs (scope filtering). */
+    accessibleSkillIds?: string[];
+  }): Promise<string[]> {
     const rows = await db
       .selectDistinct({ sourceRef: schema.skillsTable.sourceRef })
       .from(schema.skillsTable)
       .where(
         and(
-          eq(schema.skillsTable.organizationId, organizationId),
+          ...buildOrgFilters(params),
           isNotNull(schema.skillsTable.sourceRef),
         ),
       );
@@ -94,16 +109,27 @@ class SkillModel {
     return result ?? null;
   }
 
-  /** Create a skill and its bundled resource files in one transaction. */
+  /**
+   * Create a skill and its bundled resource files in one transaction.
+   *
+   * Returns `null` when a skill with the same name already exists in the
+   * organization. The insert is atomic (`ON CONFLICT DO NOTHING` on the
+   * org+name unique index), so this is race-free against concurrent creates.
+   */
   static async createWithFiles(params: {
     skill: InsertSkill;
     files: Omit<InsertSkillFile, "skillId">[];
-  }): Promise<Skill> {
+  }): Promise<Skill | null> {
     return await db.transaction(async (tx) => {
       const [skill] = await tx
         .insert(schema.skillsTable)
         .values(params.skill)
+        .onConflictDoNothing({
+          target: [schema.skillsTable.organizationId, schema.skillsTable.name],
+        })
         .returning();
+
+      if (!skill) return null;
 
       if (params.files.length > 0) {
         await tx
@@ -166,11 +192,15 @@ function buildOrgFilters(params: {
   organizationId: string;
   search?: string;
   sourceRepo?: string;
+  accessibleSkillIds?: string[];
 }) {
   const normalizedSearch = params.search?.trim();
   const normalizedSourceRepo = params.sourceRepo?.trim();
   return [
     eq(schema.skillsTable.organizationId, params.organizationId),
+    ...(params.accessibleSkillIds !== undefined
+      ? [inArray(schema.skillsTable.id, params.accessibleSkillIds)]
+      : []),
     ...(normalizedSearch
       ? [
           or(

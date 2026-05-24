@@ -13,9 +13,11 @@ let mockApiKeys: Array<{
   scope: string;
 }> = [];
 let mockAgents: Array<{ id: string; name: string; icon?: string | null }> = [];
-const mockSearchableSelect = vi.fn((props: { value: string }) => (
-  <div>{props.value}</div>
-));
+const mockSearchableSelect = vi.fn(
+  ({ value, placeholder }: { value: string; placeholder?: string }) => (
+    <div>{value || placeholder}</div>
+  ),
+);
 
 vi.mock("next/link", () => ({
   default: ({
@@ -37,17 +39,11 @@ vi.mock("@/components/llm-provider-api-key-form", () => ({
       icon: "/openai.svg",
       name: "OpenAI",
     },
+    openrouter: {
+      icon: "/openrouter.svg",
+      name: "OpenRouter",
+    },
   },
-}));
-
-vi.mock("@/components/llm-model-select", () => ({
-  LlmModelSearchableSelect: ({
-    value,
-    placeholder,
-  }: {
-    value: string;
-    placeholder: string;
-  }) => <div>{value || placeholder}</div>,
 }));
 
 vi.mock("@/components/llm-provider-options", () => ({
@@ -222,6 +218,27 @@ describe("AgentSettingsPage", () => {
 
     expect(screen.getByText("Select API key first...")).toBeInTheDocument();
     expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+  });
+
+  it("hides the free-model filter for non-OpenRouter API keys", () => {
+    renderPage();
+
+    expect(screen.queryByText("Free models only")).not.toBeInTheDocument();
+  });
+
+  it("shows the free-model filter for OpenRouter API keys", () => {
+    mockApiKeys = [
+      {
+        id: "key-1",
+        name: "openrouter - org",
+        provider: "openrouter",
+        scope: "org",
+      },
+    ];
+
+    renderPage();
+
+    expect(screen.getByText("Free models only")).toBeInTheDocument();
   });
 
   it("uses the shared profile filter renderer for org agent rows in the default agent dropdown", () => {

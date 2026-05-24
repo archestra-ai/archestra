@@ -23,8 +23,8 @@ import {
 import { getKeycloakJwt } from "../utils";
 import {
   callMcpTool,
-  initializeMcpSession,
   makeApiRequest,
+  waitForMcpGatewayJwtReady,
 } from "../utils/mcp-gateway";
 import { expect, test } from "./api-fixtures";
 
@@ -44,7 +44,7 @@ test.describe("MCP Gateway - JWKS Credential Resolution Priority", () => {
     uninstallMcpServer,
     waitForAgentTool,
   }) => {
-    test.slow();
+    test.setTimeout(300_000);
 
     // STEP 1: Get a JWT from Keycloak
     const jwt = await getKeycloakJwt();
@@ -114,9 +114,11 @@ test.describe("MCP Gateway - JWKS Credential Resolution Priority", () => {
       expect(agentTool).toBeDefined();
 
       // STEP 7: Initialize MCP session with the external JWT
-      await initializeMcpSession(request, {
+      await waitForMcpGatewayJwtReady({
+        request,
         profileId: pid,
         token: jwt,
+        expectedToolName: echoAuthToolName,
       });
 
       // STEP 8: Call echo_auth tool via MCP Gateway
@@ -165,7 +167,7 @@ test.describe("MCP Gateway - JWKS Credential Resolution Priority", () => {
     uninstallMcpServer,
     waitForAgentTool,
   }) => {
-    test.slow();
+    test.setTimeout(300_000);
 
     // STEP 1: Get a JWT from Keycloak
     const jwt = await getKeycloakJwt();
@@ -235,9 +237,11 @@ test.describe("MCP Gateway - JWKS Credential Resolution Priority", () => {
       expect(agentTool).toBeDefined();
 
       // STEP 7: Initialize MCP session with the external JWT
-      await initializeMcpSession(request, {
+      await waitForMcpGatewayJwtReady({
+        request,
         profileId: pid,
         token: jwt,
+        expectedToolName: echoAuthToolName,
       });
 
       // STEP 8: Call echo_auth tool via MCP Gateway

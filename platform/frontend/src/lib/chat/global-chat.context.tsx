@@ -8,6 +8,7 @@ import {
   makeSwapAgentPokeText,
   SWAP_AGENT_FAILED_POKE_TEXT,
   SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
+  stripDanglingToolCalls,
   TOOL_ARTIFACT_WRITE_SHORT_NAME,
   TOOL_CREATE_AGENT_SHORT_NAME,
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME,
@@ -35,7 +36,10 @@ import {
   useConversation,
   useGenerateConversationTitle,
 } from "@/lib/chat/chat.query";
-import { restoreRenderableAssistantParts } from "@/lib/chat/chat-session-utils";
+import {
+  pruneEmptyTrailingAssistantMessage,
+  restoreRenderableAssistantParts,
+} from "@/lib/chat/chat-session-utils";
 import { getChatExternalAgentId } from "@/lib/chat/chat-utils";
 import {
   extractSwapTargetAgentName,
@@ -421,8 +425,29 @@ function ChatSessionHook({
 
     experimental_throttle: 100,
     id: conversationId,
-    onFinish: ({ message }) => {
+    onFinish: ({ message, isAbort }) => {
       setOptimisticToolCalls([]);
+
+      // When the user stops mid-tool-call, the assistant message is left with a
+      // tool part that never produced output, which the UI renders as a
+      // perpetually "running" tool. Drop those dangling parts so the live view
+      // matches what the backend persists (and a reload would show).
+      if (isAbort) {
+        // The updater form runs against the SDK's live messages, not this
+        // callback's (throttled, possibly stale) closure, so the most recently
+        // streamed text is never rolled back.
+        setMessages((current) => {
+          const stripped = pruneEmptyTrailingAssistantMessage(
+            stripDanglingToolCalls(current),
+          );
+          // restoreRenderableAssistantParts treats the shrink as a streaming
+          // regression and would resurrect the stripped parts on the next
+          // render; sync the ref so that comparison sees no regression.
+          previousMessagesRef.current = stripped;
+          return stripped;
+        });
+      }
+
       queryClient.invalidateQueries({
         queryKey: ["conversation", conversationId],
       });

@@ -70,6 +70,7 @@ export { default as secretsTable } from "./secret";
 export { default as sessionsTable } from "./session";
 export { default as skillsTable } from "./skill";
 export { default as skillFilesTable } from "./skill-file";
+export { default as skillTeamsTable } from "./skill-team";
 export { default as tasksTable } from "./task";
 export { team as teamsTable, teamMember as teamMembersTable } from "./team";
 export { default as teamExternalGroupsTable } from "./team-external-group";

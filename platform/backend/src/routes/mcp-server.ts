@@ -1594,11 +1594,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Catalog item not found for this server");
       }
 
-      // For local servers with new environment values or user-config values: update/create the secret
+      // New env/userConfig values land in this install's secret bag. The
+      // runtime reload below reads `secretId` to pick them up.
       if (
-        mcpServer.serverType === "local" &&
-        ((environmentValues && Object.keys(environmentValues).length > 0) ||
-          (userConfigValues && Object.keys(userConfigValues).length > 0))
+        (environmentValues && Object.keys(environmentValues).length > 0) ||
+        (userConfigValues && Object.keys(userConfigValues).length > 0)
       ) {
         const catalogStaticUserConfigValues = getCatalogStaticUserConfigValues(
           catalogItem.userConfig,

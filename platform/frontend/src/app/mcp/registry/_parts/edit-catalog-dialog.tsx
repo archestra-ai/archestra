@@ -81,7 +81,6 @@ export function EditCatalogContent({
       onDirtyChange={onDirtyChange}
       submitRef={submitRef}
       affectedServerCount={affectedServerCount}
-      presetCount={presets.length}
       footer={({ isDirty, onReset }) => {
         if (keepOpenOnSave && !isDirty) return null;
         const Footer = keepOpenOnSave ? DialogStickyFooter : DialogFooter;

@@ -1,6 +1,6 @@
 import { expect, test } from "./fixtures";
 
-test.describe("MCP Registry (mocked backend)", () => {
+test.describe("MCP Registry", () => {
   test("lists catalog items and opens the edit form when one is clicked", async ({
     mcpRegistryPage,
     page,

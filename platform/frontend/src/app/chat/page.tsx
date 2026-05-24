@@ -1,7 +1,7 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import { E2eTestId } from "@shared";
+import { type ChatSkillMetadata, E2eTestId } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -29,10 +29,7 @@ import {
 import { CreateCatalogDialog } from "@/app/mcp/registry/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp/registry/_parts/custom-server-request-dialog";
 import { AgentDialog } from "@/components/agent-dialog";
-import type {
-  PromptInputMessage,
-  PromptInputProps,
-} from "@/components/ai-elements/prompt-input";
+import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { Suggestion } from "@/components/ai-elements/suggestion";
 import { AppLogo } from "@/components/app-logo";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
@@ -146,7 +143,9 @@ import {
   resolvePreferredModelForProvider,
   shouldResetInitialChatState,
 } from "./chat-initial-state";
-import ArchestraPromptInput from "./prompt-input";
+import ArchestraPromptInput, {
+  type ArchestraPromptInputProps,
+} from "./prompt-input";
 import { resolveSharedConversationForkState } from "./shared-conversation-fork";
 
 const BROWSER_OPEN_KEY = "archestra-chat-browser-open";
@@ -191,6 +190,9 @@ export function ChatPageContent({
   const pendingFilesRef = useRef<
     Array<{ url: string; mediaType: string; filename?: string }>
   >([]);
+  // Skill invoked via slash command on the first message of a new chat,
+  // held until the conversation exists and the message can be sent.
+  const pendingSkillRef = useRef<ChatSkillMetadata | undefined>(undefined);
   const userMessageJustEdited = useRef(false);
   const pendingInitialSendConversationRef = useRef<string | undefined>(
     undefined,
@@ -1189,7 +1191,9 @@ export function ChatPageContent({
     }
 
     const hasPendingInitialMessage =
-      !!pendingPromptRef.current || pendingFilesRef.current.length > 0;
+      !!pendingPromptRef.current ||
+      pendingFilesRef.current.length > 0 ||
+      !!pendingSkillRef.current;
     const shouldSendPendingInitialMessage =
       conversationId &&
       conversation?.id === conversationId &&
@@ -1206,13 +1210,12 @@ export function ChatPageContent({
     pendingInitialSendConversationRef.current = conversationId;
     const promptToSend = pendingPromptRef.current;
     const filesToSend = pendingFilesRef.current;
+    const skillToSend = pendingSkillRef.current;
     pendingPromptRef.current = undefined;
     pendingFilesRef.current = [];
+    pendingSkillRef.current = undefined;
 
-    const parts: Array<
-      | { type: "text"; text: string }
-      | { type: "file"; url: string; mediaType: string; filename?: string }
-    > = [];
+    const parts: ChatMessagePart[] = [];
 
     if (promptToSend) {
       parts.push({ type: "text", text: promptToSend });
@@ -1229,8 +1232,11 @@ export function ChatPageContent({
 
     sendMessage({
       role: "user",
-      parts,
-      metadata: { createdAt: new Date().toISOString() },
+      parts: ensureNonEmptyParts(parts),
+      metadata: {
+        createdAt: new Date().toISOString(),
+        ...(skillToSend ? { skill: skillToSend } : {}),
+      },
     });
   }, [
     conversation,
@@ -1286,7 +1292,11 @@ export function ChatPageContent({
     });
   }, []);
 
-  const handleSubmit: PromptInputProps["onSubmit"] = (message, e) => {
+  const handleSubmit: ArchestraPromptInputProps["onSubmit"] = (
+    message,
+    e,
+    options,
+  ) => {
     e.preventDefault();
     if (isPlaywrightSetupVisible) return;
     if (status === "submitted" || status === "streaming") {
@@ -1304,8 +1314,10 @@ export function ChatPageContent({
 
     const hasText = message.text?.trim();
     const hasFiles = message.files && message.files.length > 0;
+    // a skill slash command may be sent on its own, with no prompt or files
+    const hasSkill = !!options?.skill;
 
-    if (!sendMessage || (!hasText && !hasFiles)) {
+    if (!sendMessage || (!hasText && !hasFiles && !hasSkill)) {
       return;
     }
 
@@ -1338,10 +1350,7 @@ export function ChatPageContent({
     }
 
     // Build message parts: text first, then file attachments
-    const parts: Array<
-      | { type: "text"; text: string }
-      | { type: "file"; url: string; mediaType: string; filename?: string }
-    > = [];
+    const parts: ChatMessagePart[] = [];
 
     if (hasText) {
       parts.push({ type: "text", text: message.text as string });
@@ -1361,8 +1370,11 @@ export function ChatPageContent({
 
     sendMessage?.({
       role: "user",
-      parts,
-      metadata: { createdAt: new Date().toISOString() },
+      parts: ensureNonEmptyParts(parts),
+      metadata: {
+        createdAt: new Date().toISOString(),
+        ...(options?.skill ? { skill: options.skill } : {}),
+      },
     });
   };
 
@@ -1474,22 +1486,23 @@ export function ChatPageContent({
 
   // Core logic for starting a new conversation with a message
   const submitInitialMessage = useCallback(
-    (message: Partial<PromptInputMessage>) => {
+    (message: Partial<PromptInputMessage>, skill?: ChatSkillMetadata) => {
       if (isPlaywrightSetupVisible) return;
       const hasText = message.text?.trim();
       const hasFiles = message.files && message.files.length > 0;
 
       if (
-        (!hasText && !hasFiles) ||
+        (!hasText && !hasFiles && !skill) ||
         !initialAgentId ||
         createConversationMutation.isPending
       ) {
         return;
       }
 
-      // Store the message (text and files) to send after conversation is created
+      // Store the message (text, files, skill) to send after conversation is created
       pendingPromptRef.current = message.text || "";
       pendingFilesRef.current = message.files || [];
+      pendingSkillRef.current = skill;
 
       // Check if there are pending tool actions to apply
       const pendingActions = getPendingActions(initialAgentId);
@@ -1553,13 +1566,14 @@ export function ChatPageContent({
   );
 
   // Form submit handler wraps submitInitialMessage with event.preventDefault
-  const handleInitialSubmit: PromptInputProps["onSubmit"] = useCallback(
-    (message, e) => {
-      e.preventDefault();
-      submitInitialMessage(message);
-    },
-    [submitInitialMessage],
-  );
+  const handleInitialSubmit: ArchestraPromptInputProps["onSubmit"] =
+    useCallback(
+      (message, e, options) => {
+        e.preventDefault();
+        submitInitialMessage(message, options?.skill);
+      },
+      [submitInitialMessage],
+    );
 
   // Auto-send message from URL when conditions are met (deep link support)
   useEffect(() => {
@@ -2370,6 +2384,16 @@ function clearUserPromptQueryParam(params: {
     ? `${params.pathname}?${nextSearchParams.toString()}`
     : params.pathname;
   params.router.replace(nextUrl);
+}
+
+type ChatMessagePart =
+  | { type: "text"; text: string }
+  | { type: "file"; url: string; mediaType: string; filename?: string };
+
+// a bare skill command carries no parts of its own; keep an empty text part
+// so the message is well-formed and the backend can inject the skill
+function ensureNonEmptyParts(parts: ChatMessagePart[]): ChatMessagePart[] {
+  return parts.length === 0 ? [{ type: "text", text: "" }] : parts;
 }
 
 // =========================================================================

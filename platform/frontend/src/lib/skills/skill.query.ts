@@ -24,9 +24,13 @@ type SkillsPaginatedParams = Pick<
 
 // ===== Query hooks =====
 
-export function useSkillsPaginated(params: SkillsPaginatedParams) {
+export function useSkillsPaginated(
+  params: SkillsPaginatedParams,
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: ["skills", "paginated", params],
+    enabled: options?.enabled ?? true,
     placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const { data, error } = await getSkills({ query: params });

@@ -10,7 +10,7 @@ import {
 } from "@shared";
 import { Layers, Sparkles } from "lucide-react";
 import Image from "next/image";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { SearchableMultiSelect } from "@/components/searchable-multi-select";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -273,6 +273,13 @@ export function LlmModelSearchableSelect(props: LlmModelSearchableSelectProps) {
   } = props;
 
   const [freeOnly, setFreeOnly] = useState(false);
+  // drop a stale free-only filter when the caller hides the toggle, so it
+  // does not silently re-apply once the toggle becomes available again.
+  useEffect(() => {
+    if (!freeFilterable && freeOnly) {
+      setFreeOnly(false);
+    }
+  }, [freeFilterable, freeOnly]);
   // Shared ordering: routers, then recommended models, then the rest
   // alphabetically — identical across every model picker, unless the caller
   // imposes its own order (preserveOrder).

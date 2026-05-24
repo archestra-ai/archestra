@@ -589,11 +589,11 @@ Enable the SSRF protection `NetworkPolicy` to prevent MCP server pods from acces
 
 ## Infrastructure as Code
 
+Manage Archestra resources from Terraform or Crossplane. Both use the same API key — mint one under Settings → API Keys (see [API Reference](/docs/platform-api-reference#authentication)).
+
 ### Terraform
 
-For managing Archestra Platform resources, you can use our official Terraform provider to manage Archestra Platform declaratively.
-
-**Provider Configuration**:
+**1. Configure the provider.** Read credentials from the environment (`export ARCHESTRA_API_KEY=...` and `export ARCHESTRA_BASE_URL=...`) or pass them inline.
 
 ```terraform
 terraform {
@@ -604,22 +604,146 @@ terraform {
   }
 }
 
-provider "archestra" {
-  base_url = "http://localhost:9000" # Your Archestra API URL
-  api_key  = "your-api-key-here"     # Can also use ARCHESTRA_API_KEY env var
+provider "archestra" {}
+```
+
+**2. Define a resource.** Register an MCP server in the catalog, then install it.
+
+```terraform
+resource "archestra_mcp_registry_catalog_item" "memory" {
+  name        = "memory"
+  description = "In-memory key-value store"
+
+  local_config = {
+    command   = "npx"
+    arguments = ["-y", "@modelcontextprotocol/server-memory"]
+  }
+}
+
+resource "archestra_mcp_server_installation" "memory" {
+  name       = "memory"
+  catalog_id = archestra_mcp_registry_catalog_item.memory.id
 }
 ```
 
-**Obtaining an API Key**: See the [API Reference](/docs/platform-api-reference#authentication) documentation for instructions on creating an API key.
-
-You can also set these values via environment variables instead of hardcoding them:
+**3. Apply.**
 
 ```bash
-export ARCHESTRA_API_KEY="your-api-key-here"
-export ARCHESTRA_BASE_URL="https://api.archestra.example.com"
+terraform init
+terraform apply
 ```
 
-For complete documentation, examples, and resource reference, visit the [Archestra Terraform Provider Documentation](https://registry.terraform.io/providers/archestra-ai/archestra/latest/docs).
+Full resource reference: [Terraform provider docs](https://registry.terraform.io/providers/archestra-ai/archestra/latest/docs).
+
+### Crossplane
+
+Crossplane v1 or v2 must already be installed in the target cluster.
+
+**1. Install the provider.** Pin the latest tag from [GitHub Releases](https://github.com/archestra-ai/terraform-provider-archestra/releases).
+
+```yaml
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-archestra
+spec:
+  package: xpkg.upbound.io/archestra/provider-archestra:v1.1.4
+```
+
+**2. Configure credentials.**
+
+```bash
+kubectl create secret generic archestra-creds \
+  -n crossplane-system \
+  --from-literal=credentials='{"api_key":"arch_...","base_url":"https://api.archestra.example.com"}'
+```
+
+```yaml
+apiVersion: archestra.crossplane.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: default
+spec:
+  credentials:
+    source: Secret
+    secretRef:
+      namespace: crossplane-system
+      name: archestra-creds
+      key: credentials
+```
+
+**3. Create a resource.** Mirror of the Terraform example above.
+
+```yaml
+apiVersion: mcp.archestra.crossplane.io/v1alpha1
+kind: RegistryCatalogItem
+metadata:
+  name: memory
+spec:
+  forProvider:
+    name: memory
+    description: In-memory key-value store
+    localConfig:
+      command: npx
+      arguments:
+        - "-y"
+        - "@modelcontextprotocol/server-memory"
+  providerConfigRef:
+    name: default
+---
+apiVersion: mcp.archestra.crossplane.io/v1alpha1
+kind: ServerInstallation
+metadata:
+  name: memory
+spec:
+  forProvider:
+    name: memory
+    catalogIdRef:
+      name: memory
+  providerConfigRef:
+    name: default
+```
+
+Full resource reference: [Crossplane provider README](https://github.com/archestra-ai/terraform-provider-archestra/blob/main/crossplane/README.md).
+
+### Crossplane
+
+The same resources are also available as a Crossplane v1/v2 provider for teams that prefer GitOps-style reconciliation on Kubernetes. The xpkg is [upjet](https://github.com/crossplane/upjet)-generated from the Terraform provider's schema and published from the same release tag, so the two stay version-locked.
+
+**Install the provider**:
+
+```yaml
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-archestra
+spec:
+  package: xpkg.upbound.io/archestra/provider-archestra:v1.1.4
+```
+
+**Configure credentials** (the API key is the same one used by the Terraform provider — see [API Reference](/docs/platform-api-reference#authentication)):
+
+```bash
+kubectl create secret generic archestra-creds \
+  -n crossplane-system \
+  --from-literal=credentials='{"api_key":"arch_...","base_url":"https://api.archestra.example.com"}'
+```
+
+```yaml
+apiVersion: archestra.crossplane.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: default
+spec:
+  credentials:
+    source: Secret
+    secretRef:
+      namespace: crossplane-system
+      name: archestra-creds
+      key: credentials
+```
+
+For supported resources, examples, and the contributor flow, see the [Crossplane provider README](https://github.com/archestra-ai/terraform-provider-archestra/blob/main/crossplane/README.md). Resource coverage is partial — current state and the gap vs. the Terraform provider are tracked on the [coverage badge](https://github.com/archestra-ai/terraform-provider-archestra#archestra-provider).
 
 ## Environment Variables
 

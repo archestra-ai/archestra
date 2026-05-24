@@ -6,7 +6,7 @@ Simplify AI usage in your company, providing user-friendly MCP toolbox, observab
 
 [![License](https://img.shields.io/github/license/archestra-ai/archestra)](LICENSE)
 <img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/m/archestra-ai/archestra"/>
-<img alt="Github Last Commit" src="https://img.shields.io/github/last-commit/archestra-ai/archestra"/>
+<img alt="GitHub Last Commit" src="https://img.shields.io/github/last-commit/archestra-ai/archestra"/>
 [![Contributors](https://img.shields.io/github/contributors/archestra-ai/archestra)](https://github.com/archestra-ai/archestra/graphs/contributors)
 
 <p align="center">
@@ -97,7 +97,7 @@ Isolating dangerous tool responses from the main agent to prevent prompt injecti
 <img src="docs/assets/dual-llm.webp" alt="Dual-LLM sub-agent" />
 </div>
 
-## 🚫 Non-probabalistic security to prevent data exfiltration
+## 🚫 Non-probabilistic security to prevent data exfiltration
 
 Models could consume prompt injections via MCP uncontrollably (read your inbox, read your GitHub issues, read your customer's inquiries) and follow them resulting in data exfiltration.
 

@@ -149,9 +149,9 @@ const registry = defineArchestraTools([
       "to load its full instructions.",
     schema: ListSkillsSchema,
     async handler({ context }) {
-      const ctx = requireUserContext(context);
+      const ctx = requireOrgContext(context);
       if (!ctx) {
-        return errorResult("This tool requires an authenticated user session.");
+        return errorResult("This tool requires an organization context.");
       }
 
       return listSkillCatalog(ctx);
@@ -167,9 +167,9 @@ const registry = defineArchestraTools([
       "before attempting the task it covers.",
     schema: ActivateSkillSchema,
     async handler({ args, context }) {
-      const ctx = requireUserContext(context);
+      const ctx = requireOrgContext(context);
       if (!ctx) {
-        return errorResult("This tool requires an authenticated user session.");
+        return errorResult("This tool requires an organization context.");
       }
 
       const skill = await findAccessibleSkill(ctx, args.name);
@@ -201,9 +201,9 @@ const registry = defineArchestraTools([
       "returned as readable text — they are not executed.",
     schema: ReadSkillFileSchema,
     async handler({ args, context }) {
-      const ctx = requireUserContext(context);
+      const ctx = requireOrgContext(context);
       if (!ctx) {
-        return errorResult("This tool requires an authenticated user session.");
+        return errorResult("This tool requires an organization context.");
       }
 
       const skill = await findAccessibleSkill(ctx, args.skill);
@@ -357,26 +357,49 @@ interface UserContext {
   userId: string;
 }
 
-/** A skill MCP tool needs both an org and a user to enforce scope. */
+/**
+ * Context for read-only skill tools. `userId` is absent for org/team-token
+ * sessions, which can see only org-scoped skills.
+ */
+interface SkillReadContext {
+  organizationId: string;
+  userId?: string;
+}
+
+/** A skill write tool needs both an org and a user to enforce scope. */
 function requireUserContext(context: ArchestraContext): UserContext | null {
   if (!context.organizationId || !context.userId) return null;
   return { organizationId: context.organizationId, userId: context.userId };
 }
 
+/** A skill read tool needs an org; a user is optional (org-token sessions). */
+function requireOrgContext(context: ArchestraContext): SkillReadContext | null {
+  if (!context.organizationId) return null;
+  return { organizationId: context.organizationId, userId: context.userId };
+}
+
 /**
- * Look up a skill by name and return it only if the user can access it under
+ * Look up a skill by name and return it only if the caller can access it under
  * the skill's scope. Returns null otherwise — callers surface a generic
  * "no skill named …" so an inaccessible skill's existence is not leaked.
  */
-async function findAccessibleSkill(ctx: UserContext, name: string) {
+async function findAccessibleSkill(ctx: SkillReadContext, name: string) {
   const skill = await SkillModel.findByName(ctx.organizationId, name);
   if (!skill) return null;
 
-  const checker = await getSkillPermissionChecker(ctx);
+  const isSkillAdmin =
+    ctx.userId !== undefined &&
+    (
+      await getSkillPermissionChecker({
+        userId: ctx.userId,
+        organizationId: ctx.organizationId,
+      })
+    ).isAdmin;
   const hasAccess = await SkillTeamModel.userHasSkillAccess({
+    organizationId: ctx.organizationId,
     userId: ctx.userId,
     skill,
-    isSkillAdmin: checker.isAdmin,
+    isSkillAdmin,
   });
   return hasAccess ? skill : null;
 }
@@ -432,11 +455,21 @@ function toSkillFiles(
   }));
 }
 
-async function listSkillCatalog(ctx: UserContext) {
-  const checker = await getSkillPermissionChecker(ctx);
-  const accessibleSkillIds = checker.isAdmin
+async function listSkillCatalog(ctx: SkillReadContext) {
+  const isSkillAdmin =
+    ctx.userId !== undefined &&
+    (
+      await getSkillPermissionChecker({
+        userId: ctx.userId,
+        organizationId: ctx.organizationId,
+      })
+    ).isAdmin;
+  const accessibleSkillIds = isSkillAdmin
     ? undefined
-    : await SkillTeamModel.getUserAccessibleSkillIds(ctx.userId);
+    : await SkillTeamModel.getUserAccessibleSkillIds({
+        organizationId: ctx.organizationId,
+        userId: ctx.userId,
+      });
 
   const skills = await SkillModel.findByOrganization({
     organizationId: ctx.organizationId,

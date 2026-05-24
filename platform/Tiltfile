@@ -8,6 +8,9 @@ load('ext://dotenv', 'dotenv')
 
 is_prod = os.getenv('PROD') == 'true'
 
+if config.tilt_subcommand == 'down':
+  local('pnpm cleanup:dev:caches', command_bat='pnpm cleanup:dev:caches')
+
 # Check if .env exists, if not copy from .env.example
 if not os.path.exists('.env'):
   local('cp .env.example .env', command_bat='copy .env.example .env')

@@ -2,7 +2,7 @@
 title: Costs & Limits
 category: LLM Proxy
 order: 4
-lastUpdated: 2026-05-01
+lastUpdated: 2026-05-14
 ---
 
 Archestra tracks LLM usage costs, enforces usage limits, and records savings from model optimization and tool-result compression. These controls work together: pricing defines cost, logs and statistics show what happened, limits stop or shape usage, and optimization reduces spend before a request reaches a model.
@@ -26,17 +26,29 @@ Archestra stores both raw spend and savings. Savings can come from:
 
 ## Usage Limits
 
-Usage limits are guardrails for LLM spend. Archestra supports token-cost limits scoped to the organization, team, user, agent, LLM proxy, or virtual API key. Each limit can target one or more specific models, or apply to all models. A limit with no model specified acts as a global budget across every model the entity uses.
+Usage limits are guardrails for LLM spend. Archestra supports token-cost limits scoped to the organization, team, user, agent, LLM proxy, or virtual API key. Each limit can target one or more specific models, or apply to all models. A limit with no model specified acts as a global budget across every model the entity uses. Each limit has its own cleanup interval.
 
-Use organization limits for a shared platform-wide budget. Use team limits when different groups need separate spend caps. Use user limits to track and control per-user spend. Use agent limits to control spend for chat agents, and LLM proxy limits to control spend for LLM proxy profiles. Use virtual key limits to control spend per API key.
+| Scope | Use when |
+| --- | --- |
+| Organization | You need a shared platform-wide budget. |
+| Team | Different groups need separate spend caps. |
+| User | Individual users need their own budgets. |
+| Agent or LLM proxy | A specific profile needs a budget. |
+| Virtual API key | Spend should be capped per API key. |
 
 Limits are evaluated from recorded model usage, so pricing configuration affects token-cost limits directly.
 
+## Default User Limits
+
+Admins can configure a default user limit in LLM settings. It applies to every current and future user.
+
+A custom per-user limit overrides the default for that user. Use this when one user needs a different budget.
+
 ## Limit Cleanup
 
-Limit usage is periodically reset according to the configured cleanup interval. This is an operational setting, not a retention policy. It controls how often expired or completed limit windows are cleaned up so counters stay accurate and limit storage does not grow unnecessarily.
+Limit usage is reset according to each limit's cleanup interval. New limits default to weekly cleanup unless an admin chooses a different interval.
 
-Use shorter intervals if you rely on tighter reset windows and want counters refreshed more aggressively.
+Default user limits use their own cleanup interval from LLM settings.
 
 ## Model Pricing
 

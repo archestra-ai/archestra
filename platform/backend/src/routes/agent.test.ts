@@ -5,7 +5,7 @@ import {
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@shared";
 import { vi } from "vitest";
-import { ToolModel } from "@/models";
+import { AgentToolModel, ToolModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -100,6 +100,38 @@ describe("agent routes", () => {
       expect(agent.suggestedPrompts).toHaveLength(1);
       expect(agent.suggestedPrompts[0].summaryTitle).toBe("Quick start");
       expect(agent.suggestedPrompts[0].prompt).toBe("Get me started");
+    });
+
+    test("rejects an agent with a model but no API key", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/agents",
+        payload: {
+          name: `Half Pair Agent ${crypto.randomUUID().slice(0, 8)}`,
+          agentType: "agent",
+          scope: "personal",
+          teams: [],
+          modelId: crypto.randomUUID(),
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    test("rejects an agent with an API key but no model", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/agents",
+        payload: {
+          name: `Half Pair Agent ${crypto.randomUUID().slice(0, 8)}`,
+          agentType: "agent",
+          scope: "personal",
+          teams: [],
+          llmApiKeyId: crypto.randomUUID(),
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
     });
 
     test("should create an agent with tool modes", async () => {
@@ -199,6 +231,71 @@ describe("agent routes", () => {
       const agent = response.json();
       expect(agent).toHaveProperty("id");
       expect(agent.name).toBe(updatedName);
+    });
+
+    test("rejects an update that sets a model without an API key", async ({
+      makeAgent,
+    }) => {
+      const created = await makeAgent({
+        name: `Agent Half Pair Update ${crypto.randomUUID().slice(0, 8)}`,
+        organizationId,
+        scope: "personal",
+        authorId: user.id,
+      });
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/agents/${created.id}`,
+        payload: { modelId: crypto.randomUUID() },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    test("should preserve subagent delegations when updating agent fields", async ({
+      makeAgent,
+    }) => {
+      const sourceAgent = await makeAgent({
+        name: `Source Agent ${crypto.randomUUID().slice(0, 8)}`,
+        organizationId,
+        scope: "personal",
+        authorId: user.id,
+        agentType: "agent",
+      });
+      const targetAgent = await makeAgent({
+        name: `Target Agent ${crypto.randomUUID().slice(0, 8)}`,
+        organizationId,
+        scope: "personal",
+        authorId: user.id,
+        agentType: "agent",
+      });
+      await AgentToolModel.assignDelegation(sourceAgent.id, targetAgent.id);
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/agents/${sourceAgent.id}`,
+        payload: {
+          description: "Updated description",
+          labels: [],
+          teams: [],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const agent = response.json();
+      expect(
+        agent.tools.some(
+          (tool: { delegateToAgentId: string | null }) =>
+            tool.delegateToAgentId === targetAgent.id,
+        ),
+      ).toBe(true);
+
+      const delegations = await AgentToolModel.getDelegationTargets(
+        sourceAgent.id,
+      );
+      expect(delegations.map((delegation) => delegation.id)).toContain(
+        targetAgent.id,
+      );
     });
 
     test("should update systemPrompt and suggestedPrompts", async ({
@@ -1045,6 +1142,28 @@ describe("agent routes", () => {
         method: "POST",
         url: "/api/agents/import",
         payload,
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+  });
+
+  describe("PUT /api/members/default-model", () => {
+    test("allows clearing both the model and key together", async () => {
+      const response = await app.inject({
+        method: "PUT",
+        url: "/api/members/default-model",
+        payload: { modelId: null, chatApiKeyId: null },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    test("rejects a model with no API key", async () => {
+      const response = await app.inject({
+        method: "PUT",
+        url: "/api/members/default-model",
+        payload: { modelId: crypto.randomUUID(), chatApiKeyId: null },
       });
 
       expect(response.statusCode).toBe(400);

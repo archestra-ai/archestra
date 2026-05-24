@@ -21,8 +21,8 @@ on:
 permissions: {}
 
 env:
-  ASSIGNEE_LOGINS: '["joeyorlando","iskhakov","Konstantinov-Innokentii"]'
-  CORE_TEAM_LOGINS: '["joeyorlando","iskhakov","Konstantinov-Innokentii","Matvey-Kuk"]'
+  ASSIGNEE_LOGINS: '["joeyorlando","iskhakov","Konstantinov-Innokentii","divineforest"]'
+  CORE_TEAM_LOGINS: '["joeyorlando","iskhakov","Konstantinov-Innokentii","Matvey-Kuk","divineforest"]'
 
 concurrency:
   group: random-issue-pr-assignee-${{ github.event.issue.number || github.ref }}

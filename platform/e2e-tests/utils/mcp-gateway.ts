@@ -286,15 +286,82 @@ export async function getTeamTokenForProfile(
   return (await valueResponse.json()).value;
 }
 
+type McpTool = {
+  name: string;
+  description?: string;
+  inputSchema?: unknown;
+};
+
+/**
+ * Polls initialize (+ optional tool listing) until the MCP gateway accepts
+ * external-JWT auth for this agent. After `agents.identityProviderId` is set,
+ * the JWKS keys must be fetched from the IdP on the first validation attempt;
+ * in CI that endpoint is a cold WireMock pod and the first verify can fail
+ * for tens of seconds. ~150 s total backoff covers the worst observed cases.
+ */
+export async function waitForMcpGatewayJwtReady(params: {
+  request: APIRequestContext;
+  profileId: string;
+  token: string;
+  expectedToolName?: string;
+  requireToolsListed?: boolean;
+}): Promise<McpTool[]> {
+  const requireToolsListed = params.requireToolsListed !== false;
+  const delaysMs = [
+    0, 500, 1000, 2000, 4000, 8000, 8000, 8000, 10_000, 10_000, 10_000, 10_000,
+    15_000, 15_000, 15_000, 15_000, 15_000, 15_000,
+  ];
+  let lastError: unknown;
+
+  for (const delayMs of delaysMs) {
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+
+    try {
+      await initializeMcpSession(params.request, {
+        profileId: params.profileId,
+        token: params.token,
+      });
+
+      if (!requireToolsListed) {
+        return [];
+      }
+
+      const tools = await listMcpTools(params.request, {
+        profileId: params.profileId,
+        token: params.token,
+      });
+
+      const matches = params.expectedToolName
+        ? tools.some((tool) => tool.name === params.expectedToolName)
+        : tools.length > 0;
+
+      if (matches) {
+        return tools;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw (
+    lastError ??
+    new Error(
+      params.expectedToolName
+        ? `Tool ${params.expectedToolName} was not available via JWT auth`
+        : "MCP Gateway did not become ready for external JWT auth",
+    )
+  );
+}
+
 export async function listMcpTools(
   request: APIRequestContext,
   options: {
     profileId: string;
     token: string;
   },
-): Promise<
-  Array<{ name: string; description?: string; inputSchema?: unknown }>
-> {
+): Promise<McpTool[]> {
   const listToolsResponse = await makeApiRequest({
     request,
     method: "post",
@@ -401,7 +468,16 @@ export async function openManageCredentialsDialog(
       await closeOpenDialogs(page, { timeoutMs: 3_000 });
     }
 
-    await expect(targetCard).toBeVisible({ timeout: 2_000 });
+    if (!(await targetCard.isVisible().catch(() => false))) {
+      // Newly-installed servers may not be in the rendered list yet — re-fetch
+      // and re-apply the search filter rather than waiting on a stale page.
+      await page.reload();
+      await page.waitForLoadState("domcontentloaded");
+      if (await searchInput.isVisible().catch(() => false)) {
+        await searchInput.fill(catalogItemName);
+      }
+    }
+    await expect(targetCard).toBeVisible({ timeout: 5_000 });
 
     const manageButton = targetCard.getByTestId(
       getManageCredentialsButtonTestId(catalogItemName),
@@ -422,7 +498,7 @@ export async function openManageCredentialsDialog(
       await connectionsNavButton.click();
     }
     await expect(connectionsHeading).toBeVisible({ timeout: 2_000 });
-  }).toPass({ timeout: 10_000, intervals: [250, 500, 1000] });
+  }).toPass({ timeout: 30_000, intervals: [500, 1000, 2000, 4000] });
 }
 
 export async function getVisibleCredentials(page: Page): Promise<string[]> {

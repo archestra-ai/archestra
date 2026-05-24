@@ -487,10 +487,11 @@ function parseGeminiError(responseBody: string): ParsedGeminiError | null {
         message:
           typeof errorObj.message === "string"
             ? errorObj.message
-            : typeof parsed?.error === "object"
-              ? ((parsed.error as Record<string, unknown>).message as
-                  | string
-                  | undefined)
+            : typeof parsed?.error === "object" &&
+                parsed.error !== null &&
+                typeof (parsed.error as Record<string, unknown>).message ===
+                  "string"
+              ? ((parsed.error as Record<string, unknown>).message as string)
               : undefined,
         details: Array.isArray(details) ? details : undefined,
         // Extract ErrorInfo for specific error reason mapping
@@ -1327,10 +1328,21 @@ function findDeepestMessage(obj: unknown, depth = 0): string | null {
     if (deeper) return deeper;
   }
 
+  if (
+    typeof record.error_description === "string" &&
+    record.error_description.length > 0
+  ) {
+    return record.error_description;
+  }
+
   // Recurse into error object
   if (typeof record.error === "object" && record.error !== null) {
     const deeper = findDeepestMessage(record.error, depth + 1);
     if (deeper) return deeper;
+  }
+
+  if (typeof record.error === "string" && record.error.length > 0) {
+    return record.error;
   }
 
   // If we have a message that looks like JSON, still return it as fallback
@@ -1363,7 +1375,7 @@ function extractErrorMessage(
   }
 
   // Then try to get message from parsed error
-  if (parsedError?.message) {
+  if (typeof parsedError?.message === "string") {
     return parsedError.message;
   }
 
@@ -1516,6 +1528,11 @@ export function mapProviderError(
 
   // Map to error code using provider-specific mapper
   let errorCode = mapError(statusCode, parsedError);
+  const isTerminatedStream = isStreamTerminatedError(error);
+
+  if (isTerminatedStream) {
+    errorCode = ChatErrorCode.NetworkError;
+  }
 
   // An Archestra-normalized `internal_code` emitted by the adapter's
   // extractInternalCode takes precedence over the per-provider mapper. This
@@ -1537,15 +1554,17 @@ export function mapProviderError(
     (error instanceof Error ? error.name : undefined);
   const rawErrorJson = stringifyRawError(error);
 
-  captureRawProviderErrorInSentry({
-    provider,
-    statusCode,
-    parsedError,
-    errorCode,
-    errorMessage,
-    errorType,
-    rawErrorJson,
-  });
+  if (!isTerminatedStream) {
+    captureRawProviderErrorInSentry({
+      provider,
+      statusCode,
+      parsedError,
+      errorCode,
+      errorMessage,
+      errorType,
+      rawErrorJson,
+    });
+  }
 
   logger.info(
     {
@@ -1563,7 +1582,9 @@ export function mapProviderError(
     errorCode,
     provider,
     statusCode,
-    errorMessage,
+    isTerminatedStream
+      ? "Upstream provider closed the connection unexpectedly"
+      : errorMessage,
     errorType,
     {
       url: APICallError.isInstance(error)
@@ -1576,6 +1597,12 @@ export function mapProviderError(
         : undefined,
     },
   );
+}
+
+function isStreamTerminatedError(error: unknown): boolean {
+  // Node.js/undici stream termination can surface as a bare Error("terminated")
+  // when an upstream streamed response closes before the AI SDK finishes reading it.
+  return error instanceof Error && error.message === "terminated";
 }
 
 /**

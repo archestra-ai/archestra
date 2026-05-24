@@ -321,37 +321,71 @@ class SlackProvider implements ChatOpsProvider {
       throw new Error("SlackProvider not initialized");
     }
 
-    // Slack's native markdown block preserves standard markdown from LLMs
-    // better than converting to mrkdwn first.
-    // biome-ignore lint/suspicious/noExplicitAny: Block Kit types are complex; shape is correct
-    const blocks: any[] = splitSlackMarkdownText(options.text).map((text) => ({
-      type: "markdown",
-      text,
-    }));
+    // Slack expands `markdown` blocks server-side into Block Kit primitives
+    // (one per heading, table, list, code block, paragraph) and rejects any
+    // chat.postMessage whose expanded blocks[] exceeds 50. splitSlackMarkdownText
+    // chunks the text so each chunk's estimated expansion stays under that cap;
+    // we post one message per chunk and thread the follow-ups so the user sees
+    // the full reply. Non-final messages reserve their footer slot for a
+    // "continued in a message below" hint.
+    const chunks = splitSlackMarkdownText(options.text);
 
-    if (options.footer) {
-      blocks.push({
-        type: "context",
-        elements: [
-          {
-            type: "plain_text",
-            text: options.footer,
-            emoji: true,
-          },
-        ],
-      });
+    let firstTs = "";
+    for (let i = 0; i < chunks.length; i++) {
+      const isFinal = i === chunks.length - 1;
+      const chunkText = chunks[i];
+
+      // biome-ignore lint/suspicious/noExplicitAny: Block Kit types are complex; shape is correct
+      const blocks: any[] = [{ type: "markdown", text: chunkText }];
+
+      if (!isFinal) {
+        blocks.push({
+          type: "context",
+          elements: [
+            {
+              type: "plain_text",
+              text: "continued in a message below",
+              emoji: true,
+            },
+          ],
+        });
+      } else if (options.footer) {
+        blocks.push({
+          type: "context",
+          elements: [{ type: "plain_text", text: options.footer, emoji: true }],
+        });
+      }
+
+      const fallbackText =
+        isFinal && options.footer
+          ? `${chunkText}\n\n${options.footer}`
+          : chunkText;
+
+      // Follow-ups thread under the first message when the original wasn't a
+      // thread, so we don't spam the channel with N top-level posts.
+      const threadTs =
+        options.originalMessage.threadId ?? (firstTs || undefined);
+
+      const postArgs = {
+        channel: options.originalMessage.channelId,
+        text: fallbackText,
+        blocks,
+        thread_ts: threadTs,
+      };
+      logger.debug(
+        {
+          postArgs,
+          part: i + 1,
+          of: chunks.length,
+          estimatedRenderedBlocks: estimateRenderedBlocks(chunkText),
+        },
+        "[SlackProvider] chat.postMessage (sendReply)",
+      );
+      const result = await this.client.chat.postMessage(postArgs);
+      if (i === 0) firstTs = (result.ts as string) || "";
     }
 
-    const result = await this.client.chat.postMessage({
-      channel: options.originalMessage.channelId,
-      text: options.footer
-        ? `${options.text}\n\n${options.footer}`
-        : options.text,
-      blocks,
-      thread_ts: options.originalMessage.threadId,
-    });
-
-    return (result.ts as string) || "";
+    return firstTs;
   }
 
   async addApprovalRequestForm(
@@ -386,19 +420,19 @@ class SlackProvider implements ChatOpsProvider {
       };
     };
 
-    await this.client.chat.postMessage({
+    const postArgs = {
       channel: options.channelId,
       text: "",
       blocks: [
         {
-          type: "section",
+          type: "section" as const,
           text: {
-            type: "mrkdwn",
+            type: "mrkdwn" as const,
             text: `\`${options.toolName}\``,
           },
         },
         {
-          type: "actions",
+          type: "actions" as const,
           elements: [
             generateButton("Approve", "primary", true, "approve"),
             generateButton("Decline", "danger", false, "decline"),
@@ -406,7 +440,12 @@ class SlackProvider implements ChatOpsProvider {
         },
       ],
       thread_ts: options.threadId,
-    });
+    };
+    logger.debug(
+      { postArgs },
+      "[SlackProvider] chat.postMessage (addApprovalRequestForm)",
+    );
+    await this.client.chat.postMessage(postArgs);
   }
 
   async updateApprovalRequest(
@@ -508,7 +547,7 @@ class SlackProvider implements ChatOpsProvider {
     if (isDM) {
       // In DMs, thread the reply to the user's message so it appears in Chat tab.
       // Top-level postMessage without thread_ts goes to History.
-      await this.client.chat.postMessage({
+      const postArgs = {
         channel: params.message.channelId,
         text: fallbackText,
         // biome-ignore lint/suspicious/noExplicitAny: Block Kit types are complex; shape is correct
@@ -516,7 +555,12 @@ class SlackProvider implements ChatOpsProvider {
         ...(params.message.threadId
           ? { thread_ts: params.message.threadId }
           : {}),
-      });
+      };
+      logger.debug(
+        { postArgs },
+        "[SlackProvider] chat.postMessage (changeAgent DM)",
+      );
+      await this.client.chat.postMessage(postArgs);
     } else {
       await this.client.chat.postEphemeral({
         channel: params.message.channelId,
@@ -1041,12 +1085,17 @@ class SlackProvider implements ChatOpsProvider {
       });
     }
 
-    await this.client.chat.postMessage({
+    const postArgs = {
       channel: dmChannelId,
       text: params.text,
       blocks,
       ...(params.threadId ? { thread_ts: params.threadId } : {}),
-    });
+    };
+    logger.debug(
+      { postArgs },
+      "[SlackProvider] chat.postMessage (sendDmNotification)",
+    );
+    await this.client.chat.postMessage(postArgs);
   }
 
   async setTypingStatus(channelId: string, threadTs: string): Promise<void> {
@@ -1122,11 +1171,16 @@ class SlackProvider implements ChatOpsProvider {
     ].join("\n");
 
     try {
-      await this.client.chat.postMessage({
+      const postArgs = {
         channel: message.channelId,
         text,
         thread_ts: message.threadId,
-      });
+      };
+      logger.debug(
+        { postArgs },
+        "[SlackProvider] chat.postMessage (notifyMissingScopes)",
+      );
+      await this.client.chat.postMessage(postArgs);
 
       // Throttle: don't send again for 30 days
       cacheManager.set(cacheKey, true, TimeInMs.Day * 30).catch(() => {});
@@ -1150,27 +1204,75 @@ class SlackProvider implements ChatOpsProvider {
     body: unknown,
     ack: (response?: Record<string, unknown>) => Promise<void>,
   ): Promise<void> {
+    const cmd = body as {
+      command?: string;
+      text?: string;
+      user_id?: string;
+      user_name?: string;
+      channel_id?: string;
+      channel_name?: string;
+      team_id?: string;
+      response_url?: string;
+      trigger_id?: string;
+    };
+
+    // Deliver the response body to the user. Prefer ack() over the socket;
+    // if the socket is mid-rotation the ack rejects, so fall back to
+    // response_url (HTTP POST) which Slack guarantees is valid for ~30 min.
+    const deliver = async (response: Record<string, unknown>) => {
+      try {
+        await ack(response);
+        return;
+      } catch (error) {
+        logger.warn(
+          { error: errorMessage(error), command: cmd.command },
+          "[SlackProvider] Slash command ack failed; falling back to response_url",
+        );
+      }
+      if (!cmd.response_url) {
+        logger.error(
+          { command: cmd.command },
+          "[SlackProvider] No response_url for slash command; user will see no reply",
+        );
+        return;
+      }
+      try {
+        await fetch(cmd.response_url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(response),
+        });
+      } catch (error) {
+        logger.error(
+          { error: errorMessage(error), command: cmd.command },
+          "[SlackProvider] Slash command response_url fallback failed",
+        );
+      }
+    };
+
     try {
-      const cmd = body as {
-        command?: string;
-        text?: string;
-        user_id?: string;
-        user_name?: string;
-        channel_id?: string;
-        channel_name?: string;
-        team_id?: string;
-        response_url?: string;
-        trigger_id?: string;
-      };
       const response = await this.handleSlashCommand(cmd);
-      // Acknowledge with the response body — SocketModeClient sends it back via the socket
-      await ack(response ? (response as Record<string, unknown>) : undefined);
+      if (response) {
+        await deliver(response as Record<string, unknown>);
+      } else {
+        // No body to deliver — just close Slack's spinner. If this ack
+        // fails the user briefly sees a timeout; the side effect (e.g.
+        // modal opened via trigger_id) already happened.
+        try {
+          await ack();
+        } catch (error) {
+          logger.warn(
+            { error: errorMessage(error), command: cmd.command },
+            "[SlackProvider] Empty slash command ack failed",
+          );
+        }
+      }
     } catch (error) {
       logger.error(
-        { error: errorMessage(error) },
+        { error: errorMessage(error), command: cmd.command },
         "[SlackProvider] Slash command failed",
       );
-      await ack({
+      await deliver({
         response_type: "ephemeral",
         text: "Something went wrong. Please try again.",
       });
@@ -1210,9 +1312,25 @@ class SlackProvider implements ChatOpsProvider {
         body: unknown;
         retry_num?: number;
       }) => {
+        // Slack rotates Socket Mode WebSockets on its own schedule. If the
+        // socket goes non-ready between event receipt and our ack, the ack
+        // promise rejects. Since this listener is async and EventEmitter does
+        // not await it, an unguarded rejection becomes an unhandledRejection
+        // and Node kills the process. Slack redelivers unacked events, so
+        // swallowing the failure is safe.
+        const safeAck = async (response?: Record<string, unknown>) => {
+          try {
+            await ack(response);
+          } catch (error) {
+            logger.warn(
+              { error: errorMessage(error), type },
+              "[SlackProvider] Failed to ack Socket Mode event (socket likely rotated); Slack will redeliver",
+            );
+          }
+        };
         switch (type) {
           case "events_api": {
-            await ack();
+            await safeAck();
             const eventBody = body as { event?: { ts?: string } };
             const eventTs = eventBody?.event?.ts;
             if (eventTs && this.socketDedup.mark(eventTs)) {
@@ -1229,7 +1347,7 @@ class SlackProvider implements ChatOpsProvider {
             break;
           }
           case "interactive":
-            await ack();
+            await safeAck();
             this.handleInteractivePayload(body).catch((error) => {
               logger.error(
                 { error: errorMessage(error) },
@@ -1238,7 +1356,9 @@ class SlackProvider implements ChatOpsProvider {
             });
             break;
           case "slash_commands":
-            // ack() for slash commands can include a response body
+            // Pass the raw ack (not safeAck): handleSlashCommandSocket has its
+            // own delivery helper that falls back to response_url when the ack
+            // rejects, and it already returns a promise that is .catch()'d here.
             this.handleSlashCommandSocket(body, ack).catch((error) => {
               logger.error(
                 { error: errorMessage(error) },
@@ -1247,7 +1367,7 @@ class SlackProvider implements ChatOpsProvider {
             });
             break;
           default:
-            await ack();
+            await safeAck();
             break;
         }
       },
@@ -1559,34 +1679,194 @@ function decodeSlackEntities(text: string): string {
     .replace(/&amp;/g, "&");
 }
 
-function splitSlackMarkdownText(text: string): string[] {
-  const MARKDOWN_BLOCK_LIMIT = 12_000;
+// Slack's `markdown` block has a 12,000-char limit per block.
+const MARKDOWN_BLOCK_CHAR_LIMIT = 12_000;
 
-  if (text.length <= MARKDOWN_BLOCK_LIMIT) {
+// Slack rejects chat.postMessage with more than 50 expanded blocks. Each
+// sendReply message reserves 1 slot for a context footer (continuation hint
+// or agent footer), so the markdown block's expansion is bounded to 45 — 4
+// under the 49 ceiling for safety against estimator drift.
+const MAX_ESTIMATED_RENDERED_BLOCKS = 45;
+
+/**
+ * Estimate how many Block Kit blocks Slack will produce when rendering this
+ * text inside a `markdown` block. Slack expands markdown server-side: each
+ * heading, table, list, code block, and paragraph becomes its own block.
+ *
+ * Returns a conservative upper bound (≥ 1) used by splitSlackMarkdownText to
+ * keep each message under Slack's 50-block-per-message cap.
+ */
+function estimateRenderedBlocks(text: string): number {
+  const lines = text.split("\n");
+  let count = 0;
+  let inCodeBlock = false;
+  let inTable = false;
+  let inList = false;
+  let pendingParagraph = false;
+
+  const flushParagraph = () => {
+    if (pendingParagraph) {
+      count += 1;
+      pendingParagraph = false;
+    }
+  };
+  const flushTable = () => {
+    if (inTable) {
+      count += 1;
+      inTable = false;
+    }
+  };
+  const flushList = () => {
+    if (inList) {
+      count += 1;
+      inList = false;
+    }
+  };
+
+  for (const line of lines) {
+    if (line.trim().startsWith("```")) {
+      if (inCodeBlock) {
+        count += 1;
+        inCodeBlock = false;
+      } else {
+        flushParagraph();
+        flushTable();
+        flushList();
+        inCodeBlock = true;
+      }
+      continue;
+    }
+    if (inCodeBlock) continue;
+
+    const trimmed = line.trim();
+
+    if (trimmed === "") {
+      flushParagraph();
+      flushTable();
+      flushList();
+      continue;
+    }
+
+    if (/^#{1,6}\s/.test(trimmed)) {
+      flushParagraph();
+      flushTable();
+      flushList();
+      count += 1;
+      continue;
+    }
+
+    if (trimmed.startsWith("|")) {
+      if (!inTable) {
+        flushParagraph();
+        flushList();
+        inTable = true;
+      }
+      continue;
+    }
+    if (inTable) flushTable();
+
+    if (/^[-*+]\s/.test(trimmed) || /^\d+\.\s/.test(trimmed)) {
+      if (!inList) {
+        flushParagraph();
+        inList = true;
+      }
+      continue;
+    }
+    if (inList) flushList();
+
+    pendingParagraph = true;
+  }
+
+  flushParagraph();
+  flushTable();
+  flushList();
+  if (inCodeBlock) count += 1;
+
+  return Math.max(count, 1);
+}
+
+/**
+ * Split text into chunks where each chunk fits in one Slack message:
+ * - text length ≤ MARKDOWN_BLOCK_CHAR_LIMIT (the markdown block's char cap)
+ * - estimated rendered blocks ≤ MAX_ESTIMATED_RENDERED_BLOCKS (under Slack's
+ *   50-block-per-message cap, after reserving 1 slot for a footer)
+ *
+ * Splits at paragraph (`\n\n`) boundaries to preserve markdown structure. A
+ * single paragraph that exceeds the char limit falls back to a line-based hard
+ * split; oversized-by-blocks paragraphs are exceedingly rare in LLM output
+ * (would require dozens of headings with no blank lines between them) and are
+ * also passed through hard-split as a best effort.
+ */
+function splitSlackMarkdownText(text: string): string[] {
+  if (
+    text.length <= MARKDOWN_BLOCK_CHAR_LIMIT &&
+    estimateRenderedBlocks(text) <= MAX_ESTIMATED_RENDERED_BLOCKS
+  ) {
     return [text];
   }
 
+  const paragraphs = text.split(/\n\n+/);
+  const chunks: string[] = [];
+  let buffer: string[] = [];
+  let bufferChars = 0;
+  let bufferBlocks = 0;
+
+  const flushBuffer = () => {
+    if (buffer.length > 0) {
+      chunks.push(buffer.join("\n\n"));
+      buffer = [];
+      bufferChars = 0;
+      bufferBlocks = 0;
+    }
+  };
+
+  for (const para of paragraphs) {
+    if (para.length === 0) continue;
+    const paraBlocks = estimateRenderedBlocks(para);
+
+    if (
+      para.length > MARKDOWN_BLOCK_CHAR_LIMIT ||
+      paraBlocks > MAX_ESTIMATED_RENDERED_BLOCKS
+    ) {
+      flushBuffer();
+      for (const sub of hardSplitOversizedParagraph(para)) {
+        chunks.push(sub);
+      }
+      continue;
+    }
+
+    const sep = buffer.length > 0 ? 2 : 0;
+    const wouldExceedChars =
+      bufferChars + sep + para.length > MARKDOWN_BLOCK_CHAR_LIMIT;
+    const wouldExceedBlocks =
+      bufferBlocks + paraBlocks > MAX_ESTIMATED_RENDERED_BLOCKS;
+
+    if (buffer.length > 0 && (wouldExceedChars || wouldExceedBlocks)) {
+      flushBuffer();
+    }
+
+    buffer.push(para);
+    bufferChars += (buffer.length > 1 ? 2 : 0) + para.length;
+    bufferBlocks += paraBlocks;
+  }
+
+  flushBuffer();
+  return chunks.length > 0 ? chunks : [text];
+}
+
+function hardSplitOversizedParagraph(text: string): string[] {
   const chunks: string[] = [];
   let remaining = text;
-
   while (remaining.length > 0) {
-    if (remaining.length <= MARKDOWN_BLOCK_LIMIT) {
+    if (remaining.length <= MARKDOWN_BLOCK_CHAR_LIMIT) {
       chunks.push(remaining);
       break;
     }
-
-    let splitAt = remaining.lastIndexOf("\n\n", MARKDOWN_BLOCK_LIMIT);
-    if (splitAt <= 0) {
-      splitAt = remaining.lastIndexOf("\n", MARKDOWN_BLOCK_LIMIT);
-    }
-    if (splitAt <= 0) {
-      splitAt = MARKDOWN_BLOCK_LIMIT;
-    }
-
+    let splitAt = remaining.lastIndexOf("\n", MARKDOWN_BLOCK_CHAR_LIMIT);
+    if (splitAt <= 0) splitAt = MARKDOWN_BLOCK_CHAR_LIMIT;
     chunks.push(remaining.slice(0, splitAt));
     remaining = remaining.slice(splitAt).trim();
   }
-
   return chunks;
 }
 

@@ -14,12 +14,12 @@ Why probabilistic guardrails are not secure enough to stop prompt injections. Wi
 
 Microsoft Foundry (Azure AI Foundry) is Microsoft's enterprise AI development platform that provides a suite of tools within Azure for creating and managing AI Agents and Workflows using including hosted models, pre-built connectors, prompt builder and LLM guardrails.
 
-Past few months I've been researching a fundamental problem affecting all AI agents called "lethal trifecta". This vulnerability happens when tool result contains indirect prompt injection that causes sensitive data leakage and task drift. Numerous agents were compromised [this way](https://github.com/archestra-ai/archestra?tab=readme-ov-file#-non-probabalistic-security-to-prevent-data-exfiltration). The lethal trifecta occurs when the agent simultaneously has:
+Past few months I've been researching a fundamental problem affecting all AI agents called "lethal trifecta". This vulnerability happens when tool result contains indirect prompt injection that causes sensitive data leakage and task drift. Numerous agents were compromised [this way](https://github.com/archestra-ai/archestra?tab=readme-ov-file#-non-probabilistic-security-to-prevent-data-exfiltration). The lethal trifecta occurs when the agent simultaneously has:
 * Access to untrusted context
 * Ability to externally communicate
 * Access to private data
 
-In all the examples, authors of the agents couldn't rely on probablistic LLM guradrails, so they ended up disabling certain tools when handling untrusted context (domains in one of the cases). This is a partial solution to defend from one attack, not a general defence.
+In all the examples, authors of the agents couldn't rely on probabilistic LLM guardrails, so they ended up disabling certain tools when handling untrusted context (domains in one of the cases). This is a partial solution to defend from one attack, not a general defence.
 
 I decided to build an agent in Foundry and see how Azure Guardrails safe enough to protect against these attacks.
 
@@ -34,7 +34,7 @@ I built a simple Foundry agent to help manage GitHub issues. The setup:
 - Assigned Foundry's guardrails enabled: `Risks with controls:  Jailbreak (1), Indirect prompt injections (1)...`
 ![Screenshot: Foundry agent configuration with GitHub MCP tool and guardrails](/docs/platform-foundry-01.webp)
 
-Similarly I could build an agent that is triggered by an incomming email, reads docs and sends email back. This is a typical enterprise use case when agent processes incoming potentially untrusted information and takes action based on their content. 
+Similarly I could build an agent that is triggered by an incoming email, reads docs and sends email back. This is a typical enterprise use case when agent processes incoming potentially untrusted information and takes action based on their content.
 
 
 
@@ -84,7 +84,7 @@ Here's how it works:
 
 **Step 1: Route Agent through Archestra**
 
-Archestra sits as a proxy layer between your agent and the MCP servers/LLM. Open your AI Aplication code and change the destination to Archestra
+Archestra sits as a proxy layer between your agent and the MCP servers/LLM. Open your AI Application code and change the destination to Archestra
 
 ![Screenshot: Archestra proxy configuration](/docs/platform-foundry-04.webp)
 

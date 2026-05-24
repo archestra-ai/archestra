@@ -242,10 +242,10 @@ Chart-managed diagnostics PVCs are validated conservatively. If more than one di
 - `archestra.nodeSelector` - Node selector for scheduling pods on specific nodes (e.g., specific node pools or instance types). These values are also inherited by MCP server pods as defaults.
 - `archestra.tolerations` - Tolerations for scheduling pods on nodes with specific taints (e.g., dedicated nodes, GPU nodes, spot instances). These values are also inherited by MCP server pods as defaults. See [Kubernetes docs](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
 - `archestra.deploymentStrategy` - Deployment strategy configuration (default: RollingUpdate with `maxUnavailable: 25%` and `maxSurge: 25%`)
-- `archestra.resources` - CPU and memory requests/limits for the container (default: 2Gi request, 3Gi limit for memory)
+- `archestra.resources` - CPU and memory requests/limits for the container (default: 2 vCPU request, 2Gi memory request, 3Gi memory limit)
 - `archestra.horizontalPodAutoscaler` - Optional HPA for the main `archestra-platform` Deployment. When enabled, the chart defaults to `minReplicas: 2`, `maxReplicas: 10`, a memory utilization target of 70%, immediate scale-up, and a 5-minute scale-down stabilization window.
 - `archestra.worker.replicaCount` - Manual replica count for the separate worker Deployment
-- `archestra.worker.resources` - Resource requests/limits for worker pods (default: 1Gi request, 2Gi limit for memory)
+- `archestra.worker.resources` - Resource requests/limits for worker pods (default: 2 vCPU request, 1Gi memory request, 2Gi memory limit)
 - `archestra.worker.deploymentStrategy` - Rolling update strategy for worker pods (default: `maxUnavailable: 25%`, `maxSurge: 25%`)
 
 #### HorizontalPodAutoscaler
@@ -256,11 +256,11 @@ Default behavior when enabled:
 
 - Maintains at least 2 web pods
 - Scales up to 10 web pods
-- Uses memory utilization because the chart defines memory requests by default
+- Uses memory utilization as the default scaling signal
 - Scales up aggressively (up to 100% or 2 pods per minute)
 - Scales down conservatively with a 5-minute stabilization window
 
-If your cluster has reliable CPU requests for the platform pods and you prefer request-rate-driven scaling, override `archestra.horizontalPodAutoscaler.metrics` with a CPU target instead.
+If you prefer CPU-driven scaling, override `archestra.horizontalPodAutoscaler.metrics` with a CPU target instead.
 
 #### Existing Scaling Controls
 
@@ -431,7 +431,7 @@ The Helm chart deploys a separate worker `Deployment` for processing background 
 
 - `archestra.worker.enabled` - Deploy a separate worker Deployment (default: true)
 - `archestra.worker.replicaCount` - Number of worker pod replicas (default: 1)
-- `archestra.worker.resources` - Resource requests/limits for worker pods (default: 1Gi request, 2Gi limit)
+- `archestra.worker.resources` - Resource requests/limits for worker pods (default: 2 vCPU request, 1Gi memory request, 2Gi memory limit)
 - `archestra.worker.deploymentStrategy` - Deployment strategy (default: RollingUpdate with `maxUnavailable: 25%` and `maxSurge: 25%`)
 - `archestra.worker.podAnnotations` - Pod annotations (inherits from `archestra.podAnnotations` if not set)
 - `archestra.worker.nodeSelector` - Node selector (inherits from `archestra.nodeSelector` if not set)
@@ -589,11 +589,11 @@ Enable the SSRF protection `NetworkPolicy` to prevent MCP server pods from acces
 
 ## Infrastructure as Code
 
+Manage Archestra resources from Terraform or Crossplane. Both use the same API key — mint one under Settings → API Keys (see [API Reference](/docs/platform-api-reference#authentication)).
+
 ### Terraform
 
-For managing Archestra Platform resources, you can use our official Terraform provider to manage Archestra Platform declaratively.
-
-**Provider Configuration**:
+**1. Configure the provider.** Read credentials from the environment (`export ARCHESTRA_API_KEY=...` and `export ARCHESTRA_BASE_URL=...`) or pass them inline.
 
 ```terraform
 terraform {
@@ -604,22 +604,146 @@ terraform {
   }
 }
 
-provider "archestra" {
-  base_url = "http://localhost:9000" # Your Archestra API URL
-  api_key  = "your-api-key-here"     # Can also use ARCHESTRA_API_KEY env var
+provider "archestra" {}
+```
+
+**2. Define a resource.** Register an MCP server in the catalog, then install it.
+
+```terraform
+resource "archestra_mcp_registry_catalog_item" "memory" {
+  name        = "memory"
+  description = "In-memory key-value store"
+
+  local_config = {
+    command   = "npx"
+    arguments = ["-y", "@modelcontextprotocol/server-memory"]
+  }
+}
+
+resource "archestra_mcp_server_installation" "memory" {
+  name       = "memory"
+  catalog_id = archestra_mcp_registry_catalog_item.memory.id
 }
 ```
 
-**Obtaining an API Key**: See the [API Reference](/docs/platform-api-reference#authentication) documentation for instructions on creating an API key.
-
-You can also set these values via environment variables instead of hardcoding them:
+**3. Apply.**
 
 ```bash
-export ARCHESTRA_API_KEY="your-api-key-here"
-export ARCHESTRA_BASE_URL="https://api.archestra.example.com"
+terraform init
+terraform apply
 ```
 
-For complete documentation, examples, and resource reference, visit the [Archestra Terraform Provider Documentation](https://registry.terraform.io/providers/archestra-ai/archestra/latest/docs).
+Full resource reference: [Terraform provider docs](https://registry.terraform.io/providers/archestra-ai/archestra/latest/docs).
+
+### Crossplane
+
+Crossplane v1 or v2 must already be installed in the target cluster.
+
+**1. Install the provider.** Pin the latest tag from [GitHub Releases](https://github.com/archestra-ai/terraform-provider-archestra/releases).
+
+```yaml
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-archestra
+spec:
+  package: xpkg.upbound.io/archestra/provider-archestra:v1.1.4
+```
+
+**2. Configure credentials.**
+
+```bash
+kubectl create secret generic archestra-creds \
+  -n crossplane-system \
+  --from-literal=credentials='{"api_key":"arch_...","base_url":"https://api.archestra.example.com"}'
+```
+
+```yaml
+apiVersion: archestra.crossplane.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: default
+spec:
+  credentials:
+    source: Secret
+    secretRef:
+      namespace: crossplane-system
+      name: archestra-creds
+      key: credentials
+```
+
+**3. Create a resource.** Mirror of the Terraform example above.
+
+```yaml
+apiVersion: mcp.archestra.crossplane.io/v1alpha1
+kind: RegistryCatalogItem
+metadata:
+  name: memory
+spec:
+  forProvider:
+    name: memory
+    description: In-memory key-value store
+    localConfig:
+      command: npx
+      arguments:
+        - "-y"
+        - "@modelcontextprotocol/server-memory"
+  providerConfigRef:
+    name: default
+---
+apiVersion: mcp.archestra.crossplane.io/v1alpha1
+kind: ServerInstallation
+metadata:
+  name: memory
+spec:
+  forProvider:
+    name: memory
+    catalogIdRef:
+      name: memory
+  providerConfigRef:
+    name: default
+```
+
+Full resource reference: [Crossplane provider README](https://github.com/archestra-ai/terraform-provider-archestra/blob/main/crossplane/README.md).
+
+### Crossplane
+
+The same resources are also available as a Crossplane v1/v2 provider for teams that prefer GitOps-style reconciliation on Kubernetes. The xpkg is [upjet](https://github.com/crossplane/upjet)-generated from the Terraform provider's schema and published from the same release tag, so the two stay version-locked.
+
+**Install the provider**:
+
+```yaml
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-archestra
+spec:
+  package: xpkg.upbound.io/archestra/provider-archestra:v1.1.4
+```
+
+**Configure credentials** (the API key is the same one used by the Terraform provider — see [API Reference](/docs/platform-api-reference#authentication)):
+
+```bash
+kubectl create secret generic archestra-creds \
+  -n crossplane-system \
+  --from-literal=credentials='{"api_key":"arch_...","base_url":"https://api.archestra.example.com"}'
+```
+
+```yaml
+apiVersion: archestra.crossplane.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: default
+spec:
+  credentials:
+    source: Secret
+    secretRef:
+      namespace: crossplane-system
+      name: archestra-creds
+      key: credentials
+```
+
+For supported resources, examples, and the contributor flow, see the [Crossplane provider README](https://github.com/archestra-ai/terraform-provider-archestra/blob/main/crossplane/README.md). Resource coverage is partial — current state and the gap vs. the Terraform provider are tracked on the [coverage badge](https://github.com/archestra-ai/terraform-provider-archestra#archestra-provider).
 
 ## Environment Variables
 
@@ -631,6 +755,11 @@ The following environment variables can be used to configure Archestra Platform.
   - Format: `postgresql://user:password@host:5432/database`
   - Default: Internal PostgreSQL (Docker) or managed instance (Helm)
   - Required for production deployments with external database
+
+- **`ARCHESTRA_DATABASE_POOL_MAX`** - Maximum number of PostgreSQL connections per backend pod.
+  - Default: `50`
+  - Range: `1`–`500`
+  - Tune this when you have many concurrent users or long-running chat streams. The backend opens at most `ARCHESTRA_DATABASE_POOL_MAX` connections per pod, so coordinate with PostgreSQL `max_connections` to ensure `pods × ARCHESTRA_DATABASE_POOL_MAX < max_connections` with headroom for admin sessions. On managed Postgres (e.g. AWS RDS, Cloud SQL) the server limit is typically several thousand and rarely the binding constraint.
 
 - **`ARCHESTRA_API_BASE_URL`** - Archestra API Base URL(s) for connecting to Archestra's LLM Proxy, MCP Gateway and A2A Gateway.
 
@@ -666,6 +795,10 @@ The following environment variables can be used to configure Archestra Platform.
   - Values: `permissive` or `restrictive`
   - `permissive`: Tools are allowed, unless a specific policy is set for them.
   - `restrictive`: Tools are forbidden, unless a specific policy is set for them.
+
+- **`ARCHESTRA_AGENTS_SKILLS_ENABLED`** - Enables Agent Skills — reusable `SKILL.md` instruction sets that agents load on demand. When off, the Skills page and its sidebar link are hidden and the feature cannot be enabled for an organization.
+  - Default: `false`
+  - Values: `true`, `false`
 
 - **`ARCHESTRA_ANALYTICS`** - Controls PostHog analytics for product improvements.
   - Default: `enabled`
@@ -721,17 +854,33 @@ The following environment variables can be used to configure Archestra Platform.
 
 - **`ARCHESTRA_SECRETS_MANAGER`** - Secrets storage backend for managing sensitive data (API keys, tokens, etc.)
   - Default: `DB` (database storage)
-  - Options: `DB` or `Vault`
-  - Note: When set to `Vault`, requires `HASHICORP_VAULT_ADDR` and `HASHICORP_VAULT_TOKEN` to be configured
+  - Options: `DB`, `VAULT`, or `READONLY_VAULT`
+  - Note: When set to `VAULT` or `READONLY_VAULT`, requires `ARCHESTRA_HASHICORP_VAULT_ADDR` and the credentials for the selected auth method. See [Secrets Management](/docs/platform-secrets-management) for the full configuration reference (KV version, secret path prefix, auth methods).
 
 - **`ARCHESTRA_HASHICORP_VAULT_ADDR`** - HashiCorp Vault server address
-  - Required when: `ARCHESTRA_SECRETS_MANAGER=Vault`
+  - Required when: `ARCHESTRA_SECRETS_MANAGER=VAULT` or `READONLY_VAULT`
   - Example: `http://localhost:8200`
   - Note: System falls back to database storage if Vault is configured but credentials are missing
 
-- **`ARCHESTRA_HASHICORP_VAULT_TOKEN`** - HashiCorp Vault authentication token
-  - Required when: `ARCHESTRA_SECRETS_MANAGER=Vault`
-  - Note: System falls back to database storage if Vault is configured but credentials are missing
+- **`ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD`** - Authentication method used to connect to Vault.
+  - Default: `TOKEN`
+  - Options: `TOKEN`, `K8S`, `AWS`
+  - See [Vault Authentication](/docs/platform-secrets-management#vault-authentication) for the per-method env vars (`ARCHESTRA_HASHICORP_VAULT_TOKEN`, `..._K8S_ROLE`, `..._AWS_ROLE`, etc.).
+
+- **`ARCHESTRA_HASHICORP_VAULT_KV_VERSION`** - Version of Vault's KV secrets engine.
+  - Default: `2`
+  - Options: `1` or `2`
+  - Applies to both `VAULT` and `READONLY_VAULT` modes. Changes the default secret path prefix and the API paths used for read/write/list/delete.
+
+- **`ARCHESTRA_HASHICORP_VAULT_SECRET_PATH`** - Path prefix for Archestra-managed secrets in Vault.
+  - Default: `secret/data/archestra` (KV v2) or `secret/archestra` (KV v1)
+  - Use it to store secrets under a custom path.
+  - KV v2 example: `kv/data/platform/archestra` (resolves to `kv/data/platform/archestra/{secretName}`)
+  - KV v1 example: `kv/platform/archestra` (resolves to `kv/platform/archestra/{secretName}`)
+
+- **`ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH`** - Override path prefix for KV v2 metadata operations (list, delete).
+  - Default: derived from `ARCHESTRA_HASHICORP_VAULT_SECRET_PATH` by replacing `/data/` with `/metadata/`.
+  - Only needed when your prefix doesn't follow the `/data/` ↔ `/metadata/` convention.
 
 - **`ARCHESTRA_DATABASE_URL_VAULT_REF`** - Read the database connection string from Vault instead of environment variables.
   - Optional: Only used when `ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT`

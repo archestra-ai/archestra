@@ -22,3 +22,8 @@ __pycache__/
 .claude/*.lock
 .turbo/
 
+# playwright-cli runtime cache (snapshots, console logs, screenshots)
+.playwright-cli/
+
+docs/superpowers/plans
+

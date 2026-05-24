@@ -31,15 +31,17 @@ import type {
   UserInfo,
 } from "@/types";
 import { InteractionAuthMethodSchema } from "@/types";
+import { escapeLikePattern } from "@/utils/sql-search";
 import AgentTeamModel from "./agent-team";
+import ConversationChatErrorModel from "./conversation-chat-error";
 import LimitModel from "./limit";
 
-/**
- * Escapes special LIKE pattern characters (%, _, \) to treat them as literals.
- * This prevents users from crafting searches that behave unexpectedly.
- */
-function escapeLikePattern(value: string): string {
-  return value.replace(/[%_\\]/g, "\\$&");
+async function findChatErrorsForSessionId(sessionId: string | null) {
+  if (!sessionId || !isUuid(sessionId)) {
+    return [];
+  }
+
+  return ConversationChatErrorModel.findByConversation(sessionId);
 }
 
 /**
@@ -467,7 +469,10 @@ class InteractionModel {
       }
     }
 
-    return interaction as Interaction;
+    return {
+      ...interaction,
+      chatErrors: await findChatErrorsForSessionId(interaction.sessionId),
+    } as Interaction;
   }
 
   static async getAllInteractionsForProfile(
@@ -895,8 +900,10 @@ class InteractionModel {
         .select({
           sessionId: max(schema.interactionsTable.sessionId),
           sessionSource: max(schema.interactionsTable.sessionSource),
-          // MAX() picks alphabetically last source for mixed-source sessions; in practice sessions are single-source
-          source: max(schema.interactionsTable.source),
+          source: sql<InteractionSource | null>`CASE WHEN COUNT(DISTINCT ${schema.interactionsTable.source}) = 1 THEN MAX(${schema.interactionsTable.source}) ELSE NULL END`,
+          sources: sql<
+            InteractionSource[]
+          >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.source} ORDER BY ${schema.interactionsTable.source}), NULL)`,
           // For single interactions (no session), return the interaction ID for direct navigation
           interactionId: sql<string>`CASE WHEN MAX(${schema.interactionsTable.sessionId}) IS NULL THEN MAX(${schema.interactionsTable.id}::text) ELSE NULL END`,
           requestCount: count(),
@@ -995,6 +1002,7 @@ class InteractionModel {
         sessionId: s.sessionId,
         sessionSource: s.sessionSource,
         source: s.source,
+        sources: s.sources ?? [],
         interactionId: s.interactionId, // Only set for single interactions (null session)
         requestCount: Number(s.requestCount),
         totalInputTokens: Number(s.totalInputTokens) || 0,

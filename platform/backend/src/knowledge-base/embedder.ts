@@ -6,6 +6,7 @@ import {
   type EmbeddingApiResponse,
   type EmbeddingInput,
   getEmbeddingDiscriminator,
+  getEmbeddingRetryDelayMs,
   isRetryableEmbeddingError,
 } from "./embedding-clients";
 import {
@@ -294,7 +295,10 @@ class EmbeddingService {
           throw error;
         }
 
-        const delayMs = RETRY_BASE_DELAY_MS * 2 ** (attempt - 1);
+        const delayMs = getEmbeddingRetryDelayMs(
+          error,
+          RETRY_BASE_DELAY_MS * 2 ** (attempt - 1),
+        );
         logger.warn(
           {
             attempt,

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RolePermissionsCard } from "@/components/settings/role-permissions-card";
-import { authClient } from "@/lib/clients/auth/auth-client";
+import { useSession } from "@/lib/auth/auth.query";
 
 const mockUpdateNameMutateAsync = vi.fn();
 
@@ -17,12 +17,7 @@ vi.mock("@/lib/auth/auth.query", () => ({
     data: null,
     isLoading: false,
   }),
-}));
-
-vi.mock("@/lib/clients/auth/auth-client", () => ({
-  authClient: {
-    useSession: vi.fn(),
-  },
+  useSession: vi.fn(),
 }));
 
 vi.mock("@/lib/organization.query", () => ({
@@ -39,7 +34,7 @@ describe("RolePermissionsCard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUpdateNameMutateAsync.mockResolvedValue(true);
-    vi.mocked(authClient.useSession).mockReturnValue({
+    vi.mocked(useSession).mockReturnValue({
       data: {
         user: {
           id: "user-1",
@@ -47,7 +42,7 @@ describe("RolePermissionsCard", () => {
           email: "admin@example.com",
         },
       },
-    } as ReturnType<typeof authClient.useSession>);
+    } as unknown as ReturnType<typeof useSession>);
   });
 
   it("updates the account name from the top account section", async () => {

@@ -264,6 +264,9 @@ export const parseBodyLimit = (
 
 const DEFAULT_BODY_LIMIT = 50 * 1024 * 1024; // 50MB
 
+const DEFAULT_DATABASE_POOL_MAX = 50;
+const MAX_DATABASE_POOL_MAX = 500;
+
 // Default OTEL OTLP endpoint for HTTP/Protobuf (4318). For gRPC, the typical port is 4317.
 const DEFAULT_OTEL_ENDPOINT = "http://localhost:4318";
 const DEFAULT_OTEL_CONTENT_MAX_LENGTH = 10_000; // 10KB
@@ -368,6 +371,24 @@ export const parseContentMaxLength = (
 };
 
 /** @public — exported for testability */
+export const parseDatabasePoolMax = (envValue?: string | undefined): number => {
+  const value = envValue?.trim();
+  if (!value) {
+    return DEFAULT_DATABASE_POOL_MAX;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed < 1 || parsed > MAX_DATABASE_POOL_MAX) {
+    logger.warn(
+      `Invalid ARCHESTRA_DATABASE_POOL_MAX value "${value}", using default ${DEFAULT_DATABASE_POOL_MAX}`,
+    );
+    return DEFAULT_DATABASE_POOL_MAX;
+  }
+
+  return parsed;
+};
+
+/** @public — exported for testability */
 export const parseMetricsPort = (envValue?: string | undefined): number => {
   const value = envValue?.trim();
   if (!value) {
@@ -451,6 +472,44 @@ export const parseSampleRate = (
 };
 
 /**
+ * Hostnames that `getPublicRequestOrigin` is willing to return when forwarded
+ * headers are trusted. Always contains the frontend origin (`frontendBaseUrl`,
+ * which defaults to http://localhost:3000 when ARCHESTRA_FRONTEND_URL is
+ * unset) plus every URL in `ARCHESTRA_API_BASE_URL` — the same
+ * comma-separated list the frontend's `getExternalProxyUrls` reads (after
+ * supervisord re-exports it as `NEXT_PUBLIC_ARCHESTRA_API_BASE_URL` for the
+ * Next.js process). The backend inherits the canonical `ARCHESTRA_API_BASE_URL`
+ * directly, so we read that here.
+ *
+ * Returned as a set of normalized `host` strings (lowercased; default ports
+ * stripped — i.e. matching what `new URL(...).host` produces).
+ * @public — exported for testability
+ */
+export const getMCPGatewayOauthAllowedPublicHosts = (): Set<string> => {
+  const hosts = new Set<string>();
+
+  const addHostFromUrl = (raw: string) => {
+    try {
+      hosts.add(new URL(raw).host.toLowerCase());
+    } catch {
+      // ignore malformed values
+    }
+  };
+
+  addHostFromUrl(frontendBaseUrl);
+
+  const externalUrls = process.env.ARCHESTRA_API_BASE_URL?.trim();
+  if (externalUrls) {
+    for (const url of externalUrls.split(",")) {
+      const trimmed = url.trim();
+      if (trimmed) addHostFromUrl(trimmed);
+    }
+  }
+
+  return hosts;
+};
+
+/**
  * Parse ARCHESTRA_TRUST_PROXY into the value Fastify's trustProxy option accepts.
  *
  * Fastify supports:
@@ -527,6 +586,7 @@ const config = {
   agents: {
     advancedToolFeaturesEnabled:
       process.env.ARCHESTRA_AGENTS_ADVANCED_TOOL_FEATURES_ENABLED === "true",
+    skillsEnabled: process.env.ARCHESTRA_AGENTS_SKILLS_ENABLED === "true",
     incomingEmail: {
       provider: parseIncomingEmailProvider(),
       outlook: {
@@ -565,6 +625,7 @@ const config = {
   analytics: getAnalyticsConfig(),
   database: {
     url: getDatabaseUrl(),
+    poolMax: parseDatabasePoolMax(process.env.ARCHESTRA_DATABASE_POOL_MAX),
   },
   llm: {
     openai: {
@@ -575,11 +636,16 @@ const config = {
       baseUrl:
         process.env.ARCHESTRA_OPENROUTER_BASE_URL ||
         "https://openrouter.ai/api/v1",
+      // OpenRouter attribution must always identify the product, never the
+      // deployment host (which would leak `localhost`/internal URLs).
       referer:
-        process.env.ARCHESTRA_OPENROUTER_REFERER ||
-        process.env.ARCHESTRA_FRONTEND_URL?.trim() ||
-        frontendBaseUrl,
+        process.env.ARCHESTRA_OPENROUTER_REFERER?.trim() ||
+        "https://archestra.ai",
       title: process.env.ARCHESTRA_OPENROUTER_TITLE || DEFAULT_APP_NAME,
+      // Comma-separated OpenRouter marketplace categories for app attribution.
+      categories:
+        process.env.ARCHESTRA_OPENROUTER_CATEGORIES?.trim() ||
+        "general-chat,personal-agent",
     },
     anthropic: {
       baseUrl:

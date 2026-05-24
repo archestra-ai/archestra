@@ -6,7 +6,11 @@ import {
   DialogFooter,
   DialogStickyFooter,
 } from "@/components/ui/dialog";
-import { useUpdateInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
+import {
+  useCatalogPresets,
+  useUpdateInternalMcpCatalogItem,
+} from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { McpCatalogForm } from "./mcp-catalog-form";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import { transformFormToApiData } from "./mcp-catalog-form.utils";
@@ -46,10 +50,16 @@ export function EditCatalogContent({
 }: EditCatalogContentProps) {
   const updateMutation = useUpdateInternalMcpCatalogItem();
 
+  const { data: presets = [] } = useCatalogPresets(item.id);
+  const { data: servers = [] } = useMcpServers();
+  const affectedCatalogIds = new Set([item.id, ...presets.map((p) => p.id)]);
+  const affectedServerCount = servers.filter((s) =>
+    s.catalogId ? affectedCatalogIds.has(s.catalogId) : false,
+  ).length;
+
   const onSubmit = async (values: McpCatalogFormValues) => {
-    const apiData = transformFormToApiData(values);
-    // Tenancy is locked after creation — drop it from the update payload
-    const { multitenant: _multitenant, ...updateData } = apiData;
+    const { multitenant: _multitenant, ...updateData } =
+      transformFormToApiData(values);
 
     await updateMutation.mutateAsync({
       id: item.id,
@@ -70,6 +80,7 @@ export function EditCatalogContent({
       nameDisabled
       onDirtyChange={onDirtyChange}
       submitRef={submitRef}
+      affectedServerCount={affectedServerCount}
       footer={({ isDirty, onReset }) => {
         if (keepOpenOnSave && !isDirty) return null;
         const Footer = keepOpenOnSave ? DialogStickyFooter : DialogFooter;

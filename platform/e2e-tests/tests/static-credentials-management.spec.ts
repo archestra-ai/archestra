@@ -234,7 +234,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
               remainingCredential,
             );
           }
-        }).toPass({ timeout: 15_000, intervals: [1000, 2000, 3000] });
+        }).toPass({ timeout: 30_000, intervals: [1000, 2000, 3000, 5000] });
 
         // Cleanup team gateway
         if (teamGateway) {

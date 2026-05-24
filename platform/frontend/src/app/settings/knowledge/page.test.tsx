@@ -53,6 +53,7 @@ Element.prototype.releasePointerCapture = vi.fn();
 
 let mockOrganization: Record<string, unknown> | null = null;
 let mockOrgPending = false;
+let mockUpdateKnowledgeSettings = vi.fn();
 
 vi.mock("@/lib/organization.query", () => ({
   useOrganization: () => ({
@@ -60,7 +61,7 @@ vi.mock("@/lib/organization.query", () => ({
     isPending: mockOrgPending,
   }),
   useUpdateKnowledgeSettings: () => ({
-    mutateAsync: vi.fn(),
+    mutateAsync: mockUpdateKnowledgeSettings,
     isPending: false,
   }),
   useTestEmbeddingConnection: () => ({
@@ -185,6 +186,7 @@ function getEmbeddingModelTrigger() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockUpdateKnowledgeSettings = vi.fn();
   mockOrganization = null;
   mockOrgPending = false;
   mockApiKeys = [];
@@ -594,6 +596,40 @@ describe("KnowledgeSettingsPage", () => {
       expect(
         screen.getByText("Select a reranker API key first..."),
       ).toBeInTheDocument();
+    });
+
+    it("allows clearing reranking configuration", async () => {
+      const user = userEvent.setup();
+
+      mockOrganization = {
+        embeddingChatApiKeyId: null,
+        embeddingModel: null,
+        rerankerChatApiKeyId: "key-1",
+        rerankerModel: "gpt-4o",
+      };
+      mockApiKeys = [
+        {
+          id: "key-1",
+          name: "OpenAI Key",
+          provider: "openai",
+          scope: "org",
+        },
+      ];
+      renderPage();
+
+      await user.click(
+        screen.getByRole("button", {
+          name: "Clear reranking configuration",
+        }),
+      );
+      await user.click(screen.getByRole("button", { name: "Save" }));
+
+      expect(mockUpdateKnowledgeSettings).toHaveBeenCalledWith({
+        embeddingChatApiKeyId: null,
+        embeddingModel: undefined,
+        rerankerChatApiKeyId: null,
+        rerankerModel: null,
+      });
     });
   });
 

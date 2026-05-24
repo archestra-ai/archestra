@@ -7,10 +7,11 @@ import {
   expect,
   test,
 } from "@/test";
-import {
+import config, {
   getAnalyticsConfig,
   getCorsOrigins,
   getDatabaseUrl,
+  getMCPGatewayOauthAllowedPublicHosts,
   getOtelExporterOtlpEndpoint,
   getOtelExporterOtlpLogEndpoint,
   getOtlpAuthHeaders,
@@ -19,6 +20,7 @@ import {
   parseCommaSeparatedList,
   parseConnectorSyncMaxDuration,
   parseContentMaxLength,
+  parseDatabasePoolMax,
   parseMetricsPort,
   parseProcessType,
   parseSampleRate,
@@ -788,6 +790,61 @@ describe("parseContentMaxLength", () => {
   });
 });
 
+describe("parseDatabasePoolMax", () => {
+  test("should return default 50 when no value provided", () => {
+    expect(parseDatabasePoolMax(undefined)).toBe(50);
+  });
+
+  test("should return default when empty string provided", () => {
+    expect(parseDatabasePoolMax("")).toBe(50);
+  });
+
+  test("should return default when whitespace-only string provided", () => {
+    expect(parseDatabasePoolMax("   ")).toBe(50);
+  });
+
+  test("should parse valid value", () => {
+    expect(parseDatabasePoolMax("100")).toBe(100);
+  });
+
+  test("should accept boundary values", () => {
+    expect(parseDatabasePoolMax("1")).toBe(1);
+    expect(parseDatabasePoolMax("500")).toBe(500);
+  });
+
+  test("should trim whitespace and parse value", () => {
+    expect(parseDatabasePoolMax("  75  ")).toBe(75);
+  });
+
+  test("should return default and warn for non-numeric value", () => {
+    expect(parseDatabasePoolMax("abc")).toBe(50);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_DATABASE_POOL_MAX value "abc", using default 50',
+    );
+  });
+
+  test("should return default and warn for zero", () => {
+    expect(parseDatabasePoolMax("0")).toBe(50);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_DATABASE_POOL_MAX value "0", using default 50',
+    );
+  });
+
+  test("should return default and warn for negative value", () => {
+    expect(parseDatabasePoolMax("-1")).toBe(50);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_DATABASE_POOL_MAX value "-1", using default 50',
+    );
+  });
+
+  test("should return default and warn for value above cap", () => {
+    expect(parseDatabasePoolMax("501")).toBe(50);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_DATABASE_POOL_MAX value "501", using default 50',
+    );
+  });
+});
+
 describe("parseMetricsPort", () => {
   test("should return default 9050 when no value provided", () => {
     expect(parseMetricsPort(undefined)).toBe(9050);
@@ -1163,5 +1220,97 @@ describe("parseTrustProxy", () => {
 
   test("should filter empty entries from extra commas", () => {
     expect(parseTrustProxy("127.0.0.1,,10.0.0.1")).toBe("127.0.0.1,10.0.0.1");
+  });
+});
+
+describe("getMCPGatewayOauthAllowedPublicHosts", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    delete process.env.ARCHESTRA_API_BASE_URL;
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  // ARCHESTRA_FRONTEND_URL is captured at module load (config.frontendBaseUrl),
+  // so it can't be mutated per-test. We assert the function pulls that captured
+  // value through, and exercise the ARCHESTRA_API_BASE_URL path
+  // (which is read fresh on every call) for the rest of the behavior.
+
+  test("always includes the frontendBaseUrl host", () => {
+    const hosts = getMCPGatewayOauthAllowedPublicHosts();
+    expect(hosts.size).toBeGreaterThan(0);
+    expect(hosts.has(new URL(config.frontendBaseUrl).host.toLowerCase())).toBe(
+      true,
+    );
+  });
+
+  test("returns only the frontend host when ARCHESTRA_API_BASE_URL is unset", () => {
+    const expected = new URL(config.frontendBaseUrl).host.toLowerCase();
+    expect(getMCPGatewayOauthAllowedPublicHosts()).toEqual(new Set([expected]));
+  });
+
+  test("includes a single ARCHESTRA_API_BASE_URL host", () => {
+    process.env.ARCHESTRA_API_BASE_URL = "https://api.example.com";
+    expect(getMCPGatewayOauthAllowedPublicHosts().has("api.example.com")).toBe(
+      true,
+    );
+  });
+
+  test("splits comma-separated ARCHESTRA_API_BASE_URL", () => {
+    process.env.ARCHESTRA_API_BASE_URL =
+      "https://api.example.com,https://internal.svc:9000";
+    const hosts = getMCPGatewayOauthAllowedPublicHosts();
+    expect(hosts.has("api.example.com")).toBe(true);
+    expect(hosts.has("internal.svc:9000")).toBe(true);
+  });
+
+  test("strips default ports (80 for http, 443 for https)", () => {
+    process.env.ARCHESTRA_API_BASE_URL =
+      "https://api.example.com:443,http://other.example.com:80";
+    const hosts = getMCPGatewayOauthAllowedPublicHosts();
+    expect(hosts.has("api.example.com")).toBe(true);
+    expect(hosts.has("other.example.com")).toBe(true);
+  });
+
+  test("keeps explicit non-default ports", () => {
+    process.env.ARCHESTRA_API_BASE_URL =
+      "http://something.example:9000,https://api.example.com:8443";
+    const hosts = getMCPGatewayOauthAllowedPublicHosts();
+    expect(hosts.has("something.example:9000")).toBe(true);
+    expect(hosts.has("api.example.com:8443")).toBe(true);
+  });
+
+  test("lowercases hostnames", () => {
+    process.env.ARCHESTRA_API_BASE_URL = "https://Api.Example.COM";
+    expect(getMCPGatewayOauthAllowedPublicHosts().has("api.example.com")).toBe(
+      true,
+    );
+  });
+
+  test("trims whitespace around comma-separated URLs", () => {
+    process.env.ARCHESTRA_API_BASE_URL =
+      "  https://api.example.com , https://internal.svc:9000  ";
+    const hosts = getMCPGatewayOauthAllowedPublicHosts();
+    expect(hosts.has("api.example.com")).toBe(true);
+    expect(hosts.has("internal.svc:9000")).toBe(true);
+  });
+
+  test("ignores empty entries from extra commas", () => {
+    process.env.ARCHESTRA_API_BASE_URL =
+      "https://api.example.com,,https://internal.svc:9000";
+    const hosts = getMCPGatewayOauthAllowedPublicHosts();
+    expect(hosts.has("api.example.com")).toBe(true);
+    expect(hosts.has("internal.svc:9000")).toBe(true);
+  });
+
+  test("ignores malformed URLs without failing", () => {
+    process.env.ARCHESTRA_API_BASE_URL = "not-a-url,https://api.example.com";
+    expect(getMCPGatewayOauthAllowedPublicHosts().has("api.example.com")).toBe(
+      true,
+    );
   });
 });

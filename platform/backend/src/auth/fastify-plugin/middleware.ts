@@ -8,6 +8,7 @@ import logger from "@/logging";
 import { UserModel } from "@/models";
 import { MODEL_ROUTER_PREFIX } from "@/routes/proxy/common";
 import {
+  ARCHESTRA_CATALOG_PROXY_PREFIX,
   HEALTH_PATH,
   INCOMING_EMAIL_WEBHOOK_PREFIX,
   METRICS_PATH,
@@ -140,6 +141,8 @@ export class Authnz {
       // Only allow the exact webhook path (with optional query params), not sub-paths like /setup
       url === INCOMING_EMAIL_WEBHOOK_PREFIX ||
       url.startsWith(`${INCOMING_EMAIL_WEBHOOK_PREFIX}?`) ||
+      // Public reverse proxy to the Archestra MCP catalog (upstream is public)
+      url.startsWith(`${ARCHESTRA_CATALOG_PROXY_PREFIX}/`) ||
       // ChatOps webhooks - Bot Framework calls these directly
       // JWT validation is handled by the Bot Framework adapter
       url.startsWith("/api/webhooks/chatops/")

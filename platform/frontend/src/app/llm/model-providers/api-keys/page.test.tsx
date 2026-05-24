@@ -37,8 +37,25 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   }),
 }));
 
+vi.mock("@/lib/llm-oauth-clients.query", () => ({
+  useLlmOauthClients: () => ({
+    data: [],
+    isPending: false,
+  }),
+}));
+
 vi.mock("@/lib/organization.query", () => ({
   useOrganization: () => ({ data: null }),
+}));
+
+vi.mock("@/lib/virtual-api-keys.query", () => ({
+  useAllVirtualApiKeys: () => ({
+    data: {
+      data: [],
+      pagination: { total: 0 },
+    },
+    isPending: false,
+  }),
 }));
 
 vi.mock("@/lib/config/config.query", () => ({

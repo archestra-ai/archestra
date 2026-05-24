@@ -1,0 +1,204 @@
+name: Honeypot Auto-Ban
+
+# Bait issue #4998 is a deliberate honeypot for bounty-farming spam. Any non
+# org-member who interacts with it (commenting on the issue, or opening a PR
+# that references it) is auto-blocked from the archestra-ai org and, in the PR
+# case, the PR is closed.
+#
+# PRs are handled by polling from the default branch instead of reacting to
+# untrusted PR events. This keeps the workflow privileged only on trusted
+# triggers while still cleaning up honeypot PRs shortly after they appear.
+
+on:
+  issue_comment:
+    types: [created]
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: honeypot-auto-ban-${{ github.event.issue.number || github.ref }}
+  cancel-in-progress: false
+
+env:
+  HONEYPOT_ISSUE_NUMBER: "4998"
+  ORG_LOGIN: "archestra-ai"
+  BOT_ALLOWLIST: '["algora-pbc","dependabot[bot]","github-actions[bot]","claude[bot]","copilot[bot]","renovate[bot]","release-please[bot]"]'
+
+jobs:
+  ban-issue-commenter:
+    name: Ban honeypot issue commenter
+    # Must match env.HONEYPOT_ISSUE_NUMBER.
+    if: >-
+      github.event_name == 'issue_comment' &&
+      !github.event.issue.pull_request &&
+      github.event.issue.number == 4998
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions: {}
+
+    steps:
+      - name: Generate moderation token
+        id: generate-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.ARCHESTRA_HONEYPOT_MODERATOR_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_HONEYPOT_MODERATOR_GITHUB_APP_PRIVATE_KEY }}
+
+      - name: Block commenter if not an org member
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.generate-token.outputs.token }}
+          script: |
+            const org = process.env.ORG_LOGIN;
+            const allowlist = new Set(JSON.parse(process.env.BOT_ALLOWLIST));
+            const commenter = context.payload.comment.user.login;
+            const commenterType = context.payload.comment.user.type;
+
+            if (commenterType === 'Bot' || allowlist.has(commenter)) {
+              core.info(`Skipping ban: ${commenter} (${commenterType}) is on the bot allowlist.`);
+              return;
+            }
+
+            const isMember = await isOrgMember(commenter);
+            if (isMember) {
+              core.info(`Skipping ban: ${commenter} is a member of ${org}.`);
+              return;
+            }
+
+            core.warning(`Honeypot tripped by ${commenter}; blocking from ${org}.`);
+            try {
+              await github.rest.orgs.blockUser({ org, username: commenter });
+              core.info(`Blocked ${commenter} from ${org}.`);
+            } catch (error) {
+              core.setFailed(`Failed to block ${commenter}: ${error.message}`);
+            }
+
+            async function isOrgMember(username) {
+              try {
+                await github.rest.orgs.checkMembershipForUser({ org, username });
+                return true;
+              } catch (error) {
+                if (error.status === 404 || error.status === 302) {
+                  return false;
+                }
+                throw error;
+              }
+            }
+
+  scan-prs:
+    name: Scan honeypot PRs
+    if: >-
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions: {}
+
+    steps:
+      - name: Generate moderation token
+        id: generate-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.ARCHESTRA_HONEYPOT_MODERATOR_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_HONEYPOT_MODERATOR_GITHUB_APP_PRIVATE_KEY }}
+
+      - name: Block PR authors and close PRs that reference the honeypot
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.generate-token.outputs.token }}
+          script: |
+            const honeypotIssueNumber = Number(process.env.HONEYPOT_ISSUE_NUMBER);
+            const org = process.env.ORG_LOGIN;
+            const allowlist = new Set(JSON.parse(process.env.BOT_ALLOWLIST));
+            const pattern = new RegExp(`(^|[^A-Za-z0-9_])#${honeypotIssueNumber}(?![A-Za-z0-9_])`);
+
+            const query = [
+              `repo:${context.repo.owner}/${context.repo.repo}`,
+              'is:pr',
+              'is:open',
+              `${honeypotIssueNumber}`,
+            ].join(' ');
+
+            const { data: search } = await github.rest.search.issuesAndPullRequests({
+              q: query,
+              per_page: 100,
+            });
+
+            core.info(`Found ${search.items.length} open PR candidate(s) for #${honeypotIssueNumber}.`);
+
+            for (const item of search.items) {
+              await handlePullRequest(item.number);
+            }
+
+            async function handlePullRequest(pull_number) {
+              const { data: pr } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number,
+              });
+
+              const title = pr.title || '';
+              const body = pr.body || '';
+              const haystack = `${title}\n${body}`;
+
+              if (!pattern.test(haystack)) {
+                core.info(`PR #${pr.number} does not reference honeypot issue #${honeypotIssueNumber}.`);
+                return;
+              }
+
+              const author = pr.user.login;
+              const authorType = pr.user.type;
+
+              if (authorType === 'Bot' || allowlist.has(author)) {
+                core.info(`Skipping ban: PR author ${author} (${authorType}) is on the bot allowlist.`);
+                return;
+              }
+
+              const isMember = await isOrgMember(author);
+              if (isMember) {
+                core.info(`Skipping ban: PR author ${author} is a member of ${org}.`);
+                return;
+              }
+
+              core.warning(`Honeypot tripped by PR #${pr.number} from ${author}; blocking and closing.`);
+
+              // Closing can fail if permissions changed, but blocking the user is
+              // still the primary moderation action and should remain fatal.
+              try {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  body: 'Closed by automated moderation.',
+                });
+                await github.rest.pulls.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: pr.number,
+                  state: 'closed',
+                });
+                core.info(`Closed PR #${pr.number}.`);
+              } catch (error) {
+                core.error(`Failed to close PR #${pr.number}: ${error.message}`);
+              }
+
+              try {
+                await github.rest.orgs.blockUser({ org, username: author });
+                core.info(`Blocked ${author} from ${org}.`);
+              } catch (error) {
+                core.setFailed(`Failed to block ${author}: ${error.message}`);
+              }
+            }
+
+            async function isOrgMember(username) {
+              try {
+                await github.rest.orgs.checkMembershipForUser({ org, username });
+                return true;
+              } catch (error) {
+                if (error.status === 404 || error.status === 302) {
+                  return false;
+                }
+                throw error;
+              }
+            }

@@ -705,6 +705,9 @@ export function LlmProviderApiKeyForm({
                       id="llm-provider-api-key-value"
                       type="password"
                       placeholder={providerConfig.placeholder}
+                      autoComplete="new-password"
+                      data-1p-ignore
+                      data-lpignore="true"
                       disabled={isPending}
                       className={
                         showConfiguredStyling ? "border-green-500 pr-10" : ""
@@ -809,7 +812,9 @@ export function LlmProviderApiKeyForm({
                     id="llm-provider-anthropic-identity-token"
                     type="password"
                     placeholder="JWT assertion token"
-                    autoComplete="off"
+                    autoComplete="new-password"
+                    data-1p-ignore
+                    data-lpignore="true"
                     disabled={isPending}
                     {...form.register("anthropicIdentityToken")}
                   />

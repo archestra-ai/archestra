@@ -251,9 +251,7 @@ export async function getSecretValueForLlmProviderApiKey(
     anthropicWorkloadIdentity &&
     typeof anthropicWorkloadIdentity.federationRuleId === "string" &&
     typeof anthropicWorkloadIdentity.organizationId === "string" &&
-    typeof anthropicWorkloadIdentity.serviceAccountId === "string" &&
-    (typeof anthropicWorkloadIdentity.identityToken === "string" ||
-      typeof anthropicWorkloadIdentity.identityTokenFile === "string")
+    typeof anthropicWorkloadIdentity.serviceAccountId === "string"
   ) {
     return encodeAnthropicWorkloadIdentityMarker({
       federationRuleId: anthropicWorkloadIdentity.federationRuleId,

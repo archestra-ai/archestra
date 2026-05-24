@@ -431,6 +431,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         anthropicWorkloadIdentityRequested ||
         (anthropicWorkloadIdentityAvailable &&
           !body.apiKey &&
+          !(body.vaultSecretPath && body.vaultSecretKey) &&
           !body.awsAccessKeyId &&
           !body.awsSecretAccessKey);
 

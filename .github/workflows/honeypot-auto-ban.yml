@@ -166,17 +166,17 @@ jobs:
               // Closing can fail if permissions changed, but blocking the user is
               // still the primary moderation action and should remain fatal.
               try {
-                await github.rest.issues.createComment({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: pr.number,
-                  body: 'Closed by automated moderation.',
-                });
                 await github.rest.pulls.update({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   pull_number: pr.number,
                   state: 'closed',
+                });
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  body: 'Closed by automated moderation.',
                 });
                 core.info(`Closed PR #${pr.number}.`);
               } catch (error) {

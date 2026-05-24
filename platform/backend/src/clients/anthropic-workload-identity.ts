@@ -117,7 +117,7 @@ export async function getAnthropicWorkloadIdentityAccessToken(
     );
   }
 
-  const cacheKey = `${normalizeBaseUrl(baseUrl)}:${JSON.stringify(config)}`;
+  const cacheKey = buildTokenCacheKey(baseUrl, config);
   const cachedToken = cachedTokens.get(cacheKey) ?? null;
   if (cachedToken && now < cachedToken.expiresAtMs - ADVISORY_REFRESH_MS) {
     return cachedToken.accessToken;
@@ -136,6 +136,21 @@ export async function getAnthropicWorkloadIdentityAccessToken(
     }
     throw error;
   }
+}
+
+function buildTokenCacheKey(
+  baseUrl: string | undefined,
+  config: AnthropicWorkloadIdentityConfig,
+): string {
+  return JSON.stringify({
+    baseUrl: normalizeBaseUrl(baseUrl),
+    federationRuleId: config.federationRuleId,
+    organizationId: config.organizationId,
+    serviceAccountId: config.serviceAccountId,
+    workspaceId: config.workspaceId ?? null,
+    identityTokenFile: config.identityTokenFile ?? null,
+    hasInlineIdentityToken: Boolean(config.identityToken),
+  });
 }
 
 async function exchangeAnthropicWorkloadIdentityToken(

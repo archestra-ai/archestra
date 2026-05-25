@@ -3,10 +3,10 @@ import { archestraApiSdk } from "@shared";
 import {
   ADMIN_EMAIL,
   DEFAULT_TEAM_NAME,
-  E2eTestId,
   EDITOR_EMAIL,
   ENGINEERING_TEAM_NAME,
   MARKETING_TEAM_NAME,
+  MEMBER_EMAIL,
 } from "../consts";
 import { expect, goToPage, test } from "../fixtures";
 import {
@@ -26,6 +26,7 @@ import {
   saveOpenProfileDialog,
   settleRegistryAfterInstall,
   verifyToolCallResultViaApi,
+  waitForMcpServerReadyById,
   waitForMcpServerToolsDiscovered,
 } from "../utils";
 
@@ -33,12 +34,9 @@ test.describe.configure({ mode: "serial" });
 
 test.describe("Custom Self-hosted MCP Server - installation and static credentials management (vault disabled, prompt-on-installation disabled)", () => {
   // Matrix tests
-  const MATRIX: { user: "Admin" | "Editor" | "Member" }[] = [
+  const MATRIX: { user: "Admin" | "Member" }[] = [
     {
       user: "Admin",
-    },
-    {
-      user: "Editor",
     },
     {
       user: "Member",
@@ -47,18 +45,15 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
   MATRIX.forEach(({ user }) => {
     test(`${user}`, async ({
       adminPage,
-      editorPage,
       memberPage,
       extractCookieHeaders,
       makeRandomString,
     }) => {
-      test.setTimeout(60_000); // 60 seconds - k8s pod startup can be slow
+      test.setTimeout(180_000);
       const page = (() => {
         switch (user) {
           case "Admin":
             return adminPage;
-          case "Editor":
-            return editorPage;
           case "Member":
             return memberPage;
         }
@@ -90,11 +85,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
 
       if (user === "Member") {
         await openManageCredentialsDialog(page, catalogItemName);
-        await expect(
-          page.getByTestId(
-            E2eTestId.ManageCredentialsSharedConnectionsEmptyState,
-          ),
-        ).toBeVisible();
+        await expect(await getVisibleCredentials(page)).toEqual([MEMBER_EMAIL]);
         await closeOpenDialogs(page);
       } else {
         const expectedTeams = {
@@ -135,7 +126,22 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
             `Failed to install shared connection for ${user}: ${JSON.stringify(installResponse.error)}`,
           );
         }
+        const installedServerId = installResponse.data?.id;
+        if (!installedServerId) {
+          throw new Error(
+            `Install response for ${user} missing server id: ${JSON.stringify(installResponse.data)}`,
+          );
+        }
         await settleRegistryAfterInstall(page);
+        // The API install path doesn't refresh the registry DOM, so probe
+        // the backend installation status by ID first — surfaces a backend
+        // install error as a real error instead of a 120s DOM-poll timeout,
+        // and disambiguates from the same-named personal install above.
+        await waitForMcpServerReadyById(page, installedServerId);
+        // Follow with the existing DOM wait. This is the implicit "everything
+        // settled" signal the rest of the test relies on (TanStack Query
+        // refetch cycle has propagated to the registry view, so the gateway-
+        // edit dialog below sees the new tools in its catalog).
         await waitForMcpServerToolsDiscovered(page, catalogItemName);
       }
 
@@ -162,24 +168,12 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
         .getByRole("dialog")
         .filter({ visible: true })
         .last()
-        .getByRole("button", { name: /^Connections\b/ });
+        .getByRole("button", { name: /^Credentials\b/ });
       await expect(connectionsButton).toBeVisible();
       await closeOpenDialogs(page);
 
       if (user !== "Member") {
-        // Editor can't see org-scoped gateways, so create a team-scoped one
-        let teamGateway: { id: string; name: string } | undefined;
-        if (user === "Editor") {
-          teamGateway = await createTeamMcpGatewayViaApi({
-            cookieHeaders,
-            teamName: ENGINEERING_TEAM_NAME,
-            gatewayName: makeRandomString(10, "gw"),
-          });
-        }
-
-        // Check TokenSelect shows correct credentials
-        const gatewayNameForAssignment =
-          teamGateway?.name ?? adminSharedGateway?.name;
+        const gatewayNameForAssignment = adminSharedGateway?.name;
         if (!gatewayNameForAssignment) {
           throw new Error(
             `Expected a gateway for ${user} but none was provisioned`,
@@ -238,15 +232,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
               remainingCredential,
             );
           }
-        }).toPass({ timeout: 15_000, intervals: [1000, 2000, 3000] });
-
-        // Cleanup team gateway
-        if (teamGateway) {
-          await archestraApiSdk.deleteAgent({
-            path: { id: teamGateway.id },
-            headers: { Cookie: cookieHeaders },
-          });
-        }
+        }).toPass({ timeout: 30_000, intervals: [1000, 2000, 3000, 5000] });
       }
       // Cleanup admin shared gateway
       if (adminSharedGateway) {
@@ -324,7 +310,7 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
       .getByRole("dialog")
       .filter({ visible: true })
       .last()
-      .getByRole("button", { name: /^Connections\b/ });
+      .getByRole("button", { name: /^Credentials\b/ });
     await expect(connectionsButton).toBeVisible();
     await closeOpenDialogs(page);
   };

@@ -1,3 +1,4 @@
+import { convertToModelMessages } from "ai";
 import { describe, expect, it, vi } from "vitest";
 
 // Mock the ai module before importing chat routes
@@ -25,8 +26,10 @@ vi.mock("@/models/llm-provider-api-key-model", () => ({
   default: { getFastestModel: mockGetFastestModel },
 }));
 
+import { FAST_MODELS } from "@shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { createDirectLLMModel } from "@/clients/llm-client";
+import type { ChatMessage } from "@/types";
 import {
   __test,
   buildChatStopConditions,
@@ -193,6 +196,132 @@ describe("prepareMessagesForProvider", () => {
     );
   });
 
+  it("pads bedrock messages that only contain ignored UI data parts", () => {
+    const messages = __test.prepareMessagesForProvider({
+      provider: "bedrock",
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            {
+              type: "data-token-usage",
+              data: {
+                inputTokens: 10,
+                outputTokens: 5,
+                totalTokens: 15,
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(messages[0].parts).toContainEqual(
+      expect.objectContaining({
+        type: "text",
+        text: expect.stringMatching(/\S/),
+      }),
+    );
+  });
+
+  it("pads bedrock messages that only contain step markers and ignored data parts", () => {
+    const messages = __test.prepareMessagesForProvider({
+      provider: "bedrock",
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            { type: "step-start" },
+            {
+              type: "data-heartbeat",
+              data: { timestamp: 1778603432000 },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(messages[0].parts).toContainEqual(
+      expect.objectContaining({
+        type: "text",
+        text: expect.stringMatching(/\S/),
+      }),
+    );
+  });
+
+  it("pads bedrock messages that only contain streaming tool input", () => {
+    const messages = __test.prepareMessagesForProvider({
+      provider: "bedrock",
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-search",
+              toolCallId: "call_123",
+              toolName: "search",
+              state: "input-streaming",
+              input: { q: "partial" },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(messages[0].parts).toContainEqual(
+      expect.objectContaining({
+        type: "text",
+        text: expect.stringMatching(/\S/),
+      }),
+    );
+  });
+
+  it("pads empty bedrock assistant step blocks before later tool calls", async () => {
+    const messages = __test.prepareMessagesForProvider({
+      provider: "bedrock",
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            { type: "text", text: "" },
+            { type: "step-start" },
+            {
+              type: "tool-search",
+              toolCallId: "call_123",
+              toolName: "search",
+              state: "input-available",
+              input: { q: "query" },
+            },
+          ],
+        },
+      ],
+    });
+
+    const stepStartIndex =
+      messages[0].parts?.findIndex((part) => part.type === "step-start") ?? -1;
+    expect(stepStartIndex).toBeGreaterThan(0);
+    expect(messages[0].parts?.[stepStartIndex - 1]).toEqual(
+      expect.objectContaining({
+        type: "text",
+        text: expect.stringMatching(/\S/),
+      }),
+    );
+
+    const modelMessages = await convertToModelMessages(
+      messages as Parameters<typeof convertToModelMessages>[0],
+    );
+    const assistantMessages = modelMessages.filter(
+      (message) => message.role === "assistant",
+    );
+    expect(assistantMessages).toHaveLength(2);
+    expect(assistantMessages[0]?.content).toContainEqual(
+      expect.objectContaining({
+        type: "text",
+        text: expect.stringMatching(/\S/),
+      }),
+    );
+  });
+
   it("leaves bedrock assistant messages with a tool-call part untouched", () => {
     const message = {
       role: "assistant" as const,
@@ -222,6 +351,26 @@ describe("prepareMessagesForProvider", () => {
           type: "reasoning",
           text: "thinking...",
           providerOptions: { bedrock: { signature: "sig-abc" } },
+        },
+      ],
+    };
+
+    const messages = __test.prepareMessagesForProvider({
+      provider: "bedrock",
+      messages: [message],
+    });
+
+    expect(messages[0]).toBe(message);
+  });
+
+  it("leaves bedrock messages with reasoning that carries provider metadata", () => {
+    const message = {
+      role: "assistant" as const,
+      parts: [
+        {
+          type: "reasoning",
+          text: "thinking...",
+          providerMetadata: { bedrock: { signature: "sig-abc" } },
         },
       ],
     };
@@ -317,6 +466,131 @@ describe("getMessagesNotYetPersisted", () => {
 
     expect(newMessages).toHaveLength(1);
     expect(newMessages[0]?.id).toBe("assistant-1");
+  });
+
+  it("does not re-persist live messages linked by persisted message metadata", () => {
+    const newMessages = __test.getMessagesNotYetPersisted({
+      existingMessages: [
+        {
+          id: "22222222-2222-2222-2222-222222222222",
+          content: {
+            id: "",
+            role: "assistant",
+            parts: [{ type: "text", text: "already saved" }],
+          },
+        },
+      ],
+      uiMessages: [
+        {
+          id: "live-assistant-1",
+          role: "assistant",
+          metadata: {
+            persistedMessageId: "22222222-2222-2222-2222-222222222222",
+          },
+          parts: [{ type: "text", text: "already saved" }],
+        } as ChatMessage,
+        {
+          id: "new-user-1",
+          role: "user",
+          parts: [{ type: "text", text: "next" }],
+        },
+      ],
+    });
+
+    expect(newMessages).toHaveLength(1);
+    expect(newMessages[0]?.id).toBe("new-user-1");
+  });
+
+  it("does not re-persist an assistant message saved with an empty content id", () => {
+    const newMessages = __test.getMessagesNotYetPersisted({
+      existingMessages: [
+        {
+          id: "11111111-1111-1111-1111-111111111111",
+          content: {
+            id: "",
+            role: "assistant",
+            parts: [
+              { type: "step-start" },
+              {
+                type: "text",
+                text: "Hello! I see you've started a new chat.",
+                state: "done",
+              },
+            ],
+          },
+        },
+      ],
+      uiMessages: [
+        {
+          id: "assistant-temp-id",
+          role: "assistant",
+          parts: [
+            { type: "step-start" },
+            {
+              type: "text",
+              text: "Hello! I see you've started a new chat.",
+              state: "done",
+            },
+            {
+              type: "data-token-usage",
+              data: { inputTokens: 10, outputTokens: 20 },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(newMessages).toHaveLength(0);
+  });
+
+  it("consumes empty content id fallback matches so later repeated text is still persisted", () => {
+    const newMessages = __test.getMessagesNotYetPersisted({
+      existingMessages: [
+        {
+          id: "11111111-1111-1111-1111-111111111111",
+          content: {
+            id: "",
+            role: "assistant",
+            parts: [
+              { type: "step-start" },
+              { type: "text", text: "Of course!", state: "done" },
+            ],
+          },
+        },
+      ],
+      uiMessages: [
+        {
+          id: "assistant-temp-id",
+          role: "assistant",
+          parts: [
+            { type: "step-start" },
+            { type: "text", text: "Of course!", state: "done" },
+            {
+              type: "data-token-usage",
+              data: { inputTokens: 10, outputTokens: 20 },
+            },
+          ],
+        },
+        {
+          id: "user-2",
+          role: "user",
+          parts: [{ type: "text", text: "say it again" }],
+        },
+        {
+          id: "assistant-2",
+          role: "assistant",
+          parts: [
+            { type: "step-start" },
+            { type: "text", text: "Of course!", state: "done" },
+          ],
+        },
+      ],
+    });
+
+    expect(newMessages.map((message) => message.id)).toEqual([
+      "user-2",
+      "assistant-2",
+    ]);
   });
 });
 
@@ -608,7 +882,7 @@ describe("generateConversationTitle", () => {
 
     expect(mockGetFastestModel).not.toHaveBeenCalled();
     expect(createDirectLLMModel).toHaveBeenCalledWith(
-      expect.objectContaining({ modelName: "claude-haiku-4-5-20251001" }),
+      expect.objectContaining({ modelName: FAST_MODELS.anthropic }),
     );
   });
 
@@ -627,7 +901,7 @@ describe("generateConversationTitle", () => {
 
     expect(mockGetFastestModel).toHaveBeenCalledWith("api-key-456");
     expect(createDirectLLMModel).toHaveBeenCalledWith(
-      expect.objectContaining({ modelName: "gpt-4o-mini" }),
+      expect.objectContaining({ modelName: FAST_MODELS.openai }),
     );
   });
 
@@ -646,7 +920,7 @@ describe("generateConversationTitle", () => {
 
     expect(mockGetFastestModel).toHaveBeenCalledWith("api-key-789");
     expect(createDirectLLMModel).toHaveBeenCalledWith(
-      expect.objectContaining({ modelName: "gemini-2.0-flash-001" }),
+      expect.objectContaining({ modelName: FAST_MODELS.gemini }),
     );
   });
 });

@@ -1,12 +1,13 @@
 {
   "name": "@shared",
-  "version": "1.2.31",
+  "version": "1.2.50",
   "description": "",
   "type": "module",
   "private": true,
   "exports": {
     ".": "./index.ts",
-    "./access-control": "./access-control.ts"
+    "./access-control": "./access-control.ts",
+    "./e2e-test-ids": "./e2e-test-ids.ts"
   },
   "scripts": {
     "lint": "biome check",
@@ -27,7 +28,7 @@
   "dependencies": {
     "ai": "^6.0.116",
     "better-auth": "1.5.5",
-    "zod": "^4.3.4"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@hey-api/openapi-ts": "^0.94.0",

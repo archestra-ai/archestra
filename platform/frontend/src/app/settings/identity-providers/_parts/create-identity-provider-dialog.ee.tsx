@@ -6,18 +6,16 @@ import {
   IdentityProviderFormSchema,
   type IdentityProviderFormValues,
 } from "@shared";
-import { useCallback } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
-import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  DialogBody,
-  DialogForm,
-  DialogStickyFooter,
-} from "@/components/ui/dialog";
-import { Form } from "@/components/ui/form";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useCreateIdentityProvider } from "@/lib/auth/identity-provider.query.ee";
+import { getIdentityProviderDialogNavItems } from "./identity-provider-dialog-nav-items.ee";
+import {
+  type IdentityProviderDialogSection,
+  IdentityProviderDialogShell,
+} from "./identity-provider-dialog-shell.ee";
 import { normalizeIdentityProviderFormValues } from "./identity-provider-form.utils";
 import { OidcConfigForm } from "./oidc-config-form.ee";
 import { SamlConfigForm } from "./saml-config-form.ee";
@@ -45,6 +43,8 @@ export function CreateIdentityProviderDialog({
   providerType = "oidc",
 }: CreateIdentityProviderDialogProps) {
   const createIdentityProvider = useCreateIdentityProvider();
+  const [activeSection, setActiveSection] =
+    useState<IdentityProviderDialogSection>("general");
 
   const form = useForm<IdentityProviderFormValues>({
     // biome-ignore lint/suspicious/noExplicitAny: Version mismatch between @hookform/resolvers and Zod
@@ -54,6 +54,7 @@ export function CreateIdentityProviderDialog({
       ...(defaultValues || {
         providerId: "",
         issuer: "",
+        ssoLoginEnabled: true,
         domain: "",
         providerType: providerType,
         ...(providerType === "saml"
@@ -103,13 +104,22 @@ export function CreateIdentityProviderDialog({
 
   const handleClose = useCallback(() => {
     form.reset();
+    setActiveSection("general");
     onOpenChange(false);
   }, [form, onOpenChange]);
 
   const currentProviderType = form.watch("providerType");
+  const navItems = useMemo(
+    () => getIdentityProviderDialogNavItems(currentProviderType),
+    [currentProviderType],
+  );
+
+  const validActiveSection = navItems.some((item) => item.id === activeSection)
+    ? activeSection
+    : "general";
 
   return (
-    <FormDialog
+    <IdentityProviderDialogShell
       open={open}
       onOpenChange={handleClose}
       title={
@@ -120,42 +130,54 @@ export function CreateIdentityProviderDialog({
           ? `Configure ${providerName} Single Sign-On for your organization.`
           : "Configure a new Single Sign-On provider for your organization."
       }
-      size="large"
+      providerLabel={providerName ?? "New provider"}
+      form={form}
+      activeSection={validActiveSection}
+      navItems={navItems}
+      onActiveSectionChange={setActiveSection}
+      onSubmit={form.handleSubmit(onSubmit)}
+      footer={
+        <>
+          <Button type="button" variant="outline" onClick={handleClose}>
+            Cancel
+          </Button>
+          <PermissionButton
+            type="submit"
+            permissions={{ identityProvider: ["create"] }}
+            disabled={createIdentityProvider.isPending}
+            data-testid={E2eTestId.IdentityProviderCreateButton}
+          >
+            {createIdentityProvider.isPending
+              ? "Creating..."
+              : "Create Provider"}
+          </PermissionButton>
+        </>
+      }
     >
-      <Form {...form}>
-        <DialogForm
-          className="flex min-h-0 flex-1 flex-col"
-          onSubmit={form.handleSubmit(onSubmit)}
-        >
-          <DialogBody className="pb-4">
-            {currentProviderType === "saml" ? (
-              <SamlConfigForm form={form} hideProviderId={hideProviderId} />
-            ) : (
-              <OidcConfigForm
-                form={form}
-                hidePkce={hidePkce}
-                hideProviderId={hideProviderId}
-              />
-            )}
-          </DialogBody>
-
-          <DialogStickyFooter className="mt-0">
-            <Button type="button" variant="outline" onClick={handleClose}>
-              Cancel
-            </Button>
-            <PermissionButton
-              type="submit"
-              permissions={{ identityProvider: ["create"] }}
-              disabled={createIdentityProvider.isPending}
-              data-testid={E2eTestId.IdentityProviderCreateButton}
+      {currentProviderType === "saml" ? (
+        <SamlConfigForm
+          form={form}
+          activeSection={
+            validActiveSection as Exclude<
+              IdentityProviderDialogSection,
+              "enterprise-managed-credentials"
             >
-              {createIdentityProvider.isPending
-                ? "Creating..."
-                : "Create Provider"}
-            </PermissionButton>
-          </DialogStickyFooter>
-        </DialogForm>
-      </Form>
-    </FormDialog>
+          }
+          hideProviderId={hideProviderId}
+        />
+      ) : (
+        <OidcConfigForm
+          form={form}
+          activeSection={
+            validActiveSection as Exclude<
+              IdentityProviderDialogSection,
+              "service-provider-metadata"
+            >
+          }
+          hidePkce={hidePkce}
+          hideProviderId={hideProviderId}
+        />
+      )}
+    </IdentityProviderDialogShell>
   );
 }

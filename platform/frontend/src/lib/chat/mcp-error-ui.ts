@@ -1,4 +1,5 @@
 import {
+  type AuthRequiredAction,
   extractMcpToolError,
   MCP_CATALOG_INSTALL_QUERY_PARAM,
   MCP_CATALOG_REAUTH_QUERY_PARAM,
@@ -8,7 +9,9 @@ import type { PolicyDeniedPart } from "@/components/message-thread";
 
 export interface AuthRequiredResult {
   catalogName: string;
-  installUrl: string;
+  actionUrl: string;
+  action: AuthRequiredAction;
+  providerId: string | null;
 }
 
 export interface ExpiredAuthResult {
@@ -30,7 +33,9 @@ export type ToolAuthState =
   | {
       kind: "auth-required";
       catalogName: string;
-      installUrl: string;
+      actionUrl: string;
+      action: AuthRequiredAction;
+      providerId: string | null;
       catalogId: string | null;
     }
   | {
@@ -75,7 +80,13 @@ export function parseAuthRequired(
   const urlMatch = message.match(/visit(?:\s+this\s+URL)?:\s*(https?:\/\/\S+)/);
   if (!nameMatch || !urlMatch) return null;
 
-  return { catalogName: nameMatch[1], installUrl: urlMatch[1] };
+  const actionUrl = urlMatch[1];
+  return {
+    catalogName: nameMatch[1],
+    actionUrl,
+    action: inferAuthRequiredAction(actionUrl),
+    providerId: extractProviderIdFromSsoUrl(actionUrl),
+  };
 }
 
 export function parseExpiredAuth(errorText: string): ExpiredAuthResult | null {
@@ -148,10 +159,18 @@ export function resolveToolAuthState(params: {
   }
 
   if (structuredError?.type === "auth_required") {
+    const actionUrl = structuredError.actionUrl ?? structuredError.installUrl;
+    if (!actionUrl) {
+      return null;
+    }
+    const action = inferAuthRequiredAction(actionUrl, structuredError.action);
     return {
       kind: "auth-required",
       catalogName: structuredError.catalogName,
-      installUrl: structuredError.installUrl,
+      actionUrl,
+      action,
+      providerId:
+        structuredError.providerId ?? extractProviderIdFromSsoUrl(actionUrl),
       catalogId: structuredError.catalogId,
     };
   }
@@ -191,8 +210,10 @@ export function resolveToolAuthState(params: {
       return {
         kind: "auth-required",
         catalogName: authRequired.catalogName,
-        installUrl: authRequired.installUrl,
-        catalogId: extractCatalogIdFromInstallUrl(authRequired.installUrl),
+        actionUrl: authRequired.actionUrl,
+        action: authRequired.action,
+        providerId: authRequired.providerId,
+        catalogId: extractCatalogIdFromInstallUrl(authRequired.actionUrl),
       };
     }
   }
@@ -215,8 +236,10 @@ export function resolveToolAuthState(params: {
       return {
         kind: "auth-required",
         catalogName: authRequired.catalogName,
-        installUrl: authRequired.installUrl,
-        catalogId: extractCatalogIdFromInstallUrl(authRequired.installUrl),
+        actionUrl: authRequired.actionUrl,
+        action: authRequired.action,
+        providerId: authRequired.providerId,
+        catalogId: extractCatalogIdFromInstallUrl(authRequired.actionUrl),
       };
     }
   }
@@ -256,6 +279,31 @@ export function hasToolPartsWithAuthErrors(
   }
 
   return false;
+}
+
+function inferAuthRequiredAction(
+  actionUrl: string,
+  action?: AuthRequiredAction,
+): AuthRequiredAction {
+  if (action) {
+    return action;
+  }
+
+  return extractProviderIdFromSsoUrl(actionUrl)
+    ? "connect_identity_provider"
+    : "install_mcp_credentials";
+}
+
+function extractProviderIdFromSsoUrl(actionUrl: string): string | null {
+  try {
+    const url = new URL(actionUrl);
+    const parts = url.pathname.split("/");
+    const ssoIndex = parts.indexOf("sso");
+    const providerId = ssoIndex >= 0 ? parts[ssoIndex + 1] : null;
+    return providerId ? decodeURIComponent(providerId) : null;
+  } catch {
+    return null;
+  }
 }
 
 export function isAuthInstructionText(text: string): boolean {

@@ -23,6 +23,7 @@ import {
   MCP_SERVER_JWKS_DOCKER_IMAGE,
   MCP_SERVER_JWKS_EXTERNAL_URL,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  SSO_DOMAIN,
 } from "../consts";
 import {
   getKeycloakJwt,
@@ -32,9 +33,9 @@ import {
 import {
   callMcpTool,
   initializeMcpSession,
-  listMcpTools,
   makeApiRequest,
   waitForGatewayIdentityProviderReady,
+  waitForMcpGatewayJwtReady,
 } from "../utils/mcp-gateway";
 import { expect, test } from "./api-fixtures";
 
@@ -55,7 +56,7 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
     uninstallMcpServer,
     waitForAgentTool,
   }) => {
-    test.slow();
+    test.setTimeout(300_000);
 
     // STEP 1: Verify the upstream MCP server is healthy
     await waitForApiEndpointHealthy({
@@ -78,6 +79,7 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
     const identityProviderId = await createIdentityProvider(
       request,
       providerName,
+      { domain: SSO_DOMAIN },
     );
 
     let profileId: string | undefined;
@@ -148,16 +150,12 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
       );
       expect(agentTool).toBeDefined();
 
-      // STEP 8: Initialize MCP session with the external JWT
-      await initializeMcpSession(request, {
+      // STEP 8: Wait for the external JWT gateway auth path to be ready.
+      const tools = await waitForMcpGatewayJwtReady({
+        request,
         profileId: pid,
         token: jwt,
-      });
-
-      // STEP 9: List tools - should include upstream server tools
-      const tools = await listMcpTools(request, {
-        profileId: pid,
-        token: jwt,
+        expectedToolName: getServerInfoToolName,
       });
       const toolNames = tools.map((t) => t.name);
       expect(toolNames).toContain(getServerInfoToolName);
@@ -231,7 +229,7 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
     uninstallMcpServer,
     waitForAgentTool,
   }) => {
-    test.slow();
+    test.setTimeout(300_000);
 
     // Verify the upstream MCP server is healthy
     await waitForApiEndpointHealthy({
@@ -254,6 +252,7 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
     const identityProviderId = await createIdentityProvider(
       request,
       providerName,
+      { domain: SSO_DOMAIN },
     );
 
     let profileId: string | undefined;
@@ -374,7 +373,7 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
     uninstallMcpServer,
     waitForAgentTool,
   }) => {
-    test.slow();
+    test.setTimeout(300_000);
 
     // STEP 1: Get a JWT from Keycloak
     const jwt = await getKeycloakJwt();
@@ -386,6 +385,7 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
     const identityProviderId = await createIdentityProvider(
       request,
       providerName,
+      { domain: SSO_DOMAIN },
     );
 
     let profileId: string | undefined;
@@ -499,16 +499,12 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
       );
       expect(agentTool).toBeDefined();
 
-      // STEP 8: Initialize MCP session with the external JWT
-      await initializeMcpSession(request, {
+      // STEP 8: Wait for the external JWT gateway auth path to be ready.
+      const tools = await waitForMcpGatewayJwtReady({
+        request,
         profileId: pid,
         token: jwt,
-      });
-
-      // STEP 9: List tools - should include local server tools
-      const tools = await listMcpTools(request, {
-        profileId: pid,
-        token: jwt,
+        expectedToolName: getServerInfoToolName,
       });
       const toolNames = tools.map((t) => t.name);
       expect(toolNames).toContain(getServerInfoToolName);

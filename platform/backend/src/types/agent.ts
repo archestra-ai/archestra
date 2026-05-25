@@ -75,11 +75,16 @@ const DualLlmQuarantineAgentConfigSchema = z.object({
   name: z.literal(BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE),
 });
 
+const ContextCompactionAgentConfigSchema = z.object({
+  name: z.literal(BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION),
+});
+
 // Discriminated union — add future built-in agents here
 export const BuiltInAgentConfigSchema = z.discriminatedUnion("name", [
   PolicyConfigAgentConfigSchema,
   DualLlmMainAgentConfigSchema,
   DualLlmQuarantineAgentConfigSchema,
+  ContextCompactionAgentConfigSchema,
 ]);
 
 export type BuiltInAgentConfig = z.infer<typeof BuiltInAgentConfigSchema>;
@@ -91,6 +96,9 @@ export type DualLlmMainAgentConfig = z.infer<
 >;
 export type DualLlmQuarantineAgentConfig = z.infer<
   typeof DualLlmQuarantineAgentConfigSchema
+>;
+export type ContextCompactionAgentConfig = z.infer<
+  typeof ContextCompactionAgentConfigSchema
 >;
 
 // Team info schema for agent responses (just id and name)
@@ -286,13 +294,15 @@ export const PolicyConfigSchema = z.object({
     .enum([
       "allow_when_context_is_sensitive",
       "block_when_context_is_sensitive",
+      "require_approval",
       "block_always",
     ])
     .describe(
       "When should this tool be allowed to be invoked? " +
         "'allow_when_context_is_sensitive' - Allow invocation even when sensitive data is present (safe read-only tools). " +
         "'block_when_context_is_sensitive' - Allow only when context is safe, block when sensitive data is present (tools that could leak data). " +
-        "'block_always' - Never allow automatic invocation (dangerous tools that execute code, write data, or send data externally).",
+        "'require_approval' - Require user confirmation before executing in chat; block in autonomous sessions (write/mutating tools that are not outright destructive: create/update/send/post/charge). " +
+        "'block_always' - Never allow automatic invocation (obviously destructive tools whose name is solely dedicated to deleting or destroying data).",
     ),
   trustedDataAction: z
     .enum([
@@ -322,10 +332,12 @@ const TOOL_INVOCATION_ACTION_MAP: Record<
   PolicyConfig["toolInvocationAction"],
   | "allow_when_context_is_untrusted"
   | "block_when_context_is_untrusted"
+  | "require_approval"
   | "block_always"
 > = {
   allow_when_context_is_sensitive: "allow_when_context_is_untrusted",
   block_when_context_is_sensitive: "block_when_context_is_untrusted",
+  require_approval: "require_approval",
   block_always: "block_always",
 };
 

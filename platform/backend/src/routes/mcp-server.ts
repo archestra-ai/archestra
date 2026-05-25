@@ -1,5 +1,5 @@
 import type { IncomingHttpHeaders } from "node:http";
-import { isPlaywrightCatalogItem, RouteId } from "@shared";
+import { isPlaywrightCatalogItem, OAUTH_TOKEN_TYPE, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission, userHasPermission } from "@/auth";
@@ -14,13 +14,16 @@ import {
   AgentModel,
   AgentToolModel,
   InternalMcpCatalogModel,
+  McpPresetEntryModel,
   McpServerModel,
+  OrganizationModel,
   TeamModel,
   ToolModel,
 } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import { filterMcpServersAssignableToTarget } from "@/services/agent-tool-assignment";
 import { refreshLinkedIdentityProviderAccessToken } from "@/services/identity-providers/access-token-refresh";
+import { exchangeIdJagAtProtectedResource } from "@/services/identity-providers/enterprise-managed/broker";
 import { exchangeEnterpriseManagedCredential } from "@/services/identity-providers/enterprise-managed/exchange";
 import {
   findExternalIdentityProviderById,
@@ -40,6 +43,7 @@ import {
   SelectMcpServerSchema,
   UuidIdSchema,
 } from "@/types";
+import { validateValuesAgainstRegex } from "@/utils/validate-values-against-regex";
 import { broadcastMcpInstallationStatus } from "@/websocket";
 
 const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -209,6 +213,43 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           throw new ApiError(400, "Catalog item not found");
         }
 
+        // Enforce the preset entry's validation regex (child install) or the
+        // org-wide default regex (parent install) against every prompted user
+        // value. Vault-reference paths (isByosVault) are pre-validated lookups,
+        // not user-entered strings — skip them.
+        if (!isByosVault) {
+          let applicableRegex: string | null = null;
+          let applicableName = "Default";
+          if (catalogItem.presetEntryId) {
+            const entry = await McpPresetEntryModel.findByIdForOrganization(
+              catalogItem.presetEntryId,
+              organizationId,
+            );
+            applicableRegex = entry?.validationRegex ?? null;
+            applicableName = entry?.name ?? "Default";
+          } else {
+            const org = await OrganizationModel.getById(organizationId);
+            applicableRegex = org?.presetEntityDefaultValidationRegex ?? null;
+            applicableName = org?.presetEntityDefaultLabel ?? "Default";
+          }
+          if (applicableRegex) {
+            try {
+              validateValuesAgainstRegex(
+                userConfigValues,
+                applicableRegex,
+                applicableName,
+              );
+              validateValuesAgainstRegex(
+                environmentValues,
+                applicableRegex,
+                applicableName,
+              );
+            } catch (e) {
+              throw new ApiError(400, (e as Error).message);
+            }
+          }
+        }
+
         // Playwright browser preview can only be installed as a personal server
         if (
           isPlaywrightCatalogItem(serverData.catalogId) &&
@@ -222,6 +263,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Set serverType from catalog item
         serverData.serverType = catalogItem.serverType;
+
+        // The catalog row is the source of truth for the install name. For
+        // preset (child) installs the row's `name` is the composed
+        // `{parent.name}-{childName}`, so this also disambiguates parent vs.
+        // preset installs at the deployment-name layer.
+        serverData.name = catalogItem.name;
 
         // Scope-based authorization (personal / team / org).
         await validateScopeAndAuthorization({
@@ -261,7 +308,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               await AgentToolModel.bulkCreateForAgentsAndTools(
                 targetAgentIds,
                 toolIds,
-                { mcpServerId: existingPersonal.id },
+                {
+                  mcpServerId: existingPersonal.id,
+                  credentialResolutionMode: catalogItem.enterpriseManagedConfig
+                    ? "enterprise_managed"
+                    : "static",
+                },
               );
             }
             return reply.send(existingPersonal);
@@ -308,6 +360,40 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Update local reference for deployment
           if (catalogItem.localConfig) {
             catalogItem.localConfig.serviceAccount = normalizedServiceAccount;
+          }
+        }
+
+        // Apply preset-scoped overlay from the catalog row onto the install
+        // inputs. Preset values have *lower* precedence than install-time
+        // inputs — if the user explicitly supplied the same key at install
+        // time, that wins.
+        // Secret-typed preset env values are also surfaced into
+        // environmentValues here. They reach the pod via the K8s Secret
+        // (built from the install secret bag) — the env builder only emits a
+        // secretKeyRef when it sees a non-empty entry for that key in
+        // environmentValues, so the merge must include secret keys too.
+        // Runs *after* the persist step above so values freshly-supplied via
+        // this install request's `presetFieldValues` are included.
+        if (catalogItem.localConfig?.environment) {
+          const presetSecretBag = catalogItem.presetSecretId
+            ? ((await secretManager().getSecret(catalogItem.presetSecretId))
+                ?.secret as Record<string, unknown> | undefined)
+            : undefined;
+
+          const presetEnvDefaults: Record<string, string> = {};
+          for (const envDef of catalogItem.localConfig.environment) {
+            if (!envDef.promptOnPreset) continue;
+            const v =
+              envDef.type === "secret"
+                ? presetSecretBag?.[envDef.key]
+                : catalogItem.presetFieldValues?.[envDef.key];
+            if (v != null) presetEnvDefaults[envDef.key] = String(v);
+          }
+          if (Object.keys(presetEnvDefaults).length > 0) {
+            environmentValues = {
+              ...presetEnvDefaults,
+              ...(environmentValues ?? {}),
+            };
           }
         }
       }
@@ -523,7 +609,15 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           };
           let hasPromptedSecrets = false;
 
-          // Collect all secret-type env vars (both static and prompted).
+          // Resolve the preset secret bundle once if the catalog row carries
+          // one — preset-scoped secret env values live in this bag, keyed by
+          // env-var name.
+          const presetSecretBag = catalogItem.presetSecretId
+            ? ((await secretManager().getSecret(catalogItem.presetSecretId))
+                ?.secret as Record<string, unknown> | undefined)
+            : undefined;
+
+          // Collect all secret-type env vars (static, prompted, and preset).
           for (const envDef of catalogItem.localConfig?.environment ?? []) {
             if (envDef.type === "secret") {
               let value: string | undefined;
@@ -534,6 +628,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 if (value) {
                   hasPromptedSecrets = true;
                 }
+              } else if (envDef.promptOnPreset) {
+                // Preset-scoped — read from the resolved preset secret bag
+                const raw = presetSecretBag?.[envDef.key];
+                value = raw != null ? String(raw) : undefined;
               } else {
                 // Static value from catalog - get from envDef.value
                 value = envDef.value;
@@ -627,10 +725,25 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      // Persist plain (non-secret) values for promptOnInstallation env
+      // vars onto the install row's `environmentValues` jsonb column.
+      // Secret-typed prompted values live in the K8s Secret bag handled
+      // by the block above.
+      const installEnvironmentValues: Record<string, string> = {};
+      for (const envDef of catalogItem?.localConfig?.environment ?? []) {
+        if (envDef.promptOnInstallation && envDef.type !== "secret") {
+          const value = environmentValues?.[envDef.key];
+          if (value !== undefined && value !== null && value !== "") {
+            installEnvironmentValues[envDef.key] = String(value);
+          }
+        }
+      }
+
       // Create the MCP server with optional secret reference
       const mcpServer = await McpServerModel.create({
         ...serverData,
         ...(secretId && { secretId }),
+        environmentValues: installEnvironmentValues,
       });
 
       try {
@@ -640,6 +753,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // Capture catalogId before async callback to ensure it's available
             const capturedCatalogId = catalogItem.id;
             const capturedCatalogName = catalogItem.name;
+            const capturedEnterpriseManagedConfig =
+              catalogItem.enterpriseManagedConfig;
 
             // Set status to pending before starting the deployment
             await McpServerModel.update(mcpServer.id, {
@@ -740,7 +855,13 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       await AgentToolModel.bulkCreateForAgentsAndTools(
                         dedupedAgentIds,
                         toolIds,
-                        { mcpServerId: mcpServer.id },
+                        {
+                          mcpServerId: mcpServer.id,
+                          credentialResolutionMode:
+                            capturedEnterpriseManagedConfig
+                              ? "enterprise_managed"
+                              : "static",
+                        },
                       );
                     }
                   }
@@ -865,7 +986,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               await AgentToolModel.bulkCreateForAgentsAndTools(
                 dedupedAgentIds,
                 toolIds,
-                { mcpServerId: mcpServer.id },
+                {
+                  mcpServerId: mcpServer.id,
+                  credentialResolutionMode: catalogItem.enterpriseManagedConfig
+                    ? "enterprise_managed"
+                    : "static",
+                },
               );
             }
           }
@@ -1491,11 +1617,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Catalog item not found for this server");
       }
 
-      // For local servers with new environment values or user-config values: update/create the secret
+      // New env/userConfig values land in this install's secret bag. The
+      // runtime reload below reads `secretId` to pick them up.
       if (
-        mcpServer.serverType === "local" &&
-        ((environmentValues && Object.keys(environmentValues).length > 0) ||
-          (userConfigValues && Object.keys(userConfigValues).length > 0))
+        (environmentValues && Object.keys(environmentValues).length > 0) ||
+        (userConfigValues && Object.keys(userConfigValues).length > 0)
       ) {
         const catalogStaticUserConfigValues = getCatalogStaticUserConfigValues(
           catalogItem.userConfig,
@@ -1901,44 +2027,148 @@ async function getInstallDiscoveryAccessToken(params: {
   >;
   userId: string;
 }): Promise<string | undefined> {
-  const account = await AccountModel.getLatestSsoAccountWithAccessTokenByUserId(
-    params.userId,
-  );
-  if (!account?.accessToken) {
-    return undefined;
-  }
-
-  const accessToken = await getCurrentIdentityProviderAccessToken(
-    params.userId,
-  );
-  if (!accessToken) {
-    return undefined;
-  }
-
   const enterpriseManagedConfig = params.catalogItem.enterpriseManagedConfig;
   if (!enterpriseManagedConfig) {
+    const accessToken = await getCurrentIdentityProviderAccessToken(
+      params.userId,
+    );
     return accessToken;
+  }
+
+  const fallbackAccount =
+    await AccountModel.getLatestSsoAccountWithAccessTokenByUserId(
+      params.userId,
+    );
+  if (!fallbackAccount) {
+    return undefined;
   }
 
   const identityProvider = enterpriseManagedConfig.identityProviderId
     ? await findExternalIdentityProviderById(
         enterpriseManagedConfig.identityProviderId,
       )
-    : await findExternalIdentityProviderByProviderId(account.providerId);
+    : await findExternalIdentityProviderByProviderId(
+        fallbackAccount.providerId,
+      );
   if (!identityProvider) {
-    return accessToken;
+    return getCurrentInstallDiscoveryAccessToken(fallbackAccount);
+  }
+
+  const account = await AccountModel.getLatestSsoAccountByUserIdAndProviderId(
+    params.userId,
+    identityProvider.providerId,
+  );
+  if (!account) {
+    return undefined;
+  }
+
+  const assertion = await getInstallDiscoverySubjectToken({
+    account,
+    identityProvider,
+  });
+  if (!assertion) {
+    return undefined;
   }
 
   const credential = await exchangeEnterpriseManagedCredential({
     identityProviderId: identityProvider.id,
-    assertion: accessToken,
+    assertion,
     enterpriseManagedConfig,
   });
+
+  if (shouldExchangeInstallIdJagAtProtectedResource(enterpriseManagedConfig)) {
+    const idJagAssertion = extractInstallDiscoveryCredentialValue({
+      credentialValue: credential.value,
+      responseFieldPath: enterpriseManagedConfig.responseFieldPath,
+    });
+    const protectedResourceCredential = await exchangeIdJagAtProtectedResource({
+      assertion: idJagAssertion,
+      identityProviderId: identityProvider.id,
+      enterpriseManagedConfig,
+    });
+
+    return extractInstallDiscoveryCredentialValue({
+      credentialValue: protectedResourceCredential.value,
+      responseFieldPath: enterpriseManagedConfig.responseFieldPath,
+    });
+  }
 
   return extractInstallDiscoveryCredentialValue({
     credentialValue: credential.value,
     responseFieldPath: enterpriseManagedConfig.responseFieldPath,
   });
+}
+
+async function getInstallDiscoverySubjectToken(params: {
+  account: NonNullable<
+    Awaited<
+      ReturnType<typeof AccountModel.getLatestSsoAccountByUserIdAndProviderId>
+    >
+  >;
+  identityProvider: NonNullable<
+    Awaited<ReturnType<typeof findExternalIdentityProviderById>>
+  >;
+}): Promise<string | undefined> {
+  if (shouldUseInstallDiscoveryIdToken(params.identityProvider)) {
+    return params.account.idToken ?? undefined;
+  }
+
+  return getCurrentInstallDiscoveryAccessToken(params.account);
+}
+
+async function getCurrentInstallDiscoveryAccessToken(
+  account: NonNullable<
+    Awaited<
+      ReturnType<typeof AccountModel.getLatestSsoAccountWithAccessTokenByUserId>
+    >
+  >,
+): Promise<string | undefined> {
+  if (!account.accessToken) {
+    return undefined;
+  }
+
+  const isAccessTokenExpired =
+    !!account.accessTokenExpiresAt &&
+    account.accessTokenExpiresAt <= new Date();
+  if (!isAccessTokenExpired) {
+    return account.accessToken;
+  }
+
+  return await refreshLinkedIdentityProviderAccessToken({
+    account: {
+      id: account.id,
+      providerId: account.providerId,
+      refreshToken: account.refreshToken,
+      refreshTokenExpiresAt: account.refreshTokenExpiresAt,
+    },
+  });
+}
+
+function shouldUseInstallDiscoveryIdToken(
+  identityProvider: NonNullable<
+    Awaited<ReturnType<typeof findExternalIdentityProviderById>>
+  >,
+): boolean {
+  const enterpriseManagedCredentials =
+    identityProvider.oidcConfig?.enterpriseManagedCredentials;
+  return (
+    enterpriseManagedCredentials?.subjectTokenType ===
+      OAUTH_TOKEN_TYPE.IdToken ||
+    enterpriseManagedCredentials?.exchangeStrategy === "okta_managed"
+  );
+}
+
+function shouldExchangeInstallIdJagAtProtectedResource(
+  config: NonNullable<
+    NonNullable<
+      Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>
+    >["enterpriseManagedConfig"]
+  >,
+): boolean {
+  return (
+    config.requestedCredentialType === "id_jag" &&
+    config.resourceType === "oauth_protected_resource"
+  );
 }
 
 async function getSecretValues(

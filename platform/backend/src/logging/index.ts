@@ -10,7 +10,6 @@ import {
   SeverityNumber,
 } from "@opentelemetry/api-logs";
 import pino from "pino";
-import pretty from "pino-pretty";
 import { LOG_LEVEL } from "@/logging/log-level";
 import { getActiveSessionId } from "@/observability/request-context";
 
@@ -43,20 +42,27 @@ import { getActiveSessionId } from "@/observability/request-context";
 let _instance: pino.Logger | null = null;
 
 function createLogger(): pino.Logger {
-  const prettyStream = pretty({
-    colorize: true,
-    translateTime: "HH:MM:ss Z",
-    ignore: "pid,hostname",
-    singleLine: true,
-  });
-
+  // Write raw JSON to stdout via an async, buffered destination so log writes
+  // don't block the event loop when the container log pipe is backpressured.
   return pino(
     {
       level: LOG_LEVEL,
-      mixin: injectTraceContext,
+      // Keep `time` as epoch ms (pino default) so OTEL and log shippers can
+      // read it without parsing. Add a sibling `timeIso` for human readers
+      // looking at raw stdout.
+      mixin: () => ({
+        ...injectTraceContext(),
+        timeIso: new Date().toISOString(),
+      }),
+      // Drop `pid` and `hostname` — they're noise in a containerized
+      // environment where pod metadata already identifies the host.
+      base: undefined,
     },
     pino.multistream([
-      { level: "trace", stream: prettyStream },
+      {
+        level: "trace",
+        stream: pino.destination({ fd: 1, sync: false, minLength: 4096 }),
+      },
       { level: "trace", stream: createOtelLogStream() },
     ]),
   );

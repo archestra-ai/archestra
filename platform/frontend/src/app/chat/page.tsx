@@ -1,7 +1,7 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import { E2eTestId } from "@shared";
+import { type ChatSkillMetadata, E2eTestId } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -17,7 +17,7 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   useCallback,
   useEffect,
@@ -29,10 +29,7 @@ import {
 import { CreateCatalogDialog } from "@/app/mcp/registry/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp/registry/_parts/custom-server-request-dialog";
 import { AgentDialog } from "@/components/agent-dialog";
-import type {
-  PromptInputMessage,
-  PromptInputProps,
-} from "@/components/ai-elements/prompt-input";
+import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { Suggestion } from "@/components/ai-elements/suggestion";
 import { AppLogo } from "@/components/app-logo";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
@@ -87,24 +84,34 @@ import {
   clearOAuthReauthChatResume,
   getOAuthReauthChatResume,
 } from "@/lib/auth/oauth-session";
+import {
+  clearSsoSignInRedirectPath,
+  getSsoSignInRedirectPath,
+} from "@/lib/auth/sso-sign-in-attempt";
 import { useRecentlyGeneratedTitles } from "@/lib/chat/chat.hook";
 import {
   fetchConversationEnabledTools,
+  useCompactConversation,
   useConversation,
   useCreateConversation,
   useHasPlaywrightMcpTools,
+  useMemberDefaultModel,
   useStopChatStream,
   useUpdateConversation,
   useUpdateConversationEnabledTools,
+  useUpdateMemberDefaultModel,
 } from "@/lib/chat/chat.query";
 import { useChatAgentState } from "@/lib/chat/chat-agent-state.hook";
 import {
   useConversationShare,
+  useForkConversation,
   useForkSharedConversation,
 } from "@/lib/chat/chat-share.query";
 import {
   conversationStorageKeys,
   getConversationDisplayTitle,
+  getManualCompactionSkippedMessage,
+  mergePersistedMessageMetadata,
 } from "@/lib/chat/chat-utils";
 import { useChatSession } from "@/lib/chat/global-chat.context";
 import {
@@ -113,12 +120,9 @@ import {
   getPendingActions,
 } from "@/lib/chat/pending-tool-state";
 import {
-  clearModelOverride,
+  deriveModelSource,
   getSavedAgent,
-  getSavedModelOverride,
-  type ModelSource,
   saveAgent,
-  saveModelOverride,
 } from "@/lib/chat/use-chat-preferences";
 import { useConfig } from "@/lib/config/config.query";
 import { useDialogs } from "@/lib/hooks/use-dialog";
@@ -139,7 +143,9 @@ import {
   resolvePreferredModelForProvider,
   shouldResetInitialChatState,
 } from "./chat-initial-state";
-import ArchestraPromptInput from "./prompt-input";
+import ArchestraPromptInput, {
+  type ArchestraPromptInputProps,
+} from "./prompt-input";
 import { resolveSharedConversationForkState } from "./shared-conversation-fork";
 
 const BROWSER_OPEN_KEY = "archestra-chat-browser-open";
@@ -151,11 +157,28 @@ export function ChatPageContent({
 }) {
   const queryClient = useQueryClient();
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const [conversationId, setConversationId] = useState<string | undefined>(
     routeConversationId,
   );
+
+  useEffect(() => {
+    if (routeConversationId) {
+      clearSsoSignInRedirectPath();
+      return;
+    }
+
+    const redirectPath = getSsoSignInRedirectPath();
+    if (!redirectPath || redirectPath === "/chat") {
+      clearSsoSignInRedirectPath();
+      return;
+    }
+
+    clearSsoSignInRedirectPath();
+    router.replace(redirectPath);
+  }, [routeConversationId, router]);
 
   // Hide version display from layout - chat page has its own version display
   useEffect(() => {
@@ -167,6 +190,9 @@ export function ChatPageContent({
   const pendingFilesRef = useRef<
     Array<{ url: string; mediaType: string; filename?: string }>
   >([]);
+  // Skill invoked via slash command on the first message of a new chat,
+  // held until the conversation exists and the message can be sent.
+  const pendingSkillRef = useRef<ChatSkillMetadata | undefined>(undefined);
   const userMessageJustEdited = useRef(false);
   const pendingInitialSendConversationRef = useRef<string | undefined>(
     undefined,
@@ -182,6 +208,11 @@ export function ChatPageContent({
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
   const [isForkDialogOpen, setIsForkDialogOpen] = useState(false);
   const [forkAgentId, setForkAgentId] = useState<string | null>(null);
+  const [manualCompactionFeedback, setManualCompactionFeedback] = useState<{
+    status: "pending" | "success" | "skipped" | "failed";
+    message: string;
+  } | null>(null);
+  const forkConversationMutation = useForkConversation();
   const forkSharedConversationMutation = useForkSharedConversation();
   const { data: session } = useSession();
 
@@ -251,13 +282,14 @@ export function ChatPageContent({
   const { data: chatApiKeys = [], isLoading: isLoadingApiKeys } =
     useLlmProviderApiKeys({ enabled: hasChatAccess && canUseProviderSettings });
   const { data: organization, isPending: isOrgLoading } = useOrganization();
+  // The user's saved default (model, key) pair — top of the resolution chain
+  // for a new chat ("member" level).
+  const { data: memberDefault } = useMemberDefaultModel();
 
   // State for initial chat (when no conversation exists yet)
   const [initialAgentId, setInitialAgentId] = useState<string | null>(null);
   const [initialModel, setInitialModel] = useState<string>("");
   const [initialApiKeyId, setInitialApiKeyId] = useState<string | null>(null);
-  const [initialModelSource, setInitialModelSource] =
-    useState<ModelSource | null>(null);
   const previousRouteConversationIdRef = useRef<string | undefined>(
     routeConversationId,
   );
@@ -280,23 +312,22 @@ export function ChatPageContent({
         chatApiKeys,
         organization: organization
           ? {
-              defaultLlmModel: organization.defaultLlmModel,
+              defaultModelId: organization.defaultModelId,
               defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
             }
           : null,
+        memberDefault: memberDefault ?? null,
       });
 
       if (resolved) {
         setInitialModel(resolved.modelId);
         setInitialApiKeyId(resolved.apiKeyId);
-        setInitialModelSource(resolved.modelSource);
       } else {
         setInitialModel("");
         setInitialApiKeyId(null);
-        setInitialModelSource(null);
       }
     },
-    [modelsByProvider, chatApiKeys, organization],
+    [modelsByProvider, chatApiKeys, organization, memberDefault],
   );
 
   useEffect(() => {
@@ -367,16 +398,16 @@ export function ChatPageContent({
       chatApiKeys,
       organization: organization
         ? {
-            defaultLlmModel: organization.defaultLlmModel,
+            defaultModelId: organization.defaultModelId,
             defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
           }
         : null,
+      memberDefault: memberDefault ?? null,
     });
 
     if (!resolved) return; // No models available yet
 
     setInitialModel(resolved.modelId);
-    setInitialModelSource(resolved.modelSource);
     if (resolved.apiKeyId) {
       setInitialApiKeyId(resolved.apiKeyId);
     }
@@ -385,52 +416,63 @@ export function ChatPageContent({
     initialAgentId,
     modelsByProvider,
     chatApiKeys,
-    organization?.defaultLlmModel,
+    organization?.defaultModelId,
     organization?.defaultLlmApiKeyId,
     organization,
+    memberDefault,
   ]);
 
-  // Model change callback for the initial (no conversation) state.
-  // After init, only accept explicit user selections (dialog was opened).
-  // This prevents ModelSelector's auto-select (triggered by apiKeyId changes)
-  // from overwriting the agent default or org default.
-  const modelSelectorWasOpenRef = useRef(false);
-  const handleInitialModelChange = useCallback((modelId: string) => {
-    if (modelInitializedRef.current && !modelSelectorWasOpenRef.current) {
-      return;
-    }
-    setInitialModel(modelId);
-    if (modelSelectorWasOpenRef.current) {
-      setInitialModelSource("user");
-      saveModelOverride(modelId);
-    }
-    modelSelectorWasOpenRef.current = false;
-  }, []);
-  const handleInitialModelSelectorOpenChange = useCallback((open: boolean) => {
-    if (open) {
-      modelSelectorWasOpenRef.current = true;
-    }
-  }, []);
+  // Persist the user's (model, key) pick as their member default so the next
+  // new chat reuses it — the "member" level of the resolution chain. No-ops on
+  // an incomplete pair.
+  const updateMemberDefaultModelMutation = useUpdateMemberDefaultModel();
+  const updateMemberDefaultModelMutateRef = useRef(
+    updateMemberDefaultModelMutation.mutate,
+  );
+  updateMemberDefaultModelMutateRef.current =
+    updateMemberDefaultModelMutation.mutate;
+  const persistMemberDefaultModel = useCallback(
+    (modelId: string | null, apiKeyId: string | null) => {
+      if (!modelId || !apiKeyId) return;
+      updateMemberDefaultModelMutateRef.current({
+        modelId,
+        chatApiKeyId: apiKeyId,
+      });
+    },
+    [],
+  );
+
+  // Model change for the initial (no conversation) state. The picked model is
+  // scoped to the selected key, so the pair is persisted as the member default.
+  const initialApiKeyIdRef = useRef(initialApiKeyId);
+  initialApiKeyIdRef.current = initialApiKeyId;
+  const handleInitialModelChange = useCallback(
+    (modelId: string) => {
+      setInitialModel(modelId);
+      persistMemberDefaultModel(modelId, initialApiKeyIdRef.current);
+    },
+    [persistMemberDefaultModel],
+  );
 
   // Handle API key change - preselect best model for the new key's provider
   const handleInitialProviderChange = useCallback(
-    (newProvider: SupportedProvider, _apiKeyId: string) => {
+    (newProvider: SupportedProvider, apiKeyId: string) => {
       const preferredModel = resolvePreferredModelForProvider({
         provider: newProvider,
         modelsByProvider,
       });
       if (preferredModel) {
         setInitialModel(preferredModel.modelId);
-        setInitialModelSource("user");
-        saveModelOverride(preferredModel.modelId);
+        persistMemberDefaultModel(preferredModel.modelId, apiKeyId);
       }
     },
-    [modelsByProvider],
+    [modelsByProvider, persistMemberDefaultModel],
   );
 
-  // Reset model override: clear localStorage and re-resolve from agent/org defaults
+  // Reset to the agent/org default model (shown when on a custom model).
+  // Resolves without the member default — reset deliberately drops the user's
+  // personal override to fall back to the agent/org default.
   const handleResetModelOverride = useCallback(() => {
-    clearModelOverride();
     modelInitializedRef.current = false;
 
     const resolved = resolveChatModelState({
@@ -439,25 +481,31 @@ export function ChatPageContent({
       chatApiKeys,
       organization: organization
         ? {
-            defaultLlmModel: organization.defaultLlmModel,
+            defaultModelId: organization.defaultModelId,
             defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
           }
         : null,
+      memberDefault: null,
     });
 
     if (resolved) {
       setInitialModel(resolved.modelId);
       setInitialApiKeyId(resolved.apiKeyId);
-      setInitialModelSource(resolved.modelSource);
     }
     modelInitializedRef.current = true;
+
+    // Clear the saved member default so the reset sticks for future new chats.
+    updateMemberDefaultModelMutateRef.current({
+      modelId: null,
+      chatApiKeyId: null,
+    });
   }, [modelsByProvider, chatApiKeys, organization]);
 
   // Derive provider from initial model for API key filtering
   const initialProvider = useMemo((): SupportedProvider | undefined => {
     if (!initialModel) return undefined;
     for (const [provider, models] of Object.entries(modelsByProvider)) {
-      if (models?.some((m) => m.id === initialModel)) {
+      if (models?.some((m) => m.dbId === initialModel)) {
         return provider as SupportedProvider;
       }
     }
@@ -486,7 +534,6 @@ export function ChatPageContent({
       setInitialAgentId(null);
       setInitialModel("");
       setInitialApiKeyId(null);
-      setInitialModelSource(null);
       modelInitializedRef.current = false;
     }
 
@@ -522,9 +569,9 @@ export function ChatPageContent({
     conversation.userId === session?.user.id;
   useConversationShare(canManageShare ? conversationId : undefined);
   const isShared = !!conversation?.share;
-  const isReadOnlySharedConversation =
+  const isReadOnlyConversation =
     !!conversationId &&
-    !!conversation?.share &&
+    !!conversation &&
     conversation.userId !== session?.user.id;
   const persistedConversationMessages = useMemo(
     () => (conversation?.messages ?? []) as UIMessage[],
@@ -532,7 +579,7 @@ export function ChatPageContent({
   );
   const shouldEnableChatSession =
     !!conversationId &&
-    !isReadOnlySharedConversation &&
+    !isReadOnlyConversation &&
     (!routeConversationId || !!conversation);
   const chatSession = useChatSession({
     conversationId: shouldEnableChatSession ? conversationId : undefined,
@@ -603,62 +650,63 @@ export function ChatPageContent({
     }
   }, [conversationId, conversation?.artifact, isLoadingConversation]);
 
-  // Derive current provider from selected model
+  // Derive current provider from the selected model
   const currentProvider = useMemo((): SupportedProvider | undefined => {
-    if (!conversation?.selectedModel) return undefined;
-    const model = chatModels.find((m) => m.id === conversation.selectedModel);
+    if (!conversation?.modelId) return undefined;
+    const model = chatModels.find((m) => m.dbId === conversation.modelId);
     return model?.provider;
-  }, [conversation?.selectedModel, chatModels]);
+  }, [conversation?.modelId, chatModels]);
 
-  // Derive model source for existing conversations by comparing with agent/org defaults.
-  // Check localStorage override first — if the user explicitly saved this model as their
-  // override, it's a user override even if it matches the agent or org default.
-  const conversationModelSource = useMemo((): ModelSource | null => {
-    if (!conversation?.selectedModel) return null;
-
-    const userOverride = getSavedModelOverride();
-    if (userOverride && conversation.selectedModel === userOverride) {
-      return "user";
-    }
-
-    const agentId = conversation?.agentId;
-    if (agentId) {
-      const agent = internalAgents.find((a) => a.id === agentId) as
-        | (Record<string, unknown> & { llmModel?: string })
-        | undefined;
-      if (agent?.llmModel && conversation.selectedModel === agent.llmModel) {
-        return "agent";
-      }
-    }
-    if (
-      organization?.defaultLlmModel &&
-      conversation.selectedModel === organization.defaultLlmModel
-    ) {
-      return "organization";
-    }
-    return null;
+  // Model source — derived purely by comparing the selected model against the
+  // agent's and org's configured defaults. No stored state, nothing to keep in sync.
+  const conversationModelSource = useMemo(() => {
+    const agent = internalAgents.find((a) => a.id === conversation?.agentId) as
+      | (Record<string, unknown> & { modelId?: string | null })
+      | undefined;
+    return deriveModelSource({
+      selectedModelId: conversation?.modelId,
+      agentModelId: agent?.modelId,
+      orgModelId: organization?.defaultModelId,
+    });
   }, [
-    conversation?.selectedModel,
+    conversation?.modelId,
     conversation?.agentId,
     internalAgents,
-    organization?.defaultLlmModel,
+    organization?.defaultModelId,
+  ]);
+
+  // Same derivation for the initial (no conversation) chat.
+  const initialModelSource = useMemo(() => {
+    const agent = internalAgents.find((a) => a.id === initialAgentId) as
+      | (Record<string, unknown> & { modelId?: string | null })
+      | undefined;
+    return deriveModelSource({
+      selectedModelId: initialModel,
+      agentModelId: agent?.modelId,
+      orgModelId: organization?.defaultModelId,
+    });
+  }, [
+    initialModel,
+    initialAgentId,
+    internalAgents,
+    organization?.defaultModelId,
   ]);
 
   // Get selected model's context length for the context indicator
   const selectedModelContextLength = useMemo((): number | null => {
-    const modelId = conversation?.selectedModel ?? initialModel;
+    const modelId = conversation?.modelId ?? initialModel;
     if (!modelId) return null;
-    const model = chatModels.find((m) => m.id === modelId);
+    const model = chatModels.find((m) => m.dbId === modelId);
     return model?.capabilities?.contextLength ?? null;
-  }, [conversation?.selectedModel, initialModel, chatModels]);
+  }, [conversation?.modelId, initialModel, chatModels]);
 
   // Get selected model's input modalities for file upload filtering
   const selectedModelInputModalities = useMemo(() => {
-    const modelId = conversation?.selectedModel ?? initialModel;
+    const modelId = conversation?.modelId ?? initialModel;
     if (!modelId) return null;
-    const model = chatModels.find((m) => m.id === modelId);
+    const model = chatModels.find((m) => m.dbId === modelId);
     return model?.capabilities?.inputModalities ?? null;
-  }, [conversation?.selectedModel, initialModel, chatModels]);
+  }, [conversation?.modelId, initialModel, chatModels]);
 
   // Mutation for updating conversation model
   // Use a ref so callbacks don't recreate when mutation state changes (isPending etc.),
@@ -672,21 +720,36 @@ export function ChatPageContent({
   // ModelSelector's auto-select effect on every chatModels refetch.
   const chatModelsRef = useRef(chatModels);
   chatModelsRef.current = chatModels;
+  const chatApiKeysRef = useRef(chatApiKeys);
+  chatApiKeysRef.current = chatApiKeys;
   const conversationRef = useRef(conversation);
   conversationRef.current = conversation;
-  const handleModelChange = useCallback((model: string) => {
-    if (!conversationRef.current) return;
-
-    // Find the provider for this model
-    const modelInfo = chatModelsRef.current.find((m) => m.id === model);
-    const provider = modelInfo?.provider;
-
-    updateConversationMutateRef.current({
-      id: conversationRef.current.id,
-      selectedModel: model,
-      selectedProvider: provider,
-    });
-  }, []);
+  // Picking a model also pins the API key it runs through: a conversation
+  // stores the (model, key) pair as a unit, so a model is never persisted
+  // without its key. Keep the conversation's current key when it serves the
+  // model's provider, otherwise use any key for that provider.
+  const handleModelChange = useCallback(
+    (modelId: string) => {
+      const conv = conversationRef.current;
+      if (!conv) return;
+      const model = chatModelsRef.current.find((m) => m.dbId === modelId);
+      const currentKey = chatApiKeysRef.current.find(
+        (k) => k.id === conv.chatApiKeyId,
+      );
+      const chatApiKeyId =
+        currentKey && currentKey.provider === model?.provider
+          ? currentKey.id
+          : (chatApiKeysRef.current.find((k) => k.provider === model?.provider)
+              ?.id ?? null);
+      updateConversationMutateRef.current({
+        id: conv.id,
+        modelId,
+        chatApiKeyId,
+      });
+      persistMemberDefaultModel(modelId, chatApiKeyId);
+    },
+    [persistMemberDefaultModel],
+  );
 
   // Handle API key change - preselect best model for the new key's provider.
   // Combines chatApiKeyId + model selection in a single mutation to avoid
@@ -703,9 +766,9 @@ export function ChatPageContent({
         updateConversationMutateRef.current({
           id: conversation.id,
           chatApiKeyId: apiKeyId,
-          selectedModel: preferredModel.modelId,
-          selectedProvider: preferredModel.provider,
+          modelId: preferredModel.modelId,
         });
+        persistMemberDefaultModel(preferredModel.modelId, apiKeyId);
       } else {
         // No models for this provider yet, still update the key
         updateConversationMutateRef.current({
@@ -714,7 +777,7 @@ export function ChatPageContent({
         });
       }
     },
-    [conversation, modelsByProvider],
+    [conversation, modelsByProvider, persistMemberDefaultModel],
   );
 
   // Handle agent change in existing conversation
@@ -729,18 +792,16 @@ export function ChatPageContent({
     [conversation],
   );
 
-  // Reset model override for an existing conversation: clear localStorage,
-  // resolve default from the conversation's agent, and update the conversation.
+  // Reset an existing conversation to its agent/org default model.
   const handleConversationResetModelOverride = useCallback(() => {
-    clearModelOverride();
     if (!conversation) return;
 
     const agent = conversation.agentId
       ? (internalAgents.find((a) => a.id === conversation.agentId) as
           | (Record<string, unknown> & {
               id: string;
-              llmModel?: string;
-              llmApiKeyId?: string;
+              modelId?: string | null;
+              llmApiKeyId?: string | null;
             })
           | undefined)
       : null;
@@ -751,20 +812,29 @@ export function ChatPageContent({
       chatApiKeys,
       organization: organization
         ? {
-            defaultLlmModel: organization.defaultLlmModel,
+            defaultModelId: organization.defaultModelId,
             defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
           }
         : null,
+      // Reset deliberately drops the user's personal override.
+      memberDefault: null,
       chatModels,
     });
 
     if (resolved) {
       updateConversationMutateRef.current({
         id: conversation.id,
-        selectedModel: resolved.modelId,
-        selectedProvider: resolved.provider,
+        modelId: resolved.modelId,
+        chatApiKeyId: resolved.apiKeyId,
       });
     }
+
+    // Clear the saved member default too — resetting the chat override also
+    // drops the user override it came from.
+    updateMemberDefaultModelMutateRef.current({
+      modelId: null,
+      chatApiKeyId: null,
+    });
   }, [
     conversation,
     internalAgents,
@@ -782,6 +852,7 @@ export function ChatPageContent({
 
   // Stop chat stream mutation (signals backend to abort subagents)
   const stopChatStreamMutation = useStopChatStream();
+  const compactConversationMutation = useCompactConversation();
 
   // Persist artifact panel state
   const toggleArtifactPanel = useCallback(() => {
@@ -852,6 +923,37 @@ export function ChatPageContent({
   const setPendingCustomServerToolCall =
     chatSession?.setPendingCustomServerToolCall;
   const tokenUsage = chatSession?.tokenUsage;
+  const contextTokensUsed = chatSession?.contextTokensUsed;
+  const contextCompaction = chatSession?.contextCompaction;
+  const recordContextCompaction = chatSession?.recordContextCompaction;
+
+  const syncPersistedMessageMetadata = useCallback(
+    (persistedMessages: UIMessage[]) => {
+      if (!chatSession?.messages || !setMessages) {
+        return;
+      }
+
+      const mergedMessages = mergePersistedMessageMetadata({
+        liveMessages: chatSession.messages,
+        persistedMessages,
+      });
+
+      if (mergedMessages === chatSession.messages) {
+        return;
+      }
+
+      setMessages(mergedMessages);
+    },
+    [chatSession?.messages, setMessages],
+  );
+
+  useEffect(() => {
+    if (status !== "ready") {
+      return;
+    }
+
+    syncPersistedMessageMetadata(persistedConversationMessages);
+  }, [persistedConversationMessages, status, syncPersistedMessageMetadata]);
 
   const {
     conversationAgentId,
@@ -877,16 +979,16 @@ export function ChatPageContent({
 
   // Get current agent info
   const currentProfileId = conversationAgentId;
-  const conversationToolsStateId = isReadOnlySharedConversation
+  const conversationToolsStateId = isReadOnlyConversation
     ? undefined
     : conversationId;
-  const browserToolsAgentId = isReadOnlySharedConversation
+  const browserToolsAgentId = isReadOnlyConversation
     ? undefined
     : conversationId
       ? (conversationAgentId ?? promptAgentId ?? undefined)
       : (initialAgentId ?? undefined);
 
-  const playwrightSetupAgentId = isReadOnlySharedConversation
+  const playwrightSetupAgentId = isReadOnlyConversation
     ? undefined
     : conversationId
       ? (conversationAgentId ?? undefined)
@@ -897,7 +999,7 @@ export function ChatPageContent({
   // Show while loading so it doesn't flash hidden for members whose agent already has playwright
   // tools. Once loading is done, hides only if the user lacks permission AND agent has no tools.
   const showBrowserButton =
-    !isReadOnlySharedConversation &&
+    !isReadOnlyConversation &&
     (canUpdateAgent ||
       hasPlaywrightMcpTools ||
       (!!conversationId && isLoadingConversation) ||
@@ -911,9 +1013,7 @@ export function ChatPageContent({
     conversationToolsStateId,
     {
       enabled:
-        !isReadOnlySharedConversation &&
-        hasChatAccess &&
-        canUpdateAgent !== false,
+        !isReadOnlyConversation && hasChatAccess && canUpdateAgent !== false,
     },
   );
   // Treat both loading and required as "visible" for disabling submit, hiding arrow, etc.
@@ -921,8 +1021,116 @@ export function ChatPageContent({
   const isPlaywrightSetupVisible =
     !!canUpdateAgent && (isPlaywrightSetupRequired || isPlaywrightCheckLoading);
 
-  // Use actual token usage when available from the stream (no fallback to estimation)
-  const tokensUsed = tokenUsage?.totalTokens;
+  // Stream usage and compaction results both update this live context estimate.
+  const tokensUsed = contextTokensUsed ?? tokenUsage?.totalTokens;
+  const isContextCompacting =
+    !!contextCompaction?.isCompacting || compactConversationMutation.isPending;
+
+  const handleCompactConversation = useCallback(async () => {
+    if (!conversationId || isReadOnlyConversation) {
+      return;
+    }
+
+    setManualCompactionFeedback({
+      status: "pending",
+      message: "Compacting conversation context...",
+    });
+
+    const result = await compactConversationMutation.mutateAsync({
+      id: conversationId,
+    });
+    if (!result) {
+      setManualCompactionFeedback({
+        status: "failed",
+        message: "Context compaction failed.",
+      });
+      return;
+    }
+
+    syncPersistedMessageMetadata(
+      (result.conversation.messages ?? []) as UIMessage[],
+    );
+
+    switch (result.status) {
+      case "created": {
+        if (result.compaction) {
+          recordContextCompaction?.({
+            compactionId: result.compaction.id,
+            originalTokenEstimate: result.compaction.originalTokenEstimate,
+            compactedTokenEstimate: result.compaction.compactedTokenEstimate,
+          });
+        }
+
+        setManualCompactionFeedback(null);
+        return;
+      }
+      case "existing": {
+        if (result.compaction) {
+          recordContextCompaction?.({
+            compactionId: result.compaction.id,
+            originalTokenEstimate: result.compaction.originalTokenEstimate,
+            compactedTokenEstimate: result.compaction.compactedTokenEstimate,
+          });
+        }
+
+        setManualCompactionFeedback({
+          status: "skipped",
+          message: getManualCompactionSkippedMessage(
+            result.reason,
+            result.status,
+          ),
+        });
+        return;
+      }
+      case "skipped": {
+        setManualCompactionFeedback({
+          status: "skipped",
+          message: getManualCompactionSkippedMessage(
+            result.reason,
+            result.status,
+          ),
+        });
+        return;
+      }
+      case "failed": {
+        setManualCompactionFeedback({
+          status: "failed",
+          message: "Context compaction failed.",
+        });
+        return;
+      }
+      default: {
+        // compile-time guard: a new status must be handled explicitly above
+        result.status satisfies never;
+        setManualCompactionFeedback({
+          status: "failed",
+          message: "Context compaction failed.",
+        });
+        return;
+      }
+    }
+  }, [
+    compactConversationMutation,
+    conversationId,
+    isReadOnlyConversation,
+    recordContextCompaction,
+    syncPersistedMessageMetadata,
+  ]);
+
+  useEffect(() => {
+    if (
+      !manualCompactionFeedback ||
+      manualCompactionFeedback.status === "pending"
+    ) {
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      setManualCompactionFeedback(null);
+    }, 8000);
+
+    return () => clearTimeout(timeout);
+  }, [manualCompactionFeedback]);
 
   useEffect(() => {
     if (
@@ -983,7 +1191,9 @@ export function ChatPageContent({
     }
 
     const hasPendingInitialMessage =
-      !!pendingPromptRef.current || pendingFilesRef.current.length > 0;
+      !!pendingPromptRef.current ||
+      pendingFilesRef.current.length > 0 ||
+      !!pendingSkillRef.current;
     const shouldSendPendingInitialMessage =
       conversationId &&
       conversation?.id === conversationId &&
@@ -1000,13 +1210,12 @@ export function ChatPageContent({
     pendingInitialSendConversationRef.current = conversationId;
     const promptToSend = pendingPromptRef.current;
     const filesToSend = pendingFilesRef.current;
+    const skillToSend = pendingSkillRef.current;
     pendingPromptRef.current = undefined;
     pendingFilesRef.current = [];
+    pendingSkillRef.current = undefined;
 
-    const parts: Array<
-      | { type: "text"; text: string }
-      | { type: "file"; url: string; mediaType: string; filename?: string }
-    > = [];
+    const parts: ChatMessagePart[] = [];
 
     if (promptToSend) {
       parts.push({ type: "text", text: promptToSend });
@@ -1023,8 +1232,11 @@ export function ChatPageContent({
 
     sendMessage({
       role: "user",
-      parts,
-      metadata: { createdAt: new Date().toISOString() },
+      parts: ensureNonEmptyParts(parts),
+      metadata: {
+        createdAt: new Date().toISOString(),
+        ...(skillToSend ? { skill: skillToSend } : {}),
+      },
     });
   }, [
     conversation,
@@ -1080,7 +1292,11 @@ export function ChatPageContent({
     });
   }, []);
 
-  const handleSubmit: PromptInputProps["onSubmit"] = (message, e) => {
+  const handleSubmit: ArchestraPromptInputProps["onSubmit"] = (
+    message,
+    e,
+    options,
+  ) => {
     e.preventDefault();
     if (isPlaywrightSetupVisible) return;
     if (status === "submitted" || status === "streaming") {
@@ -1098,8 +1314,10 @@ export function ChatPageContent({
 
     const hasText = message.text?.trim();
     const hasFiles = message.files && message.files.length > 0;
+    // a skill slash command may be sent on its own, with no prompt or files
+    const hasSkill = !!options?.skill;
 
-    if (!sendMessage || (!hasText && !hasFiles)) {
+    if (!sendMessage || (!hasText && !hasFiles && !hasSkill)) {
       return;
     }
 
@@ -1132,10 +1350,7 @@ export function ChatPageContent({
     }
 
     // Build message parts: text first, then file attachments
-    const parts: Array<
-      | { type: "text"; text: string }
-      | { type: "file"; url: string; mediaType: string; filename?: string }
-    > = [];
+    const parts: ChatMessagePart[] = [];
 
     if (hasText) {
       parts.push({ type: "text", text: message.text as string });
@@ -1155,8 +1370,11 @@ export function ChatPageContent({
 
     sendMessage?.({
       role: "user",
-      parts,
-      metadata: { createdAt: new Date().toISOString() },
+      parts: ensureNonEmptyParts(parts),
+      metadata: {
+        createdAt: new Date().toISOString(),
+        ...(options?.skill ? { skill: options.skill } : {}),
+      },
     });
   };
 
@@ -1184,7 +1402,6 @@ export function ChatPageContent({
         agentId: initialAgentId,
         modelId: initialModel,
         chatApiKeyId: initialApiKeyId,
-        chatModels,
       });
       if (!input) {
         return false;
@@ -1199,13 +1416,7 @@ export function ChatPageContent({
       });
       return true;
     },
-    [
-      initialAgentId,
-      initialModel,
-      initialApiKeyId,
-      chatModels,
-      createConversationMutation,
-    ],
+    [initialAgentId, initialModel, initialApiKeyId, createConversationMutation],
   );
 
   const handleCreateConversationWithUrl = useCallback(
@@ -1230,23 +1441,30 @@ export function ChatPageContent({
     setPendingBrowserUrl(undefined);
   }, []);
 
-  const handleForkSharedConversation = useCallback(async () => {
-    if (!conversation?.share?.id || !effectiveForkAgentId) {
+  const handleForkConversation = useCallback(async () => {
+    if (!conversationId || !effectiveForkAgentId) {
       return;
     }
 
-    const result = await forkSharedConversationMutation.mutateAsync({
-      shareId: conversation.share.id,
-      agentId: effectiveForkAgentId,
-    });
+    const result = conversation?.share?.id
+      ? await forkSharedConversationMutation.mutateAsync({
+          shareId: conversation.share.id,
+          agentId: effectiveForkAgentId,
+        })
+      : await forkConversationMutation.mutateAsync({
+          conversationId,
+          agentId: effectiveForkAgentId,
+        });
 
     if (result) {
       setIsForkDialogOpen(false);
       router.push(`/chat/${result.id}`);
     }
   }, [
+    conversationId,
     conversation?.share?.id,
     effectiveForkAgentId,
+    forkConversationMutation,
     forkSharedConversationMutation,
     router,
   ]);
@@ -1268,22 +1486,23 @@ export function ChatPageContent({
 
   // Core logic for starting a new conversation with a message
   const submitInitialMessage = useCallback(
-    (message: Partial<PromptInputMessage>) => {
+    (message: Partial<PromptInputMessage>, skill?: ChatSkillMetadata) => {
       if (isPlaywrightSetupVisible) return;
       const hasText = message.text?.trim();
       const hasFiles = message.files && message.files.length > 0;
 
       if (
-        (!hasText && !hasFiles) ||
+        (!hasText && !hasFiles && !skill) ||
         !initialAgentId ||
         createConversationMutation.isPending
       ) {
         return;
       }
 
-      // Store the message (text and files) to send after conversation is created
+      // Store the message (text, files, skill) to send after conversation is created
       pendingPromptRef.current = message.text || "";
       pendingFilesRef.current = message.files || [];
+      pendingSkillRef.current = skill;
 
       // Check if there are pending tool actions to apply
       const pendingActions = getPendingActions(initialAgentId);
@@ -1347,13 +1566,14 @@ export function ChatPageContent({
   );
 
   // Form submit handler wraps submitInitialMessage with event.preventDefault
-  const handleInitialSubmit: PromptInputProps["onSubmit"] = useCallback(
-    (message, e) => {
-      e.preventDefault();
-      submitInitialMessage(message);
-    },
-    [submitInitialMessage],
-  );
+  const handleInitialSubmit: ArchestraPromptInputProps["onSubmit"] =
+    useCallback(
+      (message, e, options) => {
+        e.preventDefault();
+        submitInitialMessage(message, options?.skill);
+      },
+      [submitInitialMessage],
+    );
 
   // Auto-send message from URL when conditions are met (deep link support)
   useEffect(() => {
@@ -1370,6 +1590,11 @@ export function ChatPageContent({
 
     // Mark as triggered to prevent duplicate sends
     autoSendTriggeredRef.current = true;
+    clearUserPromptQueryParam({
+      pathname,
+      router,
+      searchParams,
+    });
 
     // Store the message to send after conversation is created
     pendingPromptRef.current = initialUserPrompt;
@@ -1384,6 +1609,43 @@ export function ChatPageContent({
     createInitialConversation,
     selectConversation,
     createConversationMutation.isPending,
+    pathname,
+    router,
+    searchParams,
+  ]);
+
+  useEffect(() => {
+    if (
+      autoSendTriggeredRef.current ||
+      !initialUserPrompt ||
+      !conversationId ||
+      !sendMessage ||
+      status !== "ready"
+    ) {
+      return;
+    }
+
+    autoSendTriggeredRef.current = true;
+
+    clearUserPromptQueryParam({
+      pathname,
+      router,
+      searchParams,
+    });
+
+    sendMessage({
+      role: "user",
+      parts: [{ type: "text", text: initialUserPrompt }],
+      metadata: { createdAt: new Date().toISOString() },
+    });
+  }, [
+    conversationId,
+    initialUserPrompt,
+    pathname,
+    router,
+    searchParams,
+    sendMessage,
+    status,
   ]);
 
   useEffect(() => {
@@ -1514,7 +1776,7 @@ export function ChatPageContent({
   }
 
   return (
-    <div className="flex h-screen w-full">
+    <div className="flex h-full w-full min-h-0">
       <div className="flex-1 flex flex-col min-w-0">
         <div className="flex flex-col h-full">
           <StreamTimeoutWarning status={status} messages={messages} />
@@ -1720,12 +1982,16 @@ export function ChatPageContent({
                     "hidden md:block",
                 )}
               >
-                {isReadOnlySharedConversation ? (
+                {isReadOnlyConversation ? (
                   <MessageThread
                     messages={sharedConversationMessages}
+                    chatErrors={conversation?.chatErrors ?? []}
+                    conversationId={conversationId}
                     containerClassName="h-full"
                     hideDivider
                     profileId={conversation?.agent?.id}
+                    agentName={conversation?.agent?.name}
+                    selectedModel={conversation?.modelId ?? undefined}
                   />
                 ) : (
                   <ChatMessages
@@ -1733,6 +1999,8 @@ export function ChatPageContent({
                     agentId={currentProfileId || initialAgentId || undefined}
                     messages={messages}
                     status={status}
+                    isContextCompacting={isContextCompacting}
+                    contextCompactionFeedback={manualCompactionFeedback}
                     optimisticToolCalls={optimisticToolCalls}
                     isLoadingConversation={isLoadingConversation}
                     onMessagesUpdate={setMessages}
@@ -1742,9 +2010,10 @@ export function ChatPageContent({
                         : internalAgents.find((a) => a.id === initialAgentId)
                       )?.name
                     }
-                    selectedModel={conversation?.selectedModel ?? initialModel}
+                    selectedModel={conversation?.modelId ?? initialModel}
                     modelSource={conversationModelSource ?? initialModelSource}
                     chatErrors={conversation?.chatErrors ?? []}
+                    compactions={conversation?.compactions ?? []}
                     onUserMessageEdit={(
                       editedMessage,
                       updatedMessages,
@@ -1780,7 +2049,7 @@ export function ChatPageContent({
                 )}
               </div>
 
-              {isReadOnlySharedConversation ? (
+              {isReadOnlyConversation ? (
                 <div className="sticky bottom-0 bg-background border-t p-4">
                   <div className="max-w-4xl mx-auto space-y-3">
                     <div className="relative">
@@ -1814,7 +2083,7 @@ export function ChatPageContent({
                               return;
                             }
 
-                            void handleForkSharedConversation();
+                            void handleForkConversation();
                           }}
                         >
                           <Plus className="h-4 w-4" />
@@ -1852,7 +2121,7 @@ export function ChatPageContent({
                       <ArchestraPromptInput
                         onSubmit={handleSubmit}
                         status={status}
-                        selectedModel={conversation?.selectedModel ?? ""}
+                        selectedModel={conversation?.modelId ?? ""}
                         onModelChange={handleModelChange}
                         agentId={promptAgentId ?? activeAgentId}
                         conversationId={conversationId}
@@ -1873,6 +2142,8 @@ export function ChatPageContent({
                           conversation?.agent?.llmApiKeyId ?? null
                         }
                         submitDisabled={isPlaywrightSetupVisible}
+                        isContextCompacting={isContextCompacting}
+                        onCompactConversation={handleCompactConversation}
                         isPlaywrightSetupVisible={isPlaywrightSetupVisible}
                         selectorAgentId={activeAgentId}
                         selectorAgentName={swappedAgentName ?? undefined}
@@ -1969,9 +2240,6 @@ export function ChatPageContent({
                       }
                       selectedModel={initialModel}
                       onModelChange={handleInitialModelChange}
-                      onModelSelectorOpenChange={
-                        handleInitialModelSelectorOpenChange
-                      }
                       agentId={newChatAgentId}
                       currentProvider={initialProvider}
                       textareaRef={textareaRef}
@@ -2077,13 +2345,15 @@ export function ChatPageContent({
               Cancel
             </Button>
             <Button
-              onClick={handleForkSharedConversation}
+              onClick={handleForkConversation}
               disabled={
                 !effectiveForkAgentId ||
+                forkConversationMutation.isPending ||
                 forkSharedConversationMutation.isPending
               }
             >
-              {forkSharedConversationMutation.isPending
+              {forkConversationMutation.isPending ||
+              forkSharedConversationMutation.isPending
                 ? "Creating..."
                 : "Start Chat"}
             </Button>
@@ -2103,71 +2373,27 @@ export default function ChatPage() {
   return <ChatPageContent key="new-chat" />;
 }
 
-function mergePersistedMessageMetadata(params: {
-  liveMessages: UIMessage[];
-  persistedMessages: UIMessage[];
-}): UIMessage[] {
-  const remainingPersistedMessages = [...params.persistedMessages];
-
-  return params.liveMessages.map((liveMessage) => {
-    if (hasCreatedAtMetadata(liveMessage)) {
-      return liveMessage;
-    }
-
-    const persistedIndex = remainingPersistedMessages.findIndex(
-      (persistedMessage) =>
-        messagesHaveSameRenderableContent({
-          liveMessage,
-          persistedMessage,
-        }),
-    );
-
-    if (persistedIndex === -1) {
-      return liveMessage;
-    }
-
-    const [persistedMessage] = remainingPersistedMessages.splice(
-      persistedIndex,
-      1,
-    );
-
-    return {
-      ...liveMessage,
-      metadata: {
-        ...getObjectMetadata(persistedMessage),
-        ...getObjectMetadata(liveMessage),
-      },
-    };
-  });
-}
-
-function messagesHaveSameRenderableContent(params: {
-  liveMessage: UIMessage;
-  persistedMessage: UIMessage;
+function clearUserPromptQueryParam(params: {
+  pathname: string;
+  router: ReturnType<typeof useRouter>;
+  searchParams: URLSearchParams;
 }) {
-  return (
-    params.liveMessage.role === params.persistedMessage.role &&
-    getMessageText(params.liveMessage) ===
-      getMessageText(params.persistedMessage)
-  );
+  const nextSearchParams = new URLSearchParams(params.searchParams.toString());
+  nextSearchParams.delete("user_prompt");
+  const nextUrl = nextSearchParams.toString()
+    ? `${params.pathname}?${nextSearchParams.toString()}`
+    : params.pathname;
+  params.router.replace(nextUrl);
 }
 
-function getMessageText(message: UIMessage) {
-  return message.parts
-    .filter((part) => part.type === "text")
-    .map((part) => part.text)
-    .join("\n");
-}
+type ChatMessagePart =
+  | { type: "text"; text: string }
+  | { type: "file"; url: string; mediaType: string; filename?: string };
 
-function hasCreatedAtMetadata(message: UIMessage) {
-  const metadata = getObjectMetadata(message);
-  return typeof metadata.createdAt === "string";
-}
-
-function getObjectMetadata(message: UIMessage): Record<string, unknown> {
-  return typeof message.metadata === "object" && message.metadata !== null
-    ? { ...message.metadata }
-    : {};
+// a bare skill command carries no parts of its own; keep an empty text part
+// so the message is well-formed and the backend can inject the skill
+function ensureNonEmptyParts(parts: ChatMessagePart[]): ChatMessagePart[] {
+  return parts.length === 0 ? [{ type: "text", text: "" }] : parts;
 }
 
 // =========================================================================

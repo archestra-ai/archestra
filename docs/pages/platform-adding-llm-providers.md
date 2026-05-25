@@ -140,11 +140,11 @@ Base URL configuration allows routing to custom endpoints (e.g., Azure OpenAI, l
 
 Tokenizers estimate token counts for provider messages. Used by Model Optimization and Tool Results Compression.
 
-| File                              | Description                                                                                                  |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `backend/src/tokenizers/base.ts`  | Add provider message type to `ProviderMessage` union                                                         |
-| `backend/src/tokenizers/base.ts`  | Update `BaseTokenizer.getMessageText()` if provider has a different message format                           |
-| `backend/src/tokenizers/index.ts` | Add entry to `tokenizerFactories` record - return appropriate tokenizer (or fallback to `TiktokenTokenizer`) |
+| File                              | Description                                                                                                   |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `backend/src/tokenizers/base.ts`  | Add provider message type to `ProviderMessage` union                                                          |
+| `backend/src/tokenizers/base.ts`  | Update `BaseTokenizer.getMessageText()` if provider has a different message format                            |
+| `backend/src/tokenizers/index.ts` | Add entry to `tokenizerFactories` record - return appropriate tokenizer (or fall back to `TiktokenTokenizer`) |
 
 ### Model Optimization
 

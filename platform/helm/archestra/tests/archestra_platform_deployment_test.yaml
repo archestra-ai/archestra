@@ -354,6 +354,34 @@ tests:
           path: spec.template.spec.initContainers[1].command[2]
           pattern: ".*nc -z.*"
 
+  - it: should bound the wait-for-postgres loop with the default timeout
+    documentIndex: 1
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: "max_attempts=300"
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: "did not become reachable after .* - giving up"
+
+  - it: should honor a custom waitForPostgres timeout in both postgres init containers
+    documentIndex: 1
+    set:
+      archestra.initContainers.waitForPostgres.timeoutSeconds: 60
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: wait-for-postgres
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: "max_attempts=60"
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: setup-postgres-extensions
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "max_attempts=60"
+
   - it: should set ARCHESTRA_DATABASE_URL with postgres:// scheme
     documentIndex: 1
     set:
@@ -415,6 +443,88 @@ tests:
           content:
             name: CUSTOM_VAR
             value: "custom-value"
+
+  - it: should not set code runtime environment variables by default
+    documentIndex: 1
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_ENABLED
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+
+  - it: should set code runtime environment variables when enabled
+    documentIndex: 1
+    set:
+      archestra.codeRuntime.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_ENABLED
+            value: "true"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+            value: kube-pod://dagger-runtime-engine-0?namespace=dagger&container=dagger-engine
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_TIMEOUT_SECONDS
+            value: "60"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_MAX_CONCURRENT
+            value: "10"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_MAX_OUTPUT_BYTES
+            value: "65536"
+
+  - it: should support custom code runtime Dagger runner host
+    documentIndex: 1
+    set:
+      archestra.codeRuntime.enabled: true
+      archestra.codeRuntime.dagger.runnerHost: tcp://dagger-runtime.custom.svc.cluster.local:1234
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+            value: tcp://dagger-runtime.custom.svc.cluster.local:1234
+
+  - it: should use the release namespace for managed code runtime Dagger pod
+    documentIndex: 1
+    set:
+      archestra.codeRuntime.enabled: true
+      archestra.codeRuntime.dagger.managed.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+            value: kube-pod://dagger-runtime-engine-0?namespace=NAMESPACE&container=dagger-engine
+
+  - it: should support custom code runtime Dagger pod settings
+    documentIndex: 1
+    set:
+      archestra.codeRuntime.enabled: true
+      archestra.codeRuntime.dagger.pod.name: dagger-engine-3
+      archestra.codeRuntime.dagger.pod.namespace: code-runtime
+      archestra.codeRuntime.dagger.pod.container: custom-engine
+      archestra.codeRuntime.dagger.pod.context: prod-cluster
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+            value: kube-pod://dagger-engine-3?namespace=code-runtime&container=custom-engine&context=prod-cluster
 
   - it: should include ARCHESTRA_DATABASE_URL alongside custom env vars
     documentIndex: 1
@@ -1387,7 +1497,7 @@ tests:
           value: 10
       - equal:
           path: spec.template.spec.containers[0].startupProbe.timeoutSeconds
-          value: 5
+          value: 45
       - equal:
           path: spec.template.spec.containers[0].startupProbe.failureThreshold
           value: 30
@@ -1408,10 +1518,10 @@ tests:
           value: 10
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.timeoutSeconds
-          value: 5
+          value: 45
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.failureThreshold
-          value: 3
+          value: 5
 
   - it: should have readiness probe configured
     documentIndex: 1
@@ -1429,15 +1539,18 @@ tests:
           value: 10
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
-          value: 5
+          value: 45
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.failureThreshold
           value: 3
 
   # Resource requests and limits tests
-  - it: should have default memory resources configured
+  - it: should have default resources configured
     documentIndex: 1
     asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: "2"
       - equal:
           path: spec.template.spec.containers[0].resources.requests.memory
           value: "2Gi"
@@ -1523,6 +1636,17 @@ tests:
       - equal:
           path: spec.template.metadata.annotations["config.linkerd.io/proxy-cpu-request"]
           value: "100m"
+
+  # Pod labels tests
+  - it: should apply pod labels when provided
+    documentIndex: 1
+    set:
+      archestra.podLabels:
+        azure.workload.identity/use: "true"
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["azure.workload.identity/use"]
+          value: "true"
 
   # Sensitive environment variable secretKeyRef tests
   - it: should use secretKeyRef for ARCHESTRA_AUTH_ADMIN_PASSWORD when provided

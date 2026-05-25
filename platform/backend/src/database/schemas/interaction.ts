@@ -15,6 +15,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type {
   DualLlmAnalysis,
+  InteractionAuthMethod,
   InteractionRequest,
   InteractionResponse,
   ToonSkipReason,
@@ -22,6 +23,7 @@ import type {
 } from "@/types";
 import agentsTable from "./agent";
 import usersTable from "./user";
+import virtualApiKeysTable from "./virtual-api-key";
 
 const interactionsTable = pgTable(
   "interactions",
@@ -50,6 +52,10 @@ const interactionsTable = pgTable(
     userId: text("user_id").references(() => usersTable.id, {
       onDelete: "set null",
     }),
+    virtualKeyId: uuid("virtual_key_id").references(
+      () => virtualApiKeysTable.id,
+      { onDelete: "set null" },
+    ),
     /**
      * Session ID to group related LLM requests together.
      * Can be extracted from:
@@ -70,6 +76,17 @@ const interactionsTable = pgTable(
      * External API requests default to 'api'.
      */
     source: varchar("source").$type<InteractionSource>(),
+    /**
+     * Authentication method used for the request.
+     */
+    authMethod: varchar("auth_method").$type<InteractionAuthMethod>(),
+    /**
+     * Authenticated application identity resolved from an OAuth client
+     * credentials token. This is distinct from externalAgentId, which is a
+     * caller-supplied label.
+     */
+    authenticatedAppId: text("authenticated_app_id"),
+    authenticatedAppName: varchar("authenticated_app_name"),
     request: jsonb("request").$type<InteractionRequest>().notNull(),
     processedRequest: jsonb("processed_request").$type<InteractionRequest>(),
     response: jsonb("response").$type<InteractionResponse>().notNull(),

@@ -2,13 +2,16 @@ import {
   AGENT_TOOL_PREFIX,
   ARCHESTRA_MCP_CATALOG_ID,
   ARCHESTRA_TOOL_SHORT_NAMES,
+  type ArchestraToolShortName,
   BUILT_IN_AGENT_IDS,
   DEFAULT_ARCHESTRA_TOOL_NAMES,
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   parseFullToolName,
+  SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
   slugify,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  TOOL_RUN_PYTHON_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@shared";
@@ -32,6 +35,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata";
+import config from "@/config";
 import db, { schema } from "@/database";
 import {
   createPaginatedResult,
@@ -663,7 +667,7 @@ class ToolModel {
   static async seedArchestraTools(
     catalogId: string,
     organizationOverride?: Pick<Organization, "appName" | "iconLogo"> | null,
-  ): Promise<void> {
+  ): Promise<string[]> {
     const organization =
       organizationOverride ?? (await OrganizationModel.getFirst());
     archestraMcpBranding.syncFromOrganization(organization);
@@ -809,6 +813,81 @@ class ToolModel {
         "Removed stale Archestra tools",
       );
     }
+
+    // Names of tools created on this run — used by callers to trigger
+    // one-time backfills when a new built-in tool first appears.
+    return toolsToInsert.map((tool) => tool.name);
+  }
+
+  /**
+   * Assign the Agent Skill tools (list_skills / activate_skill /
+   * read_skill_file) to every existing agent in the given organization.
+   * Idempotent.
+   *
+   * Triggered by the "Enable and create a new skill" empty-state button
+   * (POST /api/skills/enable-defaults).
+   */
+  static async backfillSkillToolsToOrgAgents(
+    organizationId: string,
+  ): Promise<number> {
+    const toolIds = await ToolModel.getSkillToolIdsForOrg(organizationId);
+    if (toolIds.length === 0) return 0;
+
+    const agents = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(eq(schema.agentsTable.organizationId, organizationId));
+
+    for (const agent of agents) {
+      await AgentToolModel.createManyIfNotExists(agent.id, toolIds);
+    }
+
+    logger.info(
+      { organizationId, agentCount: agents.length },
+      "Backfilled Agent Skill tools to org agents",
+    );
+    return agents.length;
+  }
+
+  /**
+   * Assign skill tools to a single agent if its org has opted in
+   * (`organization.skillToolsEnabled`). No-op otherwise.
+   *
+   * Called from `AgentModel.create` so new agents inherit skill tools after
+   * the org has enabled them.
+   */
+  static async assignSkillToolsToAgent(
+    agentId: string,
+    organizationId: string,
+  ): Promise<void> {
+    const organization = await OrganizationModel.getById(organizationId);
+    if (!organization?.skillToolsEnabled) return;
+
+    const toolIds = await ToolModel.getSkillToolIdsForOrg(organizationId, {
+      organization,
+    });
+    if (toolIds.length === 0) return;
+
+    await AgentToolModel.createManyIfNotExists(agentId, toolIds);
+  }
+
+  private static async getSkillToolIdsForOrg(
+    organizationId: string,
+    options?: { organization?: Organization | null },
+  ): Promise<string[]> {
+    const organization =
+      options?.organization ??
+      (await OrganizationModel.getById(organizationId));
+    archestraMcpBranding.syncFromOrganization(organization);
+    const skillToolNames = SKILL_ARCHESTRA_TOOL_SHORT_NAMES.map((shortName) =>
+      archestraMcpBranding.getToolName(shortName),
+    );
+
+    const skillTools = await db
+      .select({ id: schema.toolsTable.id })
+      .from(schema.toolsTable)
+      .where(inArray(schema.toolsTable.name, skillToolNames));
+    return skillTools.map((tool) => tool.id);
   }
 
   static async syncArchestraBuiltInCatalog(params: {
@@ -848,9 +927,10 @@ class ToolModel {
    * - artifact_write: for artifact management
    * - todo_write: for task tracking
    * - query_knowledge_sources: for querying the knowledge base
+   * - run_python: for code execution, only when the runtime is enabled
    *
-   * All default tools are always assigned. The query_knowledge_sources tool
-   * is filtered out at query time if the agent has no knowledge base assigned.
+   * Seeded default tools are assigned. The query_knowledge_sources tool is
+   * filtered out at query time if the agent has no knowledge base assigned.
    *
    * Only tools that have already been seeded (via {@link seedArchestraTools})
    * will be assigned. If none of the default tools exist, this method skips assignment.
@@ -860,8 +940,15 @@ class ToolModel {
   ): Promise<void> {
     const organization = await OrganizationModel.getFirst();
     archestraMcpBranding.syncFromOrganization(organization);
-    const defaultToolNames = DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES.map(
-      (shortName) => archestraMcpBranding.getToolName(shortName),
+    const defaultToolShortNames: ArchestraToolShortName[] = [
+      ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+    ];
+    if (config.codeRuntime.enabled) {
+      defaultToolShortNames.push(TOOL_RUN_PYTHON_SHORT_NAME);
+    }
+
+    const defaultToolNames = defaultToolShortNames.map((shortName) =>
+      archestraMcpBranding.getToolName(shortName),
     );
 
     const defaultTools = await db
@@ -932,6 +1019,7 @@ class ToolModel {
           schema.agentToolsTable.credentialResolutionMode,
         catalogId: schema.toolsTable.catalogId,
         catalogName: schema.internalMcpCatalogTable.name,
+        meta: schema.toolsTable.meta,
       })
       .from(schema.toolsTable)
       .innerJoin(
@@ -975,6 +1063,7 @@ class ToolModel {
           schema.agentToolsTable.credentialResolutionMode,
         catalogId: schema.toolsTable.catalogId,
         catalogName: schema.internalMcpCatalogTable.name,
+        meta: schema.toolsTable.meta,
       })
       .from(schema.toolsTable)
       .innerJoin(

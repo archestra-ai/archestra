@@ -57,6 +57,58 @@ export abstract class BaseConnector implements Connector {
     this.log = log;
   }
 
+  protected async validateConfigWithSchema<T>(params: {
+    config: Record<string, unknown>;
+    parser: (raw: Record<string, unknown>) => T | null;
+    label: string;
+    invalidConfigError?: string;
+    extraChecks?: (parsed: T) => string | null;
+  }): Promise<{ valid: boolean; error?: string }> {
+    const parsed = params.parser(params.config);
+    if (!parsed) {
+      return {
+        valid: false,
+        error:
+          params.invalidConfigError ?? `Invalid ${params.label} configuration`,
+      };
+    }
+    const extraError = params.extraChecks?.(parsed);
+    if (extraError) {
+      return { valid: false, error: extraError };
+    }
+    return { valid: true };
+  }
+
+  protected async runConnectionTest(params: {
+    label: string;
+    probe: () => Promise<void>;
+    errorContext?: (error: unknown) => Record<string, unknown>;
+  }): Promise<{ success: boolean; error?: string }> {
+    this.log.debug(
+      { connectorType: this.type },
+      `Testing ${params.label} connection`,
+    );
+    try {
+      await params.probe();
+      this.log.debug(
+        { connectorType: this.type },
+        `${params.label} connection test successful`,
+      );
+      return { success: true };
+    } catch (error) {
+      const message = extractErrorMessage(error);
+      this.log.error(
+        {
+          connectorType: this.type,
+          error: message,
+          ...(params.errorContext?.(error) ?? {}),
+        },
+        `${params.label} connection test failed`,
+      );
+      return { success: false, error: `Connection failed: ${message}` };
+    }
+  }
+
   abstract validateConfig(
     config: Record<string, unknown>,
   ): Promise<{ valid: boolean; error?: string }>;

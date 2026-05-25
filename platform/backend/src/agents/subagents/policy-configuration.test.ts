@@ -1,10 +1,10 @@
-import { generateObject } from "ai";
+import { generateText } from "ai";
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
 import AgentModel from "@/models/agent";
 import { beforeEach, describe, expect, test } from "@/test";
-import { resolveSmartDefaultLlm } from "@/utils/llm-resolution";
+import { resolveBestAvailableLlm } from "@/utils/llm-resolution";
 import { PolicyConfigurationService } from "./policy-configuration";
 
 vi.mock("@/clients/llm-client", () => ({
@@ -12,11 +12,14 @@ vi.mock("@/clients/llm-client", () => ({
 }));
 
 vi.mock("ai", () => ({
-  generateObject: vi.fn(),
+  generateText: vi.fn(),
+  Output: {
+    object: vi.fn((opts) => ({ type: "object", ...opts })),
+  },
 }));
 
 vi.mock("@/utils/llm-resolution", () => ({
-  resolveSmartDefaultLlm: vi.fn(),
+  resolveBestAvailableLlm: vi.fn(),
   resolveConfiguredAgentLlm: vi.fn(),
 }));
 
@@ -39,11 +42,11 @@ describe("PolicyConfigurationService", () => {
     vi.clearAllMocks();
     service = new PolicyConfigurationService();
     // Default: no LLM available
-    vi.mocked(resolveSmartDefaultLlm).mockResolvedValue(null);
+    vi.mocked(resolveBestAvailableLlm).mockResolvedValue(null);
   });
 
   describe("resolveLlm", () => {
-    test("returns null when resolveSmartDefaultLlm returns null", async ({
+    test("returns null when resolveBestAvailableLlm returns null", async ({
       makeOrganization,
     }) => {
       const org = await makeOrganization();
@@ -53,12 +56,12 @@ describe("PolicyConfigurationService", () => {
       expect(result).toBeNull();
     });
 
-    test("returns resolved config when resolveSmartDefaultLlm returns a result", async ({
+    test("returns resolved config when resolveBestAvailableLlm returns a result", async ({
       makeOrganization,
     }) => {
       const org = await makeOrganization();
 
-      vi.mocked(resolveSmartDefaultLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
+      vi.mocked(resolveBestAvailableLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
 
       const result = await service.resolveLlm({ organizationId: org.id });
 
@@ -73,7 +76,7 @@ describe("PolicyConfigurationService", () => {
         userId: "user-123",
       });
 
-      expect(resolveSmartDefaultLlm).toHaveBeenCalledWith({
+      expect(resolveBestAvailableLlm).toHaveBeenCalledWith({
         organizationId: org.id,
         userId: "user-123",
       });
@@ -98,7 +101,7 @@ describe("PolicyConfigurationService", () => {
     test("returns error when tool not found", async ({ makeOrganization }) => {
       const org = await makeOrganization();
 
-      vi.mocked(resolveSmartDefaultLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
+      vi.mocked(resolveBestAvailableLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
 
       const result = await service.configurePoliciesForTool({
         toolId: "nonexistent-tool",
@@ -116,7 +119,7 @@ describe("PolicyConfigurationService", () => {
     }) => {
       const org = await makeOrganization();
 
-      vi.mocked(resolveSmartDefaultLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
+      vi.mocked(resolveBestAvailableLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
       vi.spyOn(AgentModel, "getBuiltInAgent").mockResolvedValue(
         MOCK_BUILT_IN_AGENT as never,
       );
@@ -125,9 +128,9 @@ describe("PolicyConfigurationService", () => {
       const mcpServer = await makeMcpServer({ name: "test-server" });
       const tool = await makeTool({ catalogId: mcpServer.catalogId });
 
-      // Mock the generateObject call (uses new LLM-facing enum values)
-      vi.mocked(generateObject).mockResolvedValue({
-        object: {
+      // Mock the generateText call (uses new LLM-facing enum values)
+      vi.mocked(generateText).mockResolvedValue({
+        output: {
           toolInvocationAction: "allow_when_context_is_sensitive",
           trustedDataAction: "mark_as_safe",
           reasoning: "This tool is safe",
@@ -146,11 +149,11 @@ describe("PolicyConfigurationService", () => {
         reasoning: "This tool is safe",
       });
 
-      // Verify generateObject was called
-      expect(generateObject).toHaveBeenCalledWith(
+      // Verify generateText was called
+      expect(generateText).toHaveBeenCalledWith(
         expect.objectContaining({
           model: "mocked-model",
-          schema: expect.any(Object),
+          output: expect.any(Object),
           prompt: expect.any(String),
         }),
       );
@@ -180,7 +183,7 @@ describe("PolicyConfigurationService", () => {
     }) => {
       const org = await makeOrganization();
 
-      vi.mocked(resolveSmartDefaultLlm).mockResolvedValue({
+      vi.mocked(resolveBestAvailableLlm).mockResolvedValue({
         provider: "openai",
         apiKey: "sk-openai-test-key",
         modelName: "gpt-4o",
@@ -194,8 +197,8 @@ describe("PolicyConfigurationService", () => {
       const tool = await makeTool({ catalogId: mcpServer.catalogId });
 
       // Mock blocking policy response
-      vi.mocked(generateObject).mockResolvedValue({
-        object: {
+      vi.mocked(generateText).mockResolvedValue({
+        output: {
           toolInvocationAction: "block_always",
           trustedDataAction: "block_always",
           reasoning: "This tool is risky",
@@ -228,7 +231,7 @@ describe("PolicyConfigurationService", () => {
     }) => {
       const org = await makeOrganization();
 
-      vi.mocked(resolveSmartDefaultLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
+      vi.mocked(resolveBestAvailableLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
       vi.spyOn(AgentModel, "getBuiltInAgent").mockResolvedValue(
         MOCK_BUILT_IN_AGENT as never,
       );
@@ -236,8 +239,8 @@ describe("PolicyConfigurationService", () => {
       const mcpServer = await makeMcpServer({ name: "test-server" });
       const tool = await makeTool({ catalogId: mcpServer.catalogId });
 
-      vi.mocked(generateObject).mockResolvedValue({
-        object: {
+      vi.mocked(generateText).mockResolvedValue({
+        output: {
           toolInvocationAction: "allow_when_context_is_sensitive",
           trustedDataAction: "sanitize_with_dual_llm",
           reasoning: "This tool needs sanitization",
@@ -263,7 +266,7 @@ describe("PolicyConfigurationService", () => {
     }) => {
       const org = await makeOrganization();
 
-      vi.mocked(resolveSmartDefaultLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
+      vi.mocked(resolveBestAvailableLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
       vi.spyOn(AgentModel, "getBuiltInAgent").mockResolvedValue(
         MOCK_BUILT_IN_AGENT as never,
       );
@@ -271,8 +274,8 @@ describe("PolicyConfigurationService", () => {
       const mcpServer = await makeMcpServer({ name: "test-server" });
       const tool = await makeTool({ catalogId: mcpServer.catalogId });
 
-      vi.mocked(generateObject).mockResolvedValue({
-        object: {
+      vi.mocked(generateText).mockResolvedValue({
+        output: {
           toolInvocationAction: "block_when_context_is_sensitive",
           trustedDataAction: "mark_as_sensitive",
           reasoning: "External API that could leak data",
@@ -291,6 +294,47 @@ describe("PolicyConfigurationService", () => {
       expect(invocationPolicies[0].action).toBe(
         "block_when_context_is_untrusted",
       );
+
+      const trustedDataPolicies = await db
+        .select()
+        .from(schema.trustedDataPoliciesTable)
+        .where(eq(schema.trustedDataPoliciesTable.toolId, tool.id));
+      expect(trustedDataPolicies[0].action).toBe("mark_as_untrusted");
+    });
+
+    test("handles require_approval invocation action", async ({
+      makeOrganization,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const org = await makeOrganization();
+
+      vi.mocked(resolveBestAvailableLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
+      vi.spyOn(AgentModel, "getBuiltInAgent").mockResolvedValue(
+        MOCK_BUILT_IN_AGENT as never,
+      );
+
+      const mcpServer = await makeMcpServer({ name: "test-server" });
+      const tool = await makeTool({ catalogId: mcpServer.catalogId });
+
+      vi.mocked(generateText).mockResolvedValue({
+        output: {
+          toolInvocationAction: "require_approval",
+          trustedDataAction: "mark_as_sensitive",
+          reasoning: "Mutating write that needs user confirmation",
+        },
+      } as never);
+
+      await service.configurePoliciesForTool({
+        toolId: tool.id,
+        organizationId: org.id,
+      });
+
+      const invocationPolicies = await db
+        .select()
+        .from(schema.toolInvocationPoliciesTable)
+        .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
+      expect(invocationPolicies[0].action).toBe("require_approval");
 
       const trustedDataPolicies = await db
         .select()

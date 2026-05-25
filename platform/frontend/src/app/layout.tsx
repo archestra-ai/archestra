@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { PublicEnvScript } from "next-runtime-env";
 import { AppShell } from "./_parts/app-shell";
+import { MswInit } from "./_parts/msw-init";
 import { PostHogProviderWrapper } from "./_parts/posthog-provider";
 import { ArchestraQueryClientProvider } from "./_parts/query-client-provider";
 import { ThemeProvider } from "./_parts/theme-provider";
@@ -15,8 +16,9 @@ import { WithAuthCheck } from "./_parts/with-auth-check";
 import { WithPagePermissions } from "./_parts/with-page-permissions";
 import { AuthProvider } from "./auth/auth-provider";
 
-// Load fonts for white-labeling (self-hosted to avoid Google Fonts network
-// dependency during Docker builds — Turbopack cannot fetch them reliably)
+// Register theme fonts for white-labeling without preloading every file.
+// The active theme decides which CSS variable is used after appearance settings
+// load, so eager preload would fetch every optional font on every page.
 const latoFont = localFont({
   src: [
     { path: "../fonts/Lato-Light.woff2", weight: "300" },
@@ -26,6 +28,7 @@ const latoFont = localFont({
   ],
   variable: "--font-lato",
   display: "swap",
+  preload: false,
 });
 
 const interFont = localFont({
@@ -33,6 +36,7 @@ const interFont = localFont({
   variable: "--font-inter",
   weight: "100 900",
   display: "swap",
+  preload: false,
 });
 
 const openSansFont = localFont({
@@ -40,6 +44,7 @@ const openSansFont = localFont({
   variable: "--font-open-sans",
   weight: "300 800",
   display: "swap",
+  preload: false,
 });
 
 const robotoFont = localFont({
@@ -47,6 +52,7 @@ const robotoFont = localFont({
   variable: "--font-roboto",
   weight: "100 900",
   display: "swap",
+  preload: false,
 });
 
 const sourceSansFont = localFont({
@@ -54,6 +60,7 @@ const sourceSansFont = localFont({
   variable: "--font-source-sans",
   weight: "200 900",
   display: "swap",
+  preload: false,
 });
 
 const jetbrainsMonoFont = localFont({
@@ -61,6 +68,7 @@ const jetbrainsMonoFont = localFont({
   variable: "--font-jetbrains-mono",
   weight: "100 800",
   display: "swap",
+  preload: false,
 });
 
 const dmSansFont = localFont({
@@ -68,6 +76,7 @@ const dmSansFont = localFont({
   variable: "--font-dm-sans",
   weight: "100 1000",
   display: "swap",
+  preload: false,
 });
 
 const poppinsFont = localFont({
@@ -80,6 +89,7 @@ const poppinsFont = localFont({
   ],
   variable: "--font-poppins",
   display: "swap",
+  preload: false,
 });
 
 const oxaniumFont = localFont({
@@ -87,6 +97,7 @@ const oxaniumFont = localFont({
   variable: "--font-oxanium",
   weight: "200 800",
   display: "swap",
+  preload: false,
 });
 
 const montserratFont = localFont({
@@ -94,6 +105,7 @@ const montserratFont = localFont({
   variable: "--font-montserrat",
   weight: "100 900",
   display: "swap",
+  preload: false,
 });
 
 const sourceCodeProFont = localFont({
@@ -101,6 +113,7 @@ const sourceCodeProFont = localFont({
   variable: "--font-source-code-pro",
   weight: "200 900",
   display: "swap",
+  preload: false,
 });
 
 const merriweatherFont = localFont({
@@ -108,6 +121,7 @@ const merriweatherFont = localFont({
   variable: "--font-merriweather",
   weight: "300 900",
   display: "swap",
+  preload: false,
 });
 
 const quicksandFont = localFont({
@@ -115,6 +129,7 @@ const quicksandFont = localFont({
   variable: "--font-quicksand",
   weight: "300 700",
   display: "swap",
+  preload: false,
 });
 
 const outfitFont = localFont({
@@ -122,6 +137,7 @@ const outfitFont = localFont({
   variable: "--font-outfit",
   weight: "100 900",
   display: "swap",
+  preload: false,
 });
 
 const plusJakartaSansFont = localFont({
@@ -129,6 +145,7 @@ const plusJakartaSansFont = localFont({
   variable: "--font-plus-jakarta-sans",
   weight: "200 800",
   display: "swap",
+  preload: false,
 });
 
 const libreBaskervilleFont = localFont({
@@ -136,6 +153,7 @@ const libreBaskervilleFont = localFont({
   variable: "--font-libre-baskerville",
   weight: "400 700",
   display: "swap",
+  preload: false,
 });
 
 export const metadata: Metadata = {
@@ -158,29 +176,31 @@ export default function RootLayout({
         <link rel="icon" href="/favicon.ico" />
       </head>
       <body className="font-sans antialiased">
-        <ArchestraQueryClientProvider>
-          <AuthProvider>
-            <ChatProvider>
-              <ThemeProvider
-                attribute="class"
-                defaultTheme="system"
-                enableSystem
-                disableTransitionOnChange
-              >
-                <PostHogProviderWrapper>
-                  <OrgThemeLoader />
-                  <DynamicHead />
-                  <WithAuthCheck>
-                    <WebsocketInitializer />
-                    <AppShell>
-                      <WithPagePermissions>{children}</WithPagePermissions>
-                    </AppShell>
-                  </WithAuthCheck>
-                </PostHogProviderWrapper>
-              </ThemeProvider>
-            </ChatProvider>
-          </AuthProvider>
-        </ArchestraQueryClientProvider>
+        <MswInit>
+          <ArchestraQueryClientProvider>
+            <AuthProvider>
+              <ChatProvider>
+                <ThemeProvider
+                  attribute="class"
+                  defaultTheme="light"
+                  enableSystem
+                  disableTransitionOnChange
+                >
+                  <PostHogProviderWrapper>
+                    <OrgThemeLoader />
+                    <DynamicHead />
+                    <WithAuthCheck>
+                      <WebsocketInitializer />
+                      <AppShell>
+                        <WithPagePermissions>{children}</WithPagePermissions>
+                      </AppShell>
+                    </WithAuthCheck>
+                  </PostHogProviderWrapper>
+                </ThemeProvider>
+              </ChatProvider>
+            </AuthProvider>
+          </ArchestraQueryClientProvider>
+        </MswInit>
       </body>
     </html>
   );

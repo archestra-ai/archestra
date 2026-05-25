@@ -3,6 +3,8 @@ import {
   DEFAULT_LLM_PROXY_NAME,
   type PaginationQuery,
   PLAYWRIGHT_MCP_CATALOG_ID,
+  parseFullToolName,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   urlSlugify,
 } from "@shared";
 import {
@@ -231,6 +233,10 @@ class AgentModel {
       await ToolModel.findOrCreateDelegationTool(createdAgent.id);
     }
 
+    // Auto-assign Agent Skill tools if the org has opted in via the
+    // "Enable and create a new skill" empty-state action.
+    await ToolModel.assignSkillToolsToAgent(createdAgent.id, organizationId);
+
     // Get team details and tools for the created agent
     const [teamDetails, assignedTools] = await Promise.all([
       teams && teams.length > 0
@@ -246,7 +252,7 @@ class AgentModel {
         .where(eq(schema.agentToolsTable.agentId, createdAgent.id)),
     ]);
 
-    return {
+    const result: Agent = {
       ...createdAgent,
       tools: assignedTools.map((row) => row.tool),
       teams: teamDetails,
@@ -255,6 +261,9 @@ class AgentModel {
       connectorIds: connectorIds ?? [],
       suggestedPrompts: suggestedPrompts ?? [],
     };
+    AgentModel.filterUnavailableKnowledgeTools([result]);
+
+    return result;
   }
 
   /**
@@ -386,6 +395,7 @@ class AgentModel {
       AgentModel.populateConnectorIds(agents),
       AgentModel.populateSuggestedPrompts(agents),
     ]);
+    AgentModel.filterUnavailableKnowledgeTools(agents);
 
     return agents;
   }
@@ -455,7 +465,7 @@ class AgentModel {
       toolsByAgent.set(row.agentId, existing);
     }
 
-    return agents.map((agent) => ({
+    const results = agents.map((agent) => ({
       ...agent,
       tools: toolsByAgent.get(agent.id) || [],
       teams: teamsMap.get(agent.id) || [],
@@ -464,6 +474,9 @@ class AgentModel {
       connectorIds: connectorMap.get(agent.id) || [],
       suggestedPrompts: suggestedPromptsMap.get(agent.id) || [],
     }));
+    AgentModel.filterUnavailableKnowledgeTools(results);
+
+    return results;
   }
 
   /**
@@ -537,7 +550,7 @@ class AgentModel {
       toolsByAgent.set(row.agentId, existing);
     }
 
-    return agents.map((agent) => ({
+    const results = agents.map((agent) => ({
       ...agent,
       tools: toolsByAgent.get(agent.id) || [],
       teams: teamsMap.get(agent.id) || [],
@@ -546,6 +559,9 @@ class AgentModel {
       connectorIds: connectorMap.get(agent.id) || [],
       suggestedPrompts: suggestedPromptsMap.get(agent.id) || [],
     }));
+    AgentModel.filterUnavailableKnowledgeTools(results);
+
+    return results;
   }
 
   static async findByLabels(
@@ -998,6 +1014,7 @@ class AgentModel {
       AgentModel.populateConnectorIds(agents),
       AgentModel.populateSuggestedPrompts(agents),
     ]);
+    AgentModel.filterUnavailableKnowledgeTools(agents);
 
     return createPaginatedResult(agents, Number(totalResult), pagination);
   }
@@ -1041,6 +1058,21 @@ class AgentModel {
         END
       `),
     ];
+  }
+
+  private static filterUnavailableKnowledgeTools(agents: Agent[]): void {
+    for (const agent of agents) {
+      const hasKnowledgeSources =
+        agent.knowledgeBaseIds.length > 0 || agent.connectorIds.length > 0;
+
+      if (hasKnowledgeSources) {
+        continue;
+      }
+
+      agent.tools = agent.tools.filter(
+        (tool) => !isQueryKnowledgeSourcesTool(tool.name),
+      );
+    }
   }
 
   /**
@@ -1189,6 +1221,7 @@ class AgentModel {
       AgentModel.populateAuthorNames([result]),
       AgentModel.populateSuggestedPrompts([result]),
     ]);
+    AgentModel.filterUnavailableKnowledgeTools([result]);
 
     return result;
   }
@@ -1236,7 +1269,7 @@ class AgentModel {
       .map((row) => row.tools)
       .filter((tool): tool is NonNullable<typeof tool> => tool !== null);
 
-    return {
+    const result: Agent = {
       ...agent,
       tools,
       teams: await AgentTeamModel.getTeamDetailsForAgent(agent.id),
@@ -1249,6 +1282,9 @@ class AgentModel {
       ),
       suggestedPrompts: [],
     };
+    AgentModel.filterUnavailableKnowledgeTools([result]);
+
+    return result;
   }
 
   private static async getOrCreateDefaultByType(
@@ -1824,7 +1860,7 @@ class AgentModel {
           incomingEmailSecurityMode: sourceAgent.incomingEmailSecurityMode,
           incomingEmailAllowedDomain: sourceAgent.incomingEmailAllowedDomain,
           llmApiKeyId: null,
-          llmModel: sourceAgent.llmModel,
+          modelId: sourceAgent.modelId,
           identityProviderId: null,
           passthroughHeaders: null,
         },
@@ -1902,6 +1938,13 @@ function errorMentions(error: unknown, needle: string): boolean {
   if (!(error instanceof Error)) return false;
   if (error.message.includes(needle)) return true;
   return errorMentions((error as { cause?: unknown }).cause, needle);
+}
+
+function isQueryKnowledgeSourcesTool(toolName: string): boolean {
+  return (
+    parseFullToolName(toolName).toolName ===
+    TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME
+  );
 }
 
 export default AgentModel;

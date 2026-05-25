@@ -5,6 +5,7 @@ import {
 } from "@shared";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ComponentProps } from "react";
 import { useForm } from "react-hook-form";
 import { describe, expect, it, vi } from "vitest";
 import { Button } from "@/components/ui/button";
@@ -32,9 +33,11 @@ global.ResizeObserver = class ResizeObserver {
 function TestWrapper({
   onSubmit,
   providerId = "test",
+  activeSection,
 }: {
   onSubmit?: (data: IdentityProviderFormValues) => void;
   providerId?: string;
+  activeSection?: ComponentProps<typeof OidcConfigForm>["activeSection"];
 }) {
   const form = useForm<IdentityProviderFormValues>({
     // biome-ignore lint/suspicious/noExplicitAny: test setup
@@ -62,7 +65,7 @@ function TestWrapper({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit((data) => onSubmit?.(data))}>
-        <OidcConfigForm form={form} />
+        <OidcConfigForm form={form} activeSection={activeSection} />
         <Button type="submit">Save</Button>
       </form>
     </Form>
@@ -130,5 +133,19 @@ describe("OidcConfigForm", () => {
     expect(
       screen.queryByLabelText("Hosted Domain Hint (Optional)"),
     ).not.toBeInTheDocument();
+  });
+
+  it("renders only the active dialog section when provided", () => {
+    render(<TestWrapper activeSection="role-mapping" />);
+
+    expect(screen.getByText("Role Mapping")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Client ID")).not.toBeInTheDocument();
+    expect(screen.queryByText("Team Sync")).not.toBeInTheDocument();
+  });
+
+  it("opens accordion-backed sections when selected from the dialog sidebar", () => {
+    render(<TestWrapper activeSection="attribute-mapping" />);
+
+    expect(screen.getByLabelText("User ID Claim")).toBeInTheDocument();
   });
 });

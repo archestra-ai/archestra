@@ -23,6 +23,7 @@ export const actions = [
 
 export const resources = [
   "agent",
+  "skill",
   "mcpGateway",
   "llmProxy",
   "toolPolicy",
@@ -39,6 +40,7 @@ export const resources = [
   "optimizationRule",
   "llmProviderApiKey",
   "llmVirtualKey",
+  "llmOauthClient",
   "llmModel",
   "secret",
   "organizationSettings",
@@ -70,10 +72,12 @@ export const resources = [
   "chatAgentPicker",
   "chatProviderSettings",
   "chatExpandToolCalls",
+  "siteNotification",
 ] as const;
 
 export const resourceLabels: Record<Resource, string> = {
   agent: "Agents",
+  skill: "Skills",
   mcpGateway: "MCP Gateways",
   llmProxy: "LLM Proxies",
   toolPolicy: "Tools & Policies",
@@ -95,6 +99,7 @@ export const resourceLabels: Record<Resource, string> = {
   optimizationRule: "Optimization Rules",
   llmProviderApiKey: "LLM Provider API Keys",
   llmVirtualKey: "LLM Virtual Keys",
+  llmOauthClient: "LLM OAuth Clients",
   llmModel: "LLM Models",
   secret: "Secrets",
   apiKey: "API Keys",
@@ -107,10 +112,12 @@ export const resourceLabels: Record<Resource, string> = {
   chatAgentPicker: "Chat Agent Picker",
   chatProviderSettings: "Chat Provider Settings",
   chatExpandToolCalls: "Chat Expand Tool Calls",
+  siteNotification: "Site Notifications",
 };
 
 export const resourceDescriptions: Record<Resource, string> = {
   agent: "Agents with prompts and tool assignments",
+  skill: "Agent skills — reusable SKILL.md instruction bundles",
   mcpGateway: "Unified MCP endpoints that aggregate tools for clients",
   llmProxy: "LLM proxy endpoints with security policies and observability",
   toolPolicy: "Tools, tool invocation policies, and trusted data policies",
@@ -120,6 +127,7 @@ export const resourceDescriptions: Record<Resource, string> = {
   scheduledTask: "Scheduled agent tasks that run on a schedule",
   llmProviderApiKey: "LLM provider API keys and their visibility",
   llmVirtualKey: "LLM virtual keys and their visibility",
+  llmOauthClient: "OAuth clients authorized to call LLM proxies",
   llmModel: "LLM model catalog entries and chat capabilities",
   llmLimit: "LLM usage limits",
   llmSettings: "LLM settings (compression, cleanup interval)",
@@ -150,6 +158,7 @@ export const resourceDescriptions: Record<Resource, string> = {
   chatExpandToolCalls:
     "Controls ability to expand and view tool call details in chat",
   organization: "Organization (internal, used by authentication system)",
+  siteNotification: "Site-wide notification banners and announcements",
 };
 
 /**
@@ -163,7 +172,7 @@ export const internalResources: Resource[] = ["organization"];
  * Used in both the create/edit role dialog and the account permissions display.
  */
 export const resourceCategories: Record<string, Resource[]> = {
-  Agents: ["agent", "agentTrigger", "scheduledTask", "agentSettings"],
+  Agents: ["agent", "skill", "agentTrigger", "scheduledTask", "agentSettings"],
   MCP: [
     "mcpGateway",
     "toolPolicy",
@@ -175,6 +184,7 @@ export const resourceCategories: Record<string, Resource[]> = {
     "llmProxy",
     "llmProviderApiKey",
     "llmVirtualKey",
+    "llmOauthClient",
     "llmModel",
     "llmLimit",
     "optimizationRule",
@@ -199,6 +209,7 @@ export const resourceCategories: Record<string, Resource[]> = {
     "secret",
     "apiKey",
     "organizationSettings",
+    "siteNotification",
   ],
 };
 

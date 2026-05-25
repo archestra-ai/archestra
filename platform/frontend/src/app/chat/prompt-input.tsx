@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type ChatSkillMetadata,
   E2eTestId,
   getAcceptedFileTypes,
   getSupportedFileTypesDescription,
@@ -10,8 +11,8 @@ import {
 } from "@shared";
 import type { ChatStatus } from "ai";
 import { MoreVerticalIcon, PaperclipIcon, XIcon } from "lucide-react";
-import type { FormEvent } from "react";
-import { useCallback, useEffect, useRef } from "react";
+import type { FormEvent, KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import {
@@ -20,6 +21,11 @@ import {
   PromptInputAttachments,
   PromptInputBody,
   PromptInputButton,
+  PromptInputCommand,
+  PromptInputCommandEmpty,
+  PromptInputCommandGroup,
+  PromptInputCommandItem,
+  PromptInputCommandList,
   PromptInputFooter,
   type PromptInputMessage,
   PromptInputProvider,
@@ -39,6 +45,7 @@ import {
   providerToLogoProvider,
 } from "@/components/chat/model-selector";
 import { PlaywrightInstallInline } from "@/components/chat/playwright-install-dialog";
+import { SensitiveDataConfirmDialog } from "@/components/chat/sensitive-data-confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -57,13 +64,23 @@ import { useChatPlaceholder } from "@/lib/chat/chat-placeholder.hook";
 import { conversationStorageKeys } from "@/lib/chat/chat-utils";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useModelSelectorDisplay } from "@/lib/chat/use-model-selector-display.hook";
+import { useFeature } from "@/lib/config/config.query";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { useOrganization } from "@/lib/organization.query";
+import { scanText } from "@/lib/sensitive-data";
+import { useSkillsPaginated } from "@/lib/skills/skill.query";
+import { cn } from "@/lib/utils";
+import {
+  buildSkillCommands,
+  parseSkillCommand,
+  type SkillCommand,
+} from "./skill-commands";
 
-interface ArchestraPromptInputProps {
+export interface ArchestraPromptInputProps {
   onSubmit: (
     message: PromptInputMessage,
     e: FormEvent<HTMLFormElement>,
+    options?: { skill?: ChatSkillMetadata },
   ) => void;
   status: ChatStatus;
   selectedModel: string;
@@ -97,6 +114,10 @@ interface ArchestraPromptInputProps {
   agentLlmApiKeyId?: string | null;
   /** Disable the submit button (e.g., when Playwright setup overlay is visible) */
   submitDisabled?: boolean;
+  /** Disable chat input while context compaction is running */
+  isContextCompacting?: boolean;
+  /** Manually compact the active conversation */
+  onCompactConversation?: () => Promise<void> | void;
   /** Whether Playwright setup overlay is visible (for showing Playwright install dialog) */
   isPlaywrightSetupVisible: boolean;
   /** Current agent ID for agent selector */
@@ -105,13 +126,25 @@ interface ArchestraPromptInputProps {
   selectorAgentName?: string;
   /** Callback when agent changes */
   onAgentChange?: (agentId: string) => void;
-  /** Callback when model selector opens/closes */
-  onModelSelectorOpenChange?: (open: boolean) => void;
-  /** Source of the currently selected model (agent, organization, user, or null for fallback) */
+  /** Source of the currently selected model (agent, organization, user, or null) */
   modelSource?: ModelSource | null;
   /** Callback to reset user model override back to agent/org default */
   onResetModelOverride?: () => void;
 }
+
+type SlashCommand = {
+  value: string;
+  name: string;
+  description: string;
+  /** Set for skill commands; absent for built-in commands like /compact. */
+  skill?: ChatSkillMetadata;
+};
+
+const COMPACT_COMMAND: SlashCommand = {
+  value: "/compact",
+  name: "compact",
+  description: "summarize conversation to prevent hitting the context limit",
+};
 
 // Inner component that has access to the controller context
 const PromptInputContent = ({
@@ -134,11 +167,12 @@ const PromptInputContent = ({
   inputModalities,
   agentLlmApiKeyId,
   submitDisabled = false,
+  isContextCompacting = false,
+  onCompactConversation,
   isPlaywrightSetupVisible = false,
   selectorAgentId,
   selectorAgentName,
   onAgentChange,
-  onModelSelectorOpenChange,
   modelSource,
   onResetModelOverride,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
@@ -148,6 +182,11 @@ const PromptInputContent = ({
   const textareaRef = externalTextareaRef ?? internalTextareaRef;
   const controller = usePromptInputController();
   const attachments = usePromptInputAttachments();
+  const commandItemRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const [activeCommandIndex, setActiveCommandIndex] = useState(0);
+  const [dismissedSlashCommandValue, setDismissedSlashCommandValue] = useState<
+    string | null
+  >(null);
 
   // Collapsed/expanded state for the model selector (defaults to collapsed = provider icon only)
   const { isCollapsed: showDefaultLogo, expand: expandModelSelector } =
@@ -156,6 +195,18 @@ const PromptInputContent = ({
   const logoProvider = currentProvider
     ? providerToLogoProvider[currentProvider]
     : null;
+
+  // Label for the model-source badge. A custom model is a "chat override" when
+  // it is scoped to an existing conversation, and a "user override" otherwise
+  // (the new-chat case, where it reflects the user's own default).
+  const modelSourceLabel =
+    modelSource === "agent"
+      ? "agent"
+      : modelSource === "organization"
+        ? "org"
+        : conversationId
+          ? "chat override"
+          : "user override";
 
   // Derive file upload capabilities from model input modalities
   const modelSupportsFiles = supportsFileUploads(inputModalities);
@@ -177,6 +228,26 @@ const PromptInputContent = ({
     animate: orgData?.animateChatPlaceholders ?? true,
     placeholders: orgData?.chatPlaceholders,
   });
+
+  // Skills exposed as slash commands, gated by the org flag.
+  const skillSlashCommandsEnabled = orgData?.skillSlashCommandsEnabled ?? false;
+  const { data: skillsData } = useSkillsPaginated(
+    { limit: 100 },
+    { enabled: skillSlashCommandsEnabled },
+  );
+  const skillCommands = useMemo<SkillCommand[]>(() => {
+    if (!skillSlashCommandsEnabled || !skillsData?.data) {
+      return [];
+    }
+    return buildSkillCommands(skillsData.data);
+  }, [skillSlashCommandsEnabled, skillsData]);
+
+  // /compact only applies to an existing conversation; skill commands work anywhere.
+  const slashCommands = useMemo<SlashCommand[]>(() => {
+    const compact =
+      conversationId && onCompactConversation ? [COMPACT_COMMAND] : [];
+    return [...compact, ...skillCommands];
+  }, [conversationId, onCompactConversation, skillCommands]);
 
   // RBAC: check if user can see agent picker and provider settings in chat
   const { data: canSeeAgentPicker } = useHasPermissions({
@@ -245,14 +316,216 @@ const PromptInputContent = ({
   // 1. Organization must allow file uploads (allowFileUploads)
   // 2. Model must support at least one file type (modelSupportsFiles)
   const showFileUploadButton = allowFileUploads && modelSupportsFiles;
+  // The picker stays open while the user is still typing the command token;
+  // once a space is entered they have moved on to the prompt body.
+  const isSlashCommandOpen =
+    slashCommands.length > 0 &&
+    controller.textInput.value.startsWith("/") &&
+    !/\s/.test(controller.textInput.value) &&
+    controller.textInput.value !== dismissedSlashCommandValue;
 
-  const handleWrappedSubmit = useCallback(
-    (message: PromptInputMessage, e: FormEvent<HTMLFormElement>) => {
+  // reset the Escape dismissal once the user edits the input — typing more
+  // produces a new query and the picker should re-open
+  useEffect(() => {
+    if (
+      dismissedSlashCommandValue !== null &&
+      controller.textInput.value !== dismissedSlashCommandValue
+    ) {
+      setDismissedSlashCommandValue(null);
+    }
+  }, [controller.textInput.value, dismissedSlashCommandValue]);
+  const visibleSlashCommands = useMemo(() => {
+    if (!isSlashCommandOpen) {
+      return [];
+    }
+
+    const query = controller.textInput.value.trim().toLowerCase();
+    if (query === "/") {
+      return slashCommands;
+    }
+
+    return slashCommands.filter((command) => command.value.startsWith(query));
+  }, [controller.textInput.value, isSlashCommandOpen, slashCommands]);
+
+  const selectedCommandIndex =
+    visibleSlashCommands.length === 0
+      ? 0
+      : Math.max(
+          0,
+          Math.min(activeCommandIndex, visibleSlashCommands.length - 1),
+        );
+
+  useEffect(() => {
+    if (isSlashCommandOpen) {
+      setActiveCommandIndex(0);
+    }
+  }, [isSlashCommandOpen]);
+
+  useEffect(() => {
+    commandItemRefs.current[selectedCommandIndex]?.scrollIntoView({
+      block: "nearest",
+    });
+  }, [selectedCommandIndex]);
+
+  const runCompactCommand = useCallback(() => {
+    controller.textInput.clear();
+    localStorage.removeItem(storageKey);
+    void onCompactConversation?.();
+  }, [controller.textInput, onCompactConversation, storageKey]);
+
+  const selectSlashCommand = useCallback(
+    (command: SlashCommand) => {
+      if (command.skill) {
+        // a skill command is a prefix — drop it into the input so the user can
+        // type an optional prompt; submitting it bare activates the skill as-is
+        controller.textInput.setInput(`${command.value} `);
+        requestAnimationFrame(() => textareaRef.current?.focus());
+        return;
+      }
+      if (command.value === "/compact") {
+        runCompactCommand();
+      }
+    },
+    [controller.textInput, runCompactCommand, textareaRef],
+  );
+
+  const handleTextareaKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (!isSlashCommandOpen || visibleSlashCommands.length === 0) {
+        return;
+      }
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setActiveCommandIndex(
+          (current) => (current + 1) % visibleSlashCommands.length,
+        );
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setActiveCommandIndex(
+          (current) =>
+            (current - 1 + visibleSlashCommands.length) %
+            visibleSlashCommands.length,
+        );
+        return;
+      }
+
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        const command = visibleSlashCommands[selectedCommandIndex];
+        if (command) {
+          selectSlashCommand(command);
+        }
+        return;
+      }
+
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setDismissedSlashCommandValue(controller.textInput.value);
+      }
+    },
+    [
+      controller.textInput.value,
+      isSlashCommandOpen,
+      selectSlashCommand,
+      selectedCommandIndex,
+      visibleSlashCommands,
+    ],
+  );
+
+  const sensitiveDataDetectionEnabled =
+    useFeature("chatSecretScanEnabled") ?? false;
+  const [sensitiveDataDialogOpen, setSensitiveDataDialogOpen] = useState(false);
+  const pendingSubmissionRef = useRef<{
+    outgoing: PromptInputMessage;
+    e: FormEvent<HTMLFormElement>;
+    options?: { skill: ChatSkillMetadata };
+    resolve: () => void;
+    reject: (reason?: unknown) => void;
+  } | null>(null);
+
+  const dispatchSubmit = useCallback(
+    (
+      outgoing: PromptInputMessage,
+      e: FormEvent<HTMLFormElement>,
+      options?: { skill: ChatSkillMetadata },
+    ) => {
       localStorage.removeItem(storageKey);
-      onSubmit(message, e);
+      onSubmit(outgoing, e, options);
     },
     [onSubmit, storageKey],
   );
+
+  const handleWrappedSubmit = useCallback(
+    (message: PromptInputMessage, e: FormEvent<HTMLFormElement>) => {
+      const trimmed = message.text.trim();
+
+      if (trimmed === "/compact" && onCompactConversation) {
+        e.preventDefault();
+        runCompactCommand();
+        return;
+      }
+
+      // a skill command activates the skill; any text after the token is an
+      // optional prompt — a bare skill command sends with an empty prompt
+      let outgoing = message;
+      let skill: ChatSkillMetadata | undefined;
+      const parsed = parseSkillCommand(trimmed, skillCommands);
+      if (parsed) {
+        skill = parsed.skill;
+        outgoing = { ...message, text: parsed.remaining };
+      }
+
+      const options = skill ? { skill } : undefined;
+
+      if (sensitiveDataDetectionEnabled && outgoing.text.length > 0) {
+        const findings = scanText(outgoing.text);
+        if (findings.length > 0) {
+          if (pendingSubmissionRef.current !== null)
+            return new Promise<void>(() => {});
+          return new Promise<void>((resolve, reject) => {
+            pendingSubmissionRef.current = {
+              outgoing,
+              e,
+              options,
+              resolve,
+              reject,
+            };
+            setSensitiveDataDialogOpen(true);
+          });
+        }
+      }
+
+      dispatchSubmit(outgoing, e, options);
+    },
+    [
+      dispatchSubmit,
+      onCompactConversation,
+      runCompactCommand,
+      sensitiveDataDetectionEnabled,
+      skillCommands,
+    ],
+  );
+
+  const handleSensitiveDataConfirm = useCallback(() => {
+    const pending = pendingSubmissionRef.current;
+    pendingSubmissionRef.current = null;
+    setSensitiveDataDialogOpen(false);
+    if (pending) {
+      dispatchSubmit(pending.outgoing, pending.e, pending.options);
+      pending.resolve();
+    }
+  }, [dispatchSubmit]);
+
+  const handleSensitiveDataCancel = useCallback(() => {
+    const pending = pendingSubmissionRef.current;
+    pendingSubmissionRef.current = null;
+    setSensitiveDataDialogOpen(false);
+    pending?.reject();
+  }, []);
 
   const handleFileError = useCallback(
     (err: {
@@ -272,236 +545,100 @@ const PromptInputContent = ({
   const submitStatus = status === "error" ? "ready" : status;
 
   return (
-    <PromptInput
-      globalDrop
-      multiple
-      onSubmit={handleWrappedSubmit}
-      accept={showFileUploadButton ? acceptedFileTypes : "application/x-empty"}
-      onError={handleFileError}
-    >
-      {/* File attachments display - shown inline above textarea */}
-      <PromptInputAttachments className="px-3 pt-2 pb-0">
-        {(attachment) => <PromptInputAttachment data={attachment} />}
-      </PromptInputAttachments>
-      <PromptInputBody>
-        {isPlaywrightSetupVisible && conversationId ? (
-          <PlaywrightInstallInline
-            agentId={agentId}
-            conversationId={conversationId}
-          />
-        ) : (
-          <PromptInputTextarea
-            placeholder={
-              conversationId
-                ? "Ask a follow-up..."
-                : (chatPlaceholder ?? "What would you like to get done?")
-            }
-            ref={textareaRef}
-            className="px-4"
-            autoFocus
-            disabled={submitDisabled}
-            disableEnterSubmit={status !== "ready" && status !== "error"}
-            data-testid={E2eTestId.ChatPromptTextarea}
-          />
-        )}
-      </PromptInputBody>
-      <PromptInputFooter>
-        <PromptInputTools className="gap-0.5">
-          {/* Mobile: vertical three-dots menu for collapsed toolbar items */}
-          {isMobile &&
-            (showDefaultLogo &&
-            logoProvider &&
-            (modelSource === "agent" || modelSource === "organization") ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 px-2"
-                onClick={expandModelSelector}
-              >
-                <ModelSelectorLogo provider={logoProvider} className="size-4" />
-              </Button>
-            ) : (
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 px-2"
+    <div className="relative">
+      {isSlashCommandOpen && (
+        <div className="absolute inset-x-0 bottom-full z-50 mb-2 overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-lg">
+          <PromptInputCommand className="h-auto rounded-none bg-transparent">
+            <PromptInputCommandList className="max-h-64">
+              <PromptInputCommandEmpty>
+                No commands found.
+              </PromptInputCommandEmpty>
+              <PromptInputCommandGroup className="p-1">
+                {visibleSlashCommands.map((command, index) => (
+                  <PromptInputCommandItem
+                    key={command.skill?.id ?? command.value}
+                    value={command.value}
+                    ref={(node) => {
+                      commandItemRefs.current[index] = node;
+                    }}
+                    onMouseEnter={() => setActiveCommandIndex(index)}
+                    onSelect={() => selectSlashCommand(command)}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-3 rounded-md px-3 py-2.5",
+                      index === selectedCommandIndex &&
+                        "bg-accent text-accent-foreground",
+                    )}
                   >
-                    <MoreVerticalIcon className="size-4" />
-                    <span className="sr-only">More options</span>
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent side="top" align="start" className="w-auto p-3">
-                  <div className="flex flex-col gap-3">
-                    {canSeeAgentPicker &&
-                      selectorAgentId !== undefined &&
-                      onAgentChange && (
-                        <div>
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                            Agent
-                          </p>
-                          <InitialAgentSelector
-                            currentAgentId={selectorAgentId}
-                            onAgentChange={onAgentChange}
-                          />
+                    <div className="flex min-w-0 items-start gap-3">
+                      <span className="mt-0.5 font-mono text-sm text-muted-foreground">
+                        /
+                      </span>
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium">
+                          {command.name}
                         </div>
-                      )}
-                    {canSeeProviderSettings && (
-                      <>
-                        {modelSource && (
-                          <div className="flex items-center gap-1.5">
-                            <Badge
-                              variant="secondary"
-                              className="gap-1 bg-slate-200/70 text-slate-600 dark:bg-slate-700/50 dark:text-slate-300 px-3 py-1 text-xs font-medium"
-                            >
-                              {modelSource === "agent"
-                                ? "agent"
-                                : modelSource === "organization"
-                                  ? "org"
-                                  : "user override"}
-                              {modelSource === "user" &&
-                                onResetModelOverride && (
-                                  <button
-                                    type="button"
-                                    onClick={onResetModelOverride}
-                                    className="text-muted-foreground hover:text-foreground transition-colors"
-                                    title="Reset to default"
-                                  >
-                                    <XIcon className="size-3" />
-                                  </button>
-                                )}
-                            </Badge>
-                          </div>
-                        )}
-                        {(conversationId || onApiKeyChange) && (
-                          <div>
-                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                              Provider API Key
-                            </p>
-                            <LlmProviderApiKeySelector
-                              conversationId={conversationId}
-                              currentProvider={currentProvider}
-                              currentConversationChatApiKeyId={
-                                conversationId
-                                  ? (currentConversationChatApiKeyId ?? null)
-                                  : (initialApiKeyId ?? null)
-                              }
-                              onApiKeyChange={onApiKeyChange}
-                              onProviderChange={onProviderChange}
-                              isModelsLoading={isModelsLoading}
-                              agentLlmApiKeyId={agentLlmApiKeyId}
-                            />
-                          </div>
-                        )}
-                        <div>
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                            Model
-                          </p>
-                          <ModelSelector
-                            selectedModel={selectedModel}
-                            onModelChange={onModelChange}
-                            onOpenChange={onModelSelectorOpenChange}
-                            apiKeyId={
-                              conversationId
-                                ? currentConversationChatApiKeyId
-                                : initialApiKeyId
-                            }
-                          />
+                        <div className="text-xs text-muted-foreground">
+                          {command.description}
                         </div>
-                      </>
-                    )}
-                    {tokensUsed > 0 && maxContextLength && (
-                      <div>
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                          Context
-                        </p>
-                        <ContextIndicator
-                          tokensUsed={tokensUsed}
-                          maxTokens={maxContextLength}
-                          size="sm"
-                        />
                       </div>
+                    </div>
+                    {isContextCompacting && command.value === "/compact" && (
+                      <span className="text-xs text-muted-foreground">
+                        Running
+                      </span>
                     )}
-                  </div>
-                </PopoverContent>
-              </Popover>
-            ))}
-
-          {/* File attachment button - always visible */}
-          {showFileUploadButton ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 px-2"
-                  onClick={() => attachments.openFileDialog()}
-                  data-testid={E2eTestId.ChatFileUploadButton}
-                >
-                  <PaperclipIcon className="size-4" />
-                  <span className="sr-only">Attach files</span>
-                </Button>
-              </TooltipTrigger>
-              {supportedTypesDescription && (
-                <TooltipContent side="top" sideOffset={4}>
-                  Supports: {supportedTypesDescription}
-                </TooltipContent>
-              )}
-            </Tooltip>
+                  </PromptInputCommandItem>
+                ))}
+              </PromptInputCommandGroup>
+            </PromptInputCommandList>
+          </PromptInputCommand>
+        </div>
+      )}
+      <PromptInput
+        globalDrop
+        multiple
+        onSubmit={handleWrappedSubmit}
+        accept={
+          showFileUploadButton ? acceptedFileTypes : "application/x-empty"
+        }
+        onError={handleFileError}
+      >
+        {/* File attachments display - shown inline above textarea */}
+        <PromptInputAttachments className="px-3 pt-2 pb-0">
+          {(attachment) => <PromptInputAttachment data={attachment} />}
+        </PromptInputAttachments>
+        <PromptInputBody>
+          {isPlaywrightSetupVisible && conversationId ? (
+            <PlaywrightInstallInline
+              agentId={agentId}
+              conversationId={conversationId}
+            />
           ) : (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span
-                  className="inline-flex cursor-pointer"
-                  data-testid={E2eTestId.ChatDisabledFileUploadButton}
-                >
-                  <PromptInputButton disabled>
-                    <PaperclipIcon className="size-4" />
-                  </PromptInputButton>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="top" sideOffset={4}>
-                {!allowFileUploads ? (
-                  canUpdateAgentSettings ? (
-                    <span>
-                      File uploads are disabled.{" "}
-                      <a
-                        href="/settings/agents"
-                        className="underline hover:no-underline"
-                        aria-label="Enable file uploads in agent settings"
-                      >
-                        Enable in settings
-                      </a>
-                    </span>
-                  ) : (
-                    "File uploads are disabled by your administrator"
-                  )
-                ) : (
-                  "This model does not support file uploads"
-                )}
-              </TooltipContent>
-            </Tooltip>
+            <PromptInputTextarea
+              placeholder={
+                conversationId
+                  ? "Ask a follow-up..."
+                  : (chatPlaceholder ?? "What would you like to get done?")
+              }
+              ref={textareaRef}
+              className="px-4"
+              autoFocus
+              disabled={submitDisabled || isContextCompacting}
+              disableEnterSubmit={
+                status === "submitted" || status === "streaming"
+              }
+              onKeyDown={handleTextareaKeyDown}
+              data-testid={E2eTestId.ChatPromptTextarea}
+            />
           )}
-
-          {/* Desktop: inline toolbar items */}
-          {!isMobile && (
-            <>
-              {canSeeAgentPicker &&
-                selectorAgentId !== undefined &&
-                onAgentChange && (
-                  <InitialAgentSelector
-                    currentAgentId={selectorAgentId}
-                    currentAgentName={selectorAgentName}
-                    onAgentChange={onAgentChange}
-                  />
-                )}
-              {!canSeeProviderSettings ? null : showDefaultLogo &&
-                logoProvider &&
-                (modelSource === "agent" || modelSource === "organization") ? (
+        </PromptInputBody>
+        <PromptInputFooter>
+          <PromptInputTools className="gap-0.5">
+            {/* Mobile: vertical three-dots menu for collapsed toolbar items */}
+            {isMobile &&
+              (showDefaultLogo &&
+              logoProvider &&
+              (modelSource === "agent" || modelSource === "organization") ? (
                 <Button
                   type="button"
                   variant="ghost"
@@ -515,20 +652,225 @@ const PromptInputContent = ({
                   />
                 </Button>
               ) : (
-                <div className="flex items-center h-8 rounded-full border border-border bg-muted/50 overflow-hidden">
-                  {(conversationId || onApiKeyChange) && (
-                    <LlmProviderApiKeySelector
-                      conversationId={conversationId}
-                      currentProvider={currentProvider}
-                      currentConversationChatApiKeyId={
-                        conversationId
-                          ? (currentConversationChatApiKeyId ?? null)
-                          : (initialApiKeyId ?? null)
-                      }
-                      onApiKeyChange={onApiKeyChange}
-                      onProviderChange={onProviderChange}
-                      isModelsLoading={isModelsLoading}
-                      agentLlmApiKeyId={agentLlmApiKeyId}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2"
+                    >
+                      <MoreVerticalIcon className="size-4" />
+                      <span className="sr-only">More options</span>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    side="top"
+                    align="start"
+                    className="w-auto p-3"
+                  >
+                    <div className="flex flex-col gap-3">
+                      {canSeeAgentPicker &&
+                        selectorAgentId !== undefined &&
+                        onAgentChange && (
+                          <div>
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                              Agent
+                            </p>
+                            <InitialAgentSelector
+                              currentAgentId={selectorAgentId}
+                              onAgentChange={onAgentChange}
+                            />
+                          </div>
+                        )}
+                      {canSeeProviderSettings && (
+                        <>
+                          {modelSource && (
+                            <div className="flex items-center gap-1.5">
+                              <Badge
+                                variant="secondary"
+                                className="gap-1 bg-slate-200/70 text-slate-600 dark:bg-slate-700/50 dark:text-slate-300 px-3 py-1 text-xs font-medium"
+                              >
+                                {modelSourceLabel}
+                                {modelSource === "user" &&
+                                  onResetModelOverride && (
+                                    <button
+                                      type="button"
+                                      onClick={onResetModelOverride}
+                                      className="text-muted-foreground hover:text-foreground transition-colors"
+                                      title="Reset to default"
+                                    >
+                                      <XIcon className="size-3" />
+                                    </button>
+                                  )}
+                              </Badge>
+                            </div>
+                          )}
+                          {(conversationId || onApiKeyChange) && (
+                            <div>
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                                Provider API Key
+                              </p>
+                              <LlmProviderApiKeySelector
+                                conversationId={conversationId}
+                                currentProvider={currentProvider}
+                                currentConversationChatApiKeyId={
+                                  conversationId
+                                    ? (currentConversationChatApiKeyId ?? null)
+                                    : (initialApiKeyId ?? null)
+                                }
+                                onApiKeyChange={onApiKeyChange}
+                                onProviderChange={onProviderChange}
+                                isModelsLoading={isModelsLoading}
+                                agentLlmApiKeyId={agentLlmApiKeyId}
+                              />
+                            </div>
+                          )}
+                          <div>
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                              Model
+                            </p>
+                            <ModelSelector
+                              selectedModel={selectedModel}
+                              onModelChange={onModelChange}
+                              apiKeyId={
+                                conversationId
+                                  ? currentConversationChatApiKeyId
+                                  : initialApiKeyId
+                              }
+                            />
+                          </div>
+                        </>
+                      )}
+                      {tokensUsed > 0 && maxContextLength && (
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                            Context
+                          </p>
+                          <ContextIndicator
+                            tokensUsed={tokensUsed}
+                            maxTokens={maxContextLength}
+                            size="sm"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              ))}
+
+            {/* File attachment button - always visible */}
+            {showFileUploadButton ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2"
+                    onClick={() => attachments.openFileDialog()}
+                    data-testid={E2eTestId.ChatFileUploadButton}
+                  >
+                    <PaperclipIcon className="size-4" />
+                    <span className="sr-only">Attach files</span>
+                  </Button>
+                </TooltipTrigger>
+                {supportedTypesDescription && (
+                  <TooltipContent side="top" sideOffset={4}>
+                    Supports: {supportedTypesDescription}
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            ) : (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    className="inline-flex cursor-pointer"
+                    data-testid={E2eTestId.ChatDisabledFileUploadButton}
+                  >
+                    <PromptInputButton disabled>
+                      <PaperclipIcon className="size-4" />
+                    </PromptInputButton>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top" sideOffset={4}>
+                  {!allowFileUploads ? (
+                    canUpdateAgentSettings ? (
+                      <span>
+                        File uploads are disabled.{" "}
+                        <a
+                          href="/settings/agents"
+                          className="underline hover:no-underline"
+                          aria-label="Enable file uploads in agent settings"
+                        >
+                          Enable in settings
+                        </a>
+                      </span>
+                    ) : (
+                      "File uploads are disabled by your administrator"
+                    )
+                  ) : (
+                    "This model does not support file uploads"
+                  )}
+                </TooltipContent>
+              </Tooltip>
+            )}
+
+            {/* Desktop: inline toolbar items */}
+            {!isMobile && (
+              <>
+                {canSeeAgentPicker &&
+                  selectorAgentId !== undefined &&
+                  onAgentChange && (
+                    <InitialAgentSelector
+                      currentAgentId={selectorAgentId}
+                      currentAgentName={selectorAgentName}
+                      onAgentChange={onAgentChange}
+                    />
+                  )}
+                {!canSeeProviderSettings ? null : showDefaultLogo &&
+                  logoProvider &&
+                  (modelSource === "agent" ||
+                    modelSource === "organization") ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2"
+                    onClick={expandModelSelector}
+                  >
+                    <ModelSelectorLogo
+                      provider={logoProvider}
+                      className="size-4"
+                    />
+                  </Button>
+                ) : (
+                  <div className="flex items-center h-8 rounded-full border border-border bg-muted/50 overflow-hidden">
+                    {(conversationId || onApiKeyChange) && (
+                      <LlmProviderApiKeySelector
+                        conversationId={conversationId}
+                        currentProvider={currentProvider}
+                        currentConversationChatApiKeyId={
+                          conversationId
+                            ? (currentConversationChatApiKeyId ?? null)
+                            : (initialApiKeyId ?? null)
+                        }
+                        onApiKeyChange={onApiKeyChange}
+                        onProviderChange={onProviderChange}
+                        isModelsLoading={isModelsLoading}
+                        agentLlmApiKeyId={agentLlmApiKeyId}
+                        onOpenChange={(open) => {
+                          if (!open) {
+                            setTimeout(() => {
+                              textareaRef.current?.focus();
+                            }, 100);
+                          }
+                        }}
+                      />
+                    )}
+                    <ModelSelector
+                      selectedModel={selectedModel}
+                      onModelChange={onModelChange}
                       onOpenChange={(open) => {
                         if (!open) {
                           setTimeout(() => {
@@ -536,76 +878,65 @@ const PromptInputContent = ({
                           }, 100);
                         }
                       }}
-                    />
-                  )}
-                  <ModelSelector
-                    selectedModel={selectedModel}
-                    onModelChange={onModelChange}
-                    onOpenChange={(open) => {
-                      onModelSelectorOpenChange?.(open);
-                      if (!open) {
-                        setTimeout(() => {
-                          textareaRef.current?.focus();
-                        }, 100);
+                      apiKeyId={
+                        conversationId
+                          ? currentConversationChatApiKeyId
+                          : initialApiKeyId
                       }
-                    }}
-                    apiKeyId={
-                      conversationId
-                        ? currentConversationChatApiKeyId
-                        : initialApiKeyId
-                    }
+                    />
+                    {modelSource && (
+                      <Badge
+                        variant="secondary"
+                        className="ml-1 mr-2 gap-1 bg-slate-200/70 text-slate-600 dark:bg-slate-700/50 dark:text-slate-300 px-3 py-1 text-xs font-medium"
+                      >
+                        {modelSourceLabel}
+                        {modelSource === "user" && onResetModelOverride && (
+                          <button
+                            type="button"
+                            onClick={onResetModelOverride}
+                            className="text-muted-foreground hover:text-foreground transition-colors"
+                            title="Reset to default"
+                          >
+                            <XIcon className="size-3" />
+                          </button>
+                        )}
+                      </Badge>
+                    )}
+                  </div>
+                )}
+                {tokensUsed > 0 && maxContextLength && (
+                  <ContextIndicator
+                    tokensUsed={tokensUsed}
+                    maxTokens={maxContextLength}
+                    size="sm"
                   />
-                  {modelSource && (
-                    <Badge
-                      variant="secondary"
-                      className="ml-1 mr-2 gap-1 bg-slate-200/70 text-slate-600 dark:bg-slate-700/50 dark:text-slate-300 px-3 py-1 text-xs font-medium"
-                    >
-                      {modelSource === "agent"
-                        ? "agent"
-                        : modelSource === "organization"
-                          ? "org"
-                          : "user override"}
-                      {modelSource === "user" && onResetModelOverride && (
-                        <button
-                          type="button"
-                          onClick={onResetModelOverride}
-                          className="text-muted-foreground hover:text-foreground transition-colors"
-                          title="Reset to default"
-                        >
-                          <XIcon className="size-3" />
-                        </button>
-                      )}
-                    </Badge>
-                  )}
-                </div>
-              )}
-              {tokensUsed > 0 && maxContextLength && (
-                <ContextIndicator
-                  tokensUsed={tokensUsed}
-                  maxTokens={maxContextLength}
-                  size="sm"
-                />
-              )}
-            </>
-          )}
-        </PromptInputTools>
-        <div className="flex items-center gap-2">
-          <KnowledgeBaseUploadIndicator
-            attachmentCount={controller.attachments.files.length}
-            hasKnowledgeBase={hasKnowledgeSources}
-          />
-          <PromptInputSpeechButton
-            textareaRef={textareaRef}
-            onTranscriptionChange={handleTranscriptionChange}
-          />
-          <PromptInputSubmit
-            className="!h-8"
-            status={submitStatus}
-            disabled={submitDisabled}
-          />
-        </div>
-      </PromptInputFooter>
-    </PromptInput>
+                )}
+              </>
+            )}
+          </PromptInputTools>
+          <div className="flex items-center gap-2">
+            <KnowledgeBaseUploadIndicator
+              attachmentCount={controller.attachments.files.length}
+              hasKnowledgeBase={hasKnowledgeSources}
+            />
+            <PromptInputSpeechButton
+              textareaRef={textareaRef}
+              onTranscriptionChange={handleTranscriptionChange}
+            />
+            <PromptInputSubmit
+              className="!h-8"
+              status={submitStatus}
+              disabled={submitDisabled || isContextCompacting}
+            />
+          </div>
+        </PromptInputFooter>
+      </PromptInput>
+      <SensitiveDataConfirmDialog
+        open={sensitiveDataDialogOpen}
+        onConfirm={handleSensitiveDataConfirm}
+        onCancel={handleSensitiveDataCancel}
+      />
+    </div>
   );
 };
 
@@ -629,11 +960,12 @@ const ArchestraPromptInput = ({
   inputModalities,
   agentLlmApiKeyId,
   submitDisabled,
+  isContextCompacting,
+  onCompactConversation,
   isPlaywrightSetupVisible,
   selectorAgentId,
   selectorAgentName,
   onAgentChange,
-  onModelSelectorOpenChange,
   modelSource,
   onResetModelOverride,
 }: ArchestraPromptInputProps) => {
@@ -660,11 +992,12 @@ const ArchestraPromptInput = ({
           inputModalities={inputModalities}
           agentLlmApiKeyId={agentLlmApiKeyId}
           submitDisabled={submitDisabled}
+          isContextCompacting={isContextCompacting}
+          onCompactConversation={onCompactConversation}
           isPlaywrightSetupVisible={isPlaywrightSetupVisible}
           selectorAgentId={selectorAgentId}
           selectorAgentName={selectorAgentName}
           onAgentChange={onAgentChange}
-          onModelSelectorOpenChange={onModelSelectorOpenChange}
           modelSource={modelSource}
           onResetModelOverride={onResetModelOverride}
         />

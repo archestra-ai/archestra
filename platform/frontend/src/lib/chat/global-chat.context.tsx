@@ -8,6 +8,7 @@ import {
   makeSwapAgentPokeText,
   SWAP_AGENT_FAILED_POKE_TEXT,
   SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
+  stripDanglingToolCalls,
   TOOL_ARTIFACT_WRITE_SHORT_NAME,
   TOOL_CREATE_AGENT_SHORT_NAME,
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME,
@@ -30,9 +31,16 @@ import {
   useRef,
   useState,
 } from "react";
+import { toast } from "sonner";
 import { filterOptimisticToolCalls } from "@/components/chat/chat-messages.utils";
-import { useGenerateConversationTitle } from "@/lib/chat/chat.query";
-import { restoreRenderableAssistantParts } from "@/lib/chat/chat-session-utils";
+import {
+  useConversation,
+  useGenerateConversationTitle,
+} from "@/lib/chat/chat.query";
+import {
+  pruneEmptyTrailingAssistantMessage,
+  restoreRenderableAssistantParts,
+} from "@/lib/chat/chat-session-utils";
 import { getChatExternalAgentId } from "@/lib/chat/chat-utils";
 import {
   extractSwapTargetAgentName,
@@ -54,6 +62,23 @@ const RETRYABLE_CLIENT_ERRORS = [
   "network",
 ];
 
+export type ContextCompactionState = {
+  isCompacting: boolean;
+  trigger: "auto" | "manual" | null;
+  lastCompaction: {
+    trigger?: "auto" | "manual";
+    compactionId?: string;
+    originalTokenEstimate?: number;
+    compactedTokenEstimate?: number;
+  } | null;
+};
+
+type ContextCompactionRecord = NonNullable<
+  ContextCompactionState["lastCompaction"]
+> & {
+  updateContextTokens?: boolean;
+};
+
 function isRetryableError(error: Error): boolean {
   const msg = error.message;
   // Structured backend chat errors already reached the server and should render
@@ -66,6 +91,17 @@ function isRetryableError(error: Error): boolean {
   }
 
   return RETRYABLE_CLIENT_ERRORS.some((p) => msg.includes(p));
+}
+
+function isDuplicateActiveRunError(error: Error): boolean {
+  return (
+    error.message.includes("409") ||
+    error.message.includes("already has an active response")
+  );
+}
+
+function shouldResumeActiveRun(messages: UIMessage[]): boolean {
+  return messages.at(-1)?.role === "user";
 }
 
 interface ChatSession {
@@ -96,6 +132,9 @@ interface ChatSession {
   ) => void;
   /** Token usage for the current/last response */
   tokenUsage: TokenUsage | null;
+  contextTokensUsed: number | null;
+  contextCompaction: ContextCompactionState;
+  recordContextCompaction: (compaction: ContextCompactionRecord) => void;
   /** Early UI data from data-tool-ui-start events (toolCallId → resource data incl. pre-fetched HTML) */
   earlyToolUiStarts: Record<
     string,
@@ -322,7 +361,18 @@ function ChatSessionHook({
     }>
   >([]);
   const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null);
+  const [contextTokensUsed, setContextTokensUsed] = useState<number | null>(
+    null,
+  );
+  const [contextCompaction, setContextCompaction] =
+    useState<ContextCompactionState>({
+      isCompacting: false,
+      trigger: null,
+      lastCompaction: null,
+    });
   const generateTitleMutation = useGenerateConversationTitle();
+  // Read from the shared TanStack cache so we only auto-title untitled chats
+  const { data: conversation } = useConversation(conversationId);
   // Track if title generation has been attempted for this conversation
   const titleGenerationAttemptedRef = useRef(false);
   // Track when swap_agent was called so we can auto-poke the new agent on finish
@@ -341,15 +391,36 @@ function ChatSessionHook({
   const lastUserMessageIdRef = useRef<string | null>(null);
   const previousMessagesRef = useRef<UIMessage[]>([]);
 
+  const recordContextCompaction = useCallback(
+    (compaction: ContextCompactionRecord) => {
+      const { updateContextTokens = true, ...lastCompaction } = compaction;
+      setContextCompaction({
+        isCompacting: false,
+        trigger: null,
+        lastCompaction,
+      });
+
+      if (
+        updateContextTokens &&
+        typeof lastCompaction.compactedTokenEstimate === "number"
+      ) {
+        setContextTokensUsed(lastCompaction.compactedTokenEstimate);
+      }
+    },
+    [],
+  );
+
   // Track early UI data from data-tool-ui-start events (toolCallId → resource data)
   const [earlyToolUiStarts, setEarlyToolUiStarts] = useState<
     ChatSession["earlyToolUiStarts"]
   >({});
+  const shouldResume = shouldResumeActiveRun(initialMessages);
 
   const {
     messages,
     sendMessage,
     regenerate,
+    resumeStream,
     status,
     setMessages,
     stop,
@@ -364,12 +435,38 @@ function ChatSessionHook({
       headers: {
         [EXTERNAL_AGENT_ID_HEADER]: getChatExternalAgentId(appName),
       },
+      prepareReconnectToStreamRequest: ({ id, headers, credentials }) => ({
+        api: `/api/chat/conversations/${id}/active-run`,
+        headers,
+        credentials,
+      }),
     }),
 
     experimental_throttle: 100,
     id: conversationId,
-    onFinish: ({ message }) => {
+    onFinish: ({ message, isAbort }) => {
       setOptimisticToolCalls([]);
+
+      // When the user stops mid-tool-call, the assistant message is left with a
+      // tool part that never produced output, which the UI renders as a
+      // perpetually "running" tool. Drop those dangling parts so the live view
+      // matches what the backend persists (and a reload would show).
+      if (isAbort) {
+        // The updater form runs against the SDK's live messages, not this
+        // callback's (throttled, possibly stale) closure, so the most recently
+        // streamed text is never rolled back.
+        setMessages((current) => {
+          const stripped = pruneEmptyTrailingAssistantMessage(
+            stripDanglingToolCalls(current),
+          );
+          // restoreRenderableAssistantParts treats the shrink as a streaming
+          // regression and would resurrect the stripped parts on the next
+          // render; sync the ref so that comparison sees no regression.
+          previousMessagesRef.current = stripped;
+          return stripped;
+        });
+      }
+
       queryClient.invalidateQueries({
         queryKey: ["conversation", conversationId],
       });
@@ -417,6 +514,13 @@ function ChatSessionHook({
         errorMessage: chatError.message,
         retryCount: retryCountRef.current,
       });
+
+      if (isDuplicateActiveRunError(chatError)) {
+        toast.error(
+          "This conversation already has a response in progress. Stop it before sending another message.",
+        );
+        return;
+      }
 
       // Auto-retry transient errors (network failures, server errors)
       // Do not retry if the error already happened this attempt cycle to avoid
@@ -505,6 +609,34 @@ function ChatSessionHook({
       if (dataPart.type === "data-token-usage") {
         const usage = dataPart.data as TokenUsage;
         setTokenUsage(usage);
+        if (typeof usage.totalTokens === "number") {
+          setContextTokensUsed(usage.totalTokens);
+        }
+      }
+
+      if (dataPart.type === "data-context-compaction-start") {
+        const data = dataPart.data as { trigger?: "auto" | "manual" };
+        setContextCompaction((current) => ({
+          ...current,
+          isCompacting: true,
+          trigger: data.trigger ?? "auto",
+        }));
+      }
+
+      if (dataPart.type === "data-context-compaction-finish") {
+        const data = dataPart.data as {
+          trigger?: "auto" | "manual";
+          compactionId?: string;
+          originalTokenEstimate?: number;
+          compactedTokenEstimate?: number;
+        };
+        recordContextCompaction({
+          ...data,
+          updateContextTokens: data.trigger !== "auto",
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["conversation", conversationId],
+        });
       }
 
       // Handle data-tool-ui-start: backend emits this when a tool call starts streaming,
@@ -535,6 +667,16 @@ function ChatSessionHook({
       });
     },
   } as Parameters<typeof useChat>[0]);
+
+  const resumeAttemptedRef = useRef(false);
+  useEffect(() => {
+    if (!shouldResume || resumeAttemptedRef.current) {
+      return;
+    }
+
+    resumeAttemptedRef.current = true;
+    void resumeStream();
+  }, [resumeStream, shouldResume]);
 
   const messagesWithRestoredAssistantParts = restoreRenderableAssistantParts({
     previousMessages: previousMessagesRef.current,
@@ -571,7 +713,7 @@ function ChatSessionHook({
     );
   }, [stableMessages, optimisticToolCalls.length]);
 
-  // Auto-generate title after first assistant response
+  // Auto-generate title after the first settled exchange
   useEffect(() => {
     // Skip if already attempted or currently generating
     if (
@@ -581,30 +723,34 @@ function ChatSessionHook({
       return;
     }
 
-    // Check if we have at least one user message and one assistant message
-    const userMessages = stableMessages.filter((m) => m.role === "user");
-    const assistantMessages = stableMessages.filter(
+    // Only auto-title a conversation that doesn't have a title yet. This
+    // replaces relying on exact message counts, which breaks when an agent
+    // swap inserts an extra tool-only assistant message and an auto-poke
+    // user message into the first exchange.
+    if (!conversation || conversation.title || status !== "ready") {
+      return;
+    }
+
+    const hasUserMessage = stableMessages.some((m) => m.role === "user");
+    const hasAssistantMessage = stableMessages.some(
       (m) => m.role === "assistant",
     );
 
-    // Only generate title after first exchange (1 user + 1 assistant message)
-    // and when status is ready (not still streaming)
-    if (
-      userMessages.length === 1 &&
-      assistantMessages.length === 1 &&
-      status === "ready"
-    ) {
-      // Check if assistant message has actual text content (not just tool calls)
-      const assistantHasText = assistantMessages[0].parts.some(
-        (part) => part.type === "text" && "text" in part && part.text,
-      );
-
-      if (assistantHasText) {
-        titleGenerationAttemptedRef.current = true;
-        generateTitleMutation.mutate({ id: conversationId });
-      }
+    // Title once a turn has settled. Assistant *text* is intentionally not
+    // required: an agent swap and tool-only answers produce assistant
+    // messages with no text, and the backend titles from the user message
+    // when no assistant text exists.
+    if (hasUserMessage && hasAssistantMessage) {
+      titleGenerationAttemptedRef.current = true;
+      generateTitleMutation.mutate({ id: conversationId });
     }
-  }, [stableMessages, status, conversationId, generateTitleMutation]);
+  }, [
+    stableMessages,
+    status,
+    conversationId,
+    conversation,
+    generateTitleMutation,
+  ]);
 
   // Always keep the session ref up-to-date with the latest values (including
   // function references from useChat which change every render). This is a ref
@@ -624,6 +770,9 @@ function ChatSessionHook({
     optimisticToolCalls,
     setPendingCustomServerToolCall,
     tokenUsage,
+    contextTokensUsed,
+    contextCompaction,
+    recordContextCompaction,
     earlyToolUiStarts,
   };
 
@@ -647,6 +796,9 @@ function ChatSessionHook({
     pendingCustomServerToolCall,
     optimisticToolCalls,
     tokenUsage,
+    contextTokensUsed,
+    contextCompaction,
+    recordContextCompaction,
     earlyToolUiStarts,
     sessionsRef,
     notifySessionUpdate,

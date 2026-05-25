@@ -1,9 +1,440 @@
 {
-  "id": "8591c96a-983c-4dc0-9b37-dd216a3fee2c",
-  "prevId": "247ee1c8-4a41-496c-87d1-cd4e62195d5c",
+  "id": "41631e29-9443-4f21-bed4-1062aba563b5",
+  "prevId": "76d36089-8582-4926-80e5-300e1e404080",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
+    "public.a2a_context": {
+      "name": "a2a_context",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "actor_kind": {
+          "name": "actor_kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "actor_id": {
+          "name": "actor_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "a2a_context_actor_kind_id_idx": {
+          "name": "a2a_context_actor_kind_id_idx",
+          "columns": [
+            {
+              "expression": "actor_kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "actor_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "a2a_context_updated_at_idx": {
+          "name": "a2a_context_updated_at_idx",
+          "columns": [
+            {
+              "expression": "updated_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.a2a_message": {
+      "name": "a2a_message",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "context_id": {
+          "name": "context_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "task_id": {
+          "name": "task_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "parts": {
+          "name": "parts",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content": {
+          "name": "content",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "a2a_message_context_id_idx": {
+          "name": "a2a_message_context_id_idx",
+          "columns": [
+            {
+              "expression": "context_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "a2a_message_task_id_idx": {
+          "name": "a2a_message_task_id_idx",
+          "columns": [
+            {
+              "expression": "task_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "a2a_message_updated_at_idx": {
+          "name": "a2a_message_updated_at_idx",
+          "columns": [
+            {
+              "expression": "updated_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "a2a_message_context_id_a2a_context_id_fk": {
+          "name": "a2a_message_context_id_a2a_context_id_fk",
+          "tableFrom": "a2a_message",
+          "tableTo": "a2a_context",
+          "columnsFrom": [
+            "context_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "a2a_message_task_id_a2a_task_id_fk": {
+          "name": "a2a_message_task_id_a2a_task_id_fk",
+          "tableFrom": "a2a_message",
+          "tableTo": "a2a_task",
+          "columnsFrom": [
+            "task_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.a2a_task_approval_request": {
+      "name": "a2a_task_approval_request",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "task_id": {
+          "name": "task_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "approval_id": {
+          "name": "approval_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tool_call_id": {
+          "name": "tool_call_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tool_name": {
+          "name": "tool_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "approved": {
+          "name": "approved",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "resolved": {
+          "name": "resolved",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "a2a_task_approval_request_task_id_approval_id_idx": {
+          "name": "a2a_task_approval_request_task_id_approval_id_idx",
+          "columns": [
+            {
+              "expression": "task_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "approval_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "a2a_task_approval_request_task_id_a2a_task_id_fk": {
+          "name": "a2a_task_approval_request_task_id_a2a_task_id_fk",
+          "tableFrom": "a2a_task_approval_request",
+          "tableTo": "a2a_task",
+          "columnsFrom": [
+            "task_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.a2a_task": {
+      "name": "a2a_task",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "context_id": {
+          "name": "context_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "state": {
+          "name": "state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "a2a_task_context_id_idx": {
+          "name": "a2a_task_context_id_idx",
+          "columns": [
+            {
+              "expression": "context_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "a2a_task_updated_at_idx": {
+          "name": "a2a_task_updated_at_idx",
+          "columns": [
+            {
+              "expression": "updated_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "a2a_task_context_id_a2a_context_id_fk": {
+          "name": "a2a_task_context_id_a2a_context_id_fk",
+          "tableFrom": "a2a_task",
+          "tableTo": "a2a_context",
+          "columnsFrom": [
+            "context_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.account": {
       "name": "account",
       "schema": "",
@@ -1659,126 +2090,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.cluster": {
-      "name": "cluster",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "namespace": {
-          "name": "namespace",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "kubeconfig_secret_id": {
-          "name": "kubeconfig_secret_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "load_from_cluster": {
-          "name": "load_from_cluster",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "is_default": {
-          "name": "is_default",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "is_personal_default": {
-          "name": "is_personal_default",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "cluster_single_default_idx": {
-          "name": "cluster_single_default_idx",
-          "columns": [
-            {
-              "expression": "is_default",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"cluster\".\"is_default\" = true",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "cluster_single_personal_default_idx": {
-          "name": "cluster_single_personal_default_idx",
-          "columns": [
-            {
-              "expression": "is_personal_default",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"cluster\".\"is_personal_default\" = true",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "cluster_kubeconfig_secret_id_secret_id_fk": {
-          "name": "cluster_kubeconfig_secret_id_secret_id_fk",
-          "tableFrom": "cluster",
-          "tableTo": "secret",
-          "columnsFrom": [
-            "kubeconfig_secret_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.connector_runs": {
       "name": "connector_runs",
       "schema": "",
@@ -2607,6 +2918,24 @@
         },
         "source": {
           "name": "source",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "auth_method": {
+          "name": "auth_method",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "authenticated_app_id": {
+          "name": "authenticated_app_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "authenticated_app_name": {
+          "name": "authenticated_app_name",
           "type": "varchar",
           "primaryKey": false,
           "notNull": false
@@ -5044,12 +5373,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "cluster_id": {
-          "name": "cluster_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "scope": {
           "name": "scope",
           "type": "text",
@@ -5173,19 +5496,6 @@
             "id"
           ],
           "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "mcp_server_cluster_id_cluster_id_fk": {
-          "name": "mcp_server_cluster_id_cluster_id_fk",
-          "tableFrom": "mcp_server",
-          "tableTo": "cluster",
-          "columnsFrom": [
-            "cluster_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
           "onUpdate": "no action"
         }
       },
@@ -6660,8 +6970,8 @@
           "notNull": true,
           "default": false
         },
-        "mcp_oauth_access_token_lifetime_seconds": {
-          "name": "mcp_oauth_access_token_lifetime_seconds",
+        "oauth_access_token_lifetime_seconds": {
+          "name": "oauth_access_token_lifetime_seconds",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -8539,8 +8849,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.virtual_api_key_model_router_api_key": {
-      "name": "virtual_api_key_model_router_api_key",
+    "public.virtual_api_key_provider_api_key": {
+      "name": "virtual_api_key_provider_api_key",
       "schema": "",
       "columns": {
         "virtual_api_key_id": {
@@ -8555,8 +8865,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "chat_api_key_id": {
-          "name": "chat_api_key_id",
+        "provider_api_key_id": {
+          "name": "provider_api_key_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -8570,11 +8880,11 @@
         }
       },
       "indexes": {
-        "idx_virtual_api_key_model_router_api_key_id": {
-          "name": "idx_virtual_api_key_model_router_api_key_id",
+        "idx_virtual_api_key_provider_api_key_id": {
+          "name": "idx_virtual_api_key_provider_api_key_id",
           "columns": [
             {
-              "expression": "chat_api_key_id",
+              "expression": "provider_api_key_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -8587,9 +8897,9 @@
         }
       },
       "foreignKeys": {
-        "virtual_api_key_model_router_api_key_virtual_api_key_id_virtual_api_keys_id_fk": {
-          "name": "virtual_api_key_model_router_api_key_virtual_api_key_id_virtual_api_keys_id_fk",
-          "tableFrom": "virtual_api_key_model_router_api_key",
+        "virtual_api_key_provider_api_key_virtual_api_key_id_virtual_api_keys_id_fk": {
+          "name": "virtual_api_key_provider_api_key_virtual_api_key_id_virtual_api_keys_id_fk",
+          "tableFrom": "virtual_api_key_provider_api_key",
           "tableTo": "virtual_api_keys",
           "columnsFrom": [
             "virtual_api_key_id"
@@ -8600,12 +8910,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "virtual_api_key_model_router_api_key_chat_api_key_id_chat_api_keys_id_fk": {
-          "name": "virtual_api_key_model_router_api_key_chat_api_key_id_chat_api_keys_id_fk",
-          "tableFrom": "virtual_api_key_model_router_api_key",
+        "virtual_api_key_provider_api_key_provider_api_key_id_chat_api_keys_id_fk": {
+          "name": "virtual_api_key_provider_api_key_provider_api_key_id_chat_api_keys_id_fk",
+          "tableFrom": "virtual_api_key_provider_api_key",
           "tableTo": "chat_api_keys",
           "columnsFrom": [
-            "chat_api_key_id"
+            "provider_api_key_id"
           ],
           "columnsTo": [
             "id"
@@ -8615,8 +8925,8 @@
         }
       },
       "compositePrimaryKeys": {
-        "virtual_api_key_model_router_api_key_virtual_api_key_id_provider_pk": {
-          "name": "virtual_api_key_model_router_api_key_virtual_api_key_id_provider_pk",
+        "virtual_api_key_provider_api_key_virtual_api_key_id_provider_pk": {
+          "name": "virtual_api_key_provider_api_key_virtual_api_key_id_provider_pk",
           "columns": [
             "virtual_api_key_id",
             "provider"
@@ -8728,12 +9038,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "chat_api_key_id": {
-          "name": "chat_api_key_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "name": {
           "name": "name",
           "type": "varchar(256)",
@@ -8786,21 +9090,6 @@
         }
       },
       "indexes": {
-        "idx_virtual_api_key_chat_api_key_id": {
-          "name": "idx_virtual_api_key_chat_api_key_id",
-          "columns": [
-            {
-              "expression": "chat_api_key_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "idx_virtual_api_key_organization_id": {
           "name": "idx_virtual_api_key_organization_id",
           "columns": [
@@ -8863,19 +9152,6 @@
         }
       },
       "foreignKeys": {
-        "virtual_api_keys_chat_api_key_id_chat_api_keys_id_fk": {
-          "name": "virtual_api_keys_chat_api_key_id_chat_api_keys_id_fk",
-          "tableFrom": "virtual_api_keys",
-          "tableTo": "chat_api_keys",
-          "columnsFrom": [
-            "chat_api_key_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
         "virtual_api_keys_secret_id_secret_id_fk": {
           "name": "virtual_api_keys_secret_id_secret_id_fk",
           "tableFrom": "virtual_api_keys",

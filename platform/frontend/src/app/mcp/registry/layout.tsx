@@ -4,6 +4,8 @@ import { Plus } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { PageLayout } from "@/components/page-layout";
 import { PermissionButton } from "@/components/ui/permission-button";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { usePresetEntityName } from "@/lib/organization.query";
 
 export default function McpCatalogLayout({
   children,
@@ -12,6 +14,22 @@ export default function McpCatalogLayout({
 }) {
   const pathname = usePathname();
   const isRegistryPage = pathname === "/mcp/registry";
+  const { configured, plural } = usePresetEntityName();
+  const { data: canManageOrgStructure } = useHasPermissions({
+    mcpServerInstallation: ["admin"],
+  });
+
+  const tabs = [
+    { label: "Catalog", href: "/mcp/registry" },
+    ...(canManageOrgStructure
+      ? [
+          {
+            label: configured ? plural : "Organization Structure",
+            href: "/mcp/registry/org-structure",
+          },
+        ]
+      : []),
+  ];
 
   return (
     <PageLayout
@@ -22,6 +40,7 @@ export default function McpCatalogLayout({
           servers and make them available to your agents.
         </>
       }
+      tabs={tabs}
       actionButton={
         isRegistryPage ? (
           <PermissionButton

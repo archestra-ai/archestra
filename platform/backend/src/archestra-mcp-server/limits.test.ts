@@ -9,19 +9,34 @@ import { type ArchestraContext, executeArchestraTool } from ".";
 
 describe("limit tool execution", () => {
   let testAgent: Agent;
-  let mockContext: ArchestraContext;
+  let mockContext: ArchestraContext & {
+    virtualApiKeyId: string;
+  };
 
-  beforeEach(async ({ makeAgent, makeUser, makeOrganization, makeMember }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-    testAgent = await makeAgent({ name: "Test Agent", organizationId: org.id });
-    mockContext = {
-      agent: { id: testAgent.id, name: testAgent.name },
-      userId: user.id,
-      organizationId: org.id,
-    };
-  });
+  beforeEach(
+    async ({
+      makeAgent,
+      makeUser,
+      makeVirtualApiKey,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const virtualApiKey = await makeVirtualApiKey(org.id);
+      await makeMember(user.id, org.id, { role: "admin" });
+      testAgent = await makeAgent({
+        name: "Test Agent",
+        organizationId: org.id,
+      });
+      mockContext = {
+        agent: { id: testAgent.id, name: testAgent.name },
+        userId: user.id,
+        organizationId: org.id,
+        virtualApiKeyId: virtualApiKey.id,
+      };
+    },
+  );
 
   test("create_limit returns error when required fields are missing", async () => {
     const result = await executeArchestraTool(
@@ -39,7 +54,7 @@ describe("limit tool execution", () => {
     expect((result.content[0] as any).text).toContain("limit_value:");
   });
 
-  test("create_limit returns error when token_cost limit missing model", async () => {
+  test("create_limit succeeds with omitted model (all models)", async () => {
     const result = await executeArchestraTool(
       `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
       {
@@ -50,11 +65,49 @@ describe("limit tool execution", () => {
       },
       mockContext,
     );
-    expect(result.isError).toBe(true);
+    expect(result.isError).toBe(false);
     expect((result.content[0] as any).text).toContain(
-      "model array with at least one model is required",
+      "Successfully created limit",
     );
-    expect((result.content[0] as any).text).toContain("model:");
+    expect((result.content[0] as any).text).toContain("Model: All models");
+  });
+
+  test("create_limit succeeds with null model (all models)", async () => {
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
+      {
+        entity_type: "agent",
+        entity_id: testAgent.id,
+        limit_type: "token_cost",
+        limit_value: 1000,
+        model: null,
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    expect((result.content[0] as any).text).toContain(
+      "Successfully created limit",
+    );
+    expect((result.content[0] as any).text).toContain("Model: All models");
+  });
+
+  test("create_limit succeeds with empty model array (all models)", async () => {
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
+      {
+        entity_type: "agent",
+        entity_id: testAgent.id,
+        limit_type: "token_cost",
+        limit_value: 1000,
+        model: [],
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    expect((result.content[0] as any).text).toContain(
+      "Successfully created limit",
+    );
+    expect((result.content[0] as any).text).toContain("Model: All models");
   });
 
   test("create_limit returns error when mcp_server_calls limit missing mcp_server_name", async () => {
@@ -169,6 +222,7 @@ describe("limit tool execution", () => {
         limit_type: "token_cost",
         limit_value: 1000,
         model: ["gpt-4o"],
+        cleanup_interval: "12h",
       },
       mockContext,
     );
@@ -177,6 +231,7 @@ describe("limit tool execution", () => {
     expect(createText).toContain("Successfully created limit");
     expect(createText).toContain("Limit Type: token_cost");
     expect(createText).toContain("Limit Value: 1000");
+    expect(createText).toContain("Cleanup Interval: 12h");
 
     // Extract the limit ID
     const idMatch = createText.match(/Limit ID: (.+)/);
@@ -198,12 +253,15 @@ describe("limit tool execution", () => {
     // Update the limit value
     const updateResult = await executeArchestraTool(
       `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_limit`,
-      { id: limitId, limit_value: 2000 },
+      { id: limitId, limit_value: 2000, cleanup_interval: "1w" },
       mockContext,
     );
     expect(updateResult.isError).toBe(false);
     expect((updateResult.content[0] as any).text).toContain(
       "Successfully updated limit",
+    );
+    expect((updateResult.content[0] as any).text).toContain(
+      "Cleanup Interval: 1w",
     );
     expect((updateResult.content[0] as any).text).toContain(
       "Limit Value: 2000",
@@ -272,6 +330,46 @@ describe("limit tool execution", () => {
       "MCP Server: test-server",
     );
     expect((result.content[0] as any).text).toContain("Tool: test-tool");
+  });
+
+  test("create_limit succeeds for user entity type", async () => {
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
+      {
+        entity_type: "user",
+        entity_id: mockContext.userId,
+        limit_type: "token_cost",
+        limit_value: 1000,
+        model: ["gpt-4o"],
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    expect((result.content[0] as any).text).toContain(
+      "Successfully created limit",
+    );
+    expect((result.content[0] as any).text).toContain("Entity Type: user");
+  });
+
+  test("create_limit succeeds for virtual_key entity type", async () => {
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
+      {
+        entity_type: "virtual_key",
+        entity_id: mockContext.virtualApiKeyId,
+        limit_type: "token_cost",
+        limit_value: 1000,
+        model: ["gpt-4o"],
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    expect((result.content[0] as any).text).toContain(
+      "Successfully created limit",
+    );
+    expect((result.content[0] as any).text).toContain(
+      "Entity Type: virtual_key",
+    );
   });
 
   test("update_limit returns error for nonexistent limit", async () => {

@@ -1,9 +1,20 @@
 # Development + pre-requisite resources
 
+# Env-driven so a parallel Tilt session (separate worktree) doesn't collide.
+# Defined up here so the MCP RBAC block below can render into the right
+# namespace.
+frontend_port = os.getenv('ARCHESTRA_FRONTEND_PORT', '3000')
+frontend_int_tests_port = os.getenv('ARCHESTRA_FRONTEND_INT_TESTS_PORT', '3010')
+# Same namespace the backend's K8s MCP orchestrator uses to spawn MCP server
+# pods. The MCP RBAC, the port-forwarder, and the orchestrator all have to
+# agree on this — otherwise pods land in one namespace, the SA they need lives
+# in another, and the port-forwarder watches a third.
+mcp_namespace = os.getenv('ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE', 'default')
+
 # MCP Server RBAC resources for local development
 # Render from Helm chart and filter to only RBAC resources (avoid duplication)
 k8s_yaml(local(
-  'helm template archestra-platform ../helm/archestra --namespace default --set archestra.orchestrator.kubernetes.mcpServerRbac.create=true --show-only templates/mcp-serviceaccount.yaml',
+  'helm template archestra-platform ../helm/archestra --namespace ' + mcp_namespace + ' --set archestra.orchestrator.kubernetes.mcpServerRbac.create=true --show-only templates/mcp-serviceaccount.yaml',
   quiet=True
 ))
 
@@ -11,9 +22,9 @@ k8s_resource(
   new_name='mcp-rbac',
   labels=['dev'],
   objects=[
-    'archestra-platform-mcp-k8s-operator:serviceaccount:default',
-    'archestra-platform-mcp-server-operator:role:default',
-    'archestra-platform-mcp-server-operator:rolebinding:default'
+    'archestra-platform-mcp-k8s-operator:serviceaccount:' + mcp_namespace,
+    'archestra-platform-mcp-server-operator:role:' + mcp_namespace,
+    'archestra-platform-mcp-server-operator:rolebinding:' + mcp_namespace
   ]
 )
 
@@ -50,6 +61,11 @@ def get_frontend_env():
 
 frontend_env_vars = get_frontend_env()
 
+code_runtime_enabled = os.getenv('ARCHESTRA_CODE_RUNTIME_ENABLED') == 'true'
+backend_resource_deps = ['db-migrate']
+if code_runtime_enabled:
+  backend_resource_deps.append('dagger-runtime-port-forward')
+
 local_resource(
   'pnpm-install',
   cmd='CI=true pnpm install',
@@ -77,17 +93,19 @@ else:
   # Backend dev server
   local_resource(
     dev_resource_name + '-backend',
-    # Trap ensures all child processes are killed when Tilt stops, preventing orphaned processes from blocking port 3000
-    # Uses pkill -P to kill by parent PID since child processes may have their own process groups on macOS
-    serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; ARCHESTRA_LOGGING_LEVEL=debug ARCHESTRA_ANALYTICS=disabled pnpm dev --filter @backend & wait $!',
-    # On Windows, pnpm dev runs directly; cmd.exe handles process termination when Tilt stops
+    # wrapper injects the local TCP runner host when the code runtime is enabled.
+    serve_cmd='sh run-backend-dev.sh',
+    # on Windows, pnpm dev runs directly; cmd.exe handles process termination when Tilt stops.
+    # windows users enabling the code runtime set ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST in .env manually.
     serve_cmd_bat='set ARCHESTRA_LOGGING_LEVEL=debug && set ARCHESTRA_ANALYTICS=disabled && pnpm dev --filter @backend',
     labels=['dev'],
-    resource_deps=['db-migrate'],
-    deps=['../.env'],
+    resource_deps=backend_resource_deps,
+    deps=['../.env', 'run-backend-dev.sh'],
   )
 
   # Frontend dev server - waits for backend to be ready
+  frontend_serve_env = dict(frontend_env_vars)
+  frontend_serve_env['PORT'] = frontend_port
   local_resource(
     dev_resource_name + '-frontend',
     serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; pnpm dev --filter @frontend & wait $!',
@@ -95,7 +113,34 @@ else:
     labels=['dev'],
     resource_deps=[dev_resource_name + '-backend'],
     deps=['../.env'],
-    serve_env=frontend_env_vars
+    serve_env=frontend_serve_env
+  )
+
+  # Second frontend instance dedicated to Playwright integration tests
+  # (frontend/tests-integration). Uses MSW for all API calls, so it does NOT
+  # need the backend or DB. Runs on :3010 with a separate .next-pw dist dir
+  # so the lock at <distDir>/dev/lock doesn't collide with the main dev
+  # server's `.next/dev/lock`. Pointing the SDK base URL at an unreachable
+  # port surfaces any escaped (un-mocked) request as ECONNREFUSED instead of
+  # silently hitting the real backend.
+  local_resource(
+    dev_resource_name + '-frontend-int-tests',
+    serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; cd ../frontend && pnpm exec next dev -H 127.0.0.1 -p ' + frontend_int_tests_port + ' & wait $!',
+    serve_cmd_bat='cd ..\\frontend && pnpm exec next dev -H 127.0.0.1 -p ' + frontend_int_tests_port,
+    labels=['dev'],
+    deps=['../.env'],
+    serve_env={
+      'NEXT_DIST_DIR': '.next-pw',
+      'NEXT_PUBLIC_API_MOCKING': 'enabled',
+      # Both must be pinned: the SSR path reads ARCHESTRA_INTERNAL_API_BASE_URL,
+      # the browser bundle reads NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL.
+      # If only the server var is overridden, a .env value for the public mirror
+      # (e.g. set by `dev:stack:up`) reaches the browser and defeats the
+      # fail-loudly behavior for escaped client-side fetches.
+      'ARCHESTRA_INTERNAL_API_BASE_URL': 'http://127.0.0.1:1',
+      'NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL': 'http://127.0.0.1:1',
+      'NEXT_PUBLIC_SENTRY_DSN': '',
+    }
   )
 
 # Port-forward for MCP servers using streamable-http transport
@@ -107,9 +152,9 @@ local_resource(
   'mcp-http-port-forward',
   serve_cmd='''
     trap "kill 0" EXIT INT TERM
-    echo "Watching for MCP server NodePort services..."
+    echo "Watching for MCP server NodePort services in namespace ''' + mcp_namespace + '''..."
     while true; do
-      SERVICES=$(kubectl get svc -l app=mcp-server -n default -o jsonpath='{range .items[*]}{.metadata.name}:{.spec.ports[0].nodePort}:{.spec.ports[0].port} {end}' 2>/dev/null)
+      SERVICES=$(kubectl get svc -l app=mcp-server -n ''' + mcp_namespace + ''' -o jsonpath='{range .items[*]}{.metadata.name}:{.spec.ports[0].nodePort}:{.spec.ports[0].port} {end}' 2>/dev/null)
       for ENTRY in $SERVICES; do
         SVC_NAME=$(echo "$ENTRY" | cut -d: -f1)
         NODE_PORT=$(echo "$ENTRY" | cut -d: -f2)
@@ -117,10 +162,10 @@ local_resource(
         if [ "$NODE_PORT" != "null" ] && [ -n "$NODE_PORT" ] && [ -n "$SVC_NAME" ]; then
           if ! lsof -i :"$NODE_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
             # Check that service has ready endpoints before attempting port-forward
-            ENDPOINTS=$(kubectl get endpoints "$SVC_NAME" -n default -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null)
+            ENDPOINTS=$(kubectl get endpoints "$SVC_NAME" -n ''' + mcp_namespace + ''' -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null)
             if [ -n "$ENDPOINTS" ]; then
               echo "Port-forwarding $SVC_NAME: localhost:$NODE_PORT -> $CONTAINER_PORT"
-              kubectl port-forward "svc/$SVC_NAME" "$NODE_PORT:$CONTAINER_PORT" -n default &
+              kubectl port-forward "svc/$SVC_NAME" "$NODE_PORT:$CONTAINER_PORT" -n ''' + mcp_namespace + ''' &
             fi
           fi
         fi

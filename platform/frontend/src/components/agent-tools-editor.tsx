@@ -36,6 +36,7 @@ import {
 import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import { useAssignTool, useUnassignTool } from "@/lib/agent-tools.query";
 import { useProfileToolsWithIds } from "@/lib/chat/chat.query";
+import { useFeature } from "@/lib/config/config.query";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import {
   fetchCatalogTools,
@@ -43,6 +44,7 @@ import {
   useInternalMcpCatalog,
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServersGroupedByCatalog } from "@/lib/mcp/mcp-server.query";
+import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
 import {
   getDefaultArchestraToolIds,
@@ -139,8 +141,13 @@ const AgentToolsEditorContent = forwardRef<
   const assignTool = useAssignTool();
   const unassignTool = useUnassignTool();
 
-  // Fetch catalog items (MCP servers in registry)
-  const { data: catalogItems = [], isPending } = useInternalMcpCatalog();
+  // Fetch catalog items (MCP servers in registry). includeChildren so that
+  // each child preset row appears as its own selectable entry alongside the
+  // parent — agents bind tools per catalogId, and child presets carry their
+  // own `<preset>__<tool>` rows in the tools table.
+  const { data: catalogItems = [], isPending } = useInternalMcpCatalog({
+    includeChildren: true,
+  });
 
   // Fetch all credentials grouped by catalog (for default credential on toggle)
   const allCredentials = useMcpServersGroupedByCatalog({
@@ -216,10 +223,17 @@ const AgentToolsEditorContent = forwardRef<
   // Track whether default tools have been pre-selected for new agent creation
   const defaultToolsInitializedRef = useRef(false);
 
-  // Pre-select default Archestra tools when creating a new agent (no agentId)
+  const { data: organization } = useOrganization();
+  const skillToolsEnabled = organization?.skillToolsEnabled === true;
+  const codeRuntimeEnabled = useFeature("codeRuntime");
+
+  // Pre-select default Archestra tools when creating a new agent (no agentId).
+  // When the org has opted into skills, also pre-select the skill tools so the
+  // form matches what AgentModel.create will assign server-side.
   useEffect(() => {
     if (agentId) return; // Only for new agent creation
     if (defaultToolsInitializedRef.current) return; // Only initialize once
+    if (codeRuntimeEnabled === undefined) return;
 
     const toolsByCatalogIndex = toolCountQueries.map(
       (q) => (q?.data as CatalogTool[] | undefined) ?? undefined,
@@ -227,6 +241,10 @@ const AgentToolsEditorContent = forwardRef<
     const result = getDefaultArchestraToolIds(
       catalogItems,
       toolsByCatalogIndex,
+      {
+        includeSkillTools: skillToolsEnabled,
+        includeCodeRuntimeTools: codeRuntimeEnabled,
+      },
     );
     if (!result) return;
 
@@ -242,7 +260,14 @@ const AgentToolsEditorContent = forwardRef<
     });
     onSelectedCountChange?.(result.toolIds.size);
     setPendingVersion((v) => v + 1);
-  }, [agentId, catalogItems, toolCountQueries, onSelectedCountChange]);
+  }, [
+    agentId,
+    catalogItems,
+    toolCountQueries,
+    onSelectedCountChange,
+    skillToolsEnabled,
+    codeRuntimeEnabled,
+  ]);
 
   // Calculate total selected count from pending changes
   const calculateTotalSelectedCount = useCallback(() => {

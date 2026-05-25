@@ -103,6 +103,7 @@ const clientCache = new LRUCacheManager<Client>({
         "Error closing evicted MCP client (non-fatal)",
       );
     }
+    clientLastValidatedAt.delete(key);
   },
 });
 
@@ -111,6 +112,7 @@ const clientCache = new LRUCacheManager<Client>({
  */
 const TOOL_CACHE_TTL_MS = 30 * TimeInMs.Second;
 const CLIENT_PING_TIMEOUT_MS = 5 * TimeInMs.Second;
+const CLIENT_PING_VALIDATION_INTERVAL_MS = 30 * TimeInMs.Second;
 
 function getChatExternalAgentId(): string {
   return `${archestraMcpBranding.catalogName} Chat`;
@@ -139,6 +141,8 @@ const toolCache = new LRUCacheManager<Record<string, Tool>>({
   maxSize: MAX_TOOL_CACHE_SIZE,
   defaultTtl: TOOL_CACHE_TTL_MS,
 });
+
+const clientLastValidatedAt = new Map<string, number>();
 
 /**
  * UI resource cache TTL — 60 seconds.
@@ -192,6 +196,10 @@ function getToolCacheKey(
 export const __test = {
   setCachedClient(cacheKey: string, client: Client, ttl?: number) {
     clientCache.set(cacheKey, client, ttl);
+    clientLastValidatedAt.set(cacheKey, 0);
+  },
+  setCachedClientLastValidatedAt(cacheKey: string, timestamp: number) {
+    clientLastValidatedAt.set(cacheKey, timestamp);
   },
   async clearToolCache(cacheKey?: string) {
     if (cacheKey) {
@@ -372,6 +380,7 @@ export function clearChatMcpClient(agentId: string): void {
         );
       }
       clientCache.delete(key);
+      clientLastValidatedAt.delete(key);
       clientClearedCount++;
     }
   }
@@ -431,6 +440,7 @@ export function closeChatMcpClient(
       );
     }
     clientCache.delete(cacheKey);
+    clientLastValidatedAt.delete(cacheKey);
   }
 
   // Also clear tool cache for this conversation
@@ -463,12 +473,16 @@ export async function getChatMcpClient(
   // Check cache first
   const cachedClient = clientCache.get(cacheKey);
   if (cachedClient) {
-    // Health check: ping the client to verify connection is still alive
+    // Health check idle clients to verify the connection is still alive.
+    // Recently-used clients skip the ping and recover on actual call failure.
     try {
-      await pingClientWithTimeout(cachedClient);
+      if (shouldValidateCachedClient(cacheKey)) {
+        await pingClientWithTimeout(cachedClient);
+        clientLastValidatedAt.set(cacheKey, Date.now());
+      }
       logger.info(
         { agentId, userId },
-        "✅ Returning cached MCP client for agent/user (ping succeeded, session will be reused)",
+        "Returning cached MCP client for agent/user",
       );
       clientCache.set(cacheKey, cachedClient);
       return cachedClient;
@@ -492,6 +506,7 @@ export async function getChatMcpClient(
         );
       }
       clientCache.delete(cacheKey);
+      clientLastValidatedAt.delete(cacheKey);
       // Fall through to create new client
     }
   }
@@ -502,7 +517,7 @@ export async function getChatMcpClient(
       userId,
       totalCachedClients: clientCache.size,
     },
-    "🔄 No cached client found - creating new MCP client for agent/user via gateway",
+    "No cached client found - creating new MCP client for agent/user via gateway",
   );
 
   const externalIdpToken = await resolveSessionExternalIdpToken({
@@ -513,8 +528,10 @@ export async function getChatMcpClient(
   // Reuse pre-resolved token when available to avoid a redundant DB round-trip
   // (getChatMcpTools already calls selectMCPGatewayToken before this).
   let tokenValue: string;
+  let fallbackTokenValue: string | null = null;
   if (externalIdpToken) {
     tokenValue = externalIdpToken.rawToken;
+    fallbackTokenValue = preResolvedTokenValue ?? null;
     logger.info(
       {
         agentId,
@@ -545,14 +562,14 @@ export async function getChatMcpClient(
   // Use new URL format with profileId in path
   const mcpGatewayUrl = `${MCP_GATEWAY_BASE_URL}/${agentId}`;
 
-  try {
+  const connectWithToken = async (authToken: string) => {
     // Create StreamableHTTP transport with profile token authentication
     const transport = new StreamableHTTPClientTransport(
       new URL(mcpGatewayUrl),
       {
         requestInit: {
           headers: new Headers({
-            Authorization: `Bearer ${tokenValue}`,
+            Authorization: `Bearer ${authToken}`,
             Accept: "application/json, text/event-stream",
           }),
         },
@@ -574,6 +591,11 @@ export async function getChatMcpClient(
       "Connecting to MCP Gateway...",
     );
     await client.connect(transport);
+    return client;
+  };
+
+  try {
+    const client = await connectWithToken(tokenValue);
 
     logger.info(
       { agentId, userId },
@@ -583,6 +605,7 @@ export async function getChatMcpClient(
     // Cache the client with idle expiration to prevent abandoned
     // conversation-scoped sessions from accumulating indefinitely.
     clientCache.set(cacheKey, client);
+    clientLastValidatedAt.set(cacheKey, Date.now());
 
     logger.info(
       {
@@ -590,11 +613,52 @@ export async function getChatMcpClient(
         userId,
         totalCachedClients: clientCache.size,
       },
-      "✅ MCP client cached - subsequent requests will reuse this session",
+      "MCP client cached - subsequent requests will reuse this session",
     );
 
     return client;
   } catch (error) {
+    if (fallbackTokenValue) {
+      logger.warn(
+        {
+          error,
+          agentId,
+          userId,
+          url: mcpGatewayUrl,
+        },
+        "Failed to connect to MCP Gateway with session-derived external IdP token; retrying with internal gateway token",
+      );
+
+      try {
+        const client = await connectWithToken(fallbackTokenValue);
+
+        logger.info(
+          { agentId, userId },
+          "Successfully connected to MCP Gateway with internal gateway token fallback",
+        );
+
+        clientCache.set(cacheKey, client);
+        clientLastValidatedAt.set(cacheKey, Date.now());
+
+        logger.info(
+          {
+            agentId,
+            userId,
+            totalCachedClients: clientCache.size,
+          },
+          "MCP client cached - subsequent requests will reuse this session",
+        );
+
+        return client;
+      } catch (fallbackError) {
+        logger.error(
+          { error: fallbackError, agentId, userId, url: mcpGatewayUrl },
+          "Failed to connect to MCP Gateway for agent/user with fallback token",
+        );
+        return null;
+      }
+    }
+
     logger.error(
       { error, agentId, userId, url: mcpGatewayUrl },
       "Failed to connect to MCP Gateway for agent/user",
@@ -616,6 +680,11 @@ async function pingClientWithTimeout(
       timeout.unref?.();
     }),
   ]);
+}
+
+function shouldValidateCachedClient(cacheKey: string): boolean {
+  const lastValidatedAt = clientLastValidatedAt.get(cacheKey) ?? 0;
+  return Date.now() - lastValidatedAt >= CLIENT_PING_VALIDATION_INTERVAL_MS;
 }
 
 /**
@@ -937,19 +1006,9 @@ export async function getChatMcpTools({
                       isError: archestraResponse.isError ?? false,
                     });
 
-                    // Check for errors
-                    if (archestraResponse.isError) {
-                      const errorText = archestraResponse.content
-                        .map((item) =>
-                          item.type === "text"
-                            ? item.text
-                            : JSON.stringify(item),
-                        )
-                        .join("\n");
-                      throw new Error(errorText);
-                    }
-
-                    // Convert MCP content to string for AI SDK
+                    // Return errors as tool-result text so the LLM can read
+                    // and recover, instead of throwing (which surfaces as a
+                    // fatal chat error). Matches executeMcpTool behavior.
                     return archestraResponse.content
                       .map((item) =>
                         item.type === "text" ? item.text : JSON.stringify(item),
@@ -1030,6 +1089,7 @@ export async function getChatMcpTools({
           agent: { id: agentId, name: agentName },
           agentId,
           organizationId,
+          userId,
           conversationId,
           chatOpsBindingId,
           chatOpsThreadId,
@@ -1134,17 +1194,6 @@ export async function getChatMcpTools({
                       startTime: agentToolStartTime,
                       isError: response.isError ?? false,
                     });
-
-                    if (response.isError) {
-                      const errorText = response.content
-                        .map((item) =>
-                          item.type === "text"
-                            ? item.text
-                            : JSON.stringify(item),
-                        )
-                        .join("\n");
-                      throw new Error(errorText);
-                    }
 
                     return response.content
                       .map((item) =>
@@ -1481,7 +1530,7 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
   // Check if MCP tool returned an error
   // Return error text as tool result instead of throwing so the AI SDK includes
   // it in the conversation as a tool-result message. This allows the frontend to
-  // parse structured errors (e.g. auth-required with install URL) and render
+  // parse structured errors (e.g. auth-required with action URL) and render
   // actionable UI instead of showing a generic stream error.
   if (result.isError) {
     const extractedError = mcpContent

@@ -20,7 +20,6 @@ describe("MessageModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Touch Test",
-        selectedModel: "claude-3-haiku-20240307",
       });
 
       const originalUpdatedAt = conversation.updatedAt;
@@ -68,7 +67,6 @@ describe("MessageModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Bulk Touch Test",
-        selectedModel: "claude-3-haiku-20240307",
       });
 
       const originalUpdatedAt = conversation.updatedAt;
@@ -125,7 +123,6 @@ describe("MessageModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Conversation 1",
-        selectedModel: "claude-3-haiku-20240307",
       });
 
       const conversation2 = await ConversationModel.create({
@@ -133,7 +130,6 @@ describe("MessageModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Conversation 2",
-        selectedModel: "claude-3-haiku-20240307",
       });
 
       const original1 = conversation1.updatedAt;
@@ -199,7 +195,6 @@ describe("MessageModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Test Conversation",
-        selectedModel: "claude-3-haiku-20240307",
       });
 
       const message = await MessageModel.create({
@@ -246,7 +241,6 @@ describe("MessageModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Complex Content Test",
-        selectedModel: "claude-3-haiku-20240307",
       });
 
       const complexContent = {
@@ -298,7 +292,6 @@ describe("MessageModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Content ID Test",
-        selectedModel: "claude-3-haiku-20240307",
       });
 
       const message = await MessageModel.create({
@@ -342,7 +335,6 @@ describe("MessageModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "AnyId UUID Test",
-        selectedModel: "claude-3-haiku-20240307",
       });
 
       const message = await MessageModel.create({
@@ -378,7 +370,6 @@ describe("MessageModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "AnyId Content Test",
-        selectedModel: "claude-3-haiku-20240307",
       });
 
       const message = await MessageModel.create({
@@ -421,7 +412,6 @@ describe("MessageModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Update Test",
-        selectedModel: "claude-3-haiku-20240307",
       });
 
       const message = await MessageModel.create({
@@ -461,7 +451,6 @@ describe("MessageModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Multi-part Test",
-        selectedModel: "claude-3-haiku-20240307",
       });
 
       const message = await MessageModel.create({
@@ -503,7 +492,6 @@ describe("MessageModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Invalid Index Test",
-        selectedModel: "claude-3-haiku-20240307",
       });
 
       const message = await MessageModel.create({
@@ -541,7 +529,6 @@ describe("MessageModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Negative Index Test",
-        selectedModel: "claude-3-haiku-20240307",
       });
 
       const message = await MessageModel.create({
@@ -583,7 +570,6 @@ describe("MessageModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Metadata Test",
-        selectedModel: "claude-3-haiku-20240307",
       });
 
       const message = await MessageModel.create({
@@ -626,7 +612,6 @@ describe("MessageModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Empty String Test",
-        selectedModel: "claude-3-haiku-20240307",
       });
 
       const message = await MessageModel.create({
@@ -658,7 +643,6 @@ describe("MessageModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Non-text Part Test",
-        selectedModel: "claude-3-haiku-20240307",
       });
 
       const message = await MessageModel.create({
@@ -709,7 +693,6 @@ describe("MessageModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Delete After Test",
-        selectedModel: "claude-3-haiku-20240307",
       });
 
       const message1 = await MessageModel.create({
@@ -795,7 +778,6 @@ describe("MessageModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Most Recent Test",
-        selectedModel: "claude-3-haiku-20240307",
       });
 
       await MessageModel.create({
@@ -855,7 +837,6 @@ describe("MessageModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Non-existent Message Test",
-        selectedModel: "claude-3-haiku-20240307",
       });
 
       await expect(
@@ -880,7 +861,6 @@ describe("MessageModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Conversation A",
-        selectedModel: "claude-3-haiku-20240307",
       });
 
       const conversationB = await ConversationModel.create({
@@ -888,7 +868,6 @@ describe("MessageModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Conversation B",
-        selectedModel: "claude-3-haiku-20240307",
       });
 
       const messageA1 = await MessageModel.create({
@@ -986,7 +965,6 @@ describe("MessageModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Timestamp Test",
-        selectedModel: "claude-3-haiku-20240307",
       });
 
       const message1 = await MessageModel.create({
@@ -1048,7 +1026,6 @@ describe("MessageModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Conversation A",
-        selectedModel: "claude-3-haiku-20240307",
       });
 
       const conversationB = await ConversationModel.create({
@@ -1056,7 +1033,6 @@ describe("MessageModel", () => {
         organizationId: org.id,
         agentId: agent.id,
         title: "Conversation B",
-        selectedModel: "claude-3-haiku-20240307",
       });
 
       // Create a message in conversation B

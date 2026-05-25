@@ -11,8 +11,23 @@ archestra:
   # other against a fresh CI database.
   replicaCount: 1
 
+  # Override the chart's production CPU requests (2 vCPU per pod) for CI.
+  # On the resource-constrained E2E runners, 1 platform + 2 workers at 2 vCPU
+  # each reserves 6 vCPU before PostgreSQL and the e2e dependency pods are
+  # scheduled — which intermittently leaves no room, so PostgreSQL or the
+  # platform pod gets FailedScheduling ("Insufficient cpu") and the deploy
+  # stalls until the Helm timeout. CPU requests are only a scheduling
+  # reservation (there is no CPU limit), so a smaller request still lets the
+  # pods burst as needed while letting everything fit on the node.
+  resources:
+    requests:
+      cpu: "500m"
+
   worker:
     replicaCount: 2
+    resources:
+      requests:
+        cpu: "500m"
 
   # Environment variables for e2e testing
   env:

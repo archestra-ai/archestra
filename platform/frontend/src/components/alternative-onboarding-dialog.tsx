@@ -86,7 +86,7 @@ export function AlternativeOnboardingDialog({
           </div>
         </div>
 
-        <div className="px-8 py-6">
+        <div className="min-h-0 flex-1 overflow-y-auto px-8 py-6">
           <div className="space-y-6">
             {/* Options Grid */}
             <div className="grid gap-4 md:grid-cols-2">

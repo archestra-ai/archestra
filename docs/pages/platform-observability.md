@@ -1,7 +1,7 @@
 ---
 title: Observability
 category: Archestra Platform
-order: 5
+order: 4
 ---
 
 <!--

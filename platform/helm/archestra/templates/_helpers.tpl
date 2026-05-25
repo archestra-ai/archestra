@@ -124,6 +124,28 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
 - name: ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DOMAIN
   value: {{ .Values.archestra.orchestrator.kubernetes.clusterDomain | quote }}
 {{- end }}
+{{- if .Values.archestra.codeRuntime.enabled }}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_CODE_RUNTIME_ENABLED") }}
+- name: ARCHESTRA_CODE_RUNTIME_ENABLED
+  value: "true"
+{{- end }}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST") }}
+- name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+  value: {{ include "archestra-platform.codeRuntimeDaggerRunnerHost" . | quote }}
+{{- end }}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_CODE_RUNTIME_TIMEOUT_SECONDS") }}
+- name: ARCHESTRA_CODE_RUNTIME_TIMEOUT_SECONDS
+  value: {{ .Values.archestra.codeRuntime.timeoutSeconds | quote }}
+{{- end }}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_CODE_RUNTIME_MAX_CONCURRENT") }}
+- name: ARCHESTRA_CODE_RUNTIME_MAX_CONCURRENT
+  value: {{ .Values.archestra.codeRuntime.maxConcurrent | quote }}
+{{- end }}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_CODE_RUNTIME_MAX_OUTPUT_BYTES") }}
+- name: ARCHESTRA_CODE_RUNTIME_MAX_OUTPUT_BYTES
+  value: {{ .Values.archestra.codeRuntime.maxOutputBytes | quote }}
+{{- end }}
+{{- end }}
 {{- if .Values.archestra.diagnostics.enabled }}
 - name: ARCHESTRA_NODE_DIAGNOSTIC_DIR
   value: "/var/diagnostics"
@@ -160,6 +182,52 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
   valueFrom:
     {{- toYaml .valueFrom | nindent 4 }}
 {{- end }}
+{{- end }}
+
+{{/*
+dagger runner host for the code execution runtime.
+*/}}
+{{- define "archestra-platform.codeRuntimeDaggerRunnerHost" -}}
+{{- $runnerHost := .Values.archestra.codeRuntime.dagger.runnerHost -}}
+{{- if $runnerHost -}}
+{{- $runnerHost -}}
+{{- else -}}
+{{- $pod := .Values.archestra.codeRuntime.dagger.pod -}}
+{{- $namespace := include "archestra-platform.codeRuntimeDaggerPodNamespace" . -}}
+{{- $runnerHost = printf "kube-pod://%s?namespace=%s&container=%s" ($pod.name | urlquery) ($namespace | urlquery) ($pod.container | urlquery) -}}
+{{- with $pod.context -}}
+{{- $runnerHost = printf "%s&context=%s" $runnerHost (. | urlquery) -}}
+{{- end -}}
+{{- $runnerHost -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+namespace containing the Dagger Engine pod.
+*/}}
+{{- define "archestra-platform.codeRuntimeDaggerPodNamespace" -}}
+{{- $namespace := .Values.archestra.codeRuntime.dagger.pod.namespace -}}
+{{- if $namespace -}}
+{{- $namespace -}}
+{{- else if .Values.archestra.codeRuntime.dagger.managed.enabled -}}
+{{- .Release.Namespace -}}
+{{- else -}}
+dagger
+{{- end -}}
+{{- end }}
+
+{{/*
+namespace where the code-runtime kube-pod RBAC should be created.
+*/}}
+{{- define "archestra-platform.codeRuntimeDaggerRbacNamespace" -}}
+{{- default (include "archestra-platform.codeRuntimeDaggerPodNamespace" .) .Values.archestra.codeRuntime.dagger.rbac.namespace -}}
+{{- end }}
+
+{{/*
+service account name for the managed Dagger Engine pod.
+*/}}
+{{- define "archestra-platform.codeRuntimeDaggerServiceAccountName" -}}
+{{- default "dagger-runtime" .Values.dagger.engine.existingServiceAccount.name -}}
 {{- end }}
 
 {{/*
@@ -256,8 +324,15 @@ Handles Vault secret injection, pgvector extension setup, and PostgreSQL readine
     - sh
     - -c
     - |
+      max_attempts={{ .Values.archestra.initContainers.waitForPostgres.timeoutSeconds | default 300 }}
+      attempt=0
       until pg_isready -h {{ include "archestra-platform.fullname" . }}-postgresql -U postgres; do
-        echo "Waiting for PostgreSQL..."
+        attempt=$((attempt + 1))
+        if [ "$attempt" -ge "$max_attempts" ]; then
+          echo "PostgreSQL did not become ready after ${max_attempts}s - giving up" >&2
+          exit 1
+        fi
+        echo "Waiting for PostgreSQL... (${attempt}/${max_attempts})"
         sleep 1
       done
       psql -h {{ include "archestra-platform.fullname" . }}-postgresql -U postgres -d {{ .Values.postgresql.auth.database }} -c "CREATE EXTENSION IF NOT EXISTS vector;"
@@ -300,8 +375,15 @@ Handles Vault secret injection, pgvector extension setup, and PostgreSQL readine
       esac
 
       echo "Waiting for PostgreSQL at ${HOST}:${PORT}..."
+      max_attempts={{ .Values.archestra.initContainers.waitForPostgres.timeoutSeconds | default 300 }}
+      attempt=0
       until nc -z "${HOST}" "${PORT}"; do
-        echo "PostgreSQL is unavailable - sleeping"
+        attempt=$((attempt + 1))
+        if [ "$attempt" -ge "$max_attempts" ]; then
+          echo "PostgreSQL at ${HOST}:${PORT} did not become reachable after ${max_attempts}s - giving up" >&2
+          exit 1
+        fi
+        echo "PostgreSQL is unavailable - sleeping (${attempt}/${max_attempts})"
         sleep 1
       done
       echo "PostgreSQL is up - continuing"

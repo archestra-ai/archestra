@@ -1,3 +1,4 @@
+import { OAUTH_GRANT_TYPE, OAUTH_TOKEN_TYPE } from "@shared";
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import logger from "@/logging";
 import { resolveEnterpriseAssertion } from "@/services/identity-providers/enterprise-managed/assertion-resolver";
@@ -14,9 +15,6 @@ export type ResolvedEnterpriseTransportCredential = {
   headerValue: string;
   expiresInSeconds: number | null;
 };
-
-const JWT_BEARER_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:jwt-bearer";
-const ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token";
 
 export async function resolveEnterpriseTransportCredential(params: {
   agentId: string;
@@ -53,8 +51,15 @@ export async function resolveEnterpriseTransportCredential(params: {
   }
 
   if (shouldExchangeIdJagAtProtectedResource(config)) {
+    const idJagAssertion = params.tokenAuth?.isExternalIdp
+      ? assertion.assertion
+      : await exchangeSessionAssertionForIdJag({
+          assertion: assertion.assertion,
+          identityProviderId: assertion.identityProviderId,
+          enterpriseManagedConfig: config,
+        });
     const credential = await exchangeIdJagAtProtectedResource({
-      assertion: assertion.assertion,
+      assertion: idJagAssertion,
       identityProviderId: assertion.identityProviderId,
       enterpriseManagedConfig: config,
     });
@@ -77,7 +82,24 @@ export async function resolveEnterpriseTransportCredential(params: {
   });
 }
 
-async function exchangeIdJagAtProtectedResource(params: {
+async function exchangeSessionAssertionForIdJag(params: {
+  assertion: string;
+  identityProviderId: string;
+  enterpriseManagedConfig: EnterpriseManagedCredentialConfig;
+}): Promise<string> {
+  const credential = await exchangeEnterpriseManagedCredential({
+    identityProviderId: params.identityProviderId,
+    assertion: params.assertion,
+    enterpriseManagedConfig: params.enterpriseManagedConfig,
+  });
+
+  return extractInjectionValue({
+    value: credential.value,
+    responseFieldPath: params.enterpriseManagedConfig.responseFieldPath,
+  });
+}
+
+export async function exchangeIdJagAtProtectedResource(params: {
   assertion: string;
   identityProviderId: string;
   enterpriseManagedConfig: EnterpriseManagedCredentialConfig;
@@ -105,12 +127,16 @@ async function exchangeIdJagAtProtectedResource(params: {
   const tokenEndpoint =
     await discoverProtectedResourceTokenEndpoint(resourceIdentifier);
   const requestBody = new URLSearchParams({
-    grant_type: JWT_BEARER_GRANT_TYPE,
+    grant_type: OAUTH_GRANT_TYPE.JwtBearer,
     assertion: params.assertion,
   });
+  if (params.enterpriseManagedConfig.scopes?.length) {
+    requestBody.set("scope", params.enterpriseManagedConfig.scopes.join(" "));
+  }
   const headers = buildProtectedResourceTokenHeaders({
     clientId,
     clientSecret:
+      params.enterpriseManagedConfig.clientSecretOverride ??
       enterpriseConfig?.clientSecret ??
       identityProvider?.oidcConfig?.clientSecret,
     tokenEndpointAuthentication:
@@ -158,7 +184,7 @@ async function exchangeIdJagAtProtectedResource(params: {
     issuedTokenType:
       typeof responseBody.issued_token_type === "string"
         ? responseBody.issued_token_type
-        : ACCESS_TOKEN_TYPE,
+        : OAUTH_TOKEN_TYPE.AccessToken,
   };
 }
 

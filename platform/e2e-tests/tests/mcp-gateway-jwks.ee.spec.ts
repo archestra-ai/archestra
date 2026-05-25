@@ -8,7 +8,7 @@
  * 4. Authenticate to MCP Gateway using the JWT
  * 5. Verify tool calls succeed and the Archestra user is linked in audit logs
  */
-import { API_BASE_URL, MCP_GATEWAY_URL_SUFFIX } from "../consts";
+import { API_BASE_URL, MCP_GATEWAY_URL_SUFFIX, SSO_DOMAIN } from "../consts";
 import { getKeycloakJwt } from "../utils";
 import {
   assignArchestraToolsToProfile,
@@ -18,6 +18,7 @@ import {
   makeApiRequest,
   makeMcpGatewayRequestHeaders,
   waitForGatewayIdentityProviderReady,
+  waitForMcpGatewayJwtReady,
 } from "../utils/mcp-gateway";
 import { expect, test } from "./api-fixtures";
 
@@ -32,7 +33,7 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
     createIdentityProvider,
     deleteIdentityProvider,
   }) => {
-    test.slow();
+    test.setTimeout(300_000);
 
     // STEP 1: Verify Keycloak is reachable and get a test JWT
     const jwt = await getKeycloakJwt();
@@ -44,6 +45,7 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
     const identityProviderId = await createIdentityProvider(
       request,
       providerName,
+      { domain: SSO_DOMAIN },
     );
 
     let profileId: string | undefined;
@@ -80,7 +82,7 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
       // STEP 5: Wait for IdP linkage/tool assignments to settle before using the
       // external JWT against the gateway. This avoids transient 401s in CI where
       // the profile update is visible before the auth path is fully ready.
-      const tools = await waitForExternalJwtGatewayReady({
+      const tools = await waitForMcpGatewayJwtReady({
         request,
         profileId: pid,
         token: jwt,
@@ -142,6 +144,7 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
     const identityProviderId = await createIdentityProvider(
       request,
       providerName,
+      { domain: SSO_DOMAIN },
     );
 
     let profileId: string | undefined;
@@ -243,40 +246,3 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
     }
   });
 });
-
-async function waitForExternalJwtGatewayReady(params: {
-  request: Parameters<typeof initializeMcpSession>[0];
-  profileId: string;
-  token: string;
-}) {
-  let lastError: unknown;
-
-  for (const delayMs of [0, 500, 1000, 2000, 4000, 4000, 4000]) {
-    if (delayMs > 0) {
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-    }
-
-    try {
-      await initializeMcpSession(params.request, {
-        profileId: params.profileId,
-        token: params.token,
-      });
-
-      const tools = await listMcpTools(params.request, {
-        profileId: params.profileId,
-        token: params.token,
-      });
-
-      if (tools.length > 0) {
-        return tools;
-      }
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  throw (
-    lastError ??
-    new Error("MCP Gateway did not become ready for external JWT auth")
-  );
-}

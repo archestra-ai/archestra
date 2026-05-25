@@ -109,6 +109,22 @@ class ScheduleTriggerRunModel {
     return run ?? null;
   }
 
+  static async findByChatConversationId(
+    chatConversationId: string,
+  ): Promise<ScheduleTriggerRun | null> {
+    const [run] = await db
+      .select()
+      .from(schema.scheduleTriggerRunsTable)
+      .where(
+        eq(
+          schema.scheduleTriggerRunsTable.chatConversationId,
+          chatConversationId,
+        ),
+      );
+
+    return run ?? null;
+  }
+
   static async markCompleted(params: {
     runId: string;
     status: Extract<ScheduleTriggerRunStatus, "success" | "failed">;

@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ADD COLUMN "preset_entity_default_validation_regex" text;

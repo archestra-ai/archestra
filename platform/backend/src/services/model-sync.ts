@@ -1,11 +1,21 @@
-import type { SupportedEmbeddingDimension, SupportedProvider } from "@shared";
+import {
+  MODELS_DEV_PROVIDER_MAP,
+  OPENROUTER_FREE_MODEL_ID,
+  type SupportedEmbeddingDimension,
+  type SupportedProvider,
+} from "@shared";
 import {
   type ModelsDevApiResponse,
   modelsDevClient,
 } from "@/clients/models-dev-client";
 import logger from "@/logging";
-import { LlmProviderApiKeyModelLinkModel, ModelModel } from "@/models";
+import {
+  LlmProviderApiKeyModelLinkModel,
+  ModelModel,
+  OrganizationModel,
+} from "@/models";
 import { modelFetchers } from "@/routes/chat/model-fetchers";
+import type { FetchedModelCapabilities } from "@/routes/chat/model-fetchers/types";
 import type {
   CreateModel,
   ModelInputModality,
@@ -172,6 +182,44 @@ class ModelSyncService {
 
     return results;
   }
+
+  /**
+   * Give a fresh organization a zero-cost default: when an OpenRouter key is
+   * added and no default model is configured, point the org default at
+   * OpenRouter's Free Models Router. Never overrides an explicit user choice.
+   */
+  async maybeAutoSetOrgDefaultModel(params: {
+    organizationId: string;
+    apiKeyId: string;
+    provider: SupportedProvider;
+  }): Promise<void> {
+    const { organizationId, apiKeyId, provider } = params;
+    if (provider !== "openrouter") {
+      return;
+    }
+
+    const org = await OrganizationModel.getById(organizationId);
+    if (!org || org.defaultModelId || org.defaultLlmApiKeyId) {
+      return;
+    }
+
+    const routerModel = await ModelModel.findByProviderAndModelId(
+      "openrouter",
+      OPENROUTER_FREE_MODEL_ID,
+    );
+    if (!routerModel) {
+      return;
+    }
+
+    await OrganizationModel.patch(organizationId, {
+      defaultModelId: routerModel.id,
+      defaultLlmApiKeyId: apiKeyId,
+    });
+    logger.info(
+      { organizationId, apiKeyId, modelId: routerModel.modelId },
+      "Auto-selected OpenRouter Free Models Router as the organization default model",
+    );
+  }
 }
 
 // Export singleton instance
@@ -193,7 +241,7 @@ interface ProviderModelCapabilities {
 
 export function buildModelsToUpsert(params: {
   provider: SupportedProvider;
-  models: Array<{ id: string }>;
+  models: Array<{ id: string; capabilities?: FetchedModelCapabilities }>;
   modelsDevData: ModelsDevApiResponse;
 }): CreateModel[] {
   const { provider, models, modelsDevData } = params;
@@ -204,6 +252,7 @@ export function buildModelsToUpsert(params: {
       provider,
       modelId: model.id,
       capabilities: capabilitiesMap.get(model.id),
+      fetched: model.capabilities,
     });
 
     return {
@@ -232,12 +281,25 @@ function inferEmbeddingDimensions(
   provider: SupportedProvider,
 ): SupportedEmbeddingDimension | null {
   const id = modelId.toLowerCase();
-  if (provider === "openai" && id === "text-embedding-3-small") {
+  if (
+    (provider === "openai" || provider === "azure") &&
+    id === "text-embedding-3-small"
+  ) {
     return 1536;
   }
-  if (provider === "openai" && id === "text-embedding-3-large") {
+  if (
+    (provider === "openai" || provider === "azure") &&
+    id === "text-embedding-3-large"
+  ) {
     // Default to 1536 for backwards compatibility with existing OpenAI KB
     // embeddings; admins can opt into 3072 manually in the model editor.
+    return 1536;
+  }
+  if (
+    provider === "openrouter" &&
+    (id === "openai/text-embedding-3-small" ||
+      id === "openai/text-embedding-3-large")
+  ) {
     return 1536;
   }
   if (provider === "gemini" && id === "gemini-embedding-001") {
@@ -246,7 +308,7 @@ function inferEmbeddingDimensions(
   if (provider === "gemini" && id === "gemini-embedding-2-preview") {
     return 3072;
   }
-  if (id === "nomic-embed-text") {
+  if (id === "nomic-embed-text" || id.endsWith("/nomic-embed-text")) {
     return 768;
   }
   return null;
@@ -256,57 +318,46 @@ function inferEmbeddingDimensions(
 export function resolveModelCapabilities(params: {
   provider: SupportedProvider;
   modelId: string;
+  /** Capabilities from models.dev enrichment. */
   capabilities?: ProviderModelCapabilities;
+  /** Capabilities read directly from the provider's models endpoint. Highest priority. */
+  fetched?: FetchedModelCapabilities;
 }): ProviderModelCapabilities {
-  const { provider, modelId, capabilities } = params;
+  const { provider, modelId, capabilities, fetched } = params;
   const inferredCapabilities = inferModelCapabilities({
     provider,
     modelId,
   });
 
+  // Priority per field: fetcher -> models.dev -> hardcoded inference.
   return normalizeKnownModelCapabilities({
     provider,
     modelId,
     capabilities: {
       description: capabilities?.description ?? null,
       contextLength:
-        capabilities?.contextLength ?? inferredCapabilities.contextLength,
+        fetched?.contextLength ??
+        capabilities?.contextLength ??
+        inferredCapabilities.contextLength,
       inputModalities:
         capabilities?.inputModalities ?? inferredCapabilities.inputModalities,
       outputModalities:
         capabilities?.outputModalities ?? inferredCapabilities.outputModalities,
       supportsToolCalling:
+        fetched?.supportsToolCalling ??
         capabilities?.supportsToolCalling ??
         inferredCapabilities.supportsToolCalling,
-      promptPricePerToken: capabilities?.promptPricePerToken ?? null,
-      completionPricePerToken: capabilities?.completionPricePerToken ?? null,
+      promptPricePerToken:
+        fetched?.promptPricePerToken ??
+        capabilities?.promptPricePerToken ??
+        null,
+      completionPricePerToken:
+        fetched?.completionPricePerToken ??
+        capabilities?.completionPricePerToken ??
+        null,
     },
   });
 }
-
-/**
- * Maps models.dev provider IDs to Archestra provider names.
- */
-const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
-  openai: "openai",
-  openrouter: "openrouter",
-  anthropic: "anthropic",
-  google: "gemini",
-  "google-vertex": "gemini",
-  cohere: "cohere",
-  cerebras: "cerebras",
-  mistral: "mistral",
-  llama: "openai",
-  deepseek: "openai",
-  groq: "groq",
-  "fireworks-ai": "openai",
-  togetherai: "openai",
-  perplexity: null,
-  xai: "xai",
-  nvidia: null,
-  "amazon-bedrock": "bedrock",
-  azure: null,
-};
 
 /**
  * Build a map of modelId -> capabilities from models.dev data for a specific provider.
@@ -389,11 +440,28 @@ function inferModelCapabilities(params: {
 }): ProviderModelCapabilities {
   const { provider, modelId } = params;
 
+  if (provider === "azure") {
+    return inferAzureCapabilities(modelId);
+  }
+
   if (provider === "gemini") {
     return inferGeminiCapabilities(modelId);
   }
 
   return emptyCapabilities();
+}
+
+function inferAzureCapabilities(modelId: string): ProviderModelCapabilities {
+  if (!modelId.toLowerCase().includes("embedding")) {
+    return emptyCapabilities();
+  }
+
+  return {
+    ...emptyCapabilities(),
+    inputModalities: ["text"],
+    outputModalities: [],
+    supportsToolCalling: false,
+  };
 }
 
 function inferGeminiCapabilities(modelId: string): ProviderModelCapabilities {

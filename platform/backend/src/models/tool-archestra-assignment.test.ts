@@ -1,7 +1,13 @@
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  TOOL_ACTIVATE_SKILL_FULL_NAME,
+  TOOL_READ_SKILL_FILE_FULL_NAME,
+} from "@shared";
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import AgentToolModel from "./agent-tool";
+import OrganizationModel from "./organization";
 import ToolModel from "./tool";
 
 describe("Archestra Tools Dynamic Assignment", () => {
@@ -162,5 +168,125 @@ describe("Archestra Tools Dynamic Assignment", () => {
     // Should only have Archestra tools (proxy-discovered tools are excluded)
     const archestraToolCount = getArchestraMcpTools().length;
     expect(tools).toHaveLength(archestraToolCount);
+  });
+
+  test("backfillSkillToolsToOrgAgents assigns the skill tools to every agent in the org", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agentA = await makeAgent({
+      organizationId: org.id,
+      name: "Agent A",
+    });
+    const agentB = await makeAgent({
+      organizationId: org.id,
+      name: "Agent B",
+    });
+
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    const count = await ToolModel.backfillSkillToolsToOrgAgents(org.id);
+    expect(count).toBe(2);
+
+    const skillToolNames = [
+      TOOL_ACTIVATE_SKILL_FULL_NAME,
+      TOOL_READ_SKILL_FILE_FULL_NAME,
+    ];
+    for (const agentId of [agentA.id, agentB.id]) {
+      const tools = await ToolModel.getMcpToolsByAgent(agentId);
+      const names = tools.map((t) => t.name);
+      for (const skillTool of skillToolNames) {
+        expect(names).toContain(skillTool);
+      }
+    }
+  });
+
+  test("backfillSkillToolsToOrgAgents covers mcp_gateway agents too", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const gateway = await makeAgent({
+      organizationId: org.id,
+      name: "My Gateway",
+      agentType: "mcp_gateway",
+      scope: "personal",
+    });
+
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    await ToolModel.backfillSkillToolsToOrgAgents(org.id);
+
+    const names = (await ToolModel.getMcpToolsByAgent(gateway.id)).map(
+      (t) => t.name,
+    );
+    expect(names).toContain(TOOL_ACTIVATE_SKILL_FULL_NAME);
+    expect(names).toContain(TOOL_READ_SKILL_FILE_FULL_NAME);
+  });
+
+  test("backfillSkillToolsToOrgAgents is idempotent", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id, name: "Agent" });
+
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    await ToolModel.backfillSkillToolsToOrgAgents(org.id);
+    await ToolModel.backfillSkillToolsToOrgAgents(org.id);
+
+    const toolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+    expect(new Set(toolIds).size).toBe(toolIds.length);
+  });
+
+  test("backfillSkillToolsToOrgAgents does not touch agents in other orgs", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const orgA = await makeOrganization();
+    const orgB = await makeOrganization();
+    await makeAgent({ organizationId: orgA.id, name: "In A" });
+    const agentB = await makeAgent({ organizationId: orgB.id, name: "In B" });
+
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    await ToolModel.backfillSkillToolsToOrgAgents(orgA.id);
+
+    const toolsB = await ToolModel.getMcpToolsByAgent(agentB.id);
+    expect(toolsB.map((t) => t.name)).not.toContain(
+      TOOL_ACTIVATE_SKILL_FULL_NAME,
+    );
+  });
+
+  test("assignSkillToolsToAgent no-ops when org flag is off", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id, name: "Agent" });
+
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    await ToolModel.assignSkillToolsToAgent(agent.id, org.id);
+
+    const tools = await ToolModel.getMcpToolsByAgent(agent.id);
+    expect(tools.map((t) => t.name)).not.toContain(
+      TOOL_ACTIVATE_SKILL_FULL_NAME,
+    );
+  });
+
+  test("assignSkillToolsToAgent assigns when org flag is on", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id, name: "Agent" });
+    await OrganizationModel.patch(org.id, { skillToolsEnabled: true });
+
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    await ToolModel.assignSkillToolsToAgent(agent.id, org.id);
+
+    const names = (await ToolModel.getMcpToolsByAgent(agent.id)).map(
+      (t) => t.name,
+    );
+    expect(names).toContain(TOOL_ACTIVATE_SKILL_FULL_NAME);
+    expect(names).toContain(TOOL_READ_SKILL_FILE_FULL_NAME);
   });
 });

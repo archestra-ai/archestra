@@ -38,7 +38,7 @@ jobs:
 
       - name: Lint PR title
         if: ${{ github.event_name == 'pull_request' }}
-        uses: grafana/shared-workflows/actions/lint-pr-title@5f4c48c03125ef179c36a821d5b801fc876e672c # v1.2.1
+        uses: grafana/shared-workflows/actions/lint-pr-title@0239db2665246f3b078d8d9166e4d8f09c071cae # v1.2.2
         with:
           config-path: "${{ github.workspace }}/.github/commitlint.config.js" # zizmor: ignore[template-injection] workspace path is provided by GitHub and not user input.
         env:

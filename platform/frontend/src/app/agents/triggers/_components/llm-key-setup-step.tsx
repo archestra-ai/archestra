@@ -11,12 +11,17 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   provider: "anthropic",
   apiKey: null,
   baseUrl: null,
+  inferenceBaseUrl: null,
   extraHeaders: [],
   scope: "org",
   teamId: null,
   vaultSecretPath: null,
   vaultSecretKey: null,
   isPrimary: true,
+  bedrockAuthMethod: "api-key",
+  awsAccessKeyId: null,
+  awsSecretAccessKey: null,
+  awsSessionToken: null,
 };
 
 export function LlmKeySetupStep() {

@@ -1,5 +1,6 @@
 import ConversationModel from "@/models/conversation";
 import MessageModel from "@/models/message";
+import ScheduleTriggerRunModel from "@/models/schedule-trigger-run";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -48,8 +49,6 @@ describe("chat conversation and message routes", () => {
       url: "/api/chat/conversations",
       payload: {
         agentId: agent.id,
-        selectedModel: "gpt-4o",
-        selectedProvider: "openai",
       },
     });
 
@@ -57,8 +56,6 @@ describe("chat conversation and message routes", () => {
     expect(response.json()).toMatchObject({
       id: expect.any(String),
       agentId: agent.id,
-      selectedModel: "gpt-4o",
-      selectedProvider: "openai",
       pinnedAt: null,
     });
   });
@@ -73,8 +70,6 @@ describe("chat conversation and message routes", () => {
       userId: currentUser.id,
       organizationId,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
-      selectedProvider: "openai",
     });
 
     const pinnedAt = new Date().toISOString();
@@ -103,6 +98,295 @@ describe("chat conversation and message routes", () => {
 
     expect(unpinResponse.statusCode).toBe(200);
     expect(unpinResponse.json().pinnedAt).toBeNull();
+  });
+
+  test("rejects a conversation update that sets a model without an API key", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const conversation = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+    });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/chat/conversations/${conversation.id}`,
+      payload: { modelId: crypto.randomUUID() },
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  test("allows scheduled task admins to view linked run conversations owned by another user", async ({
+    makeAgent,
+    makeMember,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+    makeUser,
+  }) => {
+    const owner = await makeUser();
+    await makeMember(owner.id, organizationId, { role: "member" });
+    const agent = await makeAgent({
+      organizationId,
+      authorId: owner.id,
+      scope: "org",
+    });
+    const trigger = await makeScheduleTrigger({
+      organizationId,
+      actorUserId: owner.id,
+      agentId: agent.id,
+    });
+    const run = await makeScheduleTriggerRun(trigger.id, {
+      organizationId,
+      runKind: "due",
+    });
+    const conversation = await ConversationModel.create({
+      userId: owner.id,
+      organizationId,
+      agentId: agent.id,
+    });
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: {
+        id: "message-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "Scheduled run complete" }],
+      },
+    });
+    await ScheduleTriggerRunModel.setChatConversationId(
+      run.id,
+      conversation.id,
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/chat/conversations/${conversation.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      id: conversation.id,
+      userId: owner.id,
+      messages: [
+        expect.objectContaining({
+          id: expect.any(String),
+          parts: [{ type: "text", text: "Scheduled run complete" }],
+        }),
+      ],
+    });
+  });
+
+  test("forks an accessible scheduled run conversation for the current user", async ({
+    makeAgent,
+    makeMember,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+    makeUser,
+  }) => {
+    const owner = await makeUser();
+    await makeMember(owner.id, organizationId, { role: "member" });
+    const agent = await makeAgent({
+      organizationId,
+      authorId: owner.id,
+      scope: "org",
+    });
+    const trigger = await makeScheduleTrigger({
+      organizationId,
+      actorUserId: owner.id,
+      agentId: agent.id,
+    });
+    const run = await makeScheduleTriggerRun(trigger.id, {
+      organizationId,
+      runKind: "due",
+    });
+    const conversation = await ConversationModel.create({
+      userId: owner.id,
+      organizationId,
+      agentId: agent.id,
+    });
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: {
+        id: "message-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "Scheduled run complete" }],
+      },
+    });
+    await ScheduleTriggerRunModel.setChatConversationId(
+      run.id,
+      conversation.id,
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversation.id}/fork`,
+      payload: {
+        agentId: agent.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      agentId: agent.id,
+      userId: currentUser.id,
+      messages: [
+        expect.objectContaining({
+          id: expect.any(String),
+          parts: [{ type: "text", text: "Scheduled run complete" }],
+        }),
+      ],
+    });
+  });
+
+  test("returns 404 when non-admin member forks another user's scheduled run conversation", async ({
+    makeAgent,
+    makeMember,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+    makeUser,
+  }) => {
+    const owner = await makeUser();
+    const member = await makeUser();
+    await makeMember(owner.id, organizationId, { role: "member" });
+    await makeMember(member.id, organizationId, { role: "member" });
+    const agent = await makeAgent({
+      organizationId,
+      authorId: owner.id,
+      scope: "org",
+    });
+    const trigger = await makeScheduleTrigger({
+      organizationId,
+      actorUserId: owner.id,
+      agentId: agent.id,
+    });
+    const run = await makeScheduleTriggerRun(trigger.id, {
+      organizationId,
+      runKind: "due",
+    });
+    const conversation = await ConversationModel.create({
+      userId: owner.id,
+      organizationId,
+      agentId: agent.id,
+    });
+    await ScheduleTriggerRunModel.setChatConversationId(
+      run.id,
+      conversation.id,
+    );
+
+    currentUser = member;
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversation.id}/fork`,
+      payload: {
+        agentId: agent.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.message).toContain("Conversation not found");
+  });
+
+  test("returns 404 when forking a missing conversation", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat/conversations/00000000-0000-4000-8000-000000000000/fork",
+      payload: {
+        agentId: agent.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.message).toContain("Conversation not found");
+  });
+
+  test("returns 404 when non-admin member opens another user's scheduled run conversation", async ({
+    makeAgent,
+    makeMember,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+    makeUser,
+  }) => {
+    const owner = await makeUser();
+    const member = await makeUser();
+    await makeMember(owner.id, organizationId, { role: "member" });
+    await makeMember(member.id, organizationId, { role: "member" });
+    const agent = await makeAgent({
+      organizationId,
+      authorId: owner.id,
+      scope: "org",
+    });
+    const trigger = await makeScheduleTrigger({
+      organizationId,
+      actorUserId: owner.id,
+      agentId: agent.id,
+    });
+    const run = await makeScheduleTriggerRun(trigger.id, {
+      organizationId,
+      runKind: "due",
+    });
+    const conversation = await ConversationModel.create({
+      userId: owner.id,
+      organizationId,
+      agentId: agent.id,
+    });
+    await ScheduleTriggerRunModel.setChatConversationId(
+      run.id,
+      conversation.id,
+    );
+
+    currentUser = member;
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/chat/conversations/${conversation.id}`,
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.message).toContain("Conversation not found");
+  });
+
+  test("returns 404 when admin opens another user's conversation that is not a scheduled run", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const owner = await makeUser();
+    await makeMember(owner.id, organizationId, { role: "member" });
+    const agent = await makeAgent({
+      organizationId,
+      authorId: owner.id,
+      scope: "org",
+    });
+    const conversation = await ConversationModel.create({
+      userId: owner.id,
+      organizationId,
+      agentId: agent.id,
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/chat/conversations/${conversation.id}`,
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.message).toContain("Conversation not found");
   });
 
   test("returns 404 when updating a missing conversation", async () => {
@@ -174,8 +458,6 @@ describe("chat conversation and message routes", () => {
       userId: currentUser.id,
       organizationId,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
-      selectedProvider: "openai",
     });
 
     const firstMessage = await MessageModel.create({

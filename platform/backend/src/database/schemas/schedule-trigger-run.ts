@@ -33,6 +33,9 @@ const scheduleTriggerRunsTable = pgTable(
   },
   (table) => [
     index("schedule_trigger_runs_trigger_id_idx").on(table.triggerId),
+    index("schedule_trigger_runs_chat_conversation_id_idx").on(
+      table.chatConversationId,
+    ),
   ],
 );
 

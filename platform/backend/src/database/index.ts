@@ -64,7 +64,10 @@ export async function initializeDatabase(): Promise<void> {
   });
 
   instrumentDrizzleClient(db, { dbSystem: "postgresql" });
-  logger.info("Database connection pool initialized");
+  logger.info(
+    { poolMax: config.database.poolMax },
+    "Database connection pool initialized",
+  );
 }
 
 /**
@@ -151,7 +154,8 @@ let db: ReturnType<typeof drizzle<typeof schema>> | null = null;
  * idle timeouts.
  *
  * Pool configuration:
- * - max: 15 connections (sized to stay within max_connections during rolling deployments)
+ * - max: ARCHESTRA_DATABASE_POOL_MAX (default 50). Must be coordinated with
+ *   Postgres `max_connections` so that pods × poolMax stays under the server limit.
  * - idleTimeoutMillis: 30s (close idle connections after 30s)
  * - connectionTimeoutMillis: 10s (fail if can't get connection in 10s)
  *
@@ -167,7 +171,7 @@ function createPool(connectionString: string): pg.Pool {
   const newPool = new pg.Pool({
     connectionString,
     // Pool configuration
-    max: 15,
+    max: config.database.poolMax,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000,
     // Keepalive configuration to prevent "Connection terminated unexpectedly"

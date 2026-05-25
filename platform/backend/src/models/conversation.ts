@@ -14,7 +14,9 @@ import type {
   InsertConversation,
   UpdateConversation,
 } from "@/types";
+import { escapeLikePattern } from "@/utils/sql-search";
 import ConversationChatErrorModel from "./conversation-chat-error";
+import ConversationCompactionModel from "./conversation-compaction";
 import ConversationShareModel from "./conversation-share";
 
 class ConversationModel {
@@ -34,14 +36,6 @@ class ConversationModel {
     })) as Conversation;
 
     return conversationWithAgent;
-  }
-
-  /**
-   * Escape special characters in LIKE patterns.
-   * % and _ have special meaning in SQL LIKE patterns and need to be escaped.
-   */
-  private static escapeLikePattern(value: string): string {
-    return value.replace(/[%_\\]/g, "\\$&");
   }
 
   /**
@@ -85,7 +79,7 @@ class ConversationModel {
     // Add search filter if provided
     if (trimmedSearch) {
       // Escape LIKE special characters (%, _, \) to prevent unexpected pattern matching
-      const escapedSearch = ConversationModel.escapeLikePattern(trimmedSearch);
+      const escapedSearch = escapeLikePattern(trimmedSearch);
       const searchPattern = `%${escapedSearch}%`;
 
       // 1. Conversation title (text column) - uses conversations_title_trgm_idx
@@ -113,7 +107,7 @@ class ConversationModel {
     // Include messages only during search for preview snippets
     if (trimmedSearch) {
       // Escape search pattern for message subquery
-      const escapedSearch = ConversationModel.escapeLikePattern(trimmedSearch);
+      const escapedSearch = escapeLikePattern(trimmedSearch);
       const searchPattern = `%${escapedSearch}%`;
 
       // Use a lateral join to limit messages per conversation for preview
@@ -193,6 +187,7 @@ class ConversationModel {
             share: row.share?.id ? row.share : null,
             messages: [],
             chatErrors: [],
+            compactions: [],
           });
         }
 
@@ -251,6 +246,7 @@ class ConversationModel {
         share: row.share?.id ? row.share : null,
         messages: [], // Messages fetched separately via findById
         chatErrors: [],
+        compactions: [],
       }));
     }
   }
@@ -310,7 +306,10 @@ class ConversationModel {
     }
 
     const firstRow = rows[0];
-    const chatErrors = await ConversationChatErrorModel.findByConversation(id);
+    const [chatErrors, compactions] = await Promise.all([
+      ConversationChatErrorModel.findByConversation(id),
+      ConversationCompactionModel.findByConversation(id),
+    ]);
     const messages = [];
 
     for (const row of rows) {
@@ -326,6 +325,7 @@ class ConversationModel {
       share: firstRow.share?.id ? firstRow.share : null,
       messages,
       chatErrors,
+      compactions,
     };
   }
 
@@ -357,6 +357,77 @@ class ConversationModel {
       id: params.id,
       organizationId: params.organizationId,
     });
+  }
+
+  static async findByIdInOrganization(params: {
+    id: string;
+    organizationId: string;
+  }): Promise<Conversation | null> {
+    const rows = await db
+      .select({
+        conversation: getTableColumns(schema.conversationsTable),
+        message: getTableColumns(schema.messagesTable),
+        share: {
+          id: schema.conversationSharesTable.id,
+          visibility: schema.conversationSharesTable.visibility,
+        },
+        agent: {
+          id: schema.agentsTable.id,
+          name: schema.agentsTable.name,
+          systemPrompt: schema.agentsTable.systemPrompt,
+          agentType: schema.agentsTable.agentType,
+          llmApiKeyId: schema.agentsTable.llmApiKeyId,
+        },
+      })
+      .from(schema.conversationsTable)
+      .leftJoin(
+        schema.agentsTable,
+        eq(schema.conversationsTable.agentId, schema.agentsTable.id),
+      )
+      .leftJoin(
+        schema.messagesTable,
+        eq(schema.conversationsTable.id, schema.messagesTable.conversationId),
+      )
+      .leftJoin(
+        schema.conversationSharesTable,
+        eq(
+          schema.conversationsTable.id,
+          schema.conversationSharesTable.conversationId,
+        ),
+      )
+      .where(
+        and(
+          eq(schema.conversationsTable.id, params.id),
+          eq(schema.conversationsTable.organizationId, params.organizationId),
+        ),
+      )
+      .orderBy(schema.messagesTable.createdAt);
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    const firstRow = rows[0];
+    const [chatErrors, compactions] = await Promise.all([
+      ConversationChatErrorModel.findByConversation(params.id),
+      ConversationCompactionModel.findByConversation(params.id),
+    ]);
+    const messages = [];
+
+    for (const row of rows) {
+      if (row.message?.content) {
+        messages.push(addMessagePersistenceMetadata(row.message));
+      }
+    }
+
+    return {
+      ...firstRow.conversation,
+      agent: firstRow.agent,
+      share: firstRow.share?.id ? firstRow.share : null,
+      messages,
+      chatErrors,
+      compactions,
+    };
   }
 
   static async update(
@@ -442,75 +513,6 @@ class ConversationModel {
       .limit(1);
 
     return result[0]?.agentId ?? null;
-  }
-
-  private static async findByIdInOrganization(params: {
-    id: string;
-    organizationId: string;
-  }): Promise<Conversation | null> {
-    const rows = await db
-      .select({
-        conversation: getTableColumns(schema.conversationsTable),
-        message: getTableColumns(schema.messagesTable),
-        share: {
-          id: schema.conversationSharesTable.id,
-          visibility: schema.conversationSharesTable.visibility,
-        },
-        agent: {
-          id: schema.agentsTable.id,
-          name: schema.agentsTable.name,
-          systemPrompt: schema.agentsTable.systemPrompt,
-          agentType: schema.agentsTable.agentType,
-          llmApiKeyId: schema.agentsTable.llmApiKeyId,
-        },
-      })
-      .from(schema.conversationsTable)
-      .leftJoin(
-        schema.agentsTable,
-        eq(schema.conversationsTable.agentId, schema.agentsTable.id),
-      )
-      .leftJoin(
-        schema.messagesTable,
-        eq(schema.conversationsTable.id, schema.messagesTable.conversationId),
-      )
-      .leftJoin(
-        schema.conversationSharesTable,
-        eq(
-          schema.conversationsTable.id,
-          schema.conversationSharesTable.conversationId,
-        ),
-      )
-      .where(
-        and(
-          eq(schema.conversationsTable.id, params.id),
-          eq(schema.conversationsTable.organizationId, params.organizationId),
-        ),
-      )
-      .orderBy(schema.messagesTable.createdAt);
-
-    if (rows.length === 0) {
-      return null;
-    }
-
-    const firstRow = rows[0];
-    const chatErrors = await ConversationChatErrorModel.findByConversation(
-      params.id,
-    );
-    const messages = [];
-
-    for (const row of rows) {
-      if (row.message?.content) {
-        messages.push(addMessagePersistenceMetadata(row.message));
-      }
-    }
-
-    return {
-      ...firstRow.conversation,
-      agent: firstRow.agent,
-      share: firstRow.share?.id ? firstRow.share : null,
-      messages,
-      chatErrors,
-    };
   }
 }
 

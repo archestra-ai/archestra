@@ -9,6 +9,8 @@ export const RouteId = {
   GetDefaultLlmProxy: "getDefaultLlmProxy",
   UpdateAgent: "updateAgent",
   DeleteAgent: "deleteAgent",
+  ExportAgent: "exportAgent",
+  ImportAgent: "importAgent",
   GetLabelKeys: "getLabelKeys",
   GetLabelValues: "getLabelValues",
 
@@ -55,6 +57,7 @@ export const RouteId = {
   GetInternalMcpCatalogItem: "getInternalMcpCatalogItem",
   GetInternalMcpCatalogTools: "getInternalMcpCatalogTools",
   UpdateInternalMcpCatalogItem: "updateInternalMcpCatalogItem",
+  ReinstallInternalMcpCatalogItem: "reinstallInternalMcpCatalogItem",
   DeleteInternalMcpCatalogItem: "deleteInternalMcpCatalogItem",
   DeleteInternalMcpCatalogItemByName: "deleteInternalMcpCatalogItemByName",
   GetInternalMcpCatalogLabelKeys: "getInternalMcpCatalogLabelKeys",
@@ -63,6 +66,10 @@ export const RouteId = {
   ValidateDeploymentYaml: "validateDeploymentYaml",
   ResetDeploymentYaml: "resetDeploymentYaml",
   GetK8sImagePullSecrets: "getK8sImagePullSecrets",
+  // MCP Catalog Children (UI-named "presets") Routes
+  GetCatalogChildren: "getCatalogChildren",
+  CreateCatalogChild: "createCatalogChild",
+  UpdateCatalogChild: "updateCatalogChild",
 
   // MCP Server Routes
   GetMcpServers: "getMcpServers",
@@ -261,12 +268,15 @@ export const RouteId = {
   // Chat Routes
   StreamChat: "streamChat",
   StopChatStream: "stopChatStream",
+  GetActiveChatRun: "getActiveChatRun",
   GetChatConversations: "getChatConversations",
   GetChatConversation: "getChatConversation",
   GetChatAgentMcpTools: "getChatAgentMcpTools",
   CreateChatConversation: "createChatConversation",
+  ForkChatConversation: "forkChatConversation",
   UpdateChatConversation: "updateChatConversation",
   DeleteChatConversation: "deleteChatConversation",
+  CompactChatConversation: "compactChatConversation",
   GenerateChatConversationTitle: "generateChatConversationTitle",
   GetChatMcpTools: "getChatMcpTools",
   UpdateChatMessage: "updateChatMessage",
@@ -301,6 +311,13 @@ export const RouteId = {
   UpdateVirtualApiKey: "updateVirtualApiKey",
   DeleteVirtualApiKey: "deleteVirtualApiKey",
 
+  // LLM OAuth Client Routes
+  GetLlmOauthClients: "getLlmOauthClients",
+  CreateLlmOauthClient: "createLlmOauthClient",
+  UpdateLlmOauthClient: "updateLlmOauthClient",
+  RotateLlmOauthClientSecret: "rotateLlmOauthClientSecret",
+  DeleteLlmOauthClient: "deleteLlmOauthClient",
+
   // Models with API Keys Routes
   GetModelsWithApiKeys: "getModelsWithApiKeys",
   UpdateModel: "updateModel",
@@ -334,11 +351,23 @@ export const RouteId = {
   // Agent Settings Routes (organization-level)
   UpdateAgentSettings: "updateAgentSettings",
 
-  // MCP Settings Routes (organization-level)
-  UpdateMcpSettings: "updateMcpSettings",
+  // Auth Settings Routes (organization-level)
+  UpdateAuthSettings: "updateAuthSettings",
 
   // Connection Settings Routes (organization-level)
   UpdateConnectionSettings: "updateConnectionSettings",
+
+  // Preset Entity Name Routes (organization-level - configurable label for catalog presets)
+  UpdatePresetEntityName: "updatePresetEntityName",
+  UpdatePresetEntityDefaultLabel: "updatePresetEntityDefaultLabel",
+  UpdatePresetEntityDefaultValidationRegex:
+    "updatePresetEntityDefaultValidationRegex",
+
+  // Org-level preset entries (Production / Staging / Development buckets)
+  ListMcpPresetEntries: "listMcpPresetEntries",
+  CreateMcpPresetEntry: "createMcpPresetEntry",
+  UpdateMcpPresetEntry: "updateMcpPresetEntry",
+  DeleteMcpPresetEntry: "deleteMcpPresetEntry",
 
   // Knowledge Settings Routes (organization-level)
   UpdateKnowledgeSettings: "updateKnowledgeSettings",
@@ -349,6 +378,8 @@ export const RouteId = {
   GetPublicIdentityProviders: "getPublicIdentityProviders",
   GetIdentityProviders: "getIdentityProviders",
   GetIdentityProvider: "getIdentityProvider",
+  GetIdentityProviderLatestIdTokenClaims:
+    "getIdentityProviderLatestIdTokenClaims",
   CreateIdentityProvider: "createIdentityProvider",
   UpdateIdentityProvider: "updateIdentityProvider",
   DeleteIdentityProvider: "deleteIdentityProvider",
@@ -356,6 +387,8 @@ export const RouteId = {
 
   // Member Routes
   GetMemberDefaultAgent: "getMemberDefaultAgent",
+  GetMemberDefaultModel: "getMemberDefaultModel",
+  UpdateMemberDefaultModel: "updateMemberDefaultModel",
 
   // User Routes
   GetUserPermissions: "getUserPermissions",
@@ -380,6 +413,7 @@ export const RouteId = {
 
   // Optimization Rule Routes
   GetOptimizationRules: "getOptimizationRules",
+  GetOptimizationRule: "getOptimizationRule",
   CreateOptimizationRule: "createOptimizationRule",
   UpdateOptimizationRule: "updateOptimizationRule",
   DeleteOptimizationRule: "deleteOptimizationRule",
@@ -434,6 +468,12 @@ export const RouteId = {
   GetConnectorRuns: "getConnectorRuns",
   GetConnectorRun: "getConnectorRun",
 
+  // Connector File Upload Routes
+  UploadConnectorFiles: "uploadConnectorFiles",
+  GetConnectorFiles: "getConnectorFiles",
+  GetConnectorFile: "getConnectorFile",
+  DeleteConnectorFile: "deleteConnectorFile",
+
   // Invitation Routes
   CheckInvitation: "checkInvitation",
 
@@ -444,6 +484,25 @@ export const RouteId = {
   UpdateCluster: "updateCluster",
   DeleteCluster: "deleteCluster",
   TestCluster: "testCluster",
+
+  // Site Notification Routes
+  GetSiteNotification: "getSiteNotification",
+  GetSiteNotificationSettings: "getSiteNotificationSettings",
+  CreateSiteNotification: "createSiteNotification",
+  UpdateSiteNotification: "updateSiteNotification",
+  DeleteSiteNotification: "deleteSiteNotification",
+
+  // Agent Skill Routes
+  GetSkills: "getSkills",
+  CreateSkill: "createSkill",
+  GetSkill: "getSkill",
+  UpdateSkill: "updateSkill",
+  DeleteSkill: "deleteSkill",
+  DiscoverGithubSkills: "discoverGithubSkills",
+  PreviewGithubSkill: "previewGithubSkill",
+  ImportGithubSkills: "importGithubSkills",
+  GetSkillSourceRepos: "getSkillSourceRepos",
+  EnableSkillToolDefaults: "enableSkillToolDefaults",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

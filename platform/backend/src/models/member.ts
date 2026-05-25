@@ -53,12 +53,13 @@ class MemberModel {
 
   /**
    * Get a member by user ID and organization ID.
+   *
+   * The member table has no unique constraint on (userId, organizationId).
+   * Order by createdAt so a stale duplicate row can't shadow the seeded one:
+   * the original membership is always older than any later duplicate created
+   * (e.g. by an auto-accepted invitation), so it wins.
    */
   static async getByUserId(userId: string, organizationId: string) {
-    // logger.debug(
-    //   { userId, organizationId },
-    //   "MemberModel.getByUserId: fetching member",
-    // );
     const [member] = await db
       .select()
       .from(schema.membersTable)
@@ -68,11 +69,8 @@ class MemberModel {
           eq(schema.membersTable.organizationId, organizationId),
         ),
       )
+      .orderBy(schema.membersTable.createdAt, schema.membersTable.id)
       .limit(1);
-    // logger.debug(
-    //   { userId, organizationId, found: !!member },
-    //   "MemberModel.getByUserId: completed",
-    // );
     return member;
   }
 
@@ -89,6 +87,7 @@ class MemberModel {
       .select()
       .from(schema.membersTable)
       .where(eq(schema.membersTable.userId, userId))
+      .orderBy(schema.membersTable.createdAt, schema.membersTable.id)
       .limit(1);
     logger.debug(
       { userId, found: !!member, organizationId: member?.organizationId },
@@ -137,6 +136,23 @@ class MemberModel {
       "MemberModel.hasAnyMembership: completed",
     );
     return hasMembership;
+  }
+
+  static async deleteAllByUserId(userId: string, tx?: Transaction) {
+    logger.debug(
+      { userId },
+      "MemberModel.deleteAllByUserId: deleting memberships",
+    );
+    const dbOrTx = tx ?? db;
+    const deleted = await dbOrTx
+      .delete(schema.membersTable)
+      .where(eq(schema.membersTable.userId, userId))
+      .returning({ id: schema.membersTable.id });
+    logger.debug(
+      { userId, count: deleted.length },
+      "MemberModel.deleteAllByUserId: completed",
+    );
+    return deleted.length;
   }
 
   /**
@@ -401,6 +417,55 @@ class MemberModel {
           eq(schema.membersTable.organizationId, organizationId),
         ),
       );
+  }
+
+  /**
+   * Set the member's default model and API key. The two are a pair — callers
+   * must pass both or neither (see `isModelSelectionComplete`).
+   */
+  static async setDefaultModelSelection(params: {
+    userId: string;
+    organizationId: string;
+    modelId: string | null;
+    apiKeyId: string | null;
+  }) {
+    const { userId, organizationId, modelId, apiKeyId } = params;
+    await db
+      .update(schema.membersTable)
+      .set({ defaultModelId: modelId, defaultChatApiKeyId: apiKeyId })
+      .where(
+        and(
+          eq(schema.membersTable.userId, userId),
+          eq(schema.membersTable.organizationId, organizationId),
+        ),
+      );
+  }
+
+  /**
+   * Get the member's default (model, key) pair. Either both ids are set or
+   * both are null (see `isModelSelectionComplete`).
+   */
+  static async getDefaultModelSelection(
+    userId: string,
+    organizationId: string,
+  ): Promise<{ modelId: string | null; chatApiKeyId: string | null }> {
+    const [member] = await db
+      .select({
+        defaultModelId: schema.membersTable.defaultModelId,
+        defaultChatApiKeyId: schema.membersTable.defaultChatApiKeyId,
+      })
+      .from(schema.membersTable)
+      .where(
+        and(
+          eq(schema.membersTable.userId, userId),
+          eq(schema.membersTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+    return {
+      modelId: member?.defaultModelId ?? null,
+      chatApiKeyId: member?.defaultChatApiKeyId ?? null,
+    };
   }
 
   /**

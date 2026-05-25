@@ -1,12 +1,16 @@
-# Build KinD and Docker CLI from source with a patched Go toolchain.
-# The Alpine packages/binaries have historically lagged on Go patch releases, so
+# build KinD, Docker CLI, Dagger CLI, and kubectl from source with a patched Go toolchain.
+# the Alpine packages/binaries have historically lagged on Go patch releases, so
 # we compile these tools ourselves to pick up upstream fixes without local vendoring hacks.
-ARG GOLANG_IMAGE=golang:1.25.9-alpine@sha256:5caaf1cca9dc351e13deafbc3879fd4754801acba8653fa9540cea125d01a71f
+ARG GOLANG_IMAGE=golang:1.25.10-alpine@sha256:8d22e29d960bc50cd025d93d5b7c7d220b1ee9aa7a239b3c8f55a57e987e8d45
 ARG NODE_IMAGE=node:24-alpine3.23@sha256:7fddd9ddeae8196abf4a3ef2de34e11f7b1a722119f91f28ddf1e99dcafdf114
 ARG KIND_VERSION=v0.31.0
 ARG KIND_COMMIT=a323333ff9efd8099f95a8a6b5c86c75a210d00f
 ARG DOCKER_CLI_VERSION=v29.3.0
 ARG DOCKER_CLI_COMMIT=5927d80c76b3ce5cf782be818922966e8a0d87a3
+ARG DAGGER_VERSION=v0.20.8
+ARG DAGGER_COMMIT=74bff7d10fd78dd6935c60c4514558598f216451
+ARG KUBECTL_VERSION=v1.35.0
+ARG KUBECTL_COMMIT=66452049f3d692768c39c797b21b793dce80314e
 
 FROM ${GOLANG_IMAGE} AS go-builder
 ARG TARGETARCH
@@ -14,35 +18,84 @@ ARG KIND_VERSION
 ARG KIND_COMMIT
 ARG DOCKER_CLI_VERSION
 ARG DOCKER_CLI_COMMIT
+ARG DAGGER_VERSION
+ARG DAGGER_COMMIT
+ARG KUBECTL_VERSION
+ARG KUBECTL_COMMIT
 RUN if [ "$TARGETARCH" != "amd64" ] && [ "$TARGETARCH" != "arm64" ]; then \
         echo "ERROR: Unsupported architecture: $TARGETARCH. KinD is only available for amd64 and arm64."; \
         exit 1; \
     fi
 RUN apk add --no-cache git
+COPY docker/dagger-dockercompat /dagger-dockercompat
 RUN git clone --depth 1 --branch "${KIND_VERSION}" https://github.com/kubernetes-sigs/kind.git /kind && \
     test "$(git -C /kind rev-parse HEAD)" = "${KIND_COMMIT}" && \
     cd /kind && \
-    go mod edit -go=1.25.9 && \
-    # CVE-2026-27141: golang.org/x/net fixed in >= 0.51.0
-    go get golang.org/x/net@v0.51.0 && \
+    go mod edit -go=1.25.10 && \
+    # golang.org/x/net <0.53.0: multiple HIGH CVEs (Scout-flagged at 0.51.0); fixed in >= 0.53.0
+    go get golang.org/x/net@v0.53.0 && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /kind-binary .
 RUN git clone --depth 1 --branch "${DOCKER_CLI_VERSION}" https://github.com/docker/cli.git /docker-cli && \
     test "$(git -C /docker-cli rev-parse HEAD)" = "${DOCKER_CLI_COMMIT}" && \
     cd /docker-cli && \
     cp vendor.mod go.mod && cp vendor.sum go.sum && \
-    go mod edit -go=1.25.9 && \
+    go mod edit -go=1.25.10 && \
     # CVE-2026-33186: grpc Improper Authorization fixed in >= 1.79.3
     go get google.golang.org/grpc@v1.79.3 && \
-    # CVE-2026-27141: golang.org/x/net fixed in >= 0.51.0
-    go get golang.org/x/net@v0.51.0 && \
     # CVE-2026-39883: OTel SDK untrusted search path fixed in >= 1.43.0
     go get go.opentelemetry.io/otel/sdk@v1.43.0 && \
     # CVE-2026-34986: go-jose uncaught exception fixed in >= 4.1.4
     go get github.com/go-jose/go-jose/v4@v4.1.4 && \
+    # x/sys/x/term must be pinned for `go mod vendor` to find windows/registry and plan9 sub-pkgs.
+    go get golang.org/x/sys@v0.42.0 && \
+    go get golang.org/x/term@v0.42.0 && \
+    # golang.org/x/net <0.53.0: multiple HIGH CVEs (Scout-flagged at 0.51.0); fixed in >= 0.53.0.
+    # Must be the LAST `go get` before `go mod vendor` — earlier `go get`s for grpc/otel/x/sys
+    # transitively pull x/net@v0.52.0 and would otherwise override our explicit requirement.
+    go get golang.org/x/net@v0.53.0 && \
     go mod vendor && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor \
     -ldflags "-X github.com/docker/cli/cli/version.Version=${DOCKER_CLI_VERSION#v}" \
     -o /docker-binary ./cmd/docker
+RUN git clone --depth 1 --branch "${DAGGER_VERSION}" https://github.com/dagger/dagger.git /dagger && \
+    test "$(git -C /dagger rev-parse HEAD)" = "${DAGGER_COMMIT}" && \
+    cd /dagger && \
+    cp -R /dagger-dockercompat ./dockercompat && \
+    go mod edit -go=1.25.10 && \
+    # cve-2026-34040: replace Dagger's BuildKit Docker monolith imports with split Moby modules.
+    go mod edit -require=github.com/docker/docker@v29.3.1+incompatible && \
+    go mod edit -replace=github.com/docker/docker=./dockercompat && \
+    # cve-2026-46680: containerd type confusion fixed in >= 2.2.4
+    go get github.com/containerd/containerd/v2@v2.2.4 && \
+    # cve-2026-34986: go-jose uncaught exception fixed in >= 4.1.4
+    go get github.com/go-jose/go-jose/v4@v4.1.4 && \
+    # cve-2026-45022: go-git validation issue fixed in >= 5.19.0
+    go get github.com/go-git/go-git/v5@v5.19.0 && \
+    # cve-2026-44973: go-billy path traversal fixed in >= 5.9.0
+    go get github.com/go-git/go-billy/v5@v5.9.0 && \
+    # cve-2026-33814: x/net issue fixed in >= 0.53.0
+    go get golang.org/x/net@v0.54.0 && \
+    # cve-2026-46597: x/crypto issue fixed in >= 0.52.0; keep this after x/net.
+    go get golang.org/x/crypto@v0.52.0 && \
+    go get github.com/moby/go-archive@v0.2.0 github.com/moby/profiles/seccomp@v0.2.3 github.com/moby/sys/reexec@v0.1.0 github.com/moby/sys/user@v0.4.0 && \
+    go mod tidy && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
+    -ldflags "-X github.com/dagger/dagger/engine.Version=${DAGGER_VERSION} -X github.com/dagger/dagger/engine.Tag=${DAGGER_VERSION}" \
+    -o /dagger-binary ./cmd/dagger
+RUN git clone --depth 1 --branch "${KUBECTL_VERSION}" https://github.com/kubernetes/kubernetes.git /kubernetes && \
+    test "$(git -C /kubernetes rev-parse HEAD)" = "${KUBECTL_COMMIT}" && \
+    cd /kubernetes && \
+    go mod edit -go=1.25.10 && \
+    go work edit -go=1.25.10 && \
+    # cve-2026-35469: spdystream resource exhaustion fixed in >= 0.5.1.
+    go get github.com/moby/spdystream@v0.5.1 && \
+    # cve-2026-29181: OTel resource exhaustion fixed in >= 1.41.0.
+    go get go.opentelemetry.io/otel@v1.41.0 go.opentelemetry.io/otel/metric@v1.41.0 go.opentelemetry.io/otel/trace@v1.41.0 go.opentelemetry.io/otel/sdk@v1.41.0 && \
+    # cve-2026-33814: x/net issue fixed in >= 0.53.0.
+    go get golang.org/x/net@v0.53.0 && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=readonly \
+    -ldflags "-X k8s.io/component-base/version.gitVersion=${KUBECTL_VERSION} -X k8s.io/component-base/version.gitCommit=${KUBECTL_COMMIT} -X k8s.io/component-base/version.gitTreeState=clean" \
+    -o /kubectl-binary ./cmd/kubectl
 
 FROM ${NODE_IMAGE} AS base
 
@@ -144,6 +197,7 @@ FROM base AS unified
 WORKDIR /app
 
 ARG VERSION=dev
+ARG TARGETARCH
 
 ENV NODE_ENV=production
 # disable telemetry for next.js
@@ -169,7 +223,7 @@ COPY docker/certs/gcloud-sql-global.pem /tmp/gcloud-sql-ca.pem
 
 RUN apk --no-cache upgrade && \
     # Install PostgreSQL 17, pgvector, and supervisord
-    apk add --no-cache postgresql17=17.9-r0 postgresql17-contrib=17.9-r0 postgresql-pgvector su-exec && \
+    apk add --no-cache postgresql17 postgresql17-contrib postgresql-pgvector su-exec && \
     # Combine all CA bundles
     cat /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem > /etc/ssl/certs/cloud-database-ca-bundle.pem && \
     rm -f /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem && \
@@ -184,12 +238,14 @@ RUN apk --no-cache upgrade && \
     # Clean up
     rm -rf /tmp/*
 
-# Install KinD (Kubernetes in Docker) and docker-cli for embedded K8s cluster support
-# Both binaries are built from source in go-builder with Go 1.25.9 to fix CVE-2025-68121
+# install KinD (Kubernetes in Docker), docker-cli, and kubectl for Kubernetes runtime support
+# these binaries are built from source in go-builder with Go 1.25.10 to fix CVE-2025-68121
+# and the Go stdlib HIGH CVEs fixed in 1.25.10 (CVE-2026-42499/39836/39820/33814/33811).
 COPY --from=go-builder /docker-binary /usr/local/bin/docker
 COPY --from=go-builder /kind-binary /usr/local/bin/kind
-RUN chmod +x /usr/local/bin/kind /usr/local/bin/docker
-# TODO: Once KinD releases a version compiled with Go >= 1.25.9, remove the kind-builder stage
+COPY --from=go-builder /kubectl-binary /usr/local/bin/kubectl
+RUN chmod +x /usr/local/bin/kind /usr/local/bin/docker /usr/local/bin/kubectl
+# TODO: Once KinD releases a version compiled with Go >= 1.25.10, remove the kind-builder stage
 # at the top of this file and restore the pre-built binary download below for faster builds.
 # Track releases at: https://github.com/kubernetes-sigs/kind/releases
 # RUN ARCH=$(uname -m) && \
@@ -206,6 +262,15 @@ RUN chmod +x /usr/local/bin/kind /usr/local/bin/docker
 #     wget -O /usr/local/bin/kind "${KIND_URL}" && \
 #     echo "${KIND_SHA256}  /usr/local/bin/kind" | sha256sum -c - && \
 #     chmod +x /usr/local/bin/kind
+
+# install the Dagger CLI. The @dagger.io/dagger SDK needs it to open a session
+# to the Dagger Engine; its npm postinstall download is blocked by
+# ignore-scripts, so the binary is pinned and built from source above.
+# keep DAGGER_VERSION in sync with @dagger.io/dagger in backend/package.json.
+COPY --from=go-builder /dagger-binary /usr/local/bin/dagger
+RUN chmod +x /usr/local/bin/dagger
+# point the SDK at the baked-in CLI so it never downloads one at runtime.
+ENV _EXPERIMENTAL_DAGGER_CLI_BIN=/usr/local/bin/dagger
 
 RUN apk add --no-cache supervisor && \
     # CVE-2026-24049: wheel 0.45.1 path traversal. Vendored inside py3-setuptools

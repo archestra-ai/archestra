@@ -23,6 +23,39 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * Poll `/api/auth/get-session` until the backend serves 2xx. The endpoint
+ * is public and returns 200 with a null user when unauthenticated, so a
+ * non-2xx response signals the backend is still warming up (or down).
+ */
+async function waitForBackendReady(request: APIRequestContext): Promise<void> {
+  const start = Date.now();
+  // Capped well under the project's 60s per-test timeout so the rest of
+  // the setup (signOut, signIn, teams creation, assignments) keeps headroom.
+  const timeoutMs = 30_000;
+  let delay = 500;
+  let lastError: string | null = null;
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const response = await request.get(
+        `${UI_BASE_URL}/api/auth/get-session`,
+        { headers: { Origin: UI_BASE_URL } },
+      );
+      if (response.ok()) {
+        return;
+      }
+      lastError = `${response.status()} ${await response.text()}`;
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+    }
+    await sleep(delay);
+    delay = Math.min(delay * 1.5, 5000);
+  }
+  throw new Error(
+    `Backend did not respond OK to GET /api/auth/get-session within ${timeoutMs}ms (last: ${lastError ?? "n/a"})`,
+  );
+}
+
+/**
  * Sign in a user via API and return true if successful
  * Handles rate limiting (429) with exponential backoff retry
  */
@@ -39,7 +72,7 @@ async function signInUser(
           Origin: UI_BASE_URL,
         },
       }),
-    { retryStatuses: [429] },
+    { retryStatuses: [429, 500, 502, 503, 504] },
   );
 
   return response.ok();
@@ -114,6 +147,26 @@ async function getTeams(request: APIRequestContext): Promise<Team[]> {
   return extractTeamsFromResponse(await response.json());
 }
 
+function extractTeamFromResponse(data: unknown): Team | null {
+  if (data && typeof data === "object" && "id" in data && "name" in data) {
+    return data as Team;
+  }
+
+  if (
+    data &&
+    typeof data === "object" &&
+    "data" in data &&
+    data.data &&
+    typeof data.data === "object" &&
+    "id" in data.data &&
+    "name" in data.data
+  ) {
+    return data.data as Team;
+  }
+
+  return null;
+}
+
 /**
  * Create a team if it doesn't already exist
  * Returns the team (existing or newly created)
@@ -145,7 +198,12 @@ async function createTeamIfNotExists(
     throw new Error(`Failed to create team ${name}: ${await response.text()}`);
   }
 
-  return response.json();
+  const team = extractTeamFromResponse(await response.json());
+  if (!team) {
+    throw new Error(`Failed to parse created team ${name}`);
+  }
+
+  return team;
 }
 
 interface TeamMember {
@@ -240,8 +298,55 @@ async function withRetries(
   throw new Error("Retry loop exited unexpectedly");
 }
 
+async function signOut(request: APIRequestContext): Promise<void> {
+  await request.post(`${UI_BASE_URL}/api/auth/sign-out`, {
+    headers: { Origin: UI_BASE_URL },
+  });
+}
+
+async function getSessionUserEmail(
+  request: APIRequestContext,
+): Promise<string | null> {
+  const response = await request.get(`${UI_BASE_URL}/api/auth/get-session`, {
+    headers: { Origin: UI_BASE_URL },
+  });
+  if (!response.ok()) {
+    return null;
+  }
+
+  const data = await response.json();
+  return data?.user?.email ?? null;
+}
+
+async function assertAdminPermissions(
+  request: APIRequestContext,
+): Promise<void> {
+  const response = await request.get(`${UI_BASE_URL}/api/user/permissions`, {
+    headers: { Origin: UI_BASE_URL },
+  });
+  expect(response.ok(), "Failed to fetch admin permissions").toBe(true);
+
+  const permissions = await response.json();
+  expect(
+    permissions?.identityProvider,
+    "Teams setup session is not using the admin role",
+  ).toContain("create");
+  expect(
+    permissions?.mcpRegistry,
+    "Teams setup session is not using the admin role",
+  ).toContain("create");
+}
+
 // Setup teams - runs after users are created
 setup("setup teams and assignments", async ({ page }) => {
+  // Single up-front backend readiness probe; the signOut→signIn→GET chain
+  // below has no warm-up tolerance, so transient connection / 5xx during
+  // pod warmup intermittently aborted the chain mid-flight.
+  await waitForBackendReady(page.request);
+
+  await signOut(page.request);
+  await page.context().clearCookies();
+
   // Sign in as admin
   const signedIn = await signInUser(page.request, ADMIN_EMAIL, ADMIN_PASSWORD);
   expect(signedIn, "Admin sign-in failed for teams setup").toBe(true);
@@ -249,6 +354,11 @@ setup("setup teams and assignments", async ({ page }) => {
   // Navigate to establish cookie context
   await page.goto(`${UI_BASE_URL}/chat`);
   await page.waitForLoadState("domcontentloaded");
+  const sessionEmail = await getSessionUserEmail(page.request);
+  expect(sessionEmail, "Teams setup did not save an admin session").toBe(
+    ADMIN_EMAIL,
+  );
+  await assertAdminPermissions(page.request);
 
   // Get organization members to find editor and member user IDs
   const members = await listOrgMembers(page.request);
@@ -323,13 +433,27 @@ setup("setup teams and assignments", async ({ page }) => {
     defaultMembers,
   );
 
-  // Add Editor to both Engineering and Marketing teams
+  // Add Admin and Editor to both Engineering and Marketing teams
+  await addUserToTeamIfNotMember(
+    page.request,
+    engineeringTeam.id,
+    adminUserId,
+    "member",
+    engineeringMembers,
+  );
   await addUserToTeamIfNotMember(
     page.request,
     engineeringTeam.id,
     editorUserId,
     "member",
     engineeringMembers,
+  );
+  await addUserToTeamIfNotMember(
+    page.request,
+    marketingTeam.id,
+    adminUserId,
+    "member",
+    marketingMembers,
   );
   await addUserToTeamIfNotMember(
     page.request,
@@ -347,4 +471,6 @@ setup("setup teams and assignments", async ({ page }) => {
     "member",
     marketingMembers,
   );
+
+  await signOut(page.request);
 });

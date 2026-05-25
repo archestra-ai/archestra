@@ -4,6 +4,18 @@ templates:
 values:
   - ../ci/test-values.yaml
 tests:
+  - it: worker deployment has default resources configured
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: "2"
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: "1Gi"
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: "2Gi"
+
   - it: worker deployment uses percentage-based rolling update defaults
     asserts:
       - equal:
@@ -73,6 +85,15 @@ tests:
           path: spec.template.metadata.annotations["prometheus.io/path"]
           value: "/metrics"
 
+  - it: worker deployment inherits global pod labels
+    set:
+      archestra.podLabels:
+        azure.workload.identity/use: "true"
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["azure.workload.identity/use"]
+          value: "true"
+
   - it: worker mounts diagnostics volume and env var when diagnostics are enabled
     set:
       archestra.diagnostics.enabled: true
@@ -94,6 +115,21 @@ tests:
             name: diagnostics
             mountPath: /var/diagnostics
             readOnly: false
+
+  - it: worker receives code runtime environment variables when enabled
+    set:
+      archestra.codeRuntime.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_ENABLED
+            value: "true"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+            value: kube-pod://dagger-runtime-engine-0?namespace=dagger&container=dagger-engine
 
   - it: worker sets heap snapshot env var when diagnostics heap snapshots are enabled
     set:

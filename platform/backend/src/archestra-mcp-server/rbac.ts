@@ -125,7 +125,31 @@ export const TOOL_PERMISSIONS: Record<
   // Meta — permission is enforced on the target tool, not on run_tool itself
   search_tools: null,
   run_tool: null,
+
+  // code execution — gated by explicit tool assignment + the codeRuntime
+  // feature flag (the RBAC model has no "execute" action).
+  run_python: null,
+
+  // skills — require skill:read; handlers further filter by per-skill scope.
+  list_skills: { resource: "skill", action: "read" },
+  activate_skill: { resource: "skill", action: "read" },
+  read_skill_file: { resource: "skill", action: "read" },
+  // Skill authoring — writes need skill:create/update; create_skill always
+  // makes a personal skill, update_skill re-checks the target skill's scope.
+  create_skill: { resource: "skill", action: "create" },
+  update_skill: { resource: "skill", action: "update" },
 };
+
+/**
+ * Read-only tools that operate at organization scope and so may be used by
+ * org/team-token MCP sessions, which carry no `userId`. Their handlers
+ * restrict results to org-scoped resources when no user is present.
+ */
+const ORG_CONTEXT_READ_TOOLS: ReadonlySet<ArchestraToolShortName> = new Set([
+  "list_skills",
+  "activate_skill",
+  "read_skill_file",
+]);
 
 /**
  * Check if a user has permission to execute a specific Archestra tool.
@@ -141,10 +165,18 @@ export async function checkToolPermission(
   // Cast is safe: unknown-but-prefixed tools return undefined here and are
   // allowed through — they'll fail in the handler chain with "unknown tool".
   // Known tools with `null` permission are also allowed (no RBAC needed).
-  const perm = TOOL_PERMISSIONS[shortName as ArchestraToolShortName];
+  const typedShortName = shortName as ArchestraToolShortName;
+  const perm = TOOL_PERMISSIONS[typedShortName];
   if (!perm) return null;
 
-  if (!context.userId || !context.organizationId) {
+  if (!context.organizationId) {
+    return errorResult("User context not available");
+  }
+
+  // org/team-token sessions have no user; they may still use read-only tools
+  // that operate at organization scope — the handlers restrict the results.
+  if (!context.userId) {
+    if (ORG_CONTEXT_READ_TOOLS.has(typedShortName)) return null;
     return errorResult("User context not available");
   }
 
@@ -174,13 +206,17 @@ export async function filterToolNamesByPermission(
   organizationId: string | undefined,
 ): Promise<Set<string>> {
   if (!userId || !organizationId) {
-    // No user context — only include tools with no permission requirement
+    // No user context — include tools with no permission requirement, plus
+    // org-context read tools when an organization context is present.
     return new Set(
       toolNames.filter((name) => {
         const shortName = archestraMcpBranding.getToolShortName(name);
         if (!shortName) return true; // Non-Archestra tool
-        const perm = TOOL_PERMISSIONS[shortName as ArchestraToolShortName];
-        return perm === null; // null means no permission required
+        const typed = shortName as ArchestraToolShortName;
+        if (TOOL_PERMISSIONS[typed] === null) return true;
+        return (
+          organizationId !== undefined && ORG_CONTEXT_READ_TOOLS.has(typed)
+        );
       }),
     );
   }

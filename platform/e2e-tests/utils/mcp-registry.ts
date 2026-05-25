@@ -4,6 +4,7 @@ import {
   getManageCredentialsAddToTeamOptionTestId,
   getManageCredentialsButtonTestId,
 } from "@shared";
+import { UI_BASE_URL } from "../consts";
 import { expect, goToPage } from "../fixtures";
 import { clickButton, closeOpenDialogs } from "./dialogs";
 import { openManageCredentialsDialog } from "./mcp-gateway";
@@ -30,28 +31,6 @@ export async function openAddMcpServerDialog(page: Page): Promise<void> {
     options: { name: "Add MCP Server" },
   });
   await page.waitForLoadState("domcontentloaded");
-}
-
-export async function openRemoteServerForm(page: Page): Promise<void> {
-  await page.getByRole("button", { name: /^Remote/ }).click();
-}
-
-export async function fillRemoteServerForm(
-  page: Page,
-  params: {
-    name: string;
-    serverUrl: string;
-    authMode?: "none" | "bearer";
-  },
-): Promise<void> {
-  await page.getByRole("textbox", { name: "Name *" }).fill(params.name);
-  await page
-    .getByRole("textbox", { name: "Server URL *" })
-    .fill(params.serverUrl);
-
-  if (params.authMode === "bearer") {
-    await page.getByRole("radio", { name: /"Authorization: Bearer/ }).click();
-  }
 }
 
 export async function submitAddServer(page: Page): Promise<void> {
@@ -94,6 +73,65 @@ export async function waitForMcpServerCard(
     .waitFor({ state: "visible", timeout: 30_000 });
 }
 
+/**
+ * Poll `GET /api/mcp_server/:id` until `localInstallationStatus` reaches
+ * `"success"`. Used when the install path went via the API (so the
+ * registry DOM doesn't refresh on its own and `waitForMcpServerToolsDiscovered`
+ * has nothing to react to). Fails fast on backend `"error"` status with the
+ * error message attached; treats a 404 as "row not yet visible, keep
+ * polling" to absorb a brief window between the install POST returning
+ * and the row becoming queryable.
+ */
+export async function waitForMcpServerReadyById(
+  page: Page,
+  mcpServerId: string,
+  options?: { timeoutMs?: number },
+): Promise<void> {
+  const timeoutMs = options?.timeoutMs ?? 120_000;
+  const start = Date.now();
+  let delay = 500;
+  let lastObserved: string | null = null;
+  while (Date.now() - start < timeoutMs) {
+    const response = await page.request.get(
+      `${UI_BASE_URL}/api/mcp_server/${mcpServerId}`,
+      { headers: { Origin: UI_BASE_URL } },
+    );
+    const status = response.status();
+    if (status === 404) {
+      lastObserved = "not-found";
+    } else if (response.ok()) {
+      const server = (await response.json()) as {
+        localInstallationStatus?: string;
+        localInstallationError?: string | null;
+      };
+      lastObserved = server.localInstallationStatus ?? "unknown";
+      if (lastObserved === "success") {
+        return;
+      }
+      if (lastObserved === "error") {
+        throw new Error(
+          `MCP server ${mcpServerId} install failed: ${server.localInstallationError ?? "unknown error"}`,
+        );
+      }
+    } else if (status >= 400 && status < 500) {
+      // Permanent client errors (401 unauthorized, 403 forbidden) — fail
+      // fast rather than retrying to the 120s timeout.
+      throw new Error(
+        `MCP server ${mcpServerId} status fetch returned ${status}: ${await response.text()}`,
+      );
+    } else {
+      // 5xx — keep polling, but record so the final timeout message is
+      // diagnostic rather than the previous-iteration's stale value.
+      lastObserved = `transient-${status}`;
+    }
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    delay = Math.min(delay * 1.5, 5000);
+  }
+  throw new Error(
+    `MCP server ${mcpServerId} did not reach localInstallationStatus="success" within ${timeoutMs}ms (last observed: ${lastObserved ?? "n/a"})`,
+  );
+}
+
 export async function waitForMcpServerToolsDiscovered(
   page: Page,
   catalogItemName?: string,
@@ -124,7 +162,7 @@ export async function waitForMcpServerToolsDiscovered(
 
         return { state: "pending" as const };
       },
-      { timeout: 60_000, intervals: [500, 1000, 2000] },
+      { timeout: 120_000, intervals: [500, 1000, 2000, 5000] },
     )
     .toMatchObject({ state: "ready" });
 }
@@ -193,14 +231,13 @@ export async function addSharedLocalConnection(params: {
   timeoutMs?: number;
 }): Promise<void> {
   await openManageCredentialsDialog(params.page, params.catalogItemName);
-  const sharedConnectionsSection = params.page.getByTestId(
-    E2eTestId.ManageCredentialsSharedConnectionsSection,
-  );
-  await sharedConnectionsSection
-    .getByTestId(E2eTestId.ManageCredentialsAddToTeamButton)
-    .click({
-      timeout: params.timeoutMs ?? 15_000,
-    });
+  const visibleDialog = params.page
+    .getByRole("dialog")
+    .filter({ visible: true })
+    .last();
+  await visibleDialog
+    .getByRole("button", { name: /^Install\b/ })
+    .click({ timeout: params.timeoutMs ?? 15_000 });
   await params.page
     .getByTestId(getManageCredentialsAddToTeamOptionTestId(params.teamName))
     .click({ timeout: params.timeoutMs ?? 15_000 });
@@ -219,7 +256,7 @@ export async function addSharedLocalConnection(params: {
     }
 
     await expect(
-      sharedConnectionsSection.getByTestId(
+      visibleDialog.getByTestId(
         E2eTestId.ManageCredentialsSharedConnectionsEmptyState,
       ),
     ).not.toBeVisible({

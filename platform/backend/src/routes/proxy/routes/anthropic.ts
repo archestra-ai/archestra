@@ -19,13 +19,13 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   await fastify.register(fastifyHttpProxy, {
     upstream: config.llm.anthropic.baseUrl,
     prefix: ANTHROPIC_PREFIX,
-    rewritePrefix: "/v1",
+    rewritePrefix: "",
     preHandler: createProxyPreHandler({
       apiPrefix: ANTHROPIC_PREFIX,
       endpointSuffix: MESSAGES_SUFFIX,
       upstream: config.llm.anthropic.baseUrl,
       providerName: "Anthropic",
-      rewritePrefix: "/v1",
+      rewritePrefix: "",
       skipErrorResponse: {
         type: "error",
         error: {

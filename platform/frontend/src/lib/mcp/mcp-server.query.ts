@@ -9,7 +9,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { invalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
-import { authClient } from "@/lib/clients/auth/auth-client";
+import { useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { handleApiError } from "@/lib/utils";
 import websocketService from "@/lib/websocket/websocket";
@@ -69,6 +69,55 @@ export function useMcpServers(params?: McpServersParams) {
   });
 }
 
+export function useMcpInstallationStatusCacheSync(enabled = true) {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    websocketService.connect();
+    const unsubscribe = websocketService.subscribe(
+      "mcp_installation_status",
+      (message: McpInstallationStatusMessage) => {
+        const { serverId, status, error } = message.payload;
+
+        queryClient.setQueriesData<
+          archestraApiTypes.GetMcpServersResponses["200"]
+        >({ queryKey: ["mcp-servers"] }, (servers) => {
+          if (!servers) return servers;
+          let didUpdate = false;
+          const nextServers = servers.map((server) => {
+            if (server.id !== serverId) return server;
+            didUpdate = true;
+            return {
+              ...server,
+              localInstallationStatus: status,
+              localInstallationError: error,
+            };
+          });
+          return didUpdate ? nextServers : servers;
+        });
+
+        if (status === "success" || status === "error") {
+          // Refetch the full mcp-servers list: the install row may have
+          // changes the surgical setQueriesData above doesn't cover. In
+          // particular, the per-install reinstall route returns 200 with
+          // status="pending" before the background task clears
+          // `reinstall_required`; without this invalidation the button
+          // stays visible until a manual refresh.
+          void queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+          void queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+          void queryClient.invalidateQueries({
+            queryKey: ["mcp-servers", serverId, "tools"],
+          });
+        }
+      },
+    );
+
+    return unsubscribe;
+  }, [enabled, queryClient]);
+}
+
 /**
  * Get MCP servers grouped by catalogId with current user's credentials first.
  * Used for credential/installation selection in tool configuration.
@@ -81,7 +130,7 @@ export function useMcpServersGroupedByCatalog(params?: McpServersQuery) {
     assignmentScope: params?.assignmentScope,
     assignmentTeamIds: params?.assignmentTeamIds,
   });
-  const { data: session } = authClient.useSession();
+  const { data: session } = useSession();
   const currentUserId = session?.user?.id;
 
   return useMemo(() => {

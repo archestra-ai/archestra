@@ -199,6 +199,7 @@ function DialogStickyFooter({
 function DialogForm({
   className,
   onSubmit,
+  autoComplete = "off",
   ...props
 }: React.ComponentProps<"form"> & {
   onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
@@ -207,6 +208,7 @@ function DialogForm({
     <form
       data-slot="dialog-form"
       className={cn("contents", className)}
+      autoComplete={autoComplete}
       onSubmit={(e) => {
         e.preventDefault();
         onSubmit(e);

@@ -34,6 +34,7 @@ import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useDisableInvitations } from "@/lib/config/config.query";
 import {
+  useCanImpersonate,
   useImpersonateUser,
   useImpersonationCandidates,
 } from "@/lib/impersonation.query";
@@ -219,6 +220,7 @@ function MembersTab({
 
   const { data: session } = useSession();
   const currentUserId = session?.user.id;
+  const canImpersonate = useCanImpersonate();
   const { data: impersonationCandidates } = useImpersonationCandidates();
   const impersonableUserIds = new Set(
     (impersonationCandidates ?? []).map((c) => c.id),
@@ -364,6 +366,7 @@ function MembersTab({
         }
 
         const canImpersonateThisUser =
+          canImpersonate &&
           member.userId !== currentUserId &&
           impersonableUserIds.has(member.userId);
 

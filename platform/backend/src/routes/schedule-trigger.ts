@@ -672,16 +672,15 @@ async function ensureRunConversation(params: {
   const llmSelection = await resolveConversationLlmSelectionForAgent({
     agent: {
       llmApiKeyId: agent.llmApiKeyId ?? null,
-      llmModel: agent.llmModel ?? null,
+      modelId: agent.modelId ?? null,
     },
     organizationId,
     userId,
   });
 
   if (run.chatConversationId) {
-    const existing = await ConversationModel.findById({
+    const existing = await ConversationModel.findByIdInOrganization({
       id: run.chatConversationId,
-      userId,
       organizationId,
     });
     if (existing) {
@@ -689,7 +688,7 @@ async function ensureRunConversation(params: {
       if (run.artifact && !existing.artifact) {
         const updated = await ConversationModel.update(
           existing.id,
-          userId,
+          existing.userId,
           organizationId,
           { artifact: run.artifact },
         );
@@ -719,13 +718,15 @@ async function ensureRunConversation(params: {
     trigger.messageTemplate,
   );
 
+  // Backfilled run conversations are owned by the requester so follow-up chat
+  // uses their own model/API key access, while existing run conversations keep
+  // their original owner.
   const conversation = await ConversationModel.create({
     userId,
     organizationId,
     agentId,
     title: conversationTitle,
-    selectedModel: llmSelection.selectedModel,
-    selectedProvider: llmSelection.selectedProvider,
+    modelId: llmSelection.modelId,
     chatApiKeyId: llmSelection.chatApiKeyId,
     artifact: run.artifact ?? undefined,
   });

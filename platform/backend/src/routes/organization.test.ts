@@ -4,6 +4,7 @@ import * as embeddingClients from "@/knowledge-base/embedding-clients";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
+import OrganizationModel from "@/models/organization";
 import ToolModel from "@/models/tool";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -73,6 +74,64 @@ describe("organization routes", () => {
       organization: expect.objectContaining({
         appName: "Acme Copilot",
       }),
+    });
+  });
+
+  describe("PATCH /api/organization/agent-settings - model/key pair", () => {
+    test("rejects a default model with no API key", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/agent-settings",
+        payload: { defaultModelId: crypto.randomUUID() },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    test("allows clearing both the default model and API key together", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/agent-settings",
+        payload: { defaultModelId: null, defaultLlmApiKeyId: null },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+  });
+
+  describe("PATCH /api/organization/agent-settings - skill slash commands", () => {
+    test("rejects enabling slash commands while skill tools are off", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/agent-settings",
+        payload: { skillSlashCommandsEnabled: true },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    test("allows enabling slash commands once skill tools are on", async () => {
+      await OrganizationModel.patch(organizationId, {
+        skillToolsEnabled: true,
+      });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/agent-settings",
+        payload: { skillSlashCommandsEnabled: true },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    test("allows disabling slash commands regardless of skill tools", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/agent-settings",
+        payload: { skillSlashCommandsEnabled: false },
+      });
+
+      expect(response.statusCode).toBe(200);
     });
   });
 
@@ -292,17 +351,6 @@ describe("organization routes", () => {
       expect(response.statusCode).toBe(400);
     });
 
-    test("updates showTwoFactor toggle", async () => {
-      const response = await app.inject({
-        method: "PATCH",
-        url: "/api/organization/appearance-settings",
-        payload: { showTwoFactor: true },
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json().showTwoFactor).toBe(true);
-    });
-
     test("updates slimChatErrorUi toggle", async () => {
       const response = await app.inject({
         method: "PATCH",
@@ -332,7 +380,6 @@ describe("organization routes", () => {
         payload: {
           appName: "Multi-update Test",
           footerText: "Test Footer",
-          showTwoFactor: true,
           chatPlaceholders: ["Hello", "World"],
         },
       });
@@ -341,7 +388,6 @@ describe("organization routes", () => {
       const body = response.json();
       expect(body.appName).toBe("Multi-update Test");
       expect(body.footerText).toBe("Test Footer");
-      expect(body.showTwoFactor).toBe(true);
       expect(body.chatPlaceholders).toEqual(["Hello", "World"]);
     });
 
@@ -427,27 +473,39 @@ describe("organization routes", () => {
       });
     });
 
-    test("persists limit cleanup interval across reads", async () => {
-      await app.inject({
+    test("allows clearing the default user limit", async () => {
+      const setResponse = await app.inject({
         method: "PATCH",
         url: "/api/organization/llm-settings",
         payload: {
-          compressionScope: "organization",
-          convertToolResultsToToon: false,
-          limitCleanupInterval: "12h",
+          defaultUserLimitValue: 100,
+          defaultUserLimitModel: ["gpt-4o"],
+          defaultUserLimitCleanupInterval: "12h",
         },
       });
 
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/organization",
+      expect(setResponse.statusCode).toBe(200);
+      expect(setResponse.json()).toMatchObject({
+        defaultUserLimitValue: 100,
+        defaultUserLimitModel: ["gpt-4o"],
+        defaultUserLimitCleanupInterval: "12h",
       });
 
-      expect(response.statusCode).toBe(200);
-      expect(response.json()).toMatchObject({
-        compressionScope: "organization",
-        convertToolResultsToToon: false,
-        limitCleanupInterval: "12h",
+      const clearResponse = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/llm-settings",
+        payload: {
+          defaultUserLimitValue: null,
+          defaultUserLimitModel: null,
+          defaultUserLimitCleanupInterval: null,
+        },
+      });
+
+      expect(clearResponse.statusCode).toBe(200);
+      expect(clearResponse.json()).toMatchObject({
+        defaultUserLimitValue: null,
+        defaultUserLimitModel: null,
+        defaultUserLimitCleanupInterval: null,
       });
     });
   });
@@ -676,26 +734,37 @@ describe("organization routes", () => {
     });
   });
 
-  describe("PATCH /api/organization/mcp-settings", () => {
-    test("updates the MCP OAuth access token lifetime", async () => {
+  describe("PATCH /api/organization/auth-settings", () => {
+    test("updates showTwoFactor toggle", async () => {
       const response = await app.inject({
         method: "PATCH",
-        url: "/api/organization/mcp-settings",
+        url: "/api/organization/auth-settings",
+        payload: { showTwoFactor: true },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().showTwoFactor).toBe(true);
+    });
+
+    test("updates the OAuth access token lifetime", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/auth-settings",
         payload: {
-          mcpOauthAccessTokenLifetimeSeconds: 604_800,
+          oauthAccessTokenLifetimeSeconds: 604_800,
         },
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json().mcpOauthAccessTokenLifetimeSeconds).toBe(604_800);
+      expect(response.json().oauthAccessTokenLifetimeSeconds).toBe(604_800);
     });
 
     test("rejects values below the minimum lifetime", async () => {
       const response = await app.inject({
         method: "PATCH",
-        url: "/api/organization/mcp-settings",
+        url: "/api/organization/auth-settings",
         payload: {
-          mcpOauthAccessTokenLifetimeSeconds: 299,
+          oauthAccessTokenLifetimeSeconds: 299,
         },
       });
 
@@ -705,13 +774,42 @@ describe("organization routes", () => {
     test("rejects values above the maximum lifetime", async () => {
       const response = await app.inject({
         method: "PATCH",
-        url: "/api/organization/mcp-settings",
+        url: "/api/organization/auth-settings",
         payload: {
-          mcpOauthAccessTokenLifetimeSeconds: 31_536_001,
+          oauthAccessTokenLifetimeSeconds: 31_536_001,
         },
       });
 
       expect(response.statusCode).toBe(400);
+    });
+  });
+
+  describe("PATCH /api/organization/preset-entity-default-validation-regex", () => {
+    test("sets and clears the default validation regex", async () => {
+      const setRes = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/preset-entity-default-validation-regex",
+        payload: { presetEntityDefaultValidationRegex: "^[a-z]+$" },
+      });
+      expect(setRes.statusCode).toBe(200);
+      expect(setRes.json().presetEntityDefaultValidationRegex).toBe("^[a-z]+$");
+
+      const clearRes = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/preset-entity-default-validation-regex",
+        payload: { presetEntityDefaultValidationRegex: null },
+      });
+      expect(clearRes.statusCode).toBe(200);
+      expect(clearRes.json().presetEntityDefaultValidationRegex).toBeNull();
+    });
+
+    test("rejects an invalid regex", async () => {
+      const res = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/preset-entity-default-validation-regex",
+        payload: { presetEntityDefaultValidationRegex: "(" },
+      });
+      expect(res.statusCode).toBe(400);
     });
   });
 

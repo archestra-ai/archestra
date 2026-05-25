@@ -15,9 +15,6 @@ export function useSettingsTabs() {
     ...(permissionMap?.["/settings/agents"]
       ? [{ label: "Agents", href: "/settings/agents" }]
       : []),
-    ...(permissionMap?.["/settings/mcp"]
-      ? [{ label: "MCP", href: "/settings/mcp" }]
-      : []),
     ...(permissionMap?.["/settings/clusters"]
       ? [{ label: "Clusters", href: "/settings/clusters" }]
       : []),

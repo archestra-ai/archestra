@@ -41,6 +41,7 @@ describe("config routes", () => {
     expect(response.json()).toEqual({
       disableBasicAuth: expect.any(Boolean),
       disableInvitations: expect.any(Boolean),
+      maintenanceMode: null,
       analytics: {
         enabled: expect.any(Boolean),
         posthog: {
@@ -70,6 +71,7 @@ describe("config routes", () => {
       orchestratorK8sRuntime: expect.any(Boolean),
       advancedToolFeaturesEnabled: false,
       byosEnabled: expect.any(Boolean),
+      azureOpenAiEntraIdEnabled: expect.any(Boolean),
       bedrockIamAuthEnabled: expect.any(Boolean),
       geminiVertexAiEnabled: expect.any(Boolean),
       mcpServerBaseImage: expect.any(String),

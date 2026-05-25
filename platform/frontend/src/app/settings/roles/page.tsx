@@ -5,16 +5,10 @@ import { Eye } from "lucide-react";
 import { useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { UserSearchableSelect } from "@/components/user-searchable-select";
 import config from "@/lib/config/config";
 import {
+  useCanImpersonate,
   useImpersonateUser,
   useImpersonationCandidates,
 } from "@/lib/impersonation.query";
@@ -25,10 +19,17 @@ const { RolesList } = config.enterpriseFeatures.core
   : await import("@/components/roles/roles-list");
 
 function RoleDebuggerCallout() {
-  const { data: canImpersonate } = useHasPermissions({ member: ["update"] });
+  const canImpersonate = useCanImpersonate();
   const { data: candidates, isLoading } = useImpersonationCandidates();
   const { mutate: impersonate, isPending } = useImpersonateUser();
   const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const userOptions = (candidates ?? []).map((candidate) => ({
+    userId: candidate.id,
+    name: candidate.role
+      ? `${candidate.name} · ${candidate.role}`
+      : candidate.name,
+    email: candidate.email,
+  }));
 
   if (!canImpersonate) return null;
 
@@ -40,31 +41,22 @@ function RoleDebuggerCallout() {
         or when you click <em>Return to admin</em> in the banner.
       </p>
       <div className="mt-3 flex items-center gap-2">
-        <Select
+        <UserSearchableSelect
           value={selectedUserId}
           onValueChange={setSelectedUserId}
+          users={userOptions}
           disabled={isLoading || !candidates || candidates.length === 0}
-        >
-          <SelectTrigger className="w-72">
-            <SelectValue
-              placeholder={
-                isLoading
-                  ? "Loading users…"
-                  : !candidates || candidates.length === 0
-                    ? "No users available"
-                    : "Select a user"
-              }
-            />
-          </SelectTrigger>
-          <SelectContent>
-            {(candidates ?? []).map((candidate) => (
-              <SelectItem key={candidate.id} value={candidate.id}>
-                {candidate.name}
-                {candidate.role ? ` · ${candidate.role}` : ""}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          placeholder={
+            isLoading
+              ? "Loading users..."
+              : !candidates || candidates.length === 0
+                ? "No users available"
+                : "Select a user"
+          }
+          searchPlaceholder="Search users by name or email"
+          className="w-72"
+          emptyMessage="No matching users found."
+        />
         <Button
           size="sm"
           variant="outline"

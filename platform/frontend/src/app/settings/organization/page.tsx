@@ -18,6 +18,7 @@ import {
   organizationKeys,
   useOrganization,
   useUpdateAppearanceSettings,
+  useUpdateAuthSettings,
 } from "@/lib/organization.query";
 import { useOrgTheme } from "@/lib/theme.hook";
 import { ChatLinksEditor } from "./_components/chat-links-editor";
@@ -28,8 +29,8 @@ import {
 } from "./_components/chat-links-editor.utils";
 import { ChatPlaceholdersEditor } from "./_components/chat-placeholders-editor";
 import { FaviconUpload } from "./_components/favicon-upload";
-import { IconLogoUpload } from "./_components/icon-logo-upload";
-import { LogoUpload } from "./_components/logo-upload";
+import { LogosSection } from "./_components/logos-section";
+import { OAuthTokenLifetimeSection } from "./_components/oauth-token-lifetime-section";
 import { OnboardingWizardEditor } from "./_components/onboarding-wizards-editor";
 import {
   type OnboardingWizardValue,
@@ -37,12 +38,17 @@ import {
   validateOnboardingWizard,
 } from "./_components/onboarding-wizards-editor.utils";
 import { OrganizationTokenSection } from "./_components/organization-token-section";
+import { SiteNotificationsSection } from "./_components/site-notifications-section";
 import { ThemeSelector } from "./_components/theme-selector";
 
 export default function OrganizationSettingsPage() {
   const updateMutation = useUpdateAppearanceSettings(
     "Organization settings updated",
     "Failed to update organization settings",
+  );
+  const updateAuthSettingsMutation = useUpdateAuthSettings(
+    "Auth settings updated",
+    "Failed to update Auth settings",
   );
   const [hasThemeChanges, setHasThemeChanges] = useState(false);
   const queryClient = useQueryClient();
@@ -203,8 +209,6 @@ export default function OrganizationSettingsPage() {
     if (animateChatPlaceholders !== null) {
       data.animateChatPlaceholders = animateChatPlaceholders;
     }
-    if (showTwoFactor !== null) data.showTwoFactor = showTwoFactor;
-
     const updatedOrganization = await updateMutation.mutateAsync(data);
     if (!updatedOrganization) {
       return;
@@ -225,6 +229,21 @@ export default function OrganizationSettingsPage() {
     setShowTwoFactor(null);
   };
 
+  const handleSaveAuthFields = async () => {
+    if (showTwoFactor === null) {
+      return;
+    }
+
+    const updatedOrganization = await updateAuthSettingsMutation.mutateAsync({
+      showTwoFactor,
+    });
+    if (!updatedOrganization) {
+      return;
+    }
+
+    setShowTwoFactor(null);
+  };
+
   if (isLoadingAppearance) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -239,18 +258,16 @@ export default function OrganizationSettingsPage() {
       <div>
         <h3 className="text-lg font-medium mb-4">Appearance</h3>
         <SettingsSectionStack>
-          <LogoUpload
+          <LogosSection
             currentLogo={logo}
             currentLogoDark={logoDark}
-            onLogoChange={handleLogoChange}
+            currentIconLogo={organization?.iconLogo}
+            currentIconLogoDark={organization?.iconLogoDark}
+            onChange={handleLogoChange}
           />
           <FaviconUpload
             currentFavicon={organization?.favicon}
             onFaviconChange={handleLogoChange}
-          />
-          <IconLogoUpload
-            currentIconLogo={organization?.iconLogo}
-            onIconLogoChange={handleLogoChange}
           />
           <ThemeSelector
             selectedTheme={currentUITheme}
@@ -388,13 +405,17 @@ export default function OrganizationSettingsPage() {
               />
             </CardContent>
           </Card>
+
+          <SiteNotificationsSection />
         </SettingsSectionStack>
       </div>
 
       {/* Auth Section */}
       <div>
-        <h3 className="text-lg font-medium mb-4">Authentication</h3>
+        <h3 className="text-lg font-medium mb-4">Auth</h3>
         <SettingsSectionStack>
+          <OAuthTokenLifetimeSection />
+
           <Card>
             <SettingsCardHeader
               title="Two-Factor Authentication"
@@ -416,7 +437,9 @@ export default function OrganizationSettingsPage() {
       {/* Unified save bar for all changes (theme + fields) */}
       <SettingsSaveBar
         hasChanges={hasThemeChanges || hasFieldChanges}
-        isSaving={updateMutation.isPending}
+        isSaving={
+          updateMutation.isPending || updateAuthSettingsMutation.isPending
+        }
         permissions={{ organizationSettings: ["update"] }}
         onSave={async () => {
           if (hasFieldChanges && hasChatLinkValidationErrors) {
@@ -432,7 +455,21 @@ export default function OrganizationSettingsPage() {
             await saveAppearance?.(currentUITheme || DEFAULT_THEME);
             setHasThemeChanges(false);
           }
-          if (hasFieldChanges) {
+          if (hasFieldChanges && showTwoFactor !== null) {
+            await handleSaveAuthFields();
+          }
+          if (
+            hasFieldChanges &&
+            (appName !== null ||
+              ogDescription !== null ||
+              footerText !== null ||
+              chatLinks !== null ||
+              onboardingWizardDraft !== undefined ||
+              chatErrorSupportMessage !== null ||
+              slimChatErrorUi !== null ||
+              chatPlaceholders !== null ||
+              animateChatPlaceholders !== null)
+          ) {
             await handleSaveFields();
           }
         }}

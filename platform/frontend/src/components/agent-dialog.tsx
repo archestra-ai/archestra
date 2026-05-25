@@ -4,7 +4,6 @@ import {
   type AgentScope,
   type AgentToolAssignmentMode,
   type AgentType,
-  archestraApiSdk,
   type archestraApiTypes,
   BLOCKED_PASSTHROUGH_HEADERS,
   BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS,
@@ -23,7 +22,6 @@ import {
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@shared";
-import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Bot,
@@ -141,6 +139,7 @@ import { useConnectors } from "@/lib/knowledge/connector.query";
 import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
 import { useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import {
   getDescriptionPlaceholder,
@@ -190,6 +189,41 @@ function AgentToolsList({ agentId }: { agentId: string }) {
       </div>
     </div>
   );
+}
+
+type BuiltInAgentId =
+  (typeof BUILT_IN_AGENT_IDS)[keyof typeof BUILT_IN_AGENT_IDS];
+
+function getBuiltInAgentConfigForSave(params: {
+  builtInAgentName: BuiltInAgentId;
+  autoConfigureOnToolDiscovery: boolean;
+  maxRounds: number;
+}) {
+  switch (params.builtInAgentName) {
+    case BUILT_IN_AGENT_IDS.POLICY_CONFIG:
+      return {
+        name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+        autoConfigureOnToolDiscovery: params.autoConfigureOnToolDiscovery,
+      };
+    case BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN:
+      return {
+        name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+        maxRounds: params.maxRounds,
+      };
+    case BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE:
+      return {
+        name: BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
+      };
+    case BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION:
+      return {
+        name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
+      };
+    default: {
+      // exhaustive check: a new BUILT_IN_AGENT_ID will fail the build here
+      const _exhaustive: never = params.builtInAgentName;
+      throw new Error(`Unsupported built-in agent: ${String(_exhaustive)}`);
+    }
+  }
 }
 
 // Single subagent pill with popover
@@ -542,9 +576,8 @@ export function AgentDialog({
   const deleteAgent = useDeleteProfile();
   const updateAgent = useUpdateProfile();
   const syncDelegations = useSyncAgentDelegations();
-  const { data: currentDelegations = [] } = useAgentDelegations(
-    agentType !== "llm_proxy" ? agent?.id : undefined,
-  );
+  const { data: currentDelegations = [], isFetched: delegationsFetched } =
+    useAgentDelegations(agentType !== "llm_proxy" ? agent?.id : undefined);
   const { data: canReadIdentityProviders } = useHasPermissions({
     identityProvider: ["read"],
   });
@@ -582,14 +615,7 @@ export function AgentDialog({
 
   // Fetch fresh agent data when dialog opens
   const { data: freshAgent, refetch: refetchAgent } = useProfile(agent?.id);
-  const { data: teams } = useQuery({
-    queryKey: ["teams"],
-    queryFn: async () => {
-      const response = await archestraApiSdk.getTeams({
-        query: { limit: 100, offset: 0 },
-      });
-      return response.data?.data ?? [];
-    },
+  const { data: teams } = useTeams({
     enabled: open && !!canReadTeams,
   });
   const resource = getResourceForAgentType(agentType);
@@ -702,9 +728,7 @@ export function AgentDialog({
         setSuggestedPrompts(agentData.suggestedPrompts);
         setSuggestedPromptsOpen(false);
         setLlmApiKeyId(agentData.llmApiKeyId);
-        setLlmModel(agentData.llmModel);
-        // Reset delegation targets - will be populated by the next useEffect when data loads
-        setSelectedDelegationTargetIds([]);
+        setLlmModel(agentData.modelId);
         setAssignedTeamIds(agentData.teams.map((t) => t.id));
         setLabels(agentData.labels);
         setConsiderContextUntrusted(agentData.considerContextUntrusted);
@@ -757,17 +781,19 @@ export function AgentDialog({
     }
   }, [open, agent, freshAgent, refetchAgent]);
 
-  // Sync selectedDelegationTargetIds with currentDelegations when data loads
+  // Sync selectedDelegationTargetIds with currentDelegations when data loads.
+  // Agent refetches can update freshAgent after delegations have loaded; keeping
+  // delegations out of the agent reset path avoids clearing them on save.
   const currentDelegationIds = currentDelegations.map((a) => a.id).join(",");
   const agentId = agent?.id;
 
   useEffect(() => {
-    if (open && agentId && currentDelegationIds) {
+    if (open && agentId && delegationsFetched) {
       setSelectedDelegationTargetIds(
         currentDelegationIds.split(",").filter(Boolean),
       );
     }
-  }, [open, agentId, currentDelegationIds]);
+  }, [open, agentId, currentDelegationIds, delegationsFetched]);
 
   // LLM Configuration: computed values and bidirectional auto-linking
   // (same reactive pattern as prompt input: LlmProviderApiKeySelector + onProviderChange)
@@ -789,7 +815,7 @@ export function AgentDialog({
   const currentLlmProvider = useMemo((): SupportedProvider | null => {
     if (!llmModel) return null;
     for (const [provider, models] of Object.entries(modelsByProvider)) {
-      if (models?.some((m) => m.id === llmModel)) {
+      if (models?.some((m) => m.dbId === llmModel)) {
         return provider as SupportedProvider;
       }
     }
@@ -858,7 +884,7 @@ export function AgentDialog({
         // Only fall back to first model when switching providers (no bestModelId available)
         const providerModels = modelsByProvider[key.provider];
         if (providerModels?.length) {
-          setLlmModel(providerModels[0].id);
+          setLlmModel(providerModels[0].dbId);
         }
       }
     },
@@ -920,20 +946,12 @@ export function AgentDialog({
         });
       }
 
-      if (agent && isBuiltIn) {
-        const builtInAgentConfig = isPolicyConfigBuiltIn
-          ? {
-              name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-              autoConfigureOnToolDiscovery,
-            }
-          : isDualLlmMainBuiltIn
-            ? {
-                name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
-                maxRounds: parsedDualLlmMaxRounds,
-              }
-            : {
-                name: BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
-              };
+      if (agent && isBuiltIn && builtInAgentName) {
+        const builtInAgentConfig = getBuiltInAgentConfigForSave({
+          builtInAgentName,
+          autoConfigureOnToolDiscovery,
+          maxRounds: parsedDualLlmMaxRounds,
+        });
 
         const updated = await updateAgent.mutateAsync({
           id: agent.id,
@@ -941,7 +959,7 @@ export function AgentDialog({
             builtInAgentConfig,
             systemPrompt: trimmedSystemPrompt || null,
             llmApiKeyId: llmApiKeyId || null,
-            llmModel: llmModel || null,
+            modelId: llmModel || null,
           },
         });
         savedAgentId = updated?.id ?? agent.id;
@@ -962,7 +980,7 @@ export function AgentDialog({
             ...(isInternalAgent && {
               systemPrompt: trimmedSystemPrompt || null,
               llmApiKeyId: llmApiKeyId || null,
-              llmModel: llmModel || null,
+              modelId: llmModel || null,
               suggestedPrompts: validSuggestedPrompts,
             }),
             ...(supportsIdentityProvider && {
@@ -1002,7 +1020,7 @@ export function AgentDialog({
           ...(isInternalAgent && {
             systemPrompt: trimmedSystemPrompt || null,
             llmApiKeyId: llmApiKeyId || null,
-            llmModel: llmModel || null,
+            modelId: llmModel || null,
             suggestedPrompts: validSuggestedPrompts,
           }),
           ...(supportsIdentityProvider && {
@@ -1102,7 +1120,7 @@ export function AgentDialog({
     dualLlmMaxRounds,
     isDualLlmMainBuiltIn,
     isInternalAgent,
-    isPolicyConfigBuiltIn,
+    builtInAgentName,
     showSecurity,
     isAdmin,
     selectedDelegationTargetIds,
@@ -1826,7 +1844,7 @@ export function AgentDialog({
                                     </>
                                   ) : (
                                     <span className="text-muted-foreground">
-                                      Dynamic API key
+                                      Organization default
                                     </span>
                                   )}
                                 </Button>
@@ -1853,11 +1871,11 @@ export function AgentDialog({
                                       >
                                         <div className="flex flex-col min-w-0">
                                           <span className="text-muted-foreground">
-                                            Dynamic API key
+                                            Organization default
                                           </span>
                                           <span className="text-xs text-muted-foreground">
-                                            Resolved at runtime: org-wide → team
-                                            → personal
+                                            No model or key set — falls back to
+                                            the organization default
                                           </span>
                                         </div>
                                         {!llmApiKeyId && (

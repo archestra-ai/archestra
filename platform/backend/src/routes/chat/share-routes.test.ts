@@ -1,5 +1,6 @@
 import ConversationModel from "@/models/conversation";
 import ConversationShareModel from "@/models/conversation-share";
+import MessageModel from "@/models/message";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -48,7 +49,6 @@ describe("chat share routes", () => {
       userId: currentUser.id,
       organizationId,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
     });
 
     const response = await app.inject({
@@ -84,7 +84,6 @@ describe("chat share routes", () => {
       userId: currentUser.id,
       organizationId,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
     });
 
     const response = await app.inject({
@@ -123,7 +122,6 @@ describe("chat share routes", () => {
       userId: owner.id,
       organizationId,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
     });
 
     const share = await ConversationShareModel.upsert({
@@ -165,7 +163,15 @@ describe("chat share routes", () => {
       userId: owner.id,
       organizationId,
       agentId: sharedAgent.id,
-      selectedModel: "gpt-4o",
+    });
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: {
+        id: "message-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "Shared conversation result" }],
+      },
     });
     const share = await ConversationShareModel.upsert({
       conversationId: conversation.id,
@@ -189,8 +195,13 @@ describe("chat share routes", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
       agentId: sharedAgent.id,
-      selectedModel: "gpt-4o",
       userId: viewer.id,
+      messages: [
+        expect.objectContaining({
+          id: expect.any(String),
+          parts: [{ type: "text", text: "Shared conversation result" }],
+        }),
+      ],
     });
   });
 
@@ -222,7 +233,6 @@ describe("chat share routes", () => {
       userId: owner.id,
       organizationId,
       agentId: sharedAgent.id,
-      selectedModel: "gpt-4o",
     });
     const share = await ConversationShareModel.upsert({
       conversationId: conversation.id,

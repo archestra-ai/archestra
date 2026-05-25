@@ -3,7 +3,7 @@ import {
   buildPolicyConfigSystemPromptContext,
   type SupportedProvider,
 } from "@shared";
-import { generateObject } from "ai";
+import { generateText, Output } from "ai";
 import { createLLMModel } from "@/clients/llm-client";
 import logger from "@/logging";
 import {
@@ -23,8 +23,8 @@ import {
 } from "@/types";
 import {
   type ResolvedLlmSelection,
+  resolveBestAvailableLlm,
   resolveConfiguredAgentLlm,
-  resolveSmartDefaultLlm,
 } from "@/utils/llm-resolution";
 
 interface AutoPolicyResult {
@@ -49,7 +49,8 @@ interface BulkAutoPolicyResult {
 export class PolicyConfigurationService {
   /**
    * Resolve the LLM provider/key using the built-in agent's configured
-   * llmApiKeyId/llmModel, falling back to the org-wide smart default.
+   * llmApiKeyId/llmModel, falling back to the best available LLM across the
+   * org's keys.
    */
   async resolveLlm(params: {
     organizationId: string;
@@ -68,7 +69,7 @@ export class PolicyConfigurationService {
       if (agentLlm) return agentLlm;
     }
 
-    return resolveSmartDefaultLlm(params);
+    return resolveBestAvailableLlm(params);
   }
 
   /**
@@ -90,7 +91,8 @@ export class PolicyConfigurationService {
 
     // Use pre-resolved LLM or resolve now
     const resolved =
-      resolvedLlm ?? (await resolveSmartDefaultLlm({ organizationId, userId }));
+      resolvedLlm ??
+      (await resolveBestAvailableLlm({ organizationId, userId }));
     if (!resolved) {
       logger.warn(
         { toolId, organizationId },
@@ -455,22 +457,25 @@ export class PolicyConfigurationService {
       ) ?? "";
 
     try {
-      const result = await generateObject({
+      const { output } = await generateText({
         model,
-        schema: PolicyConfigSchema,
+        output: Output.object({ schema: PolicyConfigSchema }),
         prompt,
+        // Cap output: the schema is ~3 small fields. Without a cap, Anthropic
+        // rejects opus-class non-streaming requests as potentially >10min long.
+        maxOutputTokens: 1024,
       });
 
       logger.info(
         {
           toolName: tool.name,
           mcpServerName,
-          config: result.object,
+          config: output,
         },
         "analyzeTool: analysis completed",
       );
 
-      return result.object;
+      return output;
     } catch (error) {
       logger.error(
         {

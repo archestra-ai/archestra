@@ -29,6 +29,9 @@ process.env.ARCHESTRA_LOGGING_LEVEL = "silent";
 // Enable enterprise white-labeling in backend tests so branding-aware helpers
 // exercise the branded built-in MCP paths instead of the default prefix.
 process.env.ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING = "true";
+// PGlite-backed tests do not provide a session-stable pg.Client connection for
+// LISTEN/NOTIFY, so use the polling compatibility notifier by default in tests.
+process.env.ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED = "true";
 
 // Set auth secret for tests
 process.env.ARCHESTRA_AUTH_SECRET = "auth-secret-unit-tests-32-chars!";

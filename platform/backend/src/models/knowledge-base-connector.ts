@@ -360,6 +360,27 @@ class KnowledgeBaseConnectorModel {
 
     return results.map((r) => r.connectorId);
   }
+  static async findByNameAndType(
+    name: string,
+    connectorType: ConnectorType,
+    organizationId: string,
+  ): Promise<KnowledgeBaseConnector | null> {
+    const [result] = await db
+      .select()
+      .from(schema.knowledgeBaseConnectorsTable)
+      .where(
+        and(
+          eq(schema.knowledgeBaseConnectorsTable.name, name),
+          eq(schema.knowledgeBaseConnectorsTable.connectorType, connectorType),
+          eq(
+            schema.knowledgeBaseConnectorsTable.organizationId,
+            organizationId,
+          ),
+        ),
+      );
+
+    return result ?? null;
+  }
 }
 
 export default KnowledgeBaseConnectorModel;

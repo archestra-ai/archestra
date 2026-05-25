@@ -6,7 +6,32 @@ vi.mock("@/observability", () => ({
   metrics: { llm: { getObservableFetch: vi.fn() } },
 }));
 
+vi.mock("@/clients/azure-openai-credentials", () => ({
+  getAzureOpenAiBearerTokenProvider: vi.fn(() => async () => "entra-token"),
+  isAzureOpenAiEntraIdEnabled: vi.fn(() => false),
+}));
+
+import {
+  getAzureOpenAiBearerTokenProvider,
+  isAzureOpenAiEntraIdEnabled,
+} from "@/clients/azure-openai-credentials";
 import { azureAdapterFactory } from "./azure";
+
+type TestAzureClient = {
+  openai: OpenAIProvider & {
+    _options?: {
+      apiKey?: unknown;
+      baseURL?: string;
+      defaultHeaders?: Record<string, string>;
+      defaultQuery?: Record<string, string>;
+    };
+  };
+};
+
+const mockIsAzureOpenAiEntraIdEnabled = vi.mocked(isAzureOpenAiEntraIdEnabled);
+const mockGetAzureOpenAiBearerTokenProvider = vi.mocked(
+  getAzureOpenAiBearerTokenProvider,
+);
 
 describe("azureAdapterFactory", () => {
   describe("extractApiKey", () => {
@@ -35,6 +60,44 @@ describe("azureAdapterFactory", () => {
   });
 
   describe("createClient", () => {
+    test("uses an Entra ID token provider when enabled and no apiKey is provided", () => {
+      mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(true);
+
+      const client = azureAdapterFactory.createClient(undefined, {
+        baseUrl:
+          "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
+        defaultHeaders: {},
+        source: "api",
+      }) as TestAzureClient;
+
+      expect(typeof client.openai._options?.apiKey).toBe("function");
+      expect(
+        client.openai._options?.defaultHeaders?.["api-key"],
+      ).toBeUndefined();
+      expect(mockGetAzureOpenAiBearerTokenProvider).toHaveBeenCalledWith(
+        "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
+      );
+
+      mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(false);
+    });
+
+    test("omits api-version for Azure OpenAI v1 base URLs", () => {
+      mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(true);
+
+      const client = azureAdapterFactory.createClient(undefined, {
+        baseUrl: "https://my-resource.services.ai.azure.com/openai/v1",
+        defaultHeaders: {},
+        source: "api",
+      }) as TestAzureClient;
+
+      expect(client.openai._options?.defaultQuery).toBeUndefined();
+      expect(mockGetAzureOpenAiBearerTokenProvider).toHaveBeenCalledWith(
+        "https://my-resource.services.ai.azure.com/openai/v1",
+      );
+
+      mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(false);
+    });
+
     test("throws ApiError(401) when apiKey is undefined", () => {
       expect(() =>
         azureAdapterFactory.createClient(undefined, {
@@ -62,12 +125,12 @@ describe("azureAdapterFactory", () => {
           "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
         defaultHeaders: {},
         source: "api",
-      }) as OpenAIProvider & {
-        _options?: { defaultHeaders?: Record<string, string> };
-      };
+      }) as TestAzureClient;
 
-      expect(client._options?.defaultHeaders?.["api-key"]).toBe("my-azure-key");
-      expect(client._options?.apiKey).toBe("my-azure-key");
+      expect(client.openai._options?.defaultHeaders?.["api-key"]).toBe(
+        "my-azure-key",
+      );
+      expect(client.openai._options?.apiKey).toBe("my-azure-key");
     });
 
     test("preserves the original key when no Bearer prefix is present", () => {
@@ -76,12 +139,27 @@ describe("azureAdapterFactory", () => {
           "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
         defaultHeaders: {},
         source: "api",
-      }) as OpenAIProvider & {
-        _options?: { defaultHeaders?: Record<string, string> };
-      };
+      }) as TestAzureClient;
 
-      expect(client._options?.defaultHeaders?.["api-key"]).toBe("my-azure-key");
-      expect(client._options?.apiKey).toBe("my-azure-key");
+      expect(client.openai._options?.defaultHeaders?.["api-key"]).toBe(
+        "my-azure-key",
+      );
+      expect(client.openai._options?.apiKey).toBe("my-azure-key");
+    });
+
+    test("stores resource-level base URL for per-request deployment routing", () => {
+      const client = azureAdapterFactory.createClient("my-azure-key", {
+        baseUrl: "https://my-resource.openai.azure.com/openai",
+        defaultHeaders: {},
+        source: "api",
+      }) as TestAzureClient & { baseUrl?: string };
+
+      expect(client.baseUrl).toBe(
+        "https://my-resource.openai.azure.com/openai",
+      );
+      expect(client.openai._options?.baseURL).toBe(
+        "https://my-resource.openai.azure.com/openai",
+      );
     });
   });
 

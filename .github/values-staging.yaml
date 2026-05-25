@@ -48,6 +48,7 @@ archestra:
     ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL: "https://backend.archestra.dev/api/webhooks/incoming-email"
     ARCHESTRA_CHAT_DEFAULT_PROVIDER: "anthropic"
     ARCHESTRA_CHAT_DEFAULT_MODEL: "claude-opus-4-5-20251101"
+    ARCHESTRA_CHAT_SECRET_SCAN_ENABLED: "true"
 
   diagnostics:
     enabled: true

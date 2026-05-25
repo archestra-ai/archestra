@@ -21,6 +21,14 @@ k8s_resource(
 is_prod = os.getenv('PROD') == 'true'
 dev_resource_name = 'pnpm-prod' if is_prod else 'pnpm-dev'
 
+# Env-driven so a parallel Tilt session (separate worktree) doesn't collide.
+frontend_port = os.getenv('ARCHESTRA_FRONTEND_PORT', '3000')
+frontend_int_tests_port = os.getenv('ARCHESTRA_FRONTEND_INT_TESTS_PORT', '3010')
+# Same namespace the backend's K8s MCP orchestrator uses to spawn MCP server
+# pods; the port-forwarder below has to watch the same namespace or services
+# won't be reachable on localhost in a parallel stack.
+mcp_namespace = os.getenv('ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE', 'default')
+
 # Build env dict to sync ARCHESTRA_* to NEXT_PUBLIC_ARCHESTRA_* for frontend
 # This is rebuilt on each Tiltfile evaluation (triggered by .env changes)
 def get_frontend_env():
@@ -88,6 +96,8 @@ else:
   )
 
   # Frontend dev server - waits for backend to be ready
+  frontend_serve_env = dict(frontend_env_vars)
+  frontend_serve_env['PORT'] = frontend_port
   local_resource(
     dev_resource_name + '-frontend',
     serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; pnpm dev --filter @frontend & wait $!',
@@ -95,7 +105,7 @@ else:
     labels=['dev'],
     resource_deps=[dev_resource_name + '-backend'],
     deps=['../.env'],
-    serve_env=frontend_env_vars
+    serve_env=frontend_serve_env
   )
 
   # Second frontend instance dedicated to Playwright integration tests
@@ -107,8 +117,8 @@ else:
   # silently hitting the real backend.
   local_resource(
     dev_resource_name + '-frontend-int-tests',
-    serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; cd ../frontend && pnpm exec next dev -H 127.0.0.1 -p 3010 & wait $!',
-    serve_cmd_bat='cd ..\\frontend && pnpm exec next dev -H 127.0.0.1 -p 3010',
+    serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; cd ../frontend && pnpm exec next dev -H 127.0.0.1 -p ' + frontend_int_tests_port + ' & wait $!',
+    serve_cmd_bat='cd ..\\frontend && pnpm exec next dev -H 127.0.0.1 -p ' + frontend_int_tests_port,
     labels=['dev'],
     deps=['../.env'],
     serve_env={
@@ -128,9 +138,9 @@ local_resource(
   'mcp-http-port-forward',
   serve_cmd='''
     trap "kill 0" EXIT INT TERM
-    echo "Watching for MCP server NodePort services..."
+    echo "Watching for MCP server NodePort services in namespace ''' + mcp_namespace + '''..."
     while true; do
-      SERVICES=$(kubectl get svc -l app=mcp-server -n default -o jsonpath='{range .items[*]}{.metadata.name}:{.spec.ports[0].nodePort}:{.spec.ports[0].port} {end}' 2>/dev/null)
+      SERVICES=$(kubectl get svc -l app=mcp-server -n ''' + mcp_namespace + ''' -o jsonpath='{range .items[*]}{.metadata.name}:{.spec.ports[0].nodePort}:{.spec.ports[0].port} {end}' 2>/dev/null)
       for ENTRY in $SERVICES; do
         SVC_NAME=$(echo "$ENTRY" | cut -d: -f1)
         NODE_PORT=$(echo "$ENTRY" | cut -d: -f2)
@@ -138,10 +148,10 @@ local_resource(
         if [ "$NODE_PORT" != "null" ] && [ -n "$NODE_PORT" ] && [ -n "$SVC_NAME" ]; then
           if ! lsof -i :"$NODE_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
             # Check that service has ready endpoints before attempting port-forward
-            ENDPOINTS=$(kubectl get endpoints "$SVC_NAME" -n default -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null)
+            ENDPOINTS=$(kubectl get endpoints "$SVC_NAME" -n ''' + mcp_namespace + ''' -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null)
             if [ -n "$ENDPOINTS" ]; then
               echo "Port-forwarding $SVC_NAME: localhost:$NODE_PORT -> $CONTAINER_PORT"
-              kubectl port-forward "svc/$SVC_NAME" "$NODE_PORT:$CONTAINER_PORT" -n default &
+              kubectl port-forward "svc/$SVC_NAME" "$NODE_PORT:$CONTAINER_PORT" -n ''' + mcp_namespace + ''' &
             fi
           fi
         fi

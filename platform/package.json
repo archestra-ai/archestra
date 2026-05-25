@@ -32,7 +32,9 @@
     "db:push": "turbo db:push",
     "db:studio": "turbo db:studio",
     "db:seed:mock-data": "turbo db:seed:mock-data",
-    "cleanup:dev:k8s": "kubectl delete namespace archestra-dev"
+    "cleanup:dev:k8s": "kubectl delete namespace archestra-dev",
+    "dev:stack:up": "scripts/dev-stack.sh up",
+    "dev:stack:down": "scripts/dev-stack.sh down"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.6",

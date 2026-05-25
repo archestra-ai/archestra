@@ -60,9 +60,12 @@ cmd_up() {
     # directory). `git worktree list --porcelain` is documented to list the
     # main worktree first. Skip auto-copy if we ARE the main worktree, since
     # there's nowhere to copy from.
+    # `sed -n 's/^worktree //p' | head -n1` strips the "worktree " prefix and
+    # keeps the rest of the line verbatim — awk '{print $2}' would truncate
+    # paths that contain spaces.
     local main_worktree main_env
     main_worktree=$(git -C "$platform_dir" worktree list --porcelain 2>/dev/null \
-      | awk '/^worktree / {print $2; exit}')
+      | sed -n 's/^worktree //p' | head -n1)
     main_env="$main_worktree/platform/.env"
     if [ -n "$main_worktree" ] && [ "$main_env" != "$env_file" ] && [ -f "$main_env" ]; then
       echo "→ Auto-copying .env from main worktree: $main_env" >&2

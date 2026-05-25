@@ -64,16 +64,6 @@ jobs:
             --zone us-central1-a \
             --project friendly-path-465518-r6
 
-      - name: Deploy Dagger runtime to staging
-        run: |
-          helm upgrade dagger-runtime \
-            ./platform/helm/dagger-runtime \
-            --install \
-            --namespace dagger \
-            --create-namespace \
-            --wait \
-            --timeout 10m
-
       - name: Deploy to staging
         env:
           PLATFORM_IMAGE_TAG: ${{ github.sha }}

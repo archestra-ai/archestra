@@ -60,6 +60,16 @@ tests:
           path: metadata.namespace
           value: code-runtime
 
+  - it: should use the release namespace for managed Dagger RBAC
+    documentIndex: 0
+    set:
+      archestra.codeRuntime.enabled: true
+      archestra.codeRuntime.dagger.managed.enabled: true
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: NAMESPACE
+
   - it: should not create code runtime RBAC for explicit TCP runner hosts
     set:
       archestra.codeRuntime.enabled: true

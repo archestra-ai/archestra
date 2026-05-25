@@ -193,7 +193,8 @@ dagger runner host for the code execution runtime.
 {{- $runnerHost -}}
 {{- else -}}
 {{- $pod := .Values.archestra.codeRuntime.dagger.pod -}}
-{{- $runnerHost = printf "kube-pod://%s?namespace=%s&container=%s" ($pod.name | urlquery) ($pod.namespace | urlquery) ($pod.container | urlquery) -}}
+{{- $namespace := include "archestra-platform.codeRuntimeDaggerPodNamespace" . -}}
+{{- $runnerHost = printf "kube-pod://%s?namespace=%s&container=%s" ($pod.name | urlquery) ($namespace | urlquery) ($pod.container | urlquery) -}}
 {{- with $pod.context -}}
 {{- $runnerHost = printf "%s&context=%s" $runnerHost (. | urlquery) -}}
 {{- end -}}
@@ -202,10 +203,31 @@ dagger runner host for the code execution runtime.
 {{- end }}
 
 {{/*
+namespace containing the Dagger Engine pod.
+*/}}
+{{- define "archestra-platform.codeRuntimeDaggerPodNamespace" -}}
+{{- $namespace := .Values.archestra.codeRuntime.dagger.pod.namespace -}}
+{{- if $namespace -}}
+{{- $namespace -}}
+{{- else if .Values.archestra.codeRuntime.dagger.managed.enabled -}}
+{{- .Release.Namespace -}}
+{{- else -}}
+dagger
+{{- end -}}
+{{- end }}
+
+{{/*
 namespace where the code-runtime kube-pod RBAC should be created.
 */}}
 {{- define "archestra-platform.codeRuntimeDaggerRbacNamespace" -}}
-{{- default .Values.archestra.codeRuntime.dagger.pod.namespace .Values.archestra.codeRuntime.dagger.rbac.namespace -}}
+{{- default (include "archestra-platform.codeRuntimeDaggerPodNamespace" .) .Values.archestra.codeRuntime.dagger.rbac.namespace -}}
+{{- end }}
+
+{{/*
+service account name for the managed Dagger Engine pod.
+*/}}
+{{- define "archestra-platform.codeRuntimeDaggerServiceAccountName" -}}
+{{- default "dagger-runtime" .Values.dagger.engine.existingServiceAccount.name -}}
 {{- end }}
 
 {{/*

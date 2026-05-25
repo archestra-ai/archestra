@@ -499,6 +499,18 @@ tests:
             name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
             value: tcp://dagger-runtime.custom.svc.cluster.local:1234
 
+  - it: should use the release namespace for managed code runtime Dagger pod
+    documentIndex: 1
+    set:
+      archestra.codeRuntime.enabled: true
+      archestra.codeRuntime.dagger.managed.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+            value: kube-pod://dagger-runtime-engine-0?namespace=NAMESPACE&container=dagger-engine
+
   - it: should support custom code runtime Dagger pod settings
     documentIndex: 1
     set:

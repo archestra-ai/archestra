@@ -6,6 +6,9 @@ archestra:
 
   codeRuntime:
     enabled: true
+    dagger:
+      managed:
+        enabled: true
 
   # Pod Disruption Budget: ensure at least 3 of 4 pods stay running during
   # voluntary disruptions (node upgrades, autoscaling, maintenance)

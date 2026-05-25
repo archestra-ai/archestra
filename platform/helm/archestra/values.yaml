@@ -190,10 +190,22 @@ archestra:
       # explicit advanced deployments that provide their own transport security.
       runnerHost: ""
 
+      managed:
+        # deploy a Dagger Engine as part of this Helm release. When false, point
+        # dagger.pod at an externally deployed Dagger Engine pod instead.
+        enabled: false
+        serviceAccount:
+          # create a tokenless service account for the privileged engine pod.
+          create: true
+          automountServiceAccountToken: false
+          annotations: {}
+
       pod:
-        # pod created by the dagger-runtime companion chart's StatefulSet.
+        # pod created by the managed Dagger subchart or companion chart.
         name: dagger-runtime-engine-0
-        namespace: dagger
+        # leave empty to use the release namespace when managed.enabled=true,
+        # or the default external companion-chart namespace (`dagger`) otherwise.
+        namespace: ""
         container: dagger-engine
         # optional kube context for out-of-cluster clients. leave empty for in-cluster use.
         context: ""
@@ -731,6 +743,64 @@ archestra:
         type: HTTP
         requestPath: /health
         port: 3000
+
+# dagger subchart values used only when archestra.codeRuntime.dagger.managed.enabled=true.
+# the Dagger Engine runs in the same namespace as the Archestra release so it can
+# be installed with the same `helm upgrade`.
+dagger:
+  fullnameOverride: dagger-runtime
+
+  engine:
+    kind: StatefulSet
+    # kube-pod:// uses kubectl exec + buildctl dial-stdio, so no TCP listener is
+    # needed by default. Set this to 1234 only when intentionally enabling the
+    # plaintext tcp:// transport through additional Service wiring.
+    port:
+
+    existingServiceAccount:
+      name: dagger-runtime
+
+    configJson: |
+      {
+        "logLevel": "info",
+        "security": {
+          "insecureRootCapabilities": false
+        },
+        "gc": {
+          "maxUsedSpace": "40GB",
+          "reservedSpace": "5GB",
+          "minFreeSpace": "20%"
+        }
+      }
+
+    resources:
+      requests:
+        cpu: "2"
+        memory: 8Gi
+      limits:
+        memory: 16Gi
+
+    statefulSet:
+      persistentVolumeClaim:
+        enabled: true
+        resources:
+          requests:
+            storage: 50Gi
+
+    hostPath:
+      dataVolume:
+        enabled: false
+      runVolume:
+        enabled: false
+
+    volumeMounts:
+      - name: run
+        mountPath: /run/dagger
+
+    volumes:
+      - name: run
+        emptyDir:
+          medium: Memory
 
 # PostgreSQL configuration
 postgresql:

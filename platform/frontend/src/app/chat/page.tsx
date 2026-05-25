@@ -1776,7 +1776,7 @@ export function ChatPageContent({
   }
 
   return (
-    <div className="flex h-screen w-full">
+    <div className="flex h-full w-full min-h-0">
       <div className="flex-1 flex flex-col min-w-0">
         <div className="flex flex-col h-full">
           <StreamTimeoutWarning status={status} messages={messages} />

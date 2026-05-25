@@ -9,9 +9,7 @@ import { ExpirationDateTimeField } from "@/components/expiration-date-time-field
 import { SettingsCardHeader } from "@/components/settings/settings-block";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
@@ -61,7 +59,6 @@ export function SiteNotificationsSection() {
   const [expiresAt, setExpiresAt] = useState<Date | null | undefined>(
     undefined,
   );
-  const [isActive, setIsActive] = useState<boolean | null>(null);
   const [tab, setTab] = useState<"markdown" | "preview">("markdown");
 
   const effectiveContent = content ?? notification?.content ?? "";
@@ -71,9 +68,8 @@ export function SiteNotificationsSection() {
       : notification?.expiresAt
         ? new Date(notification.expiresAt)
         : null;
-  const effectiveIsActive = isActive ?? notification?.isActive ?? true;
   const hasChanges = notification
-    ? content !== null || expiresAt !== undefined || isActive !== null
+    ? content !== null || expiresAt !== undefined
     : content !== null || expiresAt !== undefined;
   const isSaving = createMutation.isPending || updateMutation.isPending;
   const trimmedContent = effectiveContent.trim();
@@ -81,7 +77,6 @@ export function SiteNotificationsSection() {
   const resetDraft = useCallback(() => {
     setContent(null);
     setExpiresAt(undefined);
-    setIsActive(null);
   }, []);
 
   const handleSave = useCallback(async () => {
@@ -99,7 +94,7 @@ export function SiteNotificationsSection() {
         id: notification.id,
         content: trimmedContent,
         expiresAt: effectiveExpiresAt?.toISOString() ?? null,
-        isActive: effectiveIsActive,
+        isActive: true,
       });
     }
 
@@ -108,7 +103,6 @@ export function SiteNotificationsSection() {
     notification,
     trimmedContent,
     effectiveExpiresAt,
-    effectiveIsActive,
     createMutation,
     updateMutation,
     resetDraft,
@@ -137,22 +131,6 @@ export function SiteNotificationsSection() {
           </p>
         ) : (
           <>
-            <div className="flex items-center justify-between gap-4">
-              <div className="space-y-1">
-                <Label htmlFor="siteNotificationEnabled">
-                  Enable Notification
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Show the notification banner to all users.
-                </p>
-              </div>
-              <Switch
-                id="siteNotificationEnabled"
-                checked={effectiveIsActive}
-                onCheckedChange={(checked) => setIsActive(checked)}
-              />
-            </div>
-
             <ExpirationDateTimeField
               label="Expiration Date"
               value={effectiveExpiresAt}

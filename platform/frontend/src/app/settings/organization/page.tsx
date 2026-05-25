@@ -405,6 +405,8 @@ export default function OrganizationSettingsPage() {
               />
             </CardContent>
           </Card>
+
+          <SiteNotificationsSection />
         </SettingsSectionStack>
       </div>
 
@@ -429,13 +431,6 @@ export default function OrganizationSettingsPage() {
           </Card>
 
           <OrganizationTokenSection />
-        </SettingsSectionStack>
-      </div>
-
-      <div>
-        <h3 className="text-lg font-medium mb-4">Site Notifications</h3>
-        <SettingsSectionStack>
-          <SiteNotificationsSection />
         </SettingsSectionStack>
       </div>
 

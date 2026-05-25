@@ -1,4 +1,4 @@
-# stable default names keep the platform chart's default tcp:// runner host usable.
+# stable default names keep the platform chart's default kube-pod:// runner host usable.
 fullnameOverride: dagger-runtime
 
 serviceAccount:
@@ -9,15 +9,15 @@ serviceAccount:
   automountServiceAccountToken: false
 
 service:
-  # internal-only Dagger TCP endpoint. Do not expose this with NodePort, ingress,
-  # or a public load balancer; Dagger's tcp:// transport is plaintext.
+  # expose Dagger's plaintext TCP endpoint only for explicit advanced/local-dev use.
+  create: false
   type: ClusterIP
   port: 1234
   annotations: {}
 
 networkPolicy:
-  # network policies require an enforcing CNI such as Cilium, Calico, or GKE Dataplane V2.
-  create: true
+  # optional hardening only; enforcement depends on the cluster CNI.
+  create: false
 
   ingress:
     # allow pods carrying these labels to reach Dagger. With no `namespace`,
@@ -59,7 +59,10 @@ dagger:
 
   engine:
     kind: StatefulSet
-    port: 1234
+    # kube-pod:// uses kubectl exec + buildctl dial-stdio, so no TCP listener is
+    # needed by default. Set this to 1234 together with service.create=true only
+    # when intentionally enabling the plaintext tcp:// transport.
+    port:
 
     existingServiceAccount:
       name: dagger-runtime

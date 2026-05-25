@@ -168,8 +168,8 @@ archestra:
   envFrom: []
 
   # code execution runtime configuration.
-  # enables the archestra__run_python tool and points the backend at a separately
-  # deployed Dagger runtime. The Python execution image remains a backend default;
+  # enables the archestra__run_python tool and points the backend at a Dagger
+  # runtime pod. The Python execution image remains a backend default;
   # override ARCHESTRA_CODE_RUNTIME_IMAGE through archestra.env only when required.
   codeRuntime:
     # enable or disable code execution runtime support.
@@ -185,16 +185,26 @@ archestra:
     maxOutputBytes: 65536
 
     dagger:
-      # explicit Dagger runner host. Leave empty to use the in-cluster service below.
-      # must use tcp:// because production deployments should not require Kubernetes
-      # api pod lookup or Docker socket access from the application pod.
+      # explicit Dagger runner host. Leave empty to use the kube-pod:// pod target below.
+      # supported schemes are kube-pod:// for the secure default and tcp:// for
+      # explicit advanced deployments that provide their own transport security.
       runnerHost: ""
 
-      service:
-        # internal ClusterIP service created by the dagger-runtime companion chart.
-        name: dagger-runtime
+      pod:
+        # pod created by the dagger-runtime companion chart's StatefulSet.
+        name: dagger-runtime-engine-0
         namespace: dagger
-        port: 1234
+        container: dagger-engine
+        # optional kube context for out-of-cluster clients. leave empty for in-cluster use.
+        context: ""
+
+      rbac:
+        # create a narrow Role/RoleBinding that lets the Archestra ServiceAccount
+        # exec into the Dagger Engine pod when using kube-pod://.
+        create: true
+        # defaults to dagger.pod.namespace. set explicitly when runnerHost points
+        # at a kube-pod:// URL whose namespace differs from dagger.pod.namespace.
+        namespace: ""
 
   # Additional volumes to mount into the platform and worker pods
   # Useful for mounting credential files such as a Vertex AI service account key

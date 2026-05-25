@@ -1,3 +1,7 @@
+{{- if .Values.service.create }}
+{{- if not .Values.dagger.engine.port }}
+{{- fail "service.create=true requires dagger.engine.port to enable the Dagger TCP listener" }}
+{{- end }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -18,3 +22,4 @@ spec:
       port: {{ .Values.service.port }}
       targetPort: dagger
       protocol: TCP
+{{- end }}

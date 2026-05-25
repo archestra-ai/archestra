@@ -9,6 +9,7 @@ ARG DOCKER_CLI_VERSION=v29.3.0
 ARG DOCKER_CLI_COMMIT=5927d80c76b3ce5cf782be818922966e8a0d87a3
 ARG DAGGER_VERSION=v0.20.8
 ARG DAGGER_COMMIT=74bff7d10fd78dd6935c60c4514558598f216451
+ARG KUBECTL_VERSION=v1.35.0
 
 FROM ${GOLANG_IMAGE} AS go-builder
 ARG TARGETARCH
@@ -179,6 +180,8 @@ FROM base AS unified
 WORKDIR /app
 
 ARG VERSION=dev
+ARG TARGETARCH
+ARG KUBECTL_VERSION
 
 ENV NODE_ENV=production
 # disable telemetry for next.js
@@ -219,12 +222,23 @@ RUN apk --no-cache upgrade && \
     # Clean up
     rm -rf /tmp/*
 
-# Install KinD (Kubernetes in Docker) and docker-cli for embedded K8s cluster support
-# Both binaries are built from source in go-builder with Go 1.25.10 to fix CVE-2025-68121
+# install KinD (Kubernetes in Docker), docker-cli, and kubectl for Kubernetes runtime support
+# both binaries are built from source in go-builder with Go 1.25.10 to fix CVE-2025-68121
 # and the Go stdlib HIGH CVEs fixed in 1.25.10 (CVE-2026-42499/39836/39820/33814/33811).
 COPY --from=go-builder /docker-binary /usr/local/bin/docker
 COPY --from=go-builder /kind-binary /usr/local/bin/kind
 RUN chmod +x /usr/local/bin/kind /usr/local/bin/docker
+
+# install kubectl for Dagger's kube-pod:// transport.
+RUN set -eux; \
+    case "$TARGETARCH" in \
+      amd64) KUBECTL_SHA256="a2e984a18a0c063279d692533031c1eff93a262afcc0afdc517375432d060989" ;; \
+      arm64) KUBECTL_SHA256="58f82f9fe796c375c5c4b8439850b0f3f4d401a52434052f2df46035a8789e25" ;; \
+      *) echo "ERROR: Unsupported architecture: $TARGETARCH. kubectl is only pinned for amd64 and arm64."; exit 1 ;; \
+    esac; \
+    wget -O /usr/local/bin/kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${TARGETARCH}/kubectl"; \
+    echo "${KUBECTL_SHA256}  /usr/local/bin/kubectl" | sha256sum -c -; \
+    chmod +x /usr/local/bin/kubectl
 # TODO: Once KinD releases a version compiled with Go >= 1.25.10, remove the kind-builder stage
 # at the top of this file and restore the pre-built binary download below for faster builds.
 # Track releases at: https://github.com/kubernetes-sigs/kind/releases

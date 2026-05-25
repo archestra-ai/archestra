@@ -14,8 +14,17 @@ tests:
           path: automountServiceAccountToken
           value: false
 
-  - it: exposes Dagger through an internal ClusterIP service
+  - it: does not expose Dagger TCP by default
     template: service.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: exposes Dagger through an internal ClusterIP service when explicitly enabled
+    template: service.yaml
+    set:
+      service.create: true
+      dagger.engine.port: 1234
     asserts:
       - equal:
           path: spec.type
@@ -30,8 +39,16 @@ tests:
           path: spec.selector.name
           value: dagger-runtime-engine
 
-  - it: restricts ingress to Archestra clients in any namespace by default
+  - it: does not create NetworkPolicies by default
     template: networkpolicy.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: restricts ingress to Archestra clients in any namespace when enabled
+    template: networkpolicy.yaml
+    set:
+      networkPolicy.create: true
     asserts:
       - equal:
           path: spec.policyTypes
@@ -51,6 +68,7 @@ tests:
   - it: pins ingress to a namespace when one is configured
     template: networkpolicy.yaml
     set:
+      networkPolicy.create: true
       networkPolicy.ingress.allowedClients:
         - namespace: archestra-prod
           podLabels:
@@ -62,6 +80,8 @@ tests:
 
   - it: restricts egress to DNS and public HTTPS by default
     template: networkpolicy.yaml
+    set:
+      networkPolicy.create: true
     asserts:
       - equal:
           path: spec.egress[0].to[0].namespaceSelector.matchLabels["kubernetes.io/metadata.name"]

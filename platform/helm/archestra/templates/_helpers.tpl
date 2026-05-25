@@ -192,10 +192,20 @@ dagger runner host for the code execution runtime.
 {{- if $runnerHost -}}
 {{- $runnerHost -}}
 {{- else -}}
-{{- $service := .Values.archestra.codeRuntime.dagger.service -}}
-{{- $clusterDomain := default "cluster.local" .Values.archestra.orchestrator.kubernetes.clusterDomain -}}
-{{- printf "tcp://%s.%s.svc.%s:%v" $service.name $service.namespace $clusterDomain $service.port -}}
+{{- $pod := .Values.archestra.codeRuntime.dagger.pod -}}
+{{- $runnerHost = printf "kube-pod://%s?namespace=%s&container=%s" ($pod.name | urlquery) ($pod.namespace | urlquery) ($pod.container | urlquery) -}}
+{{- with $pod.context -}}
+{{- $runnerHost = printf "%s&context=%s" $runnerHost (. | urlquery) -}}
 {{- end -}}
+{{- $runnerHost -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+namespace where the code-runtime kube-pod RBAC should be created.
+*/}}
+{{- define "archestra-platform.codeRuntimeDaggerRbacNamespace" -}}
+{{- default .Values.archestra.codeRuntime.dagger.pod.namespace .Values.archestra.codeRuntime.dagger.rbac.namespace -}}
 {{- end }}
 
 {{/*

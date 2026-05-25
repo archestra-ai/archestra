@@ -3,55 +3,60 @@ import { describe, expect, it } from "vitest";
 import { regexDetector } from "./regex-detector";
 
 const labels = (text: string): string[] =>
-  regexDetector.scan(text, { existingFindings: [] }).map((f) => f.internalLabel);
+  regexDetector
+    .scan(text, { existingFindings: [] })
+    .map((f) => f.internalLabel);
 
 describe("regexDetector positive cases", () => {
   it("detects an AWS access key", () => {
-    expect(labels("here is AKIAIOSFODNN7EXAMPLE in text")).toContain("aws-access-key");
+    expect(labels("here is AKIAIOSFODNN7EXAMPLE in text")).toContain(
+      "aws-access-key",
+    );
   });
 
   it("detects a GitHub personal access token", () => {
-    const token = "ghp_" + "a".repeat(36);
+    const token = `ghp_${"a".repeat(36)}`;
     expect(labels(`token=${token}`)).toContain("github-token");
   });
 
   it("detects a GitHub Actions token (gha_)", () => {
-    const token = "gha_" + "a".repeat(36);
+    const token = `gha_${"a".repeat(36)}`;
     expect(labels(`token=${token}`)).toContain("github-token");
   });
 
   it("detects a GitHub fine-grained PAT (github_pat_)", () => {
-    const token = "github_pat_" + "a".repeat(22) + "_" + "b".repeat(59);
+    const token = `github_pat_${"a".repeat(22)}_${"b".repeat(59)}`;
     expect(labels(`token=${token}`)).toContain("github-fine-grained-pat");
   });
 
   it("detects an Anthropic key", () => {
-    const key = "sk-ant-" + "a".repeat(40);
+    const key = `sk-ant-${"a".repeat(40)}`;
     expect(labels(`key: ${key}`)).toContain("anthropic-key");
   });
 
   it("detects an OpenAI key (legacy format)", () => {
-    const key = "sk-" + "A".repeat(40);
+    const key = `sk-${"A".repeat(40)}`;
     expect(labels(`key: ${key}`)).toContain("openai-key");
   });
 
   it("detects an OpenAI key (sk-proj- format)", () => {
-    const key = "sk-proj-" + "A".repeat(40);
+    const key = `sk-proj-${"A".repeat(40)}`;
     expect(labels(`key: ${key}`)).toContain("openai-key");
   });
 
   it("detects a Slack token", () => {
-    const token = "xoxb-" + "0".repeat(10) + "-" + "a".repeat(15);
+    const token = `xoxb-${"0".repeat(10)}-${"a".repeat(15)}`;
     expect(labels(`slack=${token}`)).toContain("slack-token");
   });
 
   it("detects a Google API key", () => {
-    const key = "AIza" + "B".repeat(35);
+    const key = `AIza${"B".repeat(35)}`;
     expect(labels(`key=${key}`)).toContain("google-api-key");
   });
 
   it("detects a JWT", () => {
-    const jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NSJ9.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
+    const jwt =
+      "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NSJ9.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
     expect(labels(`auth: ${jwt}`)).toContain("jwt");
   });
 
@@ -101,12 +106,18 @@ describe("regexDetector negative cases", () => {
 
 describe("regexDetector dedupe and ranges", () => {
   it("returns one finding per match position even when same rule re-matches", () => {
-    const token1 = "ghp_" + "a".repeat(36);
-    const token2 = "ghp_" + "b".repeat(36);
-    const found = regexDetector.scan(`${token1} and ${token2}`, { existingFindings: [] });
-    const githubFindings = found.filter((f) => f.internalLabel === "github-token");
+    const token1 = `ghp_${"a".repeat(36)}`;
+    const token2 = `ghp_${"b".repeat(36)}`;
+    const found = regexDetector.scan(`${token1} and ${token2}`, {
+      existingFindings: [],
+    });
+    const githubFindings = found.filter(
+      (f) => f.internalLabel === "github-token",
+    );
     expect(githubFindings).toHaveLength(2);
-    expect(githubFindings[0].startIndex).toBeLessThan(githubFindings[1].startIndex);
+    expect(githubFindings[0].startIndex).toBeLessThan(
+      githubFindings[1].startIndex,
+    );
   });
 
   it("reports correct start/end indices", () => {
@@ -114,7 +125,9 @@ describe("regexDetector dedupe and ranges", () => {
     const found = regexDetector.scan(text, { existingFindings: [] });
     const aws = found.find((f) => f.internalLabel === "aws-access-key");
     expect(aws).toBeDefined();
-    expect(text.slice(aws!.startIndex, aws!.endIndex)).toBe("AKIAIOSFODNN7EXAMPLE");
+    expect(text.slice(aws?.startIndex, aws?.endIndex)).toBe(
+      "AKIAIOSFODNN7EXAMPLE",
+    );
   });
 
   it("dedupes overlapping matches at the exact same range", () => {
@@ -122,6 +135,8 @@ describe("regexDetector dedupe and ranges", () => {
     const first = regexDetector.scan(text, { existingFindings: [] });
     const second = regexDetector.scan(text, { existingFindings: [] });
     expect(first).toEqual(second);
-    expect(first.filter((f) => f.startIndex === 0 && f.endIndex === text.length)).toHaveLength(1);
+    expect(
+      first.filter((f) => f.startIndex === 0 && f.endIndex === text.length),
+    ).toHaveLength(1);
   });
 });

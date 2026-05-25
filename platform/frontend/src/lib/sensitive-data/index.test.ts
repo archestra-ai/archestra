@@ -3,13 +3,13 @@ import { describe, expect, it } from "vitest";
 import { entropyDetector } from "./entropy-detector";
 import { defaultDetectors, scanText } from "./index";
 import { regexDetector } from "./regex-detector";
-import { detectorId } from "./types";
 import type { Detector, Finding } from "./types";
+import { detectorId } from "./types";
 
-const makeDetector = (
-  id: string,
-  scan: Detector["scan"],
-): Detector => ({ id: detectorId(id), scan });
+const makeDetector = (id: string, scan: Detector["scan"]): Detector => ({
+  id: detectorId(id),
+  scan,
+});
 
 describe("scanText", () => {
   it("returns empty array for empty input with no detectors", () => {
@@ -22,10 +22,20 @@ describe("scanText", () => {
 
   it("aggregates findings across multiple detectors", () => {
     const a = makeDetector("a", () => [
-      { detectorId: detectorId("a"), internalLabel: "x", startIndex: 0, endIndex: 3 },
+      {
+        detectorId: detectorId("a"),
+        internalLabel: "x",
+        startIndex: 0,
+        endIndex: 3,
+      },
     ]);
     const b = makeDetector("b", () => [
-      { detectorId: detectorId("b"), internalLabel: "y", startIndex: 4, endIndex: 7 },
+      {
+        detectorId: detectorId("b"),
+        internalLabel: "y",
+        startIndex: 4,
+        endIndex: 7,
+      },
     ]);
 
     const result = scanText("some text", [a, b]);
@@ -47,15 +57,30 @@ describe("scanText", () => {
 
   it("does not dedupe findings with different ranges from same detector", () => {
     const a = makeDetector("a", () => [
-      { detectorId: detectorId("a"), internalLabel: "x", startIndex: 0, endIndex: 3 },
-      { detectorId: detectorId("a"), internalLabel: "x", startIndex: 4, endIndex: 7 },
+      {
+        detectorId: detectorId("a"),
+        internalLabel: "x",
+        startIndex: 0,
+        endIndex: 3,
+      },
+      {
+        detectorId: detectorId("a"),
+        internalLabel: "x",
+        startIndex: 4,
+        endIndex: 7,
+      },
     ]);
     expect(scanText("abc def", [a])).toHaveLength(2);
   });
 
   it("threads existingFindings to subsequent detectors", () => {
     const a = makeDetector("a", () => [
-      { detectorId: detectorId("a"), internalLabel: "x", startIndex: 0, endIndex: 3 },
+      {
+        detectorId: detectorId("a"),
+        internalLabel: "x",
+        startIndex: 0,
+        endIndex: 3,
+      },
     ]);
 
     let seenExisting: Finding[] | undefined;

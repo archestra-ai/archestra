@@ -349,7 +349,8 @@ describe("config.chat.sensitiveDataDetectionEnabled", () => {
   });
 
   it("returns false when env var is missing", () => {
-    delete process.env.NEXT_PUBLIC_ARCHESTRA_CHAT_SENSITIVE_DATA_DETECTION_ENABLED;
+    delete process.env
+      .NEXT_PUBLIC_ARCHESTRA_CHAT_SENSITIVE_DATA_DETECTION_ENABLED;
     expect(config.chat.sensitiveDataDetectionEnabled).toBe(false);
   });
 

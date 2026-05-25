@@ -1,4 +1,9 @@
-import { type Detector, type DetectorContext, type Finding, detectorId } from "./types";
+import {
+  type Detector,
+  type DetectorContext,
+  detectorId,
+  type Finding,
+} from "./types";
 
 const ENTROPY_DETECTOR_ID = detectorId("entropy");
 const INTERNAL_LABEL = "high-entropy-token";
@@ -32,38 +37,47 @@ export const entropyDetector: Detector = {
     const findings: Finding[] = [];
     const existing = context?.existingFindings ?? [];
 
-    const pattern = new RegExp(CANDIDATE_PATTERN.source, CANDIDATE_PATTERN.flags);
-    let match: RegExpExecArray | null;
-    while ((match = pattern.exec(text)) !== null) {
+    const pattern = new RegExp(
+      CANDIDATE_PATTERN.source,
+      CANDIDATE_PATTERN.flags,
+    );
+    let match = pattern.exec(text);
+    while (match !== null) {
       const token = match[0];
       if (token.length === 0) {
         pattern.lastIndex += 1;
+        match = pattern.exec(text);
         continue;
       }
       const startIndex = match.index;
       const endIndex = startIndex + token.length;
 
-      if (overlapsExisting(startIndex, endIndex, existing)) continue;
+      if (!overlapsExisting(startIndex, endIndex, existing)) {
+        const threshold = HEX_ONLY_PATTERN.test(token)
+          ? HEX_ENTROPY_THRESHOLD
+          : BASE64_ENTROPY_THRESHOLD;
 
-      const threshold = HEX_ONLY_PATTERN.test(token)
-        ? HEX_ENTROPY_THRESHOLD
-        : BASE64_ENTROPY_THRESHOLD;
-
-      if (shannonEntropy(token) >= threshold) {
-        findings.push({
-          detectorId: ENTROPY_DETECTOR_ID,
-          internalLabel: INTERNAL_LABEL,
-          startIndex,
-          endIndex,
-        });
+        if (shannonEntropy(token) >= threshold) {
+          findings.push({
+            detectorId: ENTROPY_DETECTOR_ID,
+            internalLabel: INTERNAL_LABEL,
+            startIndex,
+            endIndex,
+          });
+        }
       }
+      match = pattern.exec(text);
     }
 
     return findings;
   },
 };
 
-function overlapsExisting(start: number, end: number, existing: Finding[]): boolean {
+function overlapsExisting(
+  start: number,
+  end: number,
+  existing: Finding[],
+): boolean {
   for (const finding of existing) {
     if (start < finding.endIndex && end > finding.startIndex) return true;
   }

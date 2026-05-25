@@ -436,7 +436,8 @@ const PromptInputContent = ({
     ],
   );
 
-  const sensitiveDataDetectionEnabled = config.chat.sensitiveDataDetectionEnabled;
+  const sensitiveDataDetectionEnabled =
+    config.chat.sensitiveDataDetectionEnabled;
   const [sensitiveDataDialogOpen, setSensitiveDataDialogOpen] = useState(false);
   const pendingSubmissionRef = useRef<{
     outgoing: PromptInputMessage;
@@ -483,9 +484,16 @@ const PromptInputContent = ({
       if (sensitiveDataDetectionEnabled && outgoing.text.length > 0) {
         const findings = scanText(outgoing.text);
         if (findings.length > 0) {
-          if (pendingSubmissionRef.current !== null) return new Promise<void>(() => {});
+          if (pendingSubmissionRef.current !== null)
+            return new Promise<void>(() => {});
           return new Promise<void>((resolve, reject) => {
-            pendingSubmissionRef.current = { outgoing, e, options, resolve, reject };
+            pendingSubmissionRef.current = {
+              outgoing,
+              e,
+              options,
+              resolve,
+              reject,
+            };
             setSensitiveDataDialogOpen(true);
           });
         }

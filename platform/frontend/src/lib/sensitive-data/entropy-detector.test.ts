@@ -29,7 +29,8 @@ describe("shannonEntropy", () => {
 
 describe("entropyDetector", () => {
   it("returns no findings for ordinary English prose", () => {
-    const text = "The quick brown fox jumps over the lazy dog and runs across the meadow.";
+    const text =
+      "The quick brown fox jumps over the lazy dog and runs across the meadow.";
     expect(scan(text)).toEqual([]);
   });
 
@@ -42,7 +43,8 @@ describe("entropyDetector", () => {
   });
 
   it("does not flag URL paths as high-entropy tokens", () => {
-    const url = "https://cdn.example.com/static/assets/v3/ab2x9z1q/main-8f3a.min.js";
+    const url =
+      "https://cdn.example.com/static/assets/v3/ab2x9z1q/main-8f3a.min.js";
     expect(scan(url)).toEqual([]);
   });
 
@@ -60,7 +62,8 @@ describe("entropyDetector", () => {
   });
 
   it("flags a hex-like SHA-style digest", () => {
-    const sha = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+    const sha =
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
     const found = scan(`digest: ${sha}`);
     expect(found).toHaveLength(1);
     expect(found[0].internalLabel).toBe("high-entropy-token");

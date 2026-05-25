@@ -13,6 +13,9 @@ export interface ActiveChatRunNotifier {
   close?(): Promise<void>;
 }
 
+/**
+ * @public - exported for testability
+ */
 export class PollingActiveChatRunNotifier implements ActiveChatRunNotifier {
   async notifyEvent(_runId: string): Promise<void> {}
 
@@ -27,6 +30,9 @@ export class PollingActiveChatRunNotifier implements ActiveChatRunNotifier {
   }
 }
 
+/**
+ * @public - exported for testability
+ */
 export class InMemoryActiveChatRunNotifier extends PollingActiveChatRunNotifier {
   private readonly eventWaiters = new RunWaiters();
   private readonly stopWaiters = new RunWaiters();
@@ -48,6 +54,9 @@ export class InMemoryActiveChatRunNotifier extends PollingActiveChatRunNotifier 
   }
 }
 
+/**
+ * @public - exported for testability
+ */
 export class PostgresActiveChatRunNotifier extends InMemoryActiveChatRunNotifier {
   private client: PgClient | null = null;
   private connectPromise: Promise<void> | null = null;

@@ -11,7 +11,7 @@ import {
 } from "../consts";
 import { expect, goToPage } from "../fixtures";
 
-export type MakeApiRequest = (args: {
+type MakeApiRequest = (args: {
   request: APIRequestContext;
   method: "get" | "post" | "put" | "patch" | "delete";
   urlSuffix: string;
@@ -19,15 +19,15 @@ export type MakeApiRequest = (args: {
   ignoreStatusCheck?: boolean;
 }) => Promise<APIResponse>;
 
-export type SyncModels = (request: APIRequestContext) => Promise<APIResponse>;
+type SyncModels = (request: APIRequestContext) => Promise<APIResponse>;
 
-export interface RuntimeChatModel {
+interface RuntimeChatModel {
   provider: string;
   id: string;
   displayName: string;
 }
 
-export interface ReadyChatProvider {
+interface ReadyChatProvider {
   apiKeyId: string;
   runtimeModel: RuntimeChatModel;
 }
@@ -75,30 +75,6 @@ export async function sendChatMessage(
   await expect(textarea).toBeVisible({ timeout: 15_000 });
   await textarea.fill(message);
   await page.keyboard.press("Enter");
-}
-
-export async function getRuntimeModelForProvider(
-  page: Page,
-  providerName: string,
-): Promise<RuntimeChatModel | null> {
-  return page.evaluate(
-    async ({ provider, route }) => {
-      const query = new URLSearchParams({ provider });
-      const response = await fetch(`${route}?${query.toString()}`, {
-        credentials: "include",
-      });
-
-      if (!response.ok) {
-        throw new Error(
-          `Failed to load chat models: ${response.status} ${response.statusText}`,
-        );
-      }
-
-      const models = (await response.json()) as RuntimeChatModel[];
-      return models.find((entry) => entry.provider === provider) ?? null;
-    },
-    { provider: providerName, route: AVAILABLE_LLM_MODELS_ROUTE },
-  );
 }
 
 export async function getRuntimeModelForProviderFromApi(

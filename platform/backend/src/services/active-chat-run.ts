@@ -11,9 +11,12 @@ const EVENT_FLUSH_INTERVAL_MS = 100;
 const EVENT_BATCH_SIZE = 16;
 const STALE_RUNNING_MS = 10 * 60 * 1000;
 const TERMINAL_CLEANUP_INTERVAL_MS = 60 * 1000;
-export const ACTIVE_CHAT_RUN_TERMINAL_RETENTION_MS = 60 * 60 * 1000;
+const ACTIVE_CHAT_RUN_TERMINAL_RETENTION_MS = 60 * 60 * 1000;
 export const ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS = 2 * 60 * 1000;
 
+/**
+ * @public - exported for testability
+ */
 export class ActiveChatRunService {
   private nextTerminalCleanupAt = 0;
 

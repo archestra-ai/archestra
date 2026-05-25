@@ -1,5 +1,10 @@
 import { archestraApiSdk } from "@shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  type UseQueryOptions,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
 import { handleApiError } from "./utils";
 
@@ -32,7 +37,12 @@ export function useActiveSiteNotification() {
   });
 }
 
-export function useSiteNotification() {
+export function useSiteNotification(
+  options?: Pick<
+    UseQueryOptions<SiteNotification | null>,
+    "enabled" | "staleTime" | "refetchOnWindowFocus"
+  >,
+) {
   return useQuery({
     queryKey: siteNotificationKeys.settings(),
     queryFn: async () => {
@@ -45,6 +55,7 @@ export function useSiteNotification() {
     },
     staleTime: 60 * 1000,
     refetchOnWindowFocus: true,
+    ...options,
   });
 }
 

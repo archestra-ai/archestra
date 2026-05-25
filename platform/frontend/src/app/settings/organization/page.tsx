@@ -38,6 +38,7 @@ import {
   validateOnboardingWizard,
 } from "./_components/onboarding-wizards-editor.utils";
 import { OrganizationTokenSection } from "./_components/organization-token-section";
+import { SiteNotificationsSection } from "./_components/site-notifications-section";
 import { ThemeSelector } from "./_components/theme-selector";
 
 export default function OrganizationSettingsPage() {
@@ -428,6 +429,13 @@ export default function OrganizationSettingsPage() {
           </Card>
 
           <OrganizationTokenSection />
+        </SettingsSectionStack>
+      </div>
+
+      <div>
+        <h3 className="text-lg font-medium mb-4">Site Notifications</h3>
+        <SettingsSectionStack>
+          <SiteNotificationsSection />
         </SettingsSectionStack>
       </div>
 

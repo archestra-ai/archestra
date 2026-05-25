@@ -1305,7 +1305,8 @@ describe("parseCodeRuntimeDaggerRunnerHost", () => {
     expect(
       parseCodeRuntimeDaggerRunnerHost({
         enabled: true,
-        envValue: " kube-pod://dagger-runtime-engine-0?namespace=dagger&container=dagger-engine ",
+        envValue:
+          " kube-pod://dagger-runtime-engine-0?namespace=dagger&container=dagger-engine ",
       }),
     ).toBe(
       "kube-pod://dagger-runtime-engine-0?namespace=dagger&container=dagger-engine",

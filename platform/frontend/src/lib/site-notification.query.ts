@@ -6,6 +6,7 @@ import { handleApiError } from "./utils";
 export const siteNotificationKeys = {
   all: ["site-notification"] as const,
   active: () => [...siteNotificationKeys.all, "active"] as const,
+  settings: () => [...siteNotificationKeys.all, "settings"] as const,
 };
 
 export interface SiteNotification {
@@ -13,14 +14,30 @@ export interface SiteNotification {
   content: string;
   expiresAt: string | null;
   createdAt: string;
-  isActive?: boolean;
+  isActive: boolean;
 }
 
-export function useSiteNotification() {
+export function useActiveSiteNotification() {
   return useQuery({
     queryKey: siteNotificationKeys.active(),
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getSiteNotification();
+      if (error) {
+        return null;
+      }
+      return data as SiteNotification | null;
+    },
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useSiteNotification() {
+  return useQuery({
+    queryKey: siteNotificationKeys.settings(),
+    queryFn: async () => {
+      const { data, error } =
+        await archestraApiSdk.getSiteNotificationSettings();
       if (error) {
         return null;
       }
@@ -46,6 +63,7 @@ export function useCreateSiteNotification() {
     },
     onSuccess: (notification) => {
       if (!notification) return;
+      queryClient.setQueryData(siteNotificationKeys.settings(), notification);
       queryClient.setQueryData(siteNotificationKeys.active(), notification);
       toast.success("Notification created");
     },
@@ -80,7 +98,11 @@ export function useUpdateSiteNotification() {
     },
     onSuccess: (notification) => {
       if (!notification) return;
-      queryClient.setQueryData(siteNotificationKeys.active(), notification);
+      queryClient.setQueryData(siteNotificationKeys.settings(), notification);
+      queryClient.setQueryData(
+        siteNotificationKeys.active(),
+        notification.isActive ? notification : null,
+      );
       toast.success("Notification updated");
     },
     onError: () => {
@@ -104,6 +126,7 @@ export function useDeleteSiteNotification() {
     },
     onSuccess: (success) => {
       if (!success) return;
+      queryClient.setQueryData(siteNotificationKeys.settings(), null);
       queryClient.setQueryData(siteNotificationKeys.active(), null);
       toast.success("Notification deleted");
     },

@@ -1,0 +1,1 @@
+ALTER TABLE "mcp_server" ADD COLUMN "environment_values" jsonb DEFAULT '{}'::jsonb NOT NULL;

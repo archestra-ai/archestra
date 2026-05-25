@@ -40,6 +40,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAnimatedDots } from "@/lib/hooks/use-animated-dots";
+import { usePresetEntityName } from "@/lib/organization.query";
 import websocketService from "@/lib/websocket/websocket";
 import {
   type DeploymentState,
@@ -121,6 +122,13 @@ interface McpLogsContentProps {
   controlledTab?: McpLogsTab;
   /** When true, hides the tab bar (use with controlledTab) */
   hideTabBar?: boolean;
+  /**
+   * Externally-controlled preset filter. When provided, takes ownership of
+   * the preset state from this component (used by the settings dialog so the
+   * selector can live in its page header).
+   */
+  controlledSelectedPreset?: string | null;
+  onSelectedPresetChange?: (preset: string) => void;
   onReinstall?: (serverId: string) => void | Promise<void>;
   initialServerId?: string | null;
 }
@@ -134,9 +142,12 @@ export function McpLogsContent({
   hideHeader = false,
   controlledTab,
   hideTabBar = false,
+  controlledSelectedPreset,
+  onSelectedPresetChange,
   onReinstall,
   initialServerId = null,
 }: McpLogsContentProps) {
+  const isPresetControlled = controlledSelectedPreset !== undefined;
   const [internalTab, setInternalTab] = useState<McpLogsTab>("logs");
   const activeTab = controlledTab ?? internalTab;
   const setActiveTab = (tab: McpLogsTab) => {
@@ -163,8 +174,17 @@ export function McpLogsContent({
 
   // State for selected installation
   const [serverId, setServerId] = useState<string | null>(null);
-  // State for selected preset (used to filter installs across all tabs)
-  const [selectedPreset, setSelectedPreset] = useState<string | null>(null);
+  // State for selected preset (used to filter installs across all tabs).
+  // When `controlledSelectedPreset` is provided, the parent owns this state.
+  const [internalSelectedPreset, setInternalSelectedPreset] = useState<
+    string | null
+  >(null);
+  const selectedPreset = isPresetControlled
+    ? (controlledSelectedPreset ?? null)
+    : internalSelectedPreset;
+  const setSelectedPreset = isPresetControlled
+    ? (next: string) => onSelectedPresetChange?.(next)
+    : setInternalSelectedPreset;
 
   // Distinct preset labels represented across the installs we received.
   const distinctPresets = useMemo(() => {
@@ -189,25 +209,37 @@ export function McpLogsContent({
     return installs[0]?.presetLabel ?? "default";
   }, [installs, initialServerId]);
 
-  // Reset when dialog closes so the next open picks up a fresh initialServerId
+  // Reset when dialog closes so the next open picks up a fresh initialServerId.
+  // Only resets internal preset state — the parent owns it when controlled.
   useEffect(() => {
     if (!isActive) {
       setServerId(null);
-      setSelectedPreset(null);
+      if (!isPresetControlled) setInternalSelectedPreset(null);
     }
-  }, [isActive]);
+  }, [isActive, isPresetControlled]);
 
-  // Default the preset selector when the dialog opens.
+  // Default the preset selector when the dialog opens. Skipped when the
+  // parent controls the preset value.
   useEffect(() => {
+    if (isPresetControlled) return;
     if (isActive && !selectedPreset && distinctPresets.length > 0) {
       setSelectedPreset(initialPreset);
     }
-  }, [isActive, selectedPreset, distinctPresets, initialPreset]);
+  }, [
+    isActive,
+    isPresetControlled,
+    selectedPreset,
+    distinctPresets,
+    initialPreset,
+    setSelectedPreset,
+  ]);
 
   // Filter installs by selected preset. Until selectedPreset is set (one tick
   // on first open) we show everything to avoid a flash of "no installs".
+  // The literal "All" is the no-filter sentinel used by the settings dialog
+  // when "All" is picked in the page header.
   const filteredInstalls = useMemo(() => {
-    if (!selectedPreset) return installs;
+    if (!selectedPreset || selectedPreset === "All") return installs;
     return installs.filter(
       (i) => (i.presetLabel ?? "default") === selectedPreset,
     );
@@ -743,12 +775,13 @@ interface PresetSelectorProps {
   setSelectedPreset: (label: string) => void;
 }
 
-function PresetSelector({
+export function PresetSelector({
   presets,
   selectedPreset,
   setSelectedPreset,
 }: PresetSelectorProps) {
   const [open, setOpen] = useState(false);
+  const { singular } = usePresetEntityName();
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -757,7 +790,7 @@ function PresetSelector({
           size="sm"
           className="h-7 flex-shrink-0 gap-1.5 text-xs font-normal"
         >
-          <span className="text-muted-foreground">Preset:</span>
+          <span className="text-muted-foreground">{singular}:</span>
           <span className="truncate max-w-[10rem]">{selectedPreset}</span>
           <ChevronsUpDown className="h-3 w-3 opacity-50" />
         </Button>

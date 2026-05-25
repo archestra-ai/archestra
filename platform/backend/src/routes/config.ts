@@ -25,6 +25,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           200: z.strictObject({
             disableBasicAuth: z.boolean(),
             disableInvitations: z.boolean(),
+            maintenanceMode: z.string().nullable(),
             analytics: z.strictObject({
               enabled: z.boolean(),
               posthog: z.strictObject({
@@ -40,6 +41,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send({
         disableBasicAuth: config.auth.disableBasicAuth,
         disableInvitations: config.auth.disableInvitations,
+        maintenanceMode: config.maintenanceMode,
         analytics: config.analytics,
       });
     },
@@ -62,6 +64,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
             features: z.strictObject({
               orchestratorK8sRuntime: z.boolean(),
               advancedToolFeaturesEnabled: z.boolean(),
+              agentSkillsEnabled: z.boolean(),
               byosEnabled: z.boolean(),
               byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
               azureOpenAiEntraIdEnabled: z.boolean(),
@@ -106,6 +109,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
           advancedToolFeaturesEnabled:
             config.agents.advancedToolFeaturesEnabled,
+          agentSkillsEnabled: config.agents.skillsEnabled,
           byosEnabled: isByosEnabled(),
           byosVaultKvVersion: getByosVaultKvVersion(),
           azureOpenAiEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),

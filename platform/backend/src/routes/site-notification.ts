@@ -2,7 +2,7 @@ import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import SiteNotificationModel from "@/models/site-notification";
-import { constructResponseSchema } from "@/types";
+import { ApiError, constructResponseSchema } from "@/types";
 
 const routes: FastifyPluginAsyncZod = async (app) => {
   app.get(
@@ -20,6 +20,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
               content: z.string(),
               expiresAt: z.string().nullable(),
               createdAt: z.string(),
+              isActive: z.boolean(),
             })
             .nullable(),
         ),
@@ -27,9 +28,6 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     },
     async (request, reply) => {
       const organizationId = request.organizationId;
-      if (!organizationId) {
-        throw new Error("Organization ID not found");
-      }
 
       const notification =
         await SiteNotificationModel.getActive(organizationId);
@@ -43,7 +41,41 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         content: notification.content,
         expiresAt: notification.expiresAt?.toISOString() ?? null,
         createdAt: notification.createdAt.toISOString(),
+        isActive: notification.isActive,
       });
+    },
+  );
+
+  app.get(
+    "/api/site-notification/settings",
+    {
+      schema: {
+        operationId: RouteId.GetSiteNotificationSettings,
+        description: "Get the latest site notification for settings management",
+        tags: ["Site Notification"],
+        response: constructResponseSchema(
+          z
+            .object({
+              id: z.string(),
+              content: z.string(),
+              expiresAt: z.string().nullable(),
+              createdAt: z.string(),
+              isActive: z.boolean(),
+            })
+            .nullable(),
+        ),
+      },
+    },
+    async (request, reply) => {
+      const notification = await SiteNotificationModel.getLatest(
+        request.organizationId,
+      );
+
+      if (!notification) {
+        return reply.send(null);
+      }
+
+      return reply.send(serializeNotification(notification));
     },
   );
 
@@ -64,15 +96,13 @@ const routes: FastifyPluginAsyncZod = async (app) => {
             content: z.string(),
             expiresAt: z.string().nullable(),
             createdAt: z.string(),
+            isActive: z.boolean(),
           }),
         ),
       },
     },
     async (request, reply) => {
       const organizationId = request.organizationId;
-      if (!organizationId) {
-        throw new Error("Organization ID not found");
-      }
 
       await SiteNotificationModel.deactivateAll(organizationId);
 
@@ -85,12 +115,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         isActive: true,
       });
 
-      return reply.send({
-        id: notification.id,
-        content: notification.content,
-        expiresAt: notification.expiresAt?.toISOString() ?? null,
-        createdAt: notification.createdAt.toISOString(),
-      });
+      return reply.send(serializeNotification(notification));
     },
   );
 
@@ -115,6 +140,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
             content: z.string(),
             expiresAt: z.string().nullable(),
             createdAt: z.string(),
+            isActive: z.boolean(),
           }),
         ),
       },
@@ -123,10 +149,12 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       const { id } = request.params;
 
       const existing = await SiteNotificationModel.getById(id);
-      if (!existing) {
-        return reply
-          .status(404)
-          .send({ error: { message: "Notification not found" } });
+      if (!existing || existing.organizationId !== request.organizationId) {
+        throw new ApiError(404, "Notification not found");
+      }
+
+      if (request.body.isActive === true) {
+        await SiteNotificationModel.deactivateAll(request.organizationId);
       }
 
       const notification = await SiteNotificationModel.update(id, {
@@ -140,13 +168,11 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         isActive: request.body.isActive,
       });
 
-      return reply.send({
-        id: notification?.id ?? "",
-        content: notification?.content ?? "",
-        expiresAt: notification?.expiresAt?.toISOString() ?? null,
-        createdAt:
-          notification?.createdAt?.toISOString() ?? new Date().toISOString(),
-      });
+      if (!notification) {
+        throw new ApiError(404, "Notification not found");
+      }
+
+      return reply.send(serializeNotification(notification));
     },
   );
 
@@ -165,6 +191,11 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     },
     async (request, reply) => {
       const { id } = request.params;
+      const existing = await SiteNotificationModel.getById(id);
+      if (!existing || existing.organizationId !== request.organizationId) {
+        throw new ApiError(404, "Notification not found");
+      }
+
       await SiteNotificationModel.delete(id);
       return reply.send({});
     },
@@ -172,3 +203,19 @@ const routes: FastifyPluginAsyncZod = async (app) => {
 };
 
 export default routes;
+
+function serializeNotification(notification: {
+  id: string;
+  content: string;
+  expiresAt: Date | null;
+  createdAt: Date;
+  isActive: boolean;
+}) {
+  return {
+    id: notification.id,
+    content: notification.content,
+    expiresAt: notification.expiresAt?.toISOString() ?? null,
+    createdAt: notification.createdAt.toISOString(),
+    isActive: notification.isActive,
+  };
+}

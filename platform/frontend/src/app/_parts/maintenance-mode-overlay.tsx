@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useConfig } from "@/lib/config/config.query";
+import { usePublicConfig } from "@/lib/config/config.query";
 
 export function MaintenanceModeOverlay() {
-  const { data: config, isLoading } = useConfig();
+  const { data: config, isLoading } = usePublicConfig();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -15,7 +15,7 @@ export function MaintenanceModeOverlay() {
     return null;
   }
 
-  const maintenanceMessage = config?.features.maintenanceMode;
+  const maintenanceMessage = config?.maintenanceMode;
 
   if (!maintenanceMessage) {
     return null;

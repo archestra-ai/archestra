@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-05-13
+lastUpdated: 2026-05-21
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -37,6 +37,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Resource | Actions |
 |----------|--------|
 | Agents | `read`, `create`, `update`, `delete`, `team-admin` |
+| Skills | `read`, `create`, `update`, `delete`, `team-admin` |
 | Agent Triggers | `read`, `create`, `update`, `delete` |
 | Scheduled Tasks | `read`, `create`, `update`, `delete` |
 | LLM Proxies | `read`, `create`, `update`, `delete`, `team-admin` |
@@ -77,6 +78,7 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Resource | Actions |
 |----------|--------|
 | Agents | `read`, `create`, `update`, `delete` |
+| Skills | `read`, `create`, `update`, `delete` |
 | Scheduled Tasks | `read`, `create`, `update`, `delete` |
 | LLM Proxies | `read`, `create`, `update`, `delete` |
 | LLM Provider API Keys | `read` |
@@ -222,6 +224,12 @@ The following table lists all available permissions that can be assigned to cust
 | `siteNotification:create` | Create new site notifications |
 | `siteNotification:update` | Modify site notifications |
 | `siteNotification:delete` | Delete site notifications |
+| `skill:read` | View and use agent skills within your scope (org, your teams, your own) |
+| `skill:create` | Create new agent skills |
+| `skill:update` | Modify agent skills and their team assignments |
+| `skill:delete` | Delete agent skills |
+| `skill:team-admin` | Manage team assignments for agent skills |
+| `skill:admin` | Full administrative control over all agent skills, bypassing team restrictions |
 | `team:read` | View teams and their members |
 | `team:create` | Create new teams |
 | `team:update` | Modify team settings |

@@ -99,6 +99,13 @@ export function useMcpInstallationStatusCacheSync(enabled = true) {
         });
 
         if (status === "success" || status === "error") {
+          // Refetch the full mcp-servers list: the install row may have
+          // changes the surgical setQueriesData above doesn't cover. In
+          // particular, the per-install reinstall route returns 200 with
+          // status="pending" before the background task clears
+          // `reinstall_required`; without this invalidation the button
+          // stays visible until a manual refresh.
+          void queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
           void queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
           void queryClient.invalidateQueries({
             queryKey: ["mcp-servers", serverId, "tools"],

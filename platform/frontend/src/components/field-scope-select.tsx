@@ -13,6 +13,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { usePresetEntityName } from "@/lib/organization.query";
 
 export type FieldScopeValue = "installation" | "preset" | "static";
 
@@ -23,7 +24,7 @@ interface FieldScopeSelectProps {
   allowPresetScope?: boolean;
   /** When true, "installation" is forbidden (e.g. multi-tenant servers). */
   disableInstallation?: boolean;
-  /** Tooltip copy when the trigger is wrapped in a disabled-reason tooltip. */
+  /** Tooltip copy shown when the disabled "Installation" option is hovered. */
   disabledReason?: string;
 }
 
@@ -34,7 +35,20 @@ export function FieldScopeSelect({
   disableInstallation = false,
   disabledReason,
 }: FieldScopeSelectProps) {
-  const select = (
+  const { singular, configured } = usePresetEntityName();
+  const showPresetScope = allowPresetScope && configured;
+  const installationItem = (
+    <SelectItem
+      value="installation"
+      disabled={disableInstallation}
+      className={
+        disableInstallation ? "data-[disabled]:pointer-events-auto" : undefined
+      }
+    >
+      Installation
+    </SelectItem>
+  );
+  return (
     <Select
       value={value}
       onValueChange={(next) => onChange(next as FieldScopeValue)}
@@ -46,26 +60,19 @@ export function FieldScopeSelect({
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="installation" disabled={disableInstallation}>
-          Prompt at installation
-        </SelectItem>
-        {allowPresetScope && <SelectItem value="preset">Per preset</SelectItem>}
+        {disableInstallation && disabledReason ? (
+          <Tooltip>
+            <TooltipTrigger asChild>{installationItem}</TooltipTrigger>
+            <TooltipContent side="right">
+              <p className="max-w-xs">{disabledReason}</p>
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          installationItem
+        )}
+        {showPresetScope && <SelectItem value="preset">{singular}</SelectItem>}
         <SelectItem value="static">Static</SelectItem>
       </SelectContent>
     </Select>
   );
-
-  if (disableInstallation && disabledReason) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div className="w-full">{select}</div>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p className="max-w-xs">{disabledReason}</p>
-        </TooltipContent>
-      </Tooltip>
-    );
-  }
-  return select;
 }

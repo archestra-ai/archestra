@@ -26,6 +26,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // Agents
   agent: ["read", "create", "update", "delete", "team-admin", "admin"],
+  skill: ["read", "create", "update", "delete", "team-admin", "admin"],
   agentTrigger: ["read", "create", "update", "delete"],
   scheduledTask: ["read", "create", "update", "delete", "admin"],
 
@@ -82,6 +83,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 export const editorPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete", "team-admin"],
+  skill: ["read", "create", "update", "delete", "team-admin"],
   agentTrigger: ["read", "create", "update", "delete"],
   scheduledTask: ["read", "create", "update", "delete"],
 
@@ -138,6 +140,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
 export const memberPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete"],
+  skill: ["read", "create", "update", "delete"],
   agentTrigger: [],
   scheduledTask: ["read", "create", "update", "delete"],
 
@@ -219,6 +222,14 @@ export const permissionDescriptions: Record<string, string> = {
   "agent:team-admin": "Manage team assignments for agents",
   "agent:admin":
     "Full administrative control over all agents, bypassing team restrictions",
+  "skill:read":
+    "View and use agent skills within your scope (org, your teams, your own)",
+  "skill:create": "Create new agent skills",
+  "skill:update": "Modify agent skills and their team assignments",
+  "skill:delete": "Delete agent skills",
+  "skill:team-admin": "Manage team assignments for agent skills",
+  "skill:admin":
+    "Full administrative control over all agent skills, bypassing team restrictions",
   "agentTrigger:read":
     "View agent trigger configurations (Slack, MS Teams, email)",
   "agentTrigger:create": "Set up new agent triggers",
@@ -514,6 +525,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateInternalMcpCatalogItem]: {
     mcpRegistry: ["update"],
   },
+  [RouteId.ReinstallInternalMcpCatalogItem]: {
+    mcpRegistry: ["update"],
+  },
   [RouteId.DeleteInternalMcpCatalogItem]: {
     mcpRegistry: ["delete"],
   },
@@ -546,9 +560,6 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.UpdateCatalogChild]: {
     mcpRegistry: ["update"],
-  },
-  [RouteId.DeleteCatalogChild]: {
-    mcpRegistry: ["delete"],
   },
   [RouteId.GetMcpServers]: {
     mcpServerInstallation: ["read"],
@@ -709,6 +720,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteChatConversation]: {
     chat: ["delete"],
   },
+  [RouteId.CompactChatConversation]: {
+    chat: ["update"],
+  },
   [RouteId.GenerateChatConversationTitle]: {
     chat: ["update"],
   },
@@ -864,6 +878,27 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateConnectionSettings]: {
     organizationSettings: ["update"],
   },
+  [RouteId.UpdatePresetEntityName]: {
+    mcpServerInstallation: ["admin"],
+  },
+  [RouteId.UpdatePresetEntityDefaultLabel]: {
+    mcpServerInstallation: ["admin"],
+  },
+  [RouteId.UpdatePresetEntityDefaultValidationRegex]: {
+    mcpServerInstallation: ["admin"],
+  },
+  [RouteId.ListMcpPresetEntries]: {
+    mcpRegistry: ["read"],
+  },
+  [RouteId.CreateMcpPresetEntry]: {
+    mcpServerInstallation: ["admin"],
+  },
+  [RouteId.UpdateMcpPresetEntry]: {
+    mcpServerInstallation: ["admin"],
+  },
+  [RouteId.DeleteMcpPresetEntry]: {
+    mcpServerInstallation: ["admin"],
+  },
   [RouteId.UpdateKnowledgeSettings]: {
     knowledgeSettings: ["update"],
   },
@@ -925,8 +960,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetUserPermissions]: {}, // User permissions route - available to all authenticated users (no specific permissions required)
   [RouteId.GetImpersonableUsers]: { member: ["update"] }, // Role debugger picker — admin-only (better-auth still gates the actual impersonate-user call)
 
-  // Member default agent routes - available to all authenticated users (manages their own default agent)
+  // Member default routes - available to all authenticated users (manages their own defaults)
   [RouteId.GetMemberDefaultAgent]: {},
+  [RouteId.GetMemberDefaultModel]: {},
+  [RouteId.UpdateMemberDefaultModel]: {},
 
   // User token routes - available to all authenticated users (manages their own personal token)
   [RouteId.GetUserToken]: {},
@@ -1071,11 +1108,24 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetConnectorFile]: { knowledgeSource: ["read"] },
   [RouteId.DeleteConnectorFile]: { knowledgeSource: ["delete"] },
 
+  // Agent Skill Routes - per-instance scope is enforced in the handlers
+  [RouteId.GetSkills]: { skill: ["read"] },
+  [RouteId.CreateSkill]: { skill: ["create"] },
+  [RouteId.GetSkill]: { skill: ["read"] },
+  [RouteId.UpdateSkill]: { skill: ["update"] },
+  [RouteId.DeleteSkill]: { skill: ["delete"] },
+  [RouteId.DiscoverGithubSkills]: { skill: ["read"] },
+  [RouteId.PreviewGithubSkill]: { skill: ["read"] },
+  [RouteId.ImportGithubSkills]: { skill: ["create"] },
+  [RouteId.GetSkillSourceRepos]: { skill: ["read"] },
+  [RouteId.EnableSkillToolDefaults]: { skill: ["admin"] },
+
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},
 
   // Site Notification Routes
   [RouteId.GetSiteNotification]: { siteNotification: ["read"] },
+  [RouteId.GetSiteNotificationSettings]: { siteNotification: ["read"] },
   [RouteId.CreateSiteNotification]: { siteNotification: ["create"] },
   [RouteId.UpdateSiteNotification]: { siteNotification: ["update"] },
   [RouteId.DeleteSiteNotification]: { siteNotification: ["delete"] },
@@ -1101,6 +1151,8 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/agents/triggers/slack": { agentTrigger: ["read"] },
   "/agents/triggers/ms-teams": { agentTrigger: ["read"] },
   "/agents/triggers/email": { agentTrigger: ["read"] },
+  "/agents/skills": { skill: ["read"] },
+  "/agents/skills/new": { skill: ["create"] },
   "/scheduled-tasks": { scheduledTask: ["read"] },
 
   // LLM

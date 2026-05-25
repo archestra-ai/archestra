@@ -7,6 +7,7 @@ import {
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   parseFullToolName,
+  SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
   slugify,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -663,7 +664,7 @@ class ToolModel {
   static async seedArchestraTools(
     catalogId: string,
     organizationOverride?: Pick<Organization, "appName" | "iconLogo"> | null,
-  ): Promise<void> {
+  ): Promise<string[]> {
     const organization =
       organizationOverride ?? (await OrganizationModel.getFirst());
     archestraMcpBranding.syncFromOrganization(organization);
@@ -809,6 +810,81 @@ class ToolModel {
         "Removed stale Archestra tools",
       );
     }
+
+    // Names of tools created on this run — used by callers to trigger
+    // one-time backfills when a new built-in tool first appears.
+    return toolsToInsert.map((tool) => tool.name);
+  }
+
+  /**
+   * Assign the Agent Skill tools (list_skills / activate_skill /
+   * read_skill_file) to every existing agent in the given organization.
+   * Idempotent.
+   *
+   * Triggered by the "Enable and create a new skill" empty-state button
+   * (POST /api/skills/enable-defaults).
+   */
+  static async backfillSkillToolsToOrgAgents(
+    organizationId: string,
+  ): Promise<number> {
+    const toolIds = await ToolModel.getSkillToolIdsForOrg(organizationId);
+    if (toolIds.length === 0) return 0;
+
+    const agents = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(eq(schema.agentsTable.organizationId, organizationId));
+
+    for (const agent of agents) {
+      await AgentToolModel.createManyIfNotExists(agent.id, toolIds);
+    }
+
+    logger.info(
+      { organizationId, agentCount: agents.length },
+      "Backfilled Agent Skill tools to org agents",
+    );
+    return agents.length;
+  }
+
+  /**
+   * Assign skill tools to a single agent if its org has opted in
+   * (`organization.skillToolsEnabled`). No-op otherwise.
+   *
+   * Called from `AgentModel.create` so new agents inherit skill tools after
+   * the org has enabled them.
+   */
+  static async assignSkillToolsToAgent(
+    agentId: string,
+    organizationId: string,
+  ): Promise<void> {
+    const organization = await OrganizationModel.getById(organizationId);
+    if (!organization?.skillToolsEnabled) return;
+
+    const toolIds = await ToolModel.getSkillToolIdsForOrg(organizationId, {
+      organization,
+    });
+    if (toolIds.length === 0) return;
+
+    await AgentToolModel.createManyIfNotExists(agentId, toolIds);
+  }
+
+  private static async getSkillToolIdsForOrg(
+    organizationId: string,
+    options?: { organization?: Organization | null },
+  ): Promise<string[]> {
+    const organization =
+      options?.organization ??
+      (await OrganizationModel.getById(organizationId));
+    archestraMcpBranding.syncFromOrganization(organization);
+    const skillToolNames = SKILL_ARCHESTRA_TOOL_SHORT_NAMES.map((shortName) =>
+      archestraMcpBranding.getToolName(shortName),
+    );
+
+    const skillTools = await db
+      .select({ id: schema.toolsTable.id })
+      .from(schema.toolsTable)
+      .where(inArray(schema.toolsTable.name, skillToolNames));
+    return skillTools.map((tool) => tool.id);
   }
 
   static async syncArchestraBuiltInCatalog(params: {

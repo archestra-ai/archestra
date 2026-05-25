@@ -32,6 +32,11 @@ interface NoAuthInstallDialogProps {
   isInstalling: boolean;
   /** Pre-select a specific team in the credential type selector */
   preselectedTeamId?: string | null;
+  /**
+   * Pre-select a preset (child catalog) in the InstallPresetPicker when the
+   * dialog opens. Falls back to the parent's id when unset.
+   */
+  preselectedCatalogId?: string | null;
   /** When true, only personal installation is allowed */
   personalOnly?: boolean;
   /** When true, only organization-wide installation is allowed */
@@ -45,6 +50,7 @@ export function NoAuthInstallDialog({
   catalogItem,
   isInstalling,
   preselectedTeamId,
+  preselectedCatalogId,
   personalOnly = false,
   orgOnly = false,
 }: NoAuthInstallDialogProps) {
@@ -56,14 +62,16 @@ export function NoAuthInstallDialog({
   );
   const [canInstall, setCanInstall] = useState(true);
   const [selectedCatalogId, setSelectedCatalogId] = useState<string>(
-    catalogItem?.id ?? "",
+    preselectedCatalogId ?? catalogItem?.id ?? "",
   );
   const { data: presets = [] } = useCatalogPresets(catalogItem?.id ?? null);
   const hasPresets = presets.length > 0;
 
   useEffect(() => {
-    if (isOpen && catalogItem) setSelectedCatalogId(catalogItem.id);
-  }, [isOpen, catalogItem]);
+    if (isOpen && catalogItem) {
+      setSelectedCatalogId(preselectedCatalogId ?? catalogItem.id);
+    }
+  }, [isOpen, catalogItem, preselectedCatalogId]);
 
   const handleInstall = useCallback(async () => {
     if (!selectedCatalogId) return;

@@ -1,6 +1,6 @@
 {
   "name": "archestra-platform",
-  "version": "1.2.48",
+  "version": "1.2.50",
   "description": "Enterprise MCP platform",
   "author": "Archestra",
   "engines": {
@@ -21,9 +21,12 @@
     "knip": "turbo knip",
     "test:e2e": "turbo test:e2e",
     "test:e2e:ui": "turbo test:e2e:ui",
+    "test:integration": "turbo test:integration",
+    "test:integration:ui": "turbo test:integration:ui",
     "check:ci": "turbo check:ci",
     "license-check": "tsx standalone-scripts/license-check.ts",
     "codegen": "CODEGEN=true turbo codegen && python3 dev/grafana/generate-pg-dashboard-variants.py",
+    "cleanup:dev:caches": "tsx standalone-scripts/cleanup-dev-caches.ts",
     "db:generate": "turbo db:generate --ui=tui",
     "db:migrate": "turbo db:migrate",
     "db:push": "turbo db:push",
@@ -36,7 +39,7 @@
     "concurrently": "^9.2.1",
     "husky": "^9.1.7",
     "tsx": "^4.21.0",
-    "turbo": "^2.8.13"
+    "turbo": "^2.9.14"
   },
   "pnpm": {
     "overrides": {
@@ -62,6 +65,7 @@
       "lodash-es": "4.18.1",
       "fast-xml-parser": "5.7.2",
       "fast-xml-builder": ">=1.1.7",
+      "samlify": ">=2.13.0",
       "fast-uri": ">=3.1.2",
       "ajv": "8.18.0",
       "axios": ">=1.15.2",
@@ -70,6 +74,7 @@
       "undici": "7.24.5",
       "@xmldom/xmldom": ">=0.9.10",
       "mammoth>@xmldom/xmldom": "0.8.13",
+      "samlify>@xmldom/xmldom": "0.8.13",
       "path-to-regexp": ">=8.4.0",
       "picomatch@>=4": ">=4.0.4",
       "picomatch@<4": ">=2.3.2",

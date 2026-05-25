@@ -1,4 +1,4 @@
-import { and, eq, gt, isNull, or } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 
@@ -34,6 +34,23 @@ class SiteNotificationModel {
             gt(schema.siteNotificationsTable.expiresAt, now),
           ),
         ),
+      )
+      .limit(1);
+    return notification;
+  }
+
+  static async getLatest(organizationId: string) {
+    logger.debug(
+      { organizationId },
+      "SiteNotificationModel.getLatest: fetching latest notification",
+    );
+    const [notification] = await db
+      .select()
+      .from(schema.siteNotificationsTable)
+      .where(eq(schema.siteNotificationsTable.organizationId, organizationId))
+      .orderBy(
+        desc(schema.siteNotificationsTable.updatedAt),
+        desc(schema.siteNotificationsTable.createdAt),
       )
       .limit(1);
     return notification;

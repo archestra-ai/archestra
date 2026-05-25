@@ -31,7 +31,17 @@ k8s_resource(
   'dagger-runtime-engine',
   new_name='dagger-engine',
   labels=['code-runtime'],
-  objects=['dagger:namespace'],
+  # bundle the namespace and the chart's free-floating objects into this
+  # resource so Tilt applies them together and orders by Kind (Namespace
+  # first). the Service auto-attaches via its selector on the StatefulSet,
+  # so it is not listed here. without this, the ServiceAccount/ConfigMap
+  # drift into `uncategorized` and try to apply before the `dagger`
+  # namespace exists, failing the initial build.
+  objects=[
+    'dagger:namespace',
+    'dagger-runtime:serviceaccount',
+    'dagger-runtime-engine-config:configmap',
+  ],
 )
 
 local_resource(

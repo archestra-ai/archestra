@@ -11,6 +11,7 @@ import {
   Globe,
   MicIcon,
   MoreVertical,
+  PanelRight,
   PaperclipIcon,
   Plus,
   Share2,
@@ -43,7 +44,10 @@ import {
   PlaywrightInstallDialog,
   usePlaywrightSetupRequired,
 } from "@/components/chat/playwright-install-dialog";
-import { RightSidePanel } from "@/components/chat/right-side-panel";
+import {
+  type RightPanelTab,
+  RightSidePanel,
+} from "@/components/chat/right-side-panel";
 import { ShareConversationDialog } from "@/components/chat/share-conversation-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
@@ -266,6 +270,11 @@ export function ChatPageContent({
     }
     return false;
   });
+
+  // Tracks which tab the right-side panel last showed; restored when the panel
+  // is re-opened via the header toggle.
+  const [activeRightTab, setActiveRightTab] =
+    useState<RightPanelTab>("artifact");
 
   const hasChatAccess = canReadAgent !== false;
   const canUseProviderSettings =
@@ -854,19 +863,6 @@ export function ChatPageContent({
   const stopChatStreamMutation = useStopChatStream();
   const compactConversationMutation = useCompactConversation();
 
-  // Persist artifact panel state
-  const toggleArtifactPanel = useCallback(() => {
-    const newValue = !isArtifactOpen;
-    setIsArtifactOpen(newValue);
-    // Only persist state for active conversations
-    if (conversationId) {
-      localStorage.setItem(
-        conversationStorageKeys(conversationId).artifactOpen,
-        String(newValue),
-      );
-    }
-  }, [isArtifactOpen, conversationId]);
-
   // Auto-open artifact panel when artifact is updated during conversation
   const previousArtifactRef = useRef<string | null | undefined>(undefined);
   useEffect(() => {
@@ -1378,18 +1374,76 @@ export function ChatPageContent({
     });
   };
 
-  // Persist browser panel state - just opens panel, installation happens inside if needed
-  const toggleBrowserPanel = useCallback(() => {
-    const newValue = !isBrowserPanelOpen;
-    setIsBrowserPanelOpen(newValue);
-    localStorage.setItem(BROWSER_OPEN_KEY, String(newValue));
-  }, [isBrowserPanelOpen]);
+  const isBrowserPanelVisible = isBrowserPanelOpen && !isPlaywrightSetupVisible;
+  const isRightPanelOpen = isArtifactOpen || isBrowserPanelVisible;
 
-  // Close browser panel handler (also persists to localStorage)
-  const closeBrowserPanel = useCallback(() => {
+  // Keep the active-tab tracker in sync with which panel is actually shown,
+  // so closing+reopening restores the user's last view.
+  useEffect(() => {
+    if (isBrowserPanelVisible && !isArtifactOpen) {
+      setActiveRightTab("browser");
+    } else if (isArtifactOpen) {
+      setActiveRightTab("artifact");
+    }
+  }, [isArtifactOpen, isBrowserPanelVisible]);
+
+  const openRightPanelTab = useCallback(
+    (tab: RightPanelTab) => {
+      setActiveRightTab(tab);
+      if (tab === "artifact") {
+        setIsArtifactOpen(true);
+        setIsBrowserPanelOpen(false);
+        if (conversationId) {
+          localStorage.setItem(
+            conversationStorageKeys(conversationId).artifactOpen,
+            "true",
+          );
+        }
+        localStorage.setItem(BROWSER_OPEN_KEY, "false");
+      } else {
+        setIsBrowserPanelOpen(true);
+        setIsArtifactOpen(false);
+        if (conversationId) {
+          localStorage.setItem(
+            conversationStorageKeys(conversationId).artifactOpen,
+            "false",
+          );
+        }
+        localStorage.setItem(BROWSER_OPEN_KEY, "true");
+      }
+    },
+    [conversationId],
+  );
+
+  const closeRightPanel = useCallback(() => {
+    setIsArtifactOpen(false);
     setIsBrowserPanelOpen(false);
+    if (conversationId) {
+      localStorage.setItem(
+        conversationStorageKeys(conversationId).artifactOpen,
+        "false",
+      );
+    }
     localStorage.setItem(BROWSER_OPEN_KEY, "false");
-  }, []);
+  }, [conversationId]);
+
+  const toggleRightPanel = useCallback(() => {
+    if (isRightPanelOpen) {
+      closeRightPanel();
+    } else {
+      const target =
+        activeRightTab === "browser" && !showBrowserButton
+          ? "artifact"
+          : activeRightTab;
+      openRightPanelTab(target);
+    }
+  }, [
+    isRightPanelOpen,
+    activeRightTab,
+    showBrowserButton,
+    closeRightPanel,
+    openRightPanelTab,
+  ]);
 
   // Handle creating conversation from browser URL input (when no conversation exists)
   const createInitialConversation = useCallback(
@@ -1818,58 +1872,21 @@ export function ChatPageContent({
                   </TruncatedTooltip>
                 </div>
               )}
-              {/* Right side - desktop: original buttons */}
+              {/* Right side - desktop: panel toggle */}
               <div className="hidden md:flex items-center gap-2 flex-shrink-0">
-                {canManageShare && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setIsShareDialogOpen(true)}
-                    className="text-xs"
-                  >
-                    {isShared ? (
-                      <>
-                        <Users className="h-3 w-3 mr-1 text-primary" />
-                        <span className="text-primary">Shared</span>
-                      </>
-                    ) : (
-                      <>
-                        <Share2 className="h-3 w-3 mr-1" />
-                        Share
-                      </>
-                    )}
-                  </Button>
-                )}
-                {canManageShare && <div className="w-px h-4 bg-border" />}
                 <Button
-                  variant={isArtifactOpen ? "secondary" : "ghost"}
-                  size="sm"
-                  onClick={toggleArtifactPanel}
-                  className="text-xs"
+                  variant="ghost"
+                  size="icon"
+                  onClick={toggleRightPanel}
+                  className="h-8 w-8"
+                  title={isRightPanelOpen ? "Close panel" : "Open panel"}
+                  aria-pressed={isRightPanelOpen}
                 >
-                  <FileText className="h-3 w-3 mr-1" />
-                  Artifact
+                  <PanelRight className="h-4 w-4" />
+                  <span className="sr-only">
+                    {isRightPanelOpen ? "Close panel" : "Open panel"}
+                  </span>
                 </Button>
-
-                {showBrowserButton && (
-                  <>
-                    <div className="w-px h-4 bg-border" />
-                    <Button
-                      variant={
-                        isBrowserPanelOpen && !isPlaywrightSetupVisible
-                          ? "secondary"
-                          : "ghost"
-                      }
-                      size="sm"
-                      onClick={toggleBrowserPanel}
-                      className="text-xs"
-                      disabled={isPlaywrightSetupVisible}
-                    >
-                      <Globe className="h-3 w-3 mr-1" />
-                      Browser
-                    </Button>
-                  </>
-                )}
               </div>
               {/* Right side - mobile: 3-dot dropdown */}
               <div className="flex md:hidden items-center gap-2 flex-shrink-0">
@@ -1903,17 +1920,31 @@ export function ChatPageContent({
                         )}
                       </DropdownMenuItem>
                     )}
-                    <DropdownMenuItem onSelect={toggleArtifactPanel}>
+                    <DropdownMenuItem
+                      onSelect={() => {
+                        if (isArtifactOpen) {
+                          closeRightPanel();
+                        } else {
+                          openRightPanelTab("artifact");
+                        }
+                      }}
+                    >
                       <FileText className="h-4 w-4" />
                       {isArtifactOpen ? "Hide Artifact" : "Show Artifact"}
                     </DropdownMenuItem>
                     {showBrowserButton && (
                       <DropdownMenuItem
-                        onSelect={toggleBrowserPanel}
+                        onSelect={() => {
+                          if (isBrowserPanelVisible) {
+                            closeRightPanel();
+                          } else {
+                            openRightPanelTab("browser");
+                          }
+                        }}
                         disabled={isPlaywrightSetupVisible}
                       >
                         <Globe className="h-4 w-4" />
-                        {isBrowserPanelOpen && !isPlaywrightSetupVisible
+                        {isBrowserPanelVisible
                           ? "Hide Browser"
                           : "Show Browser"}
                       </DropdownMenuItem>
@@ -1924,37 +1955,24 @@ export function ChatPageContent({
             </div>
           </div>
 
-          {/* Mobile: Inline artifact/browser panels below header */}
-          {(isArtifactOpen ||
-            (isBrowserPanelOpen && !isPlaywrightSetupVisible)) && (
+          {/* Mobile: Inline artifact/browser panel below header */}
+          {isRightPanelOpen && (
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden md:hidden">
-              {isArtifactOpen && (
-                <div
-                  className={cn(
-                    "min-h-0 overflow-auto",
-                    isBrowserPanelOpen && !isPlaywrightSetupVisible
-                      ? "h-1/2 border-b"
-                      : "flex-1",
-                  )}
-                >
+              {activeRightTab === "artifact" && (
+                <div className="flex-1 min-h-0 overflow-auto">
                   <ConversationArtifactPanel
                     artifact={conversation?.artifact}
-                    isOpen={isArtifactOpen}
-                    onToggle={toggleArtifactPanel}
+                    isOpen
+                    onToggle={closeRightPanel}
                     embedded
                   />
                 </div>
               )}
-              {isBrowserPanelOpen && !isPlaywrightSetupVisible && (
-                <div
-                  className={cn(
-                    "min-h-0 overflow-auto",
-                    isArtifactOpen ? "h-1/2" : "flex-1",
-                  )}
-                >
+              {activeRightTab === "browser" && isBrowserPanelVisible && (
+                <div className="flex-1 min-h-0 overflow-auto">
                   <BrowserPanel
-                    isOpen={true}
-                    onClose={closeBrowserPanel}
+                    isOpen
+                    onClose={closeRightPanel}
                     conversationId={conversationId}
                     agentId={browserToolsAgentId}
                     onCreateConversationWithUrl={
@@ -1977,9 +1995,7 @@ export function ChatPageContent({
               <div
                 className={cn(
                   "flex-1 min-h-0 relative",
-                  (isArtifactOpen ||
-                    (isBrowserPanelOpen && !isPlaywrightSetupVisible)) &&
-                    "hidden md:block",
+                  isRightPanelOpen && "hidden md:block",
                 )}
               >
                 {isReadOnlyConversation ? (
@@ -2279,11 +2295,34 @@ export function ChatPageContent({
       {/* Right-side panel - desktop only */}
       <div className="hidden md:flex">
         <RightSidePanel
+          isOpen={isRightPanelOpen}
+          activeTab={activeRightTab}
+          onTabChange={openRightPanelTab}
+          onClose={closeRightPanel}
+          canShowBrowser={showBrowserButton && !isPlaywrightSetupVisible}
+          headerActions={
+            canManageShare ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsShareDialogOpen(true)}
+                className="text-xs h-7"
+              >
+                {isShared ? (
+                  <>
+                    <Users className="h-3 w-3 mr-1 text-primary" />
+                    <span className="text-primary">Shared</span>
+                  </>
+                ) : (
+                  <>
+                    <Share2 className="h-3 w-3 mr-1" />
+                    Share
+                  </>
+                )}
+              </Button>
+            ) : undefined
+          }
           artifact={conversation?.artifact}
-          isArtifactOpen={isArtifactOpen}
-          onArtifactToggle={toggleArtifactPanel}
-          isBrowserOpen={isBrowserPanelOpen && !isPlaywrightSetupVisible}
-          onBrowserClose={closeBrowserPanel}
           conversationId={conversationId}
           agentId={browserToolsAgentId}
           onCreateConversationWithUrl={handleCreateConversationWithUrl}

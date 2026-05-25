@@ -1,20 +1,28 @@
 "use client";
 
-import { GripVertical } from "lucide-react";
+import { FileText, Globe, GripVertical, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
+export type RightPanelTab = "artifact" | "browser";
+
 interface RightSidePanelProps {
+  isOpen: boolean;
+  activeTab: RightPanelTab;
+  onTabChange: (tab: RightPanelTab) => void;
+  onClose: () => void;
+  canShowBrowser: boolean;
+  /** Optional action(s) rendered in the tab row, between the tabs and the close button. */
+  headerActions?: React.ReactNode;
+
   // Artifact props
   artifact?: string | null;
-  isArtifactOpen: boolean;
-  onArtifactToggle: () => void;
 
   // Browser props
-  isBrowserOpen: boolean;
-  onBrowserClose: () => void;
   conversationId: string | undefined;
   /** Fallback agentId for pre-conversation case */
   agentId?: string;
@@ -29,11 +37,13 @@ interface RightSidePanelProps {
 }
 
 export function RightSidePanel({
+  isOpen,
+  activeTab,
+  onTabChange,
+  onClose,
+  canShowBrowser,
+  headerActions,
   artifact,
-  isArtifactOpen,
-  onArtifactToggle,
-  isBrowserOpen,
-  onBrowserClose,
   conversationId,
   agentId,
   onCreateConversationWithUrl,
@@ -118,10 +128,12 @@ export function RightSidePanel({
     };
   }, [isResizing]);
 
-  // Don't render if nothing is open
-  if (!isArtifactOpen && !isBrowserOpen) {
+  if (!isOpen) {
     return null;
   }
+
+  const resolvedTab: RightPanelTab =
+    activeTab === "browser" && !canShowBrowser ? "artifact" : activeTab;
 
   return (
     <div
@@ -150,43 +162,64 @@ export function RightSidePanel({
         </div>
       </div>
 
-      {/* Artifact Panel - takes remaining space */}
-      {isArtifactOpen && (
-        <div
-          className="min-h-0 overflow-hidden"
-          style={{
-            height: isBrowserOpen ? "50%" : "100%",
-          }}
-        >
-          <ConversationArtifactPanel
-            artifact={artifact}
-            isOpen={isArtifactOpen}
-            onToggle={onArtifactToggle}
-            embedded
-          />
+      <Tabs
+        value={resolvedTab}
+        onValueChange={(value) => onTabChange(value as RightPanelTab)}
+        className="flex-1 min-h-0 flex flex-col gap-0"
+      >
+        <div className="flex items-center justify-between gap-2 border-b px-2 py-2">
+          <TabsList className="h-8">
+            <TabsTrigger value="artifact" className="text-xs px-3">
+              <FileText className="h-3 w-3" />
+              Artifact
+            </TabsTrigger>
+            {canShowBrowser && (
+              <TabsTrigger value="browser" className="text-xs px-3">
+                <Globe className="h-3 w-3" />
+                Browser
+              </TabsTrigger>
+            )}
+          </TabsList>
+          <div className="flex items-center gap-1">
+            {headerActions}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={onClose}
+              title="Close panel"
+            >
+              <X className="h-4 w-4" />
+              <span className="sr-only">Close panel</span>
+            </Button>
+          </div>
         </div>
-      )}
 
-      {/* Browser Panel - at the bottom */}
-      {isBrowserOpen && (
-        <div
-          className="flex-shrink-0"
-          style={{
-            height: isArtifactOpen ? "50%" : "unset",
-          }}
-        >
-          <BrowserPanel
-            isOpen={isBrowserOpen}
-            onClose={onBrowserClose}
-            conversationId={conversationId}
-            agentId={agentId}
-            onCreateConversationWithUrl={onCreateConversationWithUrl}
-            isCreatingConversation={isCreatingConversation}
-            initialNavigateUrl={initialNavigateUrl}
-            onInitialNavigateComplete={onInitialNavigateComplete}
-          />
+        <div className="flex-1 min-h-0 overflow-hidden">
+          {resolvedTab === "artifact" && (
+            <ConversationArtifactPanel
+              artifact={artifact}
+              isOpen
+              onToggle={onClose}
+              embedded
+              hideHeader
+            />
+          )}
+          {resolvedTab === "browser" && canShowBrowser && (
+            <BrowserPanel
+              isOpen
+              onClose={onClose}
+              conversationId={conversationId}
+              agentId={agentId}
+              onCreateConversationWithUrl={onCreateConversationWithUrl}
+              isCreatingConversation={isCreatingConversation}
+              initialNavigateUrl={initialNavigateUrl}
+              onInitialNavigateComplete={onInitialNavigateComplete}
+              hideHeader
+            />
+          )}
         </div>
-      )}
+      </Tabs>
     </div>
   );
 }

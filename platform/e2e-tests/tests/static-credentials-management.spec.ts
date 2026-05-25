@@ -32,13 +32,15 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.describe("Custom Self-hosted MCP Server - installation and static credentials management (vault disabled, prompt-on-installation disabled)", () => {
-  // Matrix tests
-  const MATRIX: { user: "Admin" | "Editor" | "Member" }[] = [
+  // Matrix tests. The Editor variant was removed: its unique observables
+  // (Editor cannot see org-scoped gateways → uses a team-scoped one;
+  // visible credentials = Engineering+Marketing, no Default) are pure
+  // backend RBAC filters that belong in a model/route integration test,
+  // not a K8s-bound e2e. Admin covers the end-to-end happy path; Member
+  // covers the lowest-permission UI state.
+  const MATRIX: { user: "Admin" | "Member" }[] = [
     {
       user: "Admin",
-    },
-    {
-      user: "Editor",
     },
     {
       user: "Member",
@@ -47,7 +49,6 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
   MATRIX.forEach(({ user }) => {
     test(`${user}`, async ({
       adminPage,
-      editorPage,
       memberPage,
       extractCookieHeaders,
       makeRandomString,
@@ -57,8 +58,6 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
         switch (user) {
           case "Admin":
             return adminPage;
-          case "Editor":
-            return editorPage;
           case "Member":
             return memberPage;
         }
@@ -163,19 +162,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
       await closeOpenDialogs(page);
 
       if (user !== "Member") {
-        // Editor can't see org-scoped gateways, so create a team-scoped one
-        let teamGateway: { id: string; name: string } | undefined;
-        if (user === "Editor") {
-          teamGateway = await createTeamMcpGatewayViaApi({
-            cookieHeaders,
-            teamName: ENGINEERING_TEAM_NAME,
-            gatewayName: makeRandomString(10, "gw"),
-          });
-        }
-
-        // Check TokenSelect shows correct credentials
-        const gatewayNameForAssignment =
-          teamGateway?.name ?? adminSharedGateway?.name;
+        const gatewayNameForAssignment = adminSharedGateway?.name;
         if (!gatewayNameForAssignment) {
           throw new Error(
             `Expected a gateway for ${user} but none was provisioned`,
@@ -235,14 +222,6 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
             );
           }
         }).toPass({ timeout: 30_000, intervals: [1000, 2000, 3000, 5000] });
-
-        // Cleanup team gateway
-        if (teamGateway) {
-          await archestraApiSdk.deleteAgent({
-            path: { id: teamGateway.id },
-            headers: { Cookie: cookieHeaders },
-          });
-        }
       }
       // Cleanup admin shared gateway
       if (adminSharedGateway) {

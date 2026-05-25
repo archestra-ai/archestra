@@ -127,7 +127,13 @@ else:
     serve_env={
       'NEXT_DIST_DIR': '.next-pw',
       'NEXT_PUBLIC_API_MOCKING': 'enabled',
+      # Both must be pinned: the SSR path reads ARCHESTRA_INTERNAL_API_BASE_URL,
+      # the browser bundle reads NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL.
+      # If only the server var is overridden, a .env value for the public mirror
+      # (e.g. set by `dev:stack:up`) reaches the browser and defeats the
+      # fail-loudly behavior for escaped client-side fetches.
       'ARCHESTRA_INTERNAL_API_BASE_URL': 'http://127.0.0.1:1',
+      'NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL': 'http://127.0.0.1:1',
       'NEXT_PUBLIC_SENTRY_DSN': '',
     }
   )

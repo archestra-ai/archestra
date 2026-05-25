@@ -96,7 +96,8 @@ export async function waitForMcpServerReadyById(
       `${UI_BASE_URL}/api/mcp_server/${mcpServerId}`,
       { headers: { Origin: UI_BASE_URL } },
     );
-    if (response.status() === 404) {
+    const status = response.status();
+    if (status === 404) {
       lastObserved = "not-found";
     } else if (response.ok()) {
       const server = (await response.json()) as {
@@ -112,6 +113,16 @@ export async function waitForMcpServerReadyById(
           `MCP server ${mcpServerId} install failed: ${server.localInstallationError ?? "unknown error"}`,
         );
       }
+    } else if (status >= 400 && status < 500) {
+      // Permanent client errors (401 unauthorized, 403 forbidden) — fail
+      // fast rather than retrying to the 120s timeout.
+      throw new Error(
+        `MCP server ${mcpServerId} status fetch returned ${status}: ${await response.text()}`,
+      );
+    } else {
+      // 5xx — keep polling, but record so the final timeout message is
+      // diagnostic rather than the previous-iteration's stale value.
+      lastObserved = `transient-${status}`;
     }
     await new Promise((resolve) => setTimeout(resolve, delay));
     delay = Math.min(delay * 1.5, 5000);

@@ -26,6 +26,7 @@ import {
   saveOpenProfileDialog,
   settleRegistryAfterInstall,
   verifyToolCallResultViaApi,
+  waitForMcpServerReadyById,
   waitForMcpServerToolsDiscovered,
 } from "../utils";
 
@@ -125,7 +126,22 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
             `Failed to install shared connection for ${user}: ${JSON.stringify(installResponse.error)}`,
           );
         }
+        const installedServerId = installResponse.data?.id;
+        if (!installedServerId) {
+          throw new Error(
+            `Install response for ${user} missing server id: ${JSON.stringify(installResponse.data)}`,
+          );
+        }
         await settleRegistryAfterInstall(page);
+        // The API install path doesn't refresh the registry DOM, so probe
+        // the backend installation status by ID first — surfaces a backend
+        // install error as a real error instead of a 120s DOM-poll timeout,
+        // and disambiguates from the same-named personal install above.
+        await waitForMcpServerReadyById(page, installedServerId);
+        // Follow with the existing DOM wait. This is the implicit "everything
+        // settled" signal the rest of the test relies on (TanStack Query
+        // refetch cycle has propagated to the registry view, so the gateway-
+        // edit dialog below sees the new tools in its catalog).
         await waitForMcpServerToolsDiscovered(page, catalogItemName);
       }
 

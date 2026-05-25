@@ -295,6 +295,10 @@ class ToolModel {
     return tool;
   }
 
+  // Globally scoped audit snapshot: toolsTable has no organizationId column.
+  // Tools are associated with agents (which are org-scoped), but DELETE
+  // /api/tools/:id does not apply an explicit org predicate on the row lookup.
+  // Intentional match with route handler scope.
   static async findByIdForAudit(
     id: string,
     _organizationId: string,

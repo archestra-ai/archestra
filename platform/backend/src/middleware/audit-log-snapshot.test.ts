@@ -3,6 +3,7 @@ import db, { schema } from "@/database";
 import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
+import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KnowledgeBaseModel from "@/models/knowledge-base";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import McpServerModel from "@/models/mcp-server";
@@ -556,6 +557,115 @@ describe("audit snapshot shape — non-redacted models", () => {
     expect(snap?.agentId).toBe(agent.id);
 
     expect(await AgentToolModel.findByIdForAudit(row.id, org2.id)).toBeNull();
+  });
+});
+
+describe("InternalMcpCatalogModel — org-or-global audit scoping", () => {
+  test("org-scoped catalog item is visible to its own org", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+  }) => {
+    const org = await makeOrganization();
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+    const snapshot = await InternalMcpCatalogModel.findByIdForAudit(
+      catalog.id,
+      org.id,
+    );
+    expect(snapshot).not.toBeNull();
+    expect(snapshot?.id).toBe(catalog.id);
+    expect(snapshot?.organizationId).toBe(org.id);
+  });
+
+  test("org-scoped catalog item is invisible to a different org (snapshot-before-authz fix)", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+  }) => {
+    const ownerOrg = await makeOrganization();
+    const intruderOrg = await makeOrganization();
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: ownerOrg.id,
+    });
+    const snapshot = await InternalMcpCatalogModel.findByIdForAudit(
+      catalog.id,
+      intruderOrg.id,
+    );
+    expect(snapshot).toBeNull();
+  });
+
+  test("global catalog item (organizationId=null) is visible to any org", async ({
+    makeOrganization,
+  }) => {
+    const orgA = await makeOrganization();
+    const orgB = await makeOrganization();
+
+    // Insert a global catalog entry directly — organizationId=null marks it as
+    // a platform-wide entry (e.g. the seeded Archestra catalog). scope="org"
+    // is the correct value; "global" is not a valid enum member.
+    const [global] = await db
+      .insert(schema.internalMcpCatalogTable)
+      .values({
+        id: crypto.randomUUID(),
+        name: `global-catalog-${crypto.randomUUID().slice(0, 8)}`,
+        serverType: "remote",
+        serverUrl: "https://global.example.com/mcp/",
+        scope: "org",
+        organizationId: null,
+        requiresAuth: false,
+        multitenant: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
+
+    const snapA = await InternalMcpCatalogModel.findByIdForAudit(
+      global.id,
+      orgA.id,
+    );
+    const snapB = await InternalMcpCatalogModel.findByIdForAudit(
+      global.id,
+      orgB.id,
+    );
+
+    expect(snapA).not.toBeNull();
+    expect(snapA?.id).toBe(global.id);
+    expect(snapA?.organizationId).toBeNull();
+    expect(snapB).not.toBeNull();
+    expect(snapB?.id).toBe(global.id);
+  });
+
+  test("findByNameForAudit enforces the same org-or-global predicate", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+  }) => {
+    const ownerOrg = await makeOrganization();
+    const intruderOrg = await makeOrganization();
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: ownerOrg.id,
+      name: `unique-audit-name-${crypto.randomUUID().slice(0, 8)}`,
+    });
+
+    // Owner sees it by name.
+    const own = await InternalMcpCatalogModel.findByNameForAudit(
+      catalog.name,
+      ownerOrg.id,
+    );
+    expect(own).not.toBeNull();
+    expect(own?.id).toBe(catalog.id);
+
+    // Intruder cannot find it by name.
+    const intruder = await InternalMcpCatalogModel.findByNameForAudit(
+      catalog.name,
+      intruderOrg.id,
+    );
+    expect(intruder).toBeNull();
+  });
+
+  test("returns null for a non-existent id", async ({ makeOrganization }) => {
+    const org = await makeOrganization();
+    const fakeId = "00000000-0000-0000-0000-000000000000";
+    expect(
+      await InternalMcpCatalogModel.findByIdForAudit(fakeId, org.id),
+    ).toBeNull();
   });
 });
 

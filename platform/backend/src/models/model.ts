@@ -647,6 +647,9 @@ class ModelModel {
   /**
    * Snapshot for audit logs (global model row — `organizationId` is unused).
    */
+  // Globally scoped audit snapshot: LLM model catalog entries are platform-wide;
+  // the modelsTable has no organizationId column, and the admin-only route
+  // handler is likewise unscoped. Intentional match.
   static async findByIdForAudit(
     id: string,
     _organizationId: string,

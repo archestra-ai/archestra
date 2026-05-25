@@ -527,6 +527,10 @@ class LimitModel {
     return limits;
   }
 
+  // Globally scoped audit snapshot: limitsTable has no organizationId column.
+  // Limits are tied to entities (agents, profiles) that are org-scoped, but
+  // the route handler (PATCH/DELETE /api/limits/:id) also does not apply an
+  // explicit org predicate on individual row lookups. Intentional match.
   static async findByIdForAudit(
     id: string,
     _organizationId: string,

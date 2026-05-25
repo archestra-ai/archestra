@@ -938,14 +938,28 @@ class InternalMcpCatalogModel {
     }
   }
 
+  // Org-or-global scoped audit snapshot. Returns data only for catalog rows
+  // that belong to the requesting organization OR are global entries
+  // (organizationId IS NULL, e.g. the seeded Archestra catalog). Returns null
+  // for rows owned by a different org, preventing the snapshot-before-authz
+  // cross-tenant leak: this fetcher runs in the audit preHandler before the
+  // route handler has a chance to reject the request.
   static async findByIdForAudit(
     id: string,
-    _organizationId: string,
+    organizationId: string,
   ): Promise<Record<string, unknown> | null> {
     const [row] = await db
       .select()
       .from(schema.internalMcpCatalogTable)
-      .where(eq(schema.internalMcpCatalogTable.id, id))
+      .where(
+        and(
+          eq(schema.internalMcpCatalogTable.id, id),
+          or(
+            eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+            isNull(schema.internalMcpCatalogTable.organizationId),
+          ),
+        ),
+      )
       .limit(1);
 
     if (!row) return null;

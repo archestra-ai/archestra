@@ -199,6 +199,13 @@ describe("registerAuditLogHook", () => {
       reply.code(500).send({ error: { message: "boom" } }),
     );
 
+    // 404 route — simulates a route handler that rejects a cross-org id.
+    // The route pattern walks up to /api/things/:id, whose fetchById returns
+    // null for any id that isn't KNOWN_RESOURCE_ID (cross-org scenario).
+    app.patch("/api/things/:id/cross-org", async (_req, reply) => {
+      reply.code(404).send({ error: { message: "not found" } });
+    });
+
     // Route without fetchById in registry
     app.post("/api/no-fetch-things", async () => ({ id: KNOWN_RESOURCE_ID }));
     app.patch("/api/no-fetch-things/:id", async () => ({}));
@@ -805,6 +812,28 @@ describe("registerAuditLogHook", () => {
       ).toBe(true);
 
       createSpy.mockRestore();
+    });
+  });
+
+  describe("snapshot-before-authz — before=null when fetchById returns null for cross-org id", () => {
+    test("PATCH 404 with cross-org id: row written with before=null and outcome=failure", async () => {
+      // Simulates: admin in org A issues PATCH /api/internal_mcp_catalog/<org-B-uuid>.
+      // The audit preHandler runs fetchById with (orgB_id, orgA_orgId) which returns null
+      // (the resource is not visible to org A). The route handler returns 404.
+      // The resulting audit row must have before=null — not org B's snapshot.
+      const crossOrgId = "00000000-0000-0000-0000-000000000002"; // not KNOWN_RESOURCE_ID
+      const res = await app.inject({
+        method: "PATCH",
+        url: `/api/things/${crossOrgId}/cross-org`,
+      });
+      expect(res.statusCode).toBe(404);
+      await settle();
+
+      const rows = await getRows();
+      expect(rows).toHaveLength(1);
+      expect(rows[0].outcome).toBe("failure"); // 404 maps to failure
+      expect(rows[0].before).toBeNull(); // fetchById returned null for the cross-org id
+      expect(rows[0].after).toBeNull(); // non-success → after never fetched
     });
   });
 });

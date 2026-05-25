@@ -682,6 +682,10 @@ class TrustedDataPolicyModel {
     return { defaultTrustedDataPolicies: entries };
   }
 
+  // Globally scoped audit snapshot: trustedDataPoliciesTable has no
+  // organizationId column. Policies are linked to tools scoped via agentId,
+  // but the individual row lookup in the route handler is also not org-scoped.
+  // Intentional match with route handler scope.
   static async findByIdForAudit(
     id: string,
     _organizationId: string,

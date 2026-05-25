@@ -191,6 +191,10 @@ class OrganizationModel {
   /**
    * Compact org-wide snapshot for audit logs (large/binary branding fields omitted).
    */
+  // `id` here is always the caller's own organizationId: all registry entries
+  // for this fetcher use resourceIdSource="organizationContext", so id equals
+  // organizationId at call time. The second parameter is unused by design —
+  // the resource being audited IS the organization.
   static async findByIdForAudit(
     id: string,
     _organizationId: string,

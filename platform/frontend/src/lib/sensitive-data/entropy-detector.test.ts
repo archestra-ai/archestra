@@ -33,6 +33,19 @@ describe("entropyDetector", () => {
     expect(scan(text)).toEqual([]);
   });
 
+  it("flags a high-entropy standard base64 token containing slashes", () => {
+    // standard base64 (not URL-safe) uses '+' and '/' — secrets like AWS secret keys use this
+    const token = "aB3+Y7/Z9mN2pR5wL8vK4tH6jC1fG0sD";
+    const found = scan(`secret=${token}`);
+    expect(found).toHaveLength(1);
+    expect(found[0].internalLabel).toBe("high-entropy-token");
+  });
+
+  it("does not flag URL paths as high-entropy tokens", () => {
+    const url = "https://cdn.example.com/static/assets/v3/ab2x9z1q/main-8f3a.min.js";
+    expect(scan(url)).toEqual([]);
+  });
+
   it("ignores short tokens below the length threshold", () => {
     expect(scan("abc123 def456 ghi789")).toEqual([]);
   });

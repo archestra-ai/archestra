@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { defaultDetectors, detectorId, scanText } from "./index";
+import { entropyDetector } from "./entropy-detector";
+import { defaultDetectors, scanText } from "./index";
+import { regexDetector } from "./regex-detector";
+import { detectorId } from "./types";
 import type { Detector, Finding } from "./types";
 
 const makeDetector = (
@@ -82,7 +85,9 @@ describe("scanText", () => {
 });
 
 describe("defaultDetectors", () => {
-  it("is exported as an array", () => {
-    expect(Array.isArray(defaultDetectors)).toBe(true);
+  it("contains regexDetector then entropyDetector", () => {
+    expect(defaultDetectors).toHaveLength(2);
+    expect(defaultDetectors[0]).toBe(regexDetector);
+    expect(defaultDetectors[1]).toBe(entropyDetector);
   });
 });

@@ -52,13 +52,16 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
     onSubmit?: (
       message: { text: string; files: [] },
       event: React.FormEvent<HTMLFormElement>,
-    ) => void;
+    ) => void | Promise<void>;
   }) => (
     <form
       data-testid="prompt-input"
       onSubmit={(event) => {
         event.preventDefault();
-        onSubmit?.({ text: mockControllerState.value, files: [] }, event);
+        const result = onSubmit?.({ text: mockControllerState.value, files: [] }, event);
+        if (result instanceof Promise) {
+          result.catch(() => {});
+        }
       }}
     >
       {children}

@@ -64,8 +64,8 @@ import { useChatPlaceholder } from "@/lib/chat/chat-placeholder.hook";
 import { conversationStorageKeys } from "@/lib/chat/chat-utils";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useModelSelectorDisplay } from "@/lib/chat/use-model-selector-display.hook";
-import { useIsMobile } from "@/lib/hooks/use-mobile";
 import config from "@/lib/config/config";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { useOrganization } from "@/lib/organization.query";
 import { scanText } from "@/lib/sensitive-data";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
@@ -442,6 +442,8 @@ const PromptInputContent = ({
     outgoing: PromptInputMessage;
     e: FormEvent<HTMLFormElement>;
     options?: { skill: ChatSkillMetadata };
+    resolve: () => void;
+    reject: (reason?: unknown) => void;
   } | null>(null);
 
   const dispatchSubmit = useCallback(
@@ -481,9 +483,11 @@ const PromptInputContent = ({
       if (sensitiveDataDetectionEnabled && outgoing.text.length > 0) {
         const findings = scanText(outgoing.text);
         if (findings.length > 0) {
-          pendingSubmissionRef.current = { outgoing, e, options };
-          setSensitiveDataDialogOpen(true);
-          return;
+          if (pendingSubmissionRef.current !== null) return new Promise<void>(() => {});
+          return new Promise<void>((resolve, reject) => {
+            pendingSubmissionRef.current = { outgoing, e, options, resolve, reject };
+            setSensitiveDataDialogOpen(true);
+          });
         }
       }
 
@@ -504,12 +508,15 @@ const PromptInputContent = ({
     setSensitiveDataDialogOpen(false);
     if (pending) {
       dispatchSubmit(pending.outgoing, pending.e, pending.options);
+      pending.resolve();
     }
   }, [dispatchSubmit]);
 
   const handleSensitiveDataCancel = useCallback(() => {
+    const pending = pendingSubmissionRef.current;
     pendingSubmissionRef.current = null;
     setSensitiveDataDialogOpen(false);
+    pending?.reject();
   }, []);
 
   const handleFileError = useCallback(

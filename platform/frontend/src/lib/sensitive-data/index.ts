@@ -2,10 +2,7 @@ import { entropyDetector } from "./entropy-detector";
 import { regexDetector } from "./regex-detector";
 import type { Detector, Finding } from "./types";
 
-export type { Detector, DetectorContext, DetectorId, Finding } from "./types";
-export { detectorId } from "./types";
-export { regexDetector } from "./regex-detector";
-export { entropyDetector } from "./entropy-detector";
+export type { Detector, Finding } from "./types";
 
 export const defaultDetectors: Detector[] = [regexDetector, entropyDetector];
 

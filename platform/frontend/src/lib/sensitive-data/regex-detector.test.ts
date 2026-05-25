@@ -15,13 +15,28 @@ describe("regexDetector positive cases", () => {
     expect(labels(`token=${token}`)).toContain("github-token");
   });
 
+  it("detects a GitHub Actions token (gha_)", () => {
+    const token = "gha_" + "a".repeat(36);
+    expect(labels(`token=${token}`)).toContain("github-token");
+  });
+
+  it("detects a GitHub fine-grained PAT (github_pat_)", () => {
+    const token = "github_pat_" + "a".repeat(22) + "_" + "b".repeat(59);
+    expect(labels(`token=${token}`)).toContain("github-fine-grained-pat");
+  });
+
   it("detects an Anthropic key", () => {
     const key = "sk-ant-" + "a".repeat(40);
     expect(labels(`key: ${key}`)).toContain("anthropic-key");
   });
 
-  it("detects an OpenAI key", () => {
+  it("detects an OpenAI key (legacy format)", () => {
     const key = "sk-" + "A".repeat(40);
+    expect(labels(`key: ${key}`)).toContain("openai-key");
+  });
+
+  it("detects an OpenAI key (sk-proj- format)", () => {
+    const key = "sk-proj-" + "A".repeat(40);
     expect(labels(`key: ${key}`)).toContain("openai-key");
   });
 
@@ -69,8 +84,18 @@ describe("regexDetector negative cases", () => {
     expect(labels("my password is somewhere safe")).toEqual([]);
   });
 
+  it("does not flag password assignment with value shorter than 4 chars", () => {
+    expect(labels("password=abc")).toEqual([]);
+    expect(labels("password: x")).toEqual([]);
+  });
+
   it("does not flag short sk- prefix", () => {
     expect(labels("ask-me anything")).toEqual([]);
+  });
+
+  it("does not flag sk- embedded in a longer word (e.g. task-my-long-slug)", () => {
+    // "task-my-very-long-slug-name" contains "sk-my-very-long-slug-name" starting at index 2
+    expect(labels("task-my-very-long-slug-name-here-end")).toEqual([]);
   });
 });
 

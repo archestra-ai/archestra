@@ -7,9 +7,10 @@ interface RegexRule {
 
 const RULES: readonly RegexRule[] = [
   { internalLabel: "aws-access-key", pattern: /AKIA[0-9A-Z]{16}/g },
-  { internalLabel: "github-token", pattern: /gh[pousr]_[A-Za-z0-9]{36}/g },
+  { internalLabel: "github-token", pattern: /gh[apousr]_[A-Za-z0-9]{36}/g },
+  { internalLabel: "github-fine-grained-pat", pattern: /github_pat_[A-Za-z0-9_]{20,}/g },
   { internalLabel: "anthropic-key", pattern: /sk-ant-[A-Za-z0-9_-]{20,}/g },
-  { internalLabel: "openai-key", pattern: /sk-[A-Za-z0-9]{20,}/g },
+  { internalLabel: "openai-key", pattern: /(?<![A-Za-z0-9])sk-(?!ant-)[A-Za-z0-9_-]{20,}/g },
   { internalLabel: "slack-token", pattern: /xox[abpr]-[A-Za-z0-9-]{10,}/g },
   { internalLabel: "google-api-key", pattern: /AIza[0-9A-Za-z\-_]{35}/g },
   {
@@ -17,7 +18,7 @@ const RULES: readonly RegexRule[] = [
     pattern: /eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,
   },
   { internalLabel: "pem-private-key", pattern: /-----BEGIN [A-Z ]*PRIVATE KEY-----/g },
-  { internalLabel: "password-assignment", pattern: /password\s*[:=]\s*\S+/gi },
+  { internalLabel: "password-assignment", pattern: /\bpassword\s*[:=]\s*\S{4,}/gi },
 ];
 
 const REGEX_DETECTOR_ID = detectorId("regex");

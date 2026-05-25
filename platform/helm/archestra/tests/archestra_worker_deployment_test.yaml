@@ -116,6 +116,21 @@ tests:
             mountPath: /var/diagnostics
             readOnly: false
 
+  - it: worker receives code runtime environment variables when enabled
+    set:
+      archestra.codeRuntime.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_ENABLED
+            value: "true"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+            value: tcp://dagger-runtime.dagger.svc.cluster.local:1234
+
   - it: worker sets heap snapshot env var when diagnostics heap snapshots are enabled
     set:
       archestra.diagnostics.enabled: true

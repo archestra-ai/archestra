@@ -167,6 +167,35 @@ archestra:
   #         optional: true
   envFrom: []
 
+  # code execution runtime configuration.
+  # enables the archestra__run_python tool and points the backend at a separately
+  # deployed Dagger runtime. The Python execution image remains a backend default;
+  # override ARCHESTRA_CODE_RUNTIME_IMAGE through archestra.env only when required.
+  codeRuntime:
+    # enable or disable code execution runtime support.
+    enabled: false
+
+    # hard wall-clock limit per run, and the default when the caller omits one.
+    timeoutSeconds: 60
+
+    # maximum number of concurrent runs across all conversations per backend process.
+    maxConcurrent: 10
+
+    # stdout and stderr are each truncated to this many bytes.
+    maxOutputBytes: 65536
+
+    dagger:
+      # explicit Dagger runner host. Leave empty to use the in-cluster service below.
+      # must use tcp:// because production deployments should not require Kubernetes
+      # api pod lookup or Docker socket access from the application pod.
+      runnerHost: ""
+
+      service:
+        # internal ClusterIP service created by the dagger-runtime companion chart.
+        name: dagger-runtime
+        namespace: dagger
+        port: 1234
+
   # Additional volumes to mount into the platform and worker pods
   # Useful for mounting credential files such as a Vertex AI service account key
   # Example:

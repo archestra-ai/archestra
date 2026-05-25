@@ -14,6 +14,7 @@ export * from "./api-key";
 export * from "./audit-log";
 export * from "./autonomy-policies";
 export * from "./chat";
+export * from "./chat-active-run";
 export * from "./chatops";
 // chatops-channel-binding uses @/database (drizzle-zod) — import directly to avoid circular deps
 export * from "./common-llm-format";

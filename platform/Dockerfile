@@ -1,5 +1,5 @@
-# Build KinD and Docker CLI from source with a patched Go toolchain.
-# The Alpine packages/binaries have historically lagged on Go patch releases, so
+# build KinD, Docker CLI, and Dagger CLI from source with a patched Go toolchain.
+# the Alpine packages/binaries have historically lagged on Go patch releases, so
 # we compile these tools ourselves to pick up upstream fixes without local vendoring hacks.
 ARG GOLANG_IMAGE=golang:1.25.10-alpine@sha256:8d22e29d960bc50cd025d93d5b7c7d220b1ee9aa7a239b3c8f55a57e987e8d45
 ARG NODE_IMAGE=node:24-alpine3.23@sha256:7fddd9ddeae8196abf4a3ef2de34e11f7b1a722119f91f28ddf1e99dcafdf114
@@ -7,6 +7,8 @@ ARG KIND_VERSION=v0.31.0
 ARG KIND_COMMIT=a323333ff9efd8099f95a8a6b5c86c75a210d00f
 ARG DOCKER_CLI_VERSION=v29.3.0
 ARG DOCKER_CLI_COMMIT=5927d80c76b3ce5cf782be818922966e8a0d87a3
+ARG DAGGER_VERSION=v0.20.8
+ARG DAGGER_COMMIT=74bff7d10fd78dd6935c60c4514558598f216451
 
 FROM ${GOLANG_IMAGE} AS go-builder
 ARG TARGETARCH
@@ -14,11 +16,14 @@ ARG KIND_VERSION
 ARG KIND_COMMIT
 ARG DOCKER_CLI_VERSION
 ARG DOCKER_CLI_COMMIT
+ARG DAGGER_VERSION
+ARG DAGGER_COMMIT
 RUN if [ "$TARGETARCH" != "amd64" ] && [ "$TARGETARCH" != "arm64" ]; then \
         echo "ERROR: Unsupported architecture: $TARGETARCH. KinD is only available for amd64 and arm64."; \
         exit 1; \
     fi
 RUN apk add --no-cache git
+COPY docker/dagger-dockercompat /dagger-dockercompat
 RUN git clone --depth 1 --branch "${KIND_VERSION}" https://github.com/kubernetes-sigs/kind.git /kind && \
     test "$(git -C /kind rev-parse HEAD)" = "${KIND_COMMIT}" && \
     cd /kind && \
@@ -48,6 +53,31 @@ RUN git clone --depth 1 --branch "${DOCKER_CLI_VERSION}" https://github.com/dock
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor \
     -ldflags "-X github.com/docker/cli/cli/version.Version=${DOCKER_CLI_VERSION#v}" \
     -o /docker-binary ./cmd/docker
+RUN git clone --depth 1 --branch "${DAGGER_VERSION}" https://github.com/dagger/dagger.git /dagger && \
+    test "$(git -C /dagger rev-parse HEAD)" = "${DAGGER_COMMIT}" && \
+    cd /dagger && \
+    cp -R /dagger-dockercompat ./dockercompat && \
+    go mod edit -go=1.25.10 && \
+    # cve-2026-34040: replace Dagger's BuildKit Docker monolith imports with split Moby modules.
+    go mod edit -require=github.com/docker/docker@v29.3.1+incompatible && \
+    go mod edit -replace=github.com/docker/docker=./dockercompat && \
+    # cve-2026-46680: containerd type confusion fixed in >= 2.2.4
+    go get github.com/containerd/containerd/v2@v2.2.4 && \
+    # cve-2026-34986: go-jose uncaught exception fixed in >= 4.1.4
+    go get github.com/go-jose/go-jose/v4@v4.1.4 && \
+    # cve-2026-45022: go-git validation issue fixed in >= 5.19.0
+    go get github.com/go-git/go-git/v5@v5.19.0 && \
+    # cve-2026-44973: go-billy path traversal fixed in >= 5.9.0
+    go get github.com/go-git/go-billy/v5@v5.9.0 && \
+    # cve-2026-33814: x/net issue fixed in >= 0.53.0
+    go get golang.org/x/net@v0.54.0 && \
+    # cve-2026-46597: x/crypto issue fixed in >= 0.52.0; keep this after x/net.
+    go get golang.org/x/crypto@v0.52.0 && \
+    go get github.com/moby/go-archive@v0.2.0 github.com/moby/profiles/seccomp@v0.2.3 github.com/moby/sys/reexec@v0.1.0 github.com/moby/sys/user@v0.4.0 && \
+    go mod tidy && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
+    -ldflags "-X github.com/dagger/dagger/engine.Version=${DAGGER_VERSION} -X github.com/dagger/dagger/engine.Tag=${DAGGER_VERSION}" \
+    -o /dagger-binary ./cmd/dagger
 
 FROM ${NODE_IMAGE} AS base
 
@@ -212,6 +242,15 @@ RUN chmod +x /usr/local/bin/kind /usr/local/bin/docker
 #     wget -O /usr/local/bin/kind "${KIND_URL}" && \
 #     echo "${KIND_SHA256}  /usr/local/bin/kind" | sha256sum -c - && \
 #     chmod +x /usr/local/bin/kind
+
+# install the Dagger CLI. The @dagger.io/dagger SDK needs it to open a session
+# to the Dagger Engine; its npm postinstall download is blocked by
+# ignore-scripts, so the binary is pinned and built from source above.
+# keep DAGGER_VERSION in sync with @dagger.io/dagger in backend/package.json.
+COPY --from=go-builder /dagger-binary /usr/local/bin/dagger
+RUN chmod +x /usr/local/bin/dagger
+# point the SDK at the baked-in CLI so it never downloads one at runtime.
+ENV _EXPERIMENTAL_DAGGER_CLI_BIN=/usr/local/bin/dagger
 
 RUN apk add --no-cache supervisor && \
     # CVE-2026-24049: wheel 0.45.1 path traversal. Vendored inside py3-setuptools

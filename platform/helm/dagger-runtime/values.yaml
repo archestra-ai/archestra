@@ -1,0 +1,111 @@
+# stable default names keep the platform chart's default tcp:// runner host usable.
+fullnameOverride: dagger-runtime
+
+serviceAccount:
+  # create a tokenless service account for the privileged engine pod.
+  create: true
+  name: dagger-runtime
+  annotations: {}
+  automountServiceAccountToken: false
+
+service:
+  # internal-only Dagger TCP endpoint. Do not expose this with NodePort, ingress,
+  # or a public load balancer; Dagger's tcp:// transport is plaintext.
+  type: ClusterIP
+  port: 1234
+  annotations: {}
+
+networkPolicy:
+  # network policies require an enforcing CNI such as Cilium, Calico, or GKE Dataplane V2.
+  create: true
+
+  ingress:
+    # allow pods carrying these labels to reach Dagger. With no `namespace`,
+    # an entry matches such pods in ANY namespace, so the chart works out of
+    # the box wherever archestra-platform is installed. Production deployments
+    # should pin `namespace` to the archestra-platform release namespace.
+    allowedClients:
+      - podLabels:
+          app.kubernetes.io/part-of: archestra
+
+    # extra ingress rules appended verbatim under spec.ingress.
+    additionalRules: []
+
+  egress:
+    dns:
+      # default CoreDNS labels used by many Kubernetes distributions.
+      namespace: kube-system
+      podLabels:
+        k8s-app: kube-dns
+
+    # extra IPv4 CIDRs to block from the public-internet egress rule.
+    # IMPORTANT: set this to your cluster's Service and Pod CIDRs. Sandboxed
+    # code can otherwise reach in-cluster services whose ClusterIPs fall
+    # outside the RFC1918 ranges blocked by default (common on GKE and other
+    # managed clusters). Link-local and cloud-metadata ranges are already
+    # blocked.
+    additionalDeniedCidrs: []
+
+    # include IPv6 public egress with private/link-local ranges blocked.
+    allowIpv6: true
+
+    # extra egress rules appended verbatim under spec.egress.
+    # use this for private registries, proxies, or internal package mirrors.
+    additionalRules: []
+
+# values passed to the official Dagger Helm chart.
+dagger:
+  fullnameOverride: dagger-runtime
+
+  engine:
+    kind: StatefulSet
+    port: 1234
+
+    existingServiceAccount:
+      name: dagger-runtime
+
+    configJson: |
+      {
+        "logLevel": "info",
+        "security": {
+          "insecureRootCapabilities": false
+        },
+        "gc": {
+          "maxUsedSpace": "40GB",
+          "reservedSpace": "5GB",
+          "minFreeSpace": "20%"
+        }
+      }
+
+    resources:
+      requests:
+        cpu: "2"
+        memory: 8Gi
+      limits:
+        memory: 16Gi
+
+    statefulSet:
+      persistentVolumeClaim:
+        enabled: true
+        resources:
+          requests:
+            storage: 50Gi
+
+    hostPath:
+      dataVolume:
+        enabled: false
+      runVolume:
+        enabled: false
+
+    volumeMounts:
+      - name: run
+        mountPath: /run/dagger
+
+    volumes:
+      - name: run
+        emptyDir:
+          medium: Memory
+
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}

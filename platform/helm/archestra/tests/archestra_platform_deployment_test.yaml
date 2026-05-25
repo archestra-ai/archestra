@@ -444,6 +444,76 @@ tests:
             name: CUSTOM_VAR
             value: "custom-value"
 
+  - it: should not set code runtime environment variables by default
+    documentIndex: 1
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_ENABLED
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+
+  - it: should set code runtime environment variables when enabled
+    documentIndex: 1
+    set:
+      archestra.codeRuntime.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_ENABLED
+            value: "true"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+            value: tcp://dagger-runtime.dagger.svc.cluster.local:1234
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_TIMEOUT_SECONDS
+            value: "60"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_MAX_CONCURRENT
+            value: "10"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_MAX_OUTPUT_BYTES
+            value: "65536"
+
+  - it: should support custom code runtime Dagger runner host
+    documentIndex: 1
+    set:
+      archestra.codeRuntime.enabled: true
+      archestra.codeRuntime.dagger.runnerHost: tcp://dagger-runtime.custom.svc.cluster.local:1234
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+            value: tcp://dagger-runtime.custom.svc.cluster.local:1234
+
+  - it: should support custom code runtime Dagger service settings
+    documentIndex: 1
+    set:
+      archestra.codeRuntime.enabled: true
+      archestra.codeRuntime.dagger.service.name: dagger-engine
+      archestra.codeRuntime.dagger.service.namespace: code-runtime
+      archestra.codeRuntime.dagger.service.port: 2234
+      archestra.orchestrator.kubernetes.clusterDomain: corp.internal
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+            value: tcp://dagger-engine.code-runtime.svc.corp.internal:2234
+
   - it: should include ARCHESTRA_DATABASE_URL alongside custom env vars
     documentIndex: 1
     set:

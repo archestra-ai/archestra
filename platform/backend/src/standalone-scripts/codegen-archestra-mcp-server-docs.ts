@@ -30,6 +30,7 @@ enum ToolGroup {
   KnowledgeManagement = "Knowledge Management",
   Chat = "Chat",
   Meta = "Meta",
+  CodeExecution = "Code Execution",
   Skills = "Skills",
 }
 
@@ -45,7 +46,8 @@ const groupOrder: Record<ToolGroup, number> = {
   [ToolGroup.KnowledgeManagement]: 8,
   [ToolGroup.Chat]: 9,
   [ToolGroup.Meta]: 10,
-  [ToolGroup.Skills]: 11,
+  [ToolGroup.CodeExecution]: 11,
+  [ToolGroup.Skills]: 12,
 };
 
 /**
@@ -129,6 +131,7 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   search_tools: ToolGroup.Meta,
   run_tool: ToolGroup.Meta,
 
+  run_python: ToolGroup.CodeExecution,
   list_skills: ToolGroup.Skills,
   activate_skill: ToolGroup.Skills,
   read_skill_file: ToolGroup.Skills,

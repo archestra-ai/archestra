@@ -1,0 +1,80 @@
+suite: dagger runtime
+templates:
+  - serviceaccount.yaml
+  - service.yaml
+  - networkpolicy.yaml
+tests:
+  - it: creates a tokenless service account
+    template: serviceaccount.yaml
+    asserts:
+      - equal:
+          path: metadata.name
+          value: dagger-runtime
+      - equal:
+          path: automountServiceAccountToken
+          value: false
+
+  - it: exposes Dagger through an internal ClusterIP service
+    template: service.yaml
+    asserts:
+      - equal:
+          path: spec.type
+          value: ClusterIP
+      - equal:
+          path: spec.ports[0].port
+          value: 1234
+      - equal:
+          path: spec.ports[0].targetPort
+          value: dagger
+      - equal:
+          path: spec.selector.name
+          value: dagger-runtime-engine
+
+  - it: restricts ingress to Archestra clients in any namespace by default
+    template: networkpolicy.yaml
+    asserts:
+      - equal:
+          path: spec.policyTypes
+          value:
+            - Ingress
+            - Egress
+      - equal:
+          path: spec.ingress[0].from[0].namespaceSelector
+          value: {}
+      - equal:
+          path: spec.ingress[0].from[0].podSelector.matchLabels["app.kubernetes.io/part-of"]
+          value: archestra
+      - equal:
+          path: spec.ingress[0].ports[0].port
+          value: 1234
+
+  - it: pins ingress to a namespace when one is configured
+    template: networkpolicy.yaml
+    set:
+      networkPolicy.ingress.allowedClients:
+        - namespace: archestra-prod
+          podLabels:
+            app.kubernetes.io/part-of: archestra
+    asserts:
+      - equal:
+          path: spec.ingress[0].from[0].namespaceSelector.matchLabels["kubernetes.io/metadata.name"]
+          value: archestra-prod
+
+  - it: restricts egress to DNS and public HTTPS by default
+    template: networkpolicy.yaml
+    asserts:
+      - equal:
+          path: spec.egress[0].to[0].namespaceSelector.matchLabels["kubernetes.io/metadata.name"]
+          value: kube-system
+      - equal:
+          path: spec.egress[0].to[0].podSelector.matchLabels["k8s-app"]
+          value: kube-dns
+      - equal:
+          path: spec.egress[0].ports[0].port
+          value: 53
+      - equal:
+          path: spec.egress[1].ports[0].port
+          value: 443
+      - contains:
+          path: spec.egress[1].to[0].ipBlock.except
+          content: 169.254.0.0/16

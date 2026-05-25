@@ -124,6 +124,28 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
 - name: ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DOMAIN
   value: {{ .Values.archestra.orchestrator.kubernetes.clusterDomain | quote }}
 {{- end }}
+{{- if .Values.archestra.codeRuntime.enabled }}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_CODE_RUNTIME_ENABLED") }}
+- name: ARCHESTRA_CODE_RUNTIME_ENABLED
+  value: "true"
+{{- end }}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST") }}
+- name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+  value: {{ include "archestra-platform.codeRuntimeDaggerRunnerHost" . | quote }}
+{{- end }}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_CODE_RUNTIME_TIMEOUT_SECONDS") }}
+- name: ARCHESTRA_CODE_RUNTIME_TIMEOUT_SECONDS
+  value: {{ .Values.archestra.codeRuntime.timeoutSeconds | quote }}
+{{- end }}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_CODE_RUNTIME_MAX_CONCURRENT") }}
+- name: ARCHESTRA_CODE_RUNTIME_MAX_CONCURRENT
+  value: {{ .Values.archestra.codeRuntime.maxConcurrent | quote }}
+{{- end }}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_CODE_RUNTIME_MAX_OUTPUT_BYTES") }}
+- name: ARCHESTRA_CODE_RUNTIME_MAX_OUTPUT_BYTES
+  value: {{ .Values.archestra.codeRuntime.maxOutputBytes | quote }}
+{{- end }}
+{{- end }}
 {{- if .Values.archestra.diagnostics.enabled }}
 - name: ARCHESTRA_NODE_DIAGNOSTIC_DIR
   value: "/var/diagnostics"
@@ -160,6 +182,20 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
   valueFrom:
     {{- toYaml .valueFrom | nindent 4 }}
 {{- end }}
+{{- end }}
+
+{{/*
+dagger runner host for the code execution runtime.
+*/}}
+{{- define "archestra-platform.codeRuntimeDaggerRunnerHost" -}}
+{{- $runnerHost := .Values.archestra.codeRuntime.dagger.runnerHost -}}
+{{- if $runnerHost -}}
+{{- $runnerHost -}}
+{{- else -}}
+{{- $service := .Values.archestra.codeRuntime.dagger.service -}}
+{{- $clusterDomain := default "cluster.local" .Values.archestra.orchestrator.kubernetes.clusterDomain -}}
+{{- printf "tcp://%s.%s.svc.%s:%v" $service.name $service.namespace $clusterDomain $service.port -}}
+{{- end -}}
 {{- end }}
 
 {{/*

@@ -26,12 +26,15 @@
     "check:ci": "turbo check:ci",
     "license-check": "tsx standalone-scripts/license-check.ts",
     "codegen": "CODEGEN=true turbo codegen && python3 dev/grafana/generate-pg-dashboard-variants.py",
+    "cleanup:dev:caches": "tsx standalone-scripts/cleanup-dev-caches.ts",
     "db:generate": "turbo db:generate --ui=tui",
     "db:migrate": "turbo db:migrate",
     "db:push": "turbo db:push",
     "db:studio": "turbo db:studio",
     "db:seed:mock-data": "turbo db:seed:mock-data",
-    "cleanup:dev:k8s": "kubectl delete namespace archestra-dev"
+    "cleanup:dev:k8s": "kubectl delete namespace archestra-dev",
+    "dev:stack:up": "scripts/dev-stack.sh up",
+    "dev:stack:down": "scripts/dev-stack.sh down"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.6",
@@ -84,7 +87,9 @@
       "ip-address": ">=10.1.1",
       "brace-expansion": ">=5.0.5",
       "smol-toml": ">=1.6.1",
-      "yaml": ">=2.8.3"
+      "yaml": ">=2.8.3",
+      "@opentelemetry/exporter-prometheus": "0.217.0",
+      "@opentelemetry/sdk-node": "0.217.0"
     },
     "patchedDependencies": {
       "ai@6.0.90": "patches/ai@6.0.90.patch"

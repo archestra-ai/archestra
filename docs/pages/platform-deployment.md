@@ -1021,6 +1021,28 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Options: `anthropic`, `openai`, `gemini`
   - Used when no profile-specific provider is configured
 
+Active chat run wake-ups use Postgres `LISTEN/NOTIFY` by default. This gives fast reconnect replay and Stop handling without waiting for the fallback poll interval. Poll intervals still exist in this mode as a safety net, so missed notifications or broken listener connections do not block progress forever.
+
+Enable polling compatibility only when your database endpoint cannot keep session-stable listener connections, such as PgBouncer transaction pooling or some managed/serverless database proxies. In that mode, active run replay and Stop handling rely on periodic database reads. Lower intervals react faster but create more reads; higher intervals reduce database load but make replay and Stop slower.
+
+- **`ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS`** - Fallback/poll interval for replaying active chat runs after reconnect.
+  - Default: `500`
+  - Load model: roughly one replay-check read per reconnecting client per interval while waiting for new events
+
+- **`ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS`** - Interval for checking whether a running chat stream has been explicitly stopped.
+  - With Postgres `LISTEN/NOTIFY`, Stop requests normally wake streams immediately; this interval is only a safety fallback if notification wake-up is missed
+  - With polling compatibility enabled, this is the primary polling interval
+  - Default: `30000` with Postgres `LISTEN/NOTIFY`, `500` when polling compatibility is enabled
+  - Load model: roughly one stop-check read per running chat stream per interval
+
+- **`ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED`** - Uses polling only instead of the default Postgres `LISTEN/NOTIFY` wake-ups for active chat run replay and stop detection.
+  - Default: `false`
+  - Keep disabled when direct Postgres or session pooling is available
+
+- **`ARCHESTRA_CHAT_ACTIVE_RUN_NOTIFY_DATABASE_URL`** - Optional Postgres connection string for active chat run `LISTEN/NOTIFY`.
+  - Default: Uses `ARCHESTRA_DATABASE_URL`
+  - Set this when regular database traffic goes through PgBouncer transaction pooling but notifications can use a direct or session-pooled connection
+
 ### MCP Apps Sandbox
 
 MCP Apps run inside sandboxed iframes with cross-origin isolation, CSP enforcement, and a double-iframe architecture. The sandbox proxy is served from the main backend under `/_sandbox/` — no separate port or service is needed.
@@ -1254,6 +1276,12 @@ The audit log records administrative actions (mutations via `/api/*` and auth ev
   - Set to a positive integer (e.g. `90`, `180`) to opt in to automatic purging after that many days.
   - Must be a non-negative integer; invalid values fall back to the default (disabled).
   - When enabled, the sweep runs once every 24 hours as a background task.
+### Maintenance Mode
+
+- **`ARCHESTRA_MAINTENANCE_MODE_MESSAGE`** - Enables maintenance mode and displays a custom message to all users blocking access to the platform.
+  - Default: Not set (maintenance mode disabled)
+  - When set, all users are shown a full-screen maintenance overlay with the message instead of the normal application interface.
+  - Example: `ARCHESTRA_MAINTENANCE_MODE_MESSAGE="We are performing scheduled maintenance. Please check back in 30 minutes."`
 
 ### Enterprise Licensing
 

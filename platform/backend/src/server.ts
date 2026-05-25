@@ -51,6 +51,7 @@ import {
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { fastifyAuthPlugin } from "@/auth";
 import { cacheManager } from "@/cache-manager";
+import { codeRuntimeService } from "@/code-runtime/code-runtime-service";
 import config, { shouldRunWebServer, shouldRunWorker } from "@/config";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import { seedRequiredStartingData } from "@/database/seed";
@@ -886,6 +887,11 @@ const startWebServer = async () => {
 
     startMcpServerRuntime(fastify);
 
+    // Start the sandboxed code runtime in the background (non-blocking pre-warm).
+    codeRuntimeService.init().catch((error) => {
+      logger.error({ err: error }, "Failed to initialize code runtime");
+    });
+
     // Initialize incoming email provider (if configured)
     // This handles auto-setup of webhook subscription if ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL is set
     await initializeEmailProvider();
@@ -1017,6 +1023,9 @@ const startWebServer = async () => {
         // Stop cache manager's background cleanup
         cacheManager.shutdown();
 
+        // Stop accepting new code-runtime runs
+        await codeRuntimeService.shutdown();
+
         // Stop task queue worker (waits for in-flight tasks to drain)
         if (shouldRunWorker) {
           await taskQueueService.stopWorker();
@@ -1108,6 +1117,11 @@ const startWorker = async () => {
     await taskQueueService.seedPeriodicTasks();
     taskQueueService.startWorker();
 
+    // Pre-warm the code runtime so scheduled agents avoid a cold first run.
+    codeRuntimeService.init().catch((error) => {
+      logger.error({ err: error }, "Failed to initialize code runtime");
+    });
+
     // Worker server for Kubernetes probes, Prometheus scraping,
     // and LLM Proxy / MCP Gateway routes for A2A and scheduled task execution.
     // These routes handle their own auth (Bearer tokens / API keys) and are
@@ -1158,6 +1172,7 @@ const startWorker = async () => {
       try {
         await healthServer.close();
         cacheManager.shutdown();
+        await codeRuntimeService.shutdown();
         await taskQueueService.stopWorker();
         clearTimeout(forceExitTimeout);
         process.exit(0);

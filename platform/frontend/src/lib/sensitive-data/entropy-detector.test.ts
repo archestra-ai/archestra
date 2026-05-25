@@ -126,4 +126,40 @@ describe("entropyDetector", () => {
     expect(regexFindings.length).toBeGreaterThan(0);
     expect(scan(text, regexFindings)).toEqual([]);
   });
+
+  it("flags short random-looking tokens (~21 chars) that absolute thresholds would miss", () => {
+    // 21 chars caps max entropy at log2(21) ≈ 4.39, so a fixed 4.5 threshold
+    // could never fire. ratio-based threshold (0.85) handles this length.
+    const token = "O1W7NxAA5bi7PWmQUNsks";
+    const found = scan(`leaked: ${token}`);
+    expect(found).toHaveLength(1);
+    expect(found[0].internalLabel).toBe("high-entropy-token");
+  });
+
+  it("flags tokens containing punctuation that would split a stricter candidate regex", () => {
+    // %, # are not in [A-Za-z0-9+/=_-]; without the \S{20,} candidate the
+    // string would be split into sub-20 fragments and never scored.
+    const token = "jmqK34hrlH6%ZQ#7D2HIm";
+    const found = scan(token);
+    expect(found).toHaveLength(1);
+    expect(found[0].internalLabel).toBe("high-entropy-token");
+  });
+
+  it("skips URLs even when they contain high-entropy path segments", () => {
+    // doc IDs in URLs look random; flagging them is annoying since users
+    // routinely paste links. regex layer still catches keys-with-prefix in URLs.
+    const url =
+      "https://docs.google.com/document/d/1aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789abcdef/edit";
+    expect(scan(url)).toEqual([]);
+  });
+
+  it("does not flag long natural-language compound words", () => {
+    // exotic place names / Finnish / camelCase identifiers reach ~0.7-0.82
+    // ratio — under the 0.85 threshold by a comfortable margin.
+    const text =
+      "Llanfairpwllgwyngyllgogerychwyrndrobwllllantysiliogogogoch " +
+      "Lentokonesuihkuturbiinimoottoriapumekaanikkoaliupseerioppilas " +
+      "getUserByEmailAndOrganizationIdFromDatabase";
+    expect(scan(text)).toEqual([]);
+  });
 });

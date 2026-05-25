@@ -8,11 +8,19 @@ import {
 const ENTROPY_DETECTOR_ID = detectorId("entropy");
 const INTERNAL_LABEL = "high-entropy-token";
 
-const CANDIDATE_PATTERN = /[A-Za-z0-9+/=_-]{20,}/g;
+const CANDIDATE_PATTERN = /\S{20,}/g;
 const HEX_ONLY_PATTERN = /^[0-9a-fA-F]+$/;
+// matches RFC 3986 scheme followed by "://" — skip these to avoid false
+// positives on URLs (e.g. Google Docs URLs contain high-entropy document IDs).
+const URL_LIKE_PATTERN = /^[a-z][a-z0-9+.-]*:\/\//i;
 
-const BASE64_ENTROPY_THRESHOLD = 4.5;
-const HEX_ENTROPY_THRESHOLD = 3.5;
+// fraction of the theoretical max entropy a token must reach. an absolute
+// threshold (e.g. 4.5 bits) is unreachable for shorter random tokens because
+// max entropy is capped by log2(min(len, alphabet)). a ratio works uniformly
+// across lengths.
+const ENTROPY_RATIO_THRESHOLD = 0.85;
+const HEX_ALPHABET_SIZE = 16;
+const NON_HEX_ALPHABET_SIZE = 64;
 
 export function shannonEntropy(s: string): number {
   if (s.length === 0) return 0;
@@ -52,19 +60,17 @@ export const entropyDetector: Detector = {
       const startIndex = match.index;
       const endIndex = startIndex + token.length;
 
-      if (!overlapsExisting(startIndex, endIndex, existing)) {
-        const threshold = HEX_ONLY_PATTERN.test(token)
-          ? HEX_ENTROPY_THRESHOLD
-          : BASE64_ENTROPY_THRESHOLD;
-
-        if (shannonEntropy(token) >= threshold) {
-          findings.push({
-            detectorId: ENTROPY_DETECTOR_ID,
-            internalLabel: INTERNAL_LABEL,
-            startIndex,
-            endIndex,
-          });
-        }
+      if (
+        !URL_LIKE_PATTERN.test(token) &&
+        !overlapsExisting(startIndex, endIndex, existing) &&
+        isHighEntropy(token)
+      ) {
+        findings.push({
+          detectorId: ENTROPY_DETECTOR_ID,
+          internalLabel: INTERNAL_LABEL,
+          startIndex,
+          endIndex,
+        });
       }
       match = pattern.exec(text);
     }
@@ -72,6 +78,15 @@ export const entropyDetector: Detector = {
     return findings;
   },
 };
+
+function isHighEntropy(token: string): boolean {
+  const alphabetSize = HEX_ONLY_PATTERN.test(token)
+    ? HEX_ALPHABET_SIZE
+    : NON_HEX_ALPHABET_SIZE;
+  const maxEntropy = Math.log2(Math.min(token.length, alphabetSize));
+  if (maxEntropy === 0) return false;
+  return shannonEntropy(token) / maxEntropy >= ENTROPY_RATIO_THRESHOLD;
+}
 
 function overlapsExisting(
   start: number,

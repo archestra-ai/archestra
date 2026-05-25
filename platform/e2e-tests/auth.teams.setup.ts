@@ -29,7 +29,9 @@ function sleep(ms: number): Promise<void> {
  */
 async function waitForBackendReady(request: APIRequestContext): Promise<void> {
   const start = Date.now();
-  const timeoutMs = 60_000;
+  // Capped well under the project's 60s per-test timeout so the rest of
+  // the setup (signOut, signIn, teams creation, assignments) keeps headroom.
+  const timeoutMs = 30_000;
   let delay = 500;
   let lastError: string | null = null;
   while (Date.now() - start < timeoutMs) {

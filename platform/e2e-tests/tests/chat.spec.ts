@@ -197,7 +197,9 @@ const testConfigs: ChatProviderTestConfig[] = [
 // Test Suite
 // =============================================================================
 
-const skippedProviders = new Set<string>();
+// cerebras: model selector intermittently never renders in CI (15s timeout).
+// Tracked alongside MQ flakiness from https://github.com/archestra-ai/archestra/actions/runs/26282803981.
+const skippedProviders = new Set<string>(["cerebras"]);
 
 for (const config of testConfigs) {
   test.describe(`Chat-UI-${config.providerName}`, () => {

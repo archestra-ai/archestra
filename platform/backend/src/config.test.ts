@@ -7,10 +7,11 @@ import {
   expect,
   test,
 } from "@/test";
-import {
+import config, {
   getAnalyticsConfig,
   getCorsOrigins,
   getDatabaseUrl,
+  getMCPGatewayOauthAllowedPublicHosts,
   getOtelExporterOtlpEndpoint,
   getOtelExporterOtlpLogEndpoint,
   getOtlpAuthHeaders,
@@ -1261,5 +1262,97 @@ describe("parseTrustProxy", () => {
 
   test("should filter empty entries from extra commas", () => {
     expect(parseTrustProxy("127.0.0.1,,10.0.0.1")).toBe("127.0.0.1,10.0.0.1");
+  });
+});
+
+describe("getMCPGatewayOauthAllowedPublicHosts", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    delete process.env.ARCHESTRA_API_BASE_URL;
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  // ARCHESTRA_FRONTEND_URL is captured at module load (config.frontendBaseUrl),
+  // so it can't be mutated per-test. We assert the function pulls that captured
+  // value through, and exercise the ARCHESTRA_API_BASE_URL path
+  // (which is read fresh on every call) for the rest of the behavior.
+
+  test("always includes the frontendBaseUrl host", () => {
+    const hosts = getMCPGatewayOauthAllowedPublicHosts();
+    expect(hosts.size).toBeGreaterThan(0);
+    expect(hosts.has(new URL(config.frontendBaseUrl).host.toLowerCase())).toBe(
+      true,
+    );
+  });
+
+  test("returns only the frontend host when ARCHESTRA_API_BASE_URL is unset", () => {
+    const expected = new URL(config.frontendBaseUrl).host.toLowerCase();
+    expect(getMCPGatewayOauthAllowedPublicHosts()).toEqual(new Set([expected]));
+  });
+
+  test("includes a single ARCHESTRA_API_BASE_URL host", () => {
+    process.env.ARCHESTRA_API_BASE_URL = "https://api.example.com";
+    expect(getMCPGatewayOauthAllowedPublicHosts().has("api.example.com")).toBe(
+      true,
+    );
+  });
+
+  test("splits comma-separated ARCHESTRA_API_BASE_URL", () => {
+    process.env.ARCHESTRA_API_BASE_URL =
+      "https://api.example.com,https://internal.svc:9000";
+    const hosts = getMCPGatewayOauthAllowedPublicHosts();
+    expect(hosts.has("api.example.com")).toBe(true);
+    expect(hosts.has("internal.svc:9000")).toBe(true);
+  });
+
+  test("strips default ports (80 for http, 443 for https)", () => {
+    process.env.ARCHESTRA_API_BASE_URL =
+      "https://api.example.com:443,http://other.example.com:80";
+    const hosts = getMCPGatewayOauthAllowedPublicHosts();
+    expect(hosts.has("api.example.com")).toBe(true);
+    expect(hosts.has("other.example.com")).toBe(true);
+  });
+
+  test("keeps explicit non-default ports", () => {
+    process.env.ARCHESTRA_API_BASE_URL =
+      "http://something.example:9000,https://api.example.com:8443";
+    const hosts = getMCPGatewayOauthAllowedPublicHosts();
+    expect(hosts.has("something.example:9000")).toBe(true);
+    expect(hosts.has("api.example.com:8443")).toBe(true);
+  });
+
+  test("lowercases hostnames", () => {
+    process.env.ARCHESTRA_API_BASE_URL = "https://Api.Example.COM";
+    expect(getMCPGatewayOauthAllowedPublicHosts().has("api.example.com")).toBe(
+      true,
+    );
+  });
+
+  test("trims whitespace around comma-separated URLs", () => {
+    process.env.ARCHESTRA_API_BASE_URL =
+      "  https://api.example.com , https://internal.svc:9000  ";
+    const hosts = getMCPGatewayOauthAllowedPublicHosts();
+    expect(hosts.has("api.example.com")).toBe(true);
+    expect(hosts.has("internal.svc:9000")).toBe(true);
+  });
+
+  test("ignores empty entries from extra commas", () => {
+    process.env.ARCHESTRA_API_BASE_URL =
+      "https://api.example.com,,https://internal.svc:9000";
+    const hosts = getMCPGatewayOauthAllowedPublicHosts();
+    expect(hosts.has("api.example.com")).toBe(true);
+    expect(hosts.has("internal.svc:9000")).toBe(true);
+  });
+
+  test("ignores malformed URLs without failing", () => {
+    process.env.ARCHESTRA_API_BASE_URL = "not-a-url,https://api.example.com";
+    expect(getMCPGatewayOauthAllowedPublicHosts().has("api.example.com")).toBe(
+      true,
+    );
   });
 });

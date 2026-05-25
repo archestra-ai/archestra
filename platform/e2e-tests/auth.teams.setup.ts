@@ -39,7 +39,7 @@ async function signInUser(
           Origin: UI_BASE_URL,
         },
       }),
-    { retryStatuses: [429] },
+    { retryStatuses: [429, 500, 502, 503, 504] },
   );
 
   return response.ok();

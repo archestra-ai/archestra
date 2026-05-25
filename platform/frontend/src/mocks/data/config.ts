@@ -35,6 +35,7 @@ export function makeConfig(
       virtualKeyDefaultExpirationSeconds: 3600,
       mcpSandboxDomain: null,
       ...overrides.features,
+      maintenanceMode: overrides.features?.maintenanceMode ?? null,
     },
     providerBaseUrls: overrides.providerBaseUrls ?? {},
   };
@@ -55,6 +56,7 @@ export function makePublicConfig(
       posthog: { key: "", host: "" },
     },
     ...overrides,
+    maintenanceMode: overrides.maintenanceMode ?? null,
   };
 }
 

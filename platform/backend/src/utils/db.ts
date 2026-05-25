@@ -38,3 +38,32 @@ export function isUniqueConstraintError(
 
   return false;
 }
+
+/**
+ * Check if an error (or its cause) is a PostgreSQL foreign-key constraint
+ * violation. Drizzle wraps database errors, so the cause chain is walked.
+ */
+export function isForeignKeyConstraintError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const errorCode = (error as { code?: string }).code;
+  const errorMessage = error.message.toLowerCase();
+
+  const isForeignKeyViolation =
+    errorCode === "23503" || // PostgreSQL foreign_key_violation error code
+    errorMessage.includes("foreign key constraint") ||
+    errorMessage.includes("foreign_key_violation");
+
+  if (isForeignKeyViolation) {
+    return true;
+  }
+
+  const cause = (error as { cause?: unknown }).cause;
+  if (cause) {
+    return isForeignKeyConstraintError(cause);
+  }
+
+  return false;
+}

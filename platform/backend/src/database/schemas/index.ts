@@ -68,6 +68,7 @@ export { default as scheduleTriggersTable } from "./schedule-trigger";
 export { default as scheduleTriggerRunsTable } from "./schedule-trigger-run";
 export { default as secretsTable } from "./secret";
 export { default as sessionsTable } from "./session";
+export { default as siteNotificationsTable } from "./site-notification";
 export { default as skillsTable } from "./skill";
 export { default as skillFilesTable } from "./skill-file";
 export { default as skillTeamsTable } from "./skill-team";

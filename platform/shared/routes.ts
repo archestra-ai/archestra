@@ -476,6 +476,13 @@ export const RouteId = {
   // Invitation Routes
   CheckInvitation: "checkInvitation",
 
+  // Site Notification Routes
+  GetSiteNotification: "getSiteNotification",
+  GetSiteNotificationSettings: "getSiteNotificationSettings",
+  CreateSiteNotification: "createSiteNotification",
+  UpdateSiteNotification: "updateSiteNotification",
+  DeleteSiteNotification: "deleteSiteNotification",
+
   // Agent Skill Routes
   GetSkills: "getSkills",
   CreateSkill: "createSkill",

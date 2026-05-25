@@ -1,7 +1,7 @@
 Steps:
 1) Open the docs file you asked to edit.
 2) Use playwright MCP to navigate to the specific part of the software described in this file.
-3) Use playwright MCP to walk around and see other places, proimitives this functianality is related to.
+3) Use playwright MCP to walk around and see other places, primitives this functionality is related to.
 4) Document.
 
 Screenshots:

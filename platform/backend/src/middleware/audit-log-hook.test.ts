@@ -891,6 +891,20 @@ describe("registerAuditLogHook", () => {
       expect(rows[0].resourceType).toBe("agent");
       expect(rows[0].resourceId).toBe(agentId);
     });
+
+    test("POST to an unregistered child route suppresses parent config walk-up", async () => {
+      const thingId = KNOWN_RESOURCE_ID;
+      await app.inject({
+        method: "POST",
+        url: `/api/things/${thingId}/assign-tools`,
+      });
+      await settle();
+
+      const rows = await getRows();
+      expect(rows).toHaveLength(1);
+      expect(rows[0].resourceType).toBeNull(); // walk-up suppressed for POST
+      expect(rows[0].action).toBe("unknown.created");
+    });
   });
 
   describe("denylist — GitHub read-only POST endpoints", () => {
@@ -902,6 +916,26 @@ describe("registerAuditLogHook", () => {
 
     test("POST /api/skills/github/preview writes zero rows", async () => {
       await app.inject({ method: "POST", url: "/api/skills/github/preview" });
+      await settle();
+      expect(await getRows()).toHaveLength(0);
+    });
+  });
+
+  describe("denylist — high-volume chat surface sub-routes", () => {
+    test("POST /api/chat stream endpoint writes zero rows", async () => {
+      await app.inject({ method: "POST", url: "/api/chat" });
+      await settle();
+      expect(await getRows()).toHaveLength(0);
+    });
+
+    test("POST /api/chat/conversations writes zero rows", async () => {
+      await app.inject({ method: "POST", url: "/api/chat/conversations" });
+      await settle();
+      expect(await getRows()).toHaveLength(0);
+    });
+
+    test("DELETE /api/chat/messages/123 writes zero rows", async () => {
+      await app.inject({ method: "DELETE", url: "/api/chat/messages/123" });
       await settle();
       expect(await getRows()).toHaveLength(0);
     });

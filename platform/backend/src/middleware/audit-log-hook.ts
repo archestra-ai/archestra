@@ -11,8 +11,14 @@ import {
 
 function resolveEffectiveCfg(
   routePattern: string | undefined,
+  method?: string,
 ): AuditableRouteConfig | undefined {
-  return resolveAuditableRouteConfig(routePattern)?.cfg;
+  const resolved = resolveAuditableRouteConfig(routePattern);
+  if (!resolved) return undefined;
+  // If the config was resolved via walk-up, and the request is a POST,
+  // discard it to prevent unregistered child POSTs from inheriting parent create semantics.
+  if (resolved.viaWalkUp && method === "POST") return undefined;
+  return resolved.cfg;
 }
 
 export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
@@ -23,7 +29,7 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
     request.auditOccurredAt = new Date();
 
     const routePattern = request.routeOptions.url;
-    const cfg = resolveEffectiveCfg(routePattern);
+    const cfg = resolveEffectiveCfg(routePattern, request.method);
     if (!cfg?.fetchById) return;
 
     const id = await resolveAuditedResourceId(request, cfg);
@@ -44,7 +50,7 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
       return payload;
 
     const routePattern = request.routeOptions.url;
-    const cfg = resolveEffectiveCfg(routePattern);
+    const cfg = resolveEffectiveCfg(routePattern, request.method);
     if (!cfg?.fetchById) return payload;
 
     // Skip oversized payloads (e.g. file upload responses) — the `id` we
@@ -70,7 +76,7 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
 
     // 4xx/5xx mutations are now recorded — outcome column carries the signal.
     const routePattern = request.routeOptions.url;
-    const cfg = resolveEffectiveCfg(routePattern);
+    const cfg = resolveEffectiveCfg(routePattern, request.method);
     const outcome = deriveOutcome(reply.statusCode);
     const action = resolveActionName(cfg, request.method);
 
@@ -214,6 +220,8 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   // Prefix would also silence /api/chatops/* (channel bindings, Slack/Teams
   // config, discovery refresh) which are explicitly registered for audit.
   { kind: "exact", value: "/api/chat" },
+  // Prefix match to block high-volume chat surface sub-routes like conversations/messages.
+  { kind: "prefix", value: "/api/chat/" },
   { kind: "prefix", value: "/api/browser-stream/" },
   { kind: "prefix", value: "/api/secrets/check-connectivity" },
   { kind: "prefix", value: "/api/members/default-model" },

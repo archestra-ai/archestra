@@ -79257,6 +79257,9 @@
                         "maintenanceMode": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "chatSecretScanEnabled": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -79277,7 +79280,8 @@
                         "ngrokDomain",
                         "virtualKeyDefaultExpirationSeconds",
                         "mcpSandboxDomain",
-                        "maintenanceMode"
+                        "maintenanceMode",
+                        "chatSecretScanEnabled"
                       ],
                       "additionalProperties": false
                     },

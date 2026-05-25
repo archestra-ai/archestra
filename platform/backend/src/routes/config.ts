@@ -86,6 +86,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               virtualKeyDefaultExpirationSeconds: z.number(),
               mcpSandboxDomain: z.string().nullable(),
               maintenanceMode: z.string().nullable(),
+              chatSecretScanEnabled: z.boolean(),
             }),
             providerBaseUrls: z.record(
               SupportedProvidersSchema,
@@ -128,6 +129,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
             config.llmProxy.virtualKeyDefaultExpirationSeconds,
           mcpSandboxDomain: config.mcpSandbox.domain,
           maintenanceMode: config.maintenanceMode,
+          chatSecretScanEnabled: config.chat.secretScanEnabled,
         },
         providerBaseUrls: {
           openai: config.llm.openai.baseUrl || null,

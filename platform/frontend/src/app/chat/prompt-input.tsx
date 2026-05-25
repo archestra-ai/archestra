@@ -64,7 +64,7 @@ import { useChatPlaceholder } from "@/lib/chat/chat-placeholder.hook";
 import { conversationStorageKeys } from "@/lib/chat/chat-utils";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useModelSelectorDisplay } from "@/lib/chat/use-model-selector-display.hook";
-import config from "@/lib/config/config";
+import { useFeature } from "@/lib/config/config.query";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { useOrganization } from "@/lib/organization.query";
 import { scanText } from "@/lib/sensitive-data";
@@ -437,7 +437,7 @@ const PromptInputContent = ({
   );
 
   const sensitiveDataDetectionEnabled =
-    config.chat.sensitiveDataDetectionEnabled;
+    useFeature("chatSecretScanEnabled") ?? false;
   const [sensitiveDataDialogOpen, setSensitiveDataDialogOpen] = useState(false);
   const pendingSubmissionRef = useRef<{
     outgoing: PromptInputMessage;

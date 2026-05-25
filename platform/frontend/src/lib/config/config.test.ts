@@ -5,7 +5,7 @@ vi.mock("next-runtime-env", () => ({
   env: vi.fn((key: string) => process.env[key]),
 }));
 
-import config, {
+import {
   getBackendBaseUrl,
   getExternalProxyUrls,
   getWebSocketUrl,
@@ -333,42 +333,5 @@ describe("getWebSocketUrl", () => {
 
       expect(result).toBe("ws://localhost:9000/ws");
     });
-  });
-});
-
-describe("config.chat.sensitiveDataDetectionEnabled", () => {
-  const originalEnv = process.env;
-
-  beforeEach(() => {
-    process.env = { ...originalEnv };
-    vi.clearAllMocks();
-  });
-
-  afterEach(() => {
-    process.env = originalEnv;
-  });
-
-  it("returns false when env var is missing", () => {
-    delete process.env
-      .NEXT_PUBLIC_ARCHESTRA_CHAT_SENSITIVE_DATA_DETECTION_ENABLED;
-    expect(config.chat.sensitiveDataDetectionEnabled).toBe(false);
-  });
-
-  it("returns true when env var is 'true'", () => {
-    process.env.NEXT_PUBLIC_ARCHESTRA_CHAT_SENSITIVE_DATA_DETECTION_ENABLED =
-      "true";
-    expect(config.chat.sensitiveDataDetectionEnabled).toBe(true);
-  });
-
-  it("returns false when env var is 'false'", () => {
-    process.env.NEXT_PUBLIC_ARCHESTRA_CHAT_SENSITIVE_DATA_DETECTION_ENABLED =
-      "false";
-    expect(config.chat.sensitiveDataDetectionEnabled).toBe(false);
-  });
-
-  it("returns false for any non-'true' value", () => {
-    process.env.NEXT_PUBLIC_ARCHESTRA_CHAT_SENSITIVE_DATA_DETECTION_ENABLED =
-      "1";
-    expect(config.chat.sensitiveDataDetectionEnabled).toBe(false);
   });
 });

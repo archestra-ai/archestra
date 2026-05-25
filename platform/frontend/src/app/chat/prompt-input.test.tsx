@@ -9,7 +9,7 @@ const {
   mockTextInputSetInput,
   mockTextInputClear,
   mockControllerState,
-  mockConfigState,
+  mockFeatureState,
 } = vi.hoisted(() => ({
   mockUseOrganization: vi.fn(),
   mockUseChatPlaceholder: vi.fn(),
@@ -17,7 +17,7 @@ const {
   mockTextInputSetInput: vi.fn(),
   mockTextInputClear: vi.fn(),
   mockControllerState: { value: "" },
-  mockConfigState: { sensitiveDataDetectionEnabled: false },
+  mockFeatureState: { chatSecretScanEnabled: false },
 }));
 
 // Mock ResizeObserver which is used by Radix UI components
@@ -260,14 +260,11 @@ vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => mockUseHasPermissions(),
 }));
 
-vi.mock("@/lib/config/config", () => ({
-  default: {
-    chat: {
-      get sensitiveDataDetectionEnabled() {
-        return mockConfigState.sensitiveDataDetectionEnabled;
-      },
-    },
-  },
+vi.mock("@/lib/config/config.query", () => ({
+  useFeature: (flag: string) =>
+    flag === "chatSecretScanEnabled"
+      ? mockFeatureState.chatSecretScanEnabled
+      : undefined,
 }));
 
 // Import the component after mocks are set up
@@ -298,7 +295,7 @@ describe("ArchestraPromptInput", () => {
       isLoading: false,
     });
     mockControllerState.value = "";
-    mockConfigState.sensitiveDataDetectionEnabled = false;
+    mockFeatureState.chatSecretScanEnabled = false;
   });
 
   describe("File Upload Button", () => {
@@ -580,7 +577,7 @@ describe("ArchestraPromptInput", () => {
 
     it("flag off: plain submit works", () => {
       const onSubmit = vi.fn();
-      mockConfigState.sensitiveDataDetectionEnabled = false;
+      mockFeatureState.chatSecretScanEnabled = false;
       mockControllerState.value = "just a normal message";
 
       render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
@@ -596,7 +593,7 @@ describe("ArchestraPromptInput", () => {
 
     it("flag off: token-like content submits with no dialog", () => {
       const onSubmit = vi.fn();
-      mockConfigState.sensitiveDataDetectionEnabled = false;
+      mockFeatureState.chatSecretScanEnabled = false;
       mockControllerState.value = `please rotate ${fakeGithubToken}`;
 
       render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
@@ -612,7 +609,7 @@ describe("ArchestraPromptInput", () => {
 
     it("flag on: plain message submits as before", () => {
       const onSubmit = vi.fn();
-      mockConfigState.sensitiveDataDetectionEnabled = true;
+      mockFeatureState.chatSecretScanEnabled = true;
       mockControllerState.value = "just a normal message";
 
       render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
@@ -628,7 +625,7 @@ describe("ArchestraPromptInput", () => {
 
     it("flag on: detected token opens the dialog and suppresses onSubmit", () => {
       const onSubmit = vi.fn();
-      mockConfigState.sensitiveDataDetectionEnabled = true;
+      mockFeatureState.chatSecretScanEnabled = true;
       mockControllerState.value = `please rotate ${fakeGithubToken}`;
 
       render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
@@ -644,7 +641,7 @@ describe("ArchestraPromptInput", () => {
 
     it("flag on: clicking Send anyway dispatches onSubmit with the original message", () => {
       const onSubmit = vi.fn();
-      mockConfigState.sensitiveDataDetectionEnabled = true;
+      mockFeatureState.chatSecretScanEnabled = true;
       const text = `please rotate ${fakeGithubToken}`;
       mockControllerState.value = text;
 
@@ -660,7 +657,7 @@ describe("ArchestraPromptInput", () => {
 
     it("flag on: clicking Cancel does not call onSubmit", () => {
       const onSubmit = vi.fn();
-      mockConfigState.sensitiveDataDetectionEnabled = true;
+      mockFeatureState.chatSecretScanEnabled = true;
       mockControllerState.value = `please rotate ${fakeGithubToken}`;
 
       render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);

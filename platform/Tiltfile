@@ -2,7 +2,7 @@
 # default (`kind-kind`, from `kind create cluster` without flags) and the
 # project-named one (`kind-archestra`). Contributors using a different cluster
 # name should add it here locally.
-allow_k8s_contexts(['orbstack', 'docker-desktop', 'kind-kind', 'kind-archestra'])
+allow_k8s_contexts(['orbstack', 'docker-desktop', 'kind-kind', 'kind-archestra', 'colima'])
 
 load('ext://dotenv', 'dotenv')
 

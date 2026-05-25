@@ -1,4 +1,4 @@
-# build KinD, Docker CLI, and Dagger CLI from source with a patched Go toolchain.
+# build KinD, Docker CLI, Dagger CLI, and kubectl from source with a patched Go toolchain.
 # the Alpine packages/binaries have historically lagged on Go patch releases, so
 # we compile these tools ourselves to pick up upstream fixes without local vendoring hacks.
 ARG GOLANG_IMAGE=golang:1.25.10-alpine@sha256:8d22e29d960bc50cd025d93d5b7c7d220b1ee9aa7a239b3c8f55a57e987e8d45
@@ -9,6 +9,8 @@ ARG DOCKER_CLI_VERSION=v29.3.0
 ARG DOCKER_CLI_COMMIT=5927d80c76b3ce5cf782be818922966e8a0d87a3
 ARG DAGGER_VERSION=v0.20.8
 ARG DAGGER_COMMIT=74bff7d10fd78dd6935c60c4514558598f216451
+ARG KUBECTL_VERSION=v1.35.0
+ARG KUBECTL_COMMIT=66452049f3d692768c39c797b21b793dce80314e
 
 FROM ${GOLANG_IMAGE} AS go-builder
 ARG TARGETARCH
@@ -18,6 +20,8 @@ ARG DOCKER_CLI_VERSION
 ARG DOCKER_CLI_COMMIT
 ARG DAGGER_VERSION
 ARG DAGGER_COMMIT
+ARG KUBECTL_VERSION
+ARG KUBECTL_COMMIT
 RUN if [ "$TARGETARCH" != "amd64" ] && [ "$TARGETARCH" != "arm64" ]; then \
         echo "ERROR: Unsupported architecture: $TARGETARCH. KinD is only available for amd64 and arm64."; \
         exit 1; \
@@ -78,6 +82,20 @@ RUN git clone --depth 1 --branch "${DAGGER_VERSION}" https://github.com/dagger/d
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -ldflags "-X github.com/dagger/dagger/engine.Version=${DAGGER_VERSION} -X github.com/dagger/dagger/engine.Tag=${DAGGER_VERSION}" \
     -o /dagger-binary ./cmd/dagger
+RUN git clone --depth 1 --branch "${KUBECTL_VERSION}" https://github.com/kubernetes/kubernetes.git /kubernetes && \
+    test "$(git -C /kubernetes rev-parse HEAD)" = "${KUBECTL_COMMIT}" && \
+    cd /kubernetes && \
+    go mod edit -go=1.25.10 && \
+    go work edit -go=1.25.10 && \
+    # cve-2026-35469: spdystream resource exhaustion fixed in >= 0.5.1.
+    go get github.com/moby/spdystream@v0.5.1 && \
+    # cve-2026-29181: OTel resource exhaustion fixed in >= 1.41.0.
+    go get go.opentelemetry.io/otel@v1.41.0 go.opentelemetry.io/otel/metric@v1.41.0 go.opentelemetry.io/otel/trace@v1.41.0 go.opentelemetry.io/otel/sdk@v1.41.0 && \
+    # cve-2026-33814: x/net issue fixed in >= 0.53.0.
+    go get golang.org/x/net@v0.53.0 && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=readonly \
+    -ldflags "-X k8s.io/component-base/version.gitVersion=${KUBECTL_VERSION} -X k8s.io/component-base/version.gitCommit=${KUBECTL_COMMIT} -X k8s.io/component-base/version.gitTreeState=clean" \
+    -o /kubectl-binary ./cmd/kubectl
 
 FROM ${NODE_IMAGE} AS base
 
@@ -179,6 +197,7 @@ FROM base AS unified
 WORKDIR /app
 
 ARG VERSION=dev
+ARG TARGETARCH
 
 ENV NODE_ENV=production
 # disable telemetry for next.js
@@ -219,12 +238,13 @@ RUN apk --no-cache upgrade && \
     # Clean up
     rm -rf /tmp/*
 
-# Install KinD (Kubernetes in Docker) and docker-cli for embedded K8s cluster support
-# Both binaries are built from source in go-builder with Go 1.25.10 to fix CVE-2025-68121
+# install KinD (Kubernetes in Docker), docker-cli, and kubectl for Kubernetes runtime support
+# these binaries are built from source in go-builder with Go 1.25.10 to fix CVE-2025-68121
 # and the Go stdlib HIGH CVEs fixed in 1.25.10 (CVE-2026-42499/39836/39820/33814/33811).
 COPY --from=go-builder /docker-binary /usr/local/bin/docker
 COPY --from=go-builder /kind-binary /usr/local/bin/kind
-RUN chmod +x /usr/local/bin/kind /usr/local/bin/docker
+COPY --from=go-builder /kubectl-binary /usr/local/bin/kubectl
+RUN chmod +x /usr/local/bin/kind /usr/local/bin/docker /usr/local/bin/kubectl
 # TODO: Once KinD releases a version compiled with Go >= 1.25.10, remove the kind-builder stage
 # at the top of this file and restore the pre-built binary download below for faster builds.
 # Track releases at: https://github.com/kubernetes-sigs/kind/releases

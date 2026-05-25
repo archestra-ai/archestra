@@ -22748,6 +22748,7 @@ export type GetConfigResponses = {
             virtualKeyDefaultExpirationSeconds: number;
             mcpSandboxDomain: string | null;
             maintenanceMode: string | null;
+            chatSecretScanEnabled: boolean;
         };
         providerBaseUrls: {
             [key: string]: string | null;

@@ -45,6 +45,7 @@ import {
   providerToLogoProvider,
 } from "@/components/chat/model-selector";
 import { PlaywrightInstallInline } from "@/components/chat/playwright-install-dialog";
+import { SensitiveDataConfirmDialog } from "@/components/chat/sensitive-data-confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -63,8 +64,10 @@ import { useChatPlaceholder } from "@/lib/chat/chat-placeholder.hook";
 import { conversationStorageKeys } from "@/lib/chat/chat-utils";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useModelSelectorDisplay } from "@/lib/chat/use-model-selector-display.hook";
+import { useFeature } from "@/lib/config/config.query";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { useOrganization } from "@/lib/organization.query";
+import { scanText } from "@/lib/sensitive-data";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
 import { cn } from "@/lib/utils";
 import {
@@ -433,6 +436,29 @@ const PromptInputContent = ({
     ],
   );
 
+  const sensitiveDataDetectionEnabled =
+    useFeature("chatSecretScanEnabled") ?? false;
+  const [sensitiveDataDialogOpen, setSensitiveDataDialogOpen] = useState(false);
+  const pendingSubmissionRef = useRef<{
+    outgoing: PromptInputMessage;
+    e: FormEvent<HTMLFormElement>;
+    options?: { skill: ChatSkillMetadata };
+    resolve: () => void;
+    reject: (reason?: unknown) => void;
+  } | null>(null);
+
+  const dispatchSubmit = useCallback(
+    (
+      outgoing: PromptInputMessage,
+      e: FormEvent<HTMLFormElement>,
+      options?: { skill: ChatSkillMetadata },
+    ) => {
+      localStorage.removeItem(storageKey);
+      onSubmit(outgoing, e, options);
+    },
+    [onSubmit, storageKey],
+  );
+
   const handleWrappedSubmit = useCallback(
     (message: PromptInputMessage, e: FormEvent<HTMLFormElement>) => {
       const trimmed = message.text.trim();
@@ -453,17 +479,53 @@ const PromptInputContent = ({
         outgoing = { ...message, text: parsed.remaining };
       }
 
-      localStorage.removeItem(storageKey);
-      onSubmit(outgoing, e, skill ? { skill } : undefined);
+      const options = skill ? { skill } : undefined;
+
+      if (sensitiveDataDetectionEnabled && outgoing.text.length > 0) {
+        const findings = scanText(outgoing.text);
+        if (findings.length > 0) {
+          if (pendingSubmissionRef.current !== null)
+            return new Promise<void>(() => {});
+          return new Promise<void>((resolve, reject) => {
+            pendingSubmissionRef.current = {
+              outgoing,
+              e,
+              options,
+              resolve,
+              reject,
+            };
+            setSensitiveDataDialogOpen(true);
+          });
+        }
+      }
+
+      dispatchSubmit(outgoing, e, options);
     },
     [
-      onSubmit,
+      dispatchSubmit,
       onCompactConversation,
       runCompactCommand,
+      sensitiveDataDetectionEnabled,
       skillCommands,
-      storageKey,
     ],
   );
+
+  const handleSensitiveDataConfirm = useCallback(() => {
+    const pending = pendingSubmissionRef.current;
+    pendingSubmissionRef.current = null;
+    setSensitiveDataDialogOpen(false);
+    if (pending) {
+      dispatchSubmit(pending.outgoing, pending.e, pending.options);
+      pending.resolve();
+    }
+  }, [dispatchSubmit]);
+
+  const handleSensitiveDataCancel = useCallback(() => {
+    const pending = pendingSubmissionRef.current;
+    pendingSubmissionRef.current = null;
+    setSensitiveDataDialogOpen(false);
+    pending?.reject();
+  }, []);
 
   const handleFileError = useCallback(
     (err: {
@@ -869,6 +931,11 @@ const PromptInputContent = ({
           </div>
         </PromptInputFooter>
       </PromptInput>
+      <SensitiveDataConfirmDialog
+        open={sensitiveDataDialogOpen}
+        onConfirm={handleSensitiveDataConfirm}
+        onCancel={handleSensitiveDataCancel}
+      />
     </div>
   );
 };

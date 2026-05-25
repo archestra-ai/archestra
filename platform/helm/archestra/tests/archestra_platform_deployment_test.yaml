@@ -470,7 +470,7 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
-            value: tcp://dagger-runtime.dagger.svc.cluster.local:1234
+            value: kube-pod://dagger-runtime-engine-0?namespace=dagger&container=dagger-engine
       - contains:
           path: spec.template.spec.containers[0].env
           content:
@@ -499,20 +499,32 @@ tests:
             name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
             value: tcp://dagger-runtime.custom.svc.cluster.local:1234
 
-  - it: should support custom code runtime Dagger service settings
+  - it: should use the release namespace for managed code runtime Dagger pod
     documentIndex: 1
     set:
       archestra.codeRuntime.enabled: true
-      archestra.codeRuntime.dagger.service.name: dagger-engine
-      archestra.codeRuntime.dagger.service.namespace: code-runtime
-      archestra.codeRuntime.dagger.service.port: 2234
-      archestra.orchestrator.kubernetes.clusterDomain: corp.internal
+      archestra.codeRuntime.dagger.managed.enabled: true
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
-            value: tcp://dagger-engine.code-runtime.svc.corp.internal:2234
+            value: kube-pod://dagger-runtime-engine-0?namespace=NAMESPACE&container=dagger-engine
+
+  - it: should support custom code runtime Dagger pod settings
+    documentIndex: 1
+    set:
+      archestra.codeRuntime.enabled: true
+      archestra.codeRuntime.dagger.pod.name: dagger-engine-3
+      archestra.codeRuntime.dagger.pod.namespace: code-runtime
+      archestra.codeRuntime.dagger.pod.container: custom-engine
+      archestra.codeRuntime.dagger.pod.context: prod-cluster
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+            value: kube-pod://dagger-engine-3?namespace=code-runtime&container=custom-engine&context=prod-cluster
 
   - it: should include ARCHESTRA_DATABASE_URL alongside custom env vars
     documentIndex: 1

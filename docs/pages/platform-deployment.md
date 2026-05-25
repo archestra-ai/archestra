@@ -1043,6 +1043,12 @@ Enable polling compatibility only when your database endpoint cannot keep sessio
   - Default: Uses `ARCHESTRA_DATABASE_URL`
   - Set this when regular database traffic goes through PgBouncer transaction pooling but notifications can use a direct or session-pooled connection
 
+- **`ARCHESTRA_CHAT_SECRET_SCAN_ENABLED`** - Enables client-side pre-send scanning of chat messages for secrets and high-entropy tokens.
+  - Default: `false`
+  - When `true`, the chat composer intercepts sends and shows a confirmation dialog when the message appears to contain credentials (API keys, tokens, passwords, JWTs, PEM keys, or high-entropy strings).
+  - Detection runs entirely in the browser — no message content is sent to the backend for scanning. The flag is read from the backend at runtime via `/api/config`, so toggling it does not require a frontend rebuild.
+  - Values: `true`, `false`
+
 ### MCP Apps Sandbox
 
 MCP Apps run inside sandboxed iframes with cross-origin isolation, CSP enforcement, and a double-iframe architecture. The sandbox proxy is served from the main backend under `/_sandbox/` — no separate port or service is needed.

@@ -168,8 +168,8 @@ archestra:
   envFrom: []
 
   # code execution runtime configuration.
-  # enables the archestra__run_python tool and points the backend at a separately
-  # deployed Dagger runtime. The Python execution image remains a backend default;
+  # enables the archestra__run_python tool and points the backend at a Dagger
+  # runtime pod. The Python execution image remains a backend default;
   # override ARCHESTRA_CODE_RUNTIME_IMAGE through archestra.env only when required.
   codeRuntime:
     # enable or disable code execution runtime support.
@@ -185,16 +185,38 @@ archestra:
     maxOutputBytes: 65536
 
     dagger:
-      # explicit Dagger runner host. Leave empty to use the in-cluster service below.
-      # must use tcp:// because production deployments should not require Kubernetes
-      # api pod lookup or Docker socket access from the application pod.
+      # explicit Dagger runner host. Leave empty to use the kube-pod:// pod target below.
+      # supported schemes are kube-pod:// for the secure default and tcp:// for
+      # explicit advanced deployments that provide their own transport security.
       runnerHost: ""
 
-      service:
-        # internal ClusterIP service created by the dagger-runtime companion chart.
-        name: dagger-runtime
-        namespace: dagger
-        port: 1234
+      managed:
+        # deploy a Dagger Engine as part of this Helm release. When false, point
+        # dagger.pod at an externally deployed Dagger Engine pod instead.
+        enabled: false
+        serviceAccount:
+          # create a tokenless service account for the privileged engine pod.
+          create: true
+          automountServiceAccountToken: false
+          annotations: {}
+
+      pod:
+        # pod created by the managed Dagger subchart or companion chart.
+        name: dagger-runtime-engine-0
+        # leave empty to use the release namespace when managed.enabled=true,
+        # or the default external companion-chart namespace (`dagger`) otherwise.
+        namespace: ""
+        container: dagger-engine
+        # optional kube context for out-of-cluster clients. leave empty for in-cluster use.
+        context: ""
+
+      rbac:
+        # create a narrow Role/RoleBinding that lets the Archestra ServiceAccount
+        # exec into the Dagger Engine pod when using kube-pod://.
+        create: true
+        # defaults to dagger.pod.namespace. set explicitly when runnerHost points
+        # at a kube-pod:// URL whose namespace differs from dagger.pod.namespace.
+        namespace: ""
 
   # Additional volumes to mount into the platform and worker pods
   # Useful for mounting credential files such as a Vertex AI service account key
@@ -721,6 +743,64 @@ archestra:
         type: HTTP
         requestPath: /health
         port: 3000
+
+# dagger subchart values used only when archestra.codeRuntime.dagger.managed.enabled=true.
+# the Dagger Engine runs in the same namespace as the Archestra release so it can
+# be installed with the same `helm upgrade`.
+dagger:
+  fullnameOverride: dagger-runtime
+
+  engine:
+    kind: StatefulSet
+    # kube-pod:// uses kubectl exec + buildctl dial-stdio, so no TCP listener is
+    # needed by default. Set this to 1234 only when intentionally enabling the
+    # plaintext tcp:// transport through additional Service wiring.
+    port:
+
+    existingServiceAccount:
+      name: dagger-runtime
+
+    configJson: |
+      {
+        "logLevel": "info",
+        "security": {
+          "insecureRootCapabilities": false
+        },
+        "gc": {
+          "maxUsedSpace": "40GB",
+          "reservedSpace": "5GB",
+          "minFreeSpace": "20%"
+        }
+      }
+
+    resources:
+      requests:
+        cpu: "2"
+        memory: 8Gi
+      limits:
+        memory: 16Gi
+
+    statefulSet:
+      persistentVolumeClaim:
+        enabled: true
+        resources:
+          requests:
+            storage: 50Gi
+
+    hostPath:
+      dataVolume:
+        enabled: false
+      runVolume:
+        enabled: false
+
+    volumeMounts:
+      - name: run
+        mountPath: /run/dagger
+
+    volumes:
+      - name: run
+        emptyDir:
+          medium: Memory
 
 # PostgreSQL configuration
 postgresql:

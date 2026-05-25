@@ -650,15 +650,18 @@ export const parseCodeRuntimeDaggerRunnerHost = ({
     return undefined;
   }
 
-  if (!runnerHost.startsWith("tcp://")) {
+  if (!isSupportedDaggerRunnerHost(runnerHost)) {
     logger.error(
-      "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST must use tcp:// — code runtime disabled",
+      "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST must use tcp:// or kube-pod:// — code runtime disabled",
     );
     return undefined;
   }
 
   return runnerHost;
 };
+
+const isSupportedDaggerRunnerHost = (runnerHost: string): boolean =>
+  runnerHost.startsWith("tcp://") || runnerHost.startsWith("kube-pod://");
 
 const codeRuntimeRequested =
   process.env.ARCHESTRA_CODE_RUNTIME_ENABLED === "true";
@@ -949,6 +952,8 @@ const config = {
       notifyDatabaseUrl:
         process.env.ARCHESTRA_CHAT_ACTIVE_RUN_NOTIFY_DATABASE_URL?.trim() || "",
     },
+    secretScanEnabled:
+      process.env.ARCHESTRA_CHAT_SECRET_SCAN_ENABLED === "true",
   },
   enterpriseFeatures: {
     core: process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",

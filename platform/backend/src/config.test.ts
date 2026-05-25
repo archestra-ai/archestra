@@ -1302,13 +1302,16 @@ describe("parseCodeRuntimeDaggerRunnerHost", () => {
     ).toBeUndefined();
   });
 
-  test("should return undefined for non-TCP runner hosts", () => {
+  test("should trim and return kube-pod runner host", () => {
     expect(
       parseCodeRuntimeDaggerRunnerHost({
         enabled: true,
-        envValue: "kube-pod://dagger-engine?namespace=dagger",
+        envValue:
+          " kube-pod://dagger-runtime-engine-0?namespace=dagger&container=dagger-engine ",
       }),
-    ).toBeUndefined();
+    ).toBe(
+      "kube-pod://dagger-runtime-engine-0?namespace=dagger&container=dagger-engine",
+    );
   });
 
   test("should trim and return TCP runner host", () => {
@@ -1318,6 +1321,15 @@ describe("parseCodeRuntimeDaggerRunnerHost", () => {
         envValue: " tcp://dagger-runtime.dagger.svc.cluster.local:1234 ",
       }),
     ).toBe("tcp://dagger-runtime.dagger.svc.cluster.local:1234");
+  });
+
+  test("should return undefined for unsupported runner hosts", () => {
+    expect(
+      parseCodeRuntimeDaggerRunnerHost({
+        enabled: true,
+        envValue: "unix:///run/dagger/engine.sock",
+      }),
+    ).toBeUndefined();
   });
 });
 

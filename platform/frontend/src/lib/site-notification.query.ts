@@ -1,4 +1,4 @@
-import { archestraApiSdk } from "@shared";
+import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import {
   type UseQueryOptions,
   useMutation,
@@ -14,15 +14,24 @@ export const siteNotificationKeys = {
   settings: () => [...siteNotificationKeys.all, "settings"] as const,
 };
 
-export interface SiteNotification {
-  id: string;
-  content: string;
-  expiresAt: string | null;
-  createdAt: string;
-  isActive: boolean;
-}
+export type SiteNotification = NonNullable<
+  archestraApiTypes.GetSiteNotificationResponses["200"]
+>;
+type UpdateSiteNotificationOptions = Omit<
+  archestraApiTypes.UpdateSiteNotificationData,
+  "url"
+>;
+type DeleteSiteNotificationOptions = Omit<
+  archestraApiTypes.DeleteSiteNotificationData,
+  "url"
+>;
 
-export function useActiveSiteNotification() {
+export function useActiveSiteNotification(
+  options?: Pick<
+    UseQueryOptions<SiteNotification | null>,
+    "enabled" | "staleTime" | "refetchOnWindowFocus"
+  >,
+) {
   return useQuery({
     queryKey: siteNotificationKeys.active(),
     queryFn: async () => {
@@ -34,6 +43,7 @@ export function useActiveSiteNotification() {
     },
     staleTime: 60 * 1000,
     refetchOnWindowFocus: true,
+    ...options,
   });
 }
 
@@ -62,9 +72,11 @@ export function useSiteNotification(
 export function useCreateSiteNotification() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (params: { content: string; expiresAt?: string }) => {
+    mutationFn: async (
+      body: archestraApiTypes.CreateSiteNotificationData["body"],
+    ) => {
       const { data, error } = await archestraApiSdk.createSiteNotification({
-        body: params,
+        body,
       });
       if (error) {
         handleApiError(error);
@@ -87,20 +99,9 @@ export function useCreateSiteNotification() {
 export function useUpdateSiteNotification() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (params: {
-      id: string;
-      content?: string;
-      expiresAt?: string | null;
-      isActive?: boolean;
-    }) => {
-      const { data, error } = await archestraApiSdk.updateSiteNotification({
-        path: { id: params.id },
-        body: {
-          content: params.content,
-          expiresAt: params.expiresAt,
-          isActive: params.isActive,
-        },
-      });
+    mutationFn: async (params: UpdateSiteNotificationOptions) => {
+      const { data, error } =
+        await archestraApiSdk.updateSiteNotification(params);
       if (error) {
         handleApiError(error);
         return null;
@@ -125,10 +126,8 @@ export function useUpdateSiteNotification() {
 export function useDeleteSiteNotification() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await archestraApiSdk.deleteSiteNotification({
-        path: { id },
-      });
+    mutationFn: async (params: DeleteSiteNotificationOptions) => {
+      const { error } = await archestraApiSdk.deleteSiteNotification(params);
       if (error) {
         handleApiError(error);
         return false;

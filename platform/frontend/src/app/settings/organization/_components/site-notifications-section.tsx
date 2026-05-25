@@ -91,10 +91,12 @@ export function SiteNotificationsSection() {
       });
     } else {
       await updateMutation.mutateAsync({
-        id: notification.id,
-        content: trimmedContent,
-        expiresAt: effectiveExpiresAt?.toISOString() ?? null,
-        isActive: true,
+        path: { id: notification.id },
+        body: {
+          content: trimmedContent,
+          expiresAt: effectiveExpiresAt?.toISOString() ?? null,
+          isActive: true,
+        },
       });
     }
 
@@ -110,7 +112,7 @@ export function SiteNotificationsSection() {
 
   const handleDelete = useCallback(async () => {
     if (!notification) return;
-    await deleteMutation.mutateAsync(notification.id);
+    await deleteMutation.mutateAsync({ path: { id: notification.id } });
     resetDraft();
   }, [notification, deleteMutation, resetDraft]);
 

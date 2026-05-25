@@ -26,6 +26,10 @@ const SIDEBAR_COLLAPSED_PERMISSION: Permissions = {
   simpleView: ["enable"],
 };
 
+const SITE_NOTIFICATION_READ_PERMISSION: Permissions = {
+  siteNotification: ["read"],
+};
+
 interface AppShellProps {
   children: React.ReactNode;
 }
@@ -36,7 +40,13 @@ export function AppShell({ children }: AppShellProps) {
   const isAuthPage = pathname.startsWith("/auth/");
   const { data: shouldCollapse, isSuccess: permissionLoaded } =
     useHasPermissions(SIDEBAR_COLLAPSED_PERMISSION);
-  const { data: notification } = useActiveSiteNotification();
+  const { data: canReadSiteNotification } = useHasPermissions(
+    SITE_NOTIFICATION_READ_PERMISSION,
+  );
+  const { data: notification } = useActiveSiteNotification({
+    enabled:
+      canReadSiteNotification === true && !isAuthPage && !isBrowserPreview,
+  });
 
   // Browser preview mode: render children directly without sidebar/header/version
   if (isBrowserPreview) {

@@ -125,7 +125,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   organizationSettings: ["read", "update"],
 
   // Administration
-  siteNotification: ["read", "create", "update", "delete"],
+  siteNotification: ["read"],
 
   // UI behavior resources
   simpleView: [],
@@ -182,7 +182,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   organizationSettings: [],
 
   // Administration
-  siteNotification: ["read", "create", "update", "delete"],
+  siteNotification: ["read"],
 
   // UI behavior resources
   simpleView: ["enable"],

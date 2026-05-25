@@ -1,11 +1,11 @@
-import type { UIMessage } from '@ai-sdk/react';
-import { act, render, waitFor } from '@testing-library/react';
-import { useEffect } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ChatProvider, useGlobalChat } from './global-chat.context';
+import type { UIMessage } from "@ai-sdk/react";
+import { act, render, waitFor } from "@testing-library/react";
+import { useEffect } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ChatProvider, useGlobalChat } from "./global-chat.context";
 
 type ChatSessionSnapshot = ReturnType<
-  ReturnType<typeof useGlobalChat>['getSession']
+  ReturnType<typeof useGlobalChat>["getSession"]
 >;
 
 const mocks = vi.hoisted(() => ({
@@ -22,22 +22,22 @@ const mocks = vi.hoisted(() => ({
   useChat: vi.fn(),
 }));
 
-vi.mock('@ai-sdk/react', () => ({
+vi.mock("@ai-sdk/react", () => ({
   useChat: mocks.useChat,
 }));
 
-vi.mock('ai', () => ({
+vi.mock("ai", () => ({
   DefaultChatTransport: vi.fn(),
   lastAssistantMessageIsCompleteWithApprovalResponses: vi.fn(() => true),
 }));
 
-vi.mock('sonner', () => ({
+vi.mock("sonner", () => ({
   toast: {
     error: mocks.toastError,
   },
 }));
 
-vi.mock('@tanstack/react-query', () => ({
+vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({
     invalidateQueries: mocks.invalidateQueries,
   }),
@@ -47,7 +47,7 @@ const conversationMock = vi.hoisted(() => ({
   data: { title: null as string | null } as { title: string | null } | null,
 }));
 
-vi.mock('@/lib/chat/chat.query', () => ({
+vi.mock("@/lib/chat/chat.query", () => ({
   useGenerateConversationTitle: () => ({
     isPending: false,
     mutate: mocks.mutate,
@@ -55,11 +55,11 @@ vi.mock('@/lib/chat/chat.query', () => ({
   useConversation: () => ({ data: conversationMock.data }),
 }));
 
-vi.mock('@/lib/hooks/use-app-name', () => ({
-  useAppName: () => 'Archestra',
+vi.mock("@/lib/hooks/use-app-name", () => ({
+  useAppName: () => "Archestra",
 }));
 
-vi.mock('@/lib/config/config', () => ({
+vi.mock("@/lib/config/config", () => ({
   default: {
     enterpriseFeatures: {
       fullWhiteLabeling: false,
@@ -67,7 +67,7 @@ vi.mock('@/lib/config/config', () => ({
   },
 }));
 
-describe('ChatProvider retries', () => {
+describe("ChatProvider retries", () => {
   let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
 
   beforeEach(() => {
@@ -85,7 +85,7 @@ describe('ChatProvider retries', () => {
         resumeStream: mocks.resumeStream,
         sendMessage: mocks.sendMessage,
         setMessages: mocks.setMessages,
-        status: 'ready',
+        status: "ready",
         stop: mocks.stop,
       };
     });
@@ -95,7 +95,7 @@ describe('ChatProvider retries', () => {
     vi.useRealTimers();
   });
 
-  it('does not auto-retry structured backend chat errors', async () => {
+  it("does not auto-retry structured backend chat errors", async () => {
     render(
       <ChatProvider>
         <RegisterChatSession />
@@ -109,9 +109,9 @@ describe('ChatProvider retries', () => {
       chatOptions?.onError?.(
         new Error(
           JSON.stringify({
-            code: 'server_error',
+            code: "server_error",
             isRetryable: true,
-            message: 'An unexpected error occurred. Please try again.',
+            message: "An unexpected error occurred. Please try again.",
           }),
         ),
       );
@@ -121,7 +121,7 @@ describe('ChatProvider retries', () => {
     expect(mocks.regenerate).not.toHaveBeenCalled();
   });
 
-  it('still auto-retries transport errors that likely did not reach the backend', async () => {
+  it("still auto-retries transport errors that likely did not reach the backend", async () => {
     render(
       <ChatProvider>
         <RegisterChatSession />
@@ -132,14 +132,14 @@ describe('ChatProvider retries', () => {
 
     vi.useFakeTimers();
     act(() => {
-      chatOptions?.onError?.(new Error('Failed to fetch'));
+      chatOptions?.onError?.(new Error("Failed to fetch"));
       vi.advanceTimersByTime(1500);
     });
 
     expect(mocks.regenerate).toHaveBeenCalledTimes(1);
   });
 
-  it('updates live context token estimate from usage and compaction data', async () => {
+  it("updates live context token estimate from usage and compaction data", async () => {
     const latestSessionRef: { current: ChatSessionSnapshot } = {
       current: undefined,
     };
@@ -159,7 +159,7 @@ describe('ChatProvider retries', () => {
 
     act(() => {
       chatOptions?.onData?.({
-        type: 'data-token-usage',
+        type: "data-token-usage",
         data: {
           inputTokens: 100,
           outputTokens: 20,
@@ -174,9 +174,9 @@ describe('ChatProvider retries', () => {
 
     act(() => {
       chatOptions?.onData?.({
-        type: 'data-context-compaction-finish',
+        type: "data-context-compaction-finish",
         data: {
-          compactionId: 'compaction-1',
+          compactionId: "compaction-1",
           originalTokenEstimate: 120,
           compactedTokenEstimate: 35,
         },
@@ -187,13 +187,13 @@ describe('ChatProvider retries', () => {
       expect(latestSessionRef.current?.contextTokensUsed).toBe(35),
     );
     expect(latestSessionRef.current?.contextCompaction.lastCompaction).toEqual({
-      compactionId: 'compaction-1',
+      compactionId: "compaction-1",
       originalTokenEstimate: 120,
       compactedTokenEstimate: 35,
     });
   });
 
-  it('does not overwrite live context tokens from auto compaction estimates', async () => {
+  it("does not overwrite live context tokens from auto compaction estimates", async () => {
     const latestSessionRef: { current: ChatSessionSnapshot } = {
       current: undefined,
     };
@@ -213,7 +213,7 @@ describe('ChatProvider retries', () => {
 
     act(() => {
       chatOptions?.onData?.({
-        type: 'data-token-usage',
+        type: "data-token-usage",
         data: {
           inputTokens: 100,
           outputTokens: 20,
@@ -228,10 +228,10 @@ describe('ChatProvider retries', () => {
 
     act(() => {
       chatOptions?.onData?.({
-        type: 'data-context-compaction-finish',
+        type: "data-context-compaction-finish",
         data: {
-          trigger: 'auto',
-          compactionId: 'compaction-1',
+          trigger: "auto",
+          compactionId: "compaction-1",
           originalTokenEstimate: 1_652_781,
           compactedTokenEstimate: 794_797,
         },
@@ -242,8 +242,8 @@ describe('ChatProvider retries', () => {
       expect(
         latestSessionRef.current?.contextCompaction.lastCompaction,
       ).toEqual({
-        trigger: 'auto',
-        compactionId: 'compaction-1',
+        trigger: "auto",
+        compactionId: "compaction-1",
         originalTokenEstimate: 1_652_781,
         compactedTokenEstimate: 794_797,
       }),
@@ -251,16 +251,16 @@ describe('ChatProvider retries', () => {
     expect(latestSessionRef.current?.contextTokensUsed).toBe(120);
   });
 
-  it('configures active-run reconnect URL and resumes when the last persisted message is from the user', async () => {
-    const { DefaultChatTransport } = await import('ai');
+  it("configures active-run reconnect URL and resumes when the last persisted message is from the user", async () => {
+    const { DefaultChatTransport } = await import("ai");
     render(
       <ChatProvider>
         <RegisterChatSession
           initialMessages={[
             {
-              id: 'user-1',
-              role: 'user',
-              parts: [{ type: 'text', text: 'hello' }],
+              id: "user-1",
+              role: "user",
+              parts: [{ type: "text", text: "hello" }],
             },
           ]}
         />
@@ -274,19 +274,19 @@ describe('ChatProvider retries', () => {
     const transportOptions = vi.mocked(DefaultChatTransport).mock.calls[0]?.[0];
     expect(
       transportOptions?.prepareReconnectToStreamRequest?.({
-        id: 'conversation-1',
-        api: '/api/chat',
+        id: "conversation-1",
+        api: "/api/chat",
         body: undefined,
-        credentials: 'include',
+        credentials: "include",
         headers: {},
         requestMetadata: undefined,
       }),
     ).toMatchObject({
-      api: '/api/chat/conversations/conversation-1/active-run',
+      api: "/api/chat/conversations/conversation-1/active-run",
     });
   });
 
-  it('shows a toast for duplicate active-run submits', async () => {
+  it("shows a toast for duplicate active-run submits", async () => {
     render(
       <ChatProvider>
         <RegisterChatSession />
@@ -297,18 +297,18 @@ describe('ChatProvider retries', () => {
 
     act(() => {
       chatOptions?.onError?.(
-        new Error('This conversation already has an active response.'),
+        new Error("This conversation already has an active response."),
       );
     });
 
     expect(mocks.toastError).toHaveBeenCalledWith(
-      'This conversation already has a response in progress. Stop it before sending another message.',
+      "This conversation already has a response in progress. Stop it before sending another message.",
     );
     expect(mocks.regenerate).not.toHaveBeenCalled();
   });
 });
 
-describe('ChatProvider auto title generation', () => {
+describe("ChatProvider auto title generation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     conversationMock.data = { title: null };
@@ -323,36 +323,36 @@ describe('ChatProvider auto title generation', () => {
   // two assistant messages, none of which carry assistant text.
   const swapMessages: UIMessage[] = [
     {
-      id: 'u1',
-      role: 'user',
-      parts: [{ type: 'text', text: 'Show me the Archestra PM board' }],
+      id: "u1",
+      role: "user",
+      parts: [{ type: "text", text: "Show me the Archestra PM board" }],
     },
     {
-      id: 'a1',
-      role: 'assistant',
+      id: "a1",
+      role: "assistant",
       parts: [
         {
-          type: 'tool-swap_agent',
-          toolCallId: 't1',
-          state: 'output-available',
+          type: "tool-swap_agent",
+          toolCallId: "t1",
+          state: "output-available",
           input: {},
           output: {},
         },
       ],
     } as unknown as UIMessage,
     {
-      id: 'u2',
-      role: 'user',
-      parts: [{ type: 'text', text: '(poke)' }],
+      id: "u2",
+      role: "user",
+      parts: [{ type: "text", text: "(poke)" }],
     },
     {
-      id: 'a2',
-      role: 'assistant',
+      id: "a2",
+      role: "assistant",
       parts: [
         {
-          type: 'tool-board',
-          toolCallId: 't2',
-          state: 'output-available',
+          type: "tool-board",
+          toolCallId: "t2",
+          state: "output-available",
           input: {},
           output: {},
         },
@@ -360,7 +360,7 @@ describe('ChatProvider auto title generation', () => {
     } as unknown as UIMessage,
   ];
 
-  it('titles an untitled chat after a tool-only agent-swap exchange', async () => {
+  it("titles an untitled chat after a tool-only agent-swap exchange", async () => {
     mocks.useChat.mockImplementation((options) => {
       return {
         addToolApprovalResponse: mocks.addToolApprovalResponse,
@@ -370,7 +370,7 @@ describe('ChatProvider auto title generation', () => {
         regenerate: mocks.regenerate,
         sendMessage: mocks.sendMessage,
         setMessages: mocks.setMessages,
-        status: 'ready',
+        status: "ready",
         stop: mocks.stop,
         _options: options,
       };
@@ -383,12 +383,12 @@ describe('ChatProvider auto title generation', () => {
     );
 
     await waitFor(() =>
-      expect(mocks.mutate).toHaveBeenCalledWith({ id: 'conversation-1' }),
+      expect(mocks.mutate).toHaveBeenCalledWith({ id: "conversation-1" }),
     );
   });
 
-  it('does not regenerate a title the conversation already has', async () => {
-    conversationMock.data = { title: 'Existing title' };
+  it("does not regenerate a title the conversation already has", async () => {
+    conversationMock.data = { title: "Existing title" };
     mocks.useChat.mockImplementation(() => ({
       addToolApprovalResponse: mocks.addToolApprovalResponse,
       addToolResult: mocks.addToolResult,
@@ -397,7 +397,7 @@ describe('ChatProvider auto title generation', () => {
       regenerate: mocks.regenerate,
       sendMessage: mocks.sendMessage,
       setMessages: mocks.setMessages,
-      status: 'ready',
+      status: "ready",
       stop: mocks.stop,
     }));
 
@@ -420,7 +420,7 @@ function RegisterChatSession({
   const { registerSession } = useGlobalChat();
 
   useEffect(() => {
-    registerSession({ conversationId: 'conversation-1', initialMessages });
+    registerSession({ conversationId: "conversation-1", initialMessages });
   }, [initialMessages, registerSession]);
 
   return null;
@@ -432,7 +432,7 @@ function CaptureChatSession({
   onSession: (session: ChatSessionSnapshot) => void;
 }) {
   const { getSession } = useGlobalChat();
-  const session = getSession('conversation-1');
+  const session = getSession("conversation-1");
 
   useEffect(() => {
     onSession(session);

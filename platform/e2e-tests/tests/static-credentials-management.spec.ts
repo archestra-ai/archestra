@@ -32,12 +32,7 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.describe("Custom Self-hosted MCP Server - installation and static credentials management (vault disabled, prompt-on-installation disabled)", () => {
-  // Matrix tests. The Editor variant was removed: its unique observables
-  // (Editor cannot see org-scoped gateways → uses a team-scoped one;
-  // visible credentials = Engineering+Marketing, no Default) are pure
-  // backend RBAC filters that belong in a model/route integration test,
-  // not a K8s-bound e2e. Admin covers the end-to-end happy path; Member
-  // covers the lowest-permission UI state.
+  // Matrix tests
   const MATRIX: { user: "Admin" | "Member" }[] = [
     {
       user: "Admin",

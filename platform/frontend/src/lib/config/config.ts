@@ -246,6 +246,14 @@ export default {
       },
     } satisfies Partial<PostHogConfig>,
   },
+  chat: {
+    get sensitiveDataDetectionEnabled() {
+      return (
+        env("NEXT_PUBLIC_ARCHESTRA_CHAT_SENSITIVE_DATA_DETECTION_ENABLED") ===
+        "true"
+      );
+    },
+  },
   /**
    * Mark enterprise license status to hide Archestra-specific branding and UI sections when enabled.
    */

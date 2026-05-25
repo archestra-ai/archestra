@@ -204,9 +204,28 @@ describe("registerAuditLogHook", () => {
     app.patch("/api/no-fetch-things/:id", async () => ({}));
     app.delete("/api/no-fetch-things/:id", async () => ({}));
 
-    // Denylisted
+    // Denylisted: health/ready probes
     app.post("/api/health", async () => ({ ok: true }));
     app.post("/api/ready", async () => ({ ok: true }));
+
+    // Exact-denied: the chat streaming endpoint.
+    // /api/chatops/* must NOT be caught by this entry — those routes
+    // are registered for audit and must produce rows.
+    app.post("/api/chat", async () => ({ ok: true }));
+
+    // ChatOps mutations — must NOT be swallowed by the /api/chat denylist entry.
+    app.post("/api/chatops/bindings", async () => ({
+      id: KNOWN_RESOURCE_ID,
+    }));
+    app.post("/api/chatops/config/slack", async () => ({
+      id: KNOWN_RESOURCE_ID,
+    }));
+    app.post("/api/chatops/channel-discovery/refresh", async () => ({
+      id: KNOWN_RESOURCE_ID,
+    }));
+
+    // Prefix-denied: MCP session proxy
+    app.post("/api/mcp/session", async () => ({ ok: true }));
 
     // Not in AUDITABLE_ROUTES — exercises fallback + logger.warn path.
     app.post("/api/orphan-events", async () => ({ ok: true }));
@@ -637,6 +656,60 @@ describe("registerAuditLogHook", () => {
       await app.inject({ method: "POST", url: "/api/ready" });
       await settle();
       expect(await getRows()).toHaveLength(0);
+    });
+
+    // /api/chat is the long-running stream endpoint; exact-match denial.
+    test("POST /api/chat writes zero rows (exact denylist entry)", async () => {
+      await app.inject({ method: "POST", url: "/api/chat" });
+      await settle();
+      expect(await getRows()).toHaveLength(0);
+    });
+
+    // MCP session proxy — prefix entry must still suppress these.
+    test("POST /api/mcp/session writes zero rows (prefix denylist entry)", async () => {
+      await app.inject({ method: "POST", url: "/api/mcp/session" });
+      await settle();
+      expect(await getRows()).toHaveLength(0);
+    });
+  });
+
+  describe("denylist — /api/chatops/* must not be swallowed by /api/chat exact entry", () => {
+    // These tests are the regression guard for the bug where a prefix-matched
+    // "/api/chat" silenced every /api/chatops/* mutation.  With an exact entry
+    // only POST /api/chat itself is excluded; the chatops routes must produce
+    // audit rows.
+
+    test("POST /api/chatops/bindings writes a row", async () => {
+      await app.inject({ method: "POST", url: "/api/chatops/bindings" });
+      await settle();
+      // One row expected — action/resourceType are unknown.* because the mock
+      // registry has no chatops entries, but the key assertion is that the
+      // denylist no longer swallows the request.
+      expect(await getRows()).toHaveLength(1);
+    });
+
+    test("POST /api/chatops/config/slack writes a row", async () => {
+      await app.inject({ method: "POST", url: "/api/chatops/config/slack" });
+      await settle();
+      expect(await getRows()).toHaveLength(1);
+    });
+
+    test("POST /api/chatops/channel-discovery/refresh writes a row", async () => {
+      await app.inject({
+        method: "POST",
+        url: "/api/chatops/channel-discovery/refresh",
+      });
+      await settle();
+      expect(await getRows()).toHaveLength(1);
+    });
+
+    test("/api/chat exact denial does not affect /api/chatops/* (both in same request batch)", async () => {
+      // Fire the denied route first, then a chatops route.  Only the chatops
+      // request should produce a row — proves the two are handled independently.
+      await app.inject({ method: "POST", url: "/api/chat" });
+      await app.inject({ method: "POST", url: "/api/chatops/bindings" });
+      await settle();
+      expect(await getRows()).toHaveLength(1);
     });
   });
 

@@ -190,22 +190,39 @@ function extractCreatedResourceId(parsed: unknown): string | null {
  * High-volume or non-administrative `/api/*` surfaces excluded from org audit
  * (per product direction: MCP session proxy traffic and chat/browser streams
  * stay out of the org audit log; dedicated surfaces cover them).
+ *
+ * `exact` entries match the URL precisely; `prefix` entries match any URL that
+ * starts with the value.  Use `exact` when a route and its siblings share a
+ * common prefix that must NOT be excluded — the canonical example is
+ * `/api/chat` (the streaming endpoint) vs `/api/chatops/*` (Slack/Teams
+ * admin routes that ARE audited).
  */
-const AUDIT_DENYLIST_PREFIXES = [
-  "/api/auth/",
-  "/api/health",
-  "/api/ready",
-  "/api/mcp/",
-  "/api/chat",
-  "/api/browser-stream/",
-  "/api/secrets/check-connectivity",
-  "/api/members/default-model",
+type AuditDenylistEntry = { kind: "prefix" | "exact"; value: string };
+
+const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
+  { kind: "prefix", value: "/api/auth/" },
+  { kind: "prefix", value: "/api/health" },
+  { kind: "prefix", value: "/api/ready" },
+  { kind: "prefix", value: "/api/mcp/" },
+  // Exact match: /api/chat is the single long-running chat stream endpoint.
+  // Prefix would also silence /api/chatops/* (channel bindings, Slack/Teams
+  // config, discovery refresh) which are explicitly registered for audit.
+  { kind: "exact", value: "/api/chat" },
+  { kind: "prefix", value: "/api/browser-stream/" },
+  { kind: "prefix", value: "/api/secrets/check-connectivity" },
+  { kind: "prefix", value: "/api/members/default-model" },
 ];
+
+function isDenylisted(url: string): boolean {
+  return AUDIT_DENYLIST.some((entry) =>
+    entry.kind === "exact" ? url === entry.value : url.startsWith(entry.value),
+  );
+}
 
 function shouldSkip(method: string, url: string, user: unknown): boolean {
   if (!AUDIT_METHODS.has(method)) return true;
   if (!url.startsWith("/api/")) return true;
-  if (AUDIT_DENYLIST_PREFIXES.some((p) => url.startsWith(p))) return true;
+  if (isDenylisted(url)) return true;
   if (!user) return true;
   return false;
 }

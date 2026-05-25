@@ -142,7 +142,7 @@
     "quick-lru": "^7.3.0",
     "tiktoken": "^1.0.22",
     "ws": "^8.20.1",
-    "zod": "^4.3.4"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.3.16",

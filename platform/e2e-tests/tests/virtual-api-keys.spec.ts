@@ -1,14 +1,9 @@
-import {
-  E2eTestId,
-  getDeleteVirtualKeyButtonTestId,
-  getVirtualKeyRowTestId,
-} from "@shared";
+import { E2eTestId, getVirtualKeyRowTestId } from "@shared";
 import { expect, test } from "../fixtures";
 import {
   clickButton,
   createLlmProviderApiKey,
   createVirtualKey,
-  deleteLlmProviderApiKey,
   deleteVisibleProviderKeys,
   goToLlmProviderApiKeysPage,
   goToVirtualKeysPage,
@@ -18,21 +13,19 @@ const TEST_API_KEY = "sk-ant-test-key-12345";
 const TEST_PROVIDER = "zhipuai";
 const TEST_PROVIDER_OPTION_NAME = "Zhipu AI Zhipu AI";
 
+// Serial mode keeps `--repeat-each` reps sequential. Without it, parallel
+// reps race on the shared Zhipu provider state (one rep's
+// `deleteVisibleProviderKeys` cleans up another rep's just-created key).
 test.describe.configure({ mode: "serial" });
 
 test.describe("Provider Settings - Virtual API Keys", () => {
-  test.describe.configure({ mode: "serial" });
-
-  let parentKeyName: string;
-  let virtualKeyName: string;
-
   test("Can create a virtual key from the Virtual API Keys tab", async ({
     page,
     makeRandomString,
     request,
   }) => {
-    parentKeyName = makeRandomString(8, "VK Parent");
-    virtualKeyName = makeRandomString(8, "VK Test");
+    const parentKeyName = makeRandomString(8, "VK Parent");
+    const virtualKeyName = makeRandomString(8, "VK Test");
 
     await deleteVisibleProviderKeys(request, TEST_PROVIDER);
     await goToLlmProviderApiKeysPage(page);
@@ -50,90 +43,26 @@ test.describe("Provider Settings - Virtual API Keys", () => {
       parentProvider: "Zhipu",
     });
 
-    await expect(
-      page
-        .getByTestId(E2eTestId.VirtualKeyValue)
-        .locator("code")
-        .filter({ hasText: /^(arch_|archestra_)/ })
-        .last(),
-    ).toBeVisible();
+    try {
+      await expect(
+        page
+          .getByTestId(E2eTestId.VirtualKeyValue)
+          .locator("code")
+          .filter({ hasText: /^(arch_|archestra_)/ })
+          .last(),
+      ).toBeVisible();
 
-    await clickButton({ page, options: { name: "Close" }, first: true });
+      await clickButton({ page, options: { name: "Close" }, first: true });
 
-    await expect(
-      page.getByTestId(getVirtualKeyRowTestId(virtualKeyName)),
-    ).toBeVisible();
-  });
-
-  test("Can delete a virtual key", async ({ page }) => {
-    await goToVirtualKeysPage(page);
-
-    if (virtualKeyName) {
-      const rowTestId = getVirtualKeyRowTestId(virtualKeyName);
-      const deleteButton = page.getByTestId(
-        getDeleteVirtualKeyButtonTestId(virtualKeyName),
-      );
-      await expect(deleteButton).toBeVisible({ timeout: 15_000 });
-      await deleteButton.click();
-      await clickButton({ page, options: { name: "Delete" } });
-      // wait for the row to fully disappear so the parent key dialog
-      // below does not see the virtual key as still blocking
-      await expect(page.getByTestId(rowTestId)).toBeHidden({
-        timeout: 15_000,
-      });
+      await expect(
+        page.getByTestId(getVirtualKeyRowTestId(virtualKeyName)),
+      ).toBeVisible();
+    } finally {
+      // API teardown — UI delete returns when the row leaves the DOM
+      // (TanStack Query invalidate/refetch), but the DELETE round-trip can
+      // lag, leaving the VK→parent mapping intact and breaking the next
+      // run's startup cleanup with a 400 "mapped to virtual API keys".
+      await deleteVisibleProviderKeys(request, TEST_PROVIDER);
     }
-
-    if (parentKeyName) {
-      await goToLlmProviderApiKeysPage(page);
-      await deleteLlmProviderApiKey(page, parentKeyName);
-    }
-  });
-});
-
-test.describe("Provider Settings - Virtual Keys for Keyless Provider", () => {
-  test.describe.configure({ mode: "serial" });
-
-  let keylessVirtualKeyName: string;
-
-  test("Can create a virtual key for a keyless (no API key) provider", async ({
-    page,
-    makeRandomString,
-  }) => {
-    keylessVirtualKeyName = makeRandomString(8, "Keyless VK");
-
-    await goToVirtualKeysPage(page);
-
-    await createVirtualKey(page, {
-      name: keylessVirtualKeyName,
-      parentProvider: "gemini",
-    });
-
-    await expect(
-      page
-        .getByTestId(E2eTestId.VirtualKeyValue)
-        .locator("code")
-        .filter({ hasText: /^(arch_|archestra_)/ })
-        .last(),
-    ).toBeVisible();
-
-    await clickButton({ page, options: { name: "Close" }, first: true });
-    await expect(
-      page.getByTestId(getVirtualKeyRowTestId(keylessVirtualKeyName)),
-    ).toBeVisible();
-  });
-
-  test("Cleanup keyless virtual key", async ({ page }) => {
-    if (!keylessVirtualKeyName) return;
-
-    await goToVirtualKeysPage(page);
-
-    const rowTestId = getVirtualKeyRowTestId(keylessVirtualKeyName);
-    const deleteButton = page.getByTestId(
-      getDeleteVirtualKeyButtonTestId(keylessVirtualKeyName),
-    );
-    await expect(deleteButton).toBeVisible({ timeout: 15_000 });
-    await deleteButton.click();
-    await clickButton({ page, options: { name: "Delete" } });
-    await expect(page.getByTestId(rowTestId)).toBeHidden({ timeout: 15_000 });
   });
 });

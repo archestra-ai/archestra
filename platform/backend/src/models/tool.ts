@@ -2,6 +2,7 @@ import {
   AGENT_TOOL_PREFIX,
   ARCHESTRA_MCP_CATALOG_ID,
   ARCHESTRA_TOOL_SHORT_NAMES,
+  type ArchestraToolShortName,
   BUILT_IN_AGENT_IDS,
   DEFAULT_ARCHESTRA_TOOL_NAMES,
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
@@ -10,6 +11,7 @@ import {
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
   slugify,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  TOOL_RUN_PYTHON_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@shared";
@@ -33,6 +35,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata";
+import config from "@/config";
 import db, { schema } from "@/database";
 import {
   createPaginatedResult,
@@ -924,9 +927,10 @@ class ToolModel {
    * - artifact_write: for artifact management
    * - todo_write: for task tracking
    * - query_knowledge_sources: for querying the knowledge base
+   * - run_python: for code execution, only when the runtime is enabled
    *
-   * All default tools are always assigned. The query_knowledge_sources tool
-   * is filtered out at query time if the agent has no knowledge base assigned.
+   * Seeded default tools are assigned. The query_knowledge_sources tool is
+   * filtered out at query time if the agent has no knowledge base assigned.
    *
    * Only tools that have already been seeded (via {@link seedArchestraTools})
    * will be assigned. If none of the default tools exist, this method skips assignment.
@@ -936,8 +940,15 @@ class ToolModel {
   ): Promise<void> {
     const organization = await OrganizationModel.getFirst();
     archestraMcpBranding.syncFromOrganization(organization);
-    const defaultToolNames = DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES.map(
-      (shortName) => archestraMcpBranding.getToolName(shortName),
+    const defaultToolShortNames: ArchestraToolShortName[] = [
+      ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+    ];
+    if (config.codeRuntime.enabled) {
+      defaultToolShortNames.push(TOOL_RUN_PYTHON_SHORT_NAME);
+    }
+
+    const defaultToolNames = defaultToolShortNames.map((shortName) =>
+      archestraMcpBranding.getToolName(shortName),
     );
 
     const defaultTools = await db

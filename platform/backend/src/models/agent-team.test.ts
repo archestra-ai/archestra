@@ -139,6 +139,73 @@ describe("AgentTeamModel", () => {
 
       expect(accessibleIds).toContain(orgAgent.id);
     });
+
+    test("team-scoped agent is accessible when user is a member of one of its teams but not another", async ({
+      makeAgent,
+      makeTeam,
+      makeOrganization,
+      makeUser,
+      makeTeamMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const memberTeam = await makeTeam(org.id, user.id);
+      const otherTeam = await makeTeam(org.id, user.id);
+      await makeTeamMember(memberTeam.id, user.id);
+
+      const visibleAgent = await makeAgent({
+        organizationId: org.id,
+        scope: "team",
+      });
+      await AgentTeamModel.assignTeamsToAgent(visibleAgent.id, [memberTeam.id]);
+
+      const hiddenAgent = await makeAgent({
+        organizationId: org.id,
+        scope: "team",
+      });
+      await AgentTeamModel.assignTeamsToAgent(hiddenAgent.id, [otherTeam.id]);
+
+      const accessibleIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        user.id,
+        false,
+      );
+
+      expect(accessibleIds).toContain(visibleAgent.id);
+      expect(accessibleIds).not.toContain(hiddenAgent.id);
+    });
+
+    test("personal-scoped agent is accessible only to its author", async ({
+      makeAgent,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const author = await makeUser();
+      const otherUser = await makeUser();
+
+      const ownAgent = await makeAgent({
+        organizationId: org.id,
+        scope: "personal",
+        authorId: author.id,
+      });
+      const otherUsersAgent = await makeAgent({
+        organizationId: org.id,
+        scope: "personal",
+        authorId: otherUser.id,
+      });
+
+      const authorAccessibleIds =
+        await AgentTeamModel.getUserAccessibleAgentIds(author.id, false);
+      expect(authorAccessibleIds).toContain(ownAgent.id);
+      expect(authorAccessibleIds).not.toContain(otherUsersAgent.id);
+
+      const otherAccessibleIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        otherUser.id,
+        false,
+      );
+      expect(otherAccessibleIds).toContain(otherUsersAgent.id);
+      expect(otherAccessibleIds).not.toContain(ownAgent.id);
+    });
   });
 
   describe("userHasAgentAccess", () => {

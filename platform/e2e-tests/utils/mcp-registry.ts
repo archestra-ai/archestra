@@ -4,6 +4,7 @@ import {
   getManageCredentialsAddToTeamOptionTestId,
   getManageCredentialsButtonTestId,
 } from "@shared";
+import { UI_BASE_URL } from "../consts";
 import { expect, goToPage } from "../fixtures";
 import { clickButton, closeOpenDialogs } from "./dialogs";
 import { openManageCredentialsDialog } from "./mcp-gateway";
@@ -70,6 +71,65 @@ export async function waitForMcpServerCard(
   await page
     .getByTestId(`${E2eTestId.McpServerCard}-${catalogItemName}`)
     .waitFor({ state: "visible", timeout: 30_000 });
+}
+
+/**
+ * Poll `GET /api/mcp_server/:id` until `localInstallationStatus` reaches
+ * `"success"`. Used when the install path went via the API (so the
+ * registry DOM doesn't refresh on its own and `waitForMcpServerToolsDiscovered`
+ * has nothing to react to). Fails fast on backend `"error"` status with the
+ * error message attached; treats a 404 as "row not yet visible, keep
+ * polling" to absorb a brief window between the install POST returning
+ * and the row becoming queryable.
+ */
+export async function waitForMcpServerReadyById(
+  page: Page,
+  mcpServerId: string,
+  options?: { timeoutMs?: number },
+): Promise<void> {
+  const timeoutMs = options?.timeoutMs ?? 120_000;
+  const start = Date.now();
+  let delay = 500;
+  let lastObserved: string | null = null;
+  while (Date.now() - start < timeoutMs) {
+    const response = await page.request.get(
+      `${UI_BASE_URL}/api/mcp_server/${mcpServerId}`,
+      { headers: { Origin: UI_BASE_URL } },
+    );
+    const status = response.status();
+    if (status === 404) {
+      lastObserved = "not-found";
+    } else if (response.ok()) {
+      const server = (await response.json()) as {
+        localInstallationStatus?: string;
+        localInstallationError?: string | null;
+      };
+      lastObserved = server.localInstallationStatus ?? "unknown";
+      if (lastObserved === "success") {
+        return;
+      }
+      if (lastObserved === "error") {
+        throw new Error(
+          `MCP server ${mcpServerId} install failed: ${server.localInstallationError ?? "unknown error"}`,
+        );
+      }
+    } else if (status >= 400 && status < 500) {
+      // Permanent client errors (401 unauthorized, 403 forbidden) — fail
+      // fast rather than retrying to the 120s timeout.
+      throw new Error(
+        `MCP server ${mcpServerId} status fetch returned ${status}: ${await response.text()}`,
+      );
+    } else {
+      // 5xx — keep polling, but record so the final timeout message is
+      // diagnostic rather than the previous-iteration's stale value.
+      lastObserved = `transient-${status}`;
+    }
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    delay = Math.min(delay * 1.5, 5000);
+  }
+  throw new Error(
+    `MCP server ${mcpServerId} did not reach localInstallationStatus="success" within ${timeoutMs}ms (last observed: ${lastObserved ?? "n/a"})`,
+  );
 }
 
 export async function waitForMcpServerToolsDiscovered(

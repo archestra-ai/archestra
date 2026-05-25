@@ -72,21 +72,6 @@ export async function createLlmProviderApiKey(
   ).toBeVisible({ timeout: 30_000 });
 }
 
-export async function deleteLlmProviderApiKey(
-  page: Page,
-  keyName: string,
-): Promise<void> {
-  const deleteButton = page.getByTestId(
-    `${E2eTestId.DeleteChatApiKeyButton}-${keyName}`,
-  );
-  if (!(await deleteButton.isVisible().catch(() => false))) {
-    return;
-  }
-
-  await deleteButton.click();
-  await clickButton({ page, options: { name: "Delete" } });
-}
-
 export async function createVirtualKey(
   page: Page,
   params: {

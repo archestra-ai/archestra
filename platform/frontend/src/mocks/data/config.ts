@@ -18,6 +18,7 @@ export function makeConfig(
     },
     features: {
       orchestratorK8sRuntime: false,
+      codeRuntime: false,
       advancedToolFeaturesEnabled: false,
       agentSkillsEnabled: false,
       byosEnabled: false,
@@ -33,7 +34,9 @@ export function makeConfig(
       ngrokDomain: "",
       virtualKeyDefaultExpirationSeconds: 3600,
       mcpSandboxDomain: null,
+      chatSecretScanEnabled: false,
       ...overrides.features,
+      maintenanceMode: overrides.features?.maintenanceMode ?? null,
     },
     providerBaseUrls: overrides.providerBaseUrls ?? {},
   };
@@ -54,6 +57,7 @@ export function makePublicConfig(
       posthog: { key: "", host: "" },
     },
     ...overrides,
+    maintenanceMode: overrides.maintenanceMode ?? null,
   };
 }
 

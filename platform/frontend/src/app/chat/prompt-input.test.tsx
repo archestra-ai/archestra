@@ -9,6 +9,7 @@ const {
   mockTextInputSetInput,
   mockTextInputClear,
   mockControllerState,
+  mockConfigState,
 } = vi.hoisted(() => ({
   mockUseOrganization: vi.fn(),
   mockUseChatPlaceholder: vi.fn(),
@@ -16,6 +17,7 @@ const {
   mockTextInputSetInput: vi.fn(),
   mockTextInputClear: vi.fn(),
   mockControllerState: { value: "" },
+  mockConfigState: { sensitiveDataDetectionEnabled: false },
 }));
 
 // Mock ResizeObserver which is used by Radix UI components
@@ -252,6 +254,16 @@ vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => mockUseHasPermissions(),
 }));
 
+vi.mock("@/lib/config/config", () => ({
+  default: {
+    chat: {
+      get sensitiveDataDetectionEnabled() {
+        return mockConfigState.sensitiveDataDetectionEnabled;
+      },
+    },
+  },
+}));
+
 // Import the component after mocks are set up
 import ArchestraPromptInput from "./prompt-input";
 
@@ -280,6 +292,7 @@ describe("ArchestraPromptInput", () => {
       isLoading: false,
     });
     mockControllerState.value = "";
+    mockConfigState.sensitiveDataDetectionEnabled = false;
   });
 
   describe("File Upload Button", () => {
@@ -553,6 +566,108 @@ describe("ArchestraPromptInput", () => {
 
       expect(onCompactConversation).toHaveBeenCalledTimes(1);
       expect(mockTextInputClear).toHaveBeenCalled();
+    });
+  });
+
+  describe("sensitive data detection", () => {
+    const fakeGithubToken = `ghp_${"a".repeat(36)}`;
+
+    it("flag off: plain submit works", () => {
+      const onSubmit = vi.fn();
+      mockConfigState.sensitiveDataDetectionEnabled = false;
+      mockControllerState.value = "just a normal message";
+
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      expect(
+        screen.queryByText(
+          "Your message seems to contain sensitive data, are you sure?",
+        ),
+      ).not.toBeInTheDocument();
+    });
+
+    it("flag off: token-like content submits with no dialog", () => {
+      const onSubmit = vi.fn();
+      mockConfigState.sensitiveDataDetectionEnabled = false;
+      mockControllerState.value = `please rotate ${fakeGithubToken}`;
+
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      expect(
+        screen.queryByText(
+          "Your message seems to contain sensitive data, are you sure?",
+        ),
+      ).not.toBeInTheDocument();
+    });
+
+    it("flag on: plain message submits as before", () => {
+      const onSubmit = vi.fn();
+      mockConfigState.sensitiveDataDetectionEnabled = true;
+      mockControllerState.value = "just a normal message";
+
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      expect(
+        screen.queryByText(
+          "Your message seems to contain sensitive data, are you sure?",
+        ),
+      ).not.toBeInTheDocument();
+    });
+
+    it("flag on: detected token opens the dialog and suppresses onSubmit", () => {
+      const onSubmit = vi.fn();
+      mockConfigState.sensitiveDataDetectionEnabled = true;
+      mockControllerState.value = `please rotate ${fakeGithubToken}`;
+
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(onSubmit).not.toHaveBeenCalled();
+      expect(
+        screen.getByText(
+          "Your message seems to contain sensitive data, are you sure?",
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it("flag on: clicking Send anyway dispatches onSubmit with the original message", () => {
+      const onSubmit = vi.fn();
+      mockConfigState.sensitiveDataDetectionEnabled = true;
+      const text = `please rotate ${fakeGithubToken}`;
+      mockControllerState.value = text;
+
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      fireEvent.click(screen.getByRole("button", { name: "Send anyway" }));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      const [message] = onSubmit.mock.calls[0];
+      expect(message.text).toBe(text);
+    });
+
+    it("flag on: clicking Cancel does not call onSubmit", () => {
+      const onSubmit = vi.fn();
+      mockConfigState.sensitiveDataDetectionEnabled = true;
+      mockControllerState.value = `please rotate ${fakeGithubToken}`;
+
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(onSubmit).not.toHaveBeenCalled();
+      expect(
+        screen.queryByText(
+          "Your message seems to contain sensitive data, are you sure?",
+        ),
+      ).not.toBeInTheDocument();
     });
   });
 

@@ -45,6 +45,7 @@ import {
   providerToLogoProvider,
 } from "@/components/chat/model-selector";
 import { PlaywrightInstallInline } from "@/components/chat/playwright-install-dialog";
+import { SensitiveDataConfirmDialog } from "@/components/chat/sensitive-data-confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -64,7 +65,9 @@ import { conversationStorageKeys } from "@/lib/chat/chat-utils";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useModelSelectorDisplay } from "@/lib/chat/use-model-selector-display.hook";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
+import config from "@/lib/config/config";
 import { useOrganization } from "@/lib/organization.query";
+import { scanText } from "@/lib/sensitive-data";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
 import { cn } from "@/lib/utils";
 import {
@@ -433,6 +436,26 @@ const PromptInputContent = ({
     ],
   );
 
+  const sensitiveDataDetectionEnabled = config.chat.sensitiveDataDetectionEnabled;
+  const [sensitiveDataDialogOpen, setSensitiveDataDialogOpen] = useState(false);
+  const pendingSubmissionRef = useRef<{
+    outgoing: PromptInputMessage;
+    e: FormEvent<HTMLFormElement>;
+    options?: { skill: ChatSkillMetadata };
+  } | null>(null);
+
+  const dispatchSubmit = useCallback(
+    (
+      outgoing: PromptInputMessage,
+      e: FormEvent<HTMLFormElement>,
+      options?: { skill: ChatSkillMetadata },
+    ) => {
+      localStorage.removeItem(storageKey);
+      onSubmit(outgoing, e, options);
+    },
+    [onSubmit, storageKey],
+  );
+
   const handleWrappedSubmit = useCallback(
     (message: PromptInputMessage, e: FormEvent<HTMLFormElement>) => {
       const trimmed = message.text.trim();
@@ -453,17 +476,41 @@ const PromptInputContent = ({
         outgoing = { ...message, text: parsed.remaining };
       }
 
-      localStorage.removeItem(storageKey);
-      onSubmit(outgoing, e, skill ? { skill } : undefined);
+      const options = skill ? { skill } : undefined;
+
+      if (sensitiveDataDetectionEnabled && outgoing.text.length > 0) {
+        const findings = scanText(outgoing.text);
+        if (findings.length > 0) {
+          pendingSubmissionRef.current = { outgoing, e, options };
+          setSensitiveDataDialogOpen(true);
+          return;
+        }
+      }
+
+      dispatchSubmit(outgoing, e, options);
     },
     [
-      onSubmit,
+      dispatchSubmit,
       onCompactConversation,
       runCompactCommand,
+      sensitiveDataDetectionEnabled,
       skillCommands,
-      storageKey,
     ],
   );
+
+  const handleSensitiveDataConfirm = useCallback(() => {
+    const pending = pendingSubmissionRef.current;
+    pendingSubmissionRef.current = null;
+    setSensitiveDataDialogOpen(false);
+    if (pending) {
+      dispatchSubmit(pending.outgoing, pending.e, pending.options);
+    }
+  }, [dispatchSubmit]);
+
+  const handleSensitiveDataCancel = useCallback(() => {
+    pendingSubmissionRef.current = null;
+    setSensitiveDataDialogOpen(false);
+  }, []);
 
   const handleFileError = useCallback(
     (err: {
@@ -869,6 +916,11 @@ const PromptInputContent = ({
           </div>
         </PromptInputFooter>
       </PromptInput>
+      <SensitiveDataConfirmDialog
+        open={sensitiveDataDialogOpen}
+        onConfirm={handleSensitiveDataConfirm}
+        onCancel={handleSensitiveDataCancel}
+      />
     </div>
   );
 };

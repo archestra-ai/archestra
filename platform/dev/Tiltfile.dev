@@ -1,9 +1,20 @@
 # Development + pre-requisite resources
 
+# Env-driven so a parallel Tilt session (separate worktree) doesn't collide.
+# Defined up here so the MCP RBAC block below can render into the right
+# namespace.
+frontend_port = os.getenv('ARCHESTRA_FRONTEND_PORT', '3000')
+frontend_int_tests_port = os.getenv('ARCHESTRA_FRONTEND_INT_TESTS_PORT', '3010')
+# Same namespace the backend's K8s MCP orchestrator uses to spawn MCP server
+# pods. The MCP RBAC, the port-forwarder, and the orchestrator all have to
+# agree on this — otherwise pods land in one namespace, the SA they need lives
+# in another, and the port-forwarder watches a third.
+mcp_namespace = os.getenv('ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE', 'default')
+
 # MCP Server RBAC resources for local development
 # Render from Helm chart and filter to only RBAC resources (avoid duplication)
 k8s_yaml(local(
-  'helm template archestra-platform ../helm/archestra --namespace default --set archestra.orchestrator.kubernetes.mcpServerRbac.create=true --show-only templates/mcp-serviceaccount.yaml',
+  'helm template archestra-platform ../helm/archestra --namespace ' + mcp_namespace + ' --set archestra.orchestrator.kubernetes.mcpServerRbac.create=true --show-only templates/mcp-serviceaccount.yaml',
   quiet=True
 ))
 
@@ -11,23 +22,15 @@ k8s_resource(
   new_name='mcp-rbac',
   labels=['dev'],
   objects=[
-    'archestra-platform-mcp-k8s-operator:serviceaccount:default',
-    'archestra-platform-mcp-server-operator:role:default',
-    'archestra-platform-mcp-server-operator:rolebinding:default'
+    'archestra-platform-mcp-k8s-operator:serviceaccount:' + mcp_namespace,
+    'archestra-platform-mcp-server-operator:role:' + mcp_namespace,
+    'archestra-platform-mcp-server-operator:rolebinding:' + mcp_namespace
   ]
 )
 
 # Define is_prod locally (same logic as main Tiltfile)
 is_prod = os.getenv('PROD') == 'true'
 dev_resource_name = 'pnpm-prod' if is_prod else 'pnpm-dev'
-
-# Env-driven so a parallel Tilt session (separate worktree) doesn't collide.
-frontend_port = os.getenv('ARCHESTRA_FRONTEND_PORT', '3000')
-frontend_int_tests_port = os.getenv('ARCHESTRA_FRONTEND_INT_TESTS_PORT', '3010')
-# Same namespace the backend's K8s MCP orchestrator uses to spawn MCP server
-# pods; the port-forwarder below has to watch the same namespace or services
-# won't be reachable on localhost in a parallel stack.
-mcp_namespace = os.getenv('ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE', 'default')
 
 # Build env dict to sync ARCHESTRA_* to NEXT_PUBLIC_ARCHESTRA_* for frontend
 # This is rebuilt on each Tiltfile evaluation (triggered by .env changes)

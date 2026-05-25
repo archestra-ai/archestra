@@ -177,11 +177,14 @@ describe("ChatProvider retries", () => {
     await waitFor(() =>
       expect(latestSessionRef.current?.contextTokensUsed).toBe(35),
     );
-    expect(latestSessionRef.current?.contextCompaction.lastCompaction).toEqual({
-      compactionId: "compaction-1",
-      originalTokenEstimate: 120,
-      compactedTokenEstimate: 35,
-    });
+    expect(latestSessionRef.current?.contextCompaction.lastCompaction).toEqual(
+      expect.objectContaining({
+        compactionId: "compaction-1",
+        originalTokenEstimate: 120,
+        compactedTokenEstimate: 35,
+        createdAt: expect.any(String),
+      }),
+    );
   });
 
   it("does not overwrite live context tokens from auto compaction estimates", async () => {
@@ -232,12 +235,15 @@ describe("ChatProvider retries", () => {
     await waitFor(() =>
       expect(
         latestSessionRef.current?.contextCompaction.lastCompaction,
-      ).toEqual({
-        trigger: "auto",
-        compactionId: "compaction-1",
-        originalTokenEstimate: 1_652_781,
-        compactedTokenEstimate: 794_797,
-      }),
+      ).toEqual(
+        expect.objectContaining({
+          trigger: "auto",
+          compactionId: "compaction-1",
+          originalTokenEstimate: 1_652_781,
+          compactedTokenEstimate: 794_797,
+          createdAt: expect.any(String),
+        }),
+      ),
     );
     expect(latestSessionRef.current?.contextTokensUsed).toBe(120);
   });

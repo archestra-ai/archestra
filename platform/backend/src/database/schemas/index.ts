@@ -78,6 +78,7 @@ export { default as teamTokensTable } from "./team-token";
 export { default as teamVaultFoldersTable } from "./team-vault-folder";
 export { default as toolsTable } from "./tool";
 export { default as toolInvocationPoliciesTable } from "./tool-invocation-policy";
+export { default as toolOutputArtifactsTable } from "./tool-output-artifact";
 export { default as trustedDataPoliciesTable } from "./trusted-data-policy";
 export { default as twoFactorsTable } from "./two-factor";
 export { default as usersTable } from "./user";

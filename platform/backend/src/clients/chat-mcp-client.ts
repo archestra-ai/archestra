@@ -47,7 +47,19 @@ import {
   ATTR_MCP_IS_ERROR_RESULT,
   startActiveMcpSpan,
 } from "@/observability/tracing";
+import { createDevCompactionTestTools } from "@/services/dev-compaction-test-tools";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
+import type { ToolOutputLlmSummarizer } from "@/services/tool-output-llm-summarizer";
+import {
+  buildToolResultId,
+  compactToolResultForPrompt,
+  createDefaultToolOutputSummarizer,
+  createOffloadedToolAccessTools,
+  DbToolArtifactStore,
+  formatToolResultRefForPrompt,
+  isOffloadedToolAccessToolName,
+  type ToolOutputSummarizerContext,
+} from "@/services/tool-output-offload";
 import type {
   AgentType,
   GlobalToolPolicy,
@@ -55,6 +67,11 @@ import type {
 } from "@/types";
 import { UNSAFE_CONTEXT_BOUNDARY_REASON } from "@/types";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
+import {
+  isInlineToolResultBlock,
+  isToolResultRefBlock,
+  type ToolArtifactStore,
+} from "@/types/tool-output-offload";
 import { buildMcpClientInfo } from "@/utils/mcp-client-info";
 
 /**
@@ -215,6 +232,7 @@ export const __test = {
   filterToolsByEnabledIds,
   pingClientWithTimeout,
   throwIfApprovalRequired,
+  attachToolOutputRefForModel,
 };
 
 /**
@@ -409,6 +427,69 @@ export function clearChatMcpClient(agentId: string): void {
     },
     "Cleared MCP client and tool cache entries for agent",
   );
+}
+
+function createScopedOffloadedToolAccessTools(conversationId?: string) {
+  if (!conversationId) return {};
+  return createOffloadedToolAccessTools({
+    conversationId,
+    config: config.chat.offloadedToolAccess,
+    store: new DbToolArtifactStore(),
+  });
+}
+
+function wrapOffloadedToolAccessToolsForChat(
+  tools: Record<string, Tool>,
+  params: {
+    conversationId?: string;
+    summarizer?: ToolOutputLlmSummarizer;
+  },
+): Record<string, Tool> {
+  const wrapped: Record<string, Tool> = {};
+  for (const [name, tool] of Object.entries(tools)) {
+    if (!isOffloadedToolAccessToolName(name) || !tool.execute) {
+      wrapped[name] = tool;
+      continue;
+    }
+    wrapped[name] = {
+      ...tool,
+      execute: async (args, options) => {
+        const result = await tool.execute?.(args, options);
+        if (!params.conversationId || result === undefined) {
+          return result;
+        }
+        const content =
+          typeof result === "string" ? result : JSON.stringify(result, null, 2);
+        return attachToolOutputRefForModel({
+          conversationId: params.conversationId,
+          summarizer: params.summarizer,
+          toolCallId: randomUUID(),
+          toolName: name,
+          status: "success",
+          rawInput: args,
+          rawOutput: result,
+          content,
+        });
+      },
+    };
+  }
+  return wrapped;
+}
+
+/** Dev/offload tools must remain available even when MCP Gateway tools cannot be loaded. */
+function getChatAccessoryTools(
+  conversationId?: string,
+  summarizer?: ToolOutputLlmSummarizer,
+): Record<string, Tool> {
+  const accessTools = wrapOffloadedToolAccessToolsForChat(
+    createScopedOffloadedToolAccessTools(conversationId),
+    { conversationId, summarizer },
+  );
+  const devTools = createDevCompactionTestTools({ conversationId, summarizer });
+  return withAccessoryToolModelOutput({
+    ...accessTools,
+    ...devTools,
+  });
 }
 
 /**
@@ -783,11 +864,14 @@ export async function getChatMcpTools({
   user,
   blockOnApprovalRequired,
   scheduleTriggerRunId,
+  summarizerContext,
 }: {
   agentName: string;
   agentId: string;
   userId: string;
   organizationId: string;
+  /** Same LLM credentials as the active chat turn (org/user API keys). */
+  summarizerContext?: ToolOutputSummarizerContext;
   /** ChatOps channel binding ID for Slack/MS Teams-triggered executions */
   chatOpsBindingId?: string;
   /** ChatOps thread identifier for thread-scoped agent overrides */
@@ -807,6 +891,9 @@ export async function getChatMcpTools({
   /** Schedule trigger run ID — enables artifact_write to target the run */
   scheduleTriggerRunId?: string;
 }): Promise<Record<string, Tool>> {
+  const toolOutputSummarizer = summarizerContext
+    ? await createDefaultToolOutputSummarizer(summarizerContext, conversationId)
+    : undefined;
   const toolCacheKey = getToolCacheKey(agentId, userId, conversationId);
   const shouldUseToolCache = !abortSignal;
 
@@ -823,7 +910,10 @@ export async function getChatMcpTools({
       "Returning cached MCP tools for chat",
     );
     // Apply filtering if enabledToolIds provided and non-empty
-    return await filterToolsByEnabledIds(cachedTools, enabledToolIds);
+    return {
+      ...(await filterToolsByEnabledIds(cachedTools, enabledToolIds)),
+      ...getChatAccessoryTools(conversationId, toolOutputSummarizer),
+    };
   }
 
   // Log cache miss - in multi-pod deployments without sticky sessions,
@@ -848,9 +938,9 @@ export async function getChatMcpTools({
   if (!mcpGwToken) {
     logger.warn(
       { agentId, userId },
-      "No valid team token available for user - cannot execute tools",
+      "No valid team token available for user - cannot execute MCP tools",
     );
-    return {};
+    return getChatAccessoryTools(conversationId, toolOutputSummarizer);
   }
 
   // Still use MCP client for listing tools (via MCP Gateway)
@@ -867,9 +957,9 @@ export async function getChatMcpTools({
   if (!client) {
     logger.warn(
       { agentId, userId },
-      "No MCP client available, returning empty tools",
+      "No MCP client available, returning accessory tools only",
     );
-    return {}; // No tools available
+    return getChatAccessoryTools(conversationId, toolOutputSummarizer);
   }
 
   try {
@@ -1006,14 +1096,25 @@ export async function getChatMcpTools({
                       isError: archestraResponse.isError ?? false,
                     });
 
-                    // Return errors as tool-result text so the LLM can read
-                    // and recover, instead of throwing (which surfaces as a
-                    // fatal chat error). Matches executeMcpTool behavior.
-                    return archestraResponse.content
+                    const archestraContent = archestraResponse.content
                       .map((item) =>
                         item.type === "text" ? item.text : JSON.stringify(item),
                       )
                       .join("\n");
+
+                    // Return errors as tool-result text so the LLM can read
+                    // and recover, instead of throwing (which surfaces as a
+                    // fatal chat error). Matches executeMcpTool behavior.
+                    return await attachToolOutputRefForModel({
+                      conversationId,
+                      summarizer: toolOutputSummarizer,
+                      toolCallId: randomUUID(),
+                      toolName: mcpTool.name,
+                      status: archestraResponse.isError ? "error" : "success",
+                      rawInput: toolArguments,
+                      rawOutput: archestraResponse,
+                      content: archestraContent,
+                    });
                   }
 
                   // Execute non-Archestra tools via shared helper with browser sync
@@ -1025,6 +1126,7 @@ export async function getChatMcpTools({
                     userId,
                     organizationId,
                     conversationId,
+                    toolOutputSummarizer,
                     mcpGwToken,
                     globalToolPolicy,
                     considerContextUntrusted,
@@ -1195,11 +1297,21 @@ export async function getChatMcpTools({
                       isError: response.isError ?? false,
                     });
 
-                    return response.content
+                    const agentToolContent = response.content
                       .map((item) =>
                         item.type === "text" ? item.text : JSON.stringify(item),
                       )
                       .join("\n");
+                    return await attachToolOutputRefForModel({
+                      conversationId,
+                      summarizer: toolOutputSummarizer,
+                      toolCallId: randomUUID(),
+                      toolName: agentTool.name,
+                      status: response.isError ? "error" : "success",
+                      rawInput: args,
+                      rawOutput: response,
+                      content: agentToolContent,
+                    });
                   } catch (error) {
                     reportToolMetrics({
                       toolName: agentTool.name,
@@ -1252,13 +1364,16 @@ export async function getChatMcpTools({
     }
 
     // Apply filtering if enabledToolIds provided and non-empty
-    return await filterToolsByEnabledIds(aiTools, enabledToolIds);
+    return {
+      ...(await filterToolsByEnabledIds(aiTools, enabledToolIds)),
+      ...getChatAccessoryTools(conversationId, toolOutputSummarizer),
+    };
   } catch (error) {
     logger.error(
       { agentId, userId, error },
       "Failed to fetch tools from MCP Gateway",
     );
-    return {};
+    return getChatAccessoryTools(conversationId, toolOutputSummarizer);
   }
 }
 
@@ -1268,6 +1383,19 @@ export async function getChatMcpTools({
  * only receives the plain-text `content` summary (SEP-1865).
  * @public — exported for testability
  */
+function withAccessoryToolModelOutput(
+  tools: Record<string, Tool>,
+): Record<string, Tool> {
+  const wrapped: Record<string, Tool> = {};
+  for (const [name, tool] of Object.entries(tools)) {
+    wrapped[name] = {
+      ...tool,
+      toModelOutput: mcpToolToModelOutput,
+    };
+  }
+  return wrapped;
+}
+
 export function mcpToolToModelOutput({
   output,
 }: {
@@ -1280,9 +1408,93 @@ export function mcpToolToModelOutput({
         rawContent?: unknown;
       };
 }): { type: "text"; value: string } {
+  if (typeof output !== "string") {
+    const meta = output._meta as
+      | {
+          toolResultRefBlock?: unknown;
+          toolResultInlineBlock?: unknown;
+        }
+      | undefined;
+    const refBlock = meta?.toolResultRefBlock;
+    if (isToolResultRefBlock(refBlock)) {
+      return {
+        type: "text",
+        value: formatToolResultRefForPrompt(refBlock),
+      };
+    }
+    const inlineBlock = meta?.toolResultInlineBlock;
+    if (isInlineToolResultBlock(inlineBlock)) {
+      const inlineContent = inlineBlock.content;
+      return {
+        type: "text",
+        value:
+          typeof inlineContent === "string"
+            ? inlineContent
+            : JSON.stringify(inlineContent, null, 2),
+      };
+    }
+  }
+
   return {
     type: "text",
     value: typeof output === "string" ? output : output.content,
+  };
+}
+
+async function attachToolOutputRefForModel(params: {
+  conversationId?: string;
+  summarizer?: ToolOutputLlmSummarizer;
+  store?: ToolArtifactStore;
+  toolCallId: string;
+  toolName: string;
+  status: "success" | "error" | "partial";
+  rawInput?: unknown;
+  rawOutput: unknown;
+  content: string;
+  meta?: Record<string, unknown>;
+}): Promise<{ content: string; _meta?: Record<string, unknown> }> {
+  if (!params.conversationId) {
+    return {
+      content: params.content,
+      ...(params.meta ? { _meta: params.meta } : {}),
+    };
+  }
+
+  const block = await compactToolResultForPrompt({
+    conversationId: params.conversationId,
+    toolCallId: params.toolCallId,
+    toolResultId: buildToolResultId({
+      conversationId: params.conversationId,
+      toolCallId: params.toolCallId,
+      toolName: params.toolName,
+    }),
+    toolName: params.toolName,
+    status: params.status,
+    rawInput: params.rawInput,
+    rawOutput: params.rawOutput,
+    config: config.chat.toolOutputOffload,
+    store: params.store ?? new DbToolArtifactStore(),
+    summarizer: params.summarizer,
+  });
+
+  if (!block.offloaded) {
+    return {
+      content: params.content,
+      _meta: {
+        ...params.meta,
+        ...(block.type === "TOOL_RESULT_INLINE"
+          ? { toolResultInlineBlock: block }
+          : {}),
+      },
+    };
+  }
+
+  return {
+    content: formatToolResultRefForPrompt(block),
+    _meta: {
+      ...params.meta,
+      toolResultRefBlock: block,
+    },
   };
 }
 
@@ -1411,6 +1623,7 @@ interface ToolExecutionContext {
   userId: string;
   organizationId: string;
   conversationId?: string;
+  toolOutputSummarizer?: ToolOutputLlmSummarizer;
   mcpGwToken: {
     tokenId: string;
     teamId: string | null;
@@ -1536,17 +1749,32 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     const extractedError = mcpContent
       ?.map((item) => (item.type === "text" ? item.text : JSON.stringify(item)))
       .join("\n");
+    const content = extractedError || result.error || "Tool execution failed";
+    const unsafeBoundaryResult = await buildUnsafeContextBoundaryResult({
+      resultMeta: result._meta,
+      toolCallId: toolCall.id,
+      toolName,
+      toolOutput: content,
+      agentId,
+      globalToolPolicy: ctx.globalToolPolicy,
+      considerContextUntrusted: ctx.considerContextUntrusted,
+    });
+    const modelRef = await attachToolOutputRefForModel({
+      conversationId,
+      summarizer: ctx.toolOutputSummarizer,
+      toolCallId: toolCall.id,
+      toolName,
+      status: "error",
+      rawInput: toolArguments,
+      rawOutput: result,
+      content,
+      meta: unsafeBoundaryResult._meta,
+    });
     return {
-      content: extractedError || result.error || "Tool execution failed",
-      ...(await buildUnsafeContextBoundaryResult({
-        resultMeta: result._meta,
-        toolCallId: toolCall.id,
-        toolName,
-        toolOutput: extractedError || result.error || "Tool execution failed",
-        agentId,
-        globalToolPolicy: ctx.globalToolPolicy,
-        considerContextUntrusted: ctx.considerContextUntrusted,
-      })),
+      ...modelRef,
+      ...(unsafeBoundaryResult.unsafeContextBoundary
+        ? { unsafeContextBoundary: unsafeBoundaryResult.unsafeContextBoundary }
+        : {}),
       structuredContent: result.structuredContent,
       rawContent: Array.isArray(result.content)
         ? (result.content as ContentBlock[])
@@ -1678,17 +1906,32 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     );
   }
 
-  return {
+  const unsafeBoundaryResult = await buildUnsafeContextBoundaryResult({
+    resultMeta: Object.keys(mergedMeta).length > 0 ? mergedMeta : undefined,
+    toolCallId: toolCall.id,
+    toolName,
+    toolOutput: result.structuredContent ?? textContent,
+    agentId,
+    globalToolPolicy: ctx.globalToolPolicy,
+    considerContextUntrusted: ctx.considerContextUntrusted,
+  });
+  const modelRef = await attachToolOutputRefForModel({
+    conversationId,
+    summarizer: ctx.toolOutputSummarizer,
+    toolCallId: toolCall.id,
+    toolName,
+    status: "success",
+    rawInput: toolArguments,
+    rawOutput: result,
     content: textContent,
-    ...(await buildUnsafeContextBoundaryResult({
-      resultMeta: Object.keys(mergedMeta).length > 0 ? mergedMeta : undefined,
-      toolCallId: toolCall.id,
-      toolName,
-      toolOutput: result.structuredContent ?? textContent,
-      agentId,
-      globalToolPolicy: ctx.globalToolPolicy,
-      considerContextUntrusted: ctx.considerContextUntrusted,
-    })),
+    meta: unsafeBoundaryResult._meta,
+  });
+
+  return {
+    ...modelRef,
+    ...(unsafeBoundaryResult.unsafeContextBoundary
+      ? { unsafeContextBoundary: unsafeBoundaryResult.unsafeContextBoundary }
+      : {}),
     structuredContent: result.structuredContent,
     rawContent: mcpContent,
   };

@@ -17,6 +17,25 @@ const ConversationShareSummarySchema = z
   })
   .nullable();
 
+const ContextUsageSchema = z.object({
+  estimatedContextTokens: z.number(),
+  effectiveContextWindowTokens: z.number(),
+  fillRatio: z.number(),
+  fillPercent: z.number(),
+  contextWindowSource: z.enum([
+    "explicit_config",
+    "model_registry",
+    "provider_reported",
+    "fallback_unknown_model",
+  ]),
+  isContextWindowEstimated: z.boolean(),
+  autoCompactThresholdTokens: z.number(),
+  autoCompactThresholdRatio: z.number(),
+  shouldAutoCompact: z.boolean(),
+  level: z.enum(["normal", "warning", "danger", "overflow"]),
+  lastUpdatedAt: z.string(),
+});
+
 // Override selectedProvider to use the proper enum type
 // For select schema, it's nullable (matches DB schema)
 const selectExtendedFields = {
@@ -45,6 +64,7 @@ export const SelectConversationSchema = createSelectSchema(
   messages: z.array(z.any()), // UIMessage[] from AI SDK
   chatErrors: z.array(SelectConversationChatErrorSchema),
   compactions: z.array(SelectConversationCompactionSchema),
+  contextUsage: ContextUsageSchema.optional(),
   ...selectExtendedFields,
 });
 

@@ -1259,3 +1259,14 @@ To learn more about enterprise licensing, please reach out to [sales@archestra.a
 - **`ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING`** - Enables full white-labeling (removes "Powered by Archestra" attribution).
   - Set to `true` to enable
   - Requires the core enterprise license (`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED=true`)
+
+### Chat Tool Output Offload
+
+- **`ARCHESTRA_TOOL_OUTPUT_OFFLOAD_ENABLED`** - Enables tool output offloading for chat.
+  - Default: `true`
+  - Requires the matching database migration (platform/backend/src/database/migrations/0250_tool-output-offload.sql)
+
+### Dev-Only Compaction Test Tools
+- **`ARCHESTRA_DEV_COMPACTION_TEST_TOOLS_ENABLED`** - Enables development-only tools for testing chat compaction and large tool-output flows.
+  - Default: `false`
+  - Only intended for local development and non-production environments

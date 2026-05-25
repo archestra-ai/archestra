@@ -3,6 +3,10 @@ import type { archestraApiTypes } from "@shared";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const chatMocks = vi.hoisted(() => ({
+  session: null as unknown,
+}));
+
 vi.mock("@/components/ai-elements/conversation", () => ({
   Conversation: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
@@ -177,7 +181,7 @@ vi.mock("@/lib/hooks/use-app-name", () => ({
 
 vi.mock("@/lib/chat/global-chat.context", () => ({
   useGlobalChat: () => ({
-    getSession: () => null,
+    getSession: () => chatMocks.session,
   }),
 }));
 
@@ -196,6 +200,7 @@ import { ChatMessages } from "./chat-messages";
 describe("ChatMessages", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    chatMocks.session = null;
   });
 
   it("renders the swap divider for branded built-in swap tools", () => {
@@ -499,8 +504,141 @@ describe("ChatMessages", () => {
     );
 
     const message = screen.getByText("visible assistant response");
-    const compaction = screen.getByText("Conversation context compacted");
+    const compaction = screen.getByText("Conversation was summarized");
 
+    expect(message.compareDocumentPosition(compaction)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
+  it("renders compaction events even when boundary message id does not match client ids", () => {
+    const messages = [
+      {
+        id: "client-assistant-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "visible assistant response" }],
+      },
+    ] as UIMessage[];
+    const compactions: archestraApiTypes.GetChatConversationResponses["200"]["compactions"] =
+      [
+        {
+          id: "compaction-orphan",
+          conversationId: "conv-1",
+          summary: "older context summary",
+          compactedThroughMessageId: "db-assistant-missing",
+          trigger: "auto",
+          provider: "openai",
+          model: "gpt-4o-mini",
+          originalTokenEstimate: 120,
+          compactedTokenEstimate: 35,
+          createdAt: "2026-05-19T12:00:00.000Z",
+        },
+      ];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        compactions={compactions}
+      />,
+    );
+
+    expect(screen.getByText("Conversation was summarized")).toBeInTheDocument();
+  });
+
+  it("renders a live auto-compaction event when the stream reports a new summary", () => {
+    chatMocks.session = {
+      contextCompaction: {
+        isCompacting: false,
+        trigger: null,
+        lastCompaction: {
+          compactionId: "compaction-live",
+          trigger: "auto",
+          originalTokenEstimate: 8000,
+          compactedTokenEstimate: 1200,
+          createdAt: "2026-05-19T12:00:00.000Z",
+        },
+      },
+      earlyToolUiStarts: {},
+    } as never;
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={
+          [
+            {
+              id: "user-1",
+              role: "user",
+              parts: [{ type: "text", text: "continue" }],
+            },
+          ] as UIMessage[]
+        }
+        status="ready"
+      />,
+    );
+
+    expect(screen.getByText("Conversation was summarized")).toBeInTheDocument();
+  });
+
+  it("keeps a successful manual compaction notice in the bottom status slot without duplicating the timeline event", () => {
+    chatMocks.session = {
+      contextCompaction: {
+        isCompacting: false,
+        trigger: null,
+        lastCompaction: {
+          compactionId: "compaction-manual",
+          trigger: "manual",
+          originalTokenEstimate: 8000,
+          compactedTokenEstimate: 1200,
+          createdAt: "2026-05-19T12:00:00.000Z",
+        },
+      },
+      earlyToolUiStarts: {},
+    } as never;
+
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "continue" }],
+      },
+    ] as UIMessage[];
+    const compactions: archestraApiTypes.GetChatConversationResponses["200"]["compactions"] =
+      [
+        {
+          id: "compaction-manual",
+          conversationId: "conv-1",
+          summary: "older context summary",
+          compactedThroughMessageId: "user-1",
+          trigger: "manual",
+          provider: "openai",
+          model: "gpt-4o-mini",
+          originalTokenEstimate: 120,
+          compactedTokenEstimate: 35,
+          createdAt: "2026-05-19T12:00:00.000Z",
+        },
+      ];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        compactions={compactions}
+        contextCompactionFeedback={{
+          status: "success",
+          message: "Conversation was summarized",
+          compactionId: "compaction-manual",
+        }}
+      />,
+    );
+
+    const message = screen.getByText("continue");
+    const compaction = screen.getByText("Conversation was summarized");
+
+    expect(screen.getAllByText("Conversation was summarized")).toHaveLength(1);
     expect(message.compareDocumentPosition(compaction)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );

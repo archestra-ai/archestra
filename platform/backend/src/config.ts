@@ -266,6 +266,17 @@ const DEFAULT_BODY_LIMIT = 50 * 1024 * 1024; // 50MB
 
 const DEFAULT_DATABASE_POOL_MAX = 50;
 const MAX_DATABASE_POOL_MAX = 500;
+const DEFAULT_TOOL_OUTPUT_COMPACT_PREVIEW_CHARS = 1200;
+const DEFAULT_OFFLOADED_TOOL_DEFAULT_READ_MAX_CHARS = 12000;
+const DEFAULT_OFFLOADED_TOOL_HARD_READ_MAX_CHARS = 50000;
+const DEFAULT_OFFLOADED_TOOL_DEFAULT_SEARCH_MAX_RESULTS = 5;
+const DEFAULT_OFFLOADED_TOOL_HARD_SEARCH_MAX_RESULTS = 20;
+const DEFAULT_OFFLOADED_TOOL_DEFAULT_SEARCH_SNIPPET_CHARS = 800;
+const DEFAULT_OFFLOADED_TOOL_HARD_SEARCH_SNIPPET_CHARS = 3000;
+const DEFAULT_UNKNOWN_CONTEXT_WINDOW_TOKENS = 32768;
+const DEFAULT_AUTO_COMPACT_THRESHOLD_RATIO = 0.8;
+const DEFAULT_AUTO_COMPACT_THRESHOLD_TOKENS: number | null = null;
+const DEFAULT_DEV_COMPACTION_TEST_TOOLS_PADDING_CHARS = 50_000;
 
 // Default OTEL OTLP endpoint for HTTP/Protobuf (4318). For gRPC, the typical port is 4317.
 const DEFAULT_OTEL_ENDPOINT = "http://localhost:4318";
@@ -808,6 +819,33 @@ const config = {
       }
       return "anthropic";
     })(),
+    contextCompaction: {
+      defaultUnknownContextWindowTokens: DEFAULT_UNKNOWN_CONTEXT_WINDOW_TOKENS,
+      autoCompactThresholdRatio: DEFAULT_AUTO_COMPACT_THRESHOLD_RATIO,
+      autoCompactThresholdTokens: DEFAULT_AUTO_COMPACT_THRESHOLD_TOKENS,
+    },
+    toolOutputOffload: {
+      enabled: process.env.ARCHESTRA_TOOL_OUTPUT_OFFLOAD_ENABLED !== "false",
+      compactPreviewChars: DEFAULT_TOOL_OUTPUT_COMPACT_PREVIEW_CHARS,
+    },
+    offloadedToolAccess: {
+      readEnabled: true,
+      searchEnabled: true,
+      defaultReadMaxChars: DEFAULT_OFFLOADED_TOOL_DEFAULT_READ_MAX_CHARS,
+      hardReadMaxChars: DEFAULT_OFFLOADED_TOOL_HARD_READ_MAX_CHARS,
+      defaultSearchMaxResults:
+        DEFAULT_OFFLOADED_TOOL_DEFAULT_SEARCH_MAX_RESULTS,
+      hardSearchMaxResults: DEFAULT_OFFLOADED_TOOL_HARD_SEARCH_MAX_RESULTS,
+      defaultSearchSnippetChars:
+        DEFAULT_OFFLOADED_TOOL_DEFAULT_SEARCH_SNIPPET_CHARS,
+      hardSearchSnippetChars: DEFAULT_OFFLOADED_TOOL_HARD_SEARCH_SNIPPET_CHARS,
+    },
+    devCompactionTestTools: {
+      enabled:
+        !isProduction &&
+        process.env.ARCHESTRA_DEV_COMPACTION_TEST_TOOLS_ENABLED === "true",
+      defaultPaddingChars: DEFAULT_DEV_COMPACTION_TEST_TOOLS_PADDING_CHARS,
+    },
   },
   enterpriseFeatures: {
     core: process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",

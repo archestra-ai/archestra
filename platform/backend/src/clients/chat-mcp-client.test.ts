@@ -14,6 +14,7 @@ import { TeamTokenModel } from "@/models";
 import ToolModel from "@/models/tool";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import { describe, expect, test } from "@/test";
+import type { ToolArtifactStore } from "@/types/tool-output-offload";
 import * as chatClient from "./chat-mcp-client";
 import { mcpToolToModelOutput } from "./chat-mcp-client";
 import mcpClient from "./mcp-client";
@@ -28,6 +29,19 @@ const createMockClient = () => ({
   close: mockClose,
   ping: vi.fn(),
 });
+
+function getNonAccessoryToolNames(tools: Record<string, Tool>): string[] {
+  return Object.keys(tools).filter(
+    (name) =>
+      ![
+        "read_tool_result",
+        "search_tool_result",
+        "dev_compaction_ping",
+        "dev_compaction_large_output",
+        "dev_compaction_recall_facts",
+      ].includes(name),
+  );
+}
 
 vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
   // biome-ignore lint/complexity/useArrowFunction: mock constructor to satisfy Vitest class warning
@@ -309,7 +323,7 @@ describe("chat-mcp-client health check", () => {
 
       expect(expiredClient.ping).not.toHaveBeenCalled();
       expect(expiredClient.close).toHaveBeenCalledTimes(1);
-      expect(tools).toEqual({});
+      expect(getNonAccessoryToolNames(tools)).toEqual([]);
 
       chatClient.clearChatMcpClient(agent.id);
       await chatClient.__test.clearToolCache(cacheKey);
@@ -365,8 +379,8 @@ describe("chat-mcp-client health check", () => {
     expect(deadClient.close).toHaveBeenCalledTimes(1);
     // listTools should NOT have been called on the dead client
     expect(deadClient.listTools).not.toHaveBeenCalled();
-    // Tools will be empty since we can't create a real client in tests
-    expect(tools).toEqual({});
+    // No MCP Gateway tools should survive the failed reconnect path.
+    expect(getNonAccessoryToolNames(tools)).toEqual([]);
 
     chatClient.clearChatMcpClient(agent.id);
     await chatClient.__test.clearToolCache(cacheKey);
@@ -412,7 +426,7 @@ describe("chat-mcp-client health check", () => {
 
     expect(cachedClient.ping).not.toHaveBeenCalled();
     expect(cachedClient.listTools).toHaveBeenCalledTimes(1);
-    expect(tools).toEqual({});
+    expect(getNonAccessoryToolNames(tools)).toEqual([]);
 
     chatClient.clearChatMcpClient(agent.id);
     await chatClient.__test.clearToolCache(cacheKey);
@@ -463,7 +477,7 @@ describe("chat-mcp-client health check", () => {
       expect(hangingClient.ping).toHaveBeenCalledTimes(1);
       expect(hangingClient.close).toHaveBeenCalledTimes(1);
       expect(hangingClient.listTools).not.toHaveBeenCalled();
-      expect(tools).toEqual({});
+      expect(getNonAccessoryToolNames(tools)).toEqual([]);
 
       chatClient.clearChatMcpClient(agent.id);
       await chatClient.__test.clearToolCache(cacheKey);
@@ -681,11 +695,90 @@ describe("executeMcpTool error handling", () => {
       },
     });
   });
+
+  test("returns a tool_result_summary prompt block when conversation scope is available", async ({
+    makeAgent,
+    makeConversation,
+  }) => {
+    const agent = await makeAgent();
+    const conversation = await makeConversation(agent.id);
+    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce({
+      id: "call-1",
+      name: "test_tool",
+      content: [
+        {
+          type: "text",
+          text: "large raw result with ENG-123 ".repeat(900),
+        },
+      ],
+      isError: false,
+    } as never);
+
+    const result = await chatClient.__test.executeMcpTool({
+      ...baseCtx,
+      agentId: agent.id,
+      conversationId: conversation.id,
+    });
+
+    expect(result.content).toContain("<tool_result_summary>");
+    expect(result.content).toContain('"status":"success"');
+    expect(result.content).toContain('"id":"tool_result_');
+    expect(result.content).not.toContain('"rawRef"');
+    expect(result.content).not.toContain('"toolName"');
+    expect(result.content).not.toContain('"type":"TOOL_RESULT_REF"');
+    expect(result.content).not.toContain('"rawOutput"');
+    expect(result._meta).toMatchObject({
+      toolResultRefBlock: {
+        type: "TOOL_RESULT_REF",
+        toolName: "test_tool",
+        rawRef: expect.stringContaining("tool-output://conversation/"),
+      },
+    });
+  });
+
+  test("attachToolOutputRefForModel passes through the prepared summarizer", async () => {
+    const store: ToolArtifactStore = {
+      saveRawToolResult: vi.fn(async (input) => ({
+        artifactId: input.toolResultId,
+        rawRef: `tool-output://conversation/${input.conversationId}/tool-result/${input.toolResultId}`,
+      })),
+      getRawToolResult: vi.fn(async () => null),
+    };
+    const summarizer = {
+      summarize: vi.fn(async (input) => ({
+        summaryMethod: "llm_structured" as const,
+        summaryModel: "test-model",
+        block: {
+          ...input.immutableFields,
+          summary: "Custom summarizer summary.",
+        },
+      })),
+    };
+
+    const result = await chatClient.__test.attachToolOutputRefForModel({
+      conversationId: "11111111-1111-1111-1111-111111111111",
+      toolCallId: "call_custom_summary",
+      toolName: "test_tool",
+      status: "success",
+      rawOutput: "large raw result ".repeat(900),
+      content: "ignored content",
+      summarizer,
+      store,
+    });
+
+    expect(summarizer.summarize).toHaveBeenCalledTimes(1);
+    expect(result._meta).toMatchObject({
+      toolResultRefBlock: expect.objectContaining({
+        summary: "Custom summarizer summary.",
+      }),
+    });
+  });
 });
 
 describe("chat-mcp-client tool caching", () => {
   test("passes token auth context when chat executes archestra run_tool", async ({
     makeAgent,
+    makeConversation,
     makeUser,
     makeOrganization,
     makeMember,
@@ -698,7 +791,11 @@ describe("chat-mcp-client tool caching", () => {
       name: "Chat Run Tool Agent",
     });
 
-    const conversationId = "conversation-1";
+    const conversation = await makeConversation(agent.id, {
+      userId: user.id,
+      organizationId: org.id,
+    });
+    const conversationId = conversation.id;
     const cacheKey = chatClient.__test.getCacheKey(
       agent.id,
       user.id,
@@ -734,7 +831,7 @@ describe("chat-mcp-client tool caching", () => {
       mockClient as unknown as Client,
     );
     vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce({
-      content: [{ type: "text", text: "Sentry organizations" }],
+      content: [{ type: "text", text: "Sentry organizations ".repeat(900) }],
       isError: false,
     } as never);
 
@@ -758,7 +855,15 @@ describe("chat-mcp-client tool caching", () => {
       { messages: [] } as any,
     );
 
-    expect(result).toBe("Sentry organizations");
+    expect(result).toMatchObject({
+      content: expect.stringContaining("<tool_result_summary>"),
+      _meta: {
+        toolResultRefBlock: expect.objectContaining({
+          type: "TOOL_RESULT_REF",
+          toolName: getArchestraToolFullName("run_tool"),
+        }),
+      },
+    });
     expect(mcpClient.executeToolCall).toHaveBeenCalledWith(
       expect.objectContaining({
         name: "sentry__find_organizations",
@@ -832,7 +937,7 @@ describe("chat-mcp-client tool caching", () => {
       userId: user.id,
       organizationId: org.id,
     });
-    expect(Object.keys(first)).toEqual(["lookup_email"]);
+    expect(getNonAccessoryToolNames(first)).toEqual(["lookup_email"]);
 
     const second = await chatClient.getChatMcpTools({
       agentName: agent.name,
@@ -844,12 +949,112 @@ describe("chat-mcp-client tool caching", () => {
     // Check that second call returns the same tool names
     // Note: With cacheManager, functions and symbols cannot be serialized,
     // so we compare the tool names and descriptions rather than full equality
-    expect(Object.keys(second)).toEqual(["lookup_email"]);
+    expect(getNonAccessoryToolNames(second)).toEqual(["lookup_email"]);
     expect(second.lookup_email.description).toEqual(
       first.lookup_email.description,
     );
     // Most importantly, listTools should only be called once due to caching
     expect(mockClient.listTools).toHaveBeenCalledTimes(1);
+
+    chatClient.clearChatMcpClient(agent.id);
+    await chatClient.__test.clearToolCache(cacheKey);
+  });
+});
+
+describe("offloaded tool access tools in getChatMcpTools", () => {
+  test("includes search and read tools when conversationId is provided", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ teams: [team.id] });
+    await makeTeamMember(team.id, user.id);
+    await TeamTokenModel.createTeamToken(team.id, team.name);
+
+    const conversationId = "conv-offload-access-tools";
+    const cacheKey = chatClient.__test.getCacheKey(
+      agent.id,
+      user.id,
+      conversationId,
+    );
+    chatClient.clearChatMcpClient(agent.id);
+    await chatClient.__test.clearToolCache(cacheKey);
+
+    const mockClient = {
+      ping: vi.fn().mockResolvedValue({}),
+      listTools: vi.fn().mockResolvedValue({ tools: [] }),
+      callTool: vi.fn(),
+      close: vi.fn(),
+    };
+    chatClient.__test.setCachedClient(
+      cacheKey,
+      mockClient as unknown as Client,
+    );
+    chatClient.__test.setCachedClientLastValidatedAt(cacheKey, Date.now());
+
+    const tools = await chatClient.getChatMcpTools({
+      agentName: agent.name,
+      agentId: agent.id,
+      userId: user.id,
+      organizationId: org.id,
+      conversationId,
+    });
+
+    expect(tools.search_tool_result).toBeDefined();
+    expect(tools.read_tool_result).toBeDefined();
+    expect(tools.search_tool_result.description).toMatch(
+      /Prefer this before reading/i,
+    );
+    expect(tools.read_tool_result.description).toMatch(/tool_result_summary/i);
+
+    chatClient.clearChatMcpClient(agent.id);
+    await chatClient.__test.clearToolCache(cacheKey);
+  });
+
+  test("omits offloaded access tools without conversationId", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ teams: [team.id] });
+    await makeTeamMember(team.id, user.id);
+    await TeamTokenModel.createTeamToken(team.id, team.name);
+
+    const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
+    chatClient.clearChatMcpClient(agent.id);
+    await chatClient.__test.clearToolCache(cacheKey);
+
+    const mockClient = {
+      ping: vi.fn().mockResolvedValue({}),
+      listTools: vi.fn().mockResolvedValue({ tools: [] }),
+      callTool: vi.fn(),
+      close: vi.fn(),
+    };
+    chatClient.__test.setCachedClient(
+      cacheKey,
+      mockClient as unknown as Client,
+    );
+    chatClient.__test.setCachedClientLastValidatedAt(cacheKey, Date.now());
+
+    const tools = await chatClient.getChatMcpTools({
+      agentName: agent.name,
+      agentId: agent.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
+
+    expect(tools.search_tool_result).toBeUndefined();
+    expect(tools.read_tool_result).toBeUndefined();
 
     chatClient.clearChatMcpClient(agent.id);
     await chatClient.__test.clearToolCache(cacheKey);
@@ -1427,6 +1632,55 @@ describe("mcpToolToModelOutput", () => {
     });
 
     expect(result).toEqual({ type: "text", value: "Just text, no metadata" });
+  });
+
+  test("formats toolResultRefBlock with canonical wrapper", () => {
+    const result = mcpToolToModelOutput({
+      output: {
+        content: "ignored raw content",
+        _meta: {
+          toolResultRefBlock: {
+            type: "TOOL_RESULT_REF",
+            version: 1,
+            toolResultId: "tool_result_1",
+            toolName: "github.search",
+            status: "success",
+            summary: "Safe summary.",
+            rawRef:
+              "tool-output://conversation/11111111-1111-1111-1111-111111111111/tool-result/tool_result_1",
+            offloaded: true,
+          },
+        },
+      },
+    });
+
+    expect(result.value).toMatch(
+      /^<tool_result_summary>\{"id":"tool_result_1","status":"success","summary":"Safe summary."/,
+    );
+    expect(result.value).toContain('"summary":"Safe summary."');
+    expect(result.value).toMatch(/}<\/tool_result_summary>$/);
+    expect(result.value).not.toContain("ignored raw content");
+  });
+
+  test("uses toolResultInlineBlock content for access tool output", () => {
+    const result = mcpToolToModelOutput({
+      output: {
+        content: "ignored wrapper content",
+        _meta: {
+          toolResultInlineBlock: {
+            type: "TOOL_RESULT_INLINE",
+            toolResultId: "tool_result_read",
+            toolName: "read_tool_result",
+            status: "success",
+            content: { compaction_issue: "PROJ-XYZ" },
+            offloaded: false,
+          },
+        },
+      },
+    });
+
+    expect(result.value).toContain("PROJ-XYZ");
+    expect(result.value).not.toContain("ignored wrapper content");
   });
 });
 

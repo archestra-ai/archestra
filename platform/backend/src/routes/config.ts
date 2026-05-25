@@ -32,6 +32,13 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 host: z.string(),
               }),
             }),
+            chat: z.strictObject({
+              contextCompaction: z.strictObject({
+                defaultUnknownContextWindowTokens: z.number(),
+                autoCompactThresholdRatio: z.number(),
+                autoCompactThresholdTokens: z.number().nullable(),
+              }),
+            }),
           }),
         },
       },
@@ -41,6 +48,16 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
         disableBasicAuth: config.auth.disableBasicAuth,
         disableInvitations: config.auth.disableInvitations,
         analytics: config.analytics,
+        chat: {
+          contextCompaction: {
+            defaultUnknownContextWindowTokens:
+              config.chat.contextCompaction.defaultUnknownContextWindowTokens,
+            autoCompactThresholdRatio:
+              config.chat.contextCompaction.autoCompactThresholdRatio,
+            autoCompactThresholdTokens:
+              config.chat.contextCompaction.autoCompactThresholdTokens,
+          },
+        },
       });
     },
   );

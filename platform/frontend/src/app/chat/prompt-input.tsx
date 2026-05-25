@@ -36,7 +36,10 @@ import {
   usePromptInputAttachments,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
-import { ContextIndicator } from "@/components/chat/context-indicator";
+import {
+  ContextIndicator,
+  type ContextUsage,
+} from "@/components/chat/context-indicator";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { KnowledgeBaseUploadIndicator } from "@/components/chat/knowledge-base-upload-indicator";
 import { LlmProviderApiKeySelector } from "@/components/chat/llm-provider-api-key-selector";
@@ -105,6 +108,12 @@ export interface ArchestraPromptInputProps {
   tokensUsed?: number;
   /** Maximum context length of the selected model (for context indicator) */
   maxContextLength?: number | null;
+  /** Backend-calculated model context usage after compaction/offload. */
+  contextUsage?: ContextUsage | null;
+  /** Public-config fallback context window for unknown models. */
+  defaultUnknownContextWindowTokens?: number | null;
+  /** Public-config auto-compact threshold ratio. */
+  autoCompactThresholdRatio?: number | null;
   /** Input modalities supported by the selected model (for file type filtering) */
   inputModalities?: ModelInputModality[] | null;
   /** Agent's configured LLM API key ID - passed to LlmProviderApiKeySelector */
@@ -161,6 +170,9 @@ const PromptInputContent = ({
   isModelsLoading = false,
   tokensUsed = 0,
   maxContextLength,
+  contextUsage,
+  defaultUnknownContextWindowTokens,
+  autoCompactThresholdRatio,
   inputModalities,
   agentLlmApiKeyId,
   submitDisabled = false,
@@ -680,18 +692,21 @@ const PromptInputContent = ({
                           </div>
                         </>
                       )}
-                      {tokensUsed > 0 && maxContextLength && (
-                        <div>
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                            Context
-                          </p>
-                          <ContextIndicator
-                            tokensUsed={tokensUsed}
-                            maxTokens={maxContextLength}
-                            size="sm"
-                          />
-                        </div>
-                      )}
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                          Context
+                        </p>
+                        <ContextIndicator
+                          tokensUsed={tokensUsed}
+                          maxTokens={maxContextLength}
+                          contextUsage={contextUsage}
+                          defaultUnknownContextWindowTokens={
+                            defaultUnknownContextWindowTokens
+                          }
+                          autoCompactThresholdRatio={autoCompactThresholdRatio}
+                          size="sm"
+                        />
+                      </div>
                     </div>
                   </PopoverContent>
                 </Popover>
@@ -842,13 +857,16 @@ const PromptInputContent = ({
                     )}
                   </div>
                 )}
-                {tokensUsed > 0 && maxContextLength && (
-                  <ContextIndicator
-                    tokensUsed={tokensUsed}
-                    maxTokens={maxContextLength}
-                    size="sm"
-                  />
-                )}
+                <ContextIndicator
+                  tokensUsed={tokensUsed}
+                  maxTokens={maxContextLength}
+                  contextUsage={contextUsage}
+                  defaultUnknownContextWindowTokens={
+                    defaultUnknownContextWindowTokens
+                  }
+                  autoCompactThresholdRatio={autoCompactThresholdRatio}
+                  size="sm"
+                />
               </>
             )}
           </PromptInputTools>
@@ -890,6 +908,9 @@ const ArchestraPromptInput = ({
   isModelsLoading = false,
   tokensUsed = 0,
   maxContextLength,
+  contextUsage,
+  defaultUnknownContextWindowTokens,
+  autoCompactThresholdRatio,
   inputModalities,
   agentLlmApiKeyId,
   submitDisabled,
@@ -922,6 +943,9 @@ const ArchestraPromptInput = ({
           isModelsLoading={isModelsLoading}
           tokensUsed={tokensUsed}
           maxContextLength={maxContextLength}
+          contextUsage={contextUsage}
+          defaultUnknownContextWindowTokens={defaultUnknownContextWindowTokens}
+          autoCompactThresholdRatio={autoCompactThresholdRatio}
           inputModalities={inputModalities}
           agentLlmApiKeyId={agentLlmApiKeyId}
           submitDisabled={submitDisabled}

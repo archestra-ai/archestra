@@ -67,7 +67,10 @@ import {
   getToolNameFromPart,
 } from "@/lib/chat/chat-tools-display.utils";
 import { PERSISTED_MESSAGE_ID_METADATA_KEY } from "@/lib/chat/chat-utils";
-import { useGlobalChat } from "@/lib/chat/global-chat.context";
+import {
+  type ContextCompactionState,
+  useGlobalChat,
+} from "@/lib/chat/global-chat.context";
 import {
   hasToolPartsWithAuthErrors,
   isAuthInstructionText,
@@ -152,6 +155,7 @@ interface ChatMessagesProps {
   contextCompactionFeedback?: {
     status: "pending" | "success" | "skipped" | "failed";
     message: string;
+    compactionId?: string;
   } | null;
   unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
 }
@@ -165,6 +169,10 @@ type TimelineItem =
   | {
       kind: "compaction";
       compaction: archestraApiTypes.GetChatConversationResponses["200"]["compactions"][number];
+    }
+  | {
+      kind: "live-compaction";
+      compaction: NonNullable<ContextCompactionState["lastCompaction"]>;
     };
 
 // Type guards for tool parts
@@ -447,11 +455,33 @@ export function ChatMessages({
     const nextMessage = messages[idx + 1];
     return nextMessage.role !== "assistant";
   });
-  const timelineItems = buildMessageTimeline({
+  const pinnedCompactionId =
+    contextCompactionFeedback?.status === "success"
+      ? contextCompactionFeedback.compactionId
+      : undefined;
+  const visibleCompactions = pinnedCompactionId
+    ? compactions.filter((compaction) => compaction.id !== pinnedCompactionId)
+    : compactions;
+  const baseTimelineItems = buildMessageTimeline({
     messages,
     chatErrors,
-    compactions,
+    compactions: visibleCompactions,
   });
+  const renderedCompactionIds = new Set(
+    baseTimelineItems.flatMap((item) =>
+      item.kind === "compaction" ? [item.compaction.id] : [],
+    ),
+  );
+  const lastCompaction = contextCompaction?.lastCompaction ?? null;
+  const timelineItems: TimelineItem[] =
+    lastCompaction?.compactionId &&
+    !renderedCompactionIds.has(lastCompaction.compactionId) &&
+    lastCompaction.compactionId !== pinnedCompactionId
+      ? [
+          ...baseTimelineItems,
+          { kind: "live-compaction", compaction: lastCompaction },
+        ]
+      : baseTimelineItems;
   const liveErrorMessage = error ? getInlineErrorMessage(error) : null;
   const hasRenderedLiveError =
     !!error &&
@@ -497,6 +527,15 @@ export function ChatMessages({
               return (
                 <ContextCompactionTimelineEvent
                   key={`compaction-${item.compaction.id}`}
+                  compaction={item.compaction}
+                />
+              );
+            }
+
+            if (item.kind === "live-compaction") {
+              return (
+                <LiveContextCompactionTimelineEvent
+                  key={`live-compaction-${item.compaction.compactionId ?? "unknown"}`}
                   compaction={item.compaction}
                 />
               );
@@ -2393,25 +2432,23 @@ function buildMessageTimeline(params: {
   const sortedChatErrors = [...params.chatErrors].sort(
     (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt),
   );
-  const compactionsByBoundary = new Map<
-    string,
-    NonNullable<ChatMessagesProps["compactions"]>
-  >();
-  const unanchoredCompactions: NonNullable<ChatMessagesProps["compactions"]> =
-    [];
-  for (const compaction of params.compactions ?? []) {
-    if (compaction.compactedThroughMessageId) {
-      const existing =
-        compactionsByBoundary.get(compaction.compactedThroughMessageId) ?? [];
-      existing.push(compaction);
-      compactionsByBoundary.set(compaction.compactedThroughMessageId, existing);
-    } else {
-      unanchoredCompactions.push(compaction);
-    }
-  }
+  const { compactionsByBoundary, unanchoredCompactions } = partitionCompactions(
+    params.compactions ?? [],
+  );
 
   const timelineItems: TimelineItem[] = [];
+  const renderedCompactionIds = new Set<string>();
   let errorIndex = 0;
+
+  const pushCompaction = (
+    compaction: NonNullable<ChatMessagesProps["compactions"]>[number],
+  ) => {
+    if (renderedCompactionIds.has(compaction.id)) {
+      return;
+    }
+    renderedCompactionIds.add(compaction.id);
+    timelineItems.push({ kind: "compaction", compaction });
+  };
 
   params.messages.forEach((message, messageIndex) => {
     const messageCreatedAt = getMessageCreatedAt(message);
@@ -2430,7 +2467,7 @@ function buildMessageTimeline(params: {
     timelineItems.push({ kind: "message", message, messageIndex });
     for (const boundaryId of getMessageCompactionBoundaryIds(message)) {
       for (const compaction of compactionsByBoundary.get(boundaryId) ?? []) {
-        timelineItems.push({ kind: "compaction", compaction });
+        pushCompaction(compaction);
       }
     }
   });
@@ -2443,41 +2480,82 @@ function buildMessageTimeline(params: {
   }
 
   for (const compaction of unanchoredCompactions) {
-    timelineItems.push({ kind: "compaction", compaction });
+    pushCompaction(compaction);
+  }
+
+  const trailingCompactions = [...(params.compactions ?? [])]
+    .filter((compaction) => !renderedCompactionIds.has(compaction.id))
+    .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+  for (const compaction of trailingCompactions) {
+    pushCompaction(compaction);
   }
 
   return timelineItems;
 }
 
 function getMessageCompactionBoundaryIds(message: UIMessage): string[] {
-  const ids = [message.id];
-  const metadata = message.metadata;
-  if (
-    typeof metadata === "object" &&
-    metadata !== null &&
-    PERSISTED_MESSAGE_ID_METADATA_KEY in metadata &&
-    typeof metadata[PERSISTED_MESSAGE_ID_METADATA_KEY] === "string" &&
-    metadata[PERSISTED_MESSAGE_ID_METADATA_KEY] !== message.id
-  ) {
-    ids.push(metadata[PERSISTED_MESSAGE_ID_METADATA_KEY]);
-  }
-
-  return ids;
+  const persistedId = getMessageMetadataString(
+    message,
+    PERSISTED_MESSAGE_ID_METADATA_KEY,
+  );
+  return persistedId && persistedId !== message.id
+    ? [message.id, persistedId]
+    : [message.id];
 }
 
 function getMessageCreatedAt(message: UIMessage): number | null {
-  const metadata = message.metadata;
-  if (
-    typeof metadata === "object" &&
-    metadata !== null &&
-    "createdAt" in metadata &&
-    typeof metadata.createdAt === "string"
-  ) {
-    const createdAt = Date.parse(metadata.createdAt);
-    return Number.isNaN(createdAt) ? null : createdAt;
+  const createdAt = getMessageMetadataString(message, "createdAt");
+  if (!createdAt) {
+    return null;
   }
 
-  return null;
+  const parsedCreatedAt = Date.parse(createdAt);
+  return Number.isNaN(parsedCreatedAt) ? null : parsedCreatedAt;
+}
+
+function partitionCompactions(
+  compactions: NonNullable<ChatMessagesProps["compactions"]>,
+): {
+  compactionsByBoundary: Map<
+    string,
+    NonNullable<ChatMessagesProps["compactions"]>
+  >;
+  unanchoredCompactions: NonNullable<ChatMessagesProps["compactions"]>;
+} {
+  const compactionsByBoundary = new Map<
+    string,
+    NonNullable<ChatMessagesProps["compactions"]>
+  >();
+  const unanchoredCompactions: NonNullable<ChatMessagesProps["compactions"]> =
+    [];
+
+  for (const compaction of compactions) {
+    const boundaryId = compaction.compactedThroughMessageId;
+    if (!boundaryId) {
+      unanchoredCompactions.push(compaction);
+      continue;
+    }
+
+    const existing = compactionsByBoundary.get(boundaryId) ?? [];
+    existing.push(compaction);
+    compactionsByBoundary.set(boundaryId, existing);
+  }
+
+  return { compactionsByBoundary, unanchoredCompactions };
+}
+
+function getMessageMetadataString(
+  message: UIMessage,
+  key: string,
+): string | undefined {
+  const value = getMessageMetadata(message)[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+function getMessageMetadata(message: UIMessage): Record<string, unknown> {
+  return typeof message.metadata === "object" && message.metadata !== null
+    ? (message.metadata as Record<string, unknown>)
+    : {};
 }
 
 function getInlineErrorMessage(error: Error): string {
@@ -2554,11 +2632,62 @@ function ContextCompactionTimelineEvent({
     <div className="my-4 flex justify-center">
       <div className="inline-flex max-w-full items-center gap-2 rounded-full border bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
         <CheckCircleIcon className="size-4 text-emerald-500" />
-        <span>Conversation context compacted</span>
+        <span>Conversation was summarized</span>
         {timestamp && (
           <span className="text-muted-foreground/70">{timestamp}</span>
         )}
       </div>
+    </div>
+  );
+}
+
+function LiveContextCompactionTimelineEvent({
+  compaction,
+}: {
+  compaction: NonNullable<ContextCompactionState["lastCompaction"]>;
+}) {
+  const createdAt = compaction.createdAt
+    ? new Date(compaction.createdAt)
+    : null;
+  const timestamp =
+    createdAt && !Number.isNaN(createdAt.getTime())
+      ? createdAt.toLocaleString(undefined, {
+          dateStyle: "medium",
+          timeStyle: "short",
+        })
+      : null;
+
+  return (
+    <div className="my-4 flex justify-center">
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="inline-flex max-w-full cursor-default items-center gap-2 rounded-full border bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
+              <CheckCircleIcon className="size-4 text-emerald-500" />
+              <span>Conversation was summarized</span>
+              {timestamp && (
+                <span className="text-muted-foreground/70">{timestamp}</span>
+              )}
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs">
+            <div className="flex flex-col gap-0.5">
+              {typeof compaction.originalTokenEstimate === "number" &&
+                typeof compaction.compactedTokenEstimate === "number" && (
+                  <span className="text-muted-foreground">
+                    {compaction.originalTokenEstimate.toLocaleString()} →{" "}
+                    {compaction.compactedTokenEstimate.toLocaleString()} tokens
+                  </span>
+                )}
+              {compaction.trigger && (
+                <span className="text-muted-foreground">
+                  Trigger: {compaction.trigger}
+                </span>
+              )}
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     </div>
   );
 }

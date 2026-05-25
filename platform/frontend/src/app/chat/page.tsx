@@ -124,7 +124,7 @@ import {
   getSavedAgent,
   saveAgent,
 } from "@/lib/chat/use-chat-preferences";
-import { useConfig } from "@/lib/config/config.query";
+import { useConfig, usePublicConfig } from "@/lib/config/config.query";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
@@ -211,6 +211,7 @@ export function ChatPageContent({
   const [manualCompactionFeedback, setManualCompactionFeedback] = useState<{
     status: "pending" | "success" | "skipped" | "failed";
     message: string;
+    compactionId?: string;
   } | null>(null);
   const forkConversationMutation = useForkConversation();
   const forkSharedConversationMutation = useForkSharedConversation();
@@ -924,6 +925,11 @@ export function ChatPageContent({
     chatSession?.setPendingCustomServerToolCall;
   const tokenUsage = chatSession?.tokenUsage;
   const contextTokensUsed = chatSession?.contextTokensUsed;
+  const backendContextUsage =
+    chatSession?.contextUsage ??
+    ((conversation as { contextUsage?: unknown } | undefined)?.contextUsage as
+      | ArchestraPromptInputProps["contextUsage"]
+      | undefined);
   const contextCompaction = chatSession?.contextCompaction;
   const recordContextCompaction = chatSession?.recordContextCompaction;
 
@@ -1023,6 +1029,77 @@ export function ChatPageContent({
 
   // Stream usage and compaction results both update this live context estimate.
   const tokensUsed = contextTokensUsed ?? tokenUsage?.totalTokens;
+  const { data: publicConfig } = usePublicConfig();
+  const publicContextCompaction =
+    (
+      publicConfig as unknown as {
+        chat?: {
+          contextCompaction?: {
+            defaultUnknownContextWindowTokens?: number;
+            autoCompactThresholdRatio?: number;
+            autoCompactThresholdTokens?: number | null;
+          };
+        };
+      } | null
+    )?.chat?.contextCompaction ?? null;
+  const contextUsage = useMemo(() => {
+    if (backendContextUsage) {
+      return backendContextUsage;
+    }
+
+    // Approximate context usage from public config until the backend starts
+    // streaming authoritative usage updates.
+    const effectiveContextWindowTokens =
+      selectedModelContextLength ??
+      publicContextCompaction?.defaultUnknownContextWindowTokens ??
+      null;
+    const estimatedContextTokens = tokensUsed ?? 0;
+    const autoCompactThresholdRatio =
+      publicContextCompaction?.autoCompactThresholdRatio ?? null;
+    if (
+      !effectiveContextWindowTokens ||
+      !autoCompactThresholdRatio ||
+      autoCompactThresholdRatio <= 0
+    ) {
+      return null;
+    }
+    const autoCompactThresholdTokens =
+      typeof publicContextCompaction?.autoCompactThresholdTokens === "number" &&
+      publicContextCompaction.autoCompactThresholdTokens > 0
+        ? Math.floor(publicContextCompaction.autoCompactThresholdTokens)
+        : Math.floor(effectiveContextWindowTokens * autoCompactThresholdRatio);
+    const compactLimitTokens = autoCompactThresholdTokens;
+    const fillRatio =
+      compactLimitTokens > 0 ? estimatedContextTokens / compactLimitTokens : 0;
+
+    return {
+      estimatedContextTokens,
+      effectiveContextWindowTokens,
+      fillRatio,
+      fillPercent: Math.round(fillRatio * 100),
+      contextWindowSource: selectedModelContextLength
+        ? "model_registry"
+        : "fallback_unknown_model",
+      isContextWindowEstimated: !selectedModelContextLength,
+      autoCompactThresholdTokens,
+      autoCompactThresholdRatio,
+      shouldAutoCompact: estimatedContextTokens >= autoCompactThresholdTokens,
+      level:
+        fillRatio >= 1
+          ? "overflow"
+          : fillRatio >= 0.85
+            ? "danger"
+            : fillRatio >= 0.7
+              ? "warning"
+              : "normal",
+      lastUpdatedAt: new Date().toISOString(),
+    } satisfies NonNullable<ArchestraPromptInputProps["contextUsage"]>;
+  }, [
+    backendContextUsage,
+    publicContextCompaction,
+    selectedModelContextLength,
+    tokensUsed,
+  ]);
   const isContextCompacting =
     !!contextCompaction?.isCompacting || compactConversationMutation.isPending;
 
@@ -1050,26 +1127,37 @@ export function ChatPageContent({
     syncPersistedMessageMetadata(
       (result.conversation.messages ?? []) as UIMessage[],
     );
+    const resultContextUsage =
+      (result as { contextUsage?: ArchestraPromptInputProps["contextUsage"] })
+        .contextUsage ?? null;
 
     switch (result.status) {
       case "created": {
         if (result.compaction) {
           recordContextCompaction?.({
             compactionId: result.compaction.id,
+            trigger: result.compaction.trigger,
             originalTokenEstimate: result.compaction.originalTokenEstimate,
             compactedTokenEstimate: result.compaction.compactedTokenEstimate,
+            contextUsage: resultContextUsage,
           });
         }
 
-        setManualCompactionFeedback(null);
+        setManualCompactionFeedback({
+          status: "success",
+          message: "Conversation was summarized",
+          compactionId: result.compaction?.id,
+        });
         return;
       }
       case "existing": {
         if (result.compaction) {
           recordContextCompaction?.({
             compactionId: result.compaction.id,
+            trigger: result.compaction.trigger,
             originalTokenEstimate: result.compaction.originalTokenEstimate,
             compactedTokenEstimate: result.compaction.compactedTokenEstimate,
+            contextUsage: resultContextUsage,
           });
         }
 
@@ -1131,6 +1219,10 @@ export function ChatPageContent({
 
     return () => clearTimeout(timeout);
   }, [manualCompactionFeedback]);
+
+  useEffect(() => {
+    setManualCompactionFeedback(null);
+  }, [conversationId]);
 
   useEffect(() => {
     if (
@@ -1986,6 +2078,7 @@ export function ChatPageContent({
                   <MessageThread
                     messages={sharedConversationMessages}
                     chatErrors={conversation?.chatErrors ?? []}
+                    compactions={conversation?.compactions ?? []}
                     conversationId={conversationId}
                     containerClassName="h-full"
                     hideDivider
@@ -2137,6 +2230,15 @@ export function ChatPageContent({
                         isModelsLoading={isModelsLoading}
                         tokensUsed={tokensUsed}
                         maxContextLength={selectedModelContextLength}
+                        contextUsage={contextUsage}
+                        defaultUnknownContextWindowTokens={
+                          publicContextCompaction?.defaultUnknownContextWindowTokens ??
+                          null
+                        }
+                        autoCompactThresholdRatio={
+                          publicContextCompaction?.autoCompactThresholdRatio ??
+                          null
+                        }
                         inputModalities={selectedModelInputModalities}
                         agentLlmApiKeyId={
                           conversation?.agent?.llmApiKeyId ?? null
@@ -2250,6 +2352,16 @@ export function ChatPageContent({
                         organization?.allowChatFileUploads ?? false
                       }
                       isModelsLoading={isModelsLoading}
+                      maxContextLength={selectedModelContextLength}
+                      contextUsage={contextUsage}
+                      defaultUnknownContextWindowTokens={
+                        publicContextCompaction?.defaultUnknownContextWindowTokens ??
+                        null
+                      }
+                      autoCompactThresholdRatio={
+                        publicContextCompaction?.autoCompactThresholdRatio ??
+                        null
+                      }
                       inputModalities={selectedModelInputModalities}
                       agentLlmApiKeyId={
                         (

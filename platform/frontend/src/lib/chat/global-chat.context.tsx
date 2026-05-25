@@ -32,6 +32,7 @@ import {
   useState,
 } from "react";
 import { filterOptimisticToolCalls } from "@/components/chat/chat-messages.utils";
+import type { ContextUsage } from "@/components/chat/context-indicator";
 import {
   useConversation,
   useGenerateConversationTitle,
@@ -69,6 +70,7 @@ export type ContextCompactionState = {
     compactionId?: string;
     originalTokenEstimate?: number;
     compactedTokenEstimate?: number;
+    createdAt?: string;
   } | null;
 };
 
@@ -76,6 +78,7 @@ type ContextCompactionRecord = NonNullable<
   ContextCompactionState["lastCompaction"]
 > & {
   updateContextTokens?: boolean;
+  contextUsage?: ContextUsage | null;
 };
 
 function isRetryableError(error: Error): boolean {
@@ -121,6 +124,7 @@ interface ChatSession {
   /** Token usage for the current/last response */
   tokenUsage: TokenUsage | null;
   contextTokensUsed: number | null;
+  contextUsage: ContextUsage | null;
   contextCompaction: ContextCompactionState;
   recordContextCompaction: (compaction: ContextCompactionRecord) => void;
   /** Early UI data from data-tool-ui-start events (toolCallId → resource data incl. pre-fetched HTML) */
@@ -352,6 +356,7 @@ function ChatSessionHook({
   const [contextTokensUsed, setContextTokensUsed] = useState<number | null>(
     null,
   );
+  const [contextUsage, setContextUsage] = useState<ContextUsage | null>(null);
   const [contextCompaction, setContextCompaction] =
     useState<ContextCompactionState>({
       isCompacting: false,
@@ -381,11 +386,18 @@ function ChatSessionHook({
 
   const recordContextCompaction = useCallback(
     (compaction: ContextCompactionRecord) => {
-      const { updateContextTokens = true, ...lastCompaction } = compaction;
+      const {
+        updateContextTokens = true,
+        contextUsage: nextContextUsage,
+        ...lastCompaction
+      } = compaction;
       setContextCompaction({
         isCompacting: false,
         trigger: null,
-        lastCompaction,
+        lastCompaction: {
+          ...lastCompaction,
+          createdAt: lastCompaction.createdAt ?? new Date().toISOString(),
+        },
       });
 
       if (
@@ -393,6 +405,10 @@ function ChatSessionHook({
         typeof lastCompaction.compactedTokenEstimate === "number"
       ) {
         setContextTokensUsed(lastCompaction.compactedTokenEstimate);
+      }
+      if (nextContextUsage) {
+        setContextUsage(nextContextUsage);
+        setContextTokensUsed(nextContextUsage.estimatedContextTokens);
       }
     },
     [],
@@ -583,9 +599,15 @@ function ChatSessionHook({
       if (dataPart.type === "data-token-usage") {
         const usage = dataPart.data as TokenUsage;
         setTokenUsage(usage);
-        if (typeof usage.totalTokens === "number") {
+        if (!contextUsage && typeof usage.totalTokens === "number") {
           setContextTokensUsed(usage.totalTokens);
         }
+      }
+
+      if (dataPart.type === "data-context-usage") {
+        const usage = dataPart.data as ContextUsage;
+        setContextUsage(usage);
+        setContextTokensUsed(usage.estimatedContextTokens);
       }
 
       if (dataPart.type === "data-context-compaction-start") {
@@ -606,6 +628,7 @@ function ChatSessionHook({
         };
         recordContextCompaction({
           ...data,
+          trigger: data.trigger,
           updateContextTokens: data.trigger !== "auto",
         });
         queryClient.invalidateQueries({
@@ -735,6 +758,7 @@ function ChatSessionHook({
     setPendingCustomServerToolCall,
     tokenUsage,
     contextTokensUsed,
+    contextUsage,
     contextCompaction,
     recordContextCompaction,
     earlyToolUiStarts,
@@ -761,6 +785,7 @@ function ChatSessionHook({
     optimisticToolCalls,
     tokenUsage,
     contextTokensUsed,
+    contextUsage,
     contextCompaction,
     recordContextCompaction,
     earlyToolUiStarts,

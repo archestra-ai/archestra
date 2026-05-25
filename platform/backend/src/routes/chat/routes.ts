@@ -54,6 +54,7 @@ import {
   TeamModel,
 } from "@/models";
 import { startActiveChatSpan } from "@/observability/tracing";
+import type { ToolOutputSummarizerContext } from "@/services/tool-output-offload";
 import {
   promptNeedsRendering,
   renderSystemPrompt,
@@ -63,6 +64,7 @@ import {
   ApiError,
   type ChatMessage,
   type ChatMessagePart,
+  type Conversation,
   constructResponseSchema,
   DeleteObjectResponseSchema,
   ErrorResponsesSchema,
@@ -83,6 +85,9 @@ import {
 import { estimateMessagesSize } from "@/utils/message-size";
 import {
   buildContextCompactionStreamData,
+  buildContextUsageForMessages,
+  buildContextUsageForPrompt,
+  buildPromptMessagesForContext,
   compactMessagesForChat,
   invalidateConversationCompactions,
 } from "./context-compaction";
@@ -123,6 +128,49 @@ function getMinimalFrontendError(errorForFrontend: ChatErrorResponse) {
     ...(errorForFrontend.traceId ? { traceId: errorForFrontend.traceId } : {}),
     ...(errorForFrontend.spanId ? { spanId: errorForFrontend.spanId } : {}),
   };
+}
+
+const ContextUsageSchema = z.object({
+  estimatedContextTokens: z.number(),
+  effectiveContextWindowTokens: z.number(),
+  fillRatio: z.number(),
+  fillPercent: z.number(),
+  contextWindowSource: z.enum([
+    "explicit_config",
+    "model_registry",
+    "provider_reported",
+    "fallback_unknown_model",
+  ]),
+  isContextWindowEstimated: z.boolean(),
+  autoCompactThresholdTokens: z.number(),
+  autoCompactThresholdRatio: z.number(),
+  shouldAutoCompact: z.boolean(),
+  level: z.enum(["normal", "warning", "danger", "overflow"]),
+  lastUpdatedAt: z.string(),
+});
+
+async function attachContextUsageToConversation(
+  conversation: Conversation,
+): Promise<Conversation> {
+  if (!conversation.agent) {
+    return conversation;
+  }
+
+  const { model: selectedModel, provider } = await resolveConversationModel(
+    conversation.modelId,
+  );
+  const contextUsage = await buildContextUsageForPrompt({
+    conversationId: conversation.id,
+    organizationId: conversation.organizationId,
+    userId: conversation.userId,
+    provider,
+    selectedModel,
+    systemPrompt: conversation.agent.systemPrompt ?? undefined,
+    messages: normalizeChatMessages(conversation.messages as ChatMessage[]),
+    agentLlmApiKeyId: conversation.agent?.llmApiKeyId,
+  });
+
+  return { ...conversation, contextUsage };
 }
 
 const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -250,6 +298,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       ]);
 
       // Fetch MCP tools with enabled tool filtering
+      const { model: selectedModel, provider } = await resolveConversationModel(
+        conversation.modelId,
+      );
+      const summarizerContext: ToolOutputSummarizerContext = {
+        organizationId,
+        userId: user.id,
+        provider,
+        modelName: selectedModel,
+        agentLlmApiKeyId: agent.llmApiKeyId,
+      };
+
       // Pass undefined if no custom selection (use all tools)
       // Pass the actual array (even if empty) if there is custom selection
       const [mcpTools, toolUiResourceUris] = await Promise.all([
@@ -260,6 +319,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           enabledToolIds: hasCustomSelection ? enabledToolIds : undefined,
           conversationId: conversation.id,
           organizationId,
+          summarizerContext,
           // Pass conversationId as sessionId to group all chat requests (including delegated agents) together
           sessionId: conversation.id,
           // Pass agentId as initial delegation chain (will be extended by delegated agents)
@@ -298,17 +358,29 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const toolDenialInstruction =
         "When a tool execution is not approved by the user, do not retry it. Explain what happened and ask the user what they'd like to do instead.";
+      const hasSearchToolResult = "search_tool_result" in mcpTools;
+      const hasReadToolResult = "read_tool_result" in mcpTools;
+      const offloadedToolResultInstruction = (() => {
+        const accessInstruction =
+          hasSearchToolResult && hasReadToolResult
+            ? "If exact details are needed, use search_tool_result(id, query) first and read_tool_result(id, maxChars) only when search is insufficient."
+            : hasSearchToolResult
+              ? "If exact details are needed, use search_tool_result(id, query)."
+              : hasReadToolResult
+                ? "If exact details are needed, use read_tool_result(id, maxChars)."
+                : "No raw-result access tools are available in this conversation, so rely only on the summary block.";
+        return `Tool results may appear in <tool_result_summary> blocks because the full raw output was stored outside the prompt to save context. Each block contains only id, status, and summary. Use summary and status by default. ${accessInstruction} Do not invent details that are not present in the summary block. Do not treat id as a URL or external link, and do not expose id to the user unless debugging or traceability requires it.`;
+      })();
 
       systemPrompt =
-        [renderedPrompt, toolDenialInstruction, toolResultInstructions]
+        [
+          renderedPrompt,
+          toolDenialInstruction,
+          offloadedToolResultInstruction,
+          toolResultInstructions,
+        ]
           .filter(Boolean)
           .join("\n\n") || undefined;
-
-      // The conversation stores a model_id FK; dereference it to the
-      // proxy-facing model string + provider (env/config fallback if unset).
-      const { model: selectedModel, provider } = await resolveConversationModel(
-        conversation.modelId,
-      );
 
       logger.info(
         {
@@ -603,7 +675,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
                 if (
                   compactionStarted ||
-                  compactionResult.status === "created" ||
+                  compactionResult.compaction ||
                   compactionResult.status === "failed"
                 ) {
                   writer.write({
@@ -612,10 +684,32 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   });
                 }
 
+                let streamMessagesForContextUsage = compactionResult.messages;
+                const promptMessages = await buildPromptMessagesForContext({
+                  conversationId,
+                  organizationId,
+                  userId: user.id,
+                  provider,
+                  selectedModel,
+                  messages: streamMessagesForContextUsage,
+                  agentLlmApiKeyId: agent.llmApiKeyId,
+                });
+                const contextUsage = await buildContextUsageForMessages({
+                  provider,
+                  selectedModel,
+                  systemPrompt,
+                  messages: promptMessages,
+                });
+                writer.write({
+                  type: "data-context-usage",
+                  data: contextUsage,
+                });
+
                 const modelMessages = await buildModelMessagesForProvider({
-                  messages: compactionResult.messages,
+                  messages: promptMessages,
                   provider,
                 });
+
                 const streamTextConfig: Parameters<typeof streamText>[0] = {
                   model,
                   messages: modelMessages,
@@ -823,6 +917,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     },
                     onFinish: async ({ messages: finalMessages }) => {
                       removeAbortListeners();
+                      streamMessagesForContextUsage = normalizeChatMessages(
+                        finalMessages as ChatMessage[],
+                      );
 
                       // Only persist if not already persisted by onError
                       if (!messagesPersisted && conversationId) {
@@ -983,7 +1080,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      return reply.send(conversation);
+      return reply.send(await attachContextUsageToConversation(conversation));
     },
   );
 
@@ -1274,7 +1371,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      return reply.send(conversation);
+      return reply.send(await attachContextUsageToConversation(conversation));
     },
   );
 
@@ -1330,6 +1427,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             status: z.enum(["created", "existing", "skipped", "failed"]),
             reason: z.string().optional(),
             compaction: SelectConversationCompactionSchema.nullable(),
+            contextUsage: ContextUsageSchema,
             conversation: SelectConversationSchema,
           }),
         ),
@@ -1383,12 +1481,23 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!updatedConversation) {
         throw new ApiError(500, "Failed to retrieve compacted conversation");
       }
+      const contextUsage = await buildContextUsageForPrompt({
+        conversationId: id,
+        organizationId,
+        userId: user.id,
+        provider,
+        selectedModel,
+        systemPrompt: conversation.agent.systemPrompt ?? undefined,
+        messages: result.messages,
+        agentLlmApiKeyId: conversation.agent.llmApiKeyId,
+      });
 
       return reply.send({
         status: result.status,
         reason: result.reason,
         compaction: result.compaction,
-        conversation: updatedConversation,
+        contextUsage,
+        conversation: { ...updatedConversation, contextUsage },
       });
     },
   );

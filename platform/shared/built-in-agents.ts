@@ -165,6 +165,7 @@ Preserve:
 - decisions already made
 - important facts, IDs, file names, API names, function names, schema names, and UI state
 - tool calls and tool results that remain relevant, including exact outputs when they are needed to continue
+- <tool_result_summary> id values when a durable finding depends on summarized raw tool output
 - files and code sections read, created, modified, or planned
 - unresolved tasks and next steps
 - the current working state immediately before compaction

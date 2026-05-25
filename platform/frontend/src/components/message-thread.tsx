@@ -12,6 +12,7 @@ import {
 import type { ChatStatus } from "ai";
 import {
   Check,
+  CheckCircleIcon,
   Paperclip,
   RefreshCcwIcon,
   ShieldCheck,
@@ -63,6 +64,7 @@ import { UserMessageText } from "@/components/chat/user-message-text";
 import Divider from "@/components/divider";
 import { Button } from "@/components/ui/button";
 import { getToolNameFromPart } from "@/lib/chat/chat-tools-display.utils";
+import { PERSISTED_MESSAGE_ID_METADATA_KEY } from "@/lib/chat/chat-utils";
 import { parsePolicyDenied } from "@/lib/chat/mcp-error-ui";
 import {
   getRenderedToolName,
@@ -73,14 +75,18 @@ import { cn } from "@/lib/utils";
 
 type PersistedChatError =
   archestraApiTypes.GetChatConversationResponses["200"]["chatErrors"][number];
+type PersistedCompaction =
+  archestraApiTypes.GetChatConversationResponses["200"]["compactions"][number];
 
 type TimelineItem =
   | { kind: "message"; message: PartialUIMessage; messageIndex: number }
-  | { kind: "chat-error"; chatError: PersistedChatError };
+  | { kind: "chat-error"; chatError: PersistedChatError }
+  | { kind: "compaction"; compaction: PersistedCompaction };
 
 const MessageThread = ({
   messages,
   chatErrors = [],
+  compactions = [],
   conversationId,
   reload,
   isEnded,
@@ -94,6 +100,7 @@ const MessageThread = ({
 }: {
   messages: PartialUIMessage[];
   chatErrors?: PersistedChatError[];
+  compactions?: PersistedCompaction[];
   conversationId?: string;
   reload?: () => void;
   isEnded?: boolean;
@@ -108,8 +115,8 @@ const MessageThread = ({
   const status: ChatStatus = "streaming" as ChatStatus;
   const { data: organization } = useOrganization();
   const timelineItems = useMemo(
-    () => buildMessageTimeline({ messages, chatErrors }),
-    [messages, chatErrors],
+    () => buildMessageTimeline({ messages, chatErrors, compactions }),
+    [messages, chatErrors, compactions],
   );
 
   const lastAssistantMessageIndex = useMemo(() => {
@@ -189,6 +196,15 @@ const MessageThread = ({
                       slimChatErrorUi={organization?.slimChatErrorUi ?? false}
                       agentName={agentName}
                       selectedModel={selectedModel}
+                    />
+                  );
+                }
+
+                if (item.kind === "compaction") {
+                  return (
+                    <ContextCompactionTimelineEvent
+                      key={`compaction-${item.compaction.id}`}
+                      compaction={item.compaction}
                     />
                   );
                 }
@@ -830,15 +846,64 @@ function _isBlockedToolPart(part: unknown): part is BlockedToolPart {
 
 export default MessageThread;
 
+function ContextCompactionTimelineEvent({
+  compaction,
+}: {
+  compaction: PersistedCompaction;
+}) {
+  const createdAt = new Date(compaction.createdAt);
+  const timestamp = Number.isNaN(createdAt.getTime())
+    ? null
+    : createdAt.toLocaleString(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      });
+
+  return (
+    <div className="my-4 flex justify-center">
+      <div className="inline-flex max-w-full items-center gap-2 rounded-full border bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
+        <CheckCircleIcon className="size-4 text-emerald-500" />
+        <span>Conversation was summarized</span>
+        {timestamp && (
+          <span className="text-muted-foreground/70">{timestamp}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function buildMessageTimeline(params: {
   messages: PartialUIMessage[];
   chatErrors: PersistedChatError[];
+  compactions: PersistedCompaction[];
 }): TimelineItem[] {
   const sortedChatErrors = [...params.chatErrors].sort(
     (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt),
   );
+  const compactionsByBoundary = new Map<string, PersistedCompaction[]>();
+  const unanchoredCompactions: PersistedCompaction[] = [];
+  for (const compaction of params.compactions) {
+    if (compaction.compactedThroughMessageId) {
+      const existing =
+        compactionsByBoundary.get(compaction.compactedThroughMessageId) ?? [];
+      existing.push(compaction);
+      compactionsByBoundary.set(compaction.compactedThroughMessageId, existing);
+    } else {
+      unanchoredCompactions.push(compaction);
+    }
+  }
+
   const timelineItems: TimelineItem[] = [];
+  const renderedCompactionIds = new Set<string>();
   let errorIndex = 0;
+
+  const pushCompaction = (compaction: PersistedCompaction) => {
+    if (renderedCompactionIds.has(compaction.id)) {
+      return;
+    }
+    renderedCompactionIds.add(compaction.id);
+    timelineItems.push({ kind: "compaction", compaction });
+  };
 
   params.messages.forEach((message, messageIndex) => {
     const messageCreatedAt = getMessageCreatedAt(message);
@@ -855,6 +920,11 @@ function buildMessageTimeline(params: {
     }
 
     timelineItems.push({ kind: "message", message, messageIndex });
+    for (const boundaryId of getMessageCompactionBoundaryIds(message)) {
+      for (const compaction of compactionsByBoundary.get(boundaryId) ?? []) {
+        pushCompaction(compaction);
+      }
+    }
   });
 
   for (; errorIndex < sortedChatErrors.length; errorIndex++) {
@@ -864,7 +934,34 @@ function buildMessageTimeline(params: {
     });
   }
 
+  for (const compaction of unanchoredCompactions) {
+    pushCompaction(compaction);
+  }
+
+  const trailingCompactions = params.compactions
+    .filter((compaction) => !renderedCompactionIds.has(compaction.id))
+    .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+  for (const compaction of trailingCompactions) {
+    pushCompaction(compaction);
+  }
+
   return timelineItems;
+}
+
+function getMessageCompactionBoundaryIds(message: PartialUIMessage): string[] {
+  const ids = message.id ? [message.id] : [];
+  const metadata = message.metadata;
+  if (
+    typeof metadata === "object" &&
+    metadata !== null &&
+    PERSISTED_MESSAGE_ID_METADATA_KEY in metadata &&
+    typeof metadata[PERSISTED_MESSAGE_ID_METADATA_KEY] === "string" &&
+    metadata[PERSISTED_MESSAGE_ID_METADATA_KEY] !== message.id
+  ) {
+    ids.push(metadata[PERSISTED_MESSAGE_ID_METADATA_KEY]);
+  }
+
+  return ids;
 }
 
 function getMessageCreatedAt(message: PartialUIMessage): number | null {

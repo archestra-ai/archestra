@@ -7,6 +7,7 @@ import {
 } from "@shared";
 import { convertToModelMessages, generateText, type UIMessage } from "ai";
 import { createLLMModel, isApiKeyRequired } from "@/clients/llm-client";
+import config from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -20,6 +21,12 @@ import {
   ATTR_GENAI_PROVIDER_NAME,
   ATTR_GENAI_REQUEST_MODEL,
 } from "@/observability/tracing";
+import {
+  compactToolOutputsForPrompt,
+  DbToolArtifactStore,
+  getToolPartTextForContextEstimate,
+  type ToolOutputSummarizerContext,
+} from "@/services/tool-output-offload";
 import { renderSystemPrompt } from "@/templating";
 import { getTokenizer } from "@/tokenizers";
 import type { ChatMessage, ChatMessagePart } from "@/types";
@@ -56,6 +63,40 @@ const ATTR_CONTEXT_COMPACTION_ORIGINAL_TOKEN_ESTIMATE =
   "archestra.context_compaction.original_token_estimate";
 const ATTR_CONTEXT_COMPACTION_COMPACTED_TOKEN_ESTIMATE =
   "archestra.context_compaction.compacted_token_estimate";
+
+export type ContextWindowSource =
+  | "explicit_config"
+  | "model_registry"
+  | "provider_reported"
+  | "fallback_unknown_model";
+
+export type EffectiveContextWindow = {
+  tokens: number;
+  source: ContextWindowSource;
+  isEstimated: boolean;
+};
+
+export type ContextUsageLevel = "normal" | "warning" | "danger" | "overflow";
+
+export type ContextUsage = {
+  estimatedContextTokens: number;
+  effectiveContextWindowTokens: number;
+  fillRatio: number;
+  fillPercent: number;
+  contextWindowSource: ContextWindowSource;
+  isContextWindowEstimated: boolean;
+  autoCompactThresholdTokens: number;
+  autoCompactThresholdRatio: number;
+  shouldAutoCompact: boolean;
+  level: ContextUsageLevel;
+  lastUpdatedAt: string;
+};
+
+export type ContextCompactionConfig = {
+  defaultUnknownContextWindowTokens: number;
+  autoCompactThresholdRatio: number;
+  autoCompactThresholdTokens?: number | null;
+};
 
 export const CONTEXT_COMPACTION_REASONS = [
   "below_threshold",
@@ -105,6 +146,7 @@ export type ContextCompactionStreamData = {
   trigger?: ConversationCompactionTrigger;
   originalTokenEstimate?: number;
   compactedTokenEstimate?: number;
+  contextUsage?: ContextUsage;
 };
 
 type ContextCompactionPolicy = {
@@ -130,7 +172,7 @@ export function buildContextCompactionStreamData(
     ...(result.reason ? { reason: result.reason } : {}),
   };
 
-  if (result.status !== "created" || !result.compaction) {
+  if (!result.compaction) {
     return base;
   }
 
@@ -175,8 +217,12 @@ async function runCompactMessagesForChat(
   const shouldCreate =
     !policy.requireAutoThreshold ||
     (await shouldAutoCompact({
+      conversationId: params.conversationId,
+      organizationId: params.organizationId,
+      userId: params.userId,
       provider: params.provider,
       selectedModel: params.selectedModel,
+      agentLlmApiKeyId: params.agentLlmApiKeyId,
       systemPrompt: params.systemPrompt,
       messages: existingMessages,
     }));
@@ -240,9 +286,28 @@ async function runCompactMessagesForChat(
 
   try {
     params.onCompactionStart?.();
+    const sourceMessagesForSummary = (await compactToolOutputsForPrompt({
+      conversationId: params.conversationId,
+      messagesOrEvents: sourceMessages,
+      config: config.chat.toolOutputOffload,
+      store: new DbToolArtifactStore(),
+      summarizerContext: buildToolOutputSummarizerContext(params),
+    })) as ChatMessage[];
+    const compactLimitTokens = (
+      await buildContextUsageForMessages({
+        provider: params.provider,
+        selectedModel: params.selectedModel,
+        systemPrompt: params.systemPrompt,
+        messages: sourceMessagesForSummary,
+      })
+    ).autoCompactThresholdTokens;
+    const compactableMessagesForSummary = sourceMessagesForSummary.slice(
+      0,
+      split.compactable.length,
+    );
     const originalMessages = buildOriginalCompactionMessages({
       previousSummary: usableLatestCompaction?.summary ?? null,
-      messages: sourceMessages,
+      messages: sourceMessagesForSummary,
     });
     const compaction = await createConversationCompaction({
       conversationId: params.conversationId,
@@ -253,7 +318,7 @@ async function runCompactMessagesForChat(
       agentLlmApiKeyId: params.agentLlmApiKeyId,
       trigger: params.trigger,
       previousSummary: usableLatestCompaction?.summary ?? null,
-      compactableMessages: split.compactable,
+      compactableMessages: compactableMessagesForSummary,
       recentMessages: split.recent,
       boundaryMessageId,
       originalMessages,
@@ -261,6 +326,7 @@ async function runCompactMessagesForChat(
       systemPrompt: params.systemPrompt,
       allowInContextCompaction: policy.allowInContextCompaction,
       abortSignal: params.abortSignal,
+      compactLimitTokens,
     });
 
     if (!compaction) {
@@ -324,11 +390,202 @@ export function __testEstimateChatMessagesTokens(params: {
   return estimateChatMessagesTokens(params);
 }
 
+export function resolveEffectiveContextWindow(input: {
+  explicitContextLength?: number | null;
+  registryContextLength?: number | null;
+  providerReportedContextLength?: number | null;
+  configuredFallbackContextLength?: number | null;
+}): EffectiveContextWindow {
+  if (isPositiveNumber(input.explicitContextLength)) {
+    return {
+      tokens: Math.floor(input.explicitContextLength),
+      source: "explicit_config",
+      isEstimated: false,
+    };
+  }
+
+  if (isPositiveNumber(input.registryContextLength)) {
+    return {
+      tokens: Math.floor(input.registryContextLength),
+      source: "model_registry",
+      isEstimated: false,
+    };
+  }
+
+  if (isPositiveNumber(input.providerReportedContextLength)) {
+    return {
+      tokens: Math.floor(input.providerReportedContextLength),
+      source: "provider_reported",
+      isEstimated: false,
+    };
+  }
+
+  return {
+    tokens: isPositiveNumber(input.configuredFallbackContextLength)
+      ? Math.floor(input.configuredFallbackContextLength)
+      : config.chat.contextCompaction.defaultUnknownContextWindowTokens,
+    source: "fallback_unknown_model",
+    isEstimated: true,
+  };
+}
+
+export function calculateContextUsage(input: {
+  estimatedContextTokens: number;
+  contextWindow: EffectiveContextWindow;
+  autoCompactThresholdRatio: number;
+  autoCompactThresholdTokens?: number | null;
+  lastUpdatedAt?: string;
+}): ContextUsage {
+  const compactLimitTokens =
+    isPositiveNumber(input.autoCompactThresholdTokens) &&
+    input.autoCompactThresholdTokens > 0
+      ? Math.floor(input.autoCompactThresholdTokens)
+      : Math.floor(
+          input.contextWindow.tokens * input.autoCompactThresholdRatio,
+        );
+  const fillRatio =
+    compactLimitTokens > 0
+      ? input.estimatedContextTokens / compactLimitTokens
+      : 0;
+
+  return {
+    estimatedContextTokens: input.estimatedContextTokens,
+    effectiveContextWindowTokens: input.contextWindow.tokens,
+    fillRatio,
+    fillPercent: Math.round(fillRatio * 100),
+    contextWindowSource: input.contextWindow.source,
+    isContextWindowEstimated: input.contextWindow.isEstimated,
+    autoCompactThresholdTokens: compactLimitTokens,
+    autoCompactThresholdRatio: input.autoCompactThresholdRatio,
+    shouldAutoCompact: input.estimatedContextTokens >= compactLimitTokens,
+    level: getContextUsageLevel(fillRatio),
+    lastUpdatedAt: input.lastUpdatedAt ?? new Date().toISOString(),
+  };
+}
+
+export function getContextUsageLevel(fillRatio: number): ContextUsageLevel {
+  if (fillRatio >= 1) return "overflow";
+  if (fillRatio >= 0.85) return "danger";
+  if (fillRatio >= 0.7) return "warning";
+  return "normal";
+}
+
+export async function buildPromptMessagesForContext(params: {
+  conversationId: string;
+  organizationId: string;
+  userId: string;
+  provider: SupportedProvider;
+  selectedModel: string;
+  messages: ChatMessage[];
+  agentLlmApiKeyId?: string | null;
+}): Promise<ChatMessage[]> {
+  const summarizerContext: ToolOutputSummarizerContext = {
+    organizationId: params.organizationId,
+    userId: params.userId,
+    provider: params.provider,
+    modelName: params.selectedModel,
+    agentLlmApiKeyId: params.agentLlmApiKeyId,
+  };
+  const compactedMessages = await resolveLatestCompactedMessagesForPrompt({
+    conversationId: params.conversationId,
+    messages: params.messages,
+  });
+  return (await compactToolOutputsForPrompt({
+    conversationId: params.conversationId,
+    messagesOrEvents: compactedMessages,
+    config: config.chat.toolOutputOffload,
+    store: new DbToolArtifactStore(),
+    summarizerContext,
+  })) as ChatMessage[];
+}
+
+export async function buildContextUsageForPrompt(params: {
+  conversationId: string;
+  organizationId: string;
+  userId: string;
+  provider: SupportedProvider;
+  selectedModel: string;
+  systemPrompt?: string;
+  messages: ChatMessage[];
+  agentLlmApiKeyId?: string | null;
+}): Promise<ContextUsage> {
+  const promptMessages = await buildPromptMessagesForContext(params);
+
+  return buildContextUsageForMessages({
+    provider: params.provider,
+    selectedModel: params.selectedModel,
+    systemPrompt: params.systemPrompt,
+    messages: promptMessages,
+  });
+}
+
+export async function buildContextUsageForMessages(params: {
+  provider: SupportedProvider;
+  selectedModel: string;
+  systemPrompt?: string;
+  messages: ChatMessage[];
+  explicitContextLength?: number | null;
+  providerReportedContextLength?: number | null;
+  configuredFallbackContextLength?: number | null;
+  autoCompactThresholdRatio?: number;
+  autoCompactThresholdTokens?: number | null;
+}): Promise<ContextUsage> {
+  const model = await ModelModel.findByProviderAndModelId(
+    params.provider,
+    params.selectedModel,
+  );
+  const estimatedTokens = estimateChatMessagesTokens({
+    provider: params.provider,
+    systemPrompt: params.systemPrompt,
+    messages: params.messages,
+  });
+  const contextWindow = resolveEffectiveContextWindow({
+    explicitContextLength: params.explicitContextLength,
+    registryContextLength: model?.contextLength,
+    providerReportedContextLength: params.providerReportedContextLength,
+    configuredFallbackContextLength:
+      params.configuredFallbackContextLength ??
+      config.chat.contextCompaction.defaultUnknownContextWindowTokens,
+  });
+
+  return calculateContextUsage({
+    estimatedContextTokens: estimatedTokens,
+    contextWindow,
+    autoCompactThresholdRatio:
+      params.autoCompactThresholdRatio ??
+      config.chat.contextCompaction.autoCompactThresholdRatio,
+    autoCompactThresholdTokens:
+      params.autoCompactThresholdTokens ??
+      config.chat.contextCompaction.autoCompactThresholdTokens,
+  });
+}
+
+export async function resolveLatestCompactedMessagesForPrompt(input: {
+  conversationId: string;
+  messages: ChatMessage[];
+}): Promise<ChatMessage[]> {
+  const latestCompaction =
+    await ConversationCompactionModel.findLatestByConversation(
+      input.conversationId,
+    );
+  const latestCompactionBoundaryIds =
+    await getCompactionBoundaryIds(latestCompaction);
+
+  return resolveUsableCompaction(
+    input.messages,
+    latestCompaction,
+    latestCompactionBoundaryIds,
+  ).messages;
+}
+
 export const __test = {
   buildInContextCompactionPrompt,
   buildCompactionPrompt,
+  calculateContextUsage,
   extractTaggedSummary,
+  getContextUsageLevel,
   resolveUsableCompaction,
+  resolveEffectiveContextWindow,
   splitMessagesForCompaction,
   isCompactionBeneficial,
   resolveCompactionBoundaryMessageId,
@@ -491,24 +748,70 @@ function countUserTurns(messages: ChatMessage[]): number {
   return messages.filter((message) => message.role === "user").length;
 }
 
+function buildToolOutputSummarizerContext(
+  params: Pick<
+    ContextCompactionParams,
+    | "organizationId"
+    | "userId"
+    | "provider"
+    | "selectedModel"
+    | "agentLlmApiKeyId"
+  >,
+): ToolOutputSummarizerContext {
+  return {
+    organizationId: params.organizationId,
+    userId: params.userId,
+    provider: params.provider,
+    modelName: params.selectedModel,
+    agentLlmApiKeyId: params.agentLlmApiKeyId,
+  };
+}
+
 async function shouldAutoCompact(params: {
+  conversationId: string;
+  organizationId: string;
+  userId: string;
   provider: SupportedProvider;
   selectedModel: string;
+  agentLlmApiKeyId?: string | null;
   systemPrompt?: string;
   messages: ChatMessage[];
 }): Promise<boolean> {
-  const model = await ModelModel.findByProviderAndModelId(
-    params.provider,
-    params.selectedModel,
-  );
-  if (!model?.contextLength) {
-    return false;
-  }
+  const promptMessages = (await compactToolOutputsForPrompt({
+    conversationId: params.conversationId,
+    messagesOrEvents: params.messages,
+    config: config.chat.toolOutputOffload,
+    store: new DbToolArtifactStore(),
+    summarizerContext: buildToolOutputSummarizerContext(params),
+  })) as ChatMessage[];
+  const usage = await buildContextUsageForMessages({
+    provider: params.provider,
+    selectedModel: params.selectedModel,
+    systemPrompt: params.systemPrompt,
+    messages: promptMessages,
+  });
 
-  const estimatedTokens = estimateChatMessagesTokens(params);
-  return (
-    estimatedTokens >= model.contextLength * CONTEXT_COMPACTION_AUTO_THRESHOLD
+  logger.debug(
+    {
+      conversationId: params.conversationId,
+      provider: params.provider,
+      selectedModel: params.selectedModel,
+      estimatedContextTokens: usage.estimatedContextTokens,
+      contextWindowTokens: usage.effectiveContextWindowTokens,
+      contextWindowSource: usage.contextWindowSource,
+      isContextWindowEstimated: usage.isContextWindowEstimated,
+      autoCompactThresholdRatio: usage.autoCompactThresholdRatio,
+      autoCompactThresholdTokens: usage.autoCompactThresholdTokens,
+      shouldAutoCompact: usage.shouldAutoCompact,
+    },
+    "[ContextCompaction] evaluated auto-compaction threshold",
   );
+
+  return usage.shouldAutoCompact;
+}
+
+function isPositiveNumber(value: number | null | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
 async function createConversationCompaction(params: {
@@ -528,6 +831,7 @@ async function createConversationCompaction(params: {
   systemPrompt?: string;
   allowInContextCompaction: boolean;
   abortSignal?: AbortSignal;
+  compactLimitTokens: number;
 }): Promise<ConversationCompaction | null> {
   if (params.allowInContextCompaction) {
     const inContextCompaction = await tryCreateInContextCompaction(params);
@@ -612,6 +916,7 @@ async function createConversationCompaction(params: {
     recentMessages: params.recentMessages,
     originalMessages: params.originalMessages,
     tokenEstimateProvider: params.provider,
+    compactLimitTokens: params.compactLimitTokens,
   });
 }
 
@@ -635,6 +940,7 @@ async function tryCreateInContextCompaction(params: {
   originalMessages: ChatMessage[];
   systemPrompt?: string;
   abortSignal?: AbortSignal;
+  compactLimitTokens: number;
 }): Promise<ConversationCompaction | null> {
   let summary: string;
 
@@ -670,6 +976,7 @@ async function tryCreateInContextCompaction(params: {
     const modelMessages = await convertToModelMessages(
       compactionMessages as unknown as Omit<UIMessage, "id">[],
     );
+
     const result = await generateText({
       model,
       ...(params.systemPrompt ? { system: params.systemPrompt } : {}),
@@ -724,6 +1031,7 @@ async function tryCreateInContextCompaction(params: {
           parts: [{ type: "text", text: CONTEXT_COMPACTION_CORRECTION_PROMPT }],
         },
       ]);
+
       const corrected = await generateText({
         model,
         ...(params.systemPrompt ? { system: params.systemPrompt } : {}),
@@ -773,6 +1081,7 @@ async function tryCreateInContextCompaction(params: {
     recentMessages: params.recentMessages,
     originalMessages: params.originalMessages,
     tokenEstimateProvider: params.provider,
+    compactLimitTokens: params.compactLimitTokens,
   });
 }
 
@@ -812,16 +1121,18 @@ async function createCompactionRecord(params: {
   recentMessages: ChatMessage[];
   originalMessages: ChatMessage[];
   tokenEstimateProvider: SupportedProvider;
+  compactLimitTokens: number;
 }): Promise<ConversationCompaction | null> {
   const originalTokenEstimate = estimateChatMessagesTokens({
     provider: params.tokenEstimateProvider,
     messages: params.originalMessages,
   });
-  // mirrors the message list the caller will send to the model next turn:
-  // summary + the same "recent" slice that was kept verbatim
-  const compactedTokenEstimate = estimateChatMessagesTokens({
+  const { summary, compactedTokenEstimate } = coerceSummaryToFitCompactLimit({
     provider: params.tokenEstimateProvider,
-    messages: [buildSummaryMessage(params.summary), ...params.recentMessages],
+    summary: params.summary,
+    recentMessages: params.recentMessages,
+    originalTokenEstimate,
+    compactLimitTokens: params.compactLimitTokens,
   });
 
   if (
@@ -833,15 +1144,16 @@ async function createCompactionRecord(params: {
         trigger: params.trigger,
         originalTokenEstimate,
         compactedTokenEstimate,
+        compactLimitTokens: params.compactLimitTokens,
       },
-      "[ContextCompaction] skipping non-beneficial compaction summary",
+      "[ContextCompaction] skipping non-beneficial compaction summary (even after truncation)",
     );
     return null;
   }
 
   return await ConversationCompactionModel.create({
     conversationId: params.conversationId,
-    summary: params.summary,
+    summary,
     compactedThroughMessageId: params.boundaryMessageId,
     trigger: params.trigger,
     provider: params.provider,
@@ -849,6 +1161,55 @@ async function createCompactionRecord(params: {
     originalTokenEstimate,
     compactedTokenEstimate,
   });
+}
+
+function coerceSummaryToFitCompactLimit(params: {
+  provider: SupportedProvider;
+  summary: string;
+  recentMessages: ChatMessage[];
+  originalTokenEstimate: number;
+  compactLimitTokens: number;
+}): { summary: string; compactedTokenEstimate: number } {
+  const estimate = (summary: string) =>
+    estimateChatMessagesTokens({
+      provider: params.provider,
+      messages: [buildSummaryMessage(summary), ...params.recentMessages],
+    });
+
+  const targetUpperBound = Math.max(
+    1,
+    Math.min(params.originalTokenEstimate - 1, params.compactLimitTokens - 5),
+  );
+
+  const summary = params.summary.trim();
+  let compactedTokenEstimate = estimate(summary);
+  if (compactedTokenEstimate <= targetUpperBound) {
+    return { summary, compactedTokenEstimate };
+  }
+
+  // Deterministic truncation: shrink summary until the compacted message list
+  // fits under the compact limit (and is beneficial vs original).
+  // Use a cheap char-based binary search; token estimation is the expensive step.
+  const minChars = 24;
+  let lo = minChars;
+  let hi = Math.max(minChars, summary.length);
+  let best = summary.slice(0, minChars);
+
+  while (lo <= hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    const candidate =
+      summary.length <= mid ? summary : `${summary.slice(0, mid).trimEnd()}…`;
+    const candidateEstimate = estimate(candidate);
+    if (candidateEstimate <= targetUpperBound) {
+      best = candidate;
+      compactedTokenEstimate = candidateEstimate;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+
+  return { summary: best, compactedTokenEstimate };
 }
 
 function isCompactionBeneficial(params: {
@@ -1071,7 +1432,9 @@ async function buildCompactionPrompt(params: {
   const recentUserReference = buildRecentUserMessagesReference(params.messages);
 
   return `${previous}${recentUserReference}Transcript to compact:
-${transcript}`;
+${transcript}
+
+Some tool results may be represented as <tool_result_summary> blocks with id, status, and summary only. Use summary and status for continuity. Preserve the id when a finding depends on summarized raw tool output. Do not invent details that are only present in the raw output.`;
 }
 
 function buildRecentUserMessagesReference(messages: ChatMessage[]): string {
@@ -1183,9 +1546,8 @@ function getMessageTextForTokenEstimate(message: ChatMessage): {
       }
       if (part.type?.startsWith("tool-")) {
         const output = part.output ?? part.result;
-        return `[${part.type} ${part.toolName ?? ""} ${part.state ?? ""}] ${
-          output === undefined ? "" : safeJson(output)
-        }`;
+        const toolText = getToolPartTextForContextEstimate(output);
+        return `[${part.type} ${part.toolName ?? ""} ${part.state ?? ""}] ${toolText}`;
       }
       if (part.type === "file") {
         const fileEstimate = getFilePartTextForTokenEstimate(part);
@@ -1259,9 +1621,8 @@ async function getMessageTextForSummary(message: ChatMessage): Promise<string> {
       }
       if (part.type?.startsWith("tool-")) {
         const output = part.output ?? part.result;
-        return `[${part.type} ${part.toolName ?? ""} ${part.state ?? ""}] ${
-          output === undefined ? "" : safeJson(output)
-        }`;
+        const toolText = getToolPartTextForContextEstimate(output);
+        return `[${part.type} ${part.toolName ?? ""} ${part.state ?? ""}] ${toolText}`;
       }
       if (part.type === "file") {
         return getFilePartTextForSummary(part);

@@ -93,9 +93,7 @@ vi.mock("./audit-log-registry", async () => {
     },
   };
 
-  function resolveAuditableRouteConfig(
-    routePattern: string | undefined,
-  ): import("./audit-log-registry").ResolvedAuditableRoute | undefined {
+  function resolveAuditableRouteConfig(routePattern: string | undefined) {
     if (!routePattern) return undefined;
     let p = routePattern;
     let viaWalkUp = false;

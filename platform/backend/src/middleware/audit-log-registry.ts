@@ -72,7 +72,7 @@ export type AuditableRouteConfig = {
  * for the exact route pattern.  The hook uses this to suppress POST walk-ups
  * which would otherwise mis-attribute a child-resource creation to the parent.
  */
-export type ResolvedAuditableRoute = {
+type ResolvedAuditableRoute = {
   cfg: AuditableRouteConfig;
   viaWalkUp: boolean;
 };

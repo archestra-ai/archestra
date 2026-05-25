@@ -132,7 +132,7 @@ const CASES: ScopeCase[] = [
         .values({
           entityType: "organization",
           entityId: orgB.id,
-          conditions: { type: "always" },
+          conditions: [{ maxLength: 1000 }],
           provider: "openai",
           targetModel: "gpt-4o",
           enabled: true,

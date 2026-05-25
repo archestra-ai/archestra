@@ -409,6 +409,26 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "ephemeral browser tab state; per-user UI cache",
   },
+
+  // =========================================================================
+  // Chat active run (streaming execution state)
+  // =========================================================================
+  chatActiveRunsTable: {
+    audited: false,
+    reason: "chat active run execution state; high-volume streaming runtime",
+  },
+  chatActiveRunEventsTable: {
+    audited: false,
+    reason: "chat active run event stream; child of chatActiveRunsTable",
+  },
+
+  // =========================================================================
+  // Site notifications
+  // =========================================================================
+  siteNotificationsTable: {
+    audited: false,
+    reason: "ephemeral in-app notifications; per-user UI state",
+  },
 } satisfies Record<keyof typeof schema, AuditDecision>;
 
 /**

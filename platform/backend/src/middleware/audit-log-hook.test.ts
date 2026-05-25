@@ -76,6 +76,15 @@ vi.mock("./audit-log-registry", async () => {
       fetchById: async (id: string) =>
         id === KNOWN_RESOURCE_ID ? { id, name: "Some Agent" } : null,
     },
+    // Explicit child route — POST to this path must NOT inherit agent config.
+    "/api/agents/:agentId/tools/:toolId": {
+      resourceType: "agentTool",
+      resourceIdParam: "toolId",
+      fetchById: async (id: string) =>
+        id === KNOWN_RESOURCE_ID
+          ? { id, agentId: "some-agent", toolId: id }
+          : null,
+    },
     // Rotation route with explicit action — key test for action overrides.
     "/api/user-tokens/me/rotate": {
       resourceType: "userToken",
@@ -86,15 +95,17 @@ vi.mock("./audit-log-registry", async () => {
 
   function resolveAuditableRouteConfig(
     routePattern: string | undefined,
-  ): import("./audit-log-registry").AuditableRouteConfig | undefined {
+  ): import("./audit-log-registry").ResolvedAuditableRoute | undefined {
     if (!routePattern) return undefined;
     let p = routePattern;
+    let viaWalkUp = false;
     for (;;) {
       const cfg = ROUTES[p];
-      if (cfg) return cfg;
+      if (cfg) return { cfg, viaWalkUp };
       const lastSlash = p.lastIndexOf("/");
       if (lastSlash <= 0) return undefined;
       p = p.slice(0, lastSlash);
+      viaWalkUp = true;
     }
   }
 
@@ -239,6 +250,18 @@ describe("registerAuditLogHook", () => {
 
     // Nested route — verifies resourceIdParam guard.
     app.delete("/api/agents/:agentId/tools/:id", async () => ({ ok: true }));
+
+    // Explicitly registered child route — POST should produce an agentTool row.
+    app.post("/api/agents/:agentId/tools/:toolId", async () => ({ ok: true }));
+
+    // Unregistered child route — walks up to /api/agents/:agentId.
+    // POST must be suppressed; PATCH must still write a row.
+    app.post("/api/agents/:agentId/assign-tools", async () => ({ ok: true }));
+    app.patch("/api/agents/:agentId/assign-tools", async () => ({ ok: true }));
+
+    // GitHub read-only POSTs — exact denylist entries; must produce zero rows.
+    app.post("/api/skills/github/discover", async () => ({ ok: true }));
+    app.post("/api/skills/github/preview", async () => ({ ok: true }));
 
     // Token rotation route.
     app.post("/api/user-tokens/me/rotate", async () => ({ ok: true }));
@@ -834,6 +857,55 @@ describe("registerAuditLogHook", () => {
       expect(rows[0].outcome).toBe("failure"); // 404 maps to failure
       expect(rows[0].before).toBeNull(); // fetchById returned null for the cross-org id
       expect(rows[0].after).toBeNull(); // non-success → after never fetched
+    });
+  });
+
+  describe("explicit child route — POST must use its own config, not the parent's", () => {
+    test("POST to explicitly-registered child route writes an agentTool row", async () => {
+      // /api/agents/:agentId/tools/:toolId is registered with resourceType="agentTool"
+      // and resourceIdParam="toolId".  A POST here must NOT inherit agent config
+      // and must NOT record agentId as the resourceId.
+      const agentId = "00000000-0000-0000-0000-000000000010";
+      await app.inject({
+        method: "POST",
+        url: `/api/agents/${agentId}/tools/${KNOWN_RESOURCE_ID}`,
+      });
+      await settle();
+
+      const rows = await getRows();
+      expect(rows).toHaveLength(1);
+      expect(rows[0].resourceType).toBe("agentTool");
+      // resourceIdParam="toolId" → resourceId is the tool id, not the agent id
+      expect(rows[0].resourceId).toBe(KNOWN_RESOURCE_ID);
+      expect(rows[0].resourceId).not.toBe(agentId);
+    });
+
+    test("PATCH to an unregistered child route inherits parent config via walk-up", async () => {
+      const agentId = KNOWN_RESOURCE_ID;
+      await app.inject({
+        method: "PATCH",
+        url: `/api/agents/${agentId}/assign-tools`,
+      });
+      await settle();
+
+      const rows = await getRows();
+      expect(rows).toHaveLength(1);
+      expect(rows[0].resourceType).toBe("agent");
+      expect(rows[0].resourceId).toBe(agentId);
+    });
+  });
+
+  describe("denylist — GitHub read-only POST endpoints", () => {
+    test("POST /api/skills/github/discover writes zero rows", async () => {
+      await app.inject({ method: "POST", url: "/api/skills/github/discover" });
+      await settle();
+      expect(await getRows()).toHaveLength(0);
+    });
+
+    test("POST /api/skills/github/preview writes zero rows", async () => {
+      await app.inject({ method: "POST", url: "/api/skills/github/preview" });
+      await settle();
+      expect(await getRows()).toHaveLength(0);
     });
   });
 });

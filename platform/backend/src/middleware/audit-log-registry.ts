@@ -67,6 +67,17 @@ export type AuditableRouteConfig = {
 };
 
 /**
+ * Return value of `resolveAuditableRouteConfig`.  `viaWalkUp` is true when the
+ * config was inherited from a parent path segment rather than being registered
+ * for the exact route pattern.  The hook uses this to suppress POST walk-ups
+ * which would otherwise mis-attribute a child-resource creation to the parent.
+ */
+export type ResolvedAuditableRoute = {
+  cfg: AuditableRouteConfig;
+  viaWalkUp: boolean;
+};
+
+/**
  * Derives a dotted audit event name from a resource type and HTTP method.
  * Returns null when the candidate name is not in the closed AuditEventNameSchema
  * (i.e., the resource type is unknown or the method doesn't map to a verb).
@@ -125,6 +136,13 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
 
   "/api/agent-tools/:id": {
     resourceType: "agentTool",
+    fetchById: (id, orgId) => AgentToolModel.findByIdForAudit(id, orgId),
+  },
+  // Explicit entry prevents walk-up from inheriting agent.created for POSTs to
+  // /api/agents/:agentId/tools/:toolId (assign a tool to an agent).
+  "/api/agents/:agentId/tools/:toolId": {
+    resourceType: "agentTool",
+    resourceIdParam: "toolId",
     fetchById: (id, orgId) => AgentToolModel.findByIdForAudit(id, orgId),
   },
 
@@ -470,18 +488,24 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
  * Looks up the auditable route config, falling back to the longest registered
  * prefix so `/api/mcp_server/:id/reinstall` inherits `/api/mcp_server/:id`,
  * `/api/connectors/:id/knowledge-bases` inherits `/api/connectors/:id`, etc.
+ *
+ * Returns `{ cfg, viaWalkUp }` where `viaWalkUp` is true when the config was
+ * inherited from a parent segment.  The hook uses this to suppress POST
+ * walk-ups which would mis-attribute child-resource creations to the parent.
  */
 export function resolveAuditableRouteConfig(
   routePattern: string | undefined,
-): AuditableRouteConfig | undefined {
+): ResolvedAuditableRoute | undefined {
   if (!routePattern) return undefined;
   let p = routePattern;
+  let viaWalkUp = false;
   for (;;) {
     const cfg = AUDITABLE_ROUTES[p];
-    if (cfg) return cfg;
+    if (cfg) return { cfg, viaWalkUp };
     const lastSlash = p.lastIndexOf("/");
     if (lastSlash <= 0) return undefined;
     p = p.slice(0, lastSlash);
+    viaWalkUp = true;
   }
 }
 

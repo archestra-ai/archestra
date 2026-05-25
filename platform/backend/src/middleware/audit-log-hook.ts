@@ -9,6 +9,12 @@ import {
   resolveAuditableRouteConfig,
 } from "./audit-log-registry";
 
+function resolveEffectiveCfg(
+  routePattern: string | undefined,
+): AuditableRouteConfig | undefined {
+  return resolveAuditableRouteConfig(routePattern)?.cfg;
+}
+
 export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
   fastify.addHook("preHandler", async (request) => {
     if (shouldSkip(request.method, request.url, request.user)) return;
@@ -17,7 +23,7 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
     request.auditOccurredAt = new Date();
 
     const routePattern = request.routeOptions.url;
-    const cfg = resolveAuditableRouteConfig(routePattern);
+    const cfg = resolveEffectiveCfg(routePattern);
     if (!cfg?.fetchById) return;
 
     const id = await resolveAuditedResourceId(request, cfg);
@@ -38,7 +44,7 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
       return payload;
 
     const routePattern = request.routeOptions.url;
-    const cfg = resolveAuditableRouteConfig(routePattern);
+    const cfg = resolveEffectiveCfg(routePattern);
     if (!cfg?.fetchById) return payload;
 
     // Skip oversized payloads (e.g. file upload responses) — the `id` we
@@ -64,7 +70,7 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
 
     // 4xx/5xx mutations are now recorded — outcome column carries the signal.
     const routePattern = request.routeOptions.url;
-    const cfg = resolveAuditableRouteConfig(routePattern);
+    const cfg = resolveEffectiveCfg(routePattern);
     const outcome = deriveOutcome(reply.statusCode);
     const action = resolveActionName(cfg, request.method);
 
@@ -211,6 +217,10 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   { kind: "prefix", value: "/api/browser-stream/" },
   { kind: "prefix", value: "/api/secrets/check-connectivity" },
   { kind: "prefix", value: "/api/members/default-model" },
+  // GitHub skill read-only POSTs: discover/preview fetch remote repo data but
+  // do not mutate org state — exclude them to avoid false-positive audit noise.
+  { kind: "exact", value: "/api/skills/github/discover" },
+  { kind: "exact", value: "/api/skills/github/preview" },
 ];
 
 function isDenylisted(url: string): boolean {

@@ -720,20 +720,22 @@ describe("AUDITABLE_ROUTES registry", () => {
 
 describe("resolveAuditableRouteConfig", () => {
   test("inherits auditable config from parent path for MCP server sub-routes", () => {
-    const cfg = resolveAuditableRouteConfig("/api/mcp_server/:id/reinstall");
-    expect(cfg?.resourceType).toBe("mcpServer");
-    expect(typeof cfg?.fetchById).toBe("function");
+    const resolved = resolveAuditableRouteConfig(
+      "/api/mcp_server/:id/reinstall",
+    );
+    expect(resolved?.cfg.resourceType).toBe("mcpServer");
+    expect(typeof resolved?.cfg.fetchById).toBe("function");
     expect(typeof AUDITABLE_ROUTES["/api/mcp_server/:id"].fetchById).toBe(
       "function",
     );
   });
 
   test("inherits config for connector knowledge-base assignment routes", () => {
-    const cfg = resolveAuditableRouteConfig(
+    const resolved = resolveAuditableRouteConfig(
       "/api/connectors/:id/knowledge-bases",
     );
-    expect(cfg?.resourceType).toBe("connector");
-    expect(cfg?.fetchById).toBeDefined();
+    expect(resolved?.cfg.resourceType).toBe("connector");
+    expect(resolved?.cfg.fetchById).toBeDefined();
   });
 });
 

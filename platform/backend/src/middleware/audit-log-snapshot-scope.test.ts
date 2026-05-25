@@ -24,10 +24,13 @@ import { describe, expect, test } from "@/test";
  * audited model requires adding a case here; a missing null-return is a
  * cross-tenant metadata leak.
  *
- * Models with existing isolation tests in audit-log-snapshot.test.ts
+ * Models with dedicated isolation test suites in audit-log-snapshot.test.ts
  * (Agent, McpServer, ApiKey, LlmProviderApiKey, Team, KnowledgeBase,
- * ScheduleTrigger, Skill, AgentTool, InternalMcpCatalog) are covered there
- * and are not duplicated in this file.
+ * ScheduleTrigger, Skill, AgentTool) are covered there and are not duplicated
+ * here. InternalMcpCatalog is covered in both files: snapshot.test.ts tests
+ * the full org-or-global predicate; this file adds the cross-org null invariant
+ * to the shared parametrised suite because InternalMcpCatalog was the specific
+ * model identified in the snapshot-before-authz audit.
  */
 
 // biome-ignore lint/suspicious/noExplicitAny: fixture context varies per case

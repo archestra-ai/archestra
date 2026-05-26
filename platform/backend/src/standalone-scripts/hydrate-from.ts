@@ -25,7 +25,7 @@
  * worktree, so that precondition is satisfied by the default flow.
  */
 
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, not, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import * as schema from "@/database/schemas";
@@ -115,19 +115,28 @@ try {
   // `isPrimary=true` when neither already claims it, otherwise demote. Force
   // `isSystem=false` because target seeds its own system key per provider
   // (the `chat_api_keys_system_unique` partial index would otherwise collide).
+  //
+  // Exclude rows whose UUID matches a source key — on re-hydrate those are
+  // our own previous copies, not a dev-added primary, and demoting them
+  // would clobber a key we're about to re-upsert.
+  const sourceKeyIds = providerKeys.map((k) => k.id);
+  const primaryFilters = [
+    eq(schema.llmProviderApiKeysTable.organizationId, targetOrgId),
+    eq(schema.llmProviderApiKeysTable.userId, targetUserId),
+    eq(schema.llmProviderApiKeysTable.scope, "personal"),
+    eq(schema.llmProviderApiKeysTable.isPrimary, true),
+  ];
+  if (sourceKeyIds.length) {
+    primaryFilters.push(
+      not(inArray(schema.llmProviderApiKeysTable.id, sourceKeyIds)),
+    );
+  }
   const existingTargetPrimaryProviders = new Set(
     (
       await target
         .select({ provider: schema.llmProviderApiKeysTable.provider })
         .from(schema.llmProviderApiKeysTable)
-        .where(
-          and(
-            eq(schema.llmProviderApiKeysTable.organizationId, targetOrgId),
-            eq(schema.llmProviderApiKeysTable.userId, targetUserId),
-            eq(schema.llmProviderApiKeysTable.scope, "personal"),
-            eq(schema.llmProviderApiKeysTable.isPrimary, true),
-          ),
-        )
+        .where(and(...primaryFilters))
     ).map((r) => r.provider),
   );
   const seenPrimaryProviders = new Set<string>(existingTargetPrimaryProviders);
@@ -152,10 +161,20 @@ try {
 
   await target.transaction(async (tx) => {
     if (secrets.length) {
+      // Re-hydrate after the source admin rotated a secret would otherwise
+      // skip the row (same PK) and leave target with the stale/revoked
+      // payload. Upsert the payload so rotations propagate.
       const result = await tx
         .insert(schema.secretsTable)
         .values(secrets)
-        .onConflictDoNothing()
+        .onConflictDoUpdate({
+          target: schema.secretsTable.id,
+          set: {
+            secret: sql`excluded.secret`,
+            isVault: sql`excluded.is_vault`,
+            isByosVault: sql`excluded.is_byos_vault`,
+          },
+        })
         .returning({ id: schema.secretsTable.id });
       copiedSecrets = result.length;
     }
@@ -183,10 +202,30 @@ try {
       copiedModels = result.length;
     }
     if (rewrittenKeys.length) {
+      // Re-hydrate after the source admin renamed a key, swapped its
+      // secret, or tweaked the base URLs / extra headers would otherwise
+      // skip the row (same PK) and leave the stale config. Upsert the
+      // source-owned columns on PK conflict. Target-created keys (dev
+      // added by hand) have target-side UUIDs and never match this
+      // conflict target, so they're untouched. Ownership columns
+      // (organization_id / user_id / team_id / scope) and isSystem aren't
+      // re-set because they're always our chosen values. isPrimary uses
+      // `excluded.is_primary` so the demotion logic above applies on
+      // re-hydrate too.
       const result = await tx
         .insert(schema.llmProviderApiKeysTable)
         .values(rewrittenKeys)
-        .onConflictDoNothing()
+        .onConflictDoUpdate({
+          target: schema.llmProviderApiKeysTable.id,
+          set: {
+            name: sql`excluded.name`,
+            secretId: sql`excluded.secret_id`,
+            baseUrl: sql`excluded.base_url`,
+            inferenceBaseUrl: sql`excluded.inference_base_url`,
+            extraHeaders: sql`excluded.extra_headers`,
+            isPrimary: sql`excluded.is_primary`,
+          },
+        })
         .returning({ id: schema.llmProviderApiKeysTable.id });
       copiedKeys = result.length;
     }
@@ -198,7 +237,6 @@ try {
       // different UUID, in which case the source row was skipped but the
       // link should still resolve to target's existing UUID instead of
       // being dropped.
-      const sourceKeyIds = providerKeys.map((k) => k.id);
       const sourceProviders = Array.from(
         new Set(models.map((m) => m.provider)),
       );

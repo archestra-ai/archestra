@@ -712,6 +712,19 @@ const codeRuntimeDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost({
 const codeRuntimeEnabled =
   codeRuntimeRequested && codeRuntimeDaggerRunnerHost !== undefined;
 
+const defaultSkillsSandboxImage =
+  "ghcr.io/astral-sh/uv:0.9.17-python3.12-bookworm-slim";
+const skillsSandboxRequested =
+  process.env.ARCHESTRA_SKILLS_SANDBOX_ENABLED === "true";
+const skillsSandboxDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost({
+  enabled: skillsSandboxRequested,
+  envValue:
+    process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST ||
+    process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST,
+});
+const skillsSandboxEnabled =
+  skillsSandboxRequested && skillsSandboxDaggerRunnerHost !== undefined;
+
 const config = {
   frontendBaseUrl,
   api: {
@@ -1063,6 +1076,45 @@ const config = {
     maxOutputBytes: parsePositiveInt(
       process.env.ARCHESTRA_CODE_RUNTIME_MAX_OUTPUT_BYTES,
       65536,
+    ),
+  },
+  /**
+   * sandboxed skill-execution runtime — lets agents materialize a skill into a
+   * Dagger container and run arbitrary shell commands against the snapshot.
+   * shares the Dagger engine with `codeRuntime` but is gated on its own flag.
+   */
+  skillsSandbox: {
+    enabled: skillsSandboxEnabled,
+    image:
+      process.env.ARCHESTRA_SKILLS_SANDBOX_IMAGE || defaultSkillsSandboxImage,
+    daggerRunnerHost: skillsSandboxDaggerRunnerHost,
+    daggerCliBin:
+      process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_CLI_BIN ||
+      process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN ||
+      undefined,
+    cpuLimit: parsePositiveInt(
+      process.env.ARCHESTRA_SKILLS_SANDBOX_CPU_LIMIT_SECONDS,
+      30,
+    ),
+    memoryLimit: parsePositiveInt(
+      process.env.ARCHESTRA_SKILLS_SANDBOX_MEMORY_LIMIT_BYTES,
+      1024 * 1024 * 1024,
+    ),
+    wallClockSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_SKILLS_SANDBOX_WALL_CLOCK_SECONDS,
+      120,
+    ),
+    outputBytesLimit: parsePositiveInt(
+      process.env.ARCHESTRA_SKILLS_SANDBOX_OUTPUT_BYTES_LIMIT,
+      256 * 1024,
+    ),
+    maxConcurrent: parsePositiveInt(
+      process.env.ARCHESTRA_SKILLS_SANDBOX_MAX_CONCURRENT,
+      5,
+    ),
+    artifactBytesLimit: parsePositiveInt(
+      process.env.ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT,
+      16 * 1024 * 1024,
     ),
   },
   vault: {

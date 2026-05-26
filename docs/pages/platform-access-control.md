@@ -238,6 +238,7 @@ The following table lists all available permissions that can be assigned to cust
 | `skill:delete` | Delete agent skills |
 | `skill:team-admin` | Manage team assignments for agent skills |
 | `skill:admin` | Full administrative control over all agent skills, bypassing team restrictions |
+| `skill:execute` | Execute skill scripts |
 | `team:read` | View teams and their members |
 | `team:create` | Create new teams |
 | `team:update` | Modify team settings |

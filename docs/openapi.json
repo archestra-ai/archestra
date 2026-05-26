@@ -161549,7 +161549,8 @@
                                   "admin",
                                   "cancel",
                                   "enable",
-                                  "query"
+                                  "query",
+                                  "execute"
                                 ]
                               }
                             }
@@ -161904,7 +161905,8 @@
                           "admin",
                           "cancel",
                           "enable",
-                          "query"
+                          "query",
+                          "execute"
                         ]
                       }
                     }
@@ -161957,7 +161959,8 @@
                             "admin",
                             "cancel",
                             "enable",
-                            "query"
+                            "query",
+                            "execute"
                           ]
                         }
                       }
@@ -162299,7 +162302,8 @@
                             "admin",
                             "cancel",
                             "enable",
-                            "query"
+                            "query",
+                            "execute"
                           ]
                         }
                       }
@@ -162606,7 +162610,8 @@
                           "admin",
                           "cancel",
                           "enable",
-                          "query"
+                          "query",
+                          "execute"
                         ]
                       }
                     }
@@ -162680,7 +162685,8 @@
                             "admin",
                             "cancel",
                             "enable",
-                            "query"
+                            "query",
+                            "execute"
                           ]
                         }
                       }
@@ -194339,7 +194345,8 @@
                         "admin",
                         "cancel",
                         "enable",
-                        "query"
+                        "query",
+                        "execute"
                       ]
                     }
                   }

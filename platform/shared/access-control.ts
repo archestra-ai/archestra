@@ -244,8 +244,7 @@ export const permissionDescriptions: Record<string, string> = {
   "skill:team-admin": "Manage team assignments for agent skills",
   "skill:admin":
     "Full administrative control over all agent skills, bypassing team restrictions",
-  "skill:execute":
-    "Execute skill scripts in a sandboxed runtime (create_skill_sandbox, run_skill_command, get_skill_sandbox_artifact)",
+  "skill:execute": "Execute skill scripts",
   "agentTrigger:read":
     "View agent trigger configurations (Slack, MS Teams, email)",
   "agentTrigger:create": "Set up new agent triggers",

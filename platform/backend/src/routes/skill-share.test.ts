@@ -69,7 +69,7 @@ describe("skill-share routes", () => {
       expect(body.link.status).toBe("active");
       expect(body.link.skills).toHaveLength(1);
       expect(body.link.skills[0].id).toBe(skill.id);
-      expect(body.link.tokenStart).toBe(body.rawToken.slice(0, 14));
+      expect(body.link.tokenStart).toBe(body.rawToken.slice(0, 22));
       // tokenHash must never leak to the response
       expect(body.link).not.toHaveProperty("tokenHash");
     });
@@ -159,7 +159,7 @@ describe("skill-share routes", () => {
       const body = response.json();
       expect(body.links).toHaveLength(1);
       expect(body.links[0].id).toBe(created.link.id);
-      expect(body.links[0].tokenStart).toBe(created.rawToken.slice(0, 14));
+      expect(body.links[0].tokenStart).toBe(created.rawToken.slice(0, 22));
       expect(body.links[0]).not.toHaveProperty("tokenHash");
       expect(body.links[0].skills[0].id).toBe(skill.id);
     });

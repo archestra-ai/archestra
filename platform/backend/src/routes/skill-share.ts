@@ -208,8 +208,10 @@ async function assertSkillsBelongToOrg(params: {
   skillIds: string[];
   organizationId: string;
 }): Promise<void> {
+  const skills = await SkillModel.findByIds(params.skillIds);
+  const skillMap = new Map(skills.map((s) => [s.id, s]));
   for (const skillId of params.skillIds) {
-    const skill = await SkillModel.findById(skillId);
+    const skill = skillMap.get(skillId);
     if (!skill || skill.organizationId !== params.organizationId) {
       // 404 (not 403) so org membership is not leaked
       throw new ApiError(404, "Skill not found");

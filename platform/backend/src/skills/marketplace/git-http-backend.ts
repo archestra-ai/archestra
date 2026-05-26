@@ -21,6 +21,7 @@ export interface ServeGitHttpRequestParams {
   queryString: string;
   requestMethod: string;
   contentType?: string;
+  contentLength?: string;
   /** Optional identifier surfaced to the CGI script (for audit). */
   remoteUser?: string;
   /** Optional override for the git binary (tests, alt installs). */
@@ -42,6 +43,7 @@ export async function serveGitHttpRequest(
       QUERY_STRING: params.queryString,
       REQUEST_METHOD: params.requestMethod,
       ...(params.contentType ? { CONTENT_TYPE: params.contentType } : {}),
+      ...(params.contentLength ? { CONTENT_LENGTH: params.contentLength } : {}),
       ...(params.remoteUser ? { REMOTE_USER: params.remoteUser } : {}),
     },
   });
@@ -63,11 +65,15 @@ async function runCgiBridge(params: RunCgiBridgeParams): Promise<void> {
     logger.warn({ err }, "git-http-backend: child stdin error");
   });
 
+  const MAX_STDERR_BYTES = 64 * 1024;
   let stderrBuf = "";
   child.stderr.on("data", (chunk: Buffer) => {
-    stderrBuf += chunk.toString();
+    if (stderrBuf.length < MAX_STDERR_BYTES) {
+      stderrBuf += chunk.toString();
+    }
   });
 
+  const MAX_HEADER_BYTES = 64 * 1024;
   let headersBuf = Buffer.alloc(0);
   let headersFlushed = false;
 
@@ -96,7 +102,14 @@ async function runCgiBridge(params: RunCgiBridgeParams): Promise<void> {
       return;
     }
     headersBuf = Buffer.concat([headersBuf, chunk]);
-    parseAndFlushHeaders();
+    if (parseAndFlushHeaders()) return;
+    if (headersBuf.length > MAX_HEADER_BYTES) {
+      child.kill("SIGTERM");
+      if (!res.headersSent) {
+        res.writeHead(502, { "content-type": "text/plain" });
+        res.end("git http-backend: response headers too large");
+      }
+    }
   });
 
   return new Promise<void>((resolve) => {
@@ -110,10 +123,8 @@ async function runCgiBridge(params: RunCgiBridgeParams): Promise<void> {
       if (!headersFlushed && !res.headersSent) {
         res.writeHead(502, { "content-type": "text/plain" });
         res.end("git http-backend failed to start");
-      } else {
-        finish();
       }
-      resolve();
+      finish();
     });
 
     child.once("close", (code) => {
@@ -126,10 +137,8 @@ async function runCgiBridge(params: RunCgiBridgeParams): Promise<void> {
         if (!res.headersSent) {
           res.writeHead(502, { "content-type": "text/plain" });
           res.end("git http-backend produced no response");
-        } else {
-          finish();
         }
-        resolve();
+        finish();
         return;
       }
       if (code !== 0) {
@@ -141,8 +150,9 @@ async function runCgiBridge(params: RunCgiBridgeParams): Promise<void> {
       finish();
     });
 
-    req.once("aborted", () => {
-      child.kill("SIGTERM");
+    // req.once("aborted") is removed in Node 18+; use res.once("close") instead
+    res.once("close", () => {
+      if (!child.killed) child.kill("SIGTERM");
     });
   });
 }

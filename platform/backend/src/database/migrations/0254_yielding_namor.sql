@@ -1,0 +1,1 @@
+ALTER TABLE "skill_share_link" ALTER COLUMN "token_start" SET DATA TYPE varchar(22);

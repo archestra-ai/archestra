@@ -46,7 +46,7 @@ describe("SkillShareLinkModel.create", () => {
     expect(rawToken.length).toBeGreaterThan(
       SKILL_SHARE_LINK_TOKEN_PREFIX.length,
     );
-    expect(link.tokenStart).toBe(rawToken.slice(0, 14));
+    expect(link.tokenStart).toBe(rawToken.slice(0, 22));
     expect(link.tokenHash).toBe(
       createHash("sha256").update(rawToken).digest("hex"),
     );

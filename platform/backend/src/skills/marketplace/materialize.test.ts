@@ -30,7 +30,7 @@ function makeRequest(
   overrides: Partial<MaterializeRequest> = {},
 ): MaterializeRequest {
   return {
-    linkId: "link-1",
+    linkId: "aaaaaaaa-1111-2222-3333-444444444444",
     marketplaceName: "org-abcd1234-skills",
     ownerName: "Acme Corp",
     displayName: "Acme Skills",
@@ -85,7 +85,9 @@ describe("MarketplaceMaterializer", () => {
     const result = await materializer.materialize(req);
 
     expect(result.reused).toBe(false);
-    expect(result.repoPath).toBe(path.join(cacheDir, "link-1", "repo"));
+    expect(result.repoPath).toBe(
+      path.join(cacheDir, "aaaaaaaa-1111-2222-3333-444444444444", "repo"),
+    );
 
     const expected = [
       ".claude-plugin/marketplace.json",
@@ -153,6 +155,107 @@ describe("MarketplaceMaterializer", () => {
     expect(parsed.compatibility).toBe("claude>=1.0");
     expect(parsed.metadata).toEqual({ author: "Acme", version: "2.0" });
     expect(parsed.content).toBe("# PDF Helper\n\nDoes the thing.");
+  });
+
+  test("resource file with path SKILL.md does not overwrite generated manifest", async () => {
+    const req = makeRequest({
+      skills: [
+        makeSkill({
+          name: "PDF Helper",
+          content: "# PDF Helper\n\nDoes the thing.",
+          files: [
+            {
+              id: "f1",
+              skillId: "11111111-2222-3333-4444-555555555555",
+              path: "SKILL.md",
+              content: "attacker-controlled content",
+              encoding: "utf8",
+              kind: "reference",
+              createdAt: new Date(),
+            },
+          ],
+        }),
+      ],
+    });
+    const result = await materializer.materialize(req);
+    const skillMd = await fs.readFile(
+      path.join(
+        result.repoPath,
+        "plugins/pdf-helper/skills/pdf-helper/SKILL.md",
+      ),
+      "utf8",
+    );
+    // the generated manifest must survive — attacker content must not appear
+    expect(skillMd).toContain("name: PDF Helper");
+    expect(skillMd).not.toContain("attacker-controlled content");
+  });
+
+  test("resource file with path SKILL.md/foo does not cause mkdir collision", async () => {
+    const req = makeRequest({
+      skills: [
+        makeSkill({
+          name: "PDF Helper",
+          content: "# PDF Helper\n\nDoes the thing.",
+          files: [
+            {
+              id: "f1",
+              skillId: "11111111-2222-3333-4444-555555555555",
+              path: "SKILL.md/injected.txt",
+              content: "attacker content",
+              encoding: "utf8",
+              kind: "reference",
+              createdAt: new Date(),
+            },
+          ],
+        }),
+      ],
+    });
+    const result = await materializer.materialize(req);
+    // generated SKILL.md must survive and not be replaced by a directory
+    const skillMd = await fs.readFile(
+      path.join(
+        result.repoPath,
+        "plugins/pdf-helper/skills/pdf-helper/SKILL.md",
+      ),
+      "utf8",
+    );
+    expect(skillMd).toContain("name: PDF Helper");
+    // the sub-path must not have been written
+    await expect(
+      fs.access(
+        path.join(
+          result.repoPath,
+          "plugins/pdf-helper/skills/pdf-helper/SKILL.md/injected.txt",
+        ),
+      ),
+    ).rejects.toThrow();
+  });
+
+  test("resource file with double-slash absolute path cannot escape skill root", async () => {
+    const req = makeRequest({
+      skills: [
+        makeSkill({
+          name: "PDF Helper",
+          content: "# PDF Helper\n\nDoes the thing.",
+          files: [
+            {
+              id: "f1",
+              skillId: "11111111-2222-3333-4444-555555555555",
+              path: "//tmp/injected.txt",
+              content: "attacker content",
+              encoding: "utf8",
+              kind: "reference",
+              createdAt: new Date(),
+            },
+          ],
+        }),
+      ],
+    });
+    const result = await materializer.materialize(req);
+    // file outside skill root must not be written
+    await expect(fs.access("/tmp/injected.txt")).rejects.toThrow();
+    // repo itself must still be valid
+    expect(result.repoPath).toBeTruthy();
   });
 
   test("binary resource files round-trip via base64", async () => {
@@ -266,20 +369,32 @@ describe("MarketplaceMaterializer", () => {
   });
 
   test("sweepOrphans removes directories not in the live link set", async () => {
-    await materializer.materialize(makeRequest({ linkId: "live-1" }));
+    const liveId = "bbbbbbbb-1111-2222-3333-444444444444";
+    const orphanId = "cccccccc-1111-2222-3333-444444444444";
+    await materializer.materialize(makeRequest({ linkId: liveId }));
     await materializer.materialize(
       makeRequest({
-        linkId: "orphan-1",
+        linkId: orphanId,
         skills: [makeSkill({ id: "22222222-2222-3333-4444-555555555555" })],
       }),
     );
 
-    const removed = await materializer.sweepOrphans(["live-1"]);
-    expect(removed).toEqual(["orphan-1"]);
+    const removed = await materializer.sweepOrphans([liveId]);
+    expect(removed).toEqual([orphanId]);
     await expect(
-      fs.access(path.join(cacheDir, "live-1")),
+      fs.access(path.join(cacheDir, liveId)),
     ).resolves.toBeUndefined();
-    await expect(fs.access(path.join(cacheDir, "orphan-1"))).rejects.toThrow();
+    await expect(fs.access(path.join(cacheDir, orphanId))).rejects.toThrow();
+  });
+
+  test("sweepOrphans ignores non-UUID entries in cache dir", async () => {
+    await fs.mkdir(path.join(cacheDir, "README"), { recursive: true });
+    await fs.mkdir(path.join(cacheDir, ".gitkeep"), { recursive: true });
+    const removed = await materializer.sweepOrphans([]);
+    expect(removed).toEqual([]);
+    await expect(
+      fs.access(path.join(cacheDir, "README")),
+    ).resolves.toBeUndefined();
   });
 
   test("sweepOrphans tolerates a missing cache dir", async () => {

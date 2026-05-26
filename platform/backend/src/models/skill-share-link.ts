@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type {
@@ -14,8 +14,8 @@ export const SKILL_SHARE_LINK_TOKEN_PREFIX = "archestra_skl_";
 /** Length of random bytes (24 → 32 url-safe base64 chars without padding). */
 const TOKEN_RANDOM_BYTES = 24;
 
-/** Display prefix length, mirroring team_token. */
-const TOKEN_START_LENGTH = 14;
+/** Display prefix length: prefix (14) + 8 random chars for UI distinguishability. */
+const TOKEN_START_LENGTH = 22;
 
 export interface CreateSkillShareLinkParams {
   organizationId: string;
@@ -150,10 +150,12 @@ class SkillShareLinkModel {
 
     const skillsByLink = await loadSkillsForLinks([link.id]);
 
-    // fire-and-forget last-used bookkeeping; do not block the response
+    // fire-and-forget last-used bookkeeping; do not block the response.
+    // explicitly preserve updatedAt to prevent drizzle's $onUpdate hook from
+    // bumping it on a non-admin access.
     void db
       .update(schema.skillShareLinksTable)
-      .set({ lastUsedAt: new Date() })
+      .set({ lastUsedAt: new Date(), updatedAt: link.updatedAt })
       .where(eq(schema.skillShareLinksTable.id, link.id))
       .catch((err: unknown) => {
         logger.warn(
@@ -163,6 +165,24 @@ class SkillShareLinkModel {
       });
 
     return { link, skills: skillsByLink.get(link.id) ?? [] };
+  }
+
+  /** Returns IDs of non-revoked, non-expired links. Used for orphan repo sweeps at startup. */
+  static async listActiveIds(): Promise<string[]> {
+    const now = new Date();
+    const rows = await db
+      .select({ id: schema.skillShareLinksTable.id })
+      .from(schema.skillShareLinksTable)
+      .where(
+        and(
+          isNull(schema.skillShareLinksTable.revokedAt),
+          or(
+            isNull(schema.skillShareLinksTable.expiresAt),
+            gt(schema.skillShareLinksTable.expiresAt, now),
+          ),
+        ),
+      );
+    return rows.map((r) => r.id);
   }
 
   /** Idempotent: revoking an already-revoked link is a no-op. */

@@ -92,6 +92,14 @@ class SkillModel {
     return result ?? null;
   }
 
+  static async findByIds(ids: string[]): Promise<Skill[]> {
+    if (ids.length === 0) return [];
+    return await db
+      .select()
+      .from(schema.skillsTable)
+      .where(inArray(schema.skillsTable.id, ids));
+  }
+
   static async findByName(
     organizationId: string,
     name: string,

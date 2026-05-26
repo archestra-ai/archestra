@@ -15,7 +15,7 @@ import usersTable from "./user";
 /**
  * Tokens for sharing skills via the public marketplace endpoint. The raw
  * token never lands on disk: we persist sha256(token) in `tokenHash` and
- * surface the first 14 characters in `tokenStart` for UI display. A link
+ * surface the first 22 characters in `tokenStart` for UI display. A link
  * may carry one or many skills (see `skillShareLinkSkillsTable`).
  *
  * `marketplaceName` is frozen at create time. Clients register marketplaces
@@ -34,8 +34,8 @@ const skillShareLinksTable = pgTable(
       .references(() => usersTable.id, { onDelete: "cascade" }),
     /** sha256 hex of the raw token; raw token is never stored. */
     tokenHash: text("token_hash").notNull(),
-    /** First 14 characters of the raw token (for UI display). */
-    tokenStart: varchar("token_start", { length: 14 }).notNull(),
+    /** First 22 characters of the raw token (prefix + random chars, for UI display). */
+    tokenStart: varchar("token_start", { length: 22 }).notNull(),
     name: text("name"),
     marketplaceName: text("marketplace_name").notNull(),
     expiresAt: timestamp("expires_at", { mode: "date" }),

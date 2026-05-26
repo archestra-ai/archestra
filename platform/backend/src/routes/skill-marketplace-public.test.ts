@@ -87,6 +87,32 @@ describe("skill marketplace public route — token validation", () => {
     expect(response.statusCode).toBe(404);
   });
 
+  test("GET info/refs without service=git-upload-pack returns 403", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/skills/m/archestra_skl_unknown/repo.git/info/refs",
+    });
+    expect(response.statusCode).toBe(403);
+  });
+
+  test("GET info/refs with service=git-receive-pack returns 403", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/skills/m/archestra_skl_unknown/repo.git/info/refs?service=git-receive-pack",
+    });
+    expect(response.statusCode).toBe(403);
+  });
+
+  test("POST git-receive-pack returns 403", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/skills/m/archestra_skl_unknown/repo.git/git-receive-pack",
+      headers: { "content-type": "application/x-git-receive-pack-request" },
+      payload: "",
+    });
+    expect(response.statusCode).toBe(403);
+  });
+
   test("revoked link returns 404 (same shape as miss — no leak)", async ({
     makeOrganization,
     makeUser,

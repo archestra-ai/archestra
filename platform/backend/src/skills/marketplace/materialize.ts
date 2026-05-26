@@ -119,6 +119,8 @@ export class MarketplaceMaterializer {
 
     const removed: string[] = [];
     for (const entry of entries) {
+      // only manage UUID-named directories created by this materializer
+      if (!UUID_RE.test(entry)) continue;
       if (live.has(entry)) continue;
       await fs.rm(path.join(this.cacheDir, entry), {
         recursive: true,
@@ -154,12 +156,21 @@ export class MarketplaceMaterializer {
         args: ["init", "--quiet", "--initial-branch=main"],
       });
     } else {
-      // clear any previously tracked files so the new layout is the only thing committed
-      await runGit({
+      // clear any previously tracked files so the new layout is the only thing committed;
+      // guard against an empty index (e.g. a previous run that removed files but crashed
+      // before committing) to avoid "pathspec '.' did not match any files" failures
+      const tracked = await runGit({
         binary: this.gitBinaryPath,
         cwd: repoPath,
-        args: ["rm", "-rf", "--quiet", "."],
+        args: ["ls-files"],
       });
+      if (tracked.stdout.trim()) {
+        await runGit({
+          binary: this.gitBinaryPath,
+          cwd: repoPath,
+          args: ["rm", "-rf", "--quiet", "."],
+        });
+      }
     }
 
     await writeRepoLayout(repoPath, req);
@@ -294,9 +305,10 @@ async function writeRepoLayout(
     }),
   );
 
-  for (let i = 0; i < resolved.length; i += 1) {
-    const slug = resolved[i].slug;
-    const skill = req.skills[i];
+  const skillById = new Map(req.skills.map((s) => [s.id, s]));
+  for (const { id, slug } of resolved) {
+    const skill = skillById.get(id);
+    if (!skill) continue;
     await writePluginDirectory({ repoPath, slug, skill });
   }
 }
@@ -339,8 +351,36 @@ async function writePluginDirectory(params: {
 
   // resource files preserve their stored relative path under skills/<slug>/
   for (const file of skill.files) {
-    const relPath = file.path.replace(/^\.?\//, "");
-    const target = path.join(skillRoot, relPath);
+    if (file.path.includes("\0")) {
+      logger.warn(
+        { path: file.path },
+        "materialize: skipping file with null byte in path",
+      );
+      continue;
+    }
+    const relPath = path.normalize(file.path.replace(/^\.?\//, ""));
+    if (relPath.startsWith("..")) {
+      logger.warn(
+        { path: file.path },
+        "materialize: skipping file with traversal path",
+      );
+      continue;
+    }
+    if (relPath === "SKILL.md" || relPath.startsWith(`SKILL.md${path.sep}`)) {
+      logger.warn(
+        { path: file.path },
+        "materialize: skipping reserved resource path SKILL.md",
+      );
+      continue;
+    }
+    const target = path.resolve(skillRoot, relPath);
+    if (!target.startsWith(`${skillRoot}${path.sep}`)) {
+      logger.warn(
+        { path: file.path },
+        "materialize: skipping file outside skill root",
+      );
+      continue;
+    }
     await fs.mkdir(path.dirname(target), { recursive: true });
     if (file.encoding === "base64") {
       await fs.writeFile(target, Buffer.from(file.content, "base64"));
@@ -376,6 +416,9 @@ function buildSkillMarkdown(skill: MaterializeSkillInput): string {
 async function writeJson(filePath: string, value: unknown): Promise<void> {
   await fs.writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface RunGitParams {
   binary: string;

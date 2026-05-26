@@ -1,7 +1,51 @@
 import { ApiError, ApiErrorTypeSchema } from "@shared";
 import { z } from "zod";
+import {
+  InternalError,
+  NotFoundError,
+  PreconditionFailedError,
+  UnauthenticatedError,
+  UnauthorizedError,
+  UnknownError,
+  ValidationError,
+} from "@/errors";
 
 export { ApiError, ApiErrorTypeSchema };
+
+export type ApiErrorType = z.infer<typeof ApiErrorTypeSchema>;
+
+export type ServiceErrorHttpMapping = {
+  statusCode: number;
+  type: ApiErrorType;
+};
+
+/**
+ * Translate a domain error from `@/errors` into the HTTP status + response
+ * `type` literal expected by `constructResponseSchema`. Returns `null` if
+ * the error isn't a known domain error — the global handler then falls
+ * through to its other branches (`ApiError`, generic 500, etc.).
+ *
+ * Lives here (not in `@/errors`) because the domain layer is HTTP-unaware.
+ */
+export function mapServiceErrorToHttp(
+  error: unknown,
+): ServiceErrorHttpMapping | null {
+  if (error instanceof ValidationError)
+    return { statusCode: 400, type: "api_validation_error" };
+  if (error instanceof UnauthenticatedError)
+    return { statusCode: 401, type: "api_authentication_error" };
+  if (error instanceof UnauthorizedError)
+    return { statusCode: 403, type: "api_authorization_error" };
+  if (error instanceof NotFoundError)
+    return { statusCode: 404, type: "api_not_found_error" };
+  if (error instanceof PreconditionFailedError)
+    return { statusCode: 409, type: "api_conflict_error" };
+  if (error instanceof InternalError)
+    return { statusCode: 500, type: "api_internal_server_error" };
+  if (error instanceof UnknownError)
+    return { statusCode: 500, type: "api_internal_server_error" };
+  return null;
+}
 
 export const UuidIdSchema = z.uuidv4();
 

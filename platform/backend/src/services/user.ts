@@ -1,0 +1,40 @@
+import type { Permissions } from "@shared";
+import { NotFoundError } from "@/errors";
+import { MemberModel, OrganizationRoleModel } from "@/models";
+
+export async function getUserPermissions(params: {
+  userId: string;
+  organizationId: string;
+}): Promise<Permissions> {
+  const member = await MemberModel.getByUserId(
+    params.userId,
+    params.organizationId,
+  );
+
+  // TODO: this should be handled by MemberModel.getByUserId.
+  // Do not touching it now because getByUserId is used all over the codebase now.
+  if (!member || !member.role) {
+    throw new NotFoundError("User is not a member of any organization");
+  }
+
+  return OrganizationRoleModel.getPermissions(
+    member.role,
+    params.organizationId,
+  );
+}
+
+// listImpersonableUsers list users which could be impersonated by the current user
+export async function listImpersonableUsers(params: {
+  organizationId: string;
+  currentUserId: string;
+}) {
+  const members = await MemberModel.findAllByOrganization(
+    params.organizationId,
+  );
+  // filtering out the current user and system admins.
+  // system admins are not impersonable — better-auth's adminRoles
+  // guard would reject them at impersonation time anyway.
+  return members
+    .filter((m) => m.id !== params.currentUserId && m.systemRole !== "admin")
+    .map(({ systemRole: _systemRole, ...rest }) => rest);
+}

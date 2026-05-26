@@ -26,20 +26,21 @@ import { and, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import * as schema from "@/database/schemas";
+import logger from "@/logging";
 
 const sourceUrl = process.env.SOURCE_DATABASE_URL;
 const targetUrl = process.env.ARCHESTRA_DATABASE_URL;
 
 if (!sourceUrl) {
-  console.error("ERROR: SOURCE_DATABASE_URL is not set");
+  logger.error("ERROR: SOURCE_DATABASE_URL is not set");
   process.exit(1);
 }
 if (!targetUrl) {
-  console.error("ERROR: ARCHESTRA_DATABASE_URL is not set");
+  logger.error("ERROR: ARCHESTRA_DATABASE_URL is not set");
   process.exit(1);
 }
 if (sourceUrl === targetUrl) {
-  console.error(
+  logger.error(
     "ERROR: SOURCE_DATABASE_URL and ARCHESTRA_DATABASE_URL are the same",
   );
   process.exit(1);
@@ -68,7 +69,7 @@ try {
     .limit(1);
 
   if (adminRows.length === 0) {
-    console.error(
+    logger.error(
       "ERROR: no admin@example.com user with a membership in the target DB. " +
         "Has the parallel stack finished booting and seeding the default admin?",
     );
@@ -198,16 +199,12 @@ try {
         const tid = targetModelByCompound.get(`${sm.provider}:${sm.modelId}`);
         if (tid) sourceToTargetModelId.set(sm.id, tid);
       }
-      const linkable = apiKeyModels
-        .filter(
-          (l) =>
-            presentKeyIds.has(l.apiKeyId) &&
-            sourceToTargetModelId.has(l.modelId),
-        )
-        .map((l) => ({
-          ...l,
-          modelId: sourceToTargetModelId.get(l.modelId)!,
-        }));
+      const linkable = apiKeyModels.flatMap((l) => {
+        if (!presentKeyIds.has(l.apiKeyId)) return [];
+        const remappedModelId = sourceToTargetModelId.get(l.modelId);
+        if (!remappedModelId) return [];
+        return [{ ...l, modelId: remappedModelId }];
+      });
       if (linkable.length) {
         const result = await tx
           .insert(schema.llmProviderApiKeyModelsTable)
@@ -221,7 +218,7 @@ try {
     }
   });
 
-  console.log(
+  logger.info(
     `✅ Copied: ${copiedSecrets}/${secrets.length} secrets, ` +
       `${copiedModels}/${models.length} models, ` +
       `${copiedKeys}/${providerKeys.length} provider keys, ` +

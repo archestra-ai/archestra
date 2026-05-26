@@ -34551,6 +34551,7 @@ export type GetKnowledgeFilesResponses = {
             processingStatus: 'pending' | 'processing' | 'completed' | 'failed';
             processingError: string | null;
             embeddingStatus: 'pending' | 'processing' | 'completed' | 'failed';
+            embeddingError: 'api_unauthorized' | 'api_permission_denied' | 'api_bad_request' | 'api_not_found' | 'api_conflict' | 'api_unprocessable_entity' | 'api_rate_limit' | 'api_generic_error' | 'context_length_exceeded' | 'length_mismatch' | 'dimensions_mismatch' | 'unknown';
             assignedAgents: Array<{
                 id: string;
                 name: string;
@@ -34951,6 +34952,7 @@ export type UpdateKnowledgeFileResponses = {
         processingStatus: 'pending' | 'processing' | 'completed' | 'failed';
         processingError: string | null;
         embeddingStatus: 'pending' | 'processing' | 'completed' | 'failed';
+        embeddingError: 'api_unauthorized' | 'api_permission_denied' | 'api_bad_request' | 'api_not_found' | 'api_conflict' | 'api_unprocessable_entity' | 'api_rate_limit' | 'api_generic_error' | 'context_length_exceeded' | 'length_mismatch' | 'dimensions_mismatch' | 'unknown';
         assignedAgents: Array<{
             id: string;
             name: string;

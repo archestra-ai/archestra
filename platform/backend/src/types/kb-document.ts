@@ -31,6 +31,22 @@ export const EmbeddingStatusSchema = z.enum([
 ]);
 export type EmbeddingStatus = z.infer<typeof EmbeddingStatusSchema>;
 
+export const EmbeddingErrorSchema = z.enum([
+  "api_unauthorized",
+  "api_permission_denied",
+  "api_bad_request",
+  "api_not_found",
+  "api_conflict",
+  "api_unprocessable_entity",
+  "api_rate_limit",
+  "api_generic_error",
+  "context_length_exceeded",
+  "length_mismatch",
+  "dimensions_mismatch",
+  "unknown",
+]);
+export type EmbeddingError = z.infer<typeof EmbeddingErrorSchema>;
+
 export const KbDocumentMetadataSchema = z.record(z.string(), z.unknown());
 export type KbDocumentMetadata = z.infer<typeof KbDocumentMetadataSchema>;
 
@@ -69,6 +85,7 @@ export const UpdateKbDocumentSchema = createUpdateSchema(
   acl: true,
   metadata: true,
   embeddingStatus: true,
+  embeddingError: true,
   chunkCount: true,
 });
 

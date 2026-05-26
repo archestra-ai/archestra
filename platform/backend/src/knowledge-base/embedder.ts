@@ -1,13 +1,18 @@
 import { addNomicTaskPrefix, EMBEDDING_BATCH_SIZE } from "@shared";
+import { DrizzleQueryError } from "drizzle-orm/errors";
 import logger from "@/logging";
 import { KbChunkModel, KbDocumentModel } from "@/models";
+import type { EmbeddingError } from "../types";
 import {
+  AzureEmbeddingError,
   callEmbedding,
   type EmbeddingApiResponse,
   type EmbeddingInput,
+  GeminiEmbeddingError,
   getEmbeddingDiscriminator,
   getEmbeddingRetryDelayMs,
   isRetryableEmbeddingError,
+  OpenAIEmbeddingError,
 } from "./embedding-clients";
 import {
   buildEmbeddingInteraction,
@@ -40,7 +45,10 @@ class EmbeddingService {
       return;
     }
 
-    await KbDocumentModel.update(documentId, { embeddingStatus: "processing" });
+    await KbDocumentModel.update(documentId, {
+      embeddingStatus: "processing",
+      embeddingError: null,
+    });
 
     try {
       const chunks = await KbChunkModel.findByDocument(documentId);
@@ -91,6 +99,7 @@ class EmbeddingService {
     } catch (error) {
       await KbDocumentModel.update(documentId, {
         embeddingStatus: "failed",
+        embeddingError: classifyEmbeddingError(error),
       });
       logger.error(
         {
@@ -151,6 +160,7 @@ class EmbeddingService {
 
       await KbDocumentModel.update(documentId, {
         embeddingStatus: "processing",
+        embeddingError: null,
       });
 
       const chunks = await KbChunkModel.findByDocument(documentId);
@@ -195,6 +205,7 @@ class EmbeddingService {
     const ctx = orgConfig.config;
     const embeddingResults = new Map<string, number[]>();
     const failedChunkIds = new Set<string>();
+    const failedChunksErrors = new Map<string, EmbeddingError>();
 
     for (let i = 0; i < allChunks.length; i += EMBEDDING_BATCH_SIZE) {
       const batch = allChunks.slice(i, i + EMBEDDING_BATCH_SIZE);
@@ -222,6 +233,7 @@ class EmbeddingService {
           "[Embedder] Batch embedding API call failed",
         );
         for (const chunk of batch) {
+          failedChunksErrors.set(chunk.chunkId, classifyEmbeddingError(error));
           failedChunkIds.add(chunk.chunkId);
         }
       }
@@ -236,10 +248,12 @@ class EmbeddingService {
     }
 
     for (const { documentId, chunkIds, chunkCount } of docChunkMap) {
-      const anyFailed = chunkIds.some((id) => failedChunkIds.has(id));
+      const failedChunk = chunkIds.find((id) => failedChunkIds.has(id));
+      const anyFailed = Boolean(failedChunk);
       if (anyFailed) {
         await KbDocumentModel.update(documentId, {
           embeddingStatus: "failed",
+          embeddingError: failedChunksErrors.get(failedChunk),
         });
         logger.error(
           { documentId, runId: connectorRunId },
@@ -344,4 +358,92 @@ function chunkToEmbeddingInput(
     content + (metadataSuffix ?? ""),
     "search_document",
   );
+}
+
+const MAX_DEPTH = 5;
+
+/**
+ * Check if an error (or its cause) is a PostgreSQL vector dimensions mismatch
+ * Drizzle wraps database errors, so the cause chain is walked up to 5 layers.
+ * @param error
+ * @param depth
+ * @return boolean
+ */
+function isDimensionsMismatchError(error: unknown, depth = 0): boolean {
+  if (depth > MAX_DEPTH || !(error instanceof Error)) {
+    return false;
+  }
+
+  const isDimensionsMismatch = error.message
+    .toLowerCase()
+    .includes("dimensions");
+
+  if (isDimensionsMismatch) {
+    return true;
+  }
+
+  const cause = (error as { cause?: unknown }).cause;
+
+  if (cause) {
+    return isDimensionsMismatchError(cause, depth + 1);
+  }
+
+  return false;
+}
+
+/**
+ * Classify Embedding error to one of values of EmbeddingError enum
+ *
+ * exported so it can be tested
+ * @param error
+ * @return EmbeddingError
+ */
+export function classifyEmbeddingError(error: unknown): EmbeddingError {
+  const isApiError =
+    error instanceof AzureEmbeddingError ||
+    error instanceof GeminiEmbeddingError ||
+    error instanceof OpenAIEmbeddingError;
+
+  const isLengthMismatchError =
+    error instanceof Error &&
+    error.message.match(/^Embedding API returned \d+ results for \d+ inputs$/);
+
+  const isDBError = error instanceof DrizzleQueryError;
+
+  if (isApiError) {
+    switch (error.status) {
+      case 400:
+        if (
+          error.message.includes("the input length exceeds the context length")
+        ) {
+          return "context_length_exceeded";
+        }
+
+        return "api_bad_request";
+      case 401:
+        return "api_unauthorized";
+      case 403:
+        return "api_permission_denied";
+      case 404:
+        return "api_not_found";
+      case 409:
+        return "api_conflict";
+      case 422:
+        return "api_unprocessable_entity";
+      case 429:
+        return "api_rate_limit";
+      default:
+        return "api_generic_error";
+    }
+  }
+
+  if (isLengthMismatchError) {
+    return "length_mismatch";
+  }
+
+  if (isDBError && isDimensionsMismatchError(error)) {
+    return "dimensions_mismatch";
+  }
+
+  return "unknown";
 }

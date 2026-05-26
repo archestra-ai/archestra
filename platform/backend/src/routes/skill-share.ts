@@ -1,0 +1,266 @@
+import { RouteId } from "@shared";
+import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { z } from "zod";
+import { getSkillPermissionChecker } from "@/auth/skill-permissions";
+import logger from "@/logging";
+import { SkillModel, SkillShareLinkModel } from "@/models";
+import { marketplaceMaterializer } from "@/skills/marketplace";
+import { isReservedMarketplaceName } from "@/skills/marketplace/manifest";
+import {
+  ApiError,
+  constructResponseSchema,
+  DeleteObjectResponseSchema,
+  deriveSkillShareLinkStatus,
+  SelectSkillShareLinkSchema,
+  type SkillShareLinkStatus,
+  SkillShareLinkStatusSchema,
+} from "@/types";
+import { getPublicRequestOrigin } from "./request-origin";
+import { SKILL_MARKETPLACE_PREFIX } from "./route-paths";
+
+const SkillShareLinkSkillSummarySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string(),
+});
+
+/** Response shape for a single share link, with derived status + skill summaries. */
+const SkillShareLinkResponseSchema = SelectSkillShareLinkSchema.omit({
+  tokenHash: true,
+}).extend({
+  status: SkillShareLinkStatusSchema,
+  skills: z.array(SkillShareLinkSkillSummarySchema),
+});
+
+const CreateSkillShareLinkBodySchema = z.object({
+  skillIds: z.array(z.string().uuid()).min(1).max(50),
+  name: z.string().trim().min(1).max(200).optional(),
+  expiresAt: z.iso.datetime().nullable().optional(),
+});
+
+const CreateSkillShareLinkResponseSchema = z.object({
+  link: SkillShareLinkResponseSchema,
+  rawToken: z.string(),
+  cloneUrl: z.string(),
+  marketplaceName: z.string(),
+});
+
+const ListSkillShareLinksQuerySchema = z.object({
+  skillId: z.string().uuid().optional(),
+});
+
+const ListSkillShareLinksResponseSchema = z.object({
+  links: z.array(SkillShareLinkResponseSchema),
+});
+
+const skillShareRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.get(
+    "/api/skill-share-links",
+    {
+      schema: {
+        operationId: RouteId.GetSkillShareLinks,
+        description:
+          "List skill share links for the organization, optionally filtered by skill",
+        tags: ["Skills"],
+        querystring: ListSkillShareLinksQuerySchema,
+        response: constructResponseSchema(ListSkillShareLinksResponseSchema),
+      },
+    },
+    async ({ query, organizationId, user }, reply) => {
+      await requireSkillAdmin({ userId: user.id, organizationId });
+
+      const links = await SkillShareLinkModel.listByOrganization({
+        organizationId,
+        skillId: query.skillId,
+      });
+
+      return reply.send({
+        links: links.map(toShareLinkResponse),
+      });
+    },
+  );
+
+  fastify.post(
+    "/api/skill-share-links",
+    {
+      schema: {
+        operationId: RouteId.CreateSkillShareLink,
+        description:
+          "Create a share link exposing one or more skills via the public marketplace endpoint. The raw token is returned exactly once.",
+        tags: ["Skills"],
+        body: CreateSkillShareLinkBodySchema,
+        response: constructResponseSchema(CreateSkillShareLinkResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      const { body, organizationId, user } = request;
+      await requireSkillAdmin({ userId: user.id, organizationId });
+
+      const skillIds = dedupe(body.skillIds);
+      await assertSkillsBelongToOrg({ skillIds, organizationId });
+
+      const marketplaceName = deriveMarketplaceName(organizationId);
+      if (isReservedMarketplaceName(marketplaceName)) {
+        throw new ApiError(
+          400,
+          `Marketplace name "${marketplaceName}" is reserved`,
+        );
+      }
+
+      const expiresAt =
+        body.expiresAt === undefined || body.expiresAt === null
+          ? null
+          : new Date(body.expiresAt);
+
+      const { link, rawToken } = await SkillShareLinkModel.create({
+        organizationId,
+        createdByUserId: user.id,
+        skillIds,
+        marketplaceName,
+        name: body.name ?? null,
+        expiresAt,
+      });
+
+      const origin = getPublicRequestOrigin(request);
+      const cloneUrl = `${origin}${SKILL_MARKETPLACE_PREFIX}/${rawToken}/repo.git`;
+
+      logger.info(
+        {
+          shareLinkId: link.id,
+          organizationId,
+          skillCount: skillIds.length,
+          createdByUserId: user.id,
+        },
+        "skill-share: created share link",
+      );
+
+      return reply.send({
+        link: toShareLinkResponse(link),
+        rawToken,
+        cloneUrl,
+        marketplaceName,
+      });
+    },
+  );
+
+  fastify.delete(
+    "/api/skill-share-links/:id",
+    {
+      schema: {
+        operationId: RouteId.RevokeSkillShareLink,
+        description:
+          "Revoke a skill share link. Idempotent: revoking an already-revoked link is a no-op.",
+        tags: ["Skills"],
+        params: z.object({ id: z.string().uuid() }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { id }, organizationId, user }, reply) => {
+      await requireSkillAdmin({ userId: user.id, organizationId });
+
+      const existing = await SkillShareLinkModel.findById(id);
+      if (!existing || existing.organizationId !== organizationId) {
+        throw new ApiError(404, "Skill share link not found");
+      }
+
+      await SkillShareLinkModel.revoke({ id, organizationId });
+
+      // best-effort cleanup of the materialized repo; failures must not surface
+      // to the user — revocation already took effect in the DB.
+      void marketplaceMaterializer
+        .get()
+        .revoke(id)
+        .catch((err: unknown) => {
+          logger.warn(
+            { err, shareLinkId: id },
+            "skill-share: failed to drop materialized repo after revoke",
+          );
+        });
+
+      logger.info(
+        { shareLinkId: id, organizationId, revokedByUserId: user.id },
+        "skill-share: revoked share link",
+      );
+
+      return reply.send({ success: true });
+    },
+  );
+};
+
+export default skillShareRoutes;
+
+// ===== Internal helpers =====
+
+async function requireSkillAdmin(params: {
+  userId: string;
+  organizationId: string;
+}): Promise<void> {
+  const checker = await getSkillPermissionChecker(params);
+  if (!checker.isAdmin) {
+    throw new ApiError(
+      403,
+      "Only users with skill:admin can manage skill share links",
+    );
+  }
+}
+
+async function assertSkillsBelongToOrg(params: {
+  skillIds: string[];
+  organizationId: string;
+}): Promise<void> {
+  for (const skillId of params.skillIds) {
+    const skill = await SkillModel.findById(skillId);
+    if (!skill || skill.organizationId !== params.organizationId) {
+      // 404 (not 403) so org membership is not leaked
+      throw new ApiError(404, "Skill not found");
+    }
+  }
+}
+
+/**
+ * The marketplace name is frozen at create time and embedded in the manifest.
+ * Clients register marketplaces by name in their local config, so a name that
+ * tracks a mutable org slug would silently break every installed marketplace.
+ * Format: `org-<first 8 hex of org uuid>-skills`.
+ */
+function deriveMarketplaceName(organizationId: string): string {
+  const cleaned = organizationId.replace(/[^a-fA-F0-9]/g, "").toLowerCase();
+  const shortId = cleaned.slice(0, 8) || "default0";
+  return `org-${shortId}-skills`;
+}
+
+function dedupe(values: string[]): string[] {
+  return [...new Set(values)];
+}
+
+function toShareLinkResponse(link: {
+  id: string;
+  organizationId: string;
+  createdByUserId: string;
+  tokenStart: string;
+  name: string | null;
+  marketplaceName: string;
+  expiresAt: Date | null;
+  revokedAt: Date | null;
+  lastUsedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  skills: { id: string; name: string; description: string }[];
+}): z.infer<typeof SkillShareLinkResponseSchema> {
+  const status: SkillShareLinkStatus = deriveSkillShareLinkStatus(link);
+  return {
+    id: link.id,
+    organizationId: link.organizationId,
+    createdByUserId: link.createdByUserId,
+    tokenStart: link.tokenStart,
+    name: link.name,
+    marketplaceName: link.marketplaceName,
+    expiresAt: link.expiresAt,
+    revokedAt: link.revokedAt,
+    lastUsedAt: link.lastUsedAt,
+    createdAt: link.createdAt,
+    updatedAt: link.updatedAt,
+    status,
+    skills: link.skills,
+  };
+}

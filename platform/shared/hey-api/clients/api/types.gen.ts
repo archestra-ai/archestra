@@ -48323,6 +48323,302 @@ export type ImportGithubSkillsResponses = {
 
 export type ImportGithubSkillsResponse = ImportGithubSkillsResponses[keyof ImportGithubSkillsResponses];
 
+export type GetSkillShareLinksData = {
+    body?: never;
+    path?: never;
+    query?: {
+        skillId?: string;
+    };
+    url: '/api/skill-share-links';
+};
+
+export type GetSkillShareLinksErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetSkillShareLinksError = GetSkillShareLinksErrors[keyof GetSkillShareLinksErrors];
+
+export type GetSkillShareLinksResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        links: Array<{
+            id: string;
+            organizationId: string;
+            createdByUserId: string;
+            tokenStart: string;
+            name: string | null;
+            marketplaceName: string;
+            expiresAt: string | null;
+            revokedAt: string | null;
+            lastUsedAt: string | null;
+            createdAt: string;
+            updatedAt: string;
+            status: 'active' | 'expired' | 'revoked';
+            skills: Array<{
+                id: string;
+                name: string;
+                description: string;
+            }>;
+        }>;
+    };
+};
+
+export type GetSkillShareLinksResponse = GetSkillShareLinksResponses[keyof GetSkillShareLinksResponses];
+
+export type CreateSkillShareLinkData = {
+    body: {
+        skillIds: Array<string>;
+        name?: string;
+        expiresAt?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/skill-share-links';
+};
+
+export type CreateSkillShareLinkErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateSkillShareLinkError = CreateSkillShareLinkErrors[keyof CreateSkillShareLinkErrors];
+
+export type CreateSkillShareLinkResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        link: {
+            id: string;
+            organizationId: string;
+            createdByUserId: string;
+            tokenStart: string;
+            name: string | null;
+            marketplaceName: string;
+            expiresAt: string | null;
+            revokedAt: string | null;
+            lastUsedAt: string | null;
+            createdAt: string;
+            updatedAt: string;
+            status: 'active' | 'expired' | 'revoked';
+            skills: Array<{
+                id: string;
+                name: string;
+                description: string;
+            }>;
+        };
+        rawToken: string;
+        cloneUrl: string;
+        marketplaceName: string;
+    };
+};
+
+export type CreateSkillShareLinkResponse = CreateSkillShareLinkResponses[keyof CreateSkillShareLinkResponses];
+
+export type RevokeSkillShareLinkData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/skill-share-links/{id}';
+};
+
+export type RevokeSkillShareLinkErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type RevokeSkillShareLinkError = RevokeSkillShareLinkErrors[keyof RevokeSkillShareLinkErrors];
+
+export type RevokeSkillShareLinkResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type RevokeSkillShareLinkResponse = RevokeSkillShareLinkResponses[keyof RevokeSkillShareLinkResponses];
+
 export type GetTeamStatisticsData = {
     body?: never;
     path?: never;

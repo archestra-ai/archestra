@@ -187,20 +187,20 @@ Files:
 - New: `platform/backend/src/routes/skill-share.test.ts`
 - Modify: `platform/shared/access-control.ee.ts`, `platform/backend/src/routes/index.ts`, `platform/backend/src/server.ts`
 
-- [ ] Routes (collection-level, since a share link can carry many skills):
-  - `POST /api/skill-share-links` body `{ skillIds: string[]; name?: string; expiresAt?: ISODateString | null }` → `{ link: SkillShareLink; rawToken: string; cloneUrl: string; marketplaceName: string }`. Server: (a) validates `skillIds` is non-empty and all belong to `request.organizationId`; (b) computes the marketplace name per Task 2's rule (`org-<shortOrgId>-skills`); (c) checks it against the reserved-name set, throws `ApiError(400, "Marketplace name <x> is reserved")` on collision (a future-proof guard — extremely unlikely with the `org-<id>-skills` shape); (d) calls `SkillShareLinkModel.create()`; (e) constructs `cloneUrl = config.publicBaseUrl + config.skillMarketplace.endpoint + "/" + rawToken + "/repo.git"`. One URL for both Claude and Codex — only the install *command* differs (UI handles that).
+- [x] Routes (collection-level, since a share link can carry many skills):
+  - `POST /api/skill-share-links` body `{ skillIds: string[]; name?: string; expiresAt?: ISODateString | null }` → `{ link: SkillShareLink; rawToken: string; cloneUrl: string; marketplaceName: string }`. Server: (a) validates `skillIds` is non-empty and all belong to `request.organizationId`; (b) computes the marketplace name per Task 2's rule (`org-<shortOrgId>-skills`); (c) checks it against the reserved-name set, throws `ApiError(400, "Marketplace name <x> is reserved")` on collision (a future-proof guard — extremely unlikely with the `org-<id>-skills` shape); (d) calls `SkillShareLinkModel.create()`; (e) constructs `cloneUrl = getPublicRequestOrigin(request) + SKILL_MARKETPLACE_PREFIX + "/" + rawToken + "/repo.git"`. One URL for both Claude and Codex — only the install *command* differs (UI handles that). (Note: no `config.publicBaseUrl` exists in this codebase; derived from the request origin like the OAuth server routes.)
   - `GET /api/skill-share-links` → list active+revoked links for the org with attached skill metadata. Optional `?skillId=` filter.
   - `DELETE /api/skill-share-links/:id` → revoke. Also triggers async cleanup of the materialized repo dir.
-- [ ] Permission: each route requires `skill: ["admin"]` *on every skill referenced* (admin for the org overall is the canonical check; if scoped admin exists, intersect). Verify skill ownership (`skill.organizationId === request.organizationId`) before any mutation — pattern at `platform/backend/src/routes/skill.ts:246-260`. Reject the request if any `skillId` is not visible to the caller (404, not 403 — same masking as the rest of the skill routes).
-- [ ] `requiredEndpointPermissionsMap`: add three entries with `skill: ["admin"]`. **Before editing, grep for the actual map symbol — the survey reports it lives in `platform/shared/access-control.ee.ts`, but if that's been split or renamed, follow the live location, not this plan.** The route registration will 403 without these entries (enforced by the auth middleware).
-- [ ] After implementing, regenerate the API client: `cd platform && pnpm codegen:api-client`. Commit the regenerated SDK output.
-- [ ] Tests:
+- [x] Permission: each route requires `skill: ["admin"]` *on every skill referenced* (admin for the org overall is the canonical check; if scoped admin exists, intersect). Verify skill ownership (`skill.organizationId === request.organizationId`) before any mutation — pattern at `platform/backend/src/routes/skill.ts:246-260`. Reject the request if any `skillId` is not visible to the caller (404, not 403 — same masking as the rest of the skill routes).
+- [x] `requiredEndpointPermissionsMap`: add three entries with `skill: ["admin"]`. **Before editing, grep for the actual map symbol — the survey reports it lives in `platform/shared/access-control.ee.ts`, but if that's been split or renamed, follow the live location, not this plan.** The route registration will 403 without these entries (enforced by the auth middleware). (Live location: `platform/shared/access-control.ts`.)
+- [x] After implementing, regenerate the API client: `cd platform && pnpm codegen:api-client`. Commit the regenerated SDK output.
+- [x] Tests:
   - Member without admin role: 403 on create / revoke.
   - Admin creating a share for a skill in another org: 404 (org isolation).
   - Create returns the raw token exactly once; subsequent list shows only `tokenStart`.
   - Revoke is idempotent and a clone attempt after revoke 404s (cross-task integration assertion — fine to live in this file).
   - Expired link is auto-classified as `expired` by `deriveSkillShareLinkStatus`.
-- [ ] `pnpm --filter @platform/backend test skill-share` — must pass.
+- [x] `pnpm --filter @platform/backend test skill-share` — must pass.
 
 ### Task 6: Frontend Share dialog (Claude + Codex)
 

@@ -482,3 +482,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @Priyanshuthapliyal2005
 - @ashjkd213
 - @blogMaxAbel
+- @DaveBryan001

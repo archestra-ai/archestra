@@ -775,10 +775,10 @@ The following environment variables can be used to configure Archestra Platform.
   - Values: `true`, `false`, or a comma-separated list of trusted proxy IPs/CIDRs (e.g. `10.0.0.0/8,172.16.0.0/12`)
   - Example: `ARCHESTRA_TRUST_PROXY=true`
 
-- **`ARCHESTRA_API_BODY_LIMIT`** - Maximum request body size for LLM proxy and chat routes.
-  - Default: `50MB` (52428800 bytes)
-  - Format: Numeric bytes (e.g., `52428800`) or human-readable (e.g., `50MB`, `100KB`, `1GB`)
-  - Note: Increase this if you have conversations with very large context windows (100k+ tokens) or large file attachments in chat
+- **`ARCHESTRA_API_BODY_LIMIT`** - Maximum request body size accepted by the backend for LLM proxy and chat routes.
+  - Default: `70MB` (73400320 bytes)
+  - Format: Numeric bytes (e.g., `73400320`) or human-readable (e.g., `70MB`, `100KB`, `1GB`)
+  - Note: Increase this if you have conversations with very large context windows (100k+ tokens) or large file attachments in chat. Chat attachments are base64-encoded inline, so the default leaves room for files up to about 50MB. The frontend Next.js proxy keeps a permissive static ceiling so the backend remains the single runtime knob for body size.
 
 - **`ARCHESTRA_FRONTEND_URL`** - Setting this variable enables origin validation for CORS and authentication. When set, only requests from this origin (and any in `ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`) are allowed. When not set, all origins are accepted.
   - Example: `https://frontend.example.com`

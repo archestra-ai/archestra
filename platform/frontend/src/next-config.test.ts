@@ -11,6 +11,12 @@ describe("next config rewrites", () => {
     delete process.env.VERSION;
   });
 
+  it("keeps a permissive proxy body ceiling so large uploads aren't truncated", async () => {
+    const { default: nextConfig } = await import("../next.config");
+
+    expect(nextConfig.experimental?.proxyClientMaxBodySize).toBe("200mb");
+  });
+
   it("uses sanitized VERSION as the deployment id", async () => {
     process.env.VERSION = "v1.2.41+build.5";
 

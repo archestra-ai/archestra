@@ -44,6 +44,10 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     proxyTimeout: 300000, // 5 minutes in milliseconds - prevents SSE stream timeout
+    // Static high ceiling so the Next.js proxy doesn't truncate large uploads
+    // (default is 10MB). The backend's ARCHESTRA_API_BODY_LIMIT is the actual
+    // runtime knob; this just keeps the proxy from being the first wall.
+    proxyClientMaxBodySize: "200mb",
   },
   httpAgentOptions: {
     keepAlive: true,

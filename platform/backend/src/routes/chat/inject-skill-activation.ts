@@ -15,8 +15,9 @@ import { formatSkillActivation } from "@/skills/skill-activation";
  *
  * Returns a shallow copy with the block applied; the original `messages` (used
  * for persistence and the visible bubble) are left untouched. If the org flag
- * is off, the metadata is absent, or the skill cannot be resolved or accessed
- * by the user (per its scope), the input is returned unchanged.
+ * is off, the metadata is absent, the user lacks `skill:read`, or the skill
+ * cannot be resolved or accessed by the user (per its scope), the input is
+ * returned unchanged.
  */
 export async function injectSkillActivation({
   messages,
@@ -50,9 +51,20 @@ export async function injectSkillActivation({
     return messages;
   }
 
-  // Enforce the skill's scope — a slash command must not bypass RBAC.
+  // Enforce RBAC — a slash command must not bypass the `skill:read` gate that
+  // guards the skills API and the MCP skill tools.
   const checker = await getSkillPermissionChecker({ userId, organizationId });
+  if (!checker.canRead) {
+    logger.warn(
+      { organizationId, userId, skillId: skill.id },
+      "[Skills] User lacks skill:read for slash-command skill; sending message unchanged",
+    );
+    return messages;
+  }
+
+  // Enforce the skill's scope on top of the read gate.
   const hasAccess = await SkillTeamModel.userHasSkillAccess({
+    organizationId,
     userId,
     skill,
     isSkillAdmin: checker.isAdmin,

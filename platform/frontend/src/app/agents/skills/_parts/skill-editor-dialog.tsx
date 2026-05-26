@@ -8,6 +8,8 @@ import {
   Folder,
   FolderOpen,
   Plus,
+  RotateCcw,
+  Trash2,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -39,6 +41,14 @@ interface FolderEntry {
   file: ResourceFile;
   index: number;
 }
+
+interface TrashedFile {
+  id: string;
+  file: ResourceFile;
+}
+
+let trashIdCounter = 0;
+const nextTrashId = () => `trash-${++trashIdCounter}`;
 
 const MANIFEST_PLACEHOLDER = `---
 name: my-skill
@@ -98,13 +108,19 @@ export function SkillEditorDialog({
   const [teamIds, setTeamIds] = useState<string[]>([]);
   // null = the SKILL.md manifest is open; otherwise an index into `files`.
   const [openFileIndex, setOpenFileIndex] = useState<number | null>(null);
-  const [filesExpanded, setFilesExpanded] = useState(true);
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(
     new Set(),
   );
   // null = not adding; "" = adding at root; otherwise the folder name.
   const [addingIn, setAddingIn] = useState<string | null>(null);
   const [newFileName, setNewFileName] = useState("");
+  // empty folders that exist only in this session — they only persist once a file is dropped in.
+  const [pendingFolders, setPendingFolders] = useState<string[]>([]);
+  const [addingNewFolder, setAddingNewFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  // soft-deleted files held in a trash bin until the dialog is closed; restorable until then.
+  const [trash, setTrash] = useState<TrashedFile[]>([]);
+  const [trashExpanded, setTrashExpanded] = useState(true);
 
   useEffect(() => {
     if (!open) return;
@@ -143,13 +159,21 @@ export function SkillEditorDialog({
     setAddingIn(null);
     setNewFileName("");
     setCollapsedFolders(new Set());
+    setPendingFolders([]);
+    setAddingNewFolder(false);
+    setNewFolderName("");
+    setTrash([]);
+    setTrashExpanded(true);
   }, [open, isPreview, preview, isEdit, skill]);
 
   const parsed = useMemo(() => parseManifestFields(manifest), [manifest]);
   const isSaving = createSkill.isPending || updateSkill.isPending;
   const canSave = parsed.hasName && parsed.hasDescription && !isSaving;
 
-  const tree = useMemo(() => buildTree(files), [files]);
+  const tree = useMemo(
+    () => buildTree(files, pendingFolders),
+    [files, pendingFolders],
+  );
 
   const handleSave = async () => {
     const body = {
@@ -183,7 +207,34 @@ export function SkillEditorDialog({
     setNewFileName("");
   };
 
+  const commitNewFolder = () => {
+    const name = newFolderName.trim().replace(/\/+$/, "");
+    if (!name || name.includes("/")) return;
+    const fileFolderNames = new Set(
+      files
+        .map((f) => f.path.slice(0, f.path.indexOf("/")))
+        .filter((f) => f.length > 0),
+    );
+    if (!fileFolderNames.has(name) && !pendingFolders.includes(name)) {
+      setPendingFolders((prev) => [...prev, name]);
+    }
+    setAddingNewFolder(false);
+    setNewFolderName("");
+    setAddingIn(name);
+    setNewFileName("");
+  };
+
+  const cancelAddingFolder = () => {
+    setAddingNewFolder(false);
+    setNewFolderName("");
+  };
+
   const removeFile = (index: number) => {
+    const removed = files[index];
+    if (removed) {
+      setTrash((prev) => [...prev, { id: nextTrashId(), file: removed }]);
+      setTrashExpanded(true);
+    }
     setFiles((prev) => prev.filter((_, i) => i !== index));
     setOpenFileIndex((current) => {
       if (current === index) return null;
@@ -199,8 +250,29 @@ export function SkillEditorDialog({
       const openPath = files[openFileIndex]?.path;
       if (openPath?.startsWith(prefix)) openWasInFolder = true;
     }
+    const removed = files.filter((f) => f.path.startsWith(prefix));
+    if (removed.length > 0) {
+      setTrash((prev) => [
+        ...prev,
+        ...removed.map((file) => ({ id: nextTrashId(), file })),
+      ]);
+      setTrashExpanded(true);
+    }
     setFiles((prev) => prev.filter((f) => !f.path.startsWith(prefix)));
+    setPendingFolders((prev) => prev.filter((f) => f !== folder));
     if (openWasInFolder) setOpenFileIndex(null);
+  };
+
+  const restoreFile = (id: string) => {
+    const item = trash.find((t) => t.id === id);
+    if (!item) return;
+    setTrash((prev) => prev.filter((t) => t.id !== id));
+    if (files.some((f) => f.path === item.file.path)) return;
+    setFiles((prev) => [...prev, item.file]);
+  };
+
+  const permanentRemoveFile = (id: string) => {
+    setTrash((prev) => prev.filter((t) => t.id !== id));
   };
 
   const toggleFolder = (folder: string) => {
@@ -257,6 +329,7 @@ export function SkillEditorDialog({
           : "A skill is a SKILL.md instruction set plus optional resource files."
       }
       size="large"
+      bodyClassName="flex flex-col overflow-hidden"
       footer={
         isPreview ? (
           <Button
@@ -287,74 +360,10 @@ export function SkillEditorDialog({
           Loading skill...
         </div>
       ) : (
-        <div className="space-y-4">
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <Label>{openFile ? openFile.path : "SKILL.md"}</Label>
-              {!openFile && !isPreview && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="cursor-help text-xs text-muted-foreground">
-                      frontmatter: name <Marker ok={parsed.hasName} /> ·
-                      description <Marker ok={parsed.hasDescription} />
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    <code className="font-mono">name</code> and{" "}
-                    <code className="font-mono">description</code> must be set
-                    in the YAML frontmatter block (between the{" "}
-                    <code className="font-mono">---</code> fences) at the top of{" "}
-                    <code className="font-mono">SKILL.md</code>. Agents read
-                    these to decide when to use the skill.
-                  </TooltipContent>
-                </Tooltip>
-              )}
-            </div>
-            {openFile && openFile.encoding === "base64" ? (
-              <div className="flex min-h-[320px] flex-col items-center justify-center gap-1 rounded-md border bg-muted/30 text-center text-sm text-muted-foreground">
-                <span className="font-medium text-foreground">
-                  Binary asset
-                </span>
-                <span className="text-xs">
-                  {formatBytes(approxBase64Bytes(openFile.content))} · base64
-                  encoded
-                </span>
-                <span className="max-w-xs text-xs">
-                  Stored verbatim for redistribution. Not editable here.
-                </span>
-              </div>
-            ) : (
-              <Textarea
-                value={editorValue}
-                onChange={(e) => setEditorValue(e.target.value)}
-                placeholder={
-                  openFile ? "File contents..." : MANIFEST_PLACEHOLDER
-                }
-                className="min-h-[320px] font-mono text-xs"
-                spellCheck={false}
-                readOnly={isPreview}
-              />
-            )}
-          </div>
-
-          <div className="rounded-md border">
-            <button
-              type="button"
-              className="flex w-full items-center justify-between px-3 py-2 text-sm"
-              onClick={() => setFilesExpanded((v) => !v)}
-            >
-              <span className="flex items-center gap-1.5 font-medium">
-                {filesExpanded ? (
-                  <ChevronDown className="h-4 w-4" />
-                ) : (
-                  <ChevronRight className="h-4 w-4" />
-                )}
-                Files ({files.length + 1})
-              </span>
-            </button>
-
-            {filesExpanded && (
-              <div className="border-t p-2">
+        <div className="flex h-full min-h-0 flex-col gap-4">
+          <div className="grid min-h-0 flex-1 grid-cols-[240px_1fr] gap-3">
+            <div className="flex min-h-0 flex-col rounded-md border">
+              <div className="flex-1 overflow-y-auto p-2">
                 <ul className="space-y-0.5">
                   <ManifestRow
                     isOpen={openFileIndex === null}
@@ -423,25 +432,127 @@ export function SkillEditorDialog({
                     />
                   )}
                 </ul>
+              </div>
 
-                {!isPreview && addingIn === null && (
-                  <div className="mt-2 border-t pt-2">
-                    <button
-                      type="button"
-                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                      onClick={() => {
-                        setAddingIn(ROOT_ADD_KEY);
-                        setNewFileName("");
-                      }}
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      New file (type{" "}
-                      <span className="font-mono">folder/name.md</span> to nest)
-                    </button>
-                  </div>
+              {!isPreview && trash.length > 0 && (
+                <div className="border-t">
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-1.5 px-3 py-2 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => setTrashExpanded((v) => !v)}
+                  >
+                    {trashExpanded ? (
+                      <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                    ) : (
+                      <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                    )}
+                    <Trash2 className="h-3.5 w-3.5 shrink-0" />
+                    <span>Trash ({trash.length})</span>
+                  </button>
+                  {trashExpanded && (
+                    <ul className="space-y-0.5 px-2 pb-2">
+                      {trash.map(({ id, file }) => (
+                        <TrashRow
+                          key={id}
+                          path={file.path}
+                          onRestore={() => restoreFile(id)}
+                          onPurge={() => permanentRemoveFile(id)}
+                        />
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+
+              {!isPreview && addingNewFolder && (
+                <div className="border-t p-2">
+                  <NewFolderRow
+                    value={newFolderName}
+                    onChange={setNewFolderName}
+                    onCommit={commitNewFolder}
+                    onCancel={cancelAddingFolder}
+                  />
+                </div>
+              )}
+
+              {!isPreview && addingIn === null && !addingNewFolder && (
+                <div className="flex items-center gap-3 border-t p-2">
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      setAddingIn(ROOT_ADD_KEY);
+                      setNewFileName("");
+                    }}
+                  >
+                    <Plus className="h-3.5 w-3.5 shrink-0" />
+                    <span>New file</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      setAddingNewFolder(true);
+                      setNewFolderName("");
+                    }}
+                  >
+                    <Plus className="h-3.5 w-3.5 shrink-0" />
+                    <span>New folder</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="flex min-h-0 flex-col gap-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="font-mono text-xs">
+                  {openFile ? openFile.path : "SKILL.md"}
+                </Label>
+                {!openFile && !isPreview && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="cursor-help text-xs text-muted-foreground">
+                        frontmatter: name <Marker ok={parsed.hasName} /> ·
+                        description <Marker ok={parsed.hasDescription} />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <code className="font-mono">name</code> and{" "}
+                      <code className="font-mono">description</code> must be set
+                      in the YAML frontmatter block (between the{" "}
+                      <code className="font-mono">---</code> fences) at the top
+                      of <code className="font-mono">SKILL.md</code>. Agents
+                      read these to decide when to use the skill.
+                    </TooltipContent>
+                  </Tooltip>
                 )}
               </div>
-            )}
+              {openFile && openFile.encoding === "base64" ? (
+                <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 rounded-md border bg-muted/30 text-center text-sm text-muted-foreground">
+                  <span className="font-medium text-foreground">
+                    Binary asset
+                  </span>
+                  <span className="text-xs">
+                    {formatBytes(approxBase64Bytes(openFile.content))} · base64
+                    encoded
+                  </span>
+                  <span className="max-w-xs text-xs">
+                    Stored verbatim for redistribution. Not editable here.
+                  </span>
+                </div>
+              ) : (
+                <Textarea
+                  value={editorValue}
+                  onChange={(e) => setEditorValue(e.target.value)}
+                  placeholder={
+                    openFile ? "File contents..." : MANIFEST_PLACEHOLDER
+                  }
+                  className="min-h-0 flex-1 resize-none font-mono text-xs"
+                  spellCheck={false}
+                  readOnly={isPreview}
+                />
+              )}
+            </div>
           </div>
 
           {!isPreview && (
@@ -542,9 +653,9 @@ function FolderRow({
             size="icon"
             className="h-6 w-6 opacity-0 group-hover:opacity-100"
             onClick={onRemoveFolder}
-            title={`Remove folder ${folder}/`}
+            title={`Move folder ${folder}/ to trash`}
           >
-            <X className="h-3.5 w-3.5" />
+            <Trash2 className="h-3.5 w-3.5" />
           </Button>
         </>
       )}
@@ -587,8 +698,9 @@ function FileRow({
           size="icon"
           className="h-6 w-6 opacity-0 group-hover:opacity-100"
           onClick={onRemove}
+          title="Move to trash"
         >
-          <X className="h-3.5 w-3.5" />
+          <Trash2 className="h-3.5 w-3.5" />
         </Button>
       )}
     </li>
@@ -649,6 +761,97 @@ function NewFileRow({
   );
 }
 
+function TrashRow({
+  path,
+  onRestore,
+  onPurge,
+}: {
+  path: string;
+  onRestore: () => void;
+  onPurge: () => void;
+}) {
+  return (
+    <li className="group flex items-center gap-2 rounded px-2 py-1 hover:bg-muted/50">
+      <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <span className="flex-1 truncate font-mono text-xs text-muted-foreground line-through">
+        {path}
+      </span>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-6 w-6 opacity-0 group-hover:opacity-100"
+        onClick={onRestore}
+        title="Restore"
+      >
+        <RotateCcw className="h-3.5 w-3.5" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-6 w-6 opacity-0 group-hover:opacity-100"
+        onClick={onPurge}
+        title="Delete permanently"
+      >
+        <X className="h-3.5 w-3.5" />
+      </Button>
+    </li>
+  );
+}
+
+function NewFolderRow({
+  value,
+  onChange,
+  onCommit,
+  onCancel,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onCommit: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 px-1">
+      <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <Input
+        autoFocus
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            onCommit();
+          } else if (e.key === "Escape") {
+            onCancel();
+          }
+        }}
+        placeholder="folder name"
+        className="h-7 flex-1 font-mono text-xs"
+      />
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-7 px-2 text-xs"
+        onClick={onCommit}
+        disabled={!value.trim() || value.includes("/")}
+      >
+        Add
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7"
+        onClick={onCancel}
+      >
+        <X className="h-3.5 w-3.5" />
+      </Button>
+    </div>
+  );
+}
+
 function Marker({ ok }: { ok: boolean }) {
   return (
     <span className={ok ? "text-emerald-600" : "text-muted-foreground"}>
@@ -668,12 +871,18 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function buildTree(files: ResourceFile[]): {
+function buildTree(
+  files: ResourceFile[],
+  pendingFolders: string[],
+): {
   folders: Record<string, FolderEntry[]>;
   folderNames: string[];
   rootFiles: FolderEntry[];
 } {
   const folders: Record<string, FolderEntry[]> = {};
+  for (const folder of pendingFolders) {
+    folders[folder] = [];
+  }
   const rootFiles: FolderEntry[] = [];
   files.forEach((file, index) => {
     const slashIdx = file.path.indexOf("/");

@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-05-21
+lastUpdated: 2026-05-25
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -66,6 +66,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Identity Providers | `read` |
 | Secrets | `read` |
 | Organization Settings | `read`, `update` |
+| Site Notifications | `read` |
 | Chat Agent Picker | `enable` |
 | Chat Provider Settings | `enable` |
 | Chat Expand Tool Calls | `enable` |
@@ -93,6 +94,7 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Chats | `read`, `create`, `update`, `delete` |
 | API Keys | `read`, `create`, `delete` |
 | Teams | `read` |
+| Site Notifications | `read` |
 | Simple View | `enable` |
 | Chat Agent Picker | `enable` |
 | Chat Provider Settings | `enable` |
@@ -218,6 +220,10 @@ The following table lists all available permissions that can be assigned to cust
 | `secret:read` | View secrets manager configuration |
 | `secret:update` | Modify secrets manager settings and test connectivity |
 | `simpleView:enable` | Sidebar is collapsed by default on page load |
+| `siteNotification:read` | View site-wide notifications |
+| `siteNotification:create` | Create new site notifications |
+| `siteNotification:update` | Modify site notifications |
+| `siteNotification:delete` | Delete site notifications |
 | `skill:read` | View and use agent skills within your scope (org, your teams, your own) |
 | `skill:create` | Create new agent skills |
 | `skill:update` | Modify agent skills and their team assignments |

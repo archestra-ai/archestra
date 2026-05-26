@@ -80,3 +80,6 @@ playwright-report/
 
 # Local planning specs
 specs/
+
+# project-local binaries bootstrapped by dev scripts (e.g., dagger CLI)
+dev/bin/

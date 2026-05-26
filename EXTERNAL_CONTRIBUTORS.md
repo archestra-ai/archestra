@@ -474,3 +474,12 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @aksdigitalteam-mindmesh
 - @iyop666
 - @tiaraimpex410-sudo
+- @32r7ue
+- @joeyotester
+- @BernardUriza
+- @sravan27
+- @ScottLiu007
+- @Priyanshuthapliyal2005
+- @ashjkd213
+- @blogMaxAbel
+- @DaveBryan001

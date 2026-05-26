@@ -359,6 +359,7 @@ export function useDeleteConversation() {
         const keys = conversationStorageKeys(deletedId);
         localStorage.removeItem(keys.artifactOpen);
         localStorage.removeItem(keys.draft);
+        localStorage.removeItem(keys.pinnedCanvas);
       }
 
       toast.success("Conversation deleted");

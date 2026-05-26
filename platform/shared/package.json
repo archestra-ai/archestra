@@ -28,7 +28,7 @@
   "dependencies": {
     "ai": "^6.0.116",
     "better-auth": "1.5.5",
-    "zod": "^4.3.4"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@hey-api/openapi-ts": "^0.94.0",

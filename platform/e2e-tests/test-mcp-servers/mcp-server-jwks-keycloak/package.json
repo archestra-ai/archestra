@@ -5,7 +5,7 @@
   "type": "module",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
-    "express": "^4.21.0",
+    "express": "^4.22.2",
     "jose": "^5.9.0",
     "zod": "^3.24.0"
   },

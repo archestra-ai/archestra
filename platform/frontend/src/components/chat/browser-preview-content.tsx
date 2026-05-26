@@ -52,6 +52,8 @@ interface BrowserPreviewContentProps {
   agentId?: string;
   /** When true, this is a popup that follows the active conversation */
   isPopup?: boolean;
+  /** When true, hide the title row (parent already provides chrome). */
+  hideHeader?: boolean;
   /** Called when user enters a URL without a conversation - should create conversation and navigate */
   onCreateConversationWithUrl?: (url: string) => void;
   /** Whether conversation creation is in progress */
@@ -69,6 +71,7 @@ export function BrowserPreviewContent({
   className,
   agentId: agentIdProp,
   isPopup = false,
+  hideHeader = false,
   onCreateConversationWithUrl,
   isCreatingConversation = false,
   initialNavigateUrl,
@@ -251,16 +254,27 @@ export function BrowserPreviewContent({
       {/* Header */}
       <div className="flex flex-col px-2 py-3 border-b">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <Globe className="h-4 w-4 text-muted-foreground" />
-            <span className="text-xs font-medium">Browser Preview</span>
-            {isConnected && (
+          {hideHeader ? (
+            isConnected ? (
               <span
-                className="w-2 h-2 rounded-full bg-green-500"
+                className="w-2 h-2 rounded-full bg-green-500 ml-1"
                 title="Connected"
               />
-            )}
-          </div>
+            ) : (
+              <div />
+            )
+          ) : (
+            <div className="flex items-center gap-2">
+              <Globe className="h-4 w-4 text-muted-foreground" />
+              <span className="text-xs font-medium">Browser Preview</span>
+              {isConnected && (
+                <span
+                  className="w-2 h-2 rounded-full bg-green-500"
+                  title="Connected"
+                />
+              )}
+            </div>
+          )}
           <div className="flex items-center gap-1">
             {/* Type tool */}
             <Popover>

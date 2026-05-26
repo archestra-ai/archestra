@@ -11,52 +11,77 @@ import type { ResourceVisibilityScope } from "@/types/visibility";
  */
 class SkillTeamModel {
   /**
-   * Skill IDs a non-admin user can access: org-scoped skills, their own
-   * personal skills, and team-scoped skills assigned to one of their teams.
+   * Skill IDs a user can access within an organization: org-scoped skills,
+   * their own personal skills, and team-scoped skills assigned to one of their
+   * teams. Without a `userId` (org/team-token sessions) only org-scoped skills
+   * are returned.
    *
    * Admins bypass scope filtering entirely, so callers should skip this for
    * them rather than passing a flag.
    */
-  static async getUserAccessibleSkillIds(userId: string): Promise<string[]> {
+  static async getUserAccessibleSkillIds(params: {
+    organizationId: string;
+    userId?: string;
+  }): Promise<string[]> {
+    const { organizationId, userId } = params;
+    if (userId === undefined) {
+      const result = await db.execute<{ id: string }>(sql`
+        SELECT id FROM skills
+        WHERE scope = 'org' AND organization_id = ${organizationId}
+      `);
+      return result.rows.map((r) => r.id);
+    }
+
     const result = await db.execute<{ id: string }>(sql`
-      SELECT id FROM skills WHERE scope = 'org'
+      SELECT id FROM skills
+        WHERE scope = 'org' AND organization_id = ${organizationId}
       UNION
-      SELECT id FROM skills WHERE author_id = ${userId} AND scope = 'personal'
+      SELECT id FROM skills
+        WHERE author_id = ${userId} AND scope = 'personal'
+          AND organization_id = ${organizationId}
       UNION
       SELECT st.skill_id AS id
         FROM skill_team st
         INNER JOIN skills s ON st.skill_id = s.id
         INNER JOIN team_member tm ON st.team_id = tm.team_id
         WHERE tm.user_id = ${userId} AND s.scope = 'team'
+          AND s.organization_id = ${organizationId}
     `);
     return result.rows.map((r) => r.id);
   }
 
   /**
-   * Whether a user can access a specific skill. Admins always can; otherwise
+   * Whether a user can access a specific skill within an organization. A skill
+   * from another organization is never accessible. Admins always can; otherwise
    * org → all, personal → author only, team → member of an assigned team.
+   * Without a `userId` (org/team-token sessions) only org-scoped skills are
+   * accessible.
    *
    * Takes the already-loaded skill row — every caller resolves the skill
    * before checking access, so there is no need to re-fetch it here.
    */
   static async userHasSkillAccess(params: {
-    userId: string;
+    organizationId: string;
+    userId?: string;
     skill: {
       id: string;
+      organizationId: string;
       scope: ResourceVisibilityScope;
       authorId: string | null;
     };
     isSkillAdmin: boolean;
   }): Promise<boolean> {
+    const { skill, organizationId, userId } = params;
+    if (skill.organizationId !== organizationId) return false;
     if (params.isSkillAdmin) return true;
 
-    const { skill } = params;
     switch (skill.scope) {
       case "org":
         return true;
       case "personal":
-        return skill.authorId === params.userId;
+        return userId !== undefined && skill.authorId === userId;
       case "team": {
+        if (userId === undefined) return false;
         const [match] = await db
           .select({ teamId: schema.skillTeamsTable.teamId })
           .from(schema.skillTeamsTable)
@@ -67,7 +92,7 @@ class SkillTeamModel {
           .where(
             and(
               eq(schema.skillTeamsTable.skillId, skill.id),
-              eq(schema.teamMembersTable.userId, params.userId),
+              eq(schema.teamMembersTable.userId, userId),
             ),
           )
           .limit(1);

@@ -661,6 +661,30 @@ class SlackProvider implements ChatOpsProvider {
     }
   }
 
+  async getMessagePermalink(params: {
+    channelId: string;
+    messageId: string;
+  }): Promise<string | null> {
+    if (!this.client) return null;
+    try {
+      const result = await this.client.chat.getPermalink({
+        channel: params.channelId,
+        message_ts: params.messageId,
+      });
+      return (result.permalink as string | undefined) ?? null;
+    } catch (error) {
+      logger.warn(
+        {
+          error: errorMessage(error),
+          channelId: params.channelId,
+          messageId: params.messageId,
+        },
+        "[SlackProvider] Failed to fetch chat.getPermalink",
+      );
+      return null;
+    }
+  }
+
   async getUserEmail(userId: string): Promise<string | null> {
     if (!this.client) {
       logger.warn("[SlackProvider] Client not initialized, cannot get email");

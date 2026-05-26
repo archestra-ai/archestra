@@ -1007,6 +1007,19 @@ export function ChatMessages({
                         if (!isToolPart(part)) return null;
                         const toolName = part.toolName;
 
+                        // Skip if a data-tool-ui-start already owns this toolCallId
+                        // (it renders the full input/output lifecycle itself).
+                        const tcId = part.toolCallId;
+                        const hasEarlyStart =
+                          tcId &&
+                          (message.parts ?? []).some(
+                            (p) =>
+                              p.type?.startsWith("data-tool-ui-start") &&
+                              (p as { data?: { toolCallId?: string } }).data
+                                ?.toolCallId === tcId,
+                          );
+                        if (hasEarlyStart) return null;
+
                         // Look ahead for tool result (same tool call ID)
                         let toolResultPart = null;
                         const nextPart = message.parts?.[i + 1];
@@ -1678,6 +1691,7 @@ const MessageTool = memo(
                 uiResourceUri={uiResourceUri}
                 agentId={agentId}
                 toolName={toolName}
+                toolCallId={part.toolCallId}
                 toolInput={part.input as Record<string, unknown>}
                 rawOutput={mcpOutput}
                 preloadedResource={
@@ -1771,6 +1785,7 @@ const MessageTool = memo(
                 uiResourceUri={uiResourceUri}
                 agentId={agentId}
                 toolName={toolName}
+                toolCallId={part.toolCallId}
                 toolInput={part.input as Record<string, unknown>}
                 rawOutput={mcpOutput}
                 preloadedResource={

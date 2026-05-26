@@ -145,6 +145,7 @@ describe("EmbeddingService", () => {
 
     const updated = await KbDocumentModel.findById(doc.id);
     expect(updated?.embeddingStatus).toBe("failed");
+    expect(updated?.embeddingError).toBe("rate_limited");
   });
 
   test("no chunks marks document as completed with chunkCount 0", async ({
@@ -169,6 +170,7 @@ describe("EmbeddingService", () => {
 
     const updated = await KbDocumentModel.findById(doc.id);
     expect(updated?.embeddingStatus).toBe("completed");
+    expect(updated?.embeddingError).toBeNull();
     expect(updated?.chunkCount).toBe(0);
     expect(mockEmbeddingsCreate).not.toHaveBeenCalled();
   });
@@ -293,6 +295,7 @@ describe("EmbeddingService", () => {
 
     const updated = await KbDocumentModel.findById(doc.id);
     expect(updated?.embeddingStatus).toBe("failed");
+    expect(updated?.embeddingError).toBe("server_error");
     expect(mockEmbeddingsCreate).toHaveBeenCalledTimes(3);
   });
 

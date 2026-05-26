@@ -33778,6 +33778,7 @@ export type GetConnectorFilesResponses = {
             processingStatus: string;
             processingError: string | null;
             embeddingStatus: 'pending' | 'processing' | 'completed' | 'failed';
+            embeddingError: 'rate_limited' | 'auth_error' | 'model_not_found' | 'server_error' | 'dimensions_mismatch' | 'unknown' | null;
         }>;
         pagination: {
             currentPage: number;
@@ -34063,6 +34064,7 @@ export type GetConnectorFileResponses = {
         processingStatus: string;
         processingError: string | null;
         embeddingStatus: 'pending' | 'processing' | 'completed' | 'failed';
+        embeddingError: 'rate_limited' | 'auth_error' | 'model_not_found' | 'server_error' | 'dimensions_mismatch' | 'unknown' | null;
     };
 };
 

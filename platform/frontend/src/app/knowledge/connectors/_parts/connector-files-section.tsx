@@ -1,7 +1,8 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
-import { Loader2, Search, Trash2, Upload, X } from "lucide-react";
+import { AlertCircle, Loader2, Search, Trash2, Upload, X } from "lucide-react";
+import type { ReactNode } from "react";
 import {
   useActionState,
   useCallback,
@@ -10,7 +11,7 @@ import {
   useState,
   useTransition,
 } from "react";
-import { Badge } from "@/components/ui/badge";
+import { Badge, badgeVariants } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
@@ -28,19 +29,78 @@ import {
   useDeleteConnectorFile,
   useUploadConnectorFiles,
 } from "@/lib/knowledge/connector-files.query";
+import { cn } from "@/lib/utils";
 
 const ACCEPTED_EXTENSIONS =
   ".txt,.md,.csv,.json,.xml,.html,.htm,.pdf,.doc,.docx,.zip";
 const MAX_FILE_SIZE_MB = 10;
 
+const EMBEDDING_ERROR_MESSAGES = {
+  rate_limited:
+    "The embedding provider rate limit was reached. Try again later or adjust the provider limits.",
+  auth_error:
+    "The embedding provider rejected the configured API key or credentials.",
+  model_not_found:
+    "The configured embedding model was not found. Check the selected embedding model.",
+  server_error:
+    "The embedding provider returned a server error. Try again later.",
+  dimensions_mismatch:
+    "The embedding model returned vectors with dimensions that do not match the configured database column.",
+  unknown:
+    "Embedding failed for an unknown reason. Check the embedding provider configuration and logs.",
+} as const;
+
+function getEmbeddingErrorMessage(error?: string | null) {
+  if (!error) return EMBEDDING_ERROR_MESSAGES.unknown;
+  return (
+    EMBEDDING_ERROR_MESSAGES[error as keyof typeof EMBEDDING_ERROR_MESSAGES] ??
+    EMBEDDING_ERROR_MESSAGES.unknown
+  );
+}
+
+function StatusTooltipBadge({
+  variant,
+  label,
+  tooltip,
+  children,
+}: {
+  variant: "default" | "secondary" | "destructive" | "outline";
+  label: string;
+  tooltip: string;
+  children?: ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            badgeVariants({ variant }),
+            "capitalize text-xs cursor-help appearance-none",
+          )}
+          aria-label={`${label}: ${tooltip}`}
+        >
+          {children}
+          {label}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-80 break-words">
+        {tooltip}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function FileStatusBadge({
   processingStatus,
   embeddingStatus,
   processingError,
+  embeddingError,
 }: {
   processingStatus?: string;
   embeddingStatus: string;
   processingError?: string | null;
+  embeddingError?: string | null;
 }) {
   if (processingStatus && processingStatus !== "completed") {
     const variants = {
@@ -59,25 +119,19 @@ function FileStatusBadge({
       variants[processingStatus as keyof typeof variants] ?? "secondary";
     const label =
       labels[processingStatus as keyof typeof labels] ?? processingStatus;
+    const tooltip =
+      processingStatus === "failed" && processingError
+        ? processingError
+        : processingStatus === "pending"
+          ? "File is queued for text extraction"
+          : "Extracting text from file…";
 
     return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Badge variant={variant} className="capitalize text-xs cursor-help">
-            {processingStatus === "processing" && (
-              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-            )}
-            {label}
-          </Badge>
-        </TooltipTrigger>
-        <TooltipContent>
-          {processingStatus === "failed" && processingError
-            ? processingError
-            : processingStatus === "pending"
-              ? "File is queued for text extraction"
-              : "Extracting text from file…"}
-        </TooltipContent>
-      </Tooltip>
+      <StatusTooltipBadge variant={variant} label={label} tooltip={tooltip}>
+        {processingStatus === "processing" && (
+          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+        )}
+      </StatusTooltipBadge>
     );
   }
 
@@ -94,18 +148,26 @@ function FileStatusBadge({
     processing: "Indexing…",
     failed: "Failed",
   };
+  const variant =
+    variants[embeddingStatus as keyof typeof variants] ?? "secondary";
+  const label =
+    labels[embeddingStatus as keyof typeof labels] ?? embeddingStatus;
+
+  if (embeddingStatus === "failed") {
+    const tooltip = getEmbeddingErrorMessage(embeddingError);
+    return (
+      <StatusTooltipBadge variant={variant} label={label} tooltip={tooltip}>
+        <AlertCircle className="h-3 w-3 mr-1" />
+      </StatusTooltipBadge>
+    );
+  }
 
   return (
-    <Badge
-      variant={
-        variants[embeddingStatus as keyof typeof variants] ?? "secondary"
-      }
-      className="capitalize text-xs"
-    >
+    <Badge variant={variant} className="capitalize text-xs">
       {embeddingStatus === "processing" && (
         <Loader2 className="h-3 w-3 mr-1 animate-spin" />
       )}
-      {labels[embeddingStatus as keyof typeof labels] ?? embeddingStatus}
+      {label}
     </Badge>
   );
 }
@@ -125,6 +187,7 @@ function FileStatusCell({
       processingStatus={current.processingStatus}
       embeddingStatus={current.embeddingStatus}
       processingError={current.processingError}
+      embeddingError={current.embeddingError}
     />
   );
 }

@@ -2,6 +2,7 @@ import type {
   SupportedProvider,
   SupportedProviderDiscriminator,
 } from "@shared";
+import type { EmbeddingErrorCode } from "@/types/kb-document";
 import { AzureEmbeddingError, callAzureEmbedding } from "./azure";
 import { callGeminiEmbedding, GeminiEmbeddingError } from "./gemini";
 import { callOpenAIEmbedding, OpenAIEmbeddingError } from "./openai";
@@ -93,4 +94,65 @@ export function getEmbeddingRetryDelayMs(
   }
 
   return fallbackDelayMs;
+}
+
+export function getEmbeddingErrorCode(error: unknown): EmbeddingErrorCode {
+  const status = getEmbeddingErrorStatus(error);
+  if (status === 429) return "rate_limited";
+  if (status === 401 || status === 403) return "auth_error";
+  if (status === 404) return "model_not_found";
+  if (status !== undefined && status >= 500) return "server_error";
+
+  const message = getEmbeddingErrorMessage(error);
+  if (/\bdimensions?\b|\bvector\b/.test(message)) {
+    return "dimensions_mismatch";
+  }
+  if (
+    message.includes("rate limit") ||
+    message.includes("rate-limit") ||
+    message.includes("quota")
+  ) {
+    return "rate_limited";
+  }
+  if (
+    message.includes("api key") ||
+    message.includes("authentication") ||
+    message.includes("unauthorized") ||
+    message.includes("forbidden") ||
+    message.includes("permission denied")
+  ) {
+    return "auth_error";
+  }
+  if (
+    message.includes("model not found") ||
+    message.includes("model does not exist") ||
+    message.includes("unknown model")
+  ) {
+    return "model_not_found";
+  }
+  if (
+    message.includes("server error") ||
+    message.includes("internal server") ||
+    message.includes("service unavailable")
+  ) {
+    return "server_error";
+  }
+
+  return "unknown";
+}
+
+function getEmbeddingErrorStatus(error: unknown): number | undefined {
+  if (
+    error instanceof AzureEmbeddingError ||
+    error instanceof GeminiEmbeddingError ||
+    error instanceof OpenAIEmbeddingError
+  ) {
+    return error.status;
+  }
+  return undefined;
+}
+
+function getEmbeddingErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message.toLowerCase();
+  return String(error).toLowerCase();
 }

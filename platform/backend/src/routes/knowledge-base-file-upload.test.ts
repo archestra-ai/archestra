@@ -2,7 +2,11 @@ import { eq } from "drizzle-orm";
 import JSZip from "jszip";
 import db, { schema } from "@/database";
 import * as fileProcessor from "@/knowledge-base/connectors/file-upload/file-processor";
-import { KbUploadedFileModel, KnowledgeBaseConnectorModel } from "@/models";
+import {
+  KbDocumentModel,
+  KbUploadedFileModel,
+  KnowledgeBaseConnectorModel,
+} from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
@@ -450,6 +454,16 @@ describe("connector file upload routes", () => {
       });
 
       const fileId = uploadResponse.json().results[0].fileId;
+      await KbDocumentModel.create({
+        connectorId: fileUploadConnector.id,
+        organizationId,
+        sourceId: fileId,
+        title: "single.txt",
+        content: "Single file content",
+        contentHash: `doc-${fileId}`,
+        embeddingStatus: "failed",
+        embeddingError: "dimensions_mismatch",
+      });
 
       const response = await app.inject({
         method: "GET",
@@ -465,6 +479,7 @@ describe("connector file upload routes", () => {
         mimeType: "text/plain",
       });
       expect(file).toHaveProperty("embeddingStatus");
+      expect(file.embeddingError).toBe("dimensions_mismatch");
       expect(file).toHaveProperty("createdAt");
     });
 
@@ -498,10 +513,21 @@ describe("connector file upload routes", () => {
         },
       ]);
 
-      await app.inject({
+      const uploadResponse = await app.inject({
         method: "POST",
         url: `/api/connectors/${fileUploadConnector.id}/files`,
         payload,
+      });
+      const fileId = uploadResponse.json().results[0].fileId;
+      await KbDocumentModel.create({
+        connectorId: fileUploadConnector.id,
+        organizationId,
+        sourceId: fileId,
+        title: "listed.txt",
+        content: "File list test content",
+        contentHash: `doc-${fileId}`,
+        embeddingStatus: "failed",
+        embeddingError: "auth_error",
       });
 
       const listResponse = await app.inject({
@@ -519,6 +545,7 @@ describe("connector file upload routes", () => {
       expect(listBody.data[0]).toHaveProperty("id");
       expect(listBody.data[0]).toHaveProperty("contentHash");
       expect(listBody.data[0]).toHaveProperty("embeddingStatus");
+      expect(listBody.data[0].embeddingError).toBe("auth_error");
     });
   });
 

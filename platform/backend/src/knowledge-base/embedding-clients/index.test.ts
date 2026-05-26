@@ -2,6 +2,7 @@ import { describe, expect, test } from "@/test";
 import {
   AzureEmbeddingError,
   GeminiEmbeddingError,
+  getEmbeddingErrorCode,
   getEmbeddingRetryDelayMs,
   isRetryableEmbeddingError,
   OpenAIEmbeddingError,
@@ -59,5 +60,28 @@ describe("getEmbeddingRetryDelayMs", () => {
     expect(
       getEmbeddingRetryDelayMs(new OpenAIEmbeddingError(429, "rate"), 2_000),
     ).toBe(2_000);
+  });
+});
+
+describe("getEmbeddingErrorCode", () => {
+  test("maps provider status codes to stable error codes", () => {
+    expect(getEmbeddingErrorCode(new OpenAIEmbeddingError(429, "rate"))).toBe(
+      "rate_limited",
+    );
+    expect(getEmbeddingErrorCode(new GeminiEmbeddingError(401, "auth"))).toBe(
+      "auth_error",
+    );
+    expect(getEmbeddingErrorCode(new AzureEmbeddingError(404, "missing"))).toBe(
+      "model_not_found",
+    );
+    expect(getEmbeddingErrorCode(new OpenAIEmbeddingError(503, "down"))).toBe(
+      "server_error",
+    );
+  });
+
+  test("maps local vector dimension errors", () => {
+    expect(
+      getEmbeddingErrorCode(new Error("expected 1536 dimensions, not 3072")),
+    ).toBe("dimensions_mismatch");
   });
 });

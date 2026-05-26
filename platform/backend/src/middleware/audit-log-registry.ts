@@ -49,6 +49,7 @@ export type AuditableRouteConfig = {
   fetchById?: (
     id: string,
     organizationId: string,
+    routeParams?: Record<string, unknown>,
   ) => Promise<Record<string, unknown> | null>;
   /**
    * Hard-coded action name; wins over actionByMethod and method-derivation.
@@ -143,7 +144,11 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/agents/:agentId/tools/:toolId": {
     resourceType: "agentTool",
     resourceIdParam: "toolId",
-    fetchById: (id, orgId) => AgentToolModel.findByIdForAudit(id, orgId),
+    fetchById: (toolId, orgId, params) => {
+      const agentId = params?.agentId;
+      if (typeof agentId !== "string") return Promise.resolve(null);
+      return AgentToolModel.findByAgentAndToolForAudit(agentId, toolId, orgId);
+    },
   },
 
   // MCP Servers

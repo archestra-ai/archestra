@@ -8,6 +8,7 @@ import MemberModel from "@/models/member";
 import OptimizationRuleModel from "@/models/optimization-rule";
 import OrganizationRoleModel from "@/models/organization-role";
 import TeamTokenModel from "@/models/team-token";
+import ToolModel from "@/models/tool";
 import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
 import TrustedDataPolicyModel from "@/models/trusted-data-policy";
 import UserTokenModel from "@/models/user-token";
@@ -348,6 +349,18 @@ const CASES: ScopeCase[] = [
       return { id: policy.id, orgA: orgA.id };
     },
     fetch: (id, orgId) => ToolInvocationPolicyModel.findByIdForAudit(id, orgId),
+  },
+  {
+    name: "ToolModel.findByIdForAudit",
+    setup: async ({ makeOrganization, makeAgent, makeTool, makeAgentTool }) => {
+      const orgA = await makeOrganization();
+      const orgB = await makeOrganization();
+      const tool = await makeTool();
+      const agentB = await makeAgent({ organizationId: orgB.id });
+      await makeAgentTool(agentB.id, tool.id);
+      return { id: tool.id, orgA: orgA.id };
+    },
+    fetch: (id, orgId) => ToolModel.findByIdForAudit(id, orgId),
   },
   {
     name: "TrustedDataPolicyModel.findByIdForAudit",

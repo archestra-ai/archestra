@@ -1273,6 +1273,60 @@ class AgentToolModel {
 
     if (!scoped) return null;
 
+    return AgentToolModel.toAuditSnapshot(scoped);
+  }
+
+  /** Used by `/api/agents/:agentId/tools/:toolId` where `resourceId` is the tool id. */
+  static async findByAgentAndToolForAudit(
+    agentId: string,
+    toolId: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [scoped] = await db
+      .select({
+        assignmentId: schema.agentToolsTable.id,
+        agentId: schema.agentToolsTable.agentId,
+        agentName: schema.agentsTable.name,
+        toolId: schema.toolsTable.id,
+        toolName: schema.toolsTable.name,
+        mcpServerId: schema.agentToolsTable.mcpServerId,
+        credentialResolutionMode:
+          schema.agentToolsTable.credentialResolutionMode,
+        updatedAt: schema.agentToolsTable.updatedAt,
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+      )
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          eq(schema.agentToolsTable.toolId, toolId),
+          eq(schema.agentsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!scoped) return null;
+
+    return AgentToolModel.toAuditSnapshot(scoped);
+  }
+
+  private static toAuditSnapshot(scoped: {
+    assignmentId: string;
+    agentId: string;
+    agentName: string;
+    toolId: string;
+    toolName: string;
+    mcpServerId: string | null;
+    credentialResolutionMode: string;
+    updatedAt: Date;
+  }): Record<string, unknown> {
     return {
       id: scoped.assignmentId,
       agentId: scoped.agentId,

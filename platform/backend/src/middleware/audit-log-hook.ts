@@ -35,11 +35,14 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
     const id = await resolveAuditedResourceId(request, cfg);
     if (!id) return;
 
+    const routeParams = request.params as Record<string, unknown> | undefined;
     request.auditBefore = sanitizeAuditSnapshot(
-      await cfg.fetchById(id, request.organizationId).catch((err) => {
-        logger.error({ err }, "audit: fetchById (prior) failed");
-        return null;
-      }),
+      await cfg
+        .fetchById(id, request.organizationId, routeParams)
+        .catch((err) => {
+          logger.error({ err }, "audit: fetchById (prior) failed");
+          return null;
+        }),
     );
   });
 
@@ -92,6 +95,7 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
             id,
             organizationId: request.organizationId,
             cfg,
+            routeParams: request.params as Record<string, unknown> | undefined,
           })
         : null;
 
@@ -328,13 +332,14 @@ async function resolveAfterState(params: {
   id: string | null;
   organizationId: string;
   cfg: AuditableRouteConfig | undefined;
+  routeParams?: Record<string, unknown>;
 }): Promise<Record<string, unknown> | null> {
-  const { method, id, organizationId, cfg } = params;
+  const { method, id, organizationId, cfg, routeParams } = params;
 
   if (method === "DELETE") return null;
   if (!cfg?.fetchById || !id) return null;
 
-  return cfg.fetchById(id, organizationId).catch((err) => {
+  return cfg.fetchById(id, organizationId, routeParams).catch((err) => {
     logger.error({ err }, "audit: fetchById (post) failed");
     return null;
   });

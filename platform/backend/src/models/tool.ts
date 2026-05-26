@@ -298,13 +298,14 @@ class ToolModel {
     return tool;
   }
 
-  // Globally scoped audit snapshot: toolsTable has no organizationId column.
-  // Tools are associated with agents (which are org-scoped), but DELETE
-  // /api/tools/:id does not apply an explicit org predicate on the row lookup.
-  // Intentional match with route handler scope.
+  // Org-scoped audit snapshot via tool → agent_tools → agents.organizationId.
+  // toolsTable has no organizationId column; tenancy is resolved through any
+  // agent in the caller's organization that has been assigned the tool.  Closes
+  // the snapshot-before-authz leak even though DELETE /api/tools/:id is not
+  // org-predicate-scoped at the route layer yet.
   static async findByIdForAudit(
     id: string,
-    _organizationId: string,
+    organizationId: string,
   ): Promise<Record<string, unknown> | null> {
     const [tool] = await db
       .select({
@@ -318,7 +319,20 @@ class ToolModel {
         updatedAt: schema.toolsTable.updatedAt,
       })
       .from(schema.toolsTable)
-      .where(eq(schema.toolsTable.id, id))
+      .innerJoin(
+        schema.agentToolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.toolsTable.id, id),
+          eq(schema.agentsTable.organizationId, organizationId),
+        ),
+      )
       .limit(1);
 
     if (!tool) return null;

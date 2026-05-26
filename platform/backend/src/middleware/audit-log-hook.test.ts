@@ -80,9 +80,17 @@ vi.mock("./audit-log-registry", async () => {
     "/api/agents/:agentId/tools/:toolId": {
       resourceType: "agentTool",
       resourceIdParam: "toolId",
-      fetchById: async (id: string) =>
-        id === KNOWN_RESOURCE_ID
-          ? { id, agentId: "some-agent", toolId: id }
+      fetchById: async (
+        toolId: string,
+        _orgId: string,
+        params?: Record<string, unknown>,
+      ) =>
+        toolId === KNOWN_RESOURCE_ID && typeof params?.agentId === "string"
+          ? {
+              id: "assignment-row-id",
+              agentId: params.agentId,
+              toolId,
+            }
           : null,
     },
     // Rotation route with explicit action — key test for action overrides.
@@ -246,11 +254,16 @@ describe("registerAuditLogHook", () => {
     // Not in AUDITABLE_ROUTES — exercises fallback + logger.warn path.
     app.post("/api/orphan-events", async () => ({ ok: true }));
 
-    // Nested route — verifies resourceIdParam guard.
-    app.delete("/api/agents/:agentId/tools/:id", async () => ({ ok: true }));
+    // Nested route — verifies resourceIdParam guard (walk-up to /api/agents/:agentId).
+    app.delete("/api/agents/:agentId/sub-resource/:id", async () => ({
+      ok: true,
+    }));
 
-    // Explicitly registered child route — POST should produce an agentTool row.
+    // Explicitly registered child route — POST/DELETE use toolId param name.
     app.post("/api/agents/:agentId/tools/:toolId", async () => ({ ok: true }));
+    app.delete("/api/agents/:agentId/tools/:toolId", async () => ({
+      ok: true,
+    }));
 
     // Unregistered child route — walks up to /api/agents/:agentId.
     // POST must be suppressed; PATCH must still write a row.
@@ -792,11 +805,11 @@ describe("registerAuditLogHook", () => {
   describe("resourceIdParam — nested routes use the named param", () => {
     test("nested route records the agentId, not the tool :id", async () => {
       const agentId = KNOWN_RESOURCE_ID;
-      const toolId = "00000000-0000-0000-0000-000000000999";
+      const childId = "00000000-0000-0000-0000-000000000999";
 
       await app.inject({
         method: "DELETE",
-        url: `/api/agents/${agentId}/tools/${toolId}`,
+        url: `/api/agents/${agentId}/sub-resource/${childId}`,
       });
       await settle();
 
@@ -804,7 +817,7 @@ describe("registerAuditLogHook", () => {
       expect(rows).toHaveLength(1);
       expect(rows[0].resourceType).toBe("agent");
       expect(rows[0].resourceId).toBe(agentId);
-      expect(rows[0].resourceId).not.toBe(toolId);
+      expect(rows[0].resourceId).not.toBe(childId);
     });
   });
 
@@ -906,6 +919,23 @@ describe("registerAuditLogHook", () => {
       // resourceIdParam="toolId" → resourceId is the tool id, not the agent id
       expect(rows[0].resourceId).toBe(KNOWN_RESOURCE_ID);
       expect(rows[0].resourceId).not.toBe(agentId);
+    });
+
+    test("DELETE on agent-tool route passes agentId to fetchById for before snapshot", async () => {
+      const agentId = "00000000-0000-0000-0000-000000000010";
+      await app.inject({
+        method: "DELETE",
+        url: `/api/agents/${agentId}/tools/${KNOWN_RESOURCE_ID}`,
+      });
+      await settle();
+
+      const rows = await getRows();
+      expect(rows).toHaveLength(1);
+      expect(rows[0].before).toEqual({
+        id: "assignment-row-id",
+        agentId,
+        toolId: KNOWN_RESOURCE_ID,
+      });
     });
 
     test("PATCH to an unregistered child route inherits parent config via walk-up", async () => {

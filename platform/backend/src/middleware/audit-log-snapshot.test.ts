@@ -538,6 +538,36 @@ describe("audit snapshot shape — non-redacted models", () => {
     expect(await SkillModel.findByIdForAudit(skill.id, org2.id)).toBeNull();
   });
 
+  test("AgentToolModel.findByAgentAndToolForAudit scopes to organization", async ({
+    makeOrganization,
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const org = await makeOrganization();
+    const org2 = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const tool = await makeTool();
+    await makeAgentTool(agent.id, tool.id);
+
+    const snap = await AgentToolModel.findByAgentAndToolForAudit(
+      agent.id,
+      tool.id,
+      org.id,
+    );
+    expect(snap).not.toBeNull();
+    expect(snap?.toolId).toBe(tool.id);
+    expect(snap?.agentId).toBe(agent.id);
+
+    expect(
+      await AgentToolModel.findByAgentAndToolForAudit(
+        agent.id,
+        tool.id,
+        org2.id,
+      ),
+    ).toBeNull();
+  });
+
   test("AgentToolModel.findByIdForAudit scopes to organization", async ({
     makeOrganization,
     makeAgent,

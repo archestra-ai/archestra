@@ -22,7 +22,7 @@
  * so that precondition is satisfied by the default flow.
  */
 
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import * as schema from "@/database/schemas";
@@ -77,21 +77,49 @@ try {
 
   const { userId: targetUserId, organizationId: targetOrgId } = adminRows[0];
 
-  // Read source-side rows.
-  const [secrets, models, providerKeys, apiKeyModels] = await Promise.all([
-    source.select().from(schema.secretsTable),
+  // Read source-side rows. The `secret` table also stores OAuth tokens,
+  // virtual-API-key secrets, etc. — we only want the rows referenced by
+  // provider keys, otherwise we'd import orphan credentials into target.
+  const [models, providerKeys, apiKeyModels] = await Promise.all([
     source.select().from(schema.modelsTable),
     source.select().from(schema.llmProviderApiKeysTable),
     source.select().from(schema.llmProviderApiKeyModelsTable),
   ]);
+  const referencedSecretIds = Array.from(
+    new Set(
+      providerKeys
+        .map((k) => k.secretId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  );
+  const secrets = referencedSecretIds.length
+    ? await source
+        .select()
+        .from(schema.secretsTable)
+        .where(inArray(schema.secretsTable.id, referencedSecretIds))
+    : [];
 
-  const rewrittenKeys = providerKeys.map((k) => ({
-    ...k,
-    organizationId: targetOrgId,
-    userId: targetUserId,
-    teamId: null,
-    scope: "personal" as const,
-  }));
+  // Collapsing scope to 'personal' means many source keys can flatten onto
+  // the same (org, provider, scope='personal', user_id) tuple — the partial
+  // unique index `chat_api_keys_primary_personal_unique` allows only one
+  // `isPrimary=true` row in that bucket. Keep `isPrimary=true` for the FIRST
+  // copied key per provider; demote the rest. Force `isSystem=false` because
+  // target seeds its own system key per provider (the
+  // `chat_api_keys_system_unique` partial index would otherwise collide).
+  const seenPrimaryProviders = new Set<string>();
+  const rewrittenKeys = providerKeys.map((k) => {
+    const keepPrimary = k.isPrimary && !seenPrimaryProviders.has(k.provider);
+    if (keepPrimary) seenPrimaryProviders.add(k.provider);
+    return {
+      ...k,
+      organizationId: targetOrgId,
+      userId: targetUserId,
+      teamId: null,
+      scope: "personal" as const,
+      isPrimary: keepPrimary,
+      isSystem: false,
+    };
+  });
 
   let copiedSecrets = 0;
   let copiedModels = 0;
@@ -124,34 +152,62 @@ try {
       copiedKeys = result.length;
     }
     if (apiKeyModels.length) {
-      // Filter link rows to those whose api_key_id AND model_id are actually
-      // present in target. Without this, a source key whose insert was
-      // skipped (because target already had a logically-equivalent key under
-      // a different UUID and the unique index on org/provider/scope/user_id
-      // blocked the new row) leaves a dangling source api_key_id in the link
-      // rows, and the link insert aborts the whole transaction on an FK
-      // violation. Same for models.
+      // For keys we filter by what landed in target (a source key whose
+      // insert was skipped by a unique-index conflict has no target row to
+      // FK to). For models we have to REMAP — `models_provider_model_unique`
+      // means target may already have a logically-equivalent row under a
+      // different UUID, in which case the source row was skipped but the
+      // link should still resolve to target's existing UUID instead of
+      // being dropped.
       const sourceKeyIds = providerKeys.map((k) => k.id);
-      const sourceModelIds = models.map((m) => m.id);
-      const [presentKeys, presentModels] = await Promise.all([
+      const sourceProviders = Array.from(
+        new Set(models.map((m) => m.provider)),
+      );
+      const sourceModelIds = Array.from(new Set(models.map((m) => m.modelId)));
+      const [presentKeys, targetMatchingModels] = await Promise.all([
         sourceKeyIds.length
           ? tx
               .select({ id: schema.llmProviderApiKeysTable.id })
               .from(schema.llmProviderApiKeysTable)
               .where(inArray(schema.llmProviderApiKeysTable.id, sourceKeyIds))
           : Promise.resolve([] as { id: string }[]),
-        sourceModelIds.length
+        sourceProviders.length && sourceModelIds.length
           ? tx
-              .select({ id: schema.modelsTable.id })
+              .select({
+                id: schema.modelsTable.id,
+                provider: schema.modelsTable.provider,
+                modelId: schema.modelsTable.modelId,
+              })
               .from(schema.modelsTable)
-              .where(inArray(schema.modelsTable.id, sourceModelIds))
-          : Promise.resolve([] as { id: string }[]),
+              .where(
+                and(
+                  inArray(schema.modelsTable.provider, sourceProviders),
+                  inArray(schema.modelsTable.modelId, sourceModelIds),
+                ),
+              )
+          : Promise.resolve(
+              [] as { id: string; provider: string; modelId: string }[],
+            ),
       ]);
       const presentKeyIds = new Set(presentKeys.map((r) => r.id));
-      const presentModelIds = new Set(presentModels.map((r) => r.id));
-      const linkable = apiKeyModels.filter(
-        (l) => presentKeyIds.has(l.apiKeyId) && presentModelIds.has(l.modelId),
+      const targetModelByCompound = new Map(
+        targetMatchingModels.map((t) => [`${t.provider}:${t.modelId}`, t.id]),
       );
+      const sourceToTargetModelId = new Map<string, string>();
+      for (const sm of models) {
+        const tid = targetModelByCompound.get(`${sm.provider}:${sm.modelId}`);
+        if (tid) sourceToTargetModelId.set(sm.id, tid);
+      }
+      const linkable = apiKeyModels
+        .filter(
+          (l) =>
+            presentKeyIds.has(l.apiKeyId) &&
+            sourceToTargetModelId.has(l.modelId),
+        )
+        .map((l) => ({
+          ...l,
+          modelId: sourceToTargetModelId.get(l.modelId)!,
+        }));
       if (linkable.length) {
         const result = await tx
           .insert(schema.llmProviderApiKeyModelsTable)

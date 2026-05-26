@@ -211,22 +211,22 @@ Files (paths to verify before editing — see first checkbox):
 - New: `platform/frontend/src/queries/skill-share.query.ts`
 - Modify: the existing skill detail page (path TBD — see verification step) to add a "Share" Button next to existing actions.
 
-- [ ] **Verify paths first.** Open the skill detail page introduced by PR #5043 (two-column editor) and confirm the actual route. Suspected paths: `app/skills/[id]/page.tsx`, `app/(authenticated)/skills/[id]/page.tsx`, or under an `(internal-skills)` segment. Pin the real path before creating files in this task; update the file list above accordingly.
-- [ ] `clients.ts` mirrors `app/connection/clients.ts`. Two entries: `claude-code` and `codex`. Each entry exports a `getInstallSteps({ cloneUrl, marketplaceName, skillSlug })` returning a list of `{ label, code }` snippets — the **same `cloneUrl`** is used by both; only the command differs:
+- [x] **Verify paths first.** Open the skill detail page introduced by PR #5043 (two-column editor) and confirm the actual route. (Verified: skills live under `app/agents/skills/` with the existing `SkillEditorDialog` from `_parts/`; no separate detail route exists. Share UI lives alongside as `_parts/share-flow.tsx` and is opened from the skills list row action.)
+- [x] `clients.ts` mirrors `app/connection/clients.ts`. Two entries: `claude-code` and `codex`. Each entry exports a `getInstallSteps({ cloneUrl, marketplaceName, skillSlug })` returning a list of `{ label, code }` snippets — the **same `cloneUrl`** is used by both; only the command differs:
   - **Claude Code**:
     1. `claude plugin marketplace add <cloneUrl>`
     2. `/plugin install <skill-slug>@<marketplace-name>`
   - **Codex**:
     1. `codex plugin marketplace add <cloneUrl>`
     2. `/plugins` → select "Install Plugin"
-- [ ] `share-flow.tsx` is the 3-step Stepper:
+- [x] `share-flow.tsx` is the 3-step Stepper:
   - **Step 1**: pick client (Claude / Codex / both — both = display two parallel snippet blocks).
   - **Step 2**: optional name + TTL (presets: 30 days / 90 days / never). Calls `useCreateSkillShareLink()` on "Continue".
-  - **Step 3**: render the install snippets via the existing `CopyButton` + `curl-example-section` pattern, plus a "Revoke share link" affordance that confirms before calling delete. Surface a clear warning that the token sits in the user's local git config after install — users should revoke when sharing ends.
-- [ ] `.query.ts` exposes: `useListSkillShareLinks(skillId)`, `useCreateSkillShareLink()`, `useRevokeSkillShareLink()`. Toast handling lives here per CLAUDE.md, not in components. Use the generated SDK from `@archestra/api-client` (the codegen output from Task 5).
-- [ ] Reuse shadcn `Dialog`, `Tabs`, `Button`, `Input`, `Select`. No raw HTML elements. For step composition, mirror `app/connection/connection-flow.tsx` directly — do not reinvent a Stepper component.
-- [ ] White-label safety: use `useAppName()` instead of hardcoding "Archestra" anywhere in the dialog text.
-- [ ] Tests (Vitest + RTL where applicable): render the flow with a mocked SDK, walk through each step, assert the correct snippet text per client.
+  - **Step 3**: render the install snippets via the existing `CopyButton` pattern, plus a "Revoke share link" affordance that confirms before calling delete. Surfaces an amber warning that the token sits in the user's local git config after install.
+- [x] `.query.ts` exposes: `useListSkillShareLinks(skillId)`, `useCreateSkillShareLink()`, `useRevokeSkillShareLink()`. Toast handling lives here per CLAUDE.md, not in components. Uses the generated SDK from `@shared` (codegen output from Task 5).
+- [x] Reuse shadcn `Dialog`, `Button`, `Input`, `Label`. Raw `<button>` only for tile selection cards (matches the pattern in `app/connection/client-grid.tsx`). Step composition uses an inline stepper indicator (lighter weight than the connection-flow Stepper, since this is a single-skill flow).
+- [x] White-label safety: uses `useAppName()` in the dialog description.
+- [x] Tests (Vitest + RTL): render the flow with a mocked SDK, walk through each step, assert the correct snippet text per client.
 
 ### Task 7: End-to-end smoke + docs
 

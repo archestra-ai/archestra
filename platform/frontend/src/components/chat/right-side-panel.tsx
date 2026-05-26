@@ -1,14 +1,23 @@
 "use client";
 
-import { FileText, Globe, GripVertical, X } from "lucide-react";
+import { format } from "date-fns";
+import { FileText, Globe, GripVertical, Pin, PinOff, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
+import { usePinnedCanvas } from "@/components/chat/pinned-canvas-context";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
-export type RightPanelTab = "artifact" | "browser";
+export type RightPanelTab = "artifact" | "browser" | "canvas";
 
 interface RightSidePanelProps {
   isOpen: boolean;
@@ -128,12 +137,33 @@ export function RightSidePanel({
     };
   }, [isResizing]);
 
+  const {
+    canvases,
+    pinnedCanvasId,
+    selectedCanvasId,
+    setPinned,
+    select,
+    setPortalTarget,
+  } = usePinnedCanvas();
+  const portalDivRef = useRef<HTMLDivElement | null>(null);
+
+  let resolvedTab: RightPanelTab = activeTab;
+  if (resolvedTab === "browser" && !canShowBrowser) resolvedTab = "artifact";
+
+  // Activate the portal target only while the canvas tab is showing — when the
+  // user switches to artifact/browser or closes the panel, the canvas falls
+  // back to inline rendering in the chat.
+  useEffect(() => {
+    const shouldHostCanvas = isOpen && resolvedTab === "canvas";
+    setPortalTarget(shouldHostCanvas ? portalDivRef.current : null);
+    return () => {
+      setPortalTarget(null);
+    };
+  }, [isOpen, resolvedTab, setPortalTarget]);
+
   if (!isOpen) {
     return null;
   }
-
-  const resolvedTab: RightPanelTab =
-    activeTab === "browser" && !canShowBrowser ? "artifact" : activeTab;
 
   return (
     <div
@@ -179,6 +209,9 @@ export function RightSidePanel({
                 Browser
               </TabsTrigger>
             )}
+            <TabsTrigger value="canvas" className="text-xs px-3">
+              MCP App
+            </TabsTrigger>
           </TabsList>
           <div className="flex items-center gap-1">
             {headerActions}
@@ -195,7 +228,7 @@ export function RightSidePanel({
           </div>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-hidden">
+        <div className="flex-1 min-h-0 overflow-hidden relative">
           {resolvedTab === "artifact" && (
             <ConversationArtifactPanel
               artifact={artifact}
@@ -217,6 +250,84 @@ export function RightSidePanel({
               onInitialNavigateComplete={onInitialNavigateComplete}
               hideHeader
             />
+          )}
+          {/* Canvas tab content: selector + portal target. */}
+          {resolvedTab === "canvas" && (
+            <div className="flex flex-col h-full">
+              {canvases.length > 0 ? (
+                <div className="flex items-center gap-2 border-b px-2 py-2">
+                  <Select
+                    value={selectedCanvasId ?? undefined}
+                    onValueChange={(value) => select(value)}
+                  >
+                    <SelectTrigger className="flex-1 h-8 text-xs">
+                      <SelectValue placeholder="Choose an MCP App" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {canvases.map((canvas) => (
+                        <SelectItem
+                          key={canvas.toolCallId}
+                          value={canvas.toolCallId}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="truncate">{canvas.label}</span>
+                            <span className="text-[10px] text-muted-foreground ml-auto whitespace-nowrap tabular-nums">
+                              {format(canvas.createdAt, "HH:mm:ss")}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant={
+                      pinnedCanvasId && pinnedCanvasId === selectedCanvasId
+                        ? "secondary"
+                        : "ghost"
+                    }
+                    size="icon"
+                    className="h-8 w-8"
+                    disabled={!selectedCanvasId}
+                    onClick={() => {
+                      if (!selectedCanvasId) return;
+                      setPinned(
+                        pinnedCanvasId === selectedCanvasId
+                          ? null
+                          : selectedCanvasId,
+                      );
+                    }}
+                    title={
+                      pinnedCanvasId === selectedCanvasId
+                        ? "Unpin as default"
+                        : "Pin as default for this conversation"
+                    }
+                    aria-label={
+                      pinnedCanvasId === selectedCanvasId
+                        ? "Unpin as default"
+                        : "Pin as default"
+                    }
+                  >
+                    {pinnedCanvasId === selectedCanvasId ? (
+                      <PinOff className="h-4 w-4" />
+                    ) : (
+                      <Pin className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              ) : null}
+              <div ref={portalDivRef} className="flex-1 min-h-0 relative">
+                {canvases.length === 0 && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-xs text-muted-foreground px-6">
+                    <Pin className="h-6 w-6 mb-2 opacity-50" />
+                    <p className="font-medium">No MCP Apps in this chat</p>
+                    <p className="mt-1">
+                      MCP Apps from tool calls in this conversation will appear
+                      here.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
         </div>
       </Tabs>

@@ -123,13 +123,13 @@ Files:
 - New: `platform/backend/src/skills/marketplace/materialize.ts`
 - New: `platform/backend/src/skills/marketplace/materialize.test.ts`
 
-- [ ] Strategy: **one persistent git repo per share link**, advanced commit-by-commit when content changes. The naive "content-hash dir" approach is wrong: clients run `git pull` on update, and an unrelated-history rebuild breaks every existing clone with "refusing to merge unrelated histories." So:
+- [x] Strategy: **one persistent git repo per share link**, advanced commit-by-commit when content changes. The naive "content-hash dir" approach is wrong: clients run `git pull` on update, and an unrelated-history rebuild breaks every existing clone with "refusing to merge unrelated histories." So:
   - Path: `<cacheDir>/<linkId>/repo` (stable per link, lifetime = link's lifetime).
   - On first request for a link: create the dir, materialize the layout into a working tree, `git init --quiet --initial-branch=main`, `git add .`, `git commit` with `ARCHESTRA_GIT_AUTHOR` and the committer set to an empty timestamp env (`GIT_AUTHOR_DATE`, `GIT_COMMITTER_DATE` derived from the latest `skill.updatedAt` so commits are deterministic across replicas). Tag the commit message with `contentHash`.
   - On every subsequent request: compute `contentHash = sha256(canonicalize({ skillId, updatedAt } per skill, sorted by skillId))`. If the existing repo's `HEAD` commit message ends with the same hash, serve as-is. If different, re-stage the working tree (clear all tracked files first via `git rm -rf .`, then write the new layout), `git add .`, `git commit`. The new commit is a child of the previous HEAD — `git pull` on existing clones fast-forwards cleanly.
   - **Concurrent-request race**: wrap the "check + maybe re-commit" path in a per-link mutex. Use a simple `Map<linkId, Promise<void>>` in the materializer singleton; subsequent callers `await` the in-flight promise rather than racing into the same working tree. (`LRUCacheManager` is the wrong tool here; this is a write-side serializer, not a cache.)
   - GC: when a share link is revoked or hard-deleted, drop the repo dir. We do not LRU-evict live links — the disk cost of one git repo per link is bounded by the skill set size, not by request volume. Add a startup sweep that removes repo dirs whose `linkId` no longer exists in the DB (handles dev/test churn).
-- [ ] On-disk layout the materializer produces (verified against both vendors' docs in the survey above):
+- [x] On-disk layout the materializer produces (verified against both vendors' docs in the survey above):
   ```
   <repo-root>/
     .claude-plugin/
@@ -146,10 +146,10 @@ Files:
             <resource files…>
   ```
   Both clients consume the same `plugins/<slug>/skills/<slug>/SKILL.md` — coexisting manifests at different paths.
-- [ ] `SKILL.md` rebuild: start from stored body. Reattach YAML frontmatter (`name`, `description`, plus any `disable-model-invocation` Archestra exposes). Resource files: write at their stored `path` relative to the skill's own dir. Honor `encoding` (`utf8` vs `base64`).
-- [ ] Cache dir comes from config (`ARCHESTRA_SKILL_MARKETPLACE_CACHE_DIR`, default `/var/lib/archestra/skill-marketplace-cache`). Document in `.env.example` and `docs/pages/platform-deployment.md`.
-- [ ] Tests cover: file layout, frontmatter round-trip, binary file via base64, deterministic ordering, cache hit reuses existing HEAD (no new commit), content change adds a new commit (verify HEAD parent is the previous HEAD — proves `git pull` works), per-link mutex serializes concurrent calls (no torn tree, two parallel calls produce one commit not two), revoke deletes the dir.
-- [ ] `pnpm --filter @platform/backend test materialize` — must pass.
+- [x] `SKILL.md` rebuild: start from stored body. Reattach YAML frontmatter (`name`, `description`, plus any `disable-model-invocation` Archestra exposes). Resource files: write at their stored `path` relative to the skill's own dir. Honor `encoding` (`utf8` vs `base64`).
+- [x] Cache dir comes from config (`ARCHESTRA_SKILL_MARKETPLACE_CACHE_DIR`, default `/var/lib/archestra/skill-marketplace-cache`). Document in `.env.example` and `docs/pages/platform-deployment.md`. (Materializer accepts `cacheDir` via constructor; Task 4 wires it from config + env var + docs.)
+- [x] Tests cover: file layout, frontmatter round-trip, binary file via base64, deterministic ordering, cache hit reuses existing HEAD (no new commit), content change adds a new commit (verify HEAD parent is the previous HEAD — proves `git pull` works), per-link mutex serializes concurrent calls (no torn tree, two parallel calls produce one commit not two), revoke deletes the dir.
+- [x] `pnpm --filter @platform/backend test materialize` — must pass.
 
 ### Task 4: Public git-http endpoint
 

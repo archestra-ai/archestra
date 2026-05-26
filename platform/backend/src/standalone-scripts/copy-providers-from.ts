@@ -106,11 +106,28 @@ try {
   // Collapsing scope to 'personal' means many source keys can flatten onto
   // the same (org, provider, scope='personal', user_id) tuple — the partial
   // unique index `chat_api_keys_primary_personal_unique` allows only one
-  // `isPrimary=true` row in that bucket. Keep `isPrimary=true` for the FIRST
-  // copied key per provider; demote the rest. Force `isSystem=false` because
-  // target seeds its own system key per provider (the
-  // `chat_api_keys_system_unique` partial index would otherwise collide).
-  const seenPrimaryProviders = new Set<string>();
+  // `isPrimary=true` row in that bucket. Pre-seed the "already-primary"
+  // providers from target's existing rows (the dev may have already added a
+  // primary by hand) AND track within the source set; only keep
+  // `isPrimary=true` when neither already claims it, otherwise demote. Force
+  // `isSystem=false` because target seeds its own system key per provider
+  // (the `chat_api_keys_system_unique` partial index would otherwise collide).
+  const existingTargetPrimaryProviders = new Set(
+    (
+      await target
+        .select({ provider: schema.llmProviderApiKeysTable.provider })
+        .from(schema.llmProviderApiKeysTable)
+        .where(
+          and(
+            eq(schema.llmProviderApiKeysTable.organizationId, targetOrgId),
+            eq(schema.llmProviderApiKeysTable.userId, targetUserId),
+            eq(schema.llmProviderApiKeysTable.scope, "personal"),
+            eq(schema.llmProviderApiKeysTable.isPrimary, true),
+          ),
+        )
+    ).map((r) => r.provider),
+  );
+  const seenPrimaryProviders = new Set<string>(existingTargetPrimaryProviders);
   const rewrittenKeys = providerKeys.map((k) => {
     const keepPrimary = k.isPrimary && !seenPrimaryProviders.has(k.provider);
     if (keepPrimary) seenPrimaryProviders.add(k.provider);

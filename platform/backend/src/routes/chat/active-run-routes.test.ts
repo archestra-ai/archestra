@@ -1,4 +1,8 @@
-import { MessageModel } from "@/models";
+import {
+  ConversationModel,
+  ConversationShareModel,
+  MessageModel,
+} from "@/models";
 import ActiveChatRunModel from "@/models/chat-active-run";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -124,6 +128,50 @@ describe("chat active-run routes", () => {
     const run = await ActiveChatRunModel.findRunningByConversation(
       inaccessibleConversation.id,
     );
+    expect(run?.stopRequestedAt).toBeNull();
+  });
+
+  test("stop returns 404 when a share-only user tries to stop the owner's stream", async ({
+    makeMember,
+    makeUser,
+  }) => {
+    const owner = user;
+    await makeMember(owner.id, organizationId);
+    const sharee = await makeUser();
+    await makeMember(sharee.id, organizationId);
+
+    await ConversationShareModel.upsert({
+      conversationId,
+      organizationId,
+      createdByUserId: owner.id,
+      visibility: "user",
+      teamIds: [],
+      userIds: [sharee.id],
+    });
+    await ActiveChatRunModel.create({
+      conversationId,
+      userId: owner.id,
+      organizationId,
+    });
+
+    // Guard against a silent test-setup regression: if the share stops granting
+    // read access, the assertion below would pass for the wrong reason.
+    const accessibleAsSharee = await ConversationModel.findAccessibleById({
+      id: conversationId,
+      userId: sharee.id,
+      organizationId,
+    });
+    expect(accessibleAsSharee).not.toBeNull();
+
+    user = sharee;
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversationId}/stop`,
+    });
+
+    expect(response.statusCode).toBe(404);
+    const run =
+      await ActiveChatRunModel.findRunningByConversation(conversationId);
     expect(run?.stopRequestedAt).toBeNull();
   });
 

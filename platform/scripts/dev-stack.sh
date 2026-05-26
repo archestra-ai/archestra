@@ -56,13 +56,30 @@ cmd_up() {
   local env_file="$platform_dir/.env"
 
   if [ ! -f "$env_file" ]; then
-    cat >&2 <<EOF
+    # Auto-copy from the main worktree (the original clone, where .git is a
+    # directory). `git worktree list --porcelain` is documented to list the
+    # main worktree first. Skip auto-copy if we ARE the main worktree, since
+    # there's nowhere to copy from.
+    # `sed -n 's/^worktree //p' | head -n1` strips the "worktree " prefix and
+    # keeps the rest of the line verbatim — awk '{print $2}' would truncate
+    # paths that contain spaces.
+    local main_worktree main_env
+    main_worktree=$(git -C "$platform_dir" worktree list --porcelain 2>/dev/null \
+      | sed -n 's/^worktree //p' | head -n1)
+    main_env="$main_worktree/platform/.env"
+    if [ -n "$main_worktree" ] && [ "$main_env" != "$env_file" ] && [ -f "$main_env" ]; then
+      echo "→ Auto-copying .env from main worktree: $main_env" >&2
+      cp "$main_env" "$env_file"
+    else
+      cat >&2 <<EOF
 ERROR: $env_file not found.
 
-Copy it from your main worktree first, e.g.:
-  cp <main-worktree>/platform/.env $env_file
+Tried auto-copying from the main worktree but no source was available.
+Bootstrap .env in the main worktree first, e.g.:
+  cp ${main_worktree:-<main-worktree>}/platform/.env.example ${main_worktree:-<main-worktree>}/platform/.env
 EOF
-    exit 1
+      exit 1
+    fi
   fi
 
   if [ -z "$namespace" ]; then

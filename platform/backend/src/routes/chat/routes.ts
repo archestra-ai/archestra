@@ -994,7 +994,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
-      const conversation = await ConversationModel.findAccessibleById({
+      // Owner-only: stop is a mutation on someone else's in-flight LLM work, so
+      // share-access (which is enough to read or reconnect to the stream) must
+      // not be enough to abort it.
+      const conversation = await ConversationModel.findById({
         id,
         userId: user.id,
         organizationId,

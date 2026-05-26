@@ -86,17 +86,17 @@ Files:
 - New: `platform/backend/src/models/skill-share-link.test.ts`
 - Modify: `platform/backend/src/database/schemas/index.ts`, `platform/backend/src/types/index.ts`
 
-- [ ] Define `skillShareLinksTable` with: `id` (uuid), `organizationId` (fk), `createdByUserId` (fk), `tokenHash` (text, unique — store SHA-256 of the raw token; raw token never persisted), `tokenStart` (varchar(14), for UI display, mirrors `team_token`), `name` (text, optional human label), `marketplaceName` (text, frozen at create — see Task 2 for the derivation rule and Task 5 for the reserved-name check), `expiresAt` (timestamptz, nullable — null = never), `revokedAt` (timestamptz, nullable), `lastUsedAt` (timestamptz, nullable), `createdAt`, `updatedAt`.
-- [ ] Define `skillShareLinkSkillsTable` junction: `(shareLinkId fk, skillId fk)` with cascade-delete on both sides and a `(shareLinkId, skillId)` primary key. Plural-from-day-one (see Decisions).
-- [ ] Generate Drizzle migration: `cd platform && pnpm db:generate`. Verify with `drizzle-kit check`.
-- [ ] Types (`types/skill-share-link.ts`): `SelectSkillShareLinkSchema`, `InsertSkillShareLinkSchema` (omit `id`, `tokenHash`, `tokenStart`, `lastUsedAt`, `createdAt`, `updatedAt` — controller generates token), inferred `SkillShareLink`. Export `SkillShareLinkStatus = z.enum(["active", "expired", "revoked"])` and a helper `deriveSkillShareLinkStatus(link, now)` (pure, used by both backend and tests).
-- [ ] Model methods (`SkillShareLinkModel`):
+- [x] Define `skillShareLinksTable` with: `id` (uuid), `organizationId` (fk), `createdByUserId` (fk), `tokenHash` (text, unique — store SHA-256 of the raw token; raw token never persisted), `tokenStart` (varchar(14), for UI display, mirrors `team_token`), `name` (text, optional human label), `marketplaceName` (text, frozen at create — see Task 2 for the derivation rule and Task 5 for the reserved-name check), `expiresAt` (timestamptz, nullable — null = never), `revokedAt` (timestamptz, nullable), `lastUsedAt` (timestamptz, nullable), `createdAt`, `updatedAt`.
+- [x] Define `skillShareLinkSkillsTable` junction: `(shareLinkId fk, skillId fk)` with cascade-delete on both sides and a `(shareLinkId, skillId)` primary key. Plural-from-day-one (see Decisions).
+- [x] Generate Drizzle migration: `cd platform && pnpm db:generate`. Verify with `drizzle-kit check`.
+- [x] Types (`types/skill-share-link.ts`): `SelectSkillShareLinkSchema`, `InsertSkillShareLinkSchema` (omit `id`, `tokenHash`, `tokenStart`, `lastUsedAt`, `createdAt`, `updatedAt` — controller generates token), inferred `SkillShareLink`. Export `SkillShareLinkStatus = z.enum(["active", "expired", "revoked"])` and a helper `deriveSkillShareLinkStatus(link, now)` (pure, used by both backend and tests).
+- [x] Model methods (`SkillShareLinkModel`):
   - `create({ organizationId, createdByUserId, skillIds, name, marketplaceName, expiresAt })` → returns `{ link, rawToken }`. Generates raw token via `crypto.randomBytes(24).toString("base64url")` + prefix `archestra_skl_`. Inserts row with `tokenHash = sha256(rawToken)`, `tokenStart = rawToken.slice(0, 14)`, `marketplaceName` as given (the route layer in Task 5 computes and validates it). Inserts junction rows in the same transaction. Returns the raw token exactly once.
   - `listByOrganization({ organizationId })` → array with skill metadata attached (batch load to avoid N+1 — see `agent-team.ts` for the batch pattern).
   - `validate({ rawToken })` → resolves to `{ link, skills } | null`. Looks up by `tokenHash`. Returns null if not found, revoked, or expired. Updates `lastUsedAt` (async, fire-and-forget — do not block the response).
   - `revoke({ id, organizationId })` → sets `revokedAt = now()`. Idempotent.
-- [ ] Tests cover: create (token shape, persistence, junction rows), validate (hit, miss, expired, revoked), revoke (idempotency), `deriveSkillShareLinkStatus` truth table.
-- [ ] From `platform/`: `pnpm --filter @platform/backend test skill-share-link` — must pass.
+- [x] Tests cover: create (token shape, persistence, junction rows), validate (hit, miss, expired, revoked), revoke (idempotency), `deriveSkillShareLinkStatus` truth table.
+- [x] From `platform/`: `pnpm --filter @platform/backend test skill-share-link` — must pass.
 
 ### Task 2: Manifest generation (pure logic, no I/O)
 

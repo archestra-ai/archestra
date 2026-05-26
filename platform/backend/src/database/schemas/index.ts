@@ -75,6 +75,10 @@ export { default as sessionsTable } from "./session";
 export { default as siteNotificationsTable } from "./site-notification";
 export { default as skillsTable } from "./skill";
 export { default as skillFilesTable } from "./skill-file";
+export {
+  default as skillShareLinksTable,
+  skillShareLinkSkillsTable,
+} from "./skill-share-link";
 export { default as skillTeamsTable } from "./skill-team";
 export { default as tasksTable } from "./task";
 export { team as teamsTable, teamMember as teamMembersTable } from "./team";

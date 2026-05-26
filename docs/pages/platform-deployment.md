@@ -800,6 +800,16 @@ The following environment variables can be used to configure Archestra Platform.
   - Default: `false`
   - Values: `true`, `false`
 
+- **`ARCHESTRA_SKILL_MARKETPLACE_CACHE_DIR`** - Directory used to materialize per-share-link git repos served by the public skill marketplace endpoint (`/skills/m/<token>/repo.git`). One persistent repo per live share link; cleaned up when the link is revoked.
+  - Default: `/var/lib/archestra/skill-marketplace-cache`
+  - Persistent volume recommended; size scales with the number of live links × bundled resources.
+
+- **`ARCHESTRA_GIT_BINARY_PATH`** - Path to the `git` binary. The public marketplace endpoint shells out to `git http-backend` (CGI) for clone/pull traffic — make sure the binary is present in the backend container image.
+  - Default: `git`
+
+- **`ARCHESTRA_GIT_AUTHOR`** - Author and committer identity stamped on every materialized marketplace commit. Format: `Name <email>`. Surfaces in `git log` for users who clone the marketplace.
+  - Default: `Archestra Marketplace <marketplace@archestra.local>`
+
 - **`ARCHESTRA_ANALYTICS`** - Controls PostHog analytics for product improvements.
   - Default: `enabled`
   - Set to `disabled` to opt-out of analytics

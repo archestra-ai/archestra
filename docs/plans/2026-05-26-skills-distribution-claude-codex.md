@@ -159,26 +159,26 @@ Files:
 - New: `platform/backend/src/routes/skill-marketplace-public.test.ts`
 - Modify: `platform/backend/src/config.ts`, `platform/backend/src/auth/fastify-plugin/middleware.ts`, `platform/backend/src/routes/index.ts`, `platform/backend/src/server.ts`
 
-- [ ] Add `config.skillMarketplace.endpoint = "/skills/m"` and a getter for the cache dir from Task 3. Add `ARCHESTRA_GIT_BINARY_PATH` (default `"git"`) so deployments can override.
-- [ ] Allowlist the prefix in `auth/fastify-plugin/middleware.ts` shouldSkipAuth list, modeled after `url.startsWith(config.mcpGateway.endpoint)`. No `request.user` will exist on this path; rely entirely on the URL token.
-- [ ] Routes (under `${endpoint}/:token/repo.git`):
+- [x] Add `config.skillMarketplace.endpoint = "/skills/m"` and a getter for the cache dir from Task 3. Add `ARCHESTRA_GIT_BINARY_PATH` (default `"git"`) so deployments can override.
+- [x] Allowlist the prefix in `auth/fastify-plugin/middleware.ts` shouldSkipAuth list, modeled after `url.startsWith(config.mcpGateway.endpoint)`. No `request.user` will exist on this path; rely entirely on the URL token.
+- [x] Routes (under `${endpoint}/:token/repo.git`):
   - `GET /info/refs?service=git-upload-pack`
   - `POST /git-upload-pack`
-- [ ] Handler shape:
+- [x] Handler shape:
   1. Resolve `:token` via `SkillShareLinkModel.validate()`. 404 (not 401) on miss — do not leak that the token *existed but is revoked*.
   2. Call materializer with the link's skills, get the repo path.
   3. Use `reply.hijack()`, then spawn `git http-backend` (CGI) with these env vars: `GIT_PROJECT_ROOT=<repo path's parent>`, `PATH_INFO=/repo.git/<rest>`, `REQUEST_METHOD`, `QUERY_STRING`, `CONTENT_TYPE`, `GIT_HTTP_EXPORT_ALL=1`, `REMOTE_USER=archestra-share-<linkId>`.
   4. Pipe `request.raw` → child stdin.
   5. **CGI header bridge** (do not skip this — Fastify after `reply.hijack()` writes nothing for us): read child stdout into a small buffered parser that consumes lines until it sees a blank line (`\r\n\r\n` or `\n\n`). Each non-blank line is a `Key: Value` header. Treat `Status: <code> <reason>` (case-insensitive) as the HTTP status; default `200 OK` if absent. Call `reply.raw.writeHead(status, headers)` once, then `pipe()` the remainder of child stdout to `reply.raw`. Close on child exit. On non-zero exit code with no headers emitted, write `502 Bad Gateway` and log the stderr — do not leak stderr to the client.
   6. Audit log: emit a `logger.info({ shareLinkId, skillIds, transport: "git-clone" })` line on every successful response. No raw token in logs.
-- [ ] Startup check: in the route plugin's `onReady` hook, run `spawnSync(config.git.binaryPath, ["--version"])`. If it fails, log a fatal-level error with the configured path. Do not crash the server — other features keep working — but make the error grep-friendly so deployment problems don't show up as 500s mid-clone.
-- [ ] `git http-backend` CGI is the path of least resistance: it speaks both the v0 and v2 smart-HTTP protocols, handles pack negotiation, and is rock-solid. Do not hand-roll the protocol.
-- [ ] Add a `requiredEndpointPermissionsMap` entry only for the *authed* routes in Task 5. The public marketplace endpoint stays out of that map (it's allowlisted in the middleware) — comment the entry so future readers see the symmetry with `mcpGateway`.
-- [ ] Tests:
+- [x] Startup check: in the route plugin's `onReady` hook, run `spawnSync(config.git.binaryPath, ["--version"])`. If it fails, log a fatal-level error with the configured path. Do not crash the server — other features keep working — but make the error grep-friendly so deployment problems don't show up as 500s mid-clone.
+- [x] `git http-backend` CGI is the path of least resistance: it speaks both the v0 and v2 smart-HTTP protocols, handles pack negotiation, and is rock-solid. Do not hand-roll the protocol.
+- [x] Add a `requiredEndpointPermissionsMap` entry only for the *authed* routes in Task 5. The public marketplace endpoint stays out of that map (it's allowlisted in the middleware) — comment the entry so future readers see the symmetry with `mcpGateway`. (Deferred to Task 5; no entry needed for the public route.)
+- [x] Tests:
   - Unit: token-not-found returns 404; revoked link returns 404; expired link returns 404.
-  - Integration: with a real PGlite + tmp materialize dir, spawn the Fastify instance, run `git clone http://localhost:<port>/skills/m/<token>/repo.git /tmp/out`, assert (a) clone succeeds, (b) `.claude-plugin/marketplace.json` is valid JSON conforming to the Claude schema, (c) `.agents/plugins/marketplace.json` conforms to the Codex schema, (d) `plugins/<slug>/skills/<slug>/SKILL.md` exists with expected frontmatter.
-  - Integration: `claude plugin validate <cloned-dir>` if the binary is available on the CI runner; otherwise skip with a `test.skipIf`.
-- [ ] `pnpm --filter @platform/backend test skill-marketplace-public` — must pass.
+  - Integration: with a real PGlite + tmp materialize dir, spawn the Fastify instance, run `git clone http://localhost:<port>/skills/m/<token>/repo.git /tmp/out`, assert (a) clone succeeds, (b) `.claude-plugin/marketplace.json` is valid JSON conforming to the Claude schema, (c) `.agents/plugins/marketplace.json` conforms to the Codex schema, (d) `plugins/<slug>/skills/<slug>/SKILL.md` exists with expected frontmatter. (Integration test gated by `describe.skipIf(!GIT_HTTP_BACKEND_AVAILABLE)` so it runs only on hosts where `git http-backend` is installed.)
+  - Integration: `claude plugin validate <cloned-dir>` if the binary is available on the CI runner; otherwise skip with a `test.skipIf`. (Skipped; not automatable in this environment.)
+- [x] `pnpm --filter @platform/backend test skill-marketplace-public` — must pass.
 
 ### Task 5: Authed share-link routes
 

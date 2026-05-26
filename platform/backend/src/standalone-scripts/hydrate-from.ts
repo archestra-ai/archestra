@@ -1,25 +1,28 @@
 /**
- * Copy LLM-provider rows (secrets, models, chat_api_keys/llm_provider_api_keys,
- * api_key_models) from a SOURCE Postgres into the TARGET Postgres (the one this
- * backend is configured for). Used by `pnpm dev:stack:copy-providers` to make a
- * fresh parallel dev stack immediately usable for chat/agents/proxy without
- * re-entering API keys.
+ * Hydrate a parallel dev stack's database with admin-configured rows from a
+ * SOURCE Postgres so chat / agents / proxy work without re-entering keys.
+ * Invoked via `pnpm dev:stack:hydrate`. The "hydrate" verb is deliberately
+ * generic: today this copies the LLM-provider tables (secret, models,
+ * chat_api_keys/llm_provider_api_keys, api_key_models), but future categories
+ * (policies, agents, optimization rules) can be added here without renaming
+ * the command.
  *
  * Source connection: SOURCE_DATABASE_URL env var.
  * Target connection: ARCHESTRA_DATABASE_URL env var (the standard one).
  *
- * Ownership rewrite: every copied chat_api_keys row is reassigned to the target
- * admin (`admin@example.com`)'s user and organization with scope='personal' and
- * teamId=null. Source orgs/users/teams aren't mirrored — the parallel stack is
- * a sandbox where only admin exists.
+ * Ownership rewrite: every copied chat_api_keys row is reassigned to the
+ * target admin (env-driven via ARCHESTRA_AUTH_ADMIN_EMAIL, default
+ * `admin@example.com`)'s user and organization with scope='personal' and
+ * teamId=null. Source orgs/users/teams aren't mirrored — the parallel stack
+ * is a sandbox where only admin exists.
  *
- * Idempotent: every INSERT uses ON CONFLICT DO NOTHING, so re-runs top up rows
- * the target is missing and never delete rows the dev added by hand.
+ * Idempotent: every INSERT uses ON CONFLICT DO NOTHING, so re-runs top up
+ * rows the target is missing and never delete rows the dev added by hand.
  *
  * Encryption: secrets are inserted verbatim. Decryption requires the target's
  * ARCHESTRA_AUTH_SECRET to match the source's. `pnpm dev:stack:up` copies the
- * source .env (which carries ARCHESTRA_AUTH_SECRET) into the parallel worktree,
- * so that precondition is satisfied by the default flow.
+ * source .env (which carries ARCHESTRA_AUTH_SECRET) into the parallel
+ * worktree, so that precondition is satisfied by the default flow.
  */
 
 import { and, eq, inArray } from "drizzle-orm";

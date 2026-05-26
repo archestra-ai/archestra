@@ -14,22 +14,25 @@
 #   pnpm dev:stack:up --detach
 #
 # Usage:
-#   dev-stack.sh up              [--detach] [--namespace NAME]
+#   dev-stack.sh up           [--detach] [--namespace NAME]
 #   dev-stack.sh down
-#   dev-stack.sh copy-providers
+#   dev-stack.sh hydrate
 #
 # `up`:   without --detach, execs `tilt up` in the foreground (Ctrl+C stops
 #         it). With --detach, runs Tilt in the background via nohup, writes
 #         a PID file, and returns once the frontend responds.
 # `down`: kills the detached Tilt (if any) and runs `tilt down`.
-# `copy-providers`:
-#         copies LLM-provider rows (secret / chat_api_keys / models /
-#         api_key_models) from the main worktree's database into the
-#         current worktree's database, rewriting ownership to the
-#         current admin so the providers are immediately usable. Run
-#         after `up --detach` has finished. Idempotent via ON CONFLICT
-#         DO NOTHING — re-runs top up new keys main has gained without
-#         deleting anything you added by hand.
+# `hydrate`:
+#         fills the parallel stack's database with admin-configured rows
+#         from the main worktree's database so chat / agents / proxy work
+#         without re-entering keys. Today copies the LLM-provider rows
+#         (secret / chat_api_keys / models / api_key_models) with
+#         ownership rewritten to the parallel admin; the verb is
+#         deliberately generic so other categories (policies, agents,
+#         optimization rules) can be added without renaming. Run after
+#         `up --detach` finishes. Idempotent via ON CONFLICT DO NOTHING —
+#         re-runs top up new rows main has gained without deleting
+#         anything you added by hand.
 #
 # `--namespace` overrides the auto-derived K8s namespace (default:
 # `archestra-dev-<sanitized-branch-name>`).
@@ -257,7 +260,7 @@ cmd_down() {
   echo "✅ Parallel dev stack stopped." >&2
 }
 
-cmd_copy_providers() {
+cmd_hydrate() {
   while [ $# -gt 0 ]; do
     case "$1" in
       -h|--help) usage 0 ;;
@@ -273,7 +276,7 @@ cmd_copy_providers() {
   main_worktree=$(git -C "$platform_dir" worktree list --porcelain 2>/dev/null \
     | sed -n 's/^worktree //p' | head -n1)
   if [ -z "$main_worktree" ] || [ "$main_worktree/platform" = "$platform_dir" ]; then
-    echo "ERROR: copy-providers must be run from a NON-main worktree (the parallel stack)." >&2
+    echo "ERROR: hydrate must be run from a NON-main worktree (the parallel stack)." >&2
     exit 1
   fi
   local main_env="$main_worktree/platform/.env"
@@ -310,7 +313,7 @@ cmd_copy_providers() {
   SOURCE_DATABASE_URL="$source_url" \
   ARCHESTRA_DATABASE_URL="$target_url" \
   ARCHESTRA_AUTH_ADMIN_EMAIL="$target_admin_email" \
-    pnpm --filter @backend db:copy-providers-from
+    pnpm --filter @backend db:hydrate-from
 }
 
 pick_port() {
@@ -322,7 +325,7 @@ subcommand="$1"; shift
 case "$subcommand" in
   up)             cmd_up "$@" ;;
   down)           cmd_down "$@" ;;
-  copy-providers) cmd_copy_providers "$@" ;;
+  hydrate)        cmd_hydrate "$@" ;;
   -h|--help) usage 0 ;;
   *)         echo "unknown subcommand: $subcommand" >&2; usage 1 ;;
 esac

@@ -54,7 +54,10 @@ const target = drizzle(targetPool, { schema });
 try {
   // Resolve target admin's user + org. Without a member row the user can't own
   // a chat_api_key (organization_id is NOT NULL), so we fail loudly if either
-  // is missing rather than guessing.
+  // is missing rather than guessing. The admin email is overridable in .env;
+  // matches the seeder in backend startup.
+  const adminEmail =
+    process.env.ARCHESTRA_AUTH_ADMIN_EMAIL || "admin@example.com";
   const adminRows = await target
     .select({
       userId: schema.usersTable.id,
@@ -65,13 +68,13 @@ try {
       schema.membersTable,
       eq(schema.membersTable.userId, schema.usersTable.id),
     )
-    .where(eq(schema.usersTable.email, "admin@example.com"))
+    .where(eq(schema.usersTable.email, adminEmail))
     .limit(1);
 
   if (adminRows.length === 0) {
     logger.error(
-      "ERROR: no admin@example.com user with a membership in the target DB. " +
-        "Has the parallel stack finished booting and seeding the default admin?",
+      `ERROR: no ${adminEmail} user with a membership in the target DB. ` +
+        "Has the parallel stack finished booting and seeded the default admin?",
     );
     process.exit(1);
   }

@@ -145,6 +145,9 @@ describe("EmbeddingService", () => {
 
     const updated = await KbDocumentModel.findById(doc.id);
     expect(updated?.embeddingStatus).toBe("failed");
+    expect(updated?.metadata).toMatchObject({
+      embeddingError: "unknown",
+    });
   });
 
   test("no chunks marks document as completed with chunkCount 0", async ({
@@ -293,7 +296,56 @@ describe("EmbeddingService", () => {
 
     const updated = await KbDocumentModel.findById(doc.id);
     expect(updated?.embeddingStatus).toBe("failed");
+    expect(updated?.metadata).toMatchObject({
+      embeddingError: "provider_unavailable",
+    });
     expect(mockEmbeddingsCreate).toHaveBeenCalledTimes(3);
+  });
+
+  test("classifies rate limit failures for document embeddings", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+    const doc = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Rate Limited Doc",
+      content: "Content",
+      contentHash: "hash-rate-limited",
+      embeddingStatus: "pending",
+    });
+
+    await KbChunkModel.insertMany([
+      {
+        documentId: doc.id,
+        content: "Chunk",
+        chunkIndex: 0,
+      },
+    ]);
+
+    const OpenAIMod = (await import("openai")).default;
+    const rateLimitError = Object.assign(new Error("Rate limited"), {
+      status: 429,
+    });
+    Object.setPrototypeOf(rateLimitError, OpenAIMod.APIError.prototype);
+
+    mockEmbeddingsCreate
+      .mockRejectedValueOnce(rateLimitError)
+      .mockRejectedValueOnce(rateLimitError)
+      .mockRejectedValueOnce(rateLimitError);
+
+    await embeddingService.processDocument(doc.id, makeEmbeddingContext());
+
+    const updated = await KbDocumentModel.findById(doc.id);
+    expect(updated?.embeddingStatus).toBe("failed");
+    expect(updated?.metadata).toMatchObject({
+      embeddingError: "rate_limited",
+    });
   });
 
   test("processDocuments batches chunks from multiple documents into single API call", async ({

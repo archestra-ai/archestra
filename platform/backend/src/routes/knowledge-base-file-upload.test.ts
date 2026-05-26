@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import JSZip from "jszip";
 import db, { schema } from "@/database";
 import * as fileProcessor from "@/knowledge-base/connectors/file-upload/file-processor";
-import { KbUploadedFileModel, KnowledgeBaseConnectorModel } from "@/models";
+import { KbDocumentModel, KbUploadedFileModel, KnowledgeBaseConnectorModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
@@ -465,6 +465,7 @@ describe("connector file upload routes", () => {
         mimeType: "text/plain",
       });
       expect(file).toHaveProperty("embeddingStatus");
+      expect(file).toHaveProperty("embeddingError");
       expect(file).toHaveProperty("createdAt");
     });
 
@@ -519,6 +520,47 @@ describe("connector file upload routes", () => {
       expect(listBody.data[0]).toHaveProperty("id");
       expect(listBody.data[0]).toHaveProperty("contentHash");
       expect(listBody.data[0]).toHaveProperty("embeddingStatus");
+      expect(listBody.data[0]).toHaveProperty("embeddingError");
+    });
+
+    test("includes embeddingError when indexing fails after upload", async () => {
+      const { payload } = buildJsonBody([
+        {
+          name: "embeddings.txt",
+          content: Buffer.from("Embedding error test"),
+          mimeType: "text/plain",
+        },
+      ]);
+
+      const uploadResponse = await app.inject({
+        method: "POST",
+        url: `/api/connectors/${fileUploadConnector.id}/files`,
+        payload,
+      });
+
+      const fileId = uploadResponse.json().results[0].fileId as string;
+      await KbDocumentModel.create({
+        connectorId: fileUploadConnector.id,
+        organizationId,
+        sourceId: fileId,
+        title: "embeddings.txt",
+        content: "Embedding error test",
+        contentHash: "embedding-error-test-hash",
+        embeddingStatus: "failed",
+        metadata: { embeddingError: "rate_limited" },
+      });
+
+      const listResponse = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${fileUploadConnector.id}/files`,
+      });
+
+      expect(listResponse.statusCode).toBe(200);
+      expect(listResponse.json().data[0]).toMatchObject({
+        id: fileId,
+        embeddingStatus: "failed",
+        embeddingError: "rate_limited",
+      });
     });
   });
 

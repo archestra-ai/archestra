@@ -4,8 +4,12 @@ import { type archestraApiTypes, archestraApiClient as client } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-export type UploadedFile =
+type UploadedFileApiShape =
   archestraApiTypes.GetConnectorFilesResponses["200"]["data"][number];
+
+export type UploadedFile = UploadedFileApiShape & {
+  embeddingError?: string | null;
+};
 
 type UploadResult =
   archestraApiTypes.UploadConnectorFilesResponses["200"]["results"][number];

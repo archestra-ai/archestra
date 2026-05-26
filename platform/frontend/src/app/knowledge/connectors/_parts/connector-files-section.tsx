@@ -10,6 +10,7 @@ import {
   useState,
   useTransition,
 } from "react";
+import { getConnectorFileStatusMeta } from "@/app/knowledge/connectors/_parts/connector-file-status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -37,76 +38,41 @@ function FileStatusBadge({
   processingStatus,
   embeddingStatus,
   processingError,
+  embeddingError,
 }: {
   processingStatus?: string;
   embeddingStatus: string;
   processingError?: string | null;
+  embeddingError?: string | null;
 }) {
-  if (processingStatus && processingStatus !== "completed") {
-    const variants = {
-      pending: "secondary",
-      processing: "secondary",
-      failed: "destructive",
-    } as const;
+  const statusMeta = getConnectorFileStatusMeta({
+    processingStatus,
+    embeddingStatus,
+    processingError,
+    embeddingError,
+  });
 
-    const labels = {
-      pending: "Queued",
-      processing: "Extracting…",
-      failed: "Processing Failed",
-    };
+  const badge = (
+    <Badge
+      variant={statusMeta.variant}
+      className={statusMeta.tooltip ? "capitalize text-xs cursor-help" : "capitalize text-xs"}
+    >
+      {statusMeta.showSpinner ? (
+        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+      ) : null}
+      {statusMeta.label}
+    </Badge>
+  );
 
-    const variant =
-      variants[processingStatus as keyof typeof variants] ?? "secondary";
-    const label =
-      labels[processingStatus as keyof typeof labels] ?? processingStatus;
-
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Badge variant={variant} className="capitalize text-xs cursor-help">
-            {processingStatus === "processing" && (
-              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-            )}
-            {label}
-          </Badge>
-        </TooltipTrigger>
-        <TooltipContent>
-          {processingStatus === "failed" && processingError
-            ? processingError
-            : processingStatus === "pending"
-              ? "File is queued for text extraction"
-              : "Extracting text from file…"}
-        </TooltipContent>
-      </Tooltip>
-    );
+  if (!statusMeta.tooltip) {
+    return badge;
   }
 
-  const variants = {
-    completed: "default",
-    pending: "secondary",
-    processing: "secondary",
-    failed: "destructive",
-  } as const;
-
-  const labels = {
-    completed: "Indexed",
-    pending: "Pending",
-    processing: "Indexing…",
-    failed: "Failed",
-  };
-
   return (
-    <Badge
-      variant={
-        variants[embeddingStatus as keyof typeof variants] ?? "secondary"
-      }
-      className="capitalize text-xs"
-    >
-      {embeddingStatus === "processing" && (
-        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-      )}
-      {labels[embeddingStatus as keyof typeof labels] ?? embeddingStatus}
-    </Badge>
+    <Tooltip>
+      <TooltipTrigger asChild>{badge}</TooltipTrigger>
+      <TooltipContent>{statusMeta.tooltip}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -125,6 +91,7 @@ function FileStatusCell({
       processingStatus={current.processingStatus}
       embeddingStatus={current.embeddingStatus}
       processingError={current.processingError}
+      embeddingError={current.embeddingError}
     />
   );
 }
@@ -327,7 +294,7 @@ export function ConnectorFilesSection({
       <div className="relative">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
-          placeholder="Search files by name…"
+          placeholder="Search files by name..."
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
           className="pl-9 h-9"
@@ -382,7 +349,7 @@ export function ConnectorFilesSection({
         </p>
         <p className="text-xs text-muted-foreground mt-1">
           Supports .txt, .md, .csv, .json, .xml, .html, .pdf, .doc, .docx, .zip
-          — max {MAX_FILE_SIZE_MB} MB each
+          - max {MAX_FILE_SIZE_MB} MB each
         </p>
       </button>
     </div>

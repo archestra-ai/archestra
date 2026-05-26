@@ -1063,6 +1063,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     processingStatus: z.string(),
     processingError: z.string().nullable(),
     embeddingStatus: EmbeddingStatusSchema,
+    embeddingError: z.string().nullable(),
   });
 
   fastify.post(
@@ -1322,6 +1323,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           processingStatus: file.processingStatus,
           processingError: file.processingError ?? null,
           embeddingStatus: doc?.embeddingStatus ?? "pending",
+          embeddingError: getEmbeddingError(doc?.metadata),
         };
       });
 
@@ -1367,6 +1369,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         processingStatus: file.processingStatus,
         processingError: file.processingError ?? null,
         embeddingStatus: doc?.embeddingStatus ?? "pending",
+        embeddingError: getEmbeddingError(doc?.metadata),
       });
     },
   );
@@ -1453,6 +1456,13 @@ function isContentHashConflict(error: unknown): boolean {
     current = (current as Record<string, unknown>).cause;
   }
   return false;
+}
+
+function getEmbeddingError(
+  metadata: Record<string, unknown> | null | undefined,
+): string | null {
+  const value = metadata?.embeddingError;
+  return typeof value === "string" ? value : null;
 }
 
 async function loadConnectorCredentials(

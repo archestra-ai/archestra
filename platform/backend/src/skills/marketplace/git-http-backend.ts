@@ -60,7 +60,7 @@ interface RunCgiBridgeParams {
 async function runCgiBridge(params: RunCgiBridgeParams): Promise<void> {
   const { child, req, res } = params;
 
-  params.req.pipe(child.stdin);
+  req.pipe(child.stdin);
   child.stdin.on("error", (err) => {
     logger.warn({ err }, "git-http-backend: child stdin error");
   });

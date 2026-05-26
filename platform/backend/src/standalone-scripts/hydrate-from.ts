@@ -25,7 +25,7 @@
  * worktree, so that precondition is satisfied by the default flow.
  */
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import * as schema from "@/database/schemas";
@@ -160,10 +160,25 @@ try {
       copiedSecrets = result.length;
     }
     if (models.length) {
+      // Models hit `models_provider_model_unique` when target already has the
+      // same (provider, modelId) under a different UUID. ON CONFLICT DO
+      // NOTHING would preserve target's row — including target's DEFAULT
+      // values for fields the source admin actually edited (custom prices,
+      // ignored flag). Upsert just those admin-editable columns from source
+      // so hydrating carries the admin's intent across. Catalog columns
+      // (externalId, contextLength, modalities, pricing-from-models.dev) are
+      // left as-is because target's models.dev sync may be fresher.
       const result = await tx
         .insert(schema.modelsTable)
         .values(models)
-        .onConflictDoNothing()
+        .onConflictDoUpdate({
+          target: [schema.modelsTable.provider, schema.modelsTable.modelId],
+          set: {
+            customPricePerMillionInput: sql`excluded.custom_price_per_million_input`,
+            customPricePerMillionOutput: sql`excluded.custom_price_per_million_output`,
+            ignored: sql`excluded.ignored`,
+          },
+        })
         .returning({ id: schema.modelsTable.id });
       copiedModels = result.length;
     }

@@ -27,6 +27,7 @@
     "db:clean": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/clean-db-on-dev.ts",
     "code-runtime:bench": "tsdown --config tsdown.code-runtime-benchmark.config.ts --logLevel error && ARCHESTRA_LOGGING_LEVEL=${ARCHESTRA_LOGGING_LEVEL:-warn} node --enable-source-maps dist/code-runtime-benchmark/code-runtime-benchmark.mjs",
     "db:seed:mock-data": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/seed-mock-data.ts",
+    "db:hydrate-from": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/hydrate-from.ts",
     "codegen:access-control-docs": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/codegen-access-control-docs.ts",
     "codegen:archestra-mcp-server-docs": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/codegen-archestra-mcp-server-docs.ts",
     "codegen:openapi": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/codegen-openapi.ts",

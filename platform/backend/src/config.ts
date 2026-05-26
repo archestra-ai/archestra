@@ -18,6 +18,7 @@ import {
   type EmailProviderType,
   EmailProviderTypeSchema,
 } from "@/types/email-provider-type";
+import { DEFAULT_SKILL_SANDBOX_IMAGE } from "@/skills-sandbox/runtime-image";
 import packageJson from "../../package.json";
 
 type ProcessType = "web" | "worker" | "all";
@@ -712,8 +713,7 @@ const codeRuntimeDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost({
 const codeRuntimeEnabled =
   codeRuntimeRequested && codeRuntimeDaggerRunnerHost !== undefined;
 
-const defaultSkillsSandboxImage =
-  "ghcr.io/astral-sh/uv:0.9.17-python3.12-bookworm-slim";
+const defaultSkillsSandboxImage = DEFAULT_SKILL_SANDBOX_IMAGE;
 const skillsSandboxRequested =
   process.env.ARCHESTRA_SKILLS_SANDBOX_ENABLED === "true";
 const skillsSandboxDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost({

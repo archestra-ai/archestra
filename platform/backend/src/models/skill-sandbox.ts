@@ -1,12 +1,35 @@
-import { and, desc, eq, isNotNull } from "drizzle-orm";
+import { asc, desc, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { InsertSkillSandbox, SkillSandbox } from "@/types";
+import type {
+  InsertSkillSandbox,
+  InsertSkillSandboxFileSnapshot,
+  SkillSandbox,
+} from "@/types";
+
+/**
+ * Thrown when a skill file has a path that would escape the skill root (absolute
+ * path or directory traversal). Callers should surface this as a user-visible error.
+ */
+export class SkillInvalidFilePathError extends Error {
+  constructor(skillName: string, path: string) {
+    super(
+      `Skill "${skillName}" contains an invalid file path: ${JSON.stringify(path)}`,
+    );
+    this.name = "SkillInvalidFilePathError";
+  }
+}
 
 class SkillSandboxModel {
   /**
-   * Create a sandbox row together with its junction entries for the skills
-   * mounted into it. Runs in a single transaction so a failed junction insert
-   * cannot leave an orphan sandbox.
+   * Create a sandbox row together with its junction entries and an immutable file
+   * snapshot in a single transaction. Skill content and files are fetched in a
+   * single LEFT JOIN statement so the snapshot is always internally consistent
+   * under PostgreSQL's default READ COMMITTED isolation — a concurrent
+   * update_skill that commits while this method runs cannot produce a mixed
+   * snapshot (old SKILL.md with new files, or vice versa).
+   *
+   * Throws {@link SkillInvalidFilePathError} if any mounted skill contains a file
+   * with an absolute or traversal path.
    */
   static async create(params: {
     sandbox: InsertSkillSandbox;
@@ -29,6 +52,74 @@ class SkillSandboxModel {
             skillId,
           })),
         );
+
+        const joinRows = await tx
+          .select({
+            skill: schema.skillsTable,
+            file: schema.skillFilesTable,
+          })
+          .from(schema.skillsTable)
+          .leftJoin(
+            schema.skillFilesTable,
+            eq(schema.skillsTable.id, schema.skillFilesTable.skillId),
+          )
+          .where(inArray(schema.skillsTable.id, params.skillIds))
+          .orderBy(asc(schema.skillFilesTable.path));
+
+        // group join rows into a per-skill map (preserves file order from ORDER BY)
+        const skillFileMap = new Map<
+          string,
+          {
+            skill: (typeof joinRows)[number]["skill"];
+            files: NonNullable<(typeof joinRows)[number]["file"]>[];
+          }
+        >();
+        for (const row of joinRows) {
+          const entry = skillFileMap.get(row.skill.id);
+          if (entry) {
+            if (row.file) entry.files.push(row.file);
+          } else {
+            skillFileMap.set(row.skill.id, {
+              skill: row.skill,
+              files: row.file ? [row.file] : [],
+            });
+          }
+        }
+
+        const snapshotRows: InsertSkillSandboxFileSnapshot[] = [];
+        for (const { skill, files } of skillFileMap.values()) {
+          snapshotRows.push({
+            sandboxId: sandbox.id,
+            skillId: skill.id,
+            skillName: skill.name,
+            path: "SKILL.md",
+            encoding: "utf8",
+            content: skill.content,
+          });
+          for (const file of files) {
+            if (
+              file.path.startsWith("/") ||
+              file.path.split("/").some((s) => s === "..") ||
+              file.path === "SKILL.md"
+            ) {
+              throw new SkillInvalidFilePathError(skill.name, file.path);
+            }
+            snapshotRows.push({
+              sandboxId: sandbox.id,
+              skillId: skill.id,
+              skillName: skill.name,
+              path: file.path,
+              encoding: file.encoding,
+              content: file.content,
+            });
+          }
+        }
+
+        if (snapshotRows.length > 0) {
+          await tx
+            .insert(schema.skillSandboxFileSnapshotsTable)
+            .values(snapshotRows);
+        }
       }
 
       return sandbox;
@@ -44,26 +135,18 @@ class SkillSandboxModel {
     return result ?? null;
   }
 
-  /**
-   * Most recent sandbox attached to a conversation. Used by the MCP tool layer
-   * to infer the active sandbox when the caller omits an explicit id.
-   */
-  static async findMostRecentForConversation(
+  /** All sandboxes attached to a conversation, newest first. */
+  static async listForConversation(
     conversationId: string,
-  ): Promise<SkillSandbox | null> {
-    const [result] = await db
+  ): Promise<SkillSandbox[]> {
+    return await db
       .select()
       .from(schema.skillSandboxesTable)
-      .where(
-        and(
-          eq(schema.skillSandboxesTable.conversationId, conversationId),
-          isNotNull(schema.skillSandboxesTable.conversationId),
-        ),
-      )
-      .orderBy(desc(schema.skillSandboxesTable.createdAt))
-      .limit(1);
-
-    return result ?? null;
+      .where(eq(schema.skillSandboxesTable.conversationId, conversationId))
+      .orderBy(
+        desc(schema.skillSandboxesTable.createdAt),
+        desc(schema.skillSandboxesTable.id),
+      );
   }
 
   /** Skill ids that were mounted into the sandbox at creation. */

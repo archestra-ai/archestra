@@ -1779,6 +1779,20 @@
       "when": 1779800000000,
       "tag": "0253_skill_sandboxes",
       "breakpoints": true
+    },
+    {
+      "idx": 254,
+      "version": "7",
+      "when": 1779900000000,
+      "tag": "0254_skill_sandbox_file_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 255,
+      "version": "7",
+      "when": 1780000000000,
+      "tag": "0255_skill_sandbox_command_timeout",
+      "breakpoints": true
     }
   ]
 }

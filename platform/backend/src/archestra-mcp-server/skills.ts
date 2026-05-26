@@ -84,6 +84,13 @@ const SkillFileInputSchema = z.object({
   path: z
     .string()
     .min(1)
+    .refine(
+      (p) => !p.startsWith("/") && !p.split("/").some((s) => s === ".."),
+      {
+        message:
+          "path must be relative and must not contain directory traversal sequences",
+      },
+    )
     .describe("Resource path, e.g. references/API.md or scripts/run.py"),
   content: z
     .string()

@@ -67,7 +67,16 @@ const SkillDetailSchema = SkillWithFilesSchema.extend({
 
 /** Raw resource file as submitted by the in-app editor. */
 const SkillFileInputSchema = z.object({
-  path: z.string().min(1),
+  path: z
+    .string()
+    .min(1)
+    .refine(
+      (p) => !p.startsWith("/") && !p.split("/").some((s) => s === ".."),
+      {
+        message:
+          "path must be relative and must not contain directory traversal sequences",
+      },
+    ),
   content: z.string().max(MAX_SKILL_FILE_CONTENT_CHARS),
   encoding: SkillFileEncodingSchema.optional(),
 });

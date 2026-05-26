@@ -54,6 +54,9 @@ pids
 *.seed
 *.pid.lock
 
+# OS crash dumps
+core
+
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 

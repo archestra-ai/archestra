@@ -8,15 +8,16 @@ import {
 import config from "@/config";
 import logger from "@/logging";
 import {
-  SkillFileModel,
-  SkillModel,
   SkillSandboxArtifactModel,
   SkillSandboxCommandModel,
+  SkillSandboxFileSnapshotModel,
   SkillSandboxModel,
 } from "@/models";
-import type { Skill, SkillFile, SkillSandbox } from "@/types";
+import type { SkillSandbox, SkillSandboxFileSnapshot } from "@/types";
 import { asSandboxId, type SandboxId } from "@/types";
 import {
+  SKILL_SANDBOX_APT_PACKAGES,
+  SKILL_SANDBOX_HOME,
   SKILL_SANDBOX_ROOT,
   SKILL_SANDBOX_USER,
   skillRootPath,
@@ -49,6 +50,10 @@ class SkillSandboxRuntimeService {
   private lastInitAttemptAt = 0;
   private activeRuns = 0;
   private readonly waiters: Array<() => void> = [];
+  // per-sandbox promise chain: ensures replay + exec + append are atomic per sandbox
+  private readonly sandboxQueues = new Map<string, Promise<unknown>>();
+  // tracks how many requests are in-flight or waiting per sandbox for capacity enforcement
+  private readonly sandboxPendingCounts = new Map<string, number>();
 
   get isEnabled(): boolean {
     return config.skillsSandbox.enabled;
@@ -91,83 +96,100 @@ class SkillSandboxRuntimeService {
     validateCommand(params.command);
     const timeoutSeconds = this.resolveTimeout(params.timeoutSeconds);
 
-    const sandbox = await this.loadSandbox(params.sandboxId);
-    const cwd = params.cwd ?? sandbox.defaultCwd;
+    // runExclusive is called synchronously (before the first await in this
+    // async function) so the per-sandbox queue limit is enforced immediately;
+    // async setup (loadSandbox, init) happens inside the exclusive callback.
+    return this.runExclusive(params.sandboxId, async () => {
+      const sandbox = await this.loadSandbox(params.sandboxId);
+      const cwd = params.cwd ?? sandbox.defaultCwd;
 
-    await this.init();
-    if (this.status !== "ready") {
-      throw new SkillSandboxError(
-        "the skill sandbox runtime is not available (engine unreachable)",
-      );
-    }
-
-    await this.acquire();
-    const startedAt = Date.now();
-    try {
-      const client = this.client;
-      if (!client) {
-        this.status = "error";
+      await this.init();
+      if (this.status !== "ready") {
         throw new SkillSandboxError(
           "the skill sandbox runtime is not available (engine unreachable)",
         );
       }
 
-      const materialized = await this.materializeWithReplay({
-        client,
-        sandbox,
-      });
-      const wrapped = wrapWithTimeout({
-        command: params.command,
-        cwd,
-        timeoutSeconds,
-        outputBytesLimit: config.skillsSandbox.outputBytesLimit,
-      });
-      const executed = materialized.withExec(["bash", "-c", wrapped], {
-        expect: DaggerReturnType.Any,
-      });
-      const [stdoutRaw, stderrRaw, exitCode] = await Promise.all([
-        executed.stdout(),
-        executed.stderr(),
-        executed.exitCode(),
-      ]);
-      const stdout = truncateOutput(
-        stdoutRaw,
-        config.skillsSandbox.outputBytesLimit,
-      );
-      const stderr = truncateOutput(
-        stderrRaw,
-        config.skillsSandbox.outputBytesLimit,
-      );
-      const durationMs = Date.now() - startedAt;
-      const timedOut = exitCode === TIMEOUT_EXIT_CODE;
+      await this.acquire();
+      const startedAt = Date.now();
+      try {
+        const client = this.client;
+        if (!client) {
+          this.status = "error";
+          throw new SkillSandboxError(
+            "the skill sandbox runtime is not available (engine unreachable)",
+          );
+        }
 
-      const row = await SkillSandboxCommandModel.append({
-        sandboxId: params.sandboxId,
-        command: params.command,
-        cwd: params.cwd ?? null,
-        stdout: stdout.value,
-        stderr: stderr.value,
-        exitCode,
-        durationMs,
-      });
+        const materialized = await this.materializeWithReplay({
+          client,
+          sandbox,
+        });
+        const wrapped = wrapWithTimeout({
+          command: params.command,
+          cwd,
+          timeoutSeconds,
+          outputBytesLimit: config.skillsSandbox.outputBytesLimit,
+          fileSizeLimitBytes: config.skillsSandbox.artifactBytesLimit,
+          cpuSeconds: config.skillsSandbox.cpuLimit,
+          memoryBytes: config.skillsSandbox.memoryLimit,
+          maxProcesses: SKILL_SANDBOX_LIMITS.maxProcesses,
+        });
+        const executed = materialized.withExec(["bash", "-c", wrapped], {
+          expect: DaggerReturnType.Any,
+        });
+        const [stdoutRaw, stderrRaw, exitCode] = await Promise.all([
+          executed.stdout(),
+          executed.stderr(),
+          executed.exitCode(),
+        ]);
+        const stdout = truncateOutput(
+          stdoutRaw,
+          config.skillsSandbox.outputBytesLimit,
+        );
+        const stderr = truncateOutput(
+          stderrRaw,
+          config.skillsSandbox.outputBytesLimit,
+        );
+        const durationMs = Date.now() - startedAt;
+        const timedOut = exitCode === TIMEOUT_EXIT_CODE;
 
-      return {
-        commandId: row.id,
-        sandboxId: params.sandboxId,
-        command: params.command,
-        cwd: params.cwd ?? null,
-        stdout: stdout.value,
-        stderr: stderr.value,
-        exitCode,
-        durationMs,
-        timedOut,
-        truncated: stdout.truncated || stderr.truncated,
-      };
-    } catch (error) {
-      throw await this.normalizeError(error);
-    } finally {
-      this.release();
-    }
+        let row: Awaited<ReturnType<typeof SkillSandboxCommandModel.append>>;
+        try {
+          row = await SkillSandboxCommandModel.append({
+            sandboxId: params.sandboxId,
+            command: params.command,
+            cwd: params.cwd ?? null,
+            stdout: stdout.value,
+            stderr: stderr.value,
+            exitCode,
+            durationMs,
+            timeoutSeconds,
+          });
+        } catch (dbError) {
+          throw new SkillSandboxError(
+            `failed to persist command result: ${dbError instanceof Error ? dbError.message : String(dbError)}`,
+          );
+        }
+
+        return {
+          commandId: row.id,
+          sandboxId: params.sandboxId,
+          command: params.command,
+          cwd: params.cwd ?? null,
+          stdout: stdout.value,
+          stderr: stderr.value,
+          exitCode,
+          durationMs,
+          timedOut,
+          truncated: stdout.truncated || stderr.truncated,
+        };
+      } catch (error) {
+        throw await this.normalizeError(error);
+      } finally {
+        this.release();
+      }
+    });
   }
 
   /**
@@ -176,77 +198,95 @@ class SkillSandboxRuntimeService {
    */
   async exportArtifact(params: ExportArtifactParams): Promise<ArtifactRef> {
     this.ensureEnabled();
-    const sandbox = await this.loadSandbox(params.sandboxId);
-    const resolvedPath = resolveArtifactPath({
-      path: params.path,
-      defaultCwd: sandbox.defaultCwd,
-    });
 
-    await this.init();
-    if (this.status !== "ready") {
-      throw new SkillSandboxError(
-        "the skill sandbox runtime is not available (engine unreachable)",
-      );
-    }
+    // runExclusive is called synchronously (before the first await in this
+    // async function) so the per-sandbox queue limit is enforced immediately;
+    // async setup (loadSandbox, init) happens inside the exclusive callback.
+    return this.runExclusive(params.sandboxId, async () => {
+      const sandbox = await this.loadSandbox(params.sandboxId);
+      const resolvedPath = resolveArtifactPath({
+        path: params.path,
+        defaultCwd: sandbox.defaultCwd,
+      });
 
-    await this.acquire();
-    try {
-      const client = this.client;
-      if (!client) {
-        this.status = "error";
+      await this.init();
+      if (this.status !== "ready") {
         throw new SkillSandboxError(
           "the skill sandbox runtime is not available (engine unreachable)",
         );
       }
 
-      const materialized = await this.materializeWithReplay({
-        client,
-        sandbox,
-      });
-      // `base64 -w0` collapses the file into one line for clean capture; this
-      // works for binary contents that `.file(...).contents()` cannot expose
-      // directly because the Dagger File API returns strings only.
-      const encoder = materialized.withExec(
-        ["bash", "-c", `base64 -w0 ${shellQuote(resolvedPath)}`],
-        { expect: DaggerReturnType.Any },
-      );
-      const [base64Stdout, exitCode, stderr] = await Promise.all([
-        encoder.stdout(),
-        encoder.exitCode(),
-        encoder.stderr(),
-      ]);
-      if (exitCode !== 0) {
-        throw new SkillSandboxError(
-          `failed to read artifact at ${resolvedPath}: ${stderr.trim() || `exit ${exitCode}`}`,
-        );
-      }
-      const data = Buffer.from(base64Stdout.trim(), "base64");
-      if (data.byteLength > config.skillsSandbox.artifactBytesLimit) {
-        throw new SkillSandboxError(
-          `artifact at ${resolvedPath} is too large (${data.byteLength} bytes > ${config.skillsSandbox.artifactBytesLimit})`,
-        );
-      }
+      await this.acquire();
+      try {
+        const client = this.client;
+        if (!client) {
+          this.status = "error";
+          throw new SkillSandboxError(
+            "the skill sandbox runtime is not available (engine unreachable)",
+          );
+        }
 
-      const row = await SkillSandboxArtifactModel.create({
-        sandboxId: params.sandboxId,
-        path: resolvedPath,
-        mimeType: params.mimeType ?? "application/octet-stream",
-        sizeBytes: data.byteLength,
-        data,
-      });
+        const materialized = await this.materializeWithReplay({
+          client,
+          sandbox,
+        });
+        // `base64 -w0` collapses the file into one line for clean capture; this
+        // works for binary contents that `.file(...).contents()` cannot expose
+        // directly because the Dagger File API returns strings only.
+        // stat the file first so we reject oversized artifacts before transferring
+        // their full contents across the Dagger boundary (avoids OOM on large files)
+        const bytesLimit = config.skillsSandbox.artifactBytesLimit;
+        const encoder = materialized.withExec(
+          [
+            "bash",
+            "-c",
+            `_s=$(stat -c '%s' ${shellQuote(resolvedPath)}) && ` +
+              `[ "$_s" -le ${bytesLimit} ] || ` +
+              `{ echo "artifact is too large ($_s bytes > ${bytesLimit})" >&2; exit 1; }; ` +
+              `base64 -w0 ${shellQuote(resolvedPath)}`,
+          ],
+          { expect: DaggerReturnType.Any },
+        );
+        const [base64Stdout, exitCode, stderr] = await Promise.all([
+          encoder.stdout(),
+          encoder.exitCode(),
+          encoder.stderr(),
+        ]);
+        if (exitCode !== 0) {
+          throw new SkillSandboxError(
+            `failed to read artifact at ${resolvedPath}: ${stderr.trim() || `exit ${exitCode}`}`,
+          );
+        }
+        const data = Buffer.from(base64Stdout.trim(), "base64");
 
-      return {
-        artifactId: row.id,
-        sandboxId: params.sandboxId,
-        path: row.path,
-        mimeType: row.mimeType,
-        sizeBytes: row.sizeBytes,
-      };
-    } catch (error) {
-      throw await this.normalizeError(error);
-    } finally {
-      this.release();
-    }
+        let row: Awaited<ReturnType<typeof SkillSandboxArtifactModel.create>>;
+        try {
+          row = await SkillSandboxArtifactModel.create({
+            sandboxId: params.sandboxId,
+            path: resolvedPath,
+            mimeType: params.mimeType ?? "application/octet-stream",
+            sizeBytes: data.byteLength,
+            data,
+          });
+        } catch (dbError) {
+          throw new SkillSandboxError(
+            `failed to persist artifact: ${dbError instanceof Error ? dbError.message : String(dbError)}`,
+          );
+        }
+
+        return {
+          artifactId: row.id,
+          sandboxId: params.sandboxId,
+          path: row.path,
+          mimeType: row.mimeType,
+          sizeBytes: row.sizeBytes,
+        };
+      } catch (error) {
+        throw await this.normalizeError(error);
+      } finally {
+        this.release();
+      }
+    });
   }
 
   async shutdown(): Promise<void> {
@@ -296,8 +336,12 @@ class SkillSandboxRuntimeService {
       const wrapped = wrapWithTimeout({
         command: entry.command,
         cwd,
-        timeoutSeconds: config.skillsSandbox.wallClockSeconds,
+        timeoutSeconds: entry.timeoutSeconds,
         outputBytesLimit: config.skillsSandbox.outputBytesLimit,
+        fileSizeLimitBytes: config.skillsSandbox.artifactBytesLimit,
+        cpuSeconds: config.skillsSandbox.cpuLimit,
+        memoryBytes: config.skillsSandbox.memoryLimit,
+        maxProcesses: SKILL_SANDBOX_LIMITS.maxProcesses,
       });
       // replays accept any exit code so prior failures do not block the new
       // command; Dagger's layer cache keeps repeat replays fast.
@@ -312,9 +356,14 @@ class SkillSandboxRuntimeService {
     client: Client;
     sandbox: SkillSandbox;
   }): Promise<Container> {
-    const skillIds = await SkillSandboxModel.listSkillIds(params.sandbox.id);
-    const skills = await loadSkillsById(skillIds);
-    const skillsById = new Map(skills.map((s) => [s.id, s]));
+    const snapshots = await SkillSandboxFileSnapshotModel.listBySandbox(
+      params.sandbox.id,
+    );
+    if (snapshots.length === 0) {
+      throw new SkillSandboxError(
+        `sandbox ${params.sandbox.id} has no file snapshots — recreate the sandbox`,
+      );
+    }
 
     let container = this.buildBaseContainer({
       client: params.client,
@@ -322,18 +371,39 @@ class SkillSandboxRuntimeService {
       defaultCwd: params.sandbox.defaultCwd,
     });
 
-    for (const skillId of skillIds) {
-      const skill = skillsById.get(skillId);
-      if (!skill) {
-        throw new SkillSandboxError(
-          `sandbox ${params.sandbox.id} references missing skill ${skillId}`,
-        );
+    // group snapshots by skillId so all files for one skill share a root path
+    const bySkill = new Map<
+      string,
+      { skillName: string; files: SkillSandboxFileSnapshot[] }
+    >();
+    for (const snap of snapshots) {
+      let entry = bySkill.get(snap.skillId);
+      if (!entry) {
+        entry = { skillName: snap.skillName, files: [] };
+        bySkill.set(snap.skillId, entry);
       }
-      container = await mountSkillFiles({
-        container,
-        skill,
-      });
+      entry.files.push(snap);
     }
+
+    for (const { skillName, files } of bySkill.values()) {
+      const root = skillRootPath(skillName);
+      for (const file of files) {
+        container = applySnapshotFile({ container, root, file });
+      }
+    }
+
+    // withNewFile creates files as root regardless of the container's current
+    // user; fix ownership so the sandbox user can write to any snapshot dir
+    // (needed for base64-encoded binary assets decoded via withExec).
+    container = container
+      .withUser("root")
+      .withExec([
+        "sh",
+        "-c",
+        `chown -R ${SKILL_SANDBOX_USER} ${SKILL_SANDBOX_ROOT}`,
+      ])
+      .withUser(SKILL_SANDBOX_USER);
+
     return container;
   }
 
@@ -342,13 +412,23 @@ class SkillSandboxRuntimeService {
     image: string;
     defaultCwd: string;
   }): Container {
-    return params.client
-      .container()
-      .from(params.image)
-      .withUser(SKILL_SANDBOX_USER)
-      .withEnvVariable("HOME", SKILL_SANDBOX_ROOT)
-      .withEnvVariable("SKILL_SANDBOX_ROOT", SKILL_SANDBOX_ROOT)
-      .withWorkdir(params.defaultCwd);
+    const packages = SKILL_SANDBOX_APT_PACKAGES.join(" ");
+    return (
+      params.client
+        .container()
+        .from(params.image)
+        // install baseline toolchain as root before switching to the sandbox user;
+        // also create the sandbox home dir so tool caches don't pollute /skills
+        .withExec([
+          "sh",
+          "-c",
+          `apt-get update -qq && apt-get install -y --no-install-recommends ${packages} && rm -rf /var/lib/apt/lists/* && mkdir -p ${SKILL_SANDBOX_HOME} ${SKILL_SANDBOX_ROOT} && chown 1000:1000 ${SKILL_SANDBOX_HOME} ${SKILL_SANDBOX_ROOT}`,
+        ])
+        .withUser(SKILL_SANDBOX_USER)
+        .withEnvVariable("HOME", SKILL_SANDBOX_HOME)
+        .withEnvVariable("SKILL_SANDBOX_ROOT", SKILL_SANDBOX_ROOT)
+        .withWorkdir(params.defaultCwd)
+    );
   }
 
   private async doInit(): Promise<void> {
@@ -467,6 +547,63 @@ class SkillSandboxRuntimeService {
     }
   }
 
+  /**
+   * Serializes operations on the same sandbox: replay + exec + append must be
+   * atomic per sandbox so that concurrent calls cannot observe stale replay
+   * state or record commands out of execution order.
+   *
+   * Also enforces a per-sandbox queue cap so a flood of requests for one
+   * sandbox cannot create an unbounded promise chain that bypasses the global
+   * capacity guard in `acquire()`.
+   */
+  private runExclusive<T>(sandboxId: string, fn: () => Promise<T>): Promise<T> {
+    const pending = this.sandboxPendingCounts.get(sandboxId) ?? 0;
+    if (pending >= SKILL_SANDBOX_LIMITS.maxSandboxQueueLength) {
+      return Promise.reject(
+        new SkillSandboxError(
+          "too many requests are already queued for this sandbox",
+        ),
+      );
+    }
+    this.sandboxPendingCounts.set(sandboxId, pending + 1);
+
+    const prev = this.sandboxQueues.get(sandboxId) ?? Promise.resolve();
+    // chain fn after any in-flight operation; proceed even if prev errored
+    const next = prev.then(
+      () => fn(),
+      () => fn(),
+    );
+    // decrement the pending count when fn settles (success or failure)
+    const counted = next.then(
+      (v) => {
+        this.decrementSandboxPending(sandboxId);
+        return v;
+      },
+      (e) => {
+        this.decrementSandboxPending(sandboxId);
+        throw e;
+      },
+    );
+    // store a never-rejecting tail so the next enqueued call can chain safely
+    const tail = counted.catch(() => {});
+    this.sandboxQueues.set(sandboxId, tail);
+    tail.then(() => {
+      if (this.sandboxQueues.get(sandboxId) === tail) {
+        this.sandboxQueues.delete(sandboxId);
+      }
+    });
+    return counted;
+  }
+
+  private decrementSandboxPending(sandboxId: string): void {
+    const count = this.sandboxPendingCounts.get(sandboxId) ?? 0;
+    if (count <= 1) {
+      this.sandboxPendingCounts.delete(sandboxId);
+    } else {
+      this.sandboxPendingCounts.set(sandboxId, count - 1);
+    }
+  }
+
   private async acquire(): Promise<void> {
     if (this.activeRuns < config.skillsSandbox.maxConcurrent) {
       this.activeRuns++;
@@ -515,41 +652,20 @@ function validateCommand(command: string): void {
   }
 }
 
-async function loadSkillsById(skillIds: string[]): Promise<Skill[]> {
-  if (skillIds.length === 0) return [];
-  const skills: Skill[] = [];
-  for (const id of skillIds) {
-    const skill = await SkillModel.findById(id);
-    if (skill) skills.push(skill);
+function validateSnapshotFilePath(path: string): void {
+  if (path.startsWith("/") || path.split("/").some((s) => s === "..")) {
+    throw new SkillSandboxError(
+      `invalid snapshot file path: ${JSON.stringify(path)}`,
+    );
   }
-  return skills;
 }
 
-async function mountSkillFiles(params: {
-  container: Container;
-  skill: Skill;
-}): Promise<Container> {
-  const files = await SkillFileModel.findBySkillId(params.skill.id);
-  const root = skillRootPath(params.skill.name);
-  let container = params.container.withNewFile(
-    `${root}/SKILL.md`,
-    params.skill.content,
-  );
-  for (const file of files) {
-    container = applySkillFile({
-      container,
-      root,
-      file,
-    });
-  }
-  return container;
-}
-
-function applySkillFile(params: {
+function applySnapshotFile(params: {
   container: Container;
   root: string;
-  file: SkillFile;
+  file: Pick<SkillSandboxFileSnapshot, "path" | "encoding" | "content">;
 }): Container {
+  validateSnapshotFilePath(params.file.path);
   const target = `${params.root}/${params.file.path}`;
   switch (params.file.encoding) {
     case "utf8":
@@ -558,16 +674,14 @@ function applySkillFile(params: {
       // Dagger has no direct byte upload — stage the base64 string in a temp
       // file and decode it in-place so binary assets land verbatim.
       const tempPath = `${target}.b64`;
+      const parentDir = target.substring(0, target.lastIndexOf("/"));
       return params.container
         .withNewFile(tempPath, params.file.content)
-        .withExec(
-          [
-            "bash",
-            "-c",
-            `mkdir -p $(dirname ${shellQuote(target)}) && base64 -d ${shellQuote(tempPath)} > ${shellQuote(target)} && rm ${shellQuote(tempPath)}`,
-          ],
-          { expect: DaggerReturnType.Any },
-        );
+        .withExec([
+          "bash",
+          "-c",
+          `mkdir -p ${shellQuote(parentDir)} && base64 -d ${shellQuote(tempPath)} > ${shellQuote(target)} && rm ${shellQuote(tempPath)}`,
+        ]);
     }
   }
 }
@@ -577,10 +691,38 @@ function wrapWithTimeout(params: {
   cwd: string;
   timeoutSeconds: number;
   outputBytesLimit: number;
+  fileSizeLimitBytes: number;
+  cpuSeconds: number;
+  memoryBytes: number;
+  maxProcesses: number;
 }): string {
   const cd = `cd ${shellQuote(params.cwd)}`;
-  const head = `head -c ${params.outputBytesLimit}`;
-  return `${cd} && timeout --preserve-status --signal=KILL ${params.timeoutSeconds}s bash -c ${shellQuote(params.command)} 2> >(${head} >&2) | ${head}`;
+  const limit = params.outputBytesLimit;
+  // pipe would swallow exit code (head's 0 wins); write to temp files so we
+  // can exit with the real code — 124 from timeout or the command's own code.
+  // pass limit+1 bytes so truncateOutput can detect truncation (limit alone
+  // would always produce bytes <= limit, making the truncated flag unreachable)
+  //
+  // ulimit -f (512-byte blocks) caps per-file writes so a flood command like
+  // `yes` cannot exhaust container storage before the wall clock fires.
+  // ulimit -t caps CPU seconds, ulimit -v caps virtual memory (in KB),
+  // ulimit -u caps the number of spawnable processes to prevent fork bombs.
+  const fileLimitBlocks = Math.ceil(params.fileSizeLimitBytes / 512);
+  const memoryKilobytes = Math.ceil(params.memoryBytes / 1024);
+  return (
+    `${cd} && ` +
+    `_d=$(mktemp -d) || { echo 'mktemp failed' >&2; exit 1; }; ` +
+    `ulimit -f ${fileLimitBlocks} 2>/dev/null; ` +
+    `ulimit -t ${params.cpuSeconds} 2>/dev/null; ` +
+    `ulimit -v ${memoryKilobytes} 2>/dev/null; ` +
+    `ulimit -u ${params.maxProcesses} 2>/dev/null; ` +
+    `timeout --signal=KILL ${params.timeoutSeconds}s bash -c ${shellQuote(params.command)} >"$_d/o" 2>"$_d/e"; ` +
+    `_x=$?; ` +
+    `head -c ${limit + 1} "$_d/o"; ` +
+    `head -c ${limit + 1} "$_d/e" >&2; ` +
+    `rm -rf "$_d"; ` +
+    `exit $_x`
+  );
 }
 
 function truncateOutput(
@@ -591,8 +733,12 @@ function truncateOutput(
   if (bytes <= limit) {
     return { value: raw, truncated: false };
   }
+  // slice by byte boundary, not char index, to enforce the byte cap correctly
+  const truncated = Buffer.from(raw, "utf8")
+    .subarray(0, limit)
+    .toString("utf8");
   return {
-    value: `${raw.slice(0, limit)}\n...[output truncated]`,
+    value: `${truncated}\n...[output truncated]`,
     truncated: true,
   };
 }
@@ -601,7 +747,28 @@ function resolveArtifactPath(params: {
   path: string;
   defaultCwd: string;
 }): string {
-  if (params.path.startsWith("/")) return params.path;
+  if (params.path.includes("\0")) {
+    throw new SkillSandboxError(
+      `invalid artifact path: ${JSON.stringify(params.path)}`,
+    );
+  }
+  if (params.path.split("/").some((segment) => segment === "..")) {
+    throw new SkillSandboxError(
+      `invalid artifact path: ${JSON.stringify(params.path)}`,
+    );
+  }
+  if (params.path.startsWith("/")) {
+    const allowedRoots = [SKILL_SANDBOX_ROOT, SKILL_SANDBOX_HOME];
+    const isAllowed = allowedRoots.some(
+      (root) => params.path === root || params.path.startsWith(`${root}/`),
+    );
+    if (!isAllowed) {
+      throw new SkillSandboxError(
+        `artifact path must be under ${SKILL_SANDBOX_ROOT} or ${SKILL_SANDBOX_HOME}: ${JSON.stringify(params.path)}`,
+      );
+    }
+    return params.path;
+  }
   const cwd = params.defaultCwd.endsWith("/")
     ? params.defaultCwd.slice(0, -1)
     : params.defaultCwd;
@@ -618,6 +785,7 @@ export const __internals = {
   shellQuote,
   truncateOutput,
   resolveArtifactPath,
+  validateSnapshotFilePath,
   wrapWithTimeout,
   asSandboxId,
 };

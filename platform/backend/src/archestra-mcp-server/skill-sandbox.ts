@@ -7,7 +7,12 @@ import { z } from "zod";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import config from "@/config";
 import logger from "@/logging";
-import { SkillModel, SkillSandboxModel, SkillTeamModel } from "@/models";
+import {
+  SkillInvalidFilePathError,
+  SkillModel,
+  SkillSandboxModel,
+  SkillTeamModel,
+} from "@/models";
 import {
   SKILL_SANDBOX_ROOT,
   skillRootPath,
@@ -149,7 +154,7 @@ const GetSkillSandboxArtifactSchema = z
       .describe(
         "Sandbox to read the artifact from. When omitted, the most recent " +
           "sandbox attached to the current conversation is used; rejected " +
-          "when ambiguous.",
+          "when no conversation context is available.",
       ),
     path: z
       .string()
@@ -207,6 +212,11 @@ const registry = defineArchestraTools([
       }
 
       const checker = await getSkillPermissionChecker(userCtx);
+      if (!checker.canExecute) {
+        return errorResult(
+          "You do not have permission to perform this action (requires skill:execute).",
+        );
+      }
       if (!checker.canRead) {
         return errorResult(
           "You do not have permission to perform this action (requires skill:read).",
@@ -248,19 +258,40 @@ const registry = defineArchestraTools([
         return errorResult("Could not resolve a primary skill.");
       }
 
+      // validate all skill names before the DB commit so a bad secondary name
+      // never leaves an orphaned sandbox record
+      for (const skill of skills) {
+        try {
+          skillRootPath(skill.name);
+        } catch {
+          return errorResult(
+            `Skill name ${JSON.stringify(skill.name)} is not valid for sandbox use (must not contain "/" or "..").`,
+          );
+        }
+      }
+
       const defaultCwd = skillRootPath(primary.name);
-      const sandbox = await SkillSandboxModel.create({
-        sandbox: {
-          organizationId: userCtx.organizationId,
-          userId: userCtx.userId,
-          conversationId: context.conversationId ?? null,
-          agentId: context.agentId ?? null,
-          baseImage: config.skillsSandbox.image,
-          primarySkillId: primary.id,
-          defaultCwd,
-        },
-        skillIds: skills.map((s) => s.id),
-      });
+
+      let sandbox: Awaited<ReturnType<typeof SkillSandboxModel.create>>;
+      try {
+        sandbox = await SkillSandboxModel.create({
+          sandbox: {
+            organizationId: userCtx.organizationId,
+            userId: userCtx.userId,
+            conversationId: context.conversationId ?? null,
+            agentId: context.agentId ?? null,
+            baseImage: config.skillsSandbox.image,
+            primarySkillId: primary.id,
+            defaultCwd,
+          },
+          skillIds: skills.map((s) => s.id),
+        });
+      } catch (err) {
+        if (err instanceof SkillInvalidFilePathError) {
+          return errorResult(err.message);
+        }
+        throw err;
+      }
 
       logger.info(
         {
@@ -473,19 +504,25 @@ async function resolveSandboxId(params: {
         "No sandboxId was provided and there is no conversation context to infer one from. Pass `sandboxId` explicitly.",
     };
   }
-  const inferred =
-    await SkillSandboxModel.findMostRecentForConversation(conversationId);
-  if (
-    !inferred ||
-    inferred.organizationId !== userCtx.organizationId ||
-    inferred.userId !== userCtx.userId
-  ) {
+  const all = await SkillSandboxModel.listForConversation(conversationId);
+  const accessible = all.filter(
+    (s) =>
+      s.organizationId === userCtx.organizationId &&
+      s.userId === userCtx.userId,
+  );
+  if (accessible.length === 0) {
     return {
       error:
         "No sandbox is attached to the current conversation. Call create_skill_sandbox first or pass `sandboxId` explicitly.",
     };
   }
-  return { sandboxId: asSandboxId(inferred.id) };
+  if (accessible.length > 1) {
+    return {
+      error:
+        "Multiple sandboxes are attached to the current conversation. Pass `sandboxId` explicitly.",
+    };
+  }
+  return { sandboxId: asSandboxId(accessible[0].id) };
 }
 
 function formatCommandSummary(result: {

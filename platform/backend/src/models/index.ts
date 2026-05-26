@@ -57,9 +57,13 @@ export { default as SecretModel } from "./secret";
 export { default as SessionModel } from "./session";
 export { default as SkillModel } from "./skill";
 export { default as SkillFileModel } from "./skill-file";
-export { default as SkillSandboxModel } from "./skill-sandbox";
+export {
+  default as SkillSandboxModel,
+  SkillInvalidFilePathError,
+} from "./skill-sandbox";
 export { default as SkillSandboxArtifactModel } from "./skill-sandbox-artifact";
 export { default as SkillSandboxCommandModel } from "./skill-sandbox-command";
+export { default as SkillSandboxFileSnapshotModel } from "./skill-sandbox-file-snapshot";
 export { default as SkillShareLinkModel } from "./skill-share-link";
 export { default as SkillShareLinkRevisionModel } from "./skill-share-link-revision";
 export { default as SkillTeamModel } from "./skill-team";

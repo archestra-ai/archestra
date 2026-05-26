@@ -6,7 +6,12 @@ import {
   TOOL_RUN_SKILL_COMMAND_FULL_NAME,
 } from "@shared";
 import config from "@/config";
-import { ConversationModel, SkillModel, SkillSandboxModel } from "@/models";
+import {
+  ConversationModel,
+  SkillModel,
+  SkillSandboxFileSnapshotModel,
+  SkillSandboxModel,
+} from "@/models";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { SkillSandboxError } from "@/skills-sandbox/types";
 import {
@@ -168,6 +173,15 @@ describe("skill sandbox tools (runtime enabled)", () => {
         structured.sandboxId,
       );
       expect(skillIds).toEqual([skill.id]);
+
+      // file snapshots should be captured at creation time
+      const snapshots = await SkillSandboxFileSnapshotModel.listBySandbox(
+        structured.sandboxId,
+      );
+      expect(snapshots.length).toBeGreaterThanOrEqual(1);
+      const skillMd = snapshots.find((s) => s.path === "SKILL.md");
+      expect(skillMd?.skillName).toBe("pdf-processing");
+      expect(skillMd?.content).toContain("PDF Processing");
     });
 
     test("uses primarySkill to set defaultCwd when multiple skills are mounted", async () => {
@@ -270,6 +284,35 @@ describe("skill sandbox tools (runtime enabled)", () => {
       );
       expect(result.isError).toBe(true);
       expect(textOf(result)).toContain("No accessible sandbox");
+    });
+
+    test("rejects when conversation has multiple sandboxes and no explicit sandboxId", async () => {
+      const conversation = await ConversationModel.create({
+        userId,
+        organizationId,
+        agentId: agent.id,
+        title: "Test",
+      });
+      await seedSkill();
+      // create two sandboxes for the same conversation
+      await executeArchestraTool(
+        TOOL_CREATE_SKILL_SANDBOX_FULL_NAME,
+        { skillNames: ["pdf-processing"] },
+        { ...context, conversationId: conversation.id },
+      );
+      await executeArchestraTool(
+        TOOL_CREATE_SKILL_SANDBOX_FULL_NAME,
+        { skillNames: ["pdf-processing"] },
+        { ...context, conversationId: conversation.id },
+      );
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_SKILL_COMMAND_FULL_NAME,
+        { command: "echo hi" },
+        { ...context, conversationId: conversation.id },
+      );
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain("Multiple sandboxes");
     });
 
     test("delegates to the runtime service when the sandbox is resolved via conversation", async () => {

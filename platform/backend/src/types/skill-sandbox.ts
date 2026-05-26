@@ -1,6 +1,7 @@
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import type { z } from "zod";
 import { schema } from "@/database";
+import { SkillFileEncodingSchema } from "./skill";
 
 export const SelectSkillSandboxSchema = createSelectSchema(
   schema.skillSandboxesTable,
@@ -32,6 +33,18 @@ export const InsertSkillSandboxArtifactSchema = createInsertSchema(
   createdAt: true,
 });
 
+export const SelectSkillSandboxFileSnapshotSchema = createSelectSchema(
+  schema.skillSandboxFileSnapshotsTable,
+  { encoding: SkillFileEncodingSchema },
+);
+export const InsertSkillSandboxFileSnapshotSchema = createInsertSchema(
+  schema.skillSandboxFileSnapshotsTable,
+  { encoding: SkillFileEncodingSchema },
+).omit({
+  id: true,
+  createdAt: true,
+});
+
 export type SkillSandbox = z.infer<typeof SelectSkillSandboxSchema>;
 export type InsertSkillSandbox = z.infer<typeof InsertSkillSandboxSchema>;
 export type SkillSandboxCommand = z.infer<
@@ -45,6 +58,12 @@ export type SkillSandboxArtifact = z.infer<
 >;
 export type InsertSkillSandboxArtifact = z.infer<
   typeof InsertSkillSandboxArtifactSchema
+>;
+export type SkillSandboxFileSnapshot = z.infer<
+  typeof SelectSkillSandboxFileSnapshotSchema
+>;
+export type InsertSkillSandboxFileSnapshot = z.infer<
+  typeof InsertSkillSandboxFileSnapshotSchema
 >;
 
 /**

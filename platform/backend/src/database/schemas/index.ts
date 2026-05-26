@@ -120,6 +120,7 @@ export { default as skillFilesTable } from "./skill-file";
 export { default as skillSandboxesTable } from "./skill-sandbox";
 export { default as skillSandboxArtifactsTable } from "./skill-sandbox-artifact";
 export { default as skillSandboxCommandsTable } from "./skill-sandbox-command";
+export { default as skillSandboxFileSnapshotsTable } from "./skill-sandbox-file-snapshot";
 export { default as skillSandboxSkillsTable } from "./skill-sandbox-skill";
 export {
   default as skillShareLinksTable,

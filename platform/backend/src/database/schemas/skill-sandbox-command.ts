@@ -28,6 +28,8 @@ const skillSandboxCommandsTable = pgTable(
     /** Process exit code, or a synthetic value when the runtime aborted the run. */
     exitCode: integer("exit_code").notNull(),
     durationMs: integer("duration_ms").notNull(),
+    /** Wall-clock timeout (seconds) used when this command was executed; replays use this value. */
+    timeoutSeconds: integer("timeout_seconds").notNull(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [

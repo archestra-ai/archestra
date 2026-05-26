@@ -2,6 +2,7 @@ import {
   SkillModel,
   SkillSandboxArtifactModel,
   SkillSandboxCommandModel,
+  SkillSandboxFileSnapshotModel,
   SkillSandboxModel,
 } from "@/models";
 import { describe, expect, test } from "@/test";
@@ -83,7 +84,7 @@ describe("SkillSandboxModel", () => {
     expect(missing).toBeNull();
   });
 
-  test("findMostRecentForConversation returns latest sandbox", async ({
+  test("listForConversation returns all sandboxes newest first", async ({
     makeOrganization,
     makeUser,
     makeAgent,
@@ -127,16 +128,82 @@ describe("SkillSandboxModel", () => {
       skillIds: [skill.id],
     });
 
-    const found = await SkillSandboxModel.findMostRecentForConversation(
-      conversation.id,
-    );
-    expect(found?.id).toBe(second.id);
-    expect(found?.id).not.toBe(first.id);
+    const found = await SkillSandboxModel.listForConversation(conversation.id);
+    expect(found.map((s) => s.id)).toEqual([second.id, first.id]);
 
-    const missing = await SkillSandboxModel.findMostRecentForConversation(
+    const missing = await SkillSandboxModel.listForConversation(
       crypto.randomUUID(),
     );
-    expect(missing).toBeNull();
+    expect(missing).toHaveLength(0);
+  });
+});
+
+describe("SkillSandboxFileSnapshotModel", () => {
+  test("create auto-snapshots SKILL.md; createMany adds extra files", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const skill = await seedSkill(org.id, "alpha");
+    const sandbox = await SkillSandboxModel.create({
+      sandbox: {
+        organizationId: org.id,
+        userId: user.id,
+        conversationId: null,
+        agentId: null,
+        baseImage: "archestra/skill-sandbox:dev",
+        primarySkillId: skill.id,
+        defaultCwd: "/skills/alpha",
+      },
+      skillIds: [skill.id],
+    });
+
+    // SKILL.md is auto-snapshotted; add a supplementary file to verify createMany
+    await SkillSandboxFileSnapshotModel.createMany([
+      {
+        sandboxId: sandbox.id,
+        skillId: skill.id,
+        skillName: "alpha",
+        path: "scripts/run.sh",
+        encoding: "utf8",
+        content: "echo hi",
+      },
+    ]);
+
+    const rows = await SkillSandboxFileSnapshotModel.listBySandbox(sandbox.id);
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.path).sort()).toEqual(
+      ["SKILL.md", "scripts/run.sh"].sort(),
+    );
+    expect(rows.find((r) => r.path === "SKILL.md")?.content).toBe("# alpha");
+  });
+
+  test("createMany is a no-op for empty input", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const skill = await seedSkill(org.id, "alpha");
+    const sandbox = await SkillSandboxModel.create({
+      sandbox: {
+        organizationId: org.id,
+        userId: user.id,
+        conversationId: null,
+        agentId: null,
+        baseImage: "archestra/skill-sandbox:dev",
+        primarySkillId: skill.id,
+        defaultCwd: "/skills/alpha",
+      },
+      skillIds: [skill.id],
+    });
+
+    // auto-snapshot already created SKILL.md; empty createMany adds nothing
+    await SkillSandboxFileSnapshotModel.createMany([]);
+    const rows = await SkillSandboxFileSnapshotModel.listBySandbox(sandbox.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.path).toBe("SKILL.md");
   });
 });
 
@@ -169,6 +236,7 @@ describe("SkillSandboxCommandModel", () => {
       stderr: "",
       exitCode: 0,
       durationMs: 12,
+      timeoutSeconds: 30,
     });
     await new Promise((r) => setTimeout(r, 5));
     const second = await SkillSandboxCommandModel.append({
@@ -179,6 +247,7 @@ describe("SkillSandboxCommandModel", () => {
       stderr: "",
       exitCode: 0,
       durationMs: 40,
+      timeoutSeconds: 10,
     });
 
     const log = await SkillSandboxCommandModel.listBySandbox(sandbox.id);
@@ -295,6 +364,7 @@ describe("Cascade behavior", () => {
       stderr: "",
       exitCode: 0,
       durationMs: 1,
+      timeoutSeconds: 30,
     });
     await SkillSandboxArtifactModel.create({
       sandboxId: sandbox.id,
@@ -303,6 +373,16 @@ describe("Cascade behavior", () => {
       sizeBytes: 1,
       data: Buffer.from("a"),
     });
+    await SkillSandboxFileSnapshotModel.createMany([
+      {
+        sandboxId: sandbox.id,
+        skillId: skill.id,
+        skillName: "alpha",
+        path: "SKILL.md",
+        encoding: "utf8",
+        content: "# alpha",
+      },
+    ]);
 
     const { default: db, schema } = await import("@/database");
     const { eq } = await import("drizzle-orm");
@@ -318,5 +398,8 @@ describe("Cascade behavior", () => {
       await SkillSandboxArtifactModel.listBySandbox(sandbox.id),
     ).toHaveLength(0);
     expect(await SkillSandboxModel.listSkillIds(sandbox.id)).toHaveLength(0);
+    expect(
+      await SkillSandboxFileSnapshotModel.listBySandbox(sandbox.id),
+    ).toHaveLength(0);
   });
 });

@@ -10,6 +10,7 @@ export const SKILL_SANDBOX_LIMITS = {
   maxMemoryBytes: 1024 * 1024 * 1024,
   maxProcesses: 256,
   maxQueueLength: 50,
+  maxSandboxQueueLength: 10,
   maxArtifactBytes: 16 * 1024 * 1024,
   maxCommandBytes: 16 * 1024,
 } as const;

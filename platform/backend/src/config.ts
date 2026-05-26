@@ -14,11 +14,11 @@ import {
 } from "@shared";
 import dotenv from "dotenv";
 import logger from "@/logging";
+import { DEFAULT_SKILL_SANDBOX_IMAGE } from "@/skills-sandbox/runtime-image";
 import {
   type EmailProviderType,
   EmailProviderTypeSchema,
 } from "@/types/email-provider-type";
-import { DEFAULT_SKILL_SANDBOX_IMAGE } from "@/skills-sandbox/runtime-image";
 import packageJson from "../../package.json";
 
 type ProcessType = "web" | "worker" | "all";

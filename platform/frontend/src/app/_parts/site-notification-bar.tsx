@@ -2,43 +2,27 @@
 
 import { X } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
-import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 
-const markdownComponents: Components = {
-  pre({ children }) {
-    return <>{children}</>;
-  },
-  code({ className, children, ...props }) {
-    const match = /language-(\w+)/.exec(className || "");
-    if (match) {
-      const code = String(children).replace(/\n$/, "");
-      return (
-        <code className={className} {...props}>
-          {code}
-        </code>
-      );
-    }
-    return (
-      <code className={className} {...props}>
-        {children}
-      </code>
-    );
-  },
-};
+const STORAGE_PREFIX = "site-notification-dismissed:";
 
 interface SiteNotificationBarProps {
   content: string;
-  onDismiss?: () => void;
+  notificationId: string;
 }
 
 export function SiteNotificationBar({
   content,
-  onDismiss,
+  notificationId,
 }: SiteNotificationBarProps) {
-  const [dismissed, setDismissed] = useState(false);
+  const [dismissed, setDismissed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return (
+      localStorage.getItem(`${STORAGE_PREFIX}${notificationId}`) === "true"
+    );
+  });
   const [barHeight, setBarHeight] = useState(0);
   const [barBounds, setBarBounds] = useState({ left: 0, width: 0 });
   const placeholderRef = useRef<HTMLDivElement>(null);
@@ -82,8 +66,8 @@ export function SiteNotificationBar({
   }
 
   const handleDismiss = () => {
+    localStorage.setItem(`${STORAGE_PREFIX}${notificationId}`, "true");
     setDismissed(true);
-    onDismiss?.();
   };
 
   return (
@@ -98,25 +82,18 @@ export function SiteNotificationBar({
         }}
       >
         <div className="max-w-7xl mx-auto flex items-start gap-3">
-          <div className="flex-1 text-sm [&_p]:my-1 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:text-sm [&_h2]:font-semibold [&_a]:text-primary [&_a]:underline [&_strong]:font-semibold [&_em]:italic">
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={markdownComponents}
-            >
-              {content}
-            </ReactMarkdown>
+          <div className="flex-1 text-sm">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
           </div>
-          {onDismiss && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-6 w-6 p-0 shrink-0"
-              onClick={handleDismiss}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 p-0 shrink-0"
+            onClick={handleDismiss}
+          >
+            <X className="h-4 w-4" />
+          </Button>
         </div>
       </div>
     </>

@@ -95,7 +95,10 @@ export function AppShell({ children }: AppShellProps) {
         <MaintenanceModeOverlay />
         <main className="h-screen w-full flex flex-col bg-background min-w-0 relative">
           {notification && (
-            <SiteNotificationBar content={notification.content} />
+            <SiteNotificationBar
+              content={notification.content}
+              notificationId={notification.id}
+            />
           )}
           <ImpersonationBanner />
           <header className="h-14 border-b border-border flex md:hidden items-center justify-between px-6 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">

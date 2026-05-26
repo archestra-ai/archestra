@@ -1776,43 +1776,8 @@
     {
       "idx": 253,
       "version": "7",
-      "when": 1779870185058,
-      "tag": "0253_rename-github-repository-files-flag",
-      "breakpoints": true
-    },
-    {
-      "idx": 254,
-      "version": "7",
-      "when": 1779807387011,
-      "tag": "0254_black_skin",
-      "breakpoints": true
-    },
-    {
-      "idx": 255,
-      "version": "7",
-      "when": 1779899471178,
-      "tag": "0255_ambiguous_omega_sentinel",
-      "breakpoints": true
-    },
-    {
-      "idx": 256,
-      "version": "7",
-      "when": 1779944476369,
-      "tag": "0256_rename_chat_attachments_to_conversation_attachments",
-      "breakpoints": true
-    },
-    {
-      "idx": 257,
-      "version": "7",
-      "when": 1779957730121,
-      "tag": "0257_stale_starfox",
-      "breakpoints": true
-    },
-    {
-      "idx": 258,
-      "version": "7",
-      "when": 1779975331173,
-      "tag": "0258_powerful_colonel_america",
+      "when": 1779800000000,
+      "tag": "0253_skill_sandboxes",
       "breakpoints": true
     }
   ]

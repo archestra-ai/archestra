@@ -286,7 +286,7 @@ cmd_copy_providers() {
   # differs. Read each from its own .env. Default to 5432 for the main
   # worktree (`tilt up` from main doesn't set ARCHESTRA_POSTGRES_HOST_PORT).
   # `|| true` keeps pipefail from aborting on grep-finds-nothing.
-  local main_pg_port parallel_pg_port
+  local main_pg_port parallel_pg_port target_admin_email
   main_pg_port=$( { grep -E '^ARCHESTRA_POSTGRES_HOST_PORT=' "$main_env" || true; } \
     | tail -n1 | cut -d= -f2- | tr -d '"')
   main_pg_port="${main_pg_port:-5432}"
@@ -296,6 +296,12 @@ cmd_copy_providers() {
     echo "ERROR: $platform_dir/.env has no ARCHESTRA_POSTGRES_HOST_PORT. Has 'up' run yet?" >&2
     exit 1
   fi
+  # tsx doesn't auto-load .env, so the backend script's
+  # process.env.ARCHESTRA_AUTH_ADMIN_EMAIL would otherwise be undefined. Pull
+  # it from the target worktree's .env here and forward it explicitly. Empty
+  # value is fine — the backend script falls back to "admin@example.com".
+  target_admin_email=$( { grep -E '^ARCHESTRA_AUTH_ADMIN_EMAIL=' "$platform_dir/.env" || true; } \
+    | tail -n1 | cut -d= -f2- | tr -d '"')
 
   local source_url="postgresql://archestra:archestra_dev_password@localhost:${main_pg_port}/archestra_dev"
   local target_url="postgresql://archestra:archestra_dev_password@localhost:${parallel_pg_port}/archestra_dev"
@@ -303,6 +309,7 @@ cmd_copy_providers() {
   echo "→ Copying provider data from main (:${main_pg_port}) -> parallel (:${parallel_pg_port})" >&2
   SOURCE_DATABASE_URL="$source_url" \
   ARCHESTRA_DATABASE_URL="$target_url" \
+  ARCHESTRA_AUTH_ADMIN_EMAIL="$target_admin_email" \
     pnpm --filter @backend db:copy-providers-from
 }
 

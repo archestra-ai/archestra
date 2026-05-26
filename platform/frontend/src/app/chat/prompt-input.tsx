@@ -538,6 +538,10 @@ const PromptInputContent = ({
             ? "This model does not support file uploads"
             : "File format is not supported by this model",
         );
+      } else if (err.code === "max_file_size") {
+        toast.error("File is too large. Maximum size is 50 MB.");
+      } else if (err.code === "max_files") {
+        toast.error("Too many files attached.");
       }
     },
     [showFileUploadButton],
@@ -601,6 +605,7 @@ const PromptInputContent = ({
         accept={
           showFileUploadButton ? acceptedFileTypes : "application/x-empty"
         }
+        maxFileSize={50 * 1024 * 1024}
         onError={handleFileError}
       >
         {/* File attachments display - shown inline above textarea */}
@@ -969,9 +974,26 @@ const ArchestraPromptInput = ({
   modelSource,
   onResetModelOverride,
 }: ArchestraPromptInputProps) => {
+  const handleProviderFileError = useCallback(
+    (err: {
+      code: "max_files" | "max_file_size" | "accept";
+      message: string;
+    }) => {
+      if (err.code === "max_file_size") {
+        toast.error("File is too large. Maximum size is 50 MB.");
+      } else if (err.code === "max_files") {
+        toast.error("Too many files attached.");
+      }
+    },
+    [],
+  );
+
   return (
     <div className="flex size-full flex-col justify-end">
-      <PromptInputProvider>
+      <PromptInputProvider
+        maxFileSize={50 * 1024 * 1024}
+        onError={handleProviderFileError}
+      >
         <PromptInputContent
           onSubmit={onSubmit}
           status={status}

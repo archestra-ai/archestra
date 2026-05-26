@@ -262,7 +262,7 @@ export const parseBodyLimit = (
   return defaultValue;
 };
 
-const DEFAULT_BODY_LIMIT = 50 * 1024 * 1024; // 50MB
+const DEFAULT_BODY_LIMIT = 70 * 1024 * 1024;
 
 const DEFAULT_DATABASE_POOL_MAX = 50;
 const MAX_DATABASE_POOL_MAX = 500;

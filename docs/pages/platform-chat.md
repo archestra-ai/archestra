@@ -3,7 +3,7 @@ title: Chat
 category: Agents
 order: 2
 description: Built-in Chat interface for working with agents and MCP tools
-lastUpdated: 2026-05-19
+lastUpdated: 2026-05-26
 ---
 
 <!--
@@ -32,3 +32,7 @@ Context compaction replaces older messages sent to the model with a structured h
 Compaction is handled by the built-in Context Compaction Subagent. Users with `agent:admin` permission can edit its instructions and model from the built-in agent settings. If no model is configured on the subagent, Chat uses the conversation's current provider with a fast model for that provider.
 
 Uploaded text files and PDFs are included in the compaction transcript when extractable text is available in the chat payload. If file text cannot be extracted (for example, a scanned PDF with no text layer), the summary records that limitation instead of implying the full file contents remain in context.
+
+### Attachment Storage
+
+File attachments uploaded in chat are stored in a dedicated `chat_attachments` Postgres table — separate from the chat history. Messages persist only a small reference (`/api/chat/attachments/<id>/content`) in their JSONB content; the bytes never enter the `messages` row. When the conversation is sent to the model, references are materialized back to inline content at request time, and document parts are marked with Anthropic ephemeral prompt caching so re-sending the same files across turns does not re-bill the input tokens. Forking a conversation creates fresh attachment rows scoped to the new conversation rather than aliasing the originals. The 50 MB per-file cap is enforced in the upload UI; Postgres remains the only required service.

@@ -62,16 +62,6 @@ export interface ArtifactRef {
 }
 
 /**
- * Materialized skill roots returned to callers so they can document where
- * relative paths in commands resolve.
- */
-export interface SkillRoot {
-  skillId: string;
-  skillName: string;
-  rootPath: string;
-}
-
-/**
  * Raised when the runtime cannot execute the requested operation — engine
  * unreachable, sandbox missing, limits violated. A command that runs and exits
  * non-zero is a normal {@link CommandResult}, not an error.

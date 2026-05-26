@@ -29,6 +29,29 @@ describe("formatSkillActivation", () => {
     expect(result).toContain("scripts/run.py (script)");
   });
 
+  test("points the model at read_skill_file and the sandbox tools", () => {
+    const result = formatSkillActivation({
+      skill: { name: "Research", content: "Body", compatibility: null },
+      files: [{ path: "scripts/run.py", kind: "script" }],
+    });
+
+    expect(result).toContain("read_skill_file");
+    expect(result).toContain("create_skill_sandbox");
+    expect(result).toContain("run_skill_command");
+    expect(result).toContain("get_skill_sandbox_artifact");
+    expect(result).not.toMatch(/not executed/i);
+  });
+
+  test("omits sandbox guidance when the skill has no resource files", () => {
+    const result = formatSkillActivation({
+      skill: { name: "Research", content: "Body", compatibility: null },
+      files: [],
+    });
+
+    expect(result).not.toContain("read_skill_file");
+    expect(result).not.toContain("create_skill_sandbox");
+  });
+
   test("escapes XML-significant characters in names and paths", () => {
     const result = formatSkillActivation({
       skill: { name: "A & B <c>", content: "x", compatibility: null },

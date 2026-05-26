@@ -13,7 +13,6 @@ import {
 import { marketplaceMaterializer } from "@/skills/marketplace";
 import { serveGitHttpRequest } from "@/skills/marketplace/git-http-backend";
 import type { MaterializeSkillInput } from "@/skills/marketplace/materialize";
-import { SKILL_MARKETPLACE_PREFIX } from "./route-paths";
 
 /**
  * Public, unauthenticated git smart-HTTP endpoint that serves a per-share-link
@@ -47,7 +46,7 @@ const skillMarketplacePublicRoutes: FastifyPluginAsyncZod = async (fastify) => {
     url,
     handler: async (request, reply) => {
       const token = (request.params as { token?: string }).token ?? "";
-      const subPath = (request.params as { ["*"]?: string })["*"] ?? "";
+      const subPath = (request.params as { "*"?: string })["*"] ?? "";
 
       const validated = await SkillShareLinkModel.validate({ rawToken: token });
       if (!validated) {

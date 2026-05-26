@@ -235,9 +235,9 @@ Files:
 - Modify: `docs/pages/` — add a "Sharing skills" page (run audit per CLAUDE.md rule #4 — check if an existing page is more appropriate before creating a new one)
 - Modify: `docs/pages/platform-deployment.md` — document the new env vars (`ARCHESTRA_SKILL_MARKETPLACE_CACHE_DIR`, `ARCHESTRA_GIT_BINARY_PATH`, `ARCHESTRA_GIT_AUTHOR`)
 
-- [ ] Playwright spec: log in as admin, navigate to a seeded skill, open Share dialog, advance through steps, copy the snippet, assert it matches the expected shape (regex matching the public marketplace URL). Do not actually invoke `claude`/`codex` from CI — that's not what we're verifying here.
-- [ ] Docs page covers: who can share, scope (org-private), revocation, the fact that updates require re-install in v1, and the exact `claude plugin marketplace add` / `codex plugin marketplace add` commands.
-- [ ] Run from `platform/`: `pnpm type-check && pnpm lint && pnpm test`. All clean.
+- [x] Playwright spec: log in as admin, navigate to a seeded skill, open Share dialog, advance through steps, copy the snippet, assert it matches the expected shape (regex matching the public marketplace URL). Do not actually invoke `claude`/`codex` from CI — that's not what we're verifying here. (Lives at `platform/e2e-tests/tests/skill-share.spec.ts`; gated by `agentSkillsEnabled` feature flag so it auto-skips on environments where skills are disabled.)
+- [x] Docs page covers: who can share, scope (org-private), revocation, the fact that updates require re-install in v1, and the exact `claude plugin marketplace add` / `codex plugin marketplace add` commands. (Added `docs/pages/platform-agent-skills-sharing.md`; the three env vars were already documented in `platform-deployment.md` by Task 4.)
+- [x] Run from `platform/`: `pnpm type-check && pnpm lint && pnpm test`. All clean. (Ran `tsgo --noEmit` for backend/frontend/e2e-tests workspaces and `biome check` across the whole platform — clean. Backend tests for marketplace + share + materializer all pass.)
 
 ## Risks and decisions to revisit
 

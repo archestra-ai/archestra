@@ -95,7 +95,10 @@ describe("skill marketplace public route — token validation", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id);
-    const skill = await seedSkill({ organizationId: org.id, name: "revoke-me" });
+    const skill = await seedSkill({
+      organizationId: org.id,
+      name: "revoke-me",
+    });
 
     const { link, rawToken } = await SkillShareLinkModel.create({
       organizationId: org.id,
@@ -120,7 +123,10 @@ describe("skill marketplace public route — token validation", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id);
-    const skill = await seedSkill({ organizationId: org.id, name: "expire-me" });
+    const skill = await seedSkill({
+      organizationId: org.id,
+      name: "expire-me",
+    });
 
     const { rawToken } = await SkillShareLinkModel.create({
       organizationId: org.id,
@@ -174,69 +180,69 @@ describe.skipIf(!GIT_HTTP_BACKEND_AVAILABLE)(
       marketplaceMaterializer.reset();
     });
 
-    test(
-      "git clone fetches a valid marketplace repo for a single skill",
-      async ({ makeOrganization, makeUser, makeMember }) => {
-        const org = await makeOrganization();
-        const user = await makeUser();
-        await makeMember(user.id, org.id);
-        const skill = await seedSkill({
-          organizationId: org.id,
-          name: "Clone Me",
-          content: "# Clone Me\n\nDoes things.",
-        });
+    test("git clone fetches a valid marketplace repo for a single skill", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id);
+      const skill = await seedSkill({
+        organizationId: org.id,
+        name: "Clone Me",
+        content: "# Clone Me\n\nDoes things.",
+      });
 
-        const { rawToken } = await SkillShareLinkModel.create({
-          organizationId: org.id,
-          createdByUserId: user.id,
-          skillIds: [skill.id],
-          marketplaceName: "org-test-skills",
-        });
+      const { rawToken } = await SkillShareLinkModel.create({
+        organizationId: org.id,
+        createdByUserId: user.id,
+        skillIds: [skill.id],
+        marketplaceName: "org-test-skills",
+      });
 
-        const cloneUrl = `${baseUrl}/skills/m/${rawToken}/repo.git`;
-        const target = path.join(cloneDir, "out");
-        const result = spawnSync("git", ["clone", "--quiet", cloneUrl, target], {
-          env: {
-            ...process.env,
-            // disable any system-wide credential helpers that might prompt
-            GIT_TERMINAL_PROMPT: "0",
-          },
-        });
-        if (result.status !== 0) {
-          throw new Error(
-            `git clone failed (${result.status}): ${result.stderr.toString()}`,
-          );
-        }
-
-        const claudeManifest = JSON.parse(
-          await fs.readFile(
-            path.join(target, ".claude-plugin/marketplace.json"),
-            "utf8",
-          ),
+      const cloneUrl = `${baseUrl}/skills/m/${rawToken}/repo.git`;
+      const target = path.join(cloneDir, "out");
+      const result = spawnSync("git", ["clone", "--quiet", cloneUrl, target], {
+        env: {
+          ...process.env,
+          // disable any system-wide credential helpers that might prompt
+          GIT_TERMINAL_PROMPT: "0",
+        },
+      });
+      if (result.status !== 0) {
+        throw new Error(
+          `git clone failed (${result.status}): ${result.stderr.toString()}`,
         );
-        expect(claudeManifest.name).toBe("org-test-skills");
-        expect(claudeManifest.plugins).toHaveLength(1);
-        expect(claudeManifest.plugins[0].name).toBe("clone-me");
+      }
 
-        const codexManifest = JSON.parse(
-          await fs.readFile(
-            path.join(target, ".agents/plugins/marketplace.json"),
-            "utf8",
-          ),
-        );
-        expect(codexManifest.plugins[0].source).toEqual({
-          source: "local",
-          path: "./plugins/clone-me",
-        });
-
-        const skillMd = await fs.readFile(
-          path.join(target, "plugins/clone-me/skills/clone-me/SKILL.md"),
+      const claudeManifest = JSON.parse(
+        await fs.readFile(
+          path.join(target, ".claude-plugin/marketplace.json"),
           "utf8",
-        );
-        expect(skillMd).toContain("name: Clone Me");
-        expect(skillMd).toContain("# Clone Me");
-      },
-      30_000,
-    );
+        ),
+      );
+      expect(claudeManifest.name).toBe("org-test-skills");
+      expect(claudeManifest.plugins).toHaveLength(1);
+      expect(claudeManifest.plugins[0].name).toBe("clone-me");
+
+      const codexManifest = JSON.parse(
+        await fs.readFile(
+          path.join(target, ".agents/plugins/marketplace.json"),
+          "utf8",
+        ),
+      );
+      expect(codexManifest.plugins[0].source).toEqual({
+        source: "local",
+        path: "./plugins/clone-me",
+      });
+
+      const skillMd = await fs.readFile(
+        path.join(target, "plugins/clone-me/skills/clone-me/SKILL.md"),
+        "utf8",
+      );
+      expect(skillMd).toContain("name: Clone Me");
+      expect(skillMd).toContain("# Clone Me");
+    }, 30_000);
   },
 );

@@ -933,8 +933,10 @@ export class ChatOpsManager {
       "[ChatOps] fetchThreadHistory called",
     );
 
-    if (!message.threadId) {
-      logger.debug("[ChatOps] No threadId, skipping thread history fetch");
+    if (!message.threadId || !message.isThreadReply) {
+      logger.debug(
+        "[ChatOps] No prior thread context, skipping thread history fetch",
+      );
       return { contextMessages: [], historyAttachments: [] };
     }
 

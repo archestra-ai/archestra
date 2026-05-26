@@ -478,3 +478,8 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @joeyotester
 - @BernardUriza
 - @sravan27
+- @ScottLiu007
+- @Priyanshuthapliyal2005
+- @ashjkd213
+- @blogMaxAbel
+- @DaveBryan001

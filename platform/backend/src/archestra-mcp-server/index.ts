@@ -56,6 +56,10 @@ import {
   toolEntries as searchToolEntries,
   tools as searchToolTools,
 } from "./search-tools";
+import {
+  toolEntries as skillSandboxToolEntries,
+  tools as skillSandboxTools,
+} from "./skill-sandbox";
 import { toolEntries as skillToolEntries, tools as skillTools } from "./skills";
 import {
   toolEntries as toolAssignmentToolEntries,
@@ -85,6 +89,7 @@ const toolEntries: Partial<
   ...runToolEntries,
   ...codeExecutionToolEntries,
   ...skillToolEntries,
+  ...skillSandboxToolEntries,
 };
 
 export function getArchestraMcpTools() {
@@ -103,6 +108,7 @@ export function getArchestraMcpTools() {
     ...runToolTools,
     ...(config.codeRuntime.enabled ? codeExecutionTools : []),
     ...skillTools,
+    ...(config.skillsSandbox.enabled ? skillSandboxTools : []),
   ];
 
   if (archestraMcpBranding.toolPrefix === ARCHESTRA_TOOL_PREFIX) {

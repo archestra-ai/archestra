@@ -5,7 +5,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 export type UploadedFile =
-  archestraApiTypes.GetConnectorFilesResponses["200"]["data"][number];
+  archestraApiTypes.GetConnectorFilesResponses["200"]["data"][number] & {
+    embeddingError?: string | null;
+  };
 
 type UploadResult =
   archestraApiTypes.UploadConnectorFilesResponses["200"]["results"][number];

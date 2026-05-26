@@ -44,6 +44,7 @@ class KbDocumentModel {
         acl: schema.kbDocumentsTable.acl,
         metadata: schema.kbDocumentsTable.metadata,
         embeddingStatus: schema.kbDocumentsTable.embeddingStatus,
+        embeddingError: schema.kbDocumentsTable.embeddingError,
         chunkCount: schema.kbDocumentsTable.chunkCount,
         createdAt: schema.kbDocumentsTable.createdAt,
         updatedAt: schema.kbDocumentsTable.updatedAt,

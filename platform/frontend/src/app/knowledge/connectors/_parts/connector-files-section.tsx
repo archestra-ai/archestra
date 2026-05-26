@@ -33,14 +33,36 @@ const ACCEPTED_EXTENSIONS =
   ".txt,.md,.csv,.json,.xml,.html,.htm,.pdf,.doc,.docx,.zip";
 const MAX_FILE_SIZE_MB = 10;
 
-function FileStatusBadge({
+const embeddingErrorMessages: Record<string, string> = {
+  rate_limited:
+    "Embedding provider rate limit was reached. Try again after the limit resets.",
+  authentication_failed:
+    "Embedding provider rejected the configured API key or permissions.",
+  model_not_found: "Configured embedding model was not found by the provider.",
+  server_error: "Embedding provider returned a server error. Try again later.",
+  dimensions_mismatch:
+    "Embedding dimensions do not match the configured knowledge index.",
+  unknown:
+    "Embedding failed. Check the embedding provider configuration and retry.",
+};
+
+function getEmbeddingErrorMessage(embeddingError?: string | null) {
+  if (!embeddingError) return embeddingErrorMessages.unknown;
+  return (
+    embeddingErrorMessages[embeddingError] ?? embeddingErrorMessages.unknown
+  );
+}
+
+export function FileStatusBadge({
   processingStatus,
   embeddingStatus,
   processingError,
+  embeddingError,
 }: {
   processingStatus?: string;
   embeddingStatus: string;
   processingError?: string | null;
+  embeddingError?: string | null;
 }) {
   if (processingStatus && processingStatus !== "completed") {
     const variants = {
@@ -95,18 +117,34 @@ function FileStatusBadge({
     failed: "Failed",
   };
 
-  return (
+  const variant =
+    variants[embeddingStatus as keyof typeof variants] ?? "secondary";
+  const label =
+    labels[embeddingStatus as keyof typeof labels] ?? embeddingStatus;
+
+  const badge = (
     <Badge
-      variant={
-        variants[embeddingStatus as keyof typeof variants] ?? "secondary"
-      }
-      className="capitalize text-xs"
+      variant={variant}
+      className={`capitalize text-xs ${
+        embeddingStatus === "failed" ? "cursor-help" : ""
+      }`}
     >
       {embeddingStatus === "processing" && (
         <Loader2 className="h-3 w-3 mr-1 animate-spin" />
       )}
-      {labels[embeddingStatus as keyof typeof labels] ?? embeddingStatus}
+      {label}
     </Badge>
+  );
+
+  if (embeddingStatus !== "failed") return badge;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{badge}</TooltipTrigger>
+      <TooltipContent>
+        {getEmbeddingErrorMessage(embeddingError)}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -125,6 +163,7 @@ function FileStatusCell({
       processingStatus={current.processingStatus}
       embeddingStatus={current.embeddingStatus}
       processingError={current.processingError}
+      embeddingError={current.embeddingError}
     />
   );
 }

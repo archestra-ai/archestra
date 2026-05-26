@@ -22,7 +22,7 @@
  * so that precondition is satisfied by the default flow.
  */
 
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import * as schema from "@/database/schemas";
@@ -124,12 +124,44 @@ try {
       copiedKeys = result.length;
     }
     if (apiKeyModels.length) {
-      const result = await tx
-        .insert(schema.llmProviderApiKeyModelsTable)
-        .values(apiKeyModels)
-        .onConflictDoNothing()
-        .returning({ apiKeyId: schema.llmProviderApiKeyModelsTable.apiKeyId });
-      copiedKeyModels = result.length;
+      // Filter link rows to those whose api_key_id AND model_id are actually
+      // present in target. Without this, a source key whose insert was
+      // skipped (because target already had a logically-equivalent key under
+      // a different UUID and the unique index on org/provider/scope/user_id
+      // blocked the new row) leaves a dangling source api_key_id in the link
+      // rows, and the link insert aborts the whole transaction on an FK
+      // violation. Same for models.
+      const sourceKeyIds = providerKeys.map((k) => k.id);
+      const sourceModelIds = models.map((m) => m.id);
+      const [presentKeys, presentModels] = await Promise.all([
+        sourceKeyIds.length
+          ? tx
+              .select({ id: schema.llmProviderApiKeysTable.id })
+              .from(schema.llmProviderApiKeysTable)
+              .where(inArray(schema.llmProviderApiKeysTable.id, sourceKeyIds))
+          : Promise.resolve([] as { id: string }[]),
+        sourceModelIds.length
+          ? tx
+              .select({ id: schema.modelsTable.id })
+              .from(schema.modelsTable)
+              .where(inArray(schema.modelsTable.id, sourceModelIds))
+          : Promise.resolve([] as { id: string }[]),
+      ]);
+      const presentKeyIds = new Set(presentKeys.map((r) => r.id));
+      const presentModelIds = new Set(presentModels.map((r) => r.id));
+      const linkable = apiKeyModels.filter(
+        (l) => presentKeyIds.has(l.apiKeyId) && presentModelIds.has(l.modelId),
+      );
+      if (linkable.length) {
+        const result = await tx
+          .insert(schema.llmProviderApiKeyModelsTable)
+          .values(linkable)
+          .onConflictDoNothing()
+          .returning({
+            apiKeyId: schema.llmProviderApiKeyModelsTable.apiKeyId,
+          });
+        copiedKeyModels = result.length;
+      }
     }
   });
 

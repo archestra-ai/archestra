@@ -2,11 +2,14 @@ import db, { schema } from "@/database";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
+import LimitModel from "@/models/limit";
 import LlmOauthClientModel from "@/models/llm-oauth-client";
 import MemberModel from "@/models/member";
 import OptimizationRuleModel from "@/models/optimization-rule";
 import OrganizationRoleModel from "@/models/organization-role";
 import TeamTokenModel from "@/models/team-token";
+import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
+import TrustedDataPolicyModel from "@/models/trusted-data-policy";
 import UserTokenModel from "@/models/user-token";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { describe, expect, test } from "@/test";
@@ -225,6 +228,146 @@ const CASES: ScopeCase[] = [
     },
     fetch: (userId, orgId) => MemberModel.findByUserIdForAudit(userId, orgId),
   },
+  // Limit fetcher is scoped via the entity FK (5 branches in entityType:
+  // organization | team | agent | user | virtual_key).  One case per branch
+  // exercises every arm of the switch in `LimitModel.findByIdForAudit`.
+  {
+    name: "LimitModel.findByIdForAudit (entityType=organization)",
+    setup: async ({ makeOrganization }) => {
+      const orgA = await makeOrganization();
+      const orgB = await makeOrganization();
+      const [limit] = await db
+        .insert(schema.limitsTable)
+        .values({
+          entityType: "organization",
+          entityId: orgB.id,
+          limitType: "token_cost",
+          limitValue: 100,
+        })
+        .returning();
+      return { id: limit.id, orgA: orgA.id };
+    },
+    fetch: (id, orgId) => LimitModel.findByIdForAudit(id, orgId),
+  },
+  {
+    name: "LimitModel.findByIdForAudit (entityType=team)",
+    setup: async ({ makeOrganization, makeAdmin, makeTeam }) => {
+      const orgA = await makeOrganization();
+      const orgB = await makeOrganization();
+      const owner = await makeAdmin();
+      const team = await makeTeam(orgB.id, owner.id);
+      const [limit] = await db
+        .insert(schema.limitsTable)
+        .values({
+          entityType: "team",
+          entityId: team.id,
+          limitType: "token_cost",
+          limitValue: 100,
+        })
+        .returning();
+      return { id: limit.id, orgA: orgA.id };
+    },
+    fetch: (id, orgId) => LimitModel.findByIdForAudit(id, orgId),
+  },
+  {
+    name: "LimitModel.findByIdForAudit (entityType=agent)",
+    setup: async ({ makeOrganization, makeAgent }) => {
+      const orgA = await makeOrganization();
+      const orgB = await makeOrganization();
+      const agent = await makeAgent({ organizationId: orgB.id });
+      const [limit] = await db
+        .insert(schema.limitsTable)
+        .values({
+          entityType: "agent",
+          entityId: agent.id,
+          limitType: "token_cost",
+          limitValue: 100,
+        })
+        .returning();
+      return { id: limit.id, orgA: orgA.id };
+    },
+    fetch: (id, orgId) => LimitModel.findByIdForAudit(id, orgId),
+  },
+  {
+    name: "LimitModel.findByIdForAudit (entityType=user)",
+    setup: async ({ makeOrganization, makeAdmin, makeMember }) => {
+      const orgA = await makeOrganization();
+      const orgB = await makeOrganization();
+      const user = await makeAdmin();
+      // user is a member of orgB only; orgA must not see this limit
+      await makeMember(user.id, orgB.id);
+      const [limit] = await db
+        .insert(schema.limitsTable)
+        .values({
+          entityType: "user",
+          entityId: user.id,
+          limitType: "token_cost",
+          limitValue: 100,
+        })
+        .returning();
+      return { id: limit.id, orgA: orgA.id };
+    },
+    fetch: (id, orgId) => LimitModel.findByIdForAudit(id, orgId),
+  },
+  {
+    name: "LimitModel.findByIdForAudit (entityType=virtual_key)",
+    setup: async ({ makeOrganization, makeVirtualApiKey }) => {
+      const orgA = await makeOrganization();
+      const orgB = await makeOrganization();
+      const vKey = await makeVirtualApiKey(orgB.id);
+      const [limit] = await db
+        .insert(schema.limitsTable)
+        .values({
+          entityType: "virtual_key",
+          entityId: vKey.id,
+          limitType: "token_cost",
+          limitValue: 100,
+        })
+        .returning();
+      return { id: limit.id, orgA: orgA.id };
+    },
+    fetch: (id, orgId) => LimitModel.findByIdForAudit(id, orgId),
+  },
+  {
+    name: "ToolInvocationPolicyModel.findByIdForAudit",
+    setup: async ({
+      makeOrganization,
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+      makeToolPolicy,
+    }) => {
+      const orgA = await makeOrganization();
+      const orgB = await makeOrganization();
+      // Tool is global (tools have no organizationId column); tenancy is
+      // resolved through any agent in the org that is assigned the tool.
+      const tool = await makeTool();
+      const agentB = await makeAgent({ organizationId: orgB.id });
+      await makeAgentTool(agentB.id, tool.id);
+      const policy = await makeToolPolicy(tool.id);
+      return { id: policy.id, orgA: orgA.id };
+    },
+    fetch: (id, orgId) => ToolInvocationPolicyModel.findByIdForAudit(id, orgId),
+  },
+  {
+    name: "TrustedDataPolicyModel.findByIdForAudit",
+    setup: async ({
+      makeOrganization,
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+      makeTrustedDataPolicy,
+    }) => {
+      const orgA = await makeOrganization();
+      const orgB = await makeOrganization();
+      const tool = await makeTool();
+      const agentB = await makeAgent({ organizationId: orgB.id });
+      await makeAgentTool(agentB.id, tool.id);
+      const policy = await makeTrustedDataPolicy(tool.id);
+      return { id: policy.id, orgA: orgA.id };
+    },
+    fetch: (id, orgId) => TrustedDataPolicyModel.findByIdForAudit(id, orgId),
+  },
 ];
 
 describe("audit snapshot scope invariant — cross-org returns null", () => {
@@ -240,6 +383,12 @@ describe("audit snapshot scope invariant — cross-org returns null", () => {
     makeAdmin,
     makeMember,
     makeSecret,
+    makeTeam,
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+    makeToolPolicy,
+    makeTrustedDataPolicy,
   }) => {
     const { id, orgA } = await caseDef.setup({
       makeOrganization,
@@ -251,6 +400,12 @@ describe("audit snapshot scope invariant — cross-org returns null", () => {
       makeAdmin,
       makeMember,
       makeSecret,
+      makeTeam,
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+      makeToolPolicy,
+      makeTrustedDataPolicy,
     });
     expect(await caseDef.fetch(id, orgA)).toBeNull();
   });

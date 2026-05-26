@@ -682,30 +682,62 @@ class TrustedDataPolicyModel {
     return { defaultTrustedDataPolicies: entries };
   }
 
-  // Globally scoped audit snapshot: trustedDataPoliciesTable has no
-  // organizationId column. Policies are linked to tools scoped via agentId,
-  // but the individual row lookup in the route handler is also not org-scoped.
-  // Intentional match with route handler scope.
+  // Org-scoped audit snapshot via the tool → agent_tools → agents.organizationId
+  // FK chain.  trustedDataPoliciesTable has no organizationId column, so
+  // tenancy is resolved through any agent in the caller's organization that
+  // has been assigned the policy's tool.  Mirrors the join already used by
+  // `findDefaultPoliciesSnapshotForOrganization`.
+  //
+  // The route handler for PATCH/DELETE /api/trusted-data-policies/:id does not
+  // enforce this predicate today, but the audit fetcher must — the preHandler
+  // runs before route authz, so an unscoped fetch would persist another
+  // tenant's policy snapshot into the caller's audit_logs even when the route
+  // ultimately rejects the request.  Returns null when no agent in the
+  // organization is assigned the policy's tool.
   static async findByIdForAudit(
     id: string,
-    _organizationId: string,
+    organizationId: string,
   ): Promise<Record<string, unknown> | null> {
-    const [row] = await db
-      .select()
+    const [scoped] = await db
+      .selectDistinct({
+        id: schema.trustedDataPoliciesTable.id,
+        toolId: schema.trustedDataPoliciesTable.toolId,
+        description: schema.trustedDataPoliciesTable.description,
+        conditions: schema.trustedDataPoliciesTable.conditions,
+        action: schema.trustedDataPoliciesTable.action,
+        createdAt: schema.trustedDataPoliciesTable.createdAt,
+        updatedAt: schema.trustedDataPoliciesTable.updatedAt,
+      })
       .from(schema.trustedDataPoliciesTable)
-      .where(eq(schema.trustedDataPoliciesTable.id, id))
+      .innerJoin(
+        schema.agentToolsTable,
+        eq(
+          schema.agentToolsTable.toolId,
+          schema.trustedDataPoliciesTable.toolId,
+        ),
+      )
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
+      )
+      .where(
+        and(
+          eq(schema.trustedDataPoliciesTable.id, id),
+          eq(schema.agentsTable.organizationId, organizationId),
+        ),
+      )
       .limit(1);
 
-    if (!row) return null;
+    if (!scoped) return null;
 
     return {
-      id: row.id,
-      toolId: row.toolId,
-      description: row.description ?? null,
-      conditions: row.conditions,
-      action: row.action,
-      createdAt: row.createdAt.toISOString(),
-      updatedAt: row.updatedAt.toISOString(),
+      id: scoped.id,
+      toolId: scoped.toolId,
+      description: scoped.description ?? null,
+      conditions: scoped.conditions,
+      action: scoped.action,
+      createdAt: scoped.createdAt.toISOString(),
+      updatedAt: scoped.updatedAt.toISOString(),
     };
   }
 }

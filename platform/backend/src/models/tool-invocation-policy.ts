@@ -692,30 +692,62 @@ class ToolInvocationPolicyModel {
     return { defaultToolInvocationPolicies: entries };
   }
 
-  // Globally scoped audit snapshot: toolInvocationPoliciesTable has no
-  // organizationId column. Policies are linked to tools scoped via agentId,
-  // but the individual row lookup in the route handler is also not org-scoped.
-  // Intentional match with route handler scope.
+  // Org-scoped audit snapshot via the tool → agent_tools → agents.organizationId
+  // FK chain.  toolInvocationPoliciesTable has no organizationId column, so
+  // tenancy is resolved through any agent in the caller's organization that
+  // has been assigned the policy's tool.  Mirrors the join already used by
+  // `findDefaultPoliciesSnapshotForOrganization`.
+  //
+  // The route handler for PATCH/DELETE /api/tool-invocation/:id does not
+  // enforce this predicate today, but the audit fetcher must — the preHandler
+  // runs before route authz, so an unscoped fetch would persist another
+  // tenant's policy snapshot into the caller's audit_logs even when the route
+  // ultimately rejects the request.  Returns null when no agent in the
+  // organization is assigned the policy's tool.
   static async findByIdForAudit(
     id: string,
-    _organizationId: string,
+    organizationId: string,
   ): Promise<Record<string, unknown> | null> {
-    const [row] = await db
-      .select()
+    const [scoped] = await db
+      .selectDistinct({
+        id: schema.toolInvocationPoliciesTable.id,
+        toolId: schema.toolInvocationPoliciesTable.toolId,
+        conditions: schema.toolInvocationPoliciesTable.conditions,
+        action: schema.toolInvocationPoliciesTable.action,
+        reason: schema.toolInvocationPoliciesTable.reason,
+        createdAt: schema.toolInvocationPoliciesTable.createdAt,
+        updatedAt: schema.toolInvocationPoliciesTable.updatedAt,
+      })
       .from(schema.toolInvocationPoliciesTable)
-      .where(eq(schema.toolInvocationPoliciesTable.id, id))
+      .innerJoin(
+        schema.agentToolsTable,
+        eq(
+          schema.agentToolsTable.toolId,
+          schema.toolInvocationPoliciesTable.toolId,
+        ),
+      )
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
+      )
+      .where(
+        and(
+          eq(schema.toolInvocationPoliciesTable.id, id),
+          eq(schema.agentsTable.organizationId, organizationId),
+        ),
+      )
       .limit(1);
 
-    if (!row) return null;
+    if (!scoped) return null;
 
     return {
-      id: row.id,
-      toolId: row.toolId,
-      conditions: row.conditions,
-      action: row.action,
-      reason: row.reason ?? null,
-      createdAt: row.createdAt.toISOString(),
-      updatedAt: row.updatedAt.toISOString(),
+      id: scoped.id,
+      toolId: scoped.toolId,
+      conditions: scoped.conditions,
+      action: scoped.action,
+      reason: scoped.reason ?? null,
+      createdAt: scoped.createdAt.toISOString(),
+      updatedAt: scoped.updatedAt.toISOString(),
     };
   }
 }

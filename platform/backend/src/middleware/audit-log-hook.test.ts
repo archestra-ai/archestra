@@ -741,6 +741,36 @@ describe("registerAuditLogHook", () => {
     });
   });
 
+  describe("http_path — query string is stripped before persisting", () => {
+    test("POST /api/things?token=secret&debug=1 stores path only", async () => {
+      // Query strings can contain secrets (?token=, ?key=).  audit_logs is
+      // long-lived admin-readable storage and exposes httpPath via an `ilike`
+      // search filter — persisting query params would create a permanent,
+      // searchable secret leak.
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/things?token=should-not-be-persisted&debug=1",
+      });
+      expect(res.statusCode).toBe(200);
+      await settle();
+
+      const rows = await getRows();
+      expect(rows).toHaveLength(1);
+      expect(rows[0].httpPath).toBe("/api/things");
+      expect(rows[0].httpPath).not.toContain("token");
+      expect(rows[0].httpPath).not.toContain("?");
+    });
+
+    test("URL without a query string is recorded unchanged", async () => {
+      await app.inject({ method: "POST", url: "/api/things" });
+      await settle();
+
+      const rows = await getRows();
+      expect(rows).toHaveLength(1);
+      expect(rows[0].httpPath).toBe("/api/things");
+    });
+  });
+
   describe("source_ip", () => {
     test("records sourceIp from request (not raw forwarded headers)", async () => {
       await app.inject({
@@ -919,11 +949,38 @@ describe("registerAuditLogHook", () => {
       await settle();
       expect(await getRows()).toHaveLength(0);
     });
+
+    test("POST /api/skills/github/discover?repo=abc writes zero rows (query string must not bypass exact denylist)", async () => {
+      await app.inject({
+        method: "POST",
+        url: "/api/skills/github/discover?repo=abc&branch=main",
+      });
+      await settle();
+      expect(await getRows()).toHaveLength(0);
+    });
+
+    test("POST /api/skills/github/preview?branch=main writes zero rows (query string must not bypass exact denylist)", async () => {
+      await app.inject({
+        method: "POST",
+        url: "/api/skills/github/preview?branch=main",
+      });
+      await settle();
+      expect(await getRows()).toHaveLength(0);
+    });
   });
 
   describe("denylist — high-volume chat surface sub-routes", () => {
     test("POST /api/chat stream endpoint writes zero rows", async () => {
       await app.inject({ method: "POST", url: "/api/chat" });
+      await settle();
+      expect(await getRows()).toHaveLength(0);
+    });
+
+    test("POST /api/chat?session=abc writes zero rows (query string must not bypass exact denylist)", async () => {
+      await app.inject({
+        method: "POST",
+        url: "/api/chat?session=abc&debug=1",
+      });
       await settle();
       expect(await getRows()).toHaveLength(0);
     });

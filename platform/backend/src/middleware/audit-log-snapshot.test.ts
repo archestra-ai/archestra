@@ -427,9 +427,13 @@ describe("audit snapshot shape — non-redacted models", () => {
     makeOrganization,
     makeTool,
     makeToolPolicy,
+    makeAgent,
+    makeAgentTool,
   }) => {
     const org = await makeOrganization();
     const tool = await makeTool();
+    const agent = await makeAgent({ organizationId: org.id });
+    await makeAgentTool(agent.id, tool.id);
     const policy = await makeToolPolicy(tool.id, { action: "block_always" });
 
     const snapshot = await ToolInvocationPolicyModel.findByIdForAudit(
@@ -448,9 +452,13 @@ describe("audit snapshot shape — non-redacted models", () => {
     makeOrganization,
     makeTool,
     makeTrustedDataPolicy,
+    makeAgent,
+    makeAgentTool,
   }) => {
     const org = await makeOrganization();
     const tool = await makeTool();
+    const agent = await makeAgent({ organizationId: org.id });
+    await makeAgentTool(agent.id, tool.id);
     const policy = await makeTrustedDataPolicy(tool.id, {});
 
     const snapshot = await TrustedDataPolicyModel.findByIdForAudit(

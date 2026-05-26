@@ -98,7 +98,7 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
     const sourceIp = extractIp(request);
     const userAgent =
       (request.headers["user-agent"] as string | undefined) ?? null;
-    const httpPath = request.url.slice(0, 2048);
+    const httpPath = stripQueryString(request.url).slice(0, 2048);
     const actorType: AuditActorType =
       request.authMethod === "api_key" ? "api_key" : "user";
 
@@ -239,8 +239,9 @@ function isDenylisted(url: string): boolean {
 
 function shouldSkip(method: string, url: string, user: unknown): boolean {
   if (!AUDIT_METHODS.has(method)) return true;
-  if (!url.startsWith("/api/")) return true;
-  if (isDenylisted(url)) return true;
+  const path = stripQueryString(url);
+  if (!path.startsWith("/api/")) return true;
+  if (isDenylisted(path)) return true;
   if (!user) return true;
   return false;
 }
@@ -278,6 +279,27 @@ async function resolveAuditedResourceId(
   if (cfg.resourceIdParam) return null;
   const fallback = params.id;
   return typeof fallback === "string" ? fallback : null;
+}
+
+/**
+ * Strip the query string from a request URL.
+ *
+ * The audit log persists `httpPath` in long-lived storage and exposes it via
+ * the admin `ilike` search filter, so query parameters must not be recorded:
+ * a misconfigured caller may pass secrets such as `?token=…` or `?key=…`,
+ * which would otherwise become permanently searchable admin-readable data.
+ *
+ * Returns the path-only portion. Falls back to a literal `?`-split when the
+ * URL constructor cannot parse the input (defensive — `request.url` from
+ * Fastify is always a well-formed path-and-query string in practice).
+ */
+function stripQueryString(url: string): string {
+  try {
+    return new URL(url, "http://x").pathname;
+  } catch {
+    const q = url.indexOf("?");
+    return q === -1 ? url : url.slice(0, q);
+  }
 }
 
 /**

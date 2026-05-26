@@ -32,8 +32,9 @@ export async function listImpersonableUsers(params: {
     params.organizationId,
   );
   // filtering out the current user and system admins.
-  // system admins are not impersonable — better-auth's adminRoles
-  // guard would reject them at impersonation time anyway.
+  // impersonation is a feature provided by better-auth and 
+  // system admins are not impersonable in the  better-auth's adminRoles.
+  // in fact system admin is the first users bootstrapped in archestra.
   return members
     .filter((m) => m.id !== params.currentUserId && m.systemRole !== "admin")
     .map(({ systemRole: _systemRole, ...rest }) => rest);

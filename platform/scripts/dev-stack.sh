@@ -14,13 +14,22 @@
 #   pnpm dev:stack:up --detach
 #
 # Usage:
-#   dev-stack.sh up   [--detach] [--namespace NAME]
+#   dev-stack.sh up              [--detach] [--namespace NAME]
 #   dev-stack.sh down
+#   dev-stack.sh copy-providers
 #
 # `up`:   without --detach, execs `tilt up` in the foreground (Ctrl+C stops
 #         it). With --detach, runs Tilt in the background via nohup, writes
 #         a PID file, and returns once the frontend responds.
 # `down`: kills the detached Tilt (if any) and runs `tilt down`.
+# `copy-providers`:
+#         copies LLM-provider rows (secret / chat_api_keys / models /
+#         api_key_models) from the main worktree's database into the
+#         current worktree's database, rewriting ownership to the
+#         current admin so the providers are immediately usable. Run
+#         after `up --detach` has finished. Idempotent via ON CONFLICT
+#         DO NOTHING — re-runs top up new keys main has gained without
+#         deleting anything you added by hand.
 #
 # `--namespace` overrides the auto-derived K8s namespace (default:
 # `archestra-dev-<sanitized-branch-name>`).
@@ -248,6 +257,55 @@ cmd_down() {
   echo "✅ Parallel dev stack stopped." >&2
 }
 
+cmd_copy_providers() {
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -h|--help) usage 0 ;;
+      *)         echo "unknown arg: $1" >&2; usage 1 ;;
+    esac
+  done
+
+  require_platform_cwd
+  local platform_dir; platform_dir="$(pwd)"
+
+  # Resolve the main worktree (same logic as up's auto-copy of .env).
+  local main_worktree
+  main_worktree=$(git -C "$platform_dir" worktree list --porcelain 2>/dev/null \
+    | sed -n 's/^worktree //p' | head -n1)
+  if [ -z "$main_worktree" ] || [ "$main_worktree/platform" = "$platform_dir" ]; then
+    echo "ERROR: copy-providers must be run from a NON-main worktree (the parallel stack)." >&2
+    exit 1
+  fi
+  local main_env="$main_worktree/platform/.env"
+  if [ ! -f "$main_env" ]; then
+    echo "ERROR: main worktree at $main_worktree has no platform/.env to read pg port from." >&2
+    exit 1
+  fi
+
+  # Both stacks reuse the same DB user/password/name; only the host port
+  # differs. Read each from its own .env. Default to 5432 for the main
+  # worktree (`tilt up` from main doesn't set ARCHESTRA_POSTGRES_HOST_PORT).
+  # `|| true` keeps pipefail from aborting on grep-finds-nothing.
+  local main_pg_port parallel_pg_port
+  main_pg_port=$( { grep -E '^ARCHESTRA_POSTGRES_HOST_PORT=' "$main_env" || true; } \
+    | tail -n1 | cut -d= -f2- | tr -d '"')
+  main_pg_port="${main_pg_port:-5432}"
+  parallel_pg_port=$( { grep -E '^ARCHESTRA_POSTGRES_HOST_PORT=' "$platform_dir/.env" || true; } \
+    | tail -n1 | cut -d= -f2- | tr -d '"')
+  if [ -z "$parallel_pg_port" ]; then
+    echo "ERROR: $platform_dir/.env has no ARCHESTRA_POSTGRES_HOST_PORT. Has 'up' run yet?" >&2
+    exit 1
+  fi
+
+  local source_url="postgresql://archestra:archestra_dev_password@localhost:${main_pg_port}/archestra_dev"
+  local target_url="postgresql://archestra:archestra_dev_password@localhost:${parallel_pg_port}/archestra_dev"
+
+  echo "→ Copying provider data from main (:${main_pg_port}) -> parallel (:${parallel_pg_port})" >&2
+  SOURCE_DATABASE_URL="$source_url" \
+  ARCHESTRA_DATABASE_URL="$target_url" \
+    pnpm --filter @backend db:copy-providers-from
+}
+
 pick_port() {
   python3 -c 'import socket; s=socket.socket(); s.bind(("",0)); print(s.getsockname()[1]); s.close()'
 }
@@ -255,8 +313,9 @@ pick_port() {
 if [ $# -lt 1 ]; then usage 1; fi
 subcommand="$1"; shift
 case "$subcommand" in
-  up)        cmd_up "$@" ;;
-  down)      cmd_down "$@" ;;
+  up)             cmd_up "$@" ;;
+  down)           cmd_down "$@" ;;
+  copy-providers) cmd_copy_providers "$@" ;;
   -h|--help) usage 0 ;;
   *)         echo "unknown subcommand: $subcommand" >&2; usage 1 ;;
 esac

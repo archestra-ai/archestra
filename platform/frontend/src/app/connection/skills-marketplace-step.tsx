@@ -10,7 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CopyButton } from "@/components/copy-button";
 import { CopyableCode } from "@/components/copyable-code";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,7 @@ import {
   useCreateSkillShareLink,
   useListSkillShareLinks,
   useRevokeSkillShareLink,
+  useRotateSkillShareLink,
 } from "@/lib/skills/skill-share.query";
 import { handleApiError } from "@/lib/utils";
 import type { ConnectClient } from "./clients";
@@ -72,8 +73,7 @@ export function SkillsMarketplaceStep({
   return (
     <StepCard
       hideStatus
-      title="Share skills as a marketplace"
-      subtitle="Generate one URL that exposes every skill in this organization to Claude Code or Codex."
+      title="Share Skills"
       state={state}
       expanded={expanded && !!client}
       onToggle={client ? onToggle : undefined}
@@ -224,28 +224,47 @@ function ExistingLinkPanel({
   onReveal: (revealed: RevealedClone) => void;
 }) {
   const revokeShare = useRevokeSkillShareLink();
-  const createShare = useCreateSkillShareLink();
+  const rotateShare = useRotateSkillShareLink();
   const [confirmRevoke, setConfirmRevoke] = useState(false);
 
-  const handleRotate = useCallback(async () => {
-    if (!link) return;
-    const skillIds = await fetchAllSkillIds();
-    if (skillIds.length === 0) return;
-    const created = await createShare.mutateAsync({ skillIds });
-    if (!created) return;
-    await revokeShare.mutateAsync(link.id);
-    onReveal({
-      linkId: created.link.id,
-      cloneUrl: created.cloneUrl,
-      marketplaceName: created.marketplaceName,
-    });
-  }, [createShare, revokeShare, link, onReveal]);
+  const rotate = useCallback(
+    async (silent: boolean) => {
+      if (!link) return;
+      const skillIds = await fetchAllSkillIds();
+      if (skillIds.length === 0) return;
+      const created = await rotateShare.mutateAsync({
+        previousLinkId: link.id,
+        body: { skillIds },
+        silent,
+      });
+      if (!created) return;
+      onReveal({
+        linkId: created.link.id,
+        cloneUrl: created.cloneUrl,
+        marketplaceName: created.marketplaceName,
+      });
+    },
+    [rotateShare, link, onReveal],
+  );
+
+  const handleRotate = useCallback(() => rotate(false), [rotate]);
 
   const handleRevoke = useCallback(async () => {
     if (!link) return;
     await revokeShare.mutateAsync(link.id);
     setConfirmRevoke(false);
   }, [revokeShare, link]);
+
+  // auto-rotate on unfold so the user lands on a usable URL without having to
+  // click "Refresh to reveal URL". the body unmounts on collapse, so first-mount
+  // == unfold; ref guards against StrictMode double-fire and re-renders.
+  const autoRotatedRef = useRef(false);
+  useEffect(() => {
+    if (autoRotatedRef.current) return;
+    if (!link || revealed) return;
+    autoRotatedRef.current = true;
+    void rotate(true);
+  }, [link, revealed, rotate]);
 
   const linkSkillCount = link?.skills.length ?? totalSkills;
   const stale = link !== null && linkSkillCount !== totalSkills;
@@ -281,11 +300,11 @@ function ExistingLinkPanel({
             type="button"
             variant="outline"
             onClick={handleRotate}
-            disabled={createShare.isPending || revokeShare.isPending}
+            disabled={rotateShare.isPending}
             data-testid="skills-marketplace-rotate"
           >
             <RotateCcw className="mr-2 h-4 w-4" />
-            {createShare.isPending
+            {rotateShare.isPending
               ? "Refreshing…"
               : revealed
                 ? "Refresh link"

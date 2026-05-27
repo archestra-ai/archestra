@@ -83,6 +83,10 @@ const nextConfig: NextConfig = {
         destination: `${backendUrl}/_sandbox/:path*`,
       },
       {
+        source: "/skills/m/:path*",
+        destination: `${backendUrl}/skills/m/:path*`,
+      },
+      {
         source: "/ws",
         destination: `${backendUrl}/ws`,
       },

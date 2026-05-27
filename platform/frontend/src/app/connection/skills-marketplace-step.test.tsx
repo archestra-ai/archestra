@@ -19,12 +19,14 @@ const {
   listLinksMock,
   createLinkMock,
   revokeLinkMock,
+  rotateLinkMock,
   getSkillsMock,
   hasPermissionsMock,
 } = vi.hoisted(() => ({
   listLinksMock: vi.fn(),
   createLinkMock: vi.fn(),
   revokeLinkMock: vi.fn(),
+  rotateLinkMock: vi.fn(),
   getSkillsMock: vi.fn(),
   hasPermissionsMock: vi.fn(),
 }));
@@ -47,6 +49,10 @@ vi.mock("@/lib/skills/skill-share.query", () => ({
   }),
   useRevokeSkillShareLink: () => ({
     mutateAsync: revokeLinkMock,
+    isPending: false,
+  }),
+  useRotateSkillShareLink: () => ({
+    mutateAsync: rotateLinkMock,
     isPending: false,
   }),
 }));
@@ -225,26 +231,30 @@ describe("SkillsMarketplaceStep", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("renders an existing active link with hidden URL until refreshed", async () => {
+  it("auto-rotates an existing active link on unfold (silent) and shows snippets", async () => {
     listLinksMock.mockReturnValue({
       data: { links: [ACTIVE_LINK] },
       isPending: false,
     });
+    rotateLinkMock.mockResolvedValue(CREATE_RESPONSE);
 
     renderWithClient(
       <SkillsMarketplaceStep client={anyClient} expanded onToggle={() => {}} />,
     );
 
+    await waitFor(() => expect(rotateLinkMock).toHaveBeenCalledTimes(1));
+    const vars = rotateLinkMock.mock.calls[0][0];
+    expect(vars).toMatchObject({
+      previousLinkId: ACTIVE_LINK.id,
+      silent: true,
+    });
+    expect(vars.body.skillIds).toEqual(["skill-1", "skill-2"]);
+
     await waitFor(() =>
       expect(
-        screen.getByText(/The clone URL is only shown once/i),
-      ).toBeVisible(),
+        screen.getByTestId("skills-marketplace-snippets-claude-code"),
+      ).toBeInTheDocument(),
     );
-    // refresh button is visible but install snippets are not
-    expect(screen.getByTestId("skills-marketplace-rotate")).toBeVisible();
-    expect(
-      screen.queryByTestId("skills-marketplace-snippets-claude-code"),
-    ).not.toBeInTheDocument();
   });
 
   it("revokes the link after confirmation", async () => {

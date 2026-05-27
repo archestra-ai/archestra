@@ -1096,7 +1096,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         z.object({
           name: z.string(),
           mimeType: z.string(),
-          content: z.string(),
+          content: z
+            .string()
+            .regex(/^[A-Za-z0-9+/]*={0,2}$/, "Invalid base64 content")
+            .refine((value) => value.length % 4 === 0, {
+              message: "Invalid base64 content",
+            }),
         }),
       )
       .max(20),

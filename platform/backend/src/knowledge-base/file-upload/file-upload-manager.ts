@@ -68,8 +68,8 @@ class FileUploadManager {
       rawBuffer.toString("base64"),
     );
     // Knowledge Files use a best-effort organization-wide duplicate check for
-    // reusable uploads, while the legacy connector upload path and database
-    // uniqueness remain connector-scoped.
+    // reusable uploads. Concurrent uploads can still race because database
+    // uniqueness remains connector-scoped.
     const existing = await KbUploadedFileModel.findByOrganizationContentHash({
       organizationId: params.organizationId,
       contentHash,
@@ -146,6 +146,7 @@ class FileUploadManager {
     } catch (error) {
       await this.cleanupFailedFileCreate({
         connectorId: connector.id,
+        fileId,
         blobProvider,
         blobPointer,
       });
@@ -278,9 +279,19 @@ class FileUploadManager {
 
   private async cleanupFailedFileCreate(params: {
     connectorId: string;
+    fileId: string;
     blobProvider: ReturnType<typeof getConfiguredBlobStorageProvider>;
     blobPointer: StoredBlobPointer | null;
   }) {
+    try {
+      await KbUploadedFileModel.delete(params.fileId);
+    } catch (error) {
+      logger.warn(
+        { error, fileId: params.fileId },
+        "Failed to clean up uploaded knowledge file row after create failure",
+      );
+    }
+
     if (params.blobPointer) {
       try {
         await params.blobProvider.delete({ key: params.blobPointer.key });

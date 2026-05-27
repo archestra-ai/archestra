@@ -105,7 +105,11 @@ class S3BlobStorageProvider implements BlobStorageProvider {
     const prefix = config.kb.fileUpload.blobStorage.s3.prefix
       .replace(/^\/+|\/+$/g, "")
       .trim();
-    const safeFilename = params.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const safeFilename =
+      params.filename
+        .replace(/[^a-zA-Z0-9._-]/g, "_")
+        .replace(/^\.+/, "")
+        .replace(/\.{2,}/g, ".") || "file";
     const key = `${params.organizationId}/${params.fileId}/${safeFilename}`;
     return prefix ? `${prefix}/${key}` : key;
   }

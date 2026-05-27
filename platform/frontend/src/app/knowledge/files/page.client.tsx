@@ -15,7 +15,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useCallback, useRef, useState, useTransition } from "react";
+import { useCallback, useRef, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -269,32 +269,29 @@ function UploadKnowledgeFilesDialog({
     useState<ResourceVisibilityScope>("personal");
   const [teamIds, setTeamIds] = useState<string[]>([]);
   const [agentIds, setAgentIds] = useState<string[]>([]);
-  const [isPendingUpload, startUploadTransition] = useTransition();
   const uploadFiles = useUploadKnowledgeFiles();
   const { data: config } = useKnowledgeFileUploadConfig();
 
-  const handleSubmit = () => {
-    startUploadTransition(async () => {
-      const result = await uploadFiles.mutateAsync({
-        files,
-        visibility,
-        teamIds,
-        agentIds,
-      });
-      if (result) {
-        setFiles([]);
-        if (fileInputRef.current) {
-          fileInputRef.current.value = "";
-        }
-        setVisibility("personal");
-        setTeamIds([]);
-        setAgentIds([]);
-        onOpenChange(false);
-      }
+  const handleSubmit = async () => {
+    const result = await uploadFiles.mutateAsync({
+      files,
+      visibility,
+      teamIds,
+      agentIds,
     });
+    if (result) {
+      setFiles([]);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+      setVisibility("personal");
+      setTeamIds([]);
+      setAgentIds([]);
+      onOpenChange(false);
+    }
   };
 
-  const isUploading = isPendingUpload || uploadFiles.isPending;
+  const isUploading = uploadFiles.isPending;
   const teamSelectionInvalid = visibility === "team" && teamIds.length === 0;
   const uploadDisabled =
     files.length === 0 || teamSelectionInvalid || isUploading;

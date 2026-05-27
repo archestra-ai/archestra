@@ -244,6 +244,58 @@ describe("knowledge file routes", () => {
     ]);
   });
 
+  test("reprocesses files when visibility changes", async () => {
+    const upload = await app.inject({
+      method: "POST",
+      url: "/api/knowledge-files",
+      payload: buildUploadPayload({
+        agentIds: [agent.id],
+        files: [
+          {
+            name: "visibility-change.txt",
+            content: Buffer.from("Visibility content"),
+            mimeType: "text/plain",
+          },
+        ],
+      }),
+    });
+    expect(upload.statusCode).toBe(200);
+    const fileId = upload.json().results[0].fileId as string;
+    const file = await KbUploadedFileModel.findById(fileId);
+    if (!file) throw new Error("Expected uploaded file to exist");
+    const connectorId = file.connectorId;
+
+    const enqueueSpy = vi.spyOn(taskQueueService, "enqueue");
+    const deleteDocumentSpy = vi.spyOn(
+      KbDocumentModel,
+      "deleteByConnectorAndSourceId",
+    );
+
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/knowledge-files/${fileId}`,
+      payload: {
+        visibility: "org",
+        teamIds: [],
+        agentIds: [agent.id],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().visibility).toBe("org");
+    expect(deleteDocumentSpy).toHaveBeenCalledWith({
+      connectorId,
+      sourceId: fileId,
+    });
+    expect(enqueueSpy).toHaveBeenCalledWith({
+      taskType: "process_uploaded_files",
+      payload: {
+        connectorId,
+        fileIds: [fileId],
+      },
+    });
+  });
+
   test("hides file upload connectors from the normal connector list", async () => {
     await KnowledgeBaseConnectorModel.create({
       organizationId,

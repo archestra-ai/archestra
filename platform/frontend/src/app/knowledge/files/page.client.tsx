@@ -375,7 +375,7 @@ function UploadKnowledgeFilesDialog({
               <div className="rounded-md border">
                 {files.map((file) => (
                   <div
-                    key={`${file.name}-${file.size}`}
+                    key={`${file.name}-${file.size}-${file.lastModified}`}
                     className="flex items-center justify-between border-b px-3 py-2 last:border-b-0"
                   >
                     <span className="min-w-0 truncate text-sm">

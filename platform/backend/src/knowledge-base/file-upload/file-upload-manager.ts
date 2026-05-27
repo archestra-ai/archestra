@@ -133,9 +133,10 @@ class FileUploadManager {
       throw error;
     }
 
-    for (const agentId of params.agentIds) {
-      await AgentConnectorAssignmentModel.assign(agentId, connector.id);
-    }
+    await AgentConnectorAssignmentModel.syncForAgentAssignments({
+      connectorId: connector.id,
+      agentIds: params.agentIds,
+    });
 
     await taskQueueService.enqueue({
       taskType: "process_uploaded_files",
@@ -170,20 +171,23 @@ class FileUploadManager {
       agentIds: params.agentIds,
     });
 
-    const updated = await KbUploadedFileModel.updateVisibility({
-      id: params.fileId,
-      visibility: params.visibility,
-      teamIds: params.teamIds,
-    });
+    const visibilityChanged =
+      file.visibility !== params.visibility ||
+      !areStringSetsEqual(file.teamIds, params.teamIds);
+    const updated = visibilityChanged
+      ? await KbUploadedFileModel.updateVisibility({
+          id: params.fileId,
+          visibility: params.visibility,
+          teamIds: params.teamIds,
+        })
+      : file;
+
     await AgentConnectorAssignmentModel.syncForAgentAssignments({
       connectorId: file.connectorId,
       agentIds: params.agentIds,
     });
 
-    if (
-      file.visibility === params.visibility &&
-      areStringSetsEqual(file.teamIds, params.teamIds)
-    ) {
+    if (!visibilityChanged) {
       return updated;
     }
 
@@ -216,11 +220,11 @@ class FileUploadManager {
       connectorId: file.connectorId,
       sourceId: params.fileId,
     });
+    await KbUploadedFileModel.delete(params.fileId);
+    await KnowledgeBaseConnectorModel.delete(file.connectorId);
     await getConfiguredBlobStorageProvider().delete({
       key: file.blobStorageKey,
     });
-    await KbUploadedFileModel.delete(params.fileId);
-    await KnowledgeBaseConnectorModel.delete(file.connectorId);
   }
 
   getSupportedFileUploadConfig() {

@@ -158,9 +158,9 @@ class KbUploadedFileModel {
   static async findByContentHash(
     connectorId: string,
     contentHash: string,
-  ): Promise<KbUploadedFile | null> {
+  ): Promise<Omit<KbUploadedFile, "fileData"> | null> {
     const [result] = await db
-      .select()
+      .select(listColumns)
       .from(schema.kbUploadedFilesTable)
       .where(
         and(
@@ -174,9 +174,9 @@ class KbUploadedFileModel {
   static async findByOrganizationContentHash(params: {
     organizationId: string;
     contentHash: string;
-  }): Promise<KbUploadedFile | null> {
+  }): Promise<Omit<KbUploadedFile, "fileData"> | null> {
     const [result] = await db
-      .select()
+      .select(listColumns)
       .from(schema.kbUploadedFilesTable)
       .where(
         and(

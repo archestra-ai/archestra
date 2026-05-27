@@ -9,6 +9,15 @@ Sorting Hat MCP is a first-party MCP server that demonstrates tool-call routing,
 - `floo.travel(from_server, to_server, payload)` checks the sorted house and Patronus before routing a payload.
 - `quidditch.stream(tool_call_id)` returns an event stream URL and an MCP App progress view.
 
+## Evidence
+
+- [Demo video: Slytherin blocked by non-corporeal Patronus](/docs/automated_screenshots/sorting-hat-mcp_demo.webm)
+
+![Gryffindor sorting result](/docs/automated_screenshots/sorting-hat-mcp_gryffindor.webp)
+![Slytherin sorting result](/docs/automated_screenshots/sorting-hat-mcp_slytherin.webp)
+![Ravenclaw sorting result](/docs/automated_screenshots/sorting-hat-mcp_ravenclaw.webp)
+![Hufflepuff sorting result](/docs/automated_screenshots/sorting-hat-mcp_hufflepuff.webp)
+
 ## Prompt
 
 Use this system instruction when wiring the server into an agent:

@@ -194,6 +194,9 @@ export function useUpdateKnowledgeFile() {
       queryClient.invalidateQueries({ queryKey: ["knowledge-files"] });
       toast.success("Knowledge file updated");
     },
+    onError: () => {
+      toast.error("Failed to update Knowledge file");
+    },
   });
 }
 
@@ -212,6 +215,9 @@ export function useDeleteKnowledgeFile() {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["knowledge-files"] });
       toast.success("Knowledge file deleted");
+    },
+    onError: () => {
+      toast.error("Failed to delete Knowledge file");
     },
   });
 }

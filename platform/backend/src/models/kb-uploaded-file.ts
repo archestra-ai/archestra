@@ -261,6 +261,28 @@ class KbUploadedFileModel {
     return result.length > 0;
   }
 
+  static async deleteKnowledgeFileGraph(params: {
+    fileId: string;
+    connectorId: string;
+  }): Promise<void> {
+    await db.transaction(async (tx) => {
+      await tx
+        .delete(schema.kbDocumentsTable)
+        .where(
+          and(
+            eq(schema.kbDocumentsTable.connectorId, params.connectorId),
+            eq(schema.kbDocumentsTable.sourceId, params.fileId),
+          ),
+        );
+      await tx
+        .delete(schema.kbUploadedFilesTable)
+        .where(eq(schema.kbUploadedFilesTable.id, params.fileId));
+      await tx
+        .delete(schema.knowledgeBaseConnectorsTable)
+        .where(eq(schema.knowledgeBaseConnectorsTable.id, params.connectorId));
+    });
+  }
+
   static computeContentHash(text: string): string {
     return createHash("sha256").update(text, "utf8").digest("hex");
   }

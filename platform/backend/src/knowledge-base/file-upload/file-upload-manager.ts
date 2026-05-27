@@ -225,12 +225,10 @@ class FileUploadManager {
 
     const blobStorageKey = file.blobStorageKey;
 
-    await KbDocumentModel.deleteByConnectorAndSourceId({
+    await KbUploadedFileModel.deleteKnowledgeFileGraph({
+      fileId: params.fileId,
       connectorId: file.connectorId,
-      sourceId: params.fileId,
     });
-    await KbUploadedFileModel.delete(params.fileId);
-    await KnowledgeBaseConnectorModel.delete(file.connectorId);
     try {
       await getBlobStorageProvider(file.blobStorageProvider).delete({
         key: blobStorageKey,

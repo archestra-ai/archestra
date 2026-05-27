@@ -38,7 +38,10 @@ class S3BlobStorageProvider implements BlobStorageProvider {
     };
   }
 
-  async get(params: { key: string | null }): Promise<Buffer> {
+  async get(params: {
+    key: string | null;
+    dbData: Buffer | null;
+  }): Promise<Buffer> {
     if (!params.key) {
       throw new Error("S3 object key is missing");
     }

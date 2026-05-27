@@ -2,7 +2,7 @@
 # default (`kind-kind`, from `kind create cluster` without flags) and the
 # project-named one (`kind-archestra`). Contributors using a different cluster
 # name should add it here locally.
-allow_k8s_contexts(['orbstack', 'docker-desktop', 'kind-kind', 'kind-archestra'])
+allow_k8s_contexts(['orbstack', 'docker-desktop', 'kind-kind', 'kind-archestra', 'colima'])
 
 load('ext://dotenv', 'dotenv')
 
@@ -32,6 +32,12 @@ watch_file('.env')
 
 # Load sub-Tiltfiles by label
 load_dynamic('./dev/Tiltfile.database')
+
+# Code execution runtime (Dagger Engine) — loaded only when enabled, so a
+# privileged engine is not deployed unless ARCHESTRA_CODE_RUNTIME_ENABLED=true.
+if os.getenv('ARCHESTRA_CODE_RUNTIME_ENABLED') == 'true':
+  load_dynamic('./dev/Tiltfile.coderuntime')
+
 load_dynamic('./dev/Tiltfile.dev')
 load_dynamic('./dev/Tiltfile.test')
 load_dynamic('./dev/Tiltfile.integrations')

@@ -17,10 +17,17 @@ import {
 import { Toaster } from "@/components/ui/sonner";
 import { Version } from "@/components/version";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useActiveSiteNotification } from "@/lib/site-notification.query";
+import { MaintenanceModeOverlay } from "./maintenance-mode-overlay";
 import { AppSidebar } from "./sidebar";
+import { SiteNotificationBar } from "./site-notification-bar";
 
 const SIDEBAR_COLLAPSED_PERMISSION: Permissions = {
   simpleView: ["enable"],
+};
+
+const SITE_NOTIFICATION_READ_PERMISSION: Permissions = {
+  siteNotification: ["read"],
 };
 
 interface AppShellProps {
@@ -33,11 +40,19 @@ export function AppShell({ children }: AppShellProps) {
   const isAuthPage = pathname.startsWith("/auth/");
   const { data: shouldCollapse, isSuccess: permissionLoaded } =
     useHasPermissions(SIDEBAR_COLLAPSED_PERMISSION);
+  const { data: canReadSiteNotification } = useHasPermissions(
+    SITE_NOTIFICATION_READ_PERMISSION,
+  );
+  const { data: notification } = useActiveSiteNotification({
+    enabled:
+      canReadSiteNotification === true && !isAuthPage && !isBrowserPreview,
+  });
 
   // Browser preview mode: render children directly without sidebar/header/version
   if (isBrowserPreview) {
     return (
       <>
+        <MaintenanceModeOverlay />
         {children}
         <Toaster />
       </>
@@ -48,7 +63,8 @@ export function AppShell({ children }: AppShellProps) {
   if (isAuthPage) {
     return (
       <main className="h-screen w-full flex flex-col bg-background">
-        <div className="flex-1 flex flex-col">{children}</div>
+        <MaintenanceModeOverlay />
+        <div className="flex-1 min-h-0 flex flex-col">{children}</div>
         <Version />
         <Toaster />
       </main>
@@ -61,8 +77,9 @@ export function AppShell({ children }: AppShellProps) {
   if (!permissionLoaded) {
     return (
       <main className="h-screen w-full flex flex-col bg-background min-w-0 relative">
-        <div className="flex-1 min-w-0 flex flex-col">
-          <div className="flex-1 flex flex-col">{children}</div>
+        <MaintenanceModeOverlay />
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col">
+          <div className="flex-1 min-h-0 flex flex-col">{children}</div>
         </div>
         <Toaster />
       </main>
@@ -75,7 +92,11 @@ export function AppShell({ children }: AppShellProps) {
       <SidebarProvider defaultOpen={!shouldCollapse}>
         <AppSidebar />
         <NavAwareSidebarCircleToggle />
+        <MaintenanceModeOverlay />
         <main className="h-screen w-full flex flex-col bg-background min-w-0 relative">
+          {notification && (
+            <SiteNotificationBar content={notification.content} />
+          )}
           <ImpersonationBanner />
           <header className="h-14 border-b border-border flex md:hidden items-center justify-between px-6 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">
             <SidebarTrigger className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2 -ml-2" />
@@ -84,8 +105,8 @@ export function AppShell({ children }: AppShellProps) {
               className="flex items-center gap-2"
             />
           </header>
-          <div className="flex-1 min-w-0 flex flex-col">
-            <div className="flex-1 flex flex-col">{children}</div>
+          <div className="flex-1 min-w-0 min-h-0 flex flex-col">
+            <div className="flex-1 min-h-0 flex flex-col">{children}</div>
             <Version />
           </div>
         </main>

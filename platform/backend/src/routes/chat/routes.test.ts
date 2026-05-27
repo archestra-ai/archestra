@@ -500,6 +500,98 @@ describe("getMessagesNotYetPersisted", () => {
     expect(newMessages).toHaveLength(1);
     expect(newMessages[0]?.id).toBe("new-user-1");
   });
+
+  it("does not re-persist an assistant message saved with an empty content id", () => {
+    const newMessages = __test.getMessagesNotYetPersisted({
+      existingMessages: [
+        {
+          id: "11111111-1111-1111-1111-111111111111",
+          content: {
+            id: "",
+            role: "assistant",
+            parts: [
+              { type: "step-start" },
+              {
+                type: "text",
+                text: "Hello! I see you've started a new chat.",
+                state: "done",
+              },
+            ],
+          },
+        },
+      ],
+      uiMessages: [
+        {
+          id: "assistant-temp-id",
+          role: "assistant",
+          parts: [
+            { type: "step-start" },
+            {
+              type: "text",
+              text: "Hello! I see you've started a new chat.",
+              state: "done",
+            },
+            {
+              type: "data-token-usage",
+              data: { inputTokens: 10, outputTokens: 20 },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(newMessages).toHaveLength(0);
+  });
+
+  it("consumes empty content id fallback matches so later repeated text is still persisted", () => {
+    const newMessages = __test.getMessagesNotYetPersisted({
+      existingMessages: [
+        {
+          id: "11111111-1111-1111-1111-111111111111",
+          content: {
+            id: "",
+            role: "assistant",
+            parts: [
+              { type: "step-start" },
+              { type: "text", text: "Of course!", state: "done" },
+            ],
+          },
+        },
+      ],
+      uiMessages: [
+        {
+          id: "assistant-temp-id",
+          role: "assistant",
+          parts: [
+            { type: "step-start" },
+            { type: "text", text: "Of course!", state: "done" },
+            {
+              type: "data-token-usage",
+              data: { inputTokens: 10, outputTokens: 20 },
+            },
+          ],
+        },
+        {
+          id: "user-2",
+          role: "user",
+          parts: [{ type: "text", text: "say it again" }],
+        },
+        {
+          id: "assistant-2",
+          role: "assistant",
+          parts: [
+            { type: "step-start" },
+            { type: "text", text: "Of course!", state: "done" },
+          ],
+        },
+      ],
+    });
+
+    expect(newMessages.map((message) => message.id)).toEqual([
+      "user-2",
+      "assistant-2",
+    ]);
+  });
 });
 
 describe("extractFirstMessages", () => {

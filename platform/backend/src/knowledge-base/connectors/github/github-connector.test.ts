@@ -5,6 +5,7 @@ import { GithubConnector } from "./github-connector";
 
 // Mock @octokit/rest SDK
 const mockGetAuthenticated = vi.fn();
+const mockListReposAccessibleToInstallation = vi.fn();
 const mockListForRepo = vi.fn();
 const mockListForOrg = vi.fn();
 const mockListComments = vi.fn();
@@ -12,11 +13,20 @@ const mockGetRef = vi.fn();
 const mockGetTree = vi.fn();
 const mockGetContent = vi.fn();
 const mockReposGet = vi.fn();
+const capturedOctokitOptions: Record<string, unknown>[] = [];
 
 vi.mock("@octokit/rest", () => ({
   Octokit: class MockOctokit {
+    constructor(options: Record<string, unknown>) {
+      capturedOctokitOptions.push(options);
+    }
+
     rest = {
       users: { getAuthenticated: mockGetAuthenticated },
+      apps: {
+        listReposAccessibleToInstallation:
+          mockListReposAccessibleToInstallation,
+      },
       repos: {
         listForOrg: mockListForOrg,
         getContent: mockGetContent,
@@ -28,6 +38,34 @@ vi.mock("@octokit/rest", () => ({
       },
       git: { getRef: mockGetRef, getTree: mockGetTree },
     };
+  },
+}));
+
+vi.mock("node:crypto", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:crypto")>();
+  return {
+    ...actual,
+    createPrivateKey: vi.fn(() => "mock-key"),
+  };
+});
+
+vi.mock("jose", () => ({
+  SignJWT: class MockSignJWT {
+    setProtectedHeader() {
+      return this;
+    }
+    setIssuedAt() {
+      return this;
+    }
+    setExpirationTime() {
+      return this;
+    }
+    setIssuer() {
+      return this;
+    }
+    async sign() {
+      return "app-jwt";
+    }
   },
 }));
 
@@ -46,6 +84,7 @@ describe("GithubConnector", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    capturedOctokitOptions.length = 0;
     connector = new GithubConnector();
     // Default: repos.get returns main as default branch
     mockReposGet.mockResolvedValue({
@@ -120,6 +159,17 @@ describe("GithubConnector", () => {
       });
       expect(result).toEqual({ valid: true });
     });
+
+    test("requires app IDs when GitHub App auth is selected", async () => {
+      const result = await connector.validateConfig({
+        githubUrl: "https://api.github.com",
+        owner: "test-org",
+        authMethod: "github_app",
+      });
+
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain("githubAppId");
+    });
   });
 
   describe("testConnection", () => {
@@ -159,6 +209,124 @@ describe("GithubConnector", () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain("Invalid GitHub configuration");
+    });
+
+    test("uses GitHub App installation token when app auth is configured", async () => {
+      mockListReposAccessibleToInstallation.mockResolvedValueOnce({
+        data: { repositories: [] },
+      });
+      const originalFetch = globalThis.fetch;
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ token: "installation-token" }),
+      });
+      globalThis.fetch = mockFetch as unknown as typeof fetch;
+
+      try {
+        const result = await connector.testConnection({
+          config: {
+            ...validConfig,
+            authMethod: "github_app",
+            githubAppId: "12345",
+            githubAppInstallationId: "67890",
+          },
+          credentials: {
+            apiToken: [
+              "-----BEGIN PRIVATE KEY-----",
+              "MIIB",
+              "-----END PRIVATE KEY-----",
+            ].join("\\n"),
+          },
+        });
+
+        expect(result).toEqual({ success: true });
+        expect(mockFetch).toHaveBeenCalledWith(
+          "https://api.github.com/app/installations/67890/access_tokens",
+          expect.objectContaining({ method: "POST" }),
+        );
+        expect(mockListReposAccessibleToInstallation).toHaveBeenCalledWith({
+          per_page: 1,
+        });
+        expect(mockGetAuthenticated).not.toHaveBeenCalled();
+        expect(capturedOctokitOptions[0]?.auth).toBe("installation-token");
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    test("includes GitHub App installation token error response message", async () => {
+      const originalFetch = globalThis.fetch;
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        statusText: "Unauthorized",
+        text: async () => JSON.stringify({ message: "Bad credentials" }),
+      });
+      globalThis.fetch = mockFetch as unknown as typeof fetch;
+
+      try {
+        const result = await connector.testConnection({
+          config: {
+            ...validConfig,
+            authMethod: "github_app",
+            githubAppId: "12345",
+            githubAppInstallationId: "67892",
+          },
+          credentials: {
+            apiToken: [
+              "-----BEGIN PRIVATE KEY-----",
+              "MIIB",
+              "-----END PRIVATE KEY-----",
+            ].join("\\n"),
+          },
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain("Bad credentials");
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    test("reuses cached GitHub App installation tokens", async () => {
+      mockListReposAccessibleToInstallation
+        .mockResolvedValueOnce({ data: { repositories: [] } })
+        .mockResolvedValueOnce({ data: { repositories: [] } });
+      const originalFetch = globalThis.fetch;
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ token: "cached-installation-token" }),
+      });
+      globalThis.fetch = mockFetch as unknown as typeof fetch;
+
+      const config = {
+        ...validConfig,
+        authMethod: "github_app",
+        githubAppId: "12345",
+        githubAppInstallationId: "67891",
+      };
+      const appCredentials = {
+        apiToken: [
+          "-----BEGIN PRIVATE KEY-----",
+          "MIIB",
+          "-----END PRIVATE KEY-----",
+        ].join("\\n"),
+      };
+
+      try {
+        await connector.testConnection({ config, credentials: appCredentials });
+        await connector.testConnection({ config, credentials: appCredentials });
+
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+        expect(capturedOctokitOptions[0]?.auth).toBe(
+          "cached-installation-token",
+        );
+        expect(capturedOctokitOptions[1]?.auth).toBe(
+          "cached-installation-token",
+        );
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
     });
   });
 
@@ -215,6 +383,68 @@ describe("GithubConnector", () => {
       expect(batches[0].documents[0].id).toBe("my-repo#1");
       expect(batches[0].documents[0].title).toContain("First issue");
       expect(batches[0].documents[1].id).toBe("my-repo#2");
+    });
+
+    test("discovers repositories from GitHub App installation when repos are omitted", async () => {
+      const originalFetch = globalThis.fetch;
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ token: "installation-token" }),
+      });
+      globalThis.fetch = mockFetch as unknown as typeof fetch;
+
+      mockListReposAccessibleToInstallation.mockResolvedValueOnce({
+        data: {
+          repositories: [
+            {
+              name: "app-repo",
+              html_url: "https://github.com/test-org/app-repo",
+              default_branch: "main",
+              owner: { login: "test-org" },
+            },
+          ],
+        },
+      });
+      mockListForRepo.mockResolvedValueOnce({ data: [] });
+      mockListForRepo.mockResolvedValueOnce({ data: [] });
+
+      try {
+        const batches: ConnectorSyncBatch[] = [];
+        for await (const batch of connector.sync({
+          config: {
+            githubUrl: "https://api.github.com",
+            owner: "test-org",
+            authMethod: "github_app",
+            githubAppId: "12345",
+            githubAppInstallationId: "67893",
+          },
+          credentials: {
+            apiToken: [
+              "-----BEGIN PRIVATE KEY-----",
+              "MIIB",
+              "-----END PRIVATE KEY-----",
+            ].join("\\n"),
+          },
+          checkpoint: null,
+        })) {
+          batches.push(batch);
+        }
+
+        expect(batches).toHaveLength(2);
+        expect(mockListReposAccessibleToInstallation).toHaveBeenCalledWith({
+          per_page: 100,
+          page: 1,
+        });
+        expect(mockListForOrg).not.toHaveBeenCalled();
+        expect(mockListForRepo).toHaveBeenCalledWith(
+          expect.objectContaining({
+            owner: "test-org",
+            repo: "app-repo",
+          }),
+        );
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
     });
 
     test("separates issues and pull requests", async () => {
@@ -659,31 +889,32 @@ describe("GithubConnector", () => {
     });
   });
 
-  describe("markdown file sync", () => {
-    test("fetches and indexes markdown files when includeMarkdownFiles is true", async () => {
+  describe("repository file sync", () => {
+    test("fetches and indexes repository files when includeRepositoryFiles is true", async () => {
       // Issues pass - empty
       mockListForRepo.mockResolvedValueOnce({ data: [] });
       // PR pass - empty
       mockListForRepo.mockResolvedValueOnce({ data: [] });
 
-      // Markdown: resolve default branch
+      // Repository files: resolve default branch
       mockGetRef.mockResolvedValueOnce({
         data: { object: { sha: "abc123" } },
       });
 
-      // Markdown: get tree
+      // Repository files: get tree
       mockGetTree.mockResolvedValueOnce({
         data: {
           tree: [
             { type: "blob", path: "README.md", sha: "sha1" },
             { type: "blob", path: "docs/guide.mdx", sha: "sha2" },
+            { type: "blob", path: "infra/deploy.yaml", sha: "sha5" },
             { type: "blob", path: "src/index.ts", sha: "sha3" },
             { type: "tree", path: "docs", sha: "sha4" },
           ],
         },
       });
 
-      // Markdown: get file contents
+      // Repository files: get file contents
       mockGetContent
         .mockResolvedValueOnce({
           data: {
@@ -696,11 +927,16 @@ describe("GithubConnector", () => {
               "base64",
             ),
           },
+        })
+        .mockResolvedValueOnce({
+          data: {
+            content: Buffer.from("apiVersion: v1").toString("base64"),
+          },
         });
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
-        config: { ...validConfig, includeMarkdownFiles: true },
+        config: { ...validConfig, includeRepositoryFiles: true },
         credentials,
         checkpoint: null,
       })) {
@@ -709,20 +945,71 @@ describe("GithubConnector", () => {
 
       const mdDocs = batches
         .flatMap((b) => b.documents)
-        .filter((d) => d.metadata.kind === "markdown_file");
+        .filter((d) => d.metadata.kind === "repository_file");
 
-      expect(mdDocs).toHaveLength(2);
+      expect(mdDocs).toHaveLength(3);
       expect(mdDocs[0].id).toBe("my-repo#file:README.md");
       expect(mdDocs[0].title).toBe("README.md (test-org/my-repo)");
       expect(mdDocs[0].content).toBe("# README\nHello world");
       expect(mdDocs[0].sourceUrl).toContain("blob/main/README.md");
       expect(mdDocs[0].metadata.filePath).toBe("README.md");
+      expect(mdDocs[0].metadata.kind).toBe("repository_file");
+      expect(mdDocs[0].metadata.fileKind).toBe("repository_file");
 
       expect(mdDocs[1].id).toBe("my-repo#file:docs/guide.mdx");
       expect(mdDocs[1].content).toBe("# Guide\nSome guide content");
+
+      expect(mdDocs[2].id).toBe("my-repo#file:infra/deploy.yaml");
+      expect(mdDocs[2].content).toBe("apiVersion: v1");
     });
 
-    test("does not fetch markdown files when includeMarkdownFiles is not set", async () => {
+    test("uses configured file types for repository file indexing", async () => {
+      mockListForRepo.mockResolvedValueOnce({ data: [] });
+      mockListForRepo.mockResolvedValueOnce({ data: [] });
+      mockGetRef.mockResolvedValueOnce({
+        data: { object: { sha: "abc123" } },
+      });
+      mockGetTree.mockResolvedValueOnce({
+        data: {
+          tree: [
+            { type: "blob", path: "src/index.ts", sha: "sha1" },
+            { type: "blob", path: "README.md", sha: "sha2" },
+          ],
+        },
+      });
+      mockGetContent.mockResolvedValueOnce({
+        data: {
+          content: Buffer.from("export const value = 1;").toString("base64"),
+        },
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {
+          ...validConfig,
+          includeRepositoryFiles: true,
+          fileTypes: [".ts"],
+        },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      const repoDocs = batches
+        .flatMap((b) => b.documents)
+        .filter((d) => d.metadata.kind === "repository_file");
+
+      expect(repoDocs).toHaveLength(1);
+      expect(repoDocs[0].id).toBe("my-repo#file:src/index.ts");
+      expect(repoDocs[0].metadata.kind).toBe("repository_file");
+      expect(repoDocs[0].metadata.fileKind).toBe("repository_file");
+      expect(mockGetContent).toHaveBeenCalledWith(
+        expect.objectContaining({ path: "src/index.ts" }),
+      );
+    });
+
+    test("does not fetch repository files when includeRepositoryFiles is not set", async () => {
       mockListForRepo.mockResolvedValueOnce({ data: [] });
       mockListForRepo.mockResolvedValueOnce({ data: [] });
 
@@ -767,7 +1054,7 @@ describe("GithubConnector", () => {
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
-        config: { ...validConfig, includeMarkdownFiles: true },
+        config: { ...validConfig, includeRepositoryFiles: true },
         credentials,
         checkpoint: null,
       })) {
@@ -782,7 +1069,7 @@ describe("GithubConnector", () => {
 
       const mdDocs = batches
         .flatMap((b) => b.documents)
-        .filter((d) => d.metadata.kind === "markdown_file");
+        .filter((d) => d.metadata.kind === "repository_file");
       expect(mdDocs).toHaveLength(1);
       expect(mdDocs[0].sourceUrl).toContain("/blob/develop/README.md");
     });
@@ -818,7 +1105,7 @@ describe("GithubConnector", () => {
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
-        config: { ...validConfig, includeMarkdownFiles: true },
+        config: { ...validConfig, includeRepositoryFiles: true },
         credentials,
         checkpoint: null,
       })) {
@@ -841,7 +1128,7 @@ describe("GithubConnector", () => {
 
       const mdDocs = batches
         .flatMap((b) => b.documents)
-        .filter((d) => d.metadata.kind === "markdown_file");
+        .filter((d) => d.metadata.kind === "repository_file");
       expect(mdDocs).toHaveLength(1);
       expect(mdDocs[0].sourceUrl).toContain("/blob/develop/README.md");
     });
@@ -873,7 +1160,7 @@ describe("GithubConnector", () => {
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
-        config: { ...validConfig, includeMarkdownFiles: true },
+        config: { ...validConfig, includeRepositoryFiles: true },
         credentials,
         checkpoint: null,
       })) {
@@ -881,7 +1168,7 @@ describe("GithubConnector", () => {
       }
 
       const mdBatch = batches.find((b) =>
-        b.documents.some((d) => d.metadata.kind === "markdown_file"),
+        b.documents.some((d) => d.metadata.kind === "repository_file"),
       );
       expect(mdBatch).toBeDefined();
       expect(mdBatch?.documents).toHaveLength(1);

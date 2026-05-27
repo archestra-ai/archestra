@@ -1,6 +1,31 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig, devices } from "@playwright/test";
 
 const IS_CI = !!process.env.CI;
+// Mirrors ARCHESTRA_FRONTEND_INT_TESTS_PORT in dev/Tiltfile.dev so a parallel
+// Tilt session (separate worktree) runs tests against its own MSW frontend
+// instead of the main worktree's :3010. `pnpm dev:stack:up` writes the value
+// to platform/.env, so we fall back to reading it from there when the env var
+// isn't already exported into the Playwright process.
+const INT_TESTS_PORT = readIntTestsPort() ?? "3010";
+const INT_TESTS_URL = `http://127.0.0.1:${INT_TESTS_PORT}`;
+
+function readIntTestsPort(): string | undefined {
+  if (process.env.ARCHESTRA_FRONTEND_INT_TESTS_PORT) {
+    return process.env.ARCHESTRA_FRONTEND_INT_TESTS_PORT;
+  }
+  try {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const content = readFileSync(resolve(here, "../.env"), "utf8");
+    return content.match(
+      /^\s*ARCHESTRA_FRONTEND_INT_TESTS_PORT\s*=\s*(\S+)/m,
+    )?.[1];
+  } catch {
+    return undefined;
+  }
+}
 
 export default defineConfig({
   testDir: "./tests-integration",
@@ -21,7 +46,7 @@ export default defineConfig({
     ? [["github"], ["html", { open: "never" }]]
     : [["list"], ["html", { open: "never" }]],
   use: {
-    baseURL: "http://127.0.0.1:3010",
+    baseURL: INT_TESTS_URL,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
@@ -31,8 +56,8 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
-    command: "next dev -H 127.0.0.1 -p 3010",
-    url: "http://127.0.0.1:3010",
+    command: `next dev -H 127.0.0.1 -p ${INT_TESTS_PORT}`,
+    url: INT_TESTS_URL,
     reuseExistingServer: !IS_CI,
     timeout: 120_000,
     env: {

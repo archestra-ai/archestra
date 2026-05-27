@@ -126,7 +126,11 @@ export const TOOL_PERMISSIONS: Record<
   search_tools: null,
   run_tool: null,
 
-  // Skills — require skill:read; the handlers further filter by per-skill scope
+  // code execution — gated by explicit tool assignment + the codeRuntime
+  // feature flag (the RBAC model has no "execute" action).
+  run_python: null,
+
+  // skills — require skill:read; handlers further filter by per-skill scope.
   list_skills: { resource: "skill", action: "read" },
   activate_skill: { resource: "skill", action: "read" },
   read_skill_file: { resource: "skill", action: "read" },

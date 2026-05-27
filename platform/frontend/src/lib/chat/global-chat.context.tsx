@@ -31,6 +31,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { toast } from "sonner";
 import { filterOptimisticToolCalls } from "@/components/chat/chat-messages.utils";
 import {
   useConversation,
@@ -90,6 +91,17 @@ function isRetryableError(error: Error): boolean {
   }
 
   return RETRYABLE_CLIENT_ERRORS.some((p) => msg.includes(p));
+}
+
+function isDuplicateActiveRunError(error: Error): boolean {
+  return (
+    error.message.includes("409") ||
+    error.message.includes("already has an active response")
+  );
+}
+
+function shouldResumeActiveRun(messages: UIMessage[]): boolean {
+  return messages.at(-1)?.role === "user";
 }
 
 interface ChatSession {
@@ -402,11 +414,13 @@ function ChatSessionHook({
   const [earlyToolUiStarts, setEarlyToolUiStarts] = useState<
     ChatSession["earlyToolUiStarts"]
   >({});
+  const shouldResume = shouldResumeActiveRun(initialMessages);
 
   const {
     messages,
     sendMessage,
     regenerate,
+    resumeStream,
     status,
     setMessages,
     stop,
@@ -421,6 +435,11 @@ function ChatSessionHook({
       headers: {
         [EXTERNAL_AGENT_ID_HEADER]: getChatExternalAgentId(appName),
       },
+      prepareReconnectToStreamRequest: ({ id, headers, credentials }) => ({
+        api: `/api/chat/conversations/${id}/active-run`,
+        headers,
+        credentials,
+      }),
     }),
 
     experimental_throttle: 100,
@@ -495,6 +514,13 @@ function ChatSessionHook({
         errorMessage: chatError.message,
         retryCount: retryCountRef.current,
       });
+
+      if (isDuplicateActiveRunError(chatError)) {
+        toast.error(
+          "This conversation already has a response in progress. Stop it before sending another message.",
+        );
+        return;
+      }
 
       // Auto-retry transient errors (network failures, server errors)
       // Do not retry if the error already happened this attempt cycle to avoid
@@ -641,6 +667,16 @@ function ChatSessionHook({
       });
     },
   } as Parameters<typeof useChat>[0]);
+
+  const resumeAttemptedRef = useRef(false);
+  useEffect(() => {
+    if (!shouldResume || resumeAttemptedRef.current) {
+      return;
+    }
+
+    resumeAttemptedRef.current = true;
+    void resumeStream();
+  }, [resumeStream, shouldResume]);
 
   const messagesWithRestoredAssistantParts = restoreRenderableAssistantParts({
     previousMessages: previousMessagesRef.current,

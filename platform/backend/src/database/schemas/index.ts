@@ -46,6 +46,7 @@ export {
   chatActiveRunEventsTable,
   chatActiveRunsTable,
 } from "./chat-active-run";
+export { default as chatAttachmentsTable } from "./chat-attachment";
 export { default as chatopsChannelBindingsTable } from "./chatops-channel-binding";
 export { default as chatopsProcessedMessagesTable } from "./chatops-processed-message";
 export { default as chatopsThreadAgentOverrideTable } from "./chatops-thread-agent-override";

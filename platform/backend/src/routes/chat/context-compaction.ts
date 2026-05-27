@@ -10,6 +10,7 @@ import { createLLMModel, isApiKeyRequired } from "@/clients/llm-client";
 import logger from "@/logging";
 import {
   AgentModel,
+  ChatAttachmentModel,
   ConversationCompactionModel,
   MessageModel,
   ModelModel,
@@ -32,6 +33,11 @@ import {
   resolveConfiguredAgentLlm,
   resolveFastModelName,
 } from "@/utils/llm-resolution";
+import {
+  isAttachmentRefUrl,
+  parseAttachmentIdFromUrl,
+} from "./normalization/extract-inline-attachments";
+import { materializeAttachments } from "./normalization/materialize-attachments";
 
 export const CONTEXT_COMPACTION_AUTO_THRESHOLD = 0.8;
 // max number of recent real user messages serialized into the reference block
@@ -584,6 +590,7 @@ async function createConversationCompaction(params: {
   const prompt = await buildCompactionPrompt({
     previousSummary: params.previousSummary,
     messages: params.compactableMessages,
+    conversationId: params.conversationId,
   });
   const systemPrompt =
     renderSystemPrompt(
@@ -664,9 +671,17 @@ async function tryCreateInContextCompaction(params: {
       sessionId: params.conversationId,
       source: "chat:compaction",
     });
+    // Rehydrate attachment refs back to inline bytes before the LLM call —
+    // otherwise the compaction model sees ref URLs it can't fetch and
+    // summarizes without the file content. Materialize is conversation-scoped
+    // so cross-conv refs (if any) are silently dropped.
+    const materializedCompactable = await materializeAttachments(
+      params.compactableMessages,
+      params.conversationId,
+    );
     const compactionMessages = buildInContextCompactionMessages({
       previousSummary: params.previousSummary,
-      messages: params.compactableMessages,
+      messages: materializedCompactable,
     });
     const modelMessages = await convertToModelMessages(
       compactionMessages as unknown as Omit<UIMessage, "id">[],
@@ -1067,8 +1082,12 @@ function isRealUserMessage(message: ChatMessage): boolean {
 async function buildCompactionPrompt(params: {
   previousSummary: string | null;
   messages: ChatMessage[];
+  conversationId: string;
 }): Promise<string> {
-  const transcript = await serializeMessagesForSummary(params.messages);
+  const transcript = await serializeMessagesForSummary(
+    params.messages,
+    params.conversationId,
+  );
   const previous = params.previousSummary
     ? `Existing summary to update:\n${params.previousSummary}\n\n`
     : "";
@@ -1128,11 +1147,12 @@ function getUserMessageTextForReference(message: ChatMessage): string {
 
 async function serializeMessagesForSummary(
   messages: ChatMessage[],
+  conversationId: string,
 ): Promise<string> {
   const MAX_TRANSCRIPT_CHARS = 120_000;
   const serializedParts = await Promise.all(
     messages.map(async (message, index) => {
-      const content = await getMessageTextForSummary(message);
+      const content = await getMessageTextForSummary(message, conversationId);
       return `${index + 1}. ${message.role.toUpperCase()}: ${content}`;
     }),
   );
@@ -1211,6 +1231,29 @@ function getFilePartTextForTokenEstimate(part: ChatMessagePart): {
   const fallbackMediaType = String(part.mediaType ?? "");
   const header = `[file ${filename} ${fallbackMediaType}]`;
   const url = typeof part.url === "string" ? part.url : "";
+
+  // Ref to a chat_attachments row — use the byte size carried on the part
+  // (set by extractInlineAttachments) so we don't need a DB hit on the
+  // sync token-estimate hot path.
+  if (isAttachmentRefUrl(url)) {
+    const byteSize =
+      typeof part.fileSize === "number" && part.fileSize > 0
+        ? part.fileSize
+        : 0;
+    if (byteSize === 0) {
+      return { text: header, extraTokens: 0 };
+    }
+    const mediaType = fallbackMediaType || "application/octet-stream";
+    const extraTokens = estimateBinaryFileTokens({
+      mediaType,
+      byteLength: byteSize,
+    });
+    return {
+      text: `${header}\n[binary file payload: ${byteSize} bytes]`,
+      extraTokens,
+    };
+  }
+
   if (!url.startsWith("data:")) {
     return { text: header, extraTokens: 0 };
   }
@@ -1251,7 +1294,10 @@ function estimateBinaryFileTokens(params: {
   return Math.ceil(params.byteLength / bytesPerToken);
 }
 
-async function getMessageTextForSummary(message: ChatMessage): Promise<string> {
+async function getMessageTextForSummary(
+  message: ChatMessage,
+  conversationId: string,
+): Promise<string> {
   if (!message.parts?.length) {
     return "";
   }
@@ -1268,7 +1314,7 @@ async function getMessageTextForSummary(message: ChatMessage): Promise<string> {
         }`;
       }
       if (part.type === "file") {
-        return getFilePartTextForSummary(part);
+        return getFilePartTextForSummary(part, conversationId);
       }
       return `[${part.type}]`;
     }),
@@ -1279,12 +1325,16 @@ async function getMessageTextForSummary(message: ChatMessage): Promise<string> {
 
 async function getFilePartTextForSummary(
   part: ChatMessagePart,
+  conversationId: string,
 ): Promise<string> {
   const filename = String(part.filename ?? "attached file");
   const url = typeof part.url === "string" ? part.url : "";
   const mediaType = getFilePartMediaType(part, getDataUrlMediaType(url));
   const header = `[file ${filename} ${mediaType}]`;
-  const extractedText = await extractFileTextForCompaction(part);
+  const extractedText = await extractFileTextForCompaction(
+    part,
+    conversationId,
+  );
 
   if (!extractedText) {
     return `${header}\nFile contents were not available to the compaction summarizer. Preserve this limitation in the summary if the file may matter later.`;
@@ -1295,9 +1345,34 @@ async function getFilePartTextForSummary(
 
 async function extractFileTextForCompaction(
   part: ChatMessagePart,
+  conversationId: string,
 ): Promise<string | null> {
   const MAX_FILE_TEXT_CHARS = 80_000;
   const url = typeof part.url === "string" ? part.url : "";
+
+  // Ref to a chat_attachments row — read the pre-extracted text_preview
+  // (computed at upload time) instead of decoding + parsing the blob here.
+  // The row's conversationId is verified against the request's
+  // conversationId to prevent leaking another conversation's file content
+  // via a crafted ref (same closure as the materialize-attachments ACL).
+  if (isAttachmentRefUrl(url)) {
+    const attachmentId = parseAttachmentIdFromUrl(url);
+    if (!attachmentId) return null;
+    try {
+      const row = await ChatAttachmentModel.findById(attachmentId);
+      if (!row) return null;
+      if (row.conversationId !== conversationId) return null;
+      if (row.textPreviewStatus !== "ok" || !row.textPreview) return null;
+      return truncateForCompaction(row.textPreview);
+    } catch (error) {
+      logger.warn(
+        { error, attachmentId },
+        "[ContextCompaction] failed to read text_preview for attachment ref",
+      );
+      return null;
+    }
+  }
+
   const data = decodeDataUrl(url);
 
   if (!data) {
@@ -1482,7 +1557,7 @@ let pdfParserCache: PdfParser | null = null;
 
 // pdf-parse's public entry runs test code on import; the internal path is the
 // standard workaround. cache the require so we don't repeat it per file part.
-function loadPdfParser(): PdfParser {
+export function loadPdfParser(): PdfParser {
   if (!pdfParserCache) {
     const require = createRequire(import.meta.url);
     pdfParserCache = require("pdf-parse/lib/pdf-parse.js") as PdfParser;

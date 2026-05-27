@@ -70,13 +70,12 @@ export function useRevokeSkillShareLink() {
 export interface RotateSkillShareLinkVars {
   previousLinkId: string;
   body: CreateSkillShareLinkBody;
-  /** Suppress the success toast (auto-rotate on panel unfold). */
-  silent?: boolean;
 }
 
 /**
  * Rotates a share link as one operation: create the new link, then revoke
- * the old one. Surfaces a single "updated" toast (or none, if silent).
+ * the old one. Only invoke from an explicit user action — rotation kills
+ * every URL already distributed for the previous link.
  */
 export function useRotateSkillShareLink() {
   const queryClient = useQueryClient();
@@ -101,10 +100,10 @@ export function useRotateSkillShareLink() {
       }
       return created ?? null;
     },
-    onSuccess: (data, vars) => {
+    onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["skill-share-links"] });
-      if (!vars.silent) toast.success("Share link updated");
+      toast.success("Share link updated");
     },
   });
 }

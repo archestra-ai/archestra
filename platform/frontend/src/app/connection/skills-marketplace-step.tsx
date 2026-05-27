@@ -10,7 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { CopyButton } from "@/components/copy-button";
 import { CopyableCode } from "@/components/copyable-code";
 import { Button } from "@/components/ui/button";
@@ -228,44 +228,30 @@ function ExistingLinkPanel({
   const rotateShare = useRotateSkillShareLink();
   const [confirmRevoke, setConfirmRevoke] = useState(false);
 
-  const rotate = useCallback(
-    async (silent: boolean) => {
-      if (!link) return;
-      const skillIds = await fetchAllSkillIds();
-      if (skillIds.length === 0) return;
-      const created = await rotateShare.mutateAsync({
-        previousLinkId: link.id,
-        body: { skillIds },
-        silent,
-      });
-      if (!created) return;
-      onReveal({
-        linkId: created.link.id,
-        cloneUrl: created.cloneUrl,
-        marketplaceName: created.marketplaceName,
-      });
-    },
-    [rotateShare, link, onReveal],
-  );
-
-  const handleRotate = useCallback(() => rotate(false), [rotate]);
+  // rotation creates a replacement link and revokes the previous one — it must
+  // stay behind an explicit click. auto-rotation on unfold would invalidate URLs
+  // already stored in users' git configs without the admin asking for it.
+  const handleRotate = useCallback(async () => {
+    if (!link) return;
+    const skillIds = await fetchAllSkillIds();
+    if (skillIds.length === 0) return;
+    const created = await rotateShare.mutateAsync({
+      previousLinkId: link.id,
+      body: { skillIds, expiresAt: link.expiresAt },
+    });
+    if (!created) return;
+    onReveal({
+      linkId: created.link.id,
+      cloneUrl: created.cloneUrl,
+      marketplaceName: created.marketplaceName,
+    });
+  }, [rotateShare, link, onReveal]);
 
   const handleRevoke = useCallback(async () => {
     if (!link) return;
     await revokeShare.mutateAsync(link.id);
     setConfirmRevoke(false);
   }, [revokeShare, link]);
-
-  // auto-rotate on unfold so the user lands on a usable URL without having to
-  // click "Refresh to reveal URL". the body unmounts on collapse, so first-mount
-  // == unfold; ref guards against StrictMode double-fire and re-renders.
-  const autoRotatedRef = useRef(false);
-  useEffect(() => {
-    if (autoRotatedRef.current) return;
-    if (!link || revealed) return;
-    autoRotatedRef.current = true;
-    void rotate(true);
-  }, [link, revealed, rotate]);
 
   const linkSkillCount = link?.skills.length ?? totalSkills;
   const stale = link !== null && linkSkillCount !== totalSkills;
@@ -483,11 +469,10 @@ function GenericInstallNote({
             </span>
           </div>
           <p className="text-xs text-muted-foreground">
-            The repo bundles <code className="font-mono">.claude-plugin/</code>,{" "}
-            <code className="font-mono">.agents/</code>, and{" "}
-            <code className="font-mono">.cursor-plugin/</code> manifests plus a
-            shared <code className="font-mono">skills/</code> tree. Cloning once
-            locally lets any client read whichever manifest it knows.
+            Skills live under{" "}
+            <code className="font-mono">skills/&lt;name&gt;/SKILL.md</code>{" "}
+            inside the cloned repo — point your client at the clone path however
+            its marketplace or skill-import flow expects.
           </p>
           <div className="flex items-center justify-between gap-2 rounded bg-muted/40 px-2.5 py-1.5 font-mono text-xs">
             <code className="overflow-x-auto whitespace-pre">{cloneCmd}</code>

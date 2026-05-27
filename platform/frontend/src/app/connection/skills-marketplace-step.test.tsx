@@ -85,7 +85,7 @@ const ACTIVE_LINK = {
   tokenStart: "archestra_skl_xxxx",
   name: null,
   marketplaceName: "org-12345678-skills",
-  expiresAt: null,
+  expiresAt: new Date("2026-06-26T12:00:00Z").toISOString(),
   revokedAt: null,
   lastUsedAt: null,
   createdAt: new Date("2026-05-27T12:00:00Z").toISOString(),
@@ -250,7 +250,7 @@ describe("SkillsMarketplaceStep", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("auto-rotates an existing active link on unfold (silent) and shows snippets", async () => {
+  it("does not auto-rotate an existing active link on unfold (rotation kills already-distributed URLs)", async () => {
     listLinksMock.mockReturnValue({
       data: { links: [ACTIVE_LINK] },
       isPending: false,
@@ -261,16 +261,40 @@ describe("SkillsMarketplaceStep", () => {
       <SkillsMarketplaceStep client={anyClient} expanded onToggle={() => {}} />,
     );
 
+    // panel mounts in hidden-URL state — no install snippets and no implicit rotation
+    expect(
+      await screen.findByRole("button", { name: /Refresh to reveal URL/i }),
+    ).toBeInTheDocument();
+    expect(rotateLinkMock).not.toHaveBeenCalled();
+    expect(
+      screen.queryByTestId("skills-marketplace-snippets-generic"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("forwards the link's existing expiresAt when the admin clicks Refresh", async () => {
+    listLinksMock.mockReturnValue({
+      data: { links: [ACTIVE_LINK] },
+      isPending: false,
+    });
+    rotateLinkMock.mockResolvedValue(CREATE_RESPONSE);
+
+    renderWithClient(
+      <SkillsMarketplaceStep client={anyClient} expanded onToggle={() => {}} />,
+    );
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Refresh to reveal URL/i }),
+    );
+
     await waitFor(() => expect(rotateLinkMock).toHaveBeenCalledTimes(1));
     const vars = rotateLinkMock.mock.calls[0][0];
-    expect(vars).toMatchObject({
-      previousLinkId: ACTIVE_LINK.id,
-      silent: true,
-    });
+    expect(vars.previousLinkId).toBe(ACTIVE_LINK.id);
     expect(vars.body.skillIds).toEqual(["skill-1", "skill-2"]);
+    // expiresAt is preserved so refresh doesn't silently convert a TTL link
+    // into a never-expiring one
+    expect(vars.body.expiresAt).toBe(ACTIVE_LINK.expiresAt);
 
     await waitFor(() =>
-      // the client here is "Any client" → generic install guide, not claude-code
       expect(
         screen.getByTestId("skills-marketplace-snippets-generic"),
       ).toBeInTheDocument(),

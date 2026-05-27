@@ -16,10 +16,10 @@ const SKILL_MANIFEST = (name: string) =>
 const PUBLIC_CLONE_URL_REGEX =
   /^https?:\/\/[^/]+\/skills\/m\/[A-Za-z0-9_-]+\/repo\.git$/;
 
-test.describe("Skill share dialog", () => {
+test.describe("Skills marketplace step on /connection", () => {
   test.setTimeout(90_000);
 
-  test("admin can create a share link from the skill row action", async ({
+  test("admin creates a marketplace link covering all org skills", async ({
     page,
     makeRandomString,
     goToPage,
@@ -32,61 +32,76 @@ test.describe("Skill share dialog", () => {
 
     const skillName = makeRandomString(8, "share-skill").toLowerCase();
     const skillId = await createSkillViaApi(page, skillName);
+    let createdLinkId: string | null = null;
 
     try {
-      await goToPage(page, "/agents/skills");
+      await goToPage(page, "/connection");
       await page.waitForLoadState("domcontentloaded");
 
-      const row = page.locator("tr").filter({ hasText: skillName }).first();
-      await expect(row).toBeVisible({ timeout: 20_000 });
+      // Pick "Any client" so both Claude Code and Codex snippets render.
+      await page
+        .getByRole("button", { name: /Any Client/i })
+        .first()
+        .click();
 
-      await row.getByRole("button", { name: /^Share$/i }).click();
+      // Expand the new "Share skills as a marketplace" step.
+      await page
+        .getByRole("button", {
+          name: /Share skills as a marketplace/i,
+        })
+        .first()
+        .click();
 
-      const dialog = page.getByRole("dialog");
-      await expect(dialog).toBeVisible();
-      await expect(dialog.getByText(/Share "/i)).toBeVisible();
+      const createButton = page.getByTestId("skills-marketplace-create");
+      await expect(createButton).toBeVisible({ timeout: 20_000 });
 
-      // Step 1 → Step 2: pick client, click Continue.
-      await dialog.getByTestId("share-client-claude-code").click();
-      await dialog.getByRole("button", { name: /Continue/i }).click();
-
-      // Step 2 → Step 3: create the share link.
-      await expect(dialog.getByText(/Label \(optional\)/i)).toBeVisible();
       const createResponsePromise = page.waitForResponse(
         (response) =>
           response.url().includes("/api/skill-share-links") &&
           response.request().method() === "POST",
         { timeout: 20_000 },
       );
-      await dialog.getByRole("button", { name: /Create share link/i }).click();
+      await createButton.click();
       const createResponse = await createResponsePromise;
       expect(createResponse.ok()).toBeTruthy();
+      const createBody = (await createResponse.json()) as {
+        link: { id: string };
+        cloneUrl: string;
+        marketplaceName: string;
+      };
+      createdLinkId = createBody.link.id;
+      expect(createBody.cloneUrl).toMatch(PUBLIC_CLONE_URL_REGEX);
 
-      // Step 3: install snippets visible, clone URL has the expected shape.
-      const snippets = dialog.getByTestId("share-snippets-claude-code");
-      await expect(snippets).toBeVisible();
-      const claudeAddSnippet = snippets
+      // The "Any client" picker shows both Claude Code and Codex snippets,
+      // each referencing the freshly-issued clone URL.
+      const claude = page.getByTestId(
+        "skills-marketplace-snippets-claude-code",
+      );
+      const codex = page.getByTestId("skills-marketplace-snippets-codex");
+      await expect(claude).toBeVisible();
+      await expect(codex).toBeVisible();
+
+      const claudeAdd = claude
         .locator("code")
         .filter({ hasText: /claude plugin marketplace add/ });
-      await expect(claudeAddSnippet).toBeVisible();
-      const claudeAddText = (await claudeAddSnippet.textContent()) ?? "";
+      await expect(claudeAdd).toBeVisible();
+      const claudeAddText = (await claudeAdd.textContent()) ?? "";
       const cloneUrl = claudeAddText
         .replace(/^claude plugin marketplace add\s+/, "")
         .trim();
       expect(cloneUrl).toMatch(PUBLIC_CLONE_URL_REGEX);
 
-      // The /plugin install snippet must reference the same skill slug.
-      const pluginInstallSnippet = snippets
+      const codexAdd = codex
         .locator("code")
-        .filter({ hasText: /\/plugin install/ });
-      const pluginInstallText =
-        (await pluginInstallSnippet.textContent()) ?? "";
-      expect(pluginInstallText).toContain(`/plugin install ${skillName}@`);
-
-      // Close the dialog cleanly.
-      await dialog.getByRole("button", { name: /^Done$/i }).click();
-      await expect(dialog).not.toBeVisible({ timeout: 10_000 });
+        .filter({ hasText: /codex plugin marketplace add/ });
+      const codexAddText = (await codexAdd.textContent()) ?? "";
+      expect(codexAddText).toContain(cloneUrl);
     } finally {
+      if (createdLinkId) {
+        await page.request
+          .delete(`${UI_BASE_URL}/api/skill-share-links/${createdLinkId}`)
+          .catch(() => undefined);
+      }
       await deleteSkillViaApi(page, skillId);
     }
   });

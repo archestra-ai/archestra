@@ -20,10 +20,11 @@ import { ConnectionUrlStep } from "./connection-url-step";
 import { McpClientInstructions } from "./mcp-client-instructions";
 import { ProxyClientInstructions } from "./proxy-client-instructions";
 import { SearchableSelect } from "./searchable-select";
+import { SkillsMarketplaceStep } from "./skills-marketplace-step";
 import { StepCard, type StepState } from "./step-card";
 import { useUpdateUrlParams } from "./use-update-url-params";
 
-type OpenKey = "client" | "mcp" | "proxy";
+type OpenKey = "client" | "mcp" | "proxy" | "skills";
 
 interface ConnectionFlowProps {
   defaultMcpGatewayId?: string;
@@ -324,6 +325,13 @@ export function ConnectionFlow({
           )}
         </StepCard>
       )}
+
+      {/* Step 4 — Skills marketplace (no-ops when feature off or non-admin) */}
+      <SkillsMarketplaceStep
+        client={client}
+        expanded={isOpen("skills")}
+        onToggle={client ? () => toggleOne("skills") : undefined}
+      />
     </div>
   );
 }

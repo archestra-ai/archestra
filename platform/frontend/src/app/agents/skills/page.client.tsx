@@ -2,14 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import {
-  AlertTriangle,
-  BookOpen,
-  Pencil,
-  Plus,
-  Share2,
-  Trash2,
-} from "lucide-react";
+import { AlertTriangle, BookOpen, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
@@ -52,7 +45,6 @@ import {
   useSkillSourceRepos,
   useSkillsPaginated,
 } from "@/lib/skills/skill.query";
-import { ShareFlow } from "./_parts/share-flow";
 import { SkillEditorDialog } from "./_parts/skill-editor-dialog";
 
 type SkillItem = archestraApiTypes.GetSkillsResponses["200"]["data"][number];
@@ -106,7 +98,6 @@ function SkillsList() {
 
   const [editingSkillId, setEditingSkillId] = useState<string | null>(null);
   const [deletingSkill, setDeletingSkill] = useState<SkillItem | null>(null);
-  const [sharingSkill, setSharingSkill] = useState<SkillItem | null>(null);
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
 
@@ -205,12 +196,6 @@ function SkillsList() {
             label: "Edit",
             permissions: { skill: ["update"] },
             onClick: () => setEditingSkillId(skill.id),
-          },
-          {
-            icon: <Share2 className="h-4 w-4" />,
-            label: "Share",
-            permissions: { skill: ["admin"] },
-            onClick: () => setSharingSkill(skill),
           },
           {
             icon: <Trash2 className="h-4 w-4" />,
@@ -318,14 +303,6 @@ function SkillsList() {
           skill={deletingSkill}
           open={!!deletingSkill}
           onOpenChange={(open) => !open && setDeletingSkill(null)}
-        />
-      )}
-
-      {sharingSkill && (
-        <ShareFlow
-          skill={{ id: sharingSkill.id, name: sharingSkill.name }}
-          open={!!sharingSkill}
-          onOpenChange={(open) => !open && setSharingSkill(null)}
         />
       )}
     </LoadingWrapper>

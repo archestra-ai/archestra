@@ -1,39 +1,45 @@
-export interface ShareInstallStep {
+/**
+ * Builders for the Claude Code / Codex install snippets shown inside the
+ * Skills marketplace step. The two snippets share a `cloneUrl` +
+ * `marketplaceName` produced by a single `skill_share_link` row.
+ */
+export interface SkillMarketplaceInstallStep {
   label: string;
+  body?: string;
   code?: string;
   language?: "bash" | "text";
-  body?: string;
 }
 
-export interface ShareClient {
+export interface SkillMarketplaceClient {
   id: "claude-code" | "codex";
   label: string;
   sub: string;
-  getInstallSteps: (params: ShareInstallParams) => ShareInstallStep[];
+  getInstallSteps: (
+    params: SkillMarketplaceInstallParams,
+  ) => SkillMarketplaceInstallStep[];
 }
 
-export interface ShareInstallParams {
+export interface SkillMarketplaceInstallParams {
   cloneUrl: string;
   marketplaceName: string;
-  skillSlug: string;
 }
 
-export const SHARE_CLIENTS: ShareClient[] = [
+export const SKILL_MARKETPLACE_CLIENTS: SkillMarketplaceClient[] = [
   {
     id: "claude-code",
     label: "Claude Code",
     sub: "Anthropic CLI",
-    getInstallSteps: ({ cloneUrl, marketplaceName, skillSlug }) => [
+    getInstallSteps: ({ cloneUrl, marketplaceName }) => [
       {
         label: "Register the marketplace",
         code: `claude plugin marketplace add ${cloneUrl}`,
         language: "bash",
       },
       {
-        label: "Install the skill plugin",
-        code: `/plugin install ${skillSlug}@${marketplaceName}`,
+        label: "Browse and install skills",
+        body: "Run /plugin inside Claude Code; every shared skill appears as an installable plugin.",
+        code: `/plugin marketplace browse ${marketplaceName}`,
         language: "bash",
-        body: "Run this slash command inside Claude Code after the marketplace is added.",
       },
     ],
   },
@@ -48,8 +54,8 @@ export const SHARE_CLIENTS: ShareClient[] = [
         language: "bash",
       },
       {
-        label: "Install the plugin",
-        body: 'Run /plugins inside Codex and pick "Install Plugin" to choose the skill you just registered.',
+        label: "Install a plugin",
+        body: 'Run /plugins inside Codex and pick "Install Plugin" to choose any shared skill.',
         code: "/plugins",
         language: "bash",
       },
@@ -57,7 +63,7 @@ export const SHARE_CLIENTS: ShareClient[] = [
   },
 ];
 
-export const SHARE_TTL_PRESETS: {
+export const SKILL_MARKETPLACE_TTL_PRESETS: {
   id: string;
   label: string;
   days: number | null;
@@ -67,7 +73,7 @@ export const SHARE_TTL_PRESETS: {
   { id: "never", label: "Never expires", days: null },
 ];
 
-export function computeExpiresAt(
+export function computeSkillMarketplaceExpiresAt(
   days: number | null,
   now: Date = new Date(),
 ): string | null {

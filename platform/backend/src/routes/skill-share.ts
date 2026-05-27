@@ -33,7 +33,9 @@ const SkillShareLinkResponseSchema = SelectSkillShareLinkSchema.omit({
 });
 
 const CreateSkillShareLinkBodySchema = z.object({
-  skillIds: z.array(z.string().uuid()).min(1).max(50),
+  // upper bound sized for the "share all org skills" UX at /connection,
+  // which snapshots the full org skill set in one POST.
+  skillIds: z.array(z.string().uuid()).min(1).max(500),
   name: z.string().trim().min(1).max(200).optional(),
   expiresAt: z.iso.datetime().nullable().optional(),
 });

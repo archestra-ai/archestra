@@ -79,6 +79,7 @@ export {
   default as skillShareLinksTable,
   skillShareLinkSkillsTable,
 } from "./skill-share-link";
+export { default as skillShareLinkRevisionsTable } from "./skill-share-link-revision";
 export { default as skillTeamsTable } from "./skill-team";
 export { default as tasksTable } from "./task";
 export { team as teamsTable, teamMember as teamMembersTable } from "./team";

@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-base";
@@ -655,9 +656,15 @@ const config = {
   },
   skillMarketplace: {
     endpoint: "/skills/m",
+    /**
+     * Cache directory for materialized share-link git repos. The cache is a
+     * derived view of the `skill_share_link_revision` history — wiping it is
+     * safe and replays produce byte-identical SHAs. For prod, point this at a
+     * persistent volume so reboots don't trigger an unnecessary rebuild.
+     */
     cacheDir:
       process.env.ARCHESTRA_SKILL_MARKETPLACE_CACHE_DIR?.trim() ||
-      "/var/lib/archestra/skill-marketplace-cache",
+      path.join(homedir(), ".archestra", "skill-marketplace-cache"),
   },
   git: {
     binaryPath: process.env.ARCHESTRA_GIT_BINARY_PATH?.trim() || "git",

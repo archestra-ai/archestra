@@ -3,10 +3,16 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { parseSkillManifest } from "@/skills/parser";
+import type {
+  RevisionPayload,
+  SkillShareLinkRevision,
+} from "@/types/skill-share-link-revision";
 import {
+  type AppendRevisionParams,
   MarketplaceMaterializer,
   type MaterializeRequest,
   type MaterializeSkillInput,
+  type RevisionStore,
 } from "./materialize";
 
 function makeSkill(
@@ -39,15 +45,53 @@ function makeRequest(
   };
 }
 
+/** In-memory revision store for tests; mirrors SkillShareLinkRevisionModel. */
+class InMemoryRevisionStore implements RevisionStore {
+  private byLink = new Map<string, SkillShareLinkRevision[]>();
+
+  async getLatestByLink(
+    linkId: string,
+  ): Promise<SkillShareLinkRevision | null> {
+    const list = this.byLink.get(linkId);
+    return list && list.length > 0 ? (list.at(-1) ?? null) : null;
+  }
+
+  async listByLink(linkId: string): Promise<SkillShareLinkRevision[]> {
+    return [...(this.byLink.get(linkId) ?? [])];
+  }
+
+  async append(
+    params: AppendRevisionParams,
+    sequence: number,
+  ): Promise<SkillShareLinkRevision> {
+    const row: SkillShareLinkRevision = {
+      id: `rev-${params.linkId}-${sequence}`,
+      linkId: params.linkId,
+      sequence,
+      contentHash: params.contentHash,
+      commitSha: params.commitSha,
+      parentSha: params.parentSha,
+      createdAt: params.createdAt,
+      payload: params.payload as RevisionPayload,
+    };
+    const list = this.byLink.get(params.linkId) ?? [];
+    list.push(row);
+    this.byLink.set(params.linkId, list);
+    return row;
+  }
+}
+
 describe("MarketplaceMaterializer", () => {
   let cacheDir: string;
+  let revisionStore: InMemoryRevisionStore;
   let materializer: MarketplaceMaterializer;
 
   beforeEach(async () => {
     cacheDir = await fs.mkdtemp(
       path.join(tmpdir(), "archestra-materialize-test-"),
     );
-    materializer = new MarketplaceMaterializer({ cacheDir });
+    revisionStore = new InMemoryRevisionStore();
+    materializer = new MarketplaceMaterializer({ cacheDir, revisionStore });
   });
 
   afterEach(async () => {
@@ -185,7 +229,6 @@ describe("MarketplaceMaterializer", () => {
       ),
       "utf8",
     );
-    // the generated manifest must survive — attacker content must not appear
     expect(skillMd).toContain("name: PDF Helper");
     expect(skillMd).not.toContain("attacker-controlled content");
   });
@@ -211,7 +254,6 @@ describe("MarketplaceMaterializer", () => {
       ],
     });
     const result = await materializer.materialize(req);
-    // generated SKILL.md must survive and not be replaced by a directory
     const skillMd = await fs.readFile(
       path.join(
         result.repoPath,
@@ -220,7 +262,6 @@ describe("MarketplaceMaterializer", () => {
       "utf8",
     );
     expect(skillMd).toContain("name: PDF Helper");
-    // the sub-path must not have been written
     await expect(
       fs.access(
         path.join(
@@ -252,9 +293,7 @@ describe("MarketplaceMaterializer", () => {
       ],
     });
     const result = await materializer.materialize(req);
-    // file outside skill root must not be written
     await expect(fs.access("/tmp/injected.txt")).rejects.toThrow();
-    // repo itself must still be valid
     expect(result.repoPath).toBeTruthy();
   });
 
@@ -304,7 +343,6 @@ describe("MarketplaceMaterializer", () => {
       "beta",
       "alpha",
     ]);
-    // both plugin dirs exist
     await expect(
       fs.access(path.join(result.repoPath, "plugins/beta")),
     ).resolves.toBeUndefined();
@@ -322,6 +360,10 @@ describe("MarketplaceMaterializer", () => {
     expect(second.reused).toBe(true);
     expect(second.commitHash).toBe(first.commitHash);
     expect(second.contentHash).toBe(first.contentHash);
+
+    // and only one revision was persisted
+    const revs = await revisionStore.listByLink(req.linkId);
+    expect(revs).toHaveLength(1);
   });
 
   test("changed content advances HEAD with a child commit (no unrelated histories)", async () => {
@@ -338,9 +380,14 @@ describe("MarketplaceMaterializer", () => {
     expect(second.reused).toBe(false);
     expect(second.commitHash).not.toBe(first.commitHash);
 
-    // assert parent(HEAD) === previous HEAD — proves clones can `git pull` fast-forward
     const parent = await readParent(second.repoPath);
     expect(parent).toBe(first.commitHash);
+
+    // both revisions persisted with parent chain
+    const revs = await revisionStore.listByLink(makeRequest().linkId);
+    expect(revs).toHaveLength(2);
+    expect(revs[0].parentSha).toBeNull();
+    expect(revs[1].parentSha).toBe(revs[0].commitSha);
   });
 
   test("per-link mutex serializes concurrent calls into a single commit", async () => {
@@ -350,11 +397,9 @@ describe("MarketplaceMaterializer", () => {
       materializer.materialize(req),
     ]);
 
-    // both calls finish, both return the same HEAD; the second is a no-op reuse
     expect(a.commitHash).toBe(b.commitHash);
     expect(a.reused || b.reused).toBe(true);
 
-    // and the repo really only has one commit
     const count = await commitCount(a.repoPath);
     expect(count).toBe(1);
   });
@@ -400,8 +445,83 @@ describe("MarketplaceMaterializer", () => {
   test("sweepOrphans tolerates a missing cache dir", async () => {
     const empty = new MarketplaceMaterializer({
       cacheDir: path.join(cacheDir, "does-not-exist"),
+      revisionStore,
     });
     await expect(empty.sweepOrphans([])).resolves.toEqual([]);
+  });
+
+  test("wiping the cache replays revisions to byte-identical SHAs", async () => {
+    const req = makeRequest();
+    const first = await materializer.materialize(req);
+    const updated = await materializer.materialize(
+      makeRequest({
+        skills: [makeSkill({ content: "# Updated body" })],
+      }),
+    );
+
+    // simulate a cache wipe (server reboot, container restart, etc.)
+    await fs.rm(materializer.repoPathFor(req.linkId), {
+      recursive: true,
+      force: true,
+    });
+
+    // re-materializing the same content should not write a new revision
+    const replayed = await materializer.materialize(
+      makeRequest({
+        skills: [makeSkill({ content: "# Updated body" })],
+      }),
+    );
+
+    expect(replayed.reused).toBe(true);
+    expect(replayed.commitHash).toBe(updated.commitHash);
+
+    // and the on-disk history must match: HEAD == updated, HEAD^ == first
+    expect(await diskHead(replayed.repoPath)).toBe(updated.commitHash);
+    expect(await readParent(replayed.repoPath)).toBe(first.commitHash);
+
+    // store still holds exactly two revisions
+    expect(await revisionStore.listByLink(req.linkId)).toHaveLength(2);
+  });
+
+  test("same content materialized twice produces the same commit SHA across instances", async () => {
+    const req = makeRequest();
+
+    // first instance writes revision 1
+    const firstResult = await materializer.materialize(req);
+
+    // second instance with a fresh cache but the same revisionStore — must
+    // replay to identical SHA, not produce a new commit
+    const cacheDir2 = await fs.mkdtemp(
+      path.join(tmpdir(), "archestra-materialize-test-"),
+    );
+    try {
+      const materializer2 = new MarketplaceMaterializer({
+        cacheDir: cacheDir2,
+        revisionStore,
+      });
+      const replayed = await materializer2.materialize(req);
+      expect(replayed.reused).toBe(true);
+      expect(replayed.commitHash).toBe(firstResult.commitHash);
+      expect(await diskHead(replayed.repoPath)).toBe(firstResult.commitHash);
+      expect(await revisionStore.listByLink(req.linkId)).toHaveLength(1);
+    } finally {
+      await fs.rm(cacheDir2, { recursive: true, force: true });
+    }
+  });
+
+  test("commit author and committer use the configured identity", async () => {
+    const identity = { name: "Test Marketplace", email: "test@example.com" };
+    const m = new MarketplaceMaterializer({
+      cacheDir,
+      revisionStore: new InMemoryRevisionStore(),
+      identity,
+    });
+    const result = await m.materialize(makeRequest());
+    const meta = await readCommitMeta(result.repoPath);
+    expect(meta.authorName).toBe(identity.name);
+    expect(meta.authorEmail).toBe(identity.email);
+    expect(meta.committerName).toBe(identity.name);
+    expect(meta.committerEmail).toBe(identity.email);
   });
 });
 
@@ -444,6 +564,56 @@ async function commitCount(repoPath: string): Promise<number> {
     proc.on("close", (code) => {
       if (code === 0) resolve(Number.parseInt(stdout.trim(), 10));
       else reject(new Error(stderr));
+    });
+  });
+}
+
+async function diskHead(repoPath: string): Promise<string> {
+  const { spawn } = await import("node:child_process");
+  return new Promise((resolve, reject) => {
+    const proc = spawn("git", ["rev-parse", "HEAD"], { cwd: repoPath });
+    let stdout = "";
+    let stderr = "";
+    proc.stdout.on("data", (d) => {
+      stdout += d.toString();
+    });
+    proc.stderr.on("data", (d) => {
+      stderr += d.toString();
+    });
+    proc.on("close", (code) => {
+      if (code === 0) resolve(stdout.trim());
+      else reject(new Error(stderr));
+    });
+  });
+}
+
+interface CommitMeta {
+  authorName: string;
+  authorEmail: string;
+  committerName: string;
+  committerEmail: string;
+}
+
+async function readCommitMeta(repoPath: string): Promise<CommitMeta> {
+  const { spawn } = await import("node:child_process");
+  return new Promise((resolve, reject) => {
+    const proc = spawn("git", ["log", "-1", "--pretty=%an%n%ae%n%cn%n%ce"], {
+      cwd: repoPath,
+    });
+    let stdout = "";
+    let stderr = "";
+    proc.stdout.on("data", (d) => {
+      stdout += d.toString();
+    });
+    proc.stderr.on("data", (d) => {
+      stderr += d.toString();
+    });
+    proc.on("close", (code) => {
+      if (code !== 0) return reject(new Error(stderr));
+      const [authorName, authorEmail, committerName, committerEmail] = stdout
+        .trim()
+        .split("\n");
+      resolve({ authorName, authorEmail, committerName, committerEmail });
     });
   });
 }

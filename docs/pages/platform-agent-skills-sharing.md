@@ -48,7 +48,7 @@ For security, the clone URL is only returned at creation. After a page reload th
 
 ## Updates and revocation
 
-When a skill's content changes in Archestra the materialized repo is rewritten in place, so users who run `claude plugin marketplace update` (or the Codex equivalent) will see the new revision. New or deleted skills require a link refresh (snapshot).
+When a skill's content changes in Archestra a new commit is appended to the materialized repo's history with a deterministic SHA, so users who `git pull` (via `claude plugin marketplace update` or the Codex equivalent) fast-forward to the new revision instead of fetching unrelated histories. Adding or removing skills from a link's skill set still requires creating a new link (the link's snapshot is fixed at create time).
 
 Revoking a marketplace link deletes the underlying repository on disk and causes future clone or pull requests to return `404`. Existing local clones keep working until the user attempts a pull, at which point they need a fresh link. The token also persists in the user's local `git` config after `plugin marketplace add`; revoke the link when sharing ends, and prefer short TTLs (the step defaults to 30 days).
 
@@ -58,6 +58,6 @@ Every clone is audit-logged with the share-link ID and skill IDs — the raw tok
 
 Deployment-side configuration lives in three environment variables documented in [platform-deployment](/docs/platform-deployment#environment-variables):
 
-- `ARCHESTRA_SKILL_MARKETPLACE_CACHE_DIR` — directory used to materialize per-share-link git repos.
 - `ARCHESTRA_GIT_BINARY_PATH` — path to the `git` binary; the public endpoint shells out to `git http-backend` (CGI).
 - `ARCHESTRA_GIT_AUTHOR` — author/committer identity stamped on every materialized commit.
+- `ARCHESTRA_SKILL_MARKETPLACE_CACHE_DIR` — directory holding materialized repos. Defaults to `~/.archestra/skill-marketplace-cache`. The authoritative history lives in `skill_share_link_revision`, so the cache is safe to wipe; in prod, mount a persistent volume here to skip rebuilds on container restart.

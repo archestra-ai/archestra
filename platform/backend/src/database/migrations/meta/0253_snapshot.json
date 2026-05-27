@@ -1,5 +1,5 @@
 {
-  "id": "a5b4e624-593d-47b7-9d6e-cdd3cae9c7c7",
+  "id": "50a5ccef-a8c9-4559-a221-cce876fd5bf6",
   "prevId": "e78f36b5-314c-4a0c-bdd6-1d38fb6aa404",
   "version": "7",
   "dialect": "postgresql",
@@ -8569,6 +8569,120 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.skill_share_link_revision": {
+      "name": "skill_share_link_revision",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "link_id": {
+          "name": "link_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sequence": {
+          "name": "sequence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content_hash": {
+          "name": "content_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "commit_sha": {
+          "name": "commit_sha",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "parent_sha": {
+          "name": "parent_sha",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "skill_share_link_revision_link_seq_idx": {
+          "name": "skill_share_link_revision_link_seq_idx",
+          "columns": [
+            {
+              "expression": "link_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sequence",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "skill_share_link_revision_link_id_idx": {
+          "name": "skill_share_link_revision_link_id_idx",
+          "columns": [
+            {
+              "expression": "link_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "skill_share_link_revision_link_id_skill_share_link_id_fk": {
+          "name": "skill_share_link_revision_link_id_skill_share_link_id_fk",
+          "tableFrom": "skill_share_link_revision",
+          "tableTo": "skill_share_link",
+          "columnsFrom": [
+            "link_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.skill_share_link_skill": {
       "name": "skill_share_link_skill",
       "schema": "",
@@ -8683,7 +8797,7 @@
         },
         "token_start": {
           "name": "token_start",
-          "type": "varchar(14)",
+          "type": "varchar(22)",
           "primaryKey": false,
           "notNull": true
         },

@@ -2,59 +2,59 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { dump as dumpYaml } from "js-yaml";
-import logger from "@/logging";
-import type { SkillFile } from "@/types";
-import {
-  buildClaudeMarketplaceManifest,
-  buildClaudePluginManifest,
-  buildCodexMarketplaceManifest,
-  buildCodexPluginManifest,
-  type MarketplaceSkillInput,
-  resolveMarketplaceSkills,
-} from "./manifest";
+import { SkillShareLinkRevisionModel } from "@/models";
+import type {
+  RevisionPayload,
+  RevisionPayloadFile,
+  SkillShareLinkRevision,
+} from "@/types/skill-share-link-revision";
+import { computeLayout, type MaterializeRequest } from "./layout";
 
 /**
- * Builds a one-repo-per-share-link on-disk git repository that serves both the
- * Claude Code and Codex CLI marketplace layouts. Each call advances the repo by
- * a single child commit when content changes, so existing `git clone`d copies
- * can `git pull` without unrelated-history conflicts.
+ * Materializes a share link's git repository on disk, backed by an append-only
+ * revision history in the database. Each revision row encodes the full file
+ * list at that point in time plus the deterministic commit SHA that results.
+ *
+ * Cache (`cacheDir/<linkId>/repo`) is a pure performance optimization: it can
+ * be wiped at any time and rebuilt by replaying revisions in `sequence` order
+ * with byte-identical SHAs. This keeps `git pull` working across server
+ * restarts, container redeploys, and host migrations.
  */
 
-export interface MaterializeSkillInput {
-  id: string;
-  name: string;
-  description: string;
-  content: string;
-  license: string | null;
-  compatibility: string | null;
-  metadata: Record<string, string>;
-  version?: string | null;
-  updatedAt: Date;
-  files: SkillFile[];
-}
-
-export interface MaterializeRequest {
-  linkId: string;
-  marketplaceName: string;
-  ownerName: string;
-  displayName: string;
-  skills: MaterializeSkillInput[];
-}
+export type { MaterializeRequest, MaterializeSkillInput } from "./layout";
 
 export interface MaterializeResult {
   repoPath: string;
   commitHash: string;
   contentHash: string;
-  /** True when the call produced a new commit (vs. reused an existing HEAD). */
+  /** True when the call returned the existing HEAD without writing a new commit. */
   reused: boolean;
 }
 
 export interface MaterializerOptions {
   cacheDir: string;
   gitBinaryPath?: string;
-  /** Author/committer identity stamped on every commit. */
   identity?: { name: string; email: string };
+  /** Override for tests; defaults to the SkillShareLinkRevisionModel. */
+  revisionStore?: RevisionStore;
+}
+
+export interface AppendRevisionParams {
+  linkId: string;
+  contentHash: string;
+  commitSha: string;
+  parentSha: string | null;
+  createdAt: Date;
+  payload: RevisionPayload;
+}
+
+export interface RevisionStore {
+  getLatestByLink(linkId: string): Promise<SkillShareLinkRevision | null>;
+  listByLink(linkId: string): Promise<SkillShareLinkRevision[]>;
+  append(
+    params: AppendRevisionParams,
+    sequence: number,
+  ): Promise<SkillShareLinkRevision>;
 }
 
 const DEFAULT_IDENTITY = {
@@ -62,13 +62,11 @@ const DEFAULT_IDENTITY = {
   email: "marketplace@archestra.local",
 };
 
-/** Commit-message marker so we can recover the content hash from `git log`. */
-const CONTENT_HASH_PREFIX = "content-hash:";
-
 export class MarketplaceMaterializer {
   private readonly cacheDir: string;
   private readonly gitBinaryPath: string;
   private readonly identity: { name: string; email: string };
+  private readonly revisionStore: RevisionStore;
   /** Per-link write serializer; subsequent callers chain behind the in-flight call. */
   private readonly locks = new Map<string, Promise<MaterializeResult>>();
 
@@ -76,6 +74,7 @@ export class MarketplaceMaterializer {
     this.cacheDir = options.cacheDir;
     this.gitBinaryPath = options.gitBinaryPath ?? "git";
     this.identity = options.identity ?? DEFAULT_IDENTITY;
+    this.revisionStore = options.revisionStore ?? defaultRevisionStore();
   }
 
   /** On-disk path for a given share link's repo, regardless of materialization state. */
@@ -119,7 +118,6 @@ export class MarketplaceMaterializer {
 
     const removed: string[] = [];
     for (const entry of entries) {
-      // only manage UUID-named directories created by this materializer
       if (!UUID_RE.test(entry)) continue;
       if (live.has(entry)) continue;
       await fs.rm(path.join(this.cacheDir, entry), {
@@ -134,287 +132,231 @@ export class MarketplaceMaterializer {
   private async doMaterialize(
     req: MaterializeRequest,
   ): Promise<MaterializeResult> {
+    const files = computeLayout(req);
+    const contentHash = computeContentHash(files);
     const repoPath = this.repoPathFor(req.linkId);
-    const contentHash = computeContentHash(req.skills);
-    const existingHash = await readHeadContentHash(
+
+    const latest = await this.revisionStore.getLatestByLink(req.linkId);
+
+    if (latest && latest.contentHash === contentHash) {
+      await this.syncDiskToRevisions(req.linkId);
+      return {
+        repoPath,
+        commitHash: latest.commitSha,
+        contentHash,
+        reused: true,
+      };
+    }
+
+    await this.syncDiskToRevisions(req.linkId);
+
+    const sequence = (latest?.sequence ?? 0) + 1;
+    const createdAt = roundToSeconds(new Date());
+    const message = formatMessage(sequence, contentHash);
+
+    const commitSha = await this.commitOnDisk({
       repoPath,
-      this.gitBinaryPath,
+      files,
+      parentSha: latest?.commitSha ?? null,
+      date: createdAt,
+      message,
+    });
+
+    await this.revisionStore.append(
+      {
+        linkId: req.linkId,
+        contentHash,
+        commitSha,
+        parentSha: latest?.commitSha ?? null,
+        createdAt,
+        payload: { files },
+      },
+      sequence,
     );
 
-    if (existingHash === contentHash) {
-      const head = await getHead(repoPath, this.gitBinaryPath);
-      return { repoPath, commitHash: head, contentHash, reused: true };
+    return { repoPath, commitHash: commitSha, contentHash, reused: false };
+  }
+
+  private async syncDiskToRevisions(linkId: string): Promise<void> {
+    const revisions = await this.revisionStore.listByLink(linkId);
+    const expectedHead = revisions.at(-1)?.commitSha ?? null;
+    const repoPath = this.repoPathFor(linkId);
+
+    const diskHead = await this.readDiskHead(repoPath);
+    if (diskHead === expectedHead) {
+      // already in sync — but a brand-new link still needs `.git` initialized
+      // so the upcoming commit has somewhere to land
+      if (expectedHead === null) await this.initEmptyRepo(repoPath);
+      return;
     }
 
-    const isFirstCommit = existingHash === null;
-    await fs.mkdir(repoPath, { recursive: true });
+    await fs.rm(repoPath, { recursive: true, force: true });
+    await this.initEmptyRepo(repoPath);
 
-    if (isFirstCommit) {
-      await runGit({
-        binary: this.gitBinaryPath,
-        cwd: repoPath,
-        args: ["init", "--quiet", "--initial-branch=main"],
+    let parentSha: string | null = null;
+    for (const rev of revisions) {
+      const sha = await this.commitOnDisk({
+        repoPath,
+        files: rev.payload.files,
+        parentSha,
+        date: rev.createdAt,
+        message: formatMessage(rev.sequence, rev.contentHash),
       });
-    } else {
-      // clear any previously tracked files so the new layout is the only thing committed;
-      // guard against an empty index (e.g. a previous run that removed files but crashed
-      // before committing) to avoid "pathspec '.' did not match any files" failures
-      const tracked = await runGit({
-        binary: this.gitBinaryPath,
-        cwd: repoPath,
-        args: ["ls-files"],
-      });
-      if (tracked.stdout.trim()) {
-        await runGit({
-          binary: this.gitBinaryPath,
-          cwd: repoPath,
-          args: ["rm", "-rf", "--quiet", "."],
-        });
+      if (sha !== rev.commitSha) {
+        throw new Error(
+          `materialize: replay SHA mismatch for link ${linkId} sequence ${rev.sequence}: expected ${rev.commitSha}, got ${sha}`,
+        );
       }
+      parentSha = sha;
     }
+  }
 
-    await writeRepoLayout(repoPath, req);
+  private async readDiskHead(repoPath: string): Promise<string | null> {
+    try {
+      await fs.access(path.join(repoPath, ".git"));
+    } catch {
+      return null;
+    }
+    try {
+      const res = await runGit({
+        binary: this.gitBinaryPath,
+        cwd: repoPath,
+        args: ["rev-parse", "HEAD"],
+      });
+      return res.stdout.trim();
+    } catch {
+      return null;
+    }
+  }
 
-    const commitDate = pickCommitDate(req.skills);
+  private async initEmptyRepo(repoPath: string): Promise<void> {
+    await fs.mkdir(repoPath, { recursive: true });
     await runGit({
       binary: this.gitBinaryPath,
       cwd: repoPath,
+      args: ["init", "--quiet", "--initial-branch=main"],
+    });
+    // disable executable-bit tracking so replays don't depend on host umask
+    await runGit({
+      binary: this.gitBinaryPath,
+      cwd: repoPath,
+      args: ["config", "core.fileMode", "false"],
+    });
+  }
+
+  private async commitOnDisk(params: {
+    repoPath: string;
+    files: RevisionPayloadFile[];
+    parentSha: string | null;
+    date: Date;
+    message: string;
+  }): Promise<string> {
+    await wipeWorkingTree(params.repoPath);
+
+    for (const file of params.files) {
+      const target = path.join(params.repoPath, ...file.path.split("/"));
+      await fs.mkdir(path.dirname(target), { recursive: true });
+      const buf =
+        file.encoding === "base64"
+          ? Buffer.from(file.content, "base64")
+          : Buffer.from(file.content, "utf8");
+      await fs.writeFile(target, buf);
+    }
+
+    await runGit({
+      binary: this.gitBinaryPath,
+      cwd: params.repoPath,
       args: ["add", "--all", "."],
     });
+    const treeRes = await runGit({
+      binary: this.gitBinaryPath,
+      cwd: params.repoPath,
+      args: ["write-tree"],
+    });
+    const treeSha = treeRes.stdout.trim();
+
+    const dateStr = toGitDate(params.date);
+    const env = {
+      GIT_AUTHOR_NAME: this.identity.name,
+      GIT_AUTHOR_EMAIL: this.identity.email,
+      GIT_AUTHOR_DATE: dateStr,
+      GIT_COMMITTER_NAME: this.identity.name,
+      GIT_COMMITTER_EMAIL: this.identity.email,
+      GIT_COMMITTER_DATE: dateStr,
+    };
+    const commitArgs = ["commit-tree", treeSha];
+    if (params.parentSha) commitArgs.push("-p", params.parentSha);
+    commitArgs.push("-m", params.message);
+
+    const commitRes = await runGit({
+      binary: this.gitBinaryPath,
+      cwd: params.repoPath,
+      args: commitArgs,
+      env,
+    });
+    const commitSha = commitRes.stdout.trim();
+
     await runGit({
       binary: this.gitBinaryPath,
-      cwd: repoPath,
-      args: [
-        "-c",
-        `user.name=${this.identity.name}`,
-        "-c",
-        `user.email=${this.identity.email}`,
-        "commit",
-        "--quiet",
-        "--allow-empty",
-        "-m",
-        `${commitMessageFor(req.skills.length)} ${CONTENT_HASH_PREFIX}${contentHash}`,
-      ],
-      env: {
-        GIT_AUTHOR_DATE: commitDate,
-        GIT_COMMITTER_DATE: commitDate,
-      },
+      cwd: params.repoPath,
+      args: ["update-ref", "refs/heads/main", commitSha],
     });
 
-    const head = await getHead(repoPath, this.gitBinaryPath);
-    return { repoPath, commitHash: head, contentHash, reused: false };
+    return commitSha;
   }
 }
 
 // ===== Internal helpers =====
 
-function commitMessageFor(skillCount: number): string {
-  return skillCount === 1
-    ? "Update skill marketplace"
-    : `Update skill marketplace (${skillCount} skills)`;
+function defaultRevisionStore(): RevisionStore {
+  return {
+    getLatestByLink: (linkId) =>
+      SkillShareLinkRevisionModel.getLatestByLink(linkId),
+    listByLink: (linkId) => SkillShareLinkRevisionModel.listByLink(linkId),
+    append: (params, sequence) =>
+      SkillShareLinkRevisionModel.append(params, sequence),
+  };
 }
 
-function computeContentHash(skills: MaterializeSkillInput[]): string {
-  const canonical = [...skills]
-    .map((skill) => ({
-      id: skill.id,
-      updatedAt: skill.updatedAt.toISOString(),
-    }))
-    .sort((a, b) => a.id.localeCompare(b.id));
-  return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
+function computeContentHash(files: RevisionPayloadFile[]): string {
+  const sorted = [...files].sort((a, b) => a.path.localeCompare(b.path));
+  const h = createHash("sha256");
+  for (const f of sorted) {
+    h.update(f.path);
+    h.update("\0");
+    h.update(f.mode);
+    h.update("\0");
+    h.update(f.encoding);
+    h.update("\0");
+    h.update(f.content);
+    h.update("\0");
+  }
+  return h.digest("hex");
 }
 
-function pickCommitDate(skills: MaterializeSkillInput[]): string {
-  // newest updatedAt across the bundle → deterministic across replicas
-  const latest = skills.reduce<number>(
-    (max, skill) => Math.max(max, skill.updatedAt.getTime()),
-    0,
-  );
-  return new Date(latest || Date.now()).toISOString();
+function roundToSeconds(d: Date): Date {
+  return new Date(Math.floor(d.getTime() / 1000) * 1000);
 }
 
-async function readHeadContentHash(
-  repoPath: string,
-  gitBinary: string,
-): Promise<string | null> {
+function toGitDate(d: Date): string {
+  return `${Math.floor(d.getTime() / 1000)} +0000`;
+}
+
+function formatMessage(sequence: number, contentHash: string): string {
+  return `Snapshot ${sequence}\n\ncontent-hash: ${contentHash}\n`;
+}
+
+async function wipeWorkingTree(repoPath: string): Promise<void> {
+  let entries: string[];
   try {
-    await fs.access(path.join(repoPath, ".git"));
+    entries = await fs.readdir(repoPath);
   } catch {
-    return null;
+    return;
   }
-  try {
-    const result = await runGit({
-      binary: gitBinary,
-      cwd: repoPath,
-      args: ["log", "-1", "--pretty=%B"],
-    });
-    const match = result.stdout.match(
-      new RegExp(`${CONTENT_HASH_PREFIX}([a-f0-9]+)`),
-    );
-    return match?.[1] ?? null;
-  } catch (err) {
-    logger.warn(
-      { err, repoPath },
-      "materialize: failed to read HEAD content hash; will rebuild",
-    );
-    return null;
+  for (const entry of entries) {
+    if (entry === ".git") continue;
+    await fs.rm(path.join(repoPath, entry), { recursive: true, force: true });
   }
-}
-
-async function getHead(repoPath: string, gitBinary: string): Promise<string> {
-  const result = await runGit({
-    binary: gitBinary,
-    cwd: repoPath,
-    args: ["rev-parse", "HEAD"],
-  });
-  return result.stdout.trim();
-}
-
-async function writeRepoLayout(
-  repoPath: string,
-  req: MaterializeRequest,
-): Promise<void> {
-  const resolved = resolveMarketplaceSkills(
-    req.skills.map<MarketplaceSkillInput>((skill) => ({
-      id: skill.id,
-      name: skill.name,
-      description: skill.description,
-      version: skill.version,
-      updatedAt: skill.updatedAt,
-    })),
-  );
-
-  await fs.mkdir(path.join(repoPath, ".claude-plugin"), { recursive: true });
-  await fs.mkdir(path.join(repoPath, ".agents/plugins"), { recursive: true });
-
-  await writeJson(
-    path.join(repoPath, ".claude-plugin/marketplace.json"),
-    buildClaudeMarketplaceManifest({
-      marketplaceName: req.marketplaceName,
-      ownerName: req.ownerName,
-      skills: resolved,
-    }),
-  );
-
-  await writeJson(
-    path.join(repoPath, ".agents/plugins/marketplace.json"),
-    buildCodexMarketplaceManifest({
-      marketplaceName: req.marketplaceName,
-      displayName: req.displayName,
-      skills: resolved,
-    }),
-  );
-
-  const skillById = new Map(req.skills.map((s) => [s.id, s]));
-  for (const { id, slug } of resolved) {
-    const skill = skillById.get(id);
-    if (!skill) continue;
-    await writePluginDirectory({ repoPath, slug, skill });
-  }
-}
-
-async function writePluginDirectory(params: {
-  repoPath: string;
-  slug: string;
-  skill: MaterializeSkillInput;
-}): Promise<void> {
-  const { repoPath, slug, skill } = params;
-  const pluginRoot = path.join(repoPath, "plugins", slug);
-  const skillRoot = path.join(pluginRoot, "skills", slug);
-
-  await fs.mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
-  await fs.mkdir(path.join(pluginRoot, ".codex-plugin"), { recursive: true });
-  await fs.mkdir(skillRoot, { recursive: true });
-
-  const skillInput: MarketplaceSkillInput = {
-    id: skill.id,
-    name: skill.name,
-    description: skill.description,
-    version: skill.version,
-    updatedAt: skill.updatedAt,
-  };
-
-  await writeJson(
-    path.join(pluginRoot, ".claude-plugin/plugin.json"),
-    buildClaudePluginManifest({ skill: skillInput, slug }),
-  );
-  await writeJson(
-    path.join(pluginRoot, ".codex-plugin/plugin.json"),
-    buildCodexPluginManifest({ skill: skillInput, slug }),
-  );
-
-  await fs.writeFile(
-    path.join(skillRoot, "SKILL.md"),
-    buildSkillMarkdown(skill),
-    "utf8",
-  );
-
-  // resource files preserve their stored relative path under skills/<slug>/
-  for (const file of skill.files) {
-    if (file.path.includes("\0")) {
-      logger.warn(
-        { path: file.path },
-        "materialize: skipping file with null byte in path",
-      );
-      continue;
-    }
-    const relPath = path.normalize(file.path.replace(/^\.?\//, ""));
-    if (relPath.startsWith("..")) {
-      logger.warn(
-        { path: file.path },
-        "materialize: skipping file with traversal path",
-      );
-      continue;
-    }
-    if (relPath === "SKILL.md" || relPath.startsWith(`SKILL.md${path.sep}`)) {
-      logger.warn(
-        { path: file.path },
-        "materialize: skipping reserved resource path SKILL.md",
-      );
-      continue;
-    }
-    const target = path.resolve(skillRoot, relPath);
-    if (!target.startsWith(`${skillRoot}${path.sep}`)) {
-      logger.warn(
-        { path: file.path },
-        "materialize: skipping file outside skill root",
-      );
-      continue;
-    }
-    await fs.mkdir(path.dirname(target), { recursive: true });
-    if (file.encoding === "base64") {
-      await fs.writeFile(target, Buffer.from(file.content, "base64"));
-    } else {
-      await fs.writeFile(target, file.content, "utf8");
-    }
-  }
-}
-
-function buildSkillMarkdown(skill: MaterializeSkillInput): string {
-  const frontmatter: Record<string, unknown> = {
-    name: skill.name,
-    description: skill.description,
-  };
-  if (skill.license) frontmatter.license = skill.license;
-  if (skill.compatibility) frontmatter.compatibility = skill.compatibility;
-  if (skill.metadata && Object.keys(skill.metadata).length > 0) {
-    frontmatter.metadata = skill.metadata;
-  }
-
-  const yamlBody = dumpYaml(frontmatter, {
-    sortKeys: false,
-    lineWidth: -1,
-    quotingType: '"',
-    forceQuotes: false,
-    noRefs: true,
-  });
-
-  const body = skill.content.trim();
-  return `---\n${yamlBody}---\n\n${body}\n`;
-}
-
-async function writeJson(filePath: string, value: unknown): Promise<void> {
-  await fs.writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
 const UUID_RE =

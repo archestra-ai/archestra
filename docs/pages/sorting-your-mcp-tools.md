@@ -18,6 +18,18 @@ Sorting Hat MCP is a first-party MCP server that demonstrates tool-call routing,
 ![Ravenclaw sorting result](/docs/automated_screenshots/sorting-hat-mcp_ravenclaw.webp)
 ![Hufflepuff sorting result](/docs/automated_screenshots/sorting-hat-mcp_hufflepuff.webp)
 
+### Upstream MCP server examples
+
+| Server | Tool | House | Screenshot |
+| --- | --- | --- | --- |
+| GitHub | `github.merge_pull_request` | Gryffindor | [view](/docs/automated_screenshots/sorting-hat-mcp-upstream-github.webp) |
+| Slack | `slack.send_message` | Gryffindor | [view](/docs/automated_screenshots/sorting-hat-mcp-upstream-slack.webp) |
+| Postgres | `postgres.query_database` | Ravenclaw | [view](/docs/automated_screenshots/sorting-hat-mcp-upstream-postgres.webp) |
+| Filesystem | `filesystem.list_files` | Hufflepuff | [view](/docs/automated_screenshots/sorting-hat-mcp-upstream-filesystem.webp) |
+| Stripe | `stripe.create_payment` | Slytherin | [view](/docs/automated_screenshots/sorting-hat-mcp-upstream-stripe.webp) |
+| Notion | `notion.search_pages` | Ravenclaw | [view](/docs/automated_screenshots/sorting-hat-mcp-upstream-notion.webp) |
+| Linear | `linear.list_issues` | Hufflepuff | [view](/docs/automated_screenshots/sorting-hat-mcp-upstream-linear.webp) |
+
 ## Prompt
 
 Use this system instruction when wiring the server into an agent:

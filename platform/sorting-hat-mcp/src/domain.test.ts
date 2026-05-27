@@ -4,8 +4,59 @@ import {
   authorizeTravel,
   castPatronus,
   createQuidditchEvents,
+  type House,
   sortTool,
 } from "./domain.js";
+
+const UPSTREAM_MCP_SORTING_EXAMPLES: Array<{
+  server: string;
+  toolName: string;
+  toolDescription: string;
+  expectedHouse: House;
+}> = [
+  {
+    server: "github",
+    toolName: "github.merge_pull_request",
+    toolDescription: "Merge an approved pull request into the default branch",
+    expectedHouse: "gryffindor",
+  },
+  {
+    server: "slack",
+    toolName: "slack.send_message",
+    toolDescription: "Send a message into a production incident channel",
+    expectedHouse: "gryffindor",
+  },
+  {
+    server: "postgres",
+    toolName: "postgres.query_database",
+    toolDescription: "Query read-only rows for analysis",
+    expectedHouse: "ravenclaw",
+  },
+  {
+    server: "filesystem",
+    toolName: "filesystem.list_files",
+    toolDescription: "List metadata and validate file status",
+    expectedHouse: "hufflepuff",
+  },
+  {
+    server: "stripe",
+    toolName: "stripe.create_payment",
+    toolDescription: "Create a payment and write customer billing state",
+    expectedHouse: "slytherin",
+  },
+  {
+    server: "notion",
+    toolName: "notion.search_pages",
+    toolDescription: "Search workspace docs and summarize pages",
+    expectedHouse: "ravenclaw",
+  },
+  {
+    server: "linear",
+    toolName: "linear.list_issues",
+    toolDescription: "List issue metadata and sync project status",
+    expectedHouse: "hufflepuff",
+  },
+];
 
 describe("sortTool", () => {
   it("sorts destructive tools into slytherin", () => {
@@ -27,6 +78,30 @@ describe("sortTool", () => {
 
     assert.notEqual(result.house, "slytherin");
     assert.equal(result.preferenceApplied, true);
+  });
+
+  it("sorts seven distinct upstream MCP server tools", () => {
+    const results = UPSTREAM_MCP_SORTING_EXAMPLES.map((example) => ({
+      server: example.server,
+      result: sortTool({
+        toolName: example.toolName,
+        toolDescription: example.toolDescription,
+      }),
+      expectedHouse: example.expectedHouse,
+    }));
+
+    assert.deepEqual(
+      results.map(({ server, result, expectedHouse }) => ({
+        server,
+        house: result.house,
+        expectedHouse,
+      })),
+      UPSTREAM_MCP_SORTING_EXAMPLES.map((example) => ({
+        server: example.server,
+        house: example.expectedHouse,
+        expectedHouse: example.expectedHouse,
+      })),
+    );
   });
 });
 

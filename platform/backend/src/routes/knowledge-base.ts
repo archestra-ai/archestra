@@ -41,6 +41,7 @@ import {
   ConnectorTypeSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
+  EmbeddingErrorCodeSchema,
   EmbeddingStatusSchema,
   KnowledgeSourceVisibilitySchema,
   SelectConnectorRunListSchema,
@@ -1063,6 +1064,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     processingStatus: z.string(),
     processingError: z.string().nullable(),
     embeddingStatus: EmbeddingStatusSchema,
+    embeddingErrorCode: EmbeddingErrorCodeSchema.nullable(),
   });
 
   fastify.post(
@@ -1322,6 +1324,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           processingStatus: file.processingStatus,
           processingError: file.processingError ?? null,
           embeddingStatus: doc?.embeddingStatus ?? "pending",
+          embeddingErrorCode: doc?.embeddingErrorCode ?? null,
         };
       });
 
@@ -1367,6 +1370,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         processingStatus: file.processingStatus,
         processingError: file.processingError ?? null,
         embeddingStatus: doc?.embeddingStatus ?? "pending",
+        embeddingErrorCode: doc?.embeddingErrorCode ?? null,
       });
     },
   );

@@ -1,5 +1,5 @@
+import type { EmbeddingErrorCode } from "@/types/kb-document";
 import type {
-  EmbeddingErrorCode,
   SupportedProvider,
   SupportedProviderDiscriminator,
 } from "@shared";

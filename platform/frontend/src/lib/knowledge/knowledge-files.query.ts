@@ -157,6 +157,10 @@ export function usePromoteChatAttachmentToKnowledgeFile() {
     onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["knowledge-files"] });
+      if (data.status === "duplicate") {
+        toast.info("Attachment is already saved to Knowledge");
+        return;
+      }
       showUploadResultToasts([data]);
     },
     onError: () => {
@@ -236,7 +240,7 @@ function showUploadResultToasts(results: UploadResult[]) {
   }
   if (duplicates.length > 0) {
     toast.warning(
-      `${duplicates.length} file${duplicates.length > 1 ? "s" : ""} already exist`,
+      `${duplicates.length} file${duplicates.length > 1 ? "s already exist" : " already exists"}`,
     );
   }
   if (skipped.length > 0) {

@@ -164,7 +164,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   mcpServerInstallationRequest: ["read", "create", "update"],
 
   // Knowledge
-  knowledgeFile: ["read", "create", "update", "delete"],
+  knowledgeFile: ["read"],
   knowledgeSource: ["read", "query"],
 
   // Other

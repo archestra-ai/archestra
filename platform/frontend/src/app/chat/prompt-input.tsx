@@ -9,6 +9,9 @@ import {
   type SupportedProvider,
   supportsFileUploads,
 } from "@shared";
+
+const CHAT_ATTACHMENT_MAX_BYTES = 50 * 1024 * 1024;
+const CHAT_ATTACHMENT_MAX_MB = CHAT_ATTACHMENT_MAX_BYTES / (1024 * 1024);
 import type { ChatStatus } from "ai";
 import { MoreVerticalIcon, PaperclipIcon, XIcon } from "lucide-react";
 import type { FormEvent, KeyboardEvent } from "react";
@@ -539,7 +542,7 @@ const PromptInputContent = ({
             : "File format is not supported by this model",
         );
       } else if (err.code === "max_file_size") {
-        toast.error("File is too large. Maximum size is 50 MB.");
+        toast.error(`File is too large. Maximum size is ${CHAT_ATTACHMENT_MAX_MB} MB.`);
       } else if (err.code === "max_files") {
         toast.error("Too many files attached.");
       }
@@ -605,7 +608,7 @@ const PromptInputContent = ({
         accept={
           showFileUploadButton ? acceptedFileTypes : "application/x-empty"
         }
-        maxFileSize={50 * 1024 * 1024}
+        maxFileSize={CHAT_ATTACHMENT_MAX_BYTES}
         onError={handleFileError}
       >
         {/* File attachments display - shown inline above textarea */}
@@ -980,7 +983,7 @@ const ArchestraPromptInput = ({
       message: string;
     }) => {
       if (err.code === "max_file_size") {
-        toast.error("File is too large. Maximum size is 50 MB.");
+        toast.error(`File is too large. Maximum size is ${CHAT_ATTACHMENT_MAX_MB} MB.`);
       } else if (err.code === "max_files") {
         toast.error("Too many files attached.");
       }
@@ -991,7 +994,7 @@ const ArchestraPromptInput = ({
   return (
     <div className="flex size-full flex-col justify-end">
       <PromptInputProvider
-        maxFileSize={50 * 1024 * 1024}
+        maxFileSize={CHAT_ATTACHMENT_MAX_BYTES}
         onError={handleProviderFileError}
       >
         <PromptInputContent

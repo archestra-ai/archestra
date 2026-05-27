@@ -75,6 +75,8 @@ class S3BlobStorageProvider implements BlobStorageProvider {
     if (this.client) return this.client;
 
     const s3Config = config.kb.fileUpload.blobStorage.s3;
+    // The SDK credential provider refreshes IRSA credentials for this cached
+    // client; runtime env var changes require process restart.
     this.client = new S3Client({
       region: s3Config.region || undefined,
       endpoint: s3Config.endpoint || undefined,

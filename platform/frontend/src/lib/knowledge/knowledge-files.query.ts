@@ -261,7 +261,7 @@ function fileToBase64(file: File): Promise<string> {
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = reader.result as string;
-      resolve(dataUrl.split(",")[1]);
+      resolve(dataUrl.substring(dataUrl.indexOf(",") + 1));
     };
     reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
     reader.readAsDataURL(file);

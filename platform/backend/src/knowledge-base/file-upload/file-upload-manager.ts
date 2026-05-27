@@ -65,6 +65,8 @@ class FileUploadManager {
     }
 
     const contentHash = KbUploadedFileModel.computeContentHash(
+      // Keep the Knowledge Files dedupe hash aligned with the base64 upload
+      // payload while preserving the legacy connector upload path unchanged.
       rawBuffer.toString("base64"),
     );
     // Knowledge Files use a best-effort organization-wide duplicate check for
@@ -87,6 +89,8 @@ class FileUploadManager {
       agentIds: params.agentIds,
     });
 
+    // Create the backing connector before external blob writes so create
+    // failures can clean up by connector id through cleanupFailedFileCreate.
     const connector = await KnowledgeBaseConnectorModel.create({
       organizationId: params.organizationId,
       name: `${KNOWLEDGE_FILE_CONNECTOR_NAME_PREFIX} ${params.name}`,

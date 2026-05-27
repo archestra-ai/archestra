@@ -129,15 +129,16 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { id: string; name: string; agentType: string }
       >();
       if (allAgentIds.length > 0) {
-        const agents = await AgentModel.findByOrganizationId(organizationId);
+        const agents = await AgentModel.findBasicByOrganizationIdAndIds({
+          organizationId,
+          agentIds: allAgentIds,
+        });
         for (const agent of agents) {
-          if (allAgentIds.includes(agent.id)) {
-            agentDetailsMap.set(agent.id, {
-              id: agent.id,
-              name: agent.name,
-              agentType: agent.agentType,
-            });
-          }
+          agentDetailsMap.set(agent.id, {
+            id: agent.id,
+            name: agent.name,
+            agentType: agent.agentType,
+          });
         }
       }
 

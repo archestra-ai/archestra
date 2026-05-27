@@ -5,6 +5,10 @@ edition = "2024"
 build = "build.rs"
 publish = false
 
+[features]
+default = []
+test-helpers = []
+
 [lib]
 crate-type = ["cdylib"]
 

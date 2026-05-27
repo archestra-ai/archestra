@@ -38,13 +38,5 @@ const invalidInput = {
     },
   );
 
-  assert.throws(
-    () => sandbox.__testPanic(),
-    (error) => {
-      assert(error instanceof Error);
-      assert.equal(error.code, "ARCHESTRA_INTERNAL");
-      assert.match(error.message, /sandbox-rs panic smoke test/);
-      return true;
-    },
-  );
+  assert.equal(Object.hasOwn(sandbox, "__testPanic"), false);
 })();

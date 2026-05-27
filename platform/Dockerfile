@@ -138,8 +138,8 @@ RUN set -eux; \
     rm -f picomatch-4.0.4.tgz; \
     grep -q '"version": "4.0.4"' "$target/package.json"
 
-# <----- Builder stage ----->
-FROM base AS builder
+# <----- Builder base stage ----->
+FROM base AS builder-base
 WORKDIR /app
 
 # Version arg for Sentry release tracking
@@ -169,6 +169,12 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 # VERSION is exported as env var for child processes (used by Sentry source map upload)
 ENV VERSION=${VERSION}
+
+FROM builder-base AS sandbox-rs-musl-smoke
+RUN pnpm --filter @archestra/sandbox-rs check:musl
+
+# <----- Builder stage ----->
+FROM builder-base AS builder
 
 # Use Docker secrets to securely pass various sensitive environment variables during build
 # These environment variables are NOT persisted in the final image

@@ -1342,6 +1342,7 @@ version = "1.2.50"
 dependencies = [
  "base64 0.22.1",
  "dagger-sdk",
+ "futures-util",
  "napi",
  "napi-derive",
  "opentelemetry",

@@ -92,8 +92,6 @@ export interface SnapshotFile {
   encoding: string
   content: string
 }
-export declare function __testPanic(): void
-
 export declare function checkCodeRuntimeSession(input: CheckCodeRuntimeSessionInput): Promise<void>
 
 export declare function checkDaggerSession(input?: CheckDaggerSessionInput | undefined | null): Promise<void>

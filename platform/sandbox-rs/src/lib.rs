@@ -1,6 +1,6 @@
 use std::any::Any;
 use std::future::Future;
-use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::panic::AssertUnwindSafe;
 
 use futures_util::FutureExt;
 use napi_derive::napi;
@@ -41,9 +41,10 @@ pub async fn run_code_runtime(input: core::RunCodeInput) -> napi::Result<core::C
     catch_core(core::run_code_runtime(input)).await
 }
 
+#[cfg(feature = "test-helpers")]
 #[napi(js_name = "__testPanic")]
 pub fn test_panic() -> napi::Result<()> {
-    catch_unwind(|| {
+    std::panic::catch_unwind(|| {
         panic!("sandbox-rs panic smoke test");
     })
     .map_err(panic_to_napi_error)

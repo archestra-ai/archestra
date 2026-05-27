@@ -274,7 +274,7 @@ jobs:
         run: cargo install cargo-deny --locked
 
       - name: Rust dependency policy
-        run: cargo deny --config deny.toml check advisories bans
+        run: cargo deny check --config deny.toml advisories bans licenses sources
 
       # setup-env uses --frozen-lockfile, which skips minimum-release-age checks.
       # --fix-lockfile re-resolves and fails on immature deps (ERR_PNPM_NO_MATURE_MATCHING_VERSION).
@@ -463,6 +463,17 @@ jobs:
           dockerfile: ${{ matrix.dockerfile }}
           load: "true"
           tags: ${{ format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
+          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+
+      - name: Build sandbox-rs musl smoke target
+        if: ${{ matrix.use-build-action }}
+        uses: ./.github/actions/build-docker-image
+        with:
+          context: ${{ matrix.context }}
+          dockerfile: ${{ matrix.dockerfile }}
+          target: sandbox-rs-musl-smoke
+          platforms: linux/amd64,linux/arm64
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 

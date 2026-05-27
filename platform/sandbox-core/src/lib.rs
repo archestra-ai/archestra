@@ -1,11 +1,14 @@
+use std::any::Any;
 use std::collections::BTreeMap;
 use std::fmt;
+use std::panic::AssertUnwindSafe;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
 use base64::Engine;
 use dagger_sdk::{Config, Container, ContainerWithExecOpts, DaggerConn, ReturnType, connect_opts};
+use futures_util::FutureExt;
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 use tracing::Span;
@@ -603,7 +606,13 @@ where
         .build();
 
     connect_opts(cfg, move |client| async move {
-        let value = dagger(client).await;
+        let value = match AssertUnwindSafe(dagger(client)).catch_unwind().await {
+            Ok(value) => value,
+            Err(payload) => Err(SandboxError::Internal(format!(
+                "rust panic: {}",
+                panic_payload_message(payload.as_ref())
+            ))),
+        };
         if let Ok(mut guard) = sender.lock() {
             if let Some(sender) = guard.take() {
                 let _ = sender.send(value);
@@ -618,6 +627,16 @@ where
         .await
         .map_err(|_| SandboxError::internal("Dagger session closed without a result"))
         .and_then(std::convert::identity)
+}
+
+fn panic_payload_message(payload: &(dyn Any + Send)) -> &str {
+    match payload.downcast_ref::<&'static str>() {
+        Some(message) => message,
+        None => match payload.downcast_ref::<String>() {
+            Some(message) => message.as_str(),
+            None => "unknown panic payload",
+        },
+    }
 }
 
 fn any_exit_opts<'a>() -> ContainerWithExecOpts<'a> {

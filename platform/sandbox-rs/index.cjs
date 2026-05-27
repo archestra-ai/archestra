@@ -19,15 +19,19 @@ const candidates = [
 ].filter(Boolean);
 
 const nativeBinding = loadBinding();
-
-module.exports = {
-  __testPanic: wrapNativeSync("__testPanic"),
+const exported = {
   checkCodeRuntimeSession: wrapNative("checkCodeRuntimeSession"),
   checkDaggerSession: wrapNative("checkDaggerSession"),
   readSandboxArtifact: wrapNative("readSandboxArtifact"),
   runCodeRuntime: wrapNative("runCodeRuntime"),
   runSandboxCommand: wrapNative("runSandboxCommand"),
 };
+
+if (typeof nativeBinding.__testPanic === "function") {
+  exported.__testPanic = wrapNativeSync("__testPanic");
+}
+
+module.exports = exported;
 
 function loadBinding() {
   const errors = [];

@@ -216,6 +216,8 @@ class FileUploadManager {
       throw new ApiError(404, "File not found");
     }
 
+    const blobStorageKey = file.blobStorageKey;
+
     await KbDocumentModel.deleteByConnectorAndSourceId({
       connectorId: file.connectorId,
       sourceId: params.fileId,
@@ -223,7 +225,7 @@ class FileUploadManager {
     await KbUploadedFileModel.delete(params.fileId);
     await KnowledgeBaseConnectorModel.delete(file.connectorId);
     await getConfiguredBlobStorageProvider().delete({
-      key: file.blobStorageKey,
+      key: blobStorageKey,
     });
   }
 

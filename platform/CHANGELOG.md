@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.2.52](https://github.com/archestra-ai/archestra/compare/platform-v1.2.51...platform-v1.2.52) (2026-05-27)
+
+
+### Features
+
+* **chat:** persist attachments outside messages.content ([#5055](https://github.com/archestra-ai/archestra/issues/5055)) ([4aae0c5](https://github.com/archestra-ai/archestra/commit/4aae0c58f335371c29d8c896be313a19b3c67152))
+
+
+### Bug Fixes
+
+* **frontend:** raise Next dev proxy body limit to match backend ([#5078](https://github.com/archestra-ai/archestra/issues/5078)) ([142cf27](https://github.com/archestra-ai/archestra/commit/142cf2705450323a17bb3511f36c3fd09f2ff484))
+* **frontend:** raise proxy body limit headroom to 200MB ([#5080](https://github.com/archestra-ai/archestra/issues/5080)) ([0006b49](https://github.com/archestra-ai/archestra/commit/0006b49f9c27cbaacc81827f479d063aafca976a))
+* reject empty OpenRouter stop responses ([#5077](https://github.com/archestra-ai/archestra/issues/5077)) ([6ebf7eb](https://github.com/archestra-ai/archestra/commit/6ebf7eb9b4ae01f1bb71b444431160efc5e48dbc))
+* version footer layout ([#5073](https://github.com/archestra-ai/archestra/issues/5073)) ([b274cc3](https://github.com/archestra-ai/archestra/commit/b274cc315f9bf1b3294be505701b53891c809bbc))
+
 ## [1.2.51](https://github.com/archestra-ai/archestra/compare/platform-v1.2.50...platform-v1.2.51) (2026-05-27)
 
 

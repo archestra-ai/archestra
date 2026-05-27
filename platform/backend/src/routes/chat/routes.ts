@@ -43,6 +43,7 @@ import logger from "@/logging";
 import {
   ActiveChatRunModel,
   AgentModel,
+  ChatAttachmentModel,
   ConversationChatErrorModel,
   ConversationEnabledToolModel,
   ConversationModel,
@@ -88,6 +89,10 @@ import {
 } from "@/utils/llm-resolution";
 import { estimateMessagesSize } from "@/utils/message-size";
 import {
+  isSafeInlineMimeType,
+  sanitizeAttachmentContentType,
+} from "./attachment-content-type";
+import {
   buildContextCompactionStreamData,
   compactMessagesForChat,
   invalidateConversationCompactions,
@@ -104,6 +109,9 @@ import {
   sanitizeChatErrorForFrontend,
 } from "./errors";
 import { injectSkillActivation } from "./inject-skill-activation";
+import { cloneAttachmentsForFork } from "./normalization/clone-attachments-for-fork";
+import { extractInlineAttachments } from "./normalization/extract-inline-attachments";
+import { materializeAttachments } from "./normalization/materialize-attachments";
 import { normalizeChatMessages } from "./normalization/normalize-chat-messages";
 
 function getCorrelationLogFields(traceContext: {
@@ -155,6 +163,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         user,
         organizationId,
       } = request;
+
       const chatAbortController = new AbortController();
       let activeRunError: string | null = null;
 
@@ -214,6 +223,32 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           409,
           "This conversation already has an active response. Stop it before sending another message.",
         );
+      }
+
+      // Extract any inline data: URL file parts into chat_attachments so the
+      // bytes never enter the messages.content JSONB row. Runs after both
+      // the conversation existence+ownership check and the active-run
+      // acquisition so we don't write rows for requests that would
+      // 404/403/409. After this, parts[] carry tiny refs
+      // (`/api/chat/attachments/:id/content`); the LLM-call path rehydrates
+      // inline only at send time (see materializeAttachments inside
+      // buildModelMessagesForProvider).
+      // Wrapped in markTerminal cleanup: a throw here would otherwise leave
+      // the active run stuck `running`, causing subsequent sends to 409.
+      try {
+        await extractInlineAttachments({
+          messages: messages as ChatMessage[],
+          conversationId,
+          organizationId,
+          uploadedByUserId: user.id,
+        });
+      } catch (error) {
+        await ActiveChatRunModel.markTerminal({
+          runId: activeRun.id,
+          status: "failed",
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
       }
 
       const stopActiveRunPolling = activeChatRunService.startStopPolling({
@@ -645,6 +680,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 const modelMessages = await buildModelMessagesForProvider({
                   messages: compactionResult.messages,
                   provider,
+                  conversationId,
                 });
                 const streamTextConfig: Parameters<typeof streamText>[0] = {
                   model,
@@ -1141,6 +1177,70 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(conversation);
+    },
+  );
+
+  fastify.get(
+    "/api/chat/attachments/:id/content",
+    {
+      schema: {
+        operationId: RouteId.GetChatAttachmentContent,
+        description:
+          "Stream the bytes of a chat attachment by id. Auth'd to the org.",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        response: ErrorResponsesSchema,
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      // Fetch metadata first (no fileData) so unauthorized requests don't
+      // trigger a large bytea read before the 403. Only load the blob once
+      // org + per-conversation access has been confirmed.
+      const meta = await ChatAttachmentModel.findById(id);
+      if (!meta) {
+        throw new ApiError(404, "Attachment not found");
+      }
+      if (meta.organizationId !== organizationId) {
+        throw new ApiError(403, "Attachment belongs to a different org");
+      }
+
+      // Verify the requester can read the conversation that owns this
+      // attachment. Without this check, any org member with chat:read could
+      // fetch any attachment in the org regardless of per-conversation ACLs.
+      const conversation = await findReadableConversationById({
+        conversationId: meta.conversationId,
+        userId: user.id,
+        organizationId,
+      });
+      if (!conversation) {
+        throw new ApiError(403, "No access to the owning conversation");
+      }
+
+      const attachment = await ChatAttachmentModel.findByIdWithData(id);
+      if (!attachment) {
+        // Soft-deleted between the metadata check and the blob fetch.
+        throw new ApiError(404, "Attachment not found");
+      }
+
+      const safeMime = sanitizeAttachmentContentType(attachment.mimeType);
+      const disposition = isSafeInlineMimeType(safeMime)
+        ? "inline"
+        : "attachment";
+      // Bypass fastify-zod's response schema (declared as the error union
+      // only) for the binary success body by writing directly to the
+      // underlying Node response. `reply.hijack()` tells Fastify to step
+      // back so its response serializer doesn't run against a Buffer.
+      reply.hijack();
+      reply.raw.writeHead(200, {
+        "Content-Type": safeMime,
+        "Content-Disposition": `${disposition}; filename="${encodeURIComponent(attachment.originalName)}"`,
+        "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "default-src 'none'; sandbox",
+        "Cache-Control": "private, max-age=3600",
+        "Content-Length": String(attachment.fileSize),
+      });
+      reply.raw.end(attachment.fileData);
+      return reply;
     },
   );
 
@@ -2534,8 +2634,22 @@ function prepareMessagesForProvider(params: {
 async function buildModelMessagesForProvider(params: {
   messages: ChatMessage[];
   provider: SupportedProvider;
+  conversationId: string;
 }) {
-  const providerPreparedMessages = prepareMessagesForProvider(params);
+  // Re-inline attachment refs as base64 data URLs for the LLM call (with
+  // Anthropic cache_control marker). Refs are filtered to attachments owned
+  // by `conversationId` so a client can't reference another conversation's
+  // attachment id. Legacy inline data URLs pass through unchanged. Returns a
+  // deep copy — the original messages keep their refs for any subsequent
+  // persistence step.
+  const materialized = await materializeAttachments(
+    params.messages,
+    params.conversationId,
+  );
+  const providerPreparedMessages = prepareMessagesForProvider({
+    messages: materialized,
+    provider: params.provider,
+  });
 
   // Cast to UIMessage[] - ChatMessage is structurally compatible at runtime.
   return await convertToModelMessages(
@@ -2913,8 +3027,20 @@ async function forkConversation(params: {
   });
 
   if (params.sourceConversation.messages.length > 0) {
+    // Clone any chat_attachments referenced from source messages so the fork
+    // has its own rows scoped to its conversationId — materialize and
+    // compaction both filter by conversationId, so without this the fork
+    // would silently lose every attached file on the next LLM turn.
+    const forkedMessages = await cloneAttachmentsForFork({
+      sourceMessages: params.sourceConversation
+        .messages as unknown as ChatMessage[],
+      sourceConversationId: params.sourceConversation.id,
+      newConversationId: newConversation.id,
+      newOrganizationId: params.organizationId,
+      newUploadedByUserId: params.userId,
+    });
     await MessageModel.bulkCreate(
-      params.sourceConversation.messages.map((message: { role: string }) => ({
+      forkedMessages.map((message) => ({
         conversationId: newConversation.id,
         role: message.role,
         content: message,

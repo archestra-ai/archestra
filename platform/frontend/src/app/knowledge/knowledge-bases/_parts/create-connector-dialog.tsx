@@ -33,6 +33,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { useCreateConnector } from "@/lib/knowledge/connector.query";
 import {
   CONNECTOR_OPTIONS,
@@ -158,6 +159,7 @@ export function CreateConnectorDialog({
 
   const urlConfig = getConnectorUrlConfig(connectorType);
   const isCloud = form.watch("config.isCloud") as boolean | undefined;
+  const authMethod = form.watch("config.authMethod") as string | undefined;
   const needsEmail = connectorNeedsEmail(connectorType);
   const emailRequired = needsEmail && isCloud !== false;
   const connectorDocsUrl = selectedType
@@ -166,12 +168,14 @@ export function CreateConnectorDialog({
   const {
     apiTokenHelpText,
     apiTokenLabel,
+    apiTokenMultiline,
     apiTokenPlaceholder,
     apiTokenRequiredMessage,
   } = getConnectorCredentialConfig({
     type: connectorType,
     emailRequired,
     mode: "create",
+    authMethod,
   });
 
   useLayoutEffect(() => {
@@ -383,14 +387,25 @@ export function CreateConnectorDialog({
                         <FormItem>
                           <FormLabel>{apiTokenLabel}</FormLabel>
                           <FormControl>
-                            <Input
-                              type="password"
-                              placeholder={apiTokenPlaceholder}
-                              autoComplete="new-password"
-                              data-1p-ignore
-                              data-lpignore="true"
-                              {...field}
-                            />
+                            {apiTokenMultiline ? (
+                              <Textarea
+                                placeholder={apiTokenPlaceholder}
+                                rows={5}
+                                autoComplete="new-password"
+                                data-1p-ignore
+                                data-lpignore="true"
+                                {...field}
+                              />
+                            ) : (
+                              <Input
+                                type="password"
+                                placeholder={apiTokenPlaceholder}
+                                autoComplete="new-password"
+                                data-1p-ignore
+                                data-lpignore="true"
+                                {...field}
+                              />
+                            )}
                           </FormControl>
                           {apiTokenHelpText}
                           <FormMessage />

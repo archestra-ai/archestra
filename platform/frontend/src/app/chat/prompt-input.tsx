@@ -76,6 +76,9 @@ import {
   type SkillCommand,
 } from "./skill-commands";
 
+const CHAT_ATTACHMENT_MAX_BYTES = 50 * 1024 * 1024;
+const CHAT_ATTACHMENT_MAX_MB = CHAT_ATTACHMENT_MAX_BYTES / (1024 * 1024);
+
 export interface ArchestraPromptInputProps {
   onSubmit: (
     message: PromptInputMessage,
@@ -538,6 +541,12 @@ const PromptInputContent = ({
             ? "This model does not support file uploads"
             : "File format is not supported by this model",
         );
+      } else if (err.code === "max_file_size") {
+        toast.error(
+          `File is too large. Maximum size is ${CHAT_ATTACHMENT_MAX_MB} MB.`,
+        );
+      } else if (err.code === "max_files") {
+        toast.error("Too many files attached.");
       }
     },
     [showFileUploadButton],
@@ -601,6 +610,7 @@ const PromptInputContent = ({
         accept={
           showFileUploadButton ? acceptedFileTypes : "application/x-empty"
         }
+        maxFileSize={CHAT_ATTACHMENT_MAX_BYTES}
         onError={handleFileError}
       >
         {/* File attachments display - shown inline above textarea */}
@@ -969,9 +979,28 @@ const ArchestraPromptInput = ({
   modelSource,
   onResetModelOverride,
 }: ArchestraPromptInputProps) => {
+  const handleProviderFileError = useCallback(
+    (err: {
+      code: "max_files" | "max_file_size" | "accept";
+      message: string;
+    }) => {
+      if (err.code === "max_file_size") {
+        toast.error(
+          `File is too large. Maximum size is ${CHAT_ATTACHMENT_MAX_MB} MB.`,
+        );
+      } else if (err.code === "max_files") {
+        toast.error("Too many files attached.");
+      }
+    },
+    [],
+  );
+
   return (
     <div className="flex size-full flex-col justify-end">
-      <PromptInputProvider>
+      <PromptInputProvider
+        maxFileSize={CHAT_ATTACHMENT_MAX_BYTES}
+        onError={handleProviderFileError}
+      >
         <PromptInputContent
           onSubmit={onSubmit}
           status={status}

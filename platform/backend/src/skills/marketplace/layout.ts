@@ -204,7 +204,10 @@ function resolveResourceFile(params: {
     );
     return null;
   }
-  if (relPath === "SKILL.md" || relPath.startsWith("SKILL.md/")) {
+  // case-insensitive: collides with the generated SKILL.md on macOS APFS and
+  // Windows NTFS, where the second writeFile would silently overwrite the first
+  const relLower = relPath.toLowerCase();
+  if (relLower === "skill.md" || relLower.startsWith("skill.md/")) {
     logger.warn(
       { path: file.path },
       "materialize: skipping reserved resource path SKILL.md",

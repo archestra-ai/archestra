@@ -1,7 +1,6 @@
 import { DEFAULT_APP_NAME, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import logger from "@/logging";
 import { OrganizationModel, SkillModel, SkillShareLinkModel } from "@/models";
 import { marketplaceMaterializer } from "@/skills/marketplace";
@@ -14,6 +13,7 @@ import {
   SelectSkillShareLinkSchema,
   type SkillShareLinkStatus,
   SkillShareLinkStatusSchema,
+  type SkillShareLinkWithSkills,
 } from "@/types";
 import { getPublicRequestOrigin } from "./request-origin";
 import { SKILL_MARKETPLACE_PREFIX } from "./route-paths";
@@ -68,9 +68,7 @@ const skillShareRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(ListSkillShareLinksResponseSchema),
       },
     },
-    async ({ query, organizationId, user }, reply) => {
-      await requireSkillAdmin({ userId: user.id, organizationId });
-
+    async ({ query, organizationId }, reply) => {
       const links = await SkillShareLinkModel.listByOrganization({
         organizationId,
         skillId: query.skillId,
@@ -96,10 +94,11 @@ const skillShareRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { body, organizationId, user } = request;
-      await requireSkillAdmin({ userId: user.id, organizationId });
 
-      const skillIds = dedupe(body.skillIds);
-      await assertSkillsBelongToOrg({ skillIds, organizationId });
+      await assertSkillsBelongToOrg({
+        skillIds: body.skillIds,
+        organizationId,
+      });
 
       const marketplaceName = await deriveMarketplaceName(organizationId);
       if (isReservedMarketplaceName(marketplaceName)) {
@@ -117,7 +116,7 @@ const skillShareRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { link, rawToken } = await SkillShareLinkModel.create({
         organizationId,
         createdByUserId: user.id,
-        skillIds,
+        skillIds: body.skillIds,
         marketplaceName,
         name: body.name ?? null,
         expiresAt,
@@ -130,7 +129,7 @@ const skillShareRoutes: FastifyPluginAsyncZod = async (fastify) => {
         {
           shareLinkId: link.id,
           organizationId,
-          skillCount: skillIds.length,
+          skillCount: link.skills.length,
           createdByUserId: user.id,
         },
         "skill-share: created share link",
@@ -158,8 +157,6 @@ const skillShareRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, organizationId, user }, reply) => {
-      await requireSkillAdmin({ userId: user.id, organizationId });
-
       const existing = await SkillShareLinkModel.findById(id);
       if (!existing || existing.organizationId !== organizationId) {
         throw new ApiError(404, "Skill share link not found");
@@ -192,19 +189,6 @@ const skillShareRoutes: FastifyPluginAsyncZod = async (fastify) => {
 export default skillShareRoutes;
 
 // ===== Internal helpers =====
-
-async function requireSkillAdmin(params: {
-  userId: string;
-  organizationId: string;
-}): Promise<void> {
-  const checker = await getSkillPermissionChecker(params);
-  if (!checker.isAdmin) {
-    throw new ApiError(
-      403,
-      "Only users with skill:admin can manage skill share links",
-    );
-  }
-}
 
 async function assertSkillsBelongToOrg(params: {
   skillIds: string[];
@@ -258,38 +242,10 @@ function capLength(name: string): string {
   return name.length <= MAX ? name : name.slice(0, MAX).replace(/-+$/g, "");
 }
 
-function dedupe(values: string[]): string[] {
-  return [...new Set(values)];
-}
-
-function toShareLinkResponse(link: {
-  id: string;
-  organizationId: string;
-  createdByUserId: string;
-  tokenStart: string;
-  name: string | null;
-  marketplaceName: string;
-  expiresAt: Date | null;
-  revokedAt: Date | null;
-  lastUsedAt: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
-  skills: { id: string; name: string; description: string }[];
-}): z.infer<typeof SkillShareLinkResponseSchema> {
+function toShareLinkResponse(
+  link: SkillShareLinkWithSkills,
+): z.infer<typeof SkillShareLinkResponseSchema> {
+  const { tokenHash: _, ...rest } = link;
   const status: SkillShareLinkStatus = deriveSkillShareLinkStatus(link);
-  return {
-    id: link.id,
-    organizationId: link.organizationId,
-    createdByUserId: link.createdByUserId,
-    tokenStart: link.tokenStart,
-    name: link.name,
-    marketplaceName: link.marketplaceName,
-    expiresAt: link.expiresAt,
-    revokedAt: link.revokedAt,
-    lastUsedAt: link.lastUsedAt,
-    createdAt: link.createdAt,
-    updatedAt: link.updatedAt,
-    status,
-    skills: link.skills,
-  };
+  return { ...rest, status };
 }

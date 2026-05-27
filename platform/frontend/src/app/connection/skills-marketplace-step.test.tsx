@@ -255,7 +255,11 @@ describe("SkillsMarketplaceStep", () => {
       data: { links: [ACTIVE_LINK] },
       isPending: false,
     });
-    rotateLinkMock.mockResolvedValue(CREATE_RESPONSE);
+    rotateLinkMock.mockResolvedValue({
+      created: CREATE_RESPONSE,
+      revokeFailed: false,
+      revokeError: undefined,
+    });
 
     renderWithClient(
       <SkillsMarketplaceStep client={anyClient} expanded onToggle={() => {}} />,
@@ -276,7 +280,11 @@ describe("SkillsMarketplaceStep", () => {
       data: { links: [ACTIVE_LINK] },
       isPending: false,
     });
-    rotateLinkMock.mockResolvedValue(CREATE_RESPONSE);
+    rotateLinkMock.mockResolvedValue({
+      created: CREATE_RESPONSE,
+      revokeFailed: false,
+      revokeError: undefined,
+    });
 
     renderWithClient(
       <SkillsMarketplaceStep client={anyClient} expanded onToggle={() => {}} />,

@@ -72,6 +72,12 @@ export interface RotateSkillShareLinkVars {
   body: CreateSkillShareLinkBody;
 }
 
+export interface RotateSkillShareLinkOutput {
+  created: CreateSkillShareLinkResult | null;
+  revokeFailed: boolean;
+  revokeError: unknown;
+}
+
 /**
  * Rotates a share link as one operation: create the new link, then revoke
  * the old one. Only invoke from an explicit user action — rotation kills
@@ -82,7 +88,7 @@ export function useRotateSkillShareLink() {
   return useMutation({
     mutationFn: async (
       vars: RotateSkillShareLinkVars,
-    ): Promise<CreateSkillShareLinkResult | null> => {
+    ): Promise<RotateSkillShareLinkOutput | null> => {
       const { data: created, error: createError } = await createSkillShareLink({
         body: vars.body,
       });
@@ -93,16 +99,24 @@ export function useRotateSkillShareLink() {
       const { error: revokeError } = await revokeSkillShareLink({
         path: { id: vars.previousLinkId },
       });
-      if (revokeError) {
-        handleApiError(revokeError);
-        // new link is live even if revoke failed; return it so the UI can show it
-        return created ?? null;
-      }
-      return created ?? null;
+      return {
+        created: created ?? null,
+        revokeFailed: Boolean(revokeError),
+        revokeError,
+      };
     },
-    onSuccess: (data) => {
-      if (!data) return;
+    onSuccess: (result) => {
+      if (!result?.created) return;
       queryClient.invalidateQueries({ queryKey: ["skill-share-links"] });
+      if (result.revokeFailed) {
+        if (result.revokeError) handleApiError(result.revokeError);
+        // the new link is live but the old one is still valid — surface the
+        // partial state so the admin knows to revoke manually.
+        toast.error(
+          "New share link created, but revoking the previous one failed. The old URL still works.",
+        );
+        return;
+      }
       toast.success("Share link updated");
     },
   });

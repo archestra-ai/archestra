@@ -22,6 +22,8 @@ export interface ServeGitHttpRequestParams {
   requestMethod: string;
   contentType?: string;
   contentLength?: string;
+  /** Value of the client's `Git-Protocol` header (e.g. `version=2`); enables protocol v2. */
+  gitProtocol?: string;
   /** Optional identifier surfaced to the CGI script (for audit). */
   remoteUser?: string;
   /** Optional override for the git binary (tests, alt installs). */
@@ -44,6 +46,7 @@ export async function serveGitHttpRequest(
       REQUEST_METHOD: params.requestMethod,
       ...(params.contentType ? { CONTENT_TYPE: params.contentType } : {}),
       ...(params.contentLength ? { CONTENT_LENGTH: params.contentLength } : {}),
+      ...(params.gitProtocol ? { GIT_PROTOCOL: params.gitProtocol } : {}),
       ...(params.remoteUser ? { REMOTE_USER: params.remoteUser } : {}),
     },
   });
@@ -66,10 +69,13 @@ async function runCgiBridge(params: RunCgiBridgeParams): Promise<void> {
   });
 
   const MAX_STDERR_BYTES = 64 * 1024;
+  // tail-buffer: the operative fatal usually arrives at the END of stderr,
+  // so drop the oldest bytes when we exceed the cap rather than the newest
   let stderrBuf = "";
   child.stderr.on("data", (chunk: Buffer) => {
-    if (stderrBuf.length < MAX_STDERR_BYTES) {
-      stderrBuf += chunk.toString();
+    stderrBuf += chunk.toString();
+    if (stderrBuf.length > MAX_STDERR_BYTES) {
+      stderrBuf = stderrBuf.slice(stderrBuf.length - MAX_STDERR_BYTES);
     }
   });
 
@@ -90,6 +96,9 @@ async function runCgiBridge(params: RunCgiBridgeParams): Promise<void> {
     headersBuf = Buffer.alloc(0);
 
     const { status, headers } = parseCgiHeaders(headerBytes.toString("utf8"));
+    // pass as raw [k1, v1, k2, v2, ...] so repeated header names (e.g. multiple
+    // Cache-Control / Pragma lines emitted by git http-backend's hdr_nocache)
+    // are preserved instead of collapsing to the last value
     res.writeHead(status, headers);
     flushBufferedBody(remainder);
     headersFlushed = true;
@@ -186,13 +195,14 @@ const LF_LF = Buffer.from("\n\n", "ascii");
 
 interface ParsedCgiHeaders {
   status: number;
-  headers: Record<string, string>;
+  /** Flat [k1, v1, k2, v2, ...] so repeated header names are preserved. */
+  headers: string[];
 }
 
 function parseCgiHeaders(raw: string): ParsedCgiHeaders {
   const lines = raw.split(/\r?\n/).filter((line) => line.length > 0);
   let status = 200;
-  const headers: Record<string, string> = {};
+  const headers: string[] = [];
 
   for (const line of lines) {
     const idx = line.indexOf(":");
@@ -204,7 +214,7 @@ function parseCgiHeaders(raw: string): ParsedCgiHeaders {
       if (Number.isFinite(code)) status = code;
       continue;
     }
-    headers[key] = value;
+    headers.push(key, value);
   }
 
   return { status, headers };

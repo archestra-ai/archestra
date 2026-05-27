@@ -98,8 +98,25 @@ export class MarketplaceMaterializer {
 
   /** Drop the on-disk repo for a revoked or hard-deleted share link. */
   async revoke(linkId: string): Promise<void> {
-    const dir = path.join(this.cacheDir, linkId);
-    await fs.rm(dir, { recursive: true, force: true });
+    // chain behind any in-flight materialize so we don't yank pack files out
+    // from under a streaming clone. swallow upstream errors — the rm runs
+    // regardless of how the previous call ended.
+    const previous: Promise<unknown> =
+      this.locks.get(linkId) ?? Promise.resolve();
+    const removed: Promise<MaterializeResult> = previous
+      .catch(() => undefined)
+      .then(async () => {
+        const dir = path.join(this.cacheDir, linkId);
+        await fs.rm(dir, { recursive: true, force: true });
+        // returned value is unused; revoke() callers await for completion only
+        return REVOKED_PLACEHOLDER;
+      });
+    this.locks.set(linkId, removed);
+    try {
+      await removed;
+    } finally {
+      if (this.locks.get(linkId) === removed) this.locks.delete(linkId);
+    }
   }
 
   /**
@@ -362,6 +379,24 @@ async function wipeWorkingTree(repoPath: string): Promise<void> {
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// sentinel slotted into the per-link lock map when revoke() chains behind an
+// in-flight materialize; never observed by callers.
+const REVOKED_PLACEHOLDER: MaterializeResult = {
+  repoPath: "",
+  commitHash: "",
+  contentHash: "",
+  reused: false,
+};
+
+function scrubGitEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = {};
+  for (const [k, v] of Object.entries(env)) {
+    if (k.startsWith("GIT_")) continue;
+    out[k] = v;
+  }
+  return out;
+}
+
 interface RunGitParams {
   binary: string;
   cwd: string;
@@ -375,7 +410,9 @@ function runGit(
   return new Promise((resolve, reject) => {
     const proc = spawn(params.binary, params.args, {
       cwd: params.cwd,
-      env: { ...process.env, ...(params.env ?? {}) },
+      // strip host GIT_* env so e.g. an operator-set GIT_DIR or
+      // GIT_AUTHOR_DATE can't divert commits or break replay determinism
+      env: { ...scrubGitEnv(process.env), ...(params.env ?? {}) },
     });
     let stdout = "";
     let stderr = "";
@@ -386,8 +423,17 @@ function runGit(
       stderr += chunk.toString();
     });
     proc.once("error", reject);
-    proc.once("close", (code) => {
-      const exitCode = code ?? 0;
+    proc.once("close", (code, signal) => {
+      // a signal-killed process has code=null; never treat that as success
+      if (signal) {
+        reject(
+          new Error(
+            `git ${params.args[0]} terminated by signal ${signal}: ${stderr.trim()}`,
+          ),
+        );
+        return;
+      }
+      const exitCode = code ?? -1;
       if (exitCode === 0) {
         resolve({ stdout, stderr, code: exitCode });
         return;

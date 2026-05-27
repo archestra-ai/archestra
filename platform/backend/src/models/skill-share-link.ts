@@ -152,11 +152,18 @@ class SkillShareLinkModel {
 
     // fire-and-forget last-used bookkeeping; do not block the response.
     // explicitly preserve updatedAt to prevent drizzle's $onUpdate hook from
-    // bumping it on a non-admin access.
+    // bumping it on a non-admin access. WHERE re-checks revokedAt so a
+    // racing revoke between SELECT and UPDATE doesn't push lastUsedAt past
+    // revokedAt and break the audit invariant.
     void db
       .update(schema.skillShareLinksTable)
       .set({ lastUsedAt: new Date(), updatedAt: link.updatedAt })
-      .where(eq(schema.skillShareLinksTable.id, link.id))
+      .where(
+        and(
+          eq(schema.skillShareLinksTable.id, link.id),
+          isNull(schema.skillShareLinksTable.revokedAt),
+        ),
+      )
       .catch((err: unknown) => {
         logger.warn(
           { err, shareLinkId: link.id },
@@ -224,8 +231,6 @@ async function loadSkillsForLinks(
   const map = new Map<string, SkillShareLinkSkillSummary[]>();
   if (linkIds.length === 0) return map;
 
-  for (const id of linkIds) map.set(id, []);
-
   const rows = await db
     .select({
       shareLinkId: schema.skillShareLinkSkillsTable.shareLinkId,
@@ -243,8 +248,13 @@ async function loadSkillsForLinks(
 
   for (const row of rows) {
     const list = map.get(row.shareLinkId);
-    if (!list) continue;
-    list.push({ id: row.id, name: row.name, description: row.description });
+    if (list) {
+      list.push({ id: row.id, name: row.name, description: row.description });
+    } else {
+      map.set(row.shareLinkId, [
+        { id: row.id, name: row.name, description: row.description },
+      ]);
+    }
   }
   return map;
 }

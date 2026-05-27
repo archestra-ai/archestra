@@ -112,6 +112,7 @@ const skillMarketplacePublicRoutes: FastifyPluginAsyncZod = async (fastify) => {
           requestMethod: request.method,
           contentType: request.headers["content-type"],
           contentLength: request.headers["content-length"],
+          gitProtocol: pickGitProtocol(request.headers["git-protocol"]),
           remoteUser: `archestra-share-${ctx.shareLinkId}`,
           gitBinaryPath: config.git.binaryPath,
           req: request.raw as IncomingMessage,
@@ -142,6 +143,14 @@ export default skillMarketplacePublicRoutes;
 function extractQueryString(url: string): string {
   const idx = url.indexOf("?");
   return idx === -1 ? "" : url.slice(idx + 1);
+}
+
+function pickGitProtocol(
+  value: string | string[] | undefined,
+): string | undefined {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value[0];
+  return undefined;
 }
 
 /** Allow only the two smart-HTTP upload-pack paths; block receive-pack and dumb HTTP. */

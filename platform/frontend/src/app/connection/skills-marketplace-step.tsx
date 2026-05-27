@@ -229,15 +229,15 @@ function ExistingLinkPanel({
     if (!link) return;
     const skillIds = await fetchAllSkillIds();
     if (skillIds.length === 0) return;
-    const created = await rotateShare.mutateAsync({
+    const result = await rotateShare.mutateAsync({
       previousLinkId: link.id,
       body: { skillIds, expiresAt: link.expiresAt },
     });
-    if (!created) return;
+    if (!result?.created) return;
     onReveal({
-      linkId: created.link.id,
-      cloneUrl: created.cloneUrl,
-      marketplaceName: created.marketplaceName,
+      linkId: result.created.link.id,
+      cloneUrl: result.created.cloneUrl,
+      marketplaceName: result.created.marketplaceName,
     });
   }, [rotateShare, link, onReveal]);
 

@@ -71,6 +71,7 @@ export const JiraConfigSchema = z.object({
   type: JIRA,
   jiraBaseUrl: connectorUrlSchema,
   isCloud: z.boolean(),
+  /** @deprecated use projectKeys instead. */
   projectKey: z.string().optional(),
   projectKeys: z.array(z.string()).optional(),
   jqlQuery: z.string().optional(),
@@ -123,6 +124,7 @@ export const GithubConfigSchema = z.object({
   repos: z.array(z.string()).optional(),
   includeIssues: z.boolean().optional(),
   includePullRequests: z.boolean().optional(),
+  /** Backward-compatible config key for repository file indexing. */
   includeMarkdownFiles: z.boolean().optional(),
   fileTypes: z.array(z.string()).optional(),
   labelsToSkip: z.array(z.string()).optional(),

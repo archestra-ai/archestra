@@ -235,7 +235,9 @@ const CREATE_ADVANCED_CONFIG_FIELDS: Record<
   confluence: ({ form }) => (
     <ConfluenceConfigFields form={form} hideUrl hideIsCloud />
   ),
-  github: ({ form }) => <GithubConfigFields form={form} hideUrl hideOwner />,
+  github: ({ form }) => (
+    <GithubConfigFields form={form} hideUrl hideOwner hideAuth />
+  ),
   gitlab: ({ form }) => <GitlabConfigFields form={form} hideUrl />,
   linear: ({ form }) => <LinearConfigFields form={form} />,
   servicenow: ({ form }) => <ServiceNowConfigFields form={form} hideUrl />,
@@ -255,7 +257,9 @@ const EDIT_ADVANCED_CONFIG_FIELDS: Record<
   (props: AdvancedConfigFieldsProps) => ReactNode
 > = {
   ...CREATE_ADVANCED_CONFIG_FIELDS,
-  github: ({ form }) => <GithubConfigFields form={form} hideUrl />,
+  github: ({ form }) => (
+    <GithubConfigFields form={form} hideUrl hideOwner hideAuth />
+  ),
   asana: ({ form }) => <AsanaConfigFields form={form} />,
 };
 
@@ -657,28 +661,9 @@ const INLINE_CONFIG_FIELDS: Record<
       />
     </>
   ),
-  github: ({ form, mode }) =>
-    mode === "create" ? (
-      <FormField
-        control={form.control}
-        name={"config.owner"}
-        rules={{ required: "Owner is required" }}
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Owner</FormLabel>
-            <FormControl>
-              <Input
-                placeholder="my-org"
-                {...field}
-                value={(field.value as string) ?? ""}
-              />
-            </FormControl>
-            <FormDescription>GitHub organization or username.</FormDescription>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
-    ) : null,
+  github: ({ form }) => (
+    <GithubConfigFields form={form} hideUrl hideRepositoryOptions />
+  ),
   gitlab: () => null,
   linear: () => null,
   servicenow: ({ form, mode }) => (

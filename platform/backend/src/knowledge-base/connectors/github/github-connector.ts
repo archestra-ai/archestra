@@ -1,6 +1,9 @@
+import { createPrivateKey } from "node:crypto";
 import { Octokit } from "@octokit/rest";
-import { importPKCS8, SignJWT } from "jose";
+import { TimeInMs } from "@shared";
+import { SignJWT } from "jose";
 import type pino from "pino";
+import { LRUCacheManager } from "@/cache-manager";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -17,6 +20,11 @@ import {
 } from "../base-connector";
 
 const BATCH_SIZE = 50;
+const GITHUB_APP_INSTALLATION_TOKEN_TTL_MS = 55 * TimeInMs.Minute;
+const githubInstallationTokenCache = new LRUCacheManager<string>({
+  maxSize: 500,
+  defaultTtl: GITHUB_APP_INSTALLATION_TOKEN_TTL_MS,
+});
 
 export class GithubConnector extends BaseConnector {
   type = "github" as const;
@@ -532,8 +540,18 @@ async function resolveGithubAuthToken(
     );
   }
 
+  const cacheKey = buildGithubAppInstallationTokenCacheKey({
+    githubUrl: config.githubUrl,
+    appId,
+    installationId,
+  });
+  const cachedToken = githubInstallationTokenCache.get(cacheKey);
+  if (cachedToken) {
+    return cachedToken;
+  }
+
   const now = Math.floor(Date.now() / 1000);
-  const key = await importPKCS8(normalizePrivateKey(privateKey), "RS256");
+  const key = createPrivateKey(normalizePrivateKey(privateKey));
   const jwt = await new SignJWT({})
     .setProtectedHeader({ alg: "RS256" })
     .setIssuedAt(now - 60)
@@ -566,6 +584,11 @@ async function resolveGithubAuthToken(
       "GitHub App installation token response did not include a token",
     );
   }
+  githubInstallationTokenCache.set(
+    cacheKey,
+    body.token,
+    GITHUB_APP_INSTALLATION_TOKEN_TTL_MS,
+  );
   return body.token;
 }
 
@@ -574,6 +597,18 @@ function parseGithubConfig(
 ): GithubConfig | null {
   const result = GithubConfigSchema.safeParse({ type: "github", ...config });
   return result.success ? result.data : null;
+}
+
+function buildGithubAppInstallationTokenCacheKey(params: {
+  githubUrl: string;
+  appId: string;
+  installationId: string;
+}): string {
+  return [
+    params.githubUrl.replace(/\/+$/, ""),
+    params.appId,
+    params.installationId,
+  ].join(":");
 }
 
 function validateGithubConfig(config: GithubConfig): string | null {
@@ -784,7 +819,8 @@ function repositoryFileToDocument(
     metadata: {
       repo: `${repo.owner}/${repo.name}`,
       filePath,
-      kind: "repository_file",
+      kind: "markdown_file",
+      fileKind: "repository_file",
     },
   };
 }

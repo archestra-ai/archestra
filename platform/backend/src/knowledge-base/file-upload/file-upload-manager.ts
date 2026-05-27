@@ -16,8 +16,6 @@ import { taskQueueService } from "@/task-queue";
 import { ApiError } from "@/types";
 import { getConfiguredBlobStorageProvider } from "./blob-storage-providers";
 
-export const KNOWLEDGE_FILE_CONNECTOR_NAME_PREFIX = "Knowledge File:";
-
 type UploadKnowledgeFileParams = {
   organizationId: string;
   userId: string;
@@ -28,6 +26,8 @@ type UploadKnowledgeFileParams = {
   teamIds: string[];
   agentIds: string[];
 };
+
+const KNOWLEDGE_FILE_CONNECTOR_NAME_PREFIX = "Knowledge File:";
 
 class FileUploadManager {
   async uploadKnowledgeFile(params: UploadKnowledgeFileParams) {

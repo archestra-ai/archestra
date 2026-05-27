@@ -42,7 +42,9 @@ vi.mock("@/lib/knowledge/knowledge-files.query", () => ({
           embeddingStatus: "completed",
           visibility: "personal",
           teamIds: [],
-          assignedAgents: [{ id: "agent-1", name: "Support", agentType: "agent" }],
+          assignedAgents: [
+            { id: "agent-1", name: "Support", agentType: "agent" },
+          ],
         },
       ],
       pagination: {

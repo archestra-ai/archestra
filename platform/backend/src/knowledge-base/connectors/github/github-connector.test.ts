@@ -254,6 +254,40 @@ describe("GithubConnector", () => {
       }
     });
 
+    test("includes GitHub App installation token error response message", async () => {
+      const originalFetch = globalThis.fetch;
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        statusText: "Unauthorized",
+        text: async () => JSON.stringify({ message: "Bad credentials" }),
+      });
+      globalThis.fetch = mockFetch as unknown as typeof fetch;
+
+      try {
+        const result = await connector.testConnection({
+          config: {
+            ...validConfig,
+            authMethod: "github_app",
+            githubAppId: "12345",
+            githubAppInstallationId: "67892",
+          },
+          credentials: {
+            apiToken: [
+              "-----BEGIN PRIVATE KEY-----",
+              "MIIB",
+              "-----END PRIVATE KEY-----",
+            ].join("\\n"),
+          },
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain("Bad credentials");
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
     test("reuses cached GitHub App installation tokens", async () => {
       mockListReposAccessibleToInstallation
         .mockResolvedValueOnce({ data: { repositories: [] } })
@@ -349,6 +383,68 @@ describe("GithubConnector", () => {
       expect(batches[0].documents[0].id).toBe("my-repo#1");
       expect(batches[0].documents[0].title).toContain("First issue");
       expect(batches[0].documents[1].id).toBe("my-repo#2");
+    });
+
+    test("discovers repositories from GitHub App installation when repos are omitted", async () => {
+      const originalFetch = globalThis.fetch;
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ token: "installation-token" }),
+      });
+      globalThis.fetch = mockFetch as unknown as typeof fetch;
+
+      mockListReposAccessibleToInstallation.mockResolvedValueOnce({
+        data: {
+          repositories: [
+            {
+              name: "app-repo",
+              html_url: "https://github.com/test-org/app-repo",
+              default_branch: "main",
+              owner: { login: "test-org" },
+            },
+          ],
+        },
+      });
+      mockListForRepo.mockResolvedValueOnce({ data: [] });
+      mockListForRepo.mockResolvedValueOnce({ data: [] });
+
+      try {
+        const batches: ConnectorSyncBatch[] = [];
+        for await (const batch of connector.sync({
+          config: {
+            githubUrl: "https://api.github.com",
+            owner: "test-org",
+            authMethod: "github_app",
+            githubAppId: "12345",
+            githubAppInstallationId: "67893",
+          },
+          credentials: {
+            apiToken: [
+              "-----BEGIN PRIVATE KEY-----",
+              "MIIB",
+              "-----END PRIVATE KEY-----",
+            ].join("\\n"),
+          },
+          checkpoint: null,
+        })) {
+          batches.push(batch);
+        }
+
+        expect(batches).toHaveLength(2);
+        expect(mockListReposAccessibleToInstallation).toHaveBeenCalledWith({
+          per_page: 100,
+          page: 1,
+        });
+        expect(mockListForOrg).not.toHaveBeenCalled();
+        expect(mockListForRepo).toHaveBeenCalledWith(
+          expect.objectContaining({
+            owner: "test-org",
+            repo: "app-repo",
+          }),
+        );
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
     });
 
     test("separates issues and pull requests", async () => {
@@ -849,7 +945,7 @@ describe("GithubConnector", () => {
 
       const mdDocs = batches
         .flatMap((b) => b.documents)
-        .filter((d) => d.metadata.kind === "markdown_file");
+        .filter((d) => d.metadata.kind === "repository_file");
 
       expect(mdDocs).toHaveLength(3);
       expect(mdDocs[0].id).toBe("my-repo#file:README.md");
@@ -857,7 +953,7 @@ describe("GithubConnector", () => {
       expect(mdDocs[0].content).toBe("# README\nHello world");
       expect(mdDocs[0].sourceUrl).toContain("blob/main/README.md");
       expect(mdDocs[0].metadata.filePath).toBe("README.md");
-      expect(mdDocs[0].metadata.kind).toBe("markdown_file");
+      expect(mdDocs[0].metadata.kind).toBe("repository_file");
       expect(mdDocs[0].metadata.fileKind).toBe("repository_file");
 
       expect(mdDocs[1].id).toBe("my-repo#file:docs/guide.mdx");
@@ -902,11 +998,11 @@ describe("GithubConnector", () => {
 
       const repoDocs = batches
         .flatMap((b) => b.documents)
-        .filter((d) => d.metadata.kind === "markdown_file");
+        .filter((d) => d.metadata.kind === "repository_file");
 
       expect(repoDocs).toHaveLength(1);
       expect(repoDocs[0].id).toBe("my-repo#file:src/index.ts");
-      expect(repoDocs[0].metadata.kind).toBe("markdown_file");
+      expect(repoDocs[0].metadata.kind).toBe("repository_file");
       expect(repoDocs[0].metadata.fileKind).toBe("repository_file");
       expect(mockGetContent).toHaveBeenCalledWith(
         expect.objectContaining({ path: "src/index.ts" }),
@@ -973,7 +1069,7 @@ describe("GithubConnector", () => {
 
       const mdDocs = batches
         .flatMap((b) => b.documents)
-        .filter((d) => d.metadata.kind === "markdown_file");
+        .filter((d) => d.metadata.kind === "repository_file");
       expect(mdDocs).toHaveLength(1);
       expect(mdDocs[0].sourceUrl).toContain("/blob/develop/README.md");
     });
@@ -1032,7 +1128,7 @@ describe("GithubConnector", () => {
 
       const mdDocs = batches
         .flatMap((b) => b.documents)
-        .filter((d) => d.metadata.kind === "markdown_file");
+        .filter((d) => d.metadata.kind === "repository_file");
       expect(mdDocs).toHaveLength(1);
       expect(mdDocs[0].sourceUrl).toContain("/blob/develop/README.md");
     });
@@ -1072,7 +1168,7 @@ describe("GithubConnector", () => {
       }
 
       const mdBatch = batches.find((b) =>
-        b.documents.some((d) => d.metadata.kind === "markdown_file"),
+        b.documents.some((d) => d.metadata.kind === "repository_file"),
       );
       expect(mdBatch).toBeDefined();
       expect(mdBatch?.documents).toHaveLength(1);

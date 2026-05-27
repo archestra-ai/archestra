@@ -575,8 +575,14 @@ async function resolveGithubAuthToken(
   );
 
   if (!response.ok) {
+    const responseMessage = await readGithubErrorResponse(response);
     throw new Error(
-      `Failed to create GitHub App installation token: ${response.status} ${response.statusText}`,
+      [
+        `Failed to create GitHub App installation token: ${response.status} ${response.statusText}`,
+        responseMessage,
+      ]
+        .filter(Boolean)
+        .join(": "),
     );
   }
 
@@ -667,23 +673,43 @@ async function getRepos(
   let hasMore = true;
 
   while (hasMore) {
-    const response = await octokit.rest.repos.listForOrg({
-      org: config.owner,
-      per_page: 100,
-      page,
-      type: "all",
-    });
+    if (config.authMethod === "github_app") {
+      const response =
+        await octokit.rest.apps.listReposAccessibleToInstallation({
+          per_page: 100,
+          page,
+        });
 
-    for (const repo of response.data) {
-      repos.push({
-        owner: config.owner,
-        name: repo.name,
-        htmlUrl: repo.html_url,
-        defaultBranch: repo.default_branch ?? null,
+      for (const repo of response.data.repositories) {
+        repos.push({
+          owner: repo.owner?.login ?? config.owner,
+          name: repo.name,
+          htmlUrl: repo.html_url,
+          defaultBranch: repo.default_branch ?? null,
+        });
+      }
+
+      hasMore = response.data.repositories.length >= 100;
+    } else {
+      const response = await octokit.rest.repos.listForOrg({
+        org: config.owner,
+        per_page: 100,
+        page,
+        type: "all",
       });
+
+      for (const repo of response.data) {
+        repos.push({
+          owner: config.owner,
+          name: repo.name,
+          htmlUrl: repo.html_url,
+          defaultBranch: repo.default_branch ?? null,
+        });
+      }
+
+      hasMore = response.data.length >= 100;
     }
 
-    hasMore = response.data.length >= 100;
     page++;
   }
 
@@ -821,10 +847,30 @@ function repositoryFileToDocument(
     metadata: {
       repo: `${repo.owner}/${repo.name}`,
       filePath,
-      kind: "markdown_file",
+      kind: "repository_file",
       fileKind: "repository_file",
     },
   };
+}
+
+async function readGithubErrorResponse(response: Response): Promise<string> {
+  try {
+    const text = await response.text();
+    if (!text) return "";
+
+    try {
+      const parsed = JSON.parse(text) as { message?: unknown };
+      if (typeof parsed.message === "string") {
+        return parsed.message;
+      }
+    } catch {
+      // Fall back to the raw response body below.
+    }
+
+    return text.slice(0, 500);
+  } catch {
+    return "";
+  }
 }
 
 function itemToDocument(

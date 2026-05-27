@@ -630,6 +630,10 @@ export function McpCatalogForm({
     { mode: "add" } | { mode: "edit"; index: number } | null
   >(null);
 
+  const [configurationView, setConfigurationView] = useState<"form" | "json">(
+    "form",
+  );
+
   // Fetch available k8s docker-registry secrets for the "existing" dropdown
   const { data: k8sSecrets = [] } = useK8sImagePullSecrets();
 
@@ -1011,7 +1015,31 @@ export function McpCatalogForm({
               )}
             </div>
 
-            {currentServerType !== "remote" && <Separator />}
+            {currentServerType === "local" && (
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    setConfigurationView(
+                      configurationView === "form" ? "json" : "form",
+                    )
+                  }
+                >
+                  {configurationView === "form"
+                    ? "View as JSON"
+                    : "View as Form"}
+                </Button>
+              </div>
+            )}
+
+            {configurationView === "json" && (
+              <LocalConfigJsonView
+                form={form}
+                successCallback={() => setConfigurationView("form")}
+              />
+            )}
 
             <div className="space-y-4">
               {currentServerType === "remote" ? null : (
@@ -1047,153 +1075,154 @@ export function McpCatalogForm({
                 />
               )}
 
-              {currentServerType === "local" && (
-                <>
-                  <FormField
-                    control={form.control}
-                    name="localConfig.command"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>
-                          Command
-                          <ReinstallHint show={isCommandDirty} />
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="node"
-                            className="font-mono"
-                            autoComplete={MCP_CONFIG_AUTOCOMPLETE}
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          The executable command to run. Optional if Docker
-                          Image is set (will use image's default{" "}
-                          <code>CMD</code>).
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+              {currentServerType === "local" &&
+                configurationView === "form" && (
+                  <>
+                    <FormField
+                      control={form.control}
+                      name="localConfig.command"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>
+                            Command
+                            <ReinstallHint show={isCommandDirty} />
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="node"
+                              className="font-mono"
+                              autoComplete={MCP_CONFIG_AUTOCOMPLETE}
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            The executable command to run. Optional if Docker
+                            Image is set (will use image's default{" "}
+                            <code>CMD</code>).
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                  <FormField
-                    control={form.control}
-                    name="localConfig.arguments"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>
-                          Arguments (one per line)
-                          <ReinstallHint show={isArgumentsDirty} />
-                        </FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder={`/path/to/server.js\n--verbose`}
-                            className="font-mono min-h-20"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                    <FormField
+                      control={form.control}
+                      name="localConfig.arguments"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>
+                            Arguments (one per line)
+                            <ReinstallHint show={isArgumentsDirty} />
+                          </FormLabel>
+                          <FormControl>
+                            <Textarea
+                              placeholder={`/path/to/server.js\n--verbose`}
+                              className="font-mono min-h-20"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                  <FormField
-                    control={form.control}
-                    name="localConfig.transportType"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>
-                          Transport Type
-                          <ReinstallHint show={isTransportTypeDirty} />
-                        </FormLabel>
-                        <FormControl>
-                          <RadioGroup
-                            onValueChange={field.onChange}
-                            value={field.value || "streamable-http"}
-                            className="space-y-1"
-                          >
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem
-                                value="streamable-http"
-                                id="transport-http"
-                              />
-                              <FormLabel
-                                htmlFor="transport-http"
-                                className="font-normal cursor-pointer"
-                              >
-                                Streamable HTTP (default)
+                    <FormField
+                      control={form.control}
+                      name="localConfig.transportType"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>
+                            Transport Type
+                            <ReinstallHint show={isTransportTypeDirty} />
+                          </FormLabel>
+                          <FormControl>
+                            <RadioGroup
+                              onValueChange={field.onChange}
+                              value={field.value || "streamable-http"}
+                              className="space-y-1"
+                            >
+                              <div className="flex items-center space-x-2">
+                                <RadioGroupItem
+                                  value="streamable-http"
+                                  id="transport-http"
+                                />
+                                <FormLabel
+                                  htmlFor="transport-http"
+                                  className="font-normal cursor-pointer"
+                                >
+                                  Streamable HTTP (default)
+                                </FormLabel>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <RadioGroupItem
+                                  value="stdio"
+                                  id="transport-stdio"
+                                />
+                                <FormLabel
+                                  htmlFor="transport-stdio"
+                                  className="font-normal cursor-pointer"
+                                >
+                                  stdio
+                                </FormLabel>
+                              </div>
+                            </RadioGroup>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    {form.watch("localConfig.transportType") ===
+                      "streamable-http" && (
+                      <div className="grid gap-4 sm:grid-cols-2 rounded-lg border p-4">
+                        <FormField
+                          control={form.control}
+                          name="localConfig.httpPort"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>
+                                HTTP Port (optional)
+                                <ReinstallHint show={isHttpPortDirty} />
                               </FormLabel>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem
-                                value="stdio"
-                                id="transport-stdio"
-                              />
-                              <FormLabel
-                                htmlFor="transport-stdio"
-                                className="font-normal cursor-pointer"
-                              >
-                                stdio
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  placeholder="8080"
+                                  className="font-mono"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="localConfig.httpPath"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>
+                                HTTP Path (optional)
+                                <ReinstallHint show={isHttpPathDirty} />
                               </FormLabel>
-                            </div>
-                          </RadioGroup>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
+                              <FormControl>
+                                <Input
+                                  placeholder="/mcp"
+                                  className="font-mono"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
                     )}
-                  />
-
-                  {form.watch("localConfig.transportType") ===
-                    "streamable-http" && (
-                    <div className="grid gap-4 sm:grid-cols-2 rounded-lg border p-4">
-                      <FormField
-                        control={form.control}
-                        name="localConfig.httpPort"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>
-                              HTTP Port (optional)
-                              <ReinstallHint show={isHttpPortDirty} />
-                            </FormLabel>
-                            <FormControl>
-                              <Input
-                                type="number"
-                                placeholder="8080"
-                                className="font-mono"
-                                {...field}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="localConfig.httpPath"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>
-                              HTTP Path (optional)
-                              <ReinstallHint show={isHttpPathDirty} />
-                            </FormLabel>
-                            <FormControl>
-                              <Input
-                                placeholder="/mcp"
-                                className="font-mono"
-                                {...field}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  )}
-                </>
-              )}
+                  </>
+                )}
             </div>
 
-            {currentServerType === "local" && (
+            {currentServerType === "local" && configurationView === "form" && (
               <div className="space-y-4">
                 <EnvironmentVariablesFormField
                   fields={fields}
@@ -1219,7 +1248,7 @@ export function McpCatalogForm({
               </div>
             )}
 
-            {currentServerType === "local" && (
+            {currentServerType === "local" && configurationView === "form" && (
               <div className="space-y-4">
                 <h3 className="font-semibold text-base">Docker</h3>
 
@@ -1254,7 +1283,10 @@ export function McpCatalogForm({
                       variant="outline"
                       size="sm"
                       onClick={() =>
-                        appendImagePullSecret({ source: "existing", name: "" })
+                        appendImagePullSecret({
+                          source: "existing",
+                          name: "",
+                        })
                       }
                     >
                       <Plus className="h-4 w-4 mr-1" />
@@ -2664,4 +2696,109 @@ function applyHeaderDraftToRow(
   set("description", draft.description);
   set("includeBearerPrefix", draft.includeBearerPrefix);
   set("sensitive", draft.scope === "static" ? false : draft.sensitive);
+}
+
+function LocalConfigJsonView(params: {
+  form: UseFormReturn<McpCatalogFormValues>;
+  successCallback: () => void;
+}) {
+  const [value, setValue] = useState(() => {
+    const localConfig = params.form.getValues().localConfig;
+    return localConfigToJson(localConfig);
+  });
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <div className="space-y-3">
+      <Textarea
+        value={value}
+        onChange={(e) => {
+          setValue(e.target.value);
+          setError(null);
+        }}
+        spellCheck={false}
+        className="font-mono min-h-64 max-h-[30rem] overflow-y-auto text-sm"
+      />
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={() => {
+          const result = tryParseJson(value);
+
+          if (!result.ok) {
+            setError(result.error);
+          } else {
+            applyLocalConfigJsonToForm(result.value, params.form);
+            params.successCallback();
+            setError(null);
+          }
+        }}
+      >
+        Apply to Form
+      </Button>
+    </div>
+  );
+}
+
+function tryParseJson(
+  json: string,
+): { ok: true; value: Record<string, unknown> } | { ok: false; error: string } {
+  try {
+    const parsed = JSON.parse(json);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { ok: false, error: "Expected a JSON object" };
+    }
+    return { ok: true, value: parsed as Record<string, unknown> };
+  } catch (e) {
+    return {
+      ok: false,
+      error: `Invalid JSON: ${e instanceof Error ? e.message : String(e)}`,
+    };
+  }
+}
+
+function localConfigToJson(
+  config: McpCatalogFormValues["localConfig"],
+): string {
+  if (!config) return JSON.stringify({}, null, 2);
+
+  // Arguments are stored as a string with newlines in the form, but should be an array in the JSON config.
+  const args = config.arguments
+    ? config.arguments
+        .split("\n")
+        .map((a) => a.trim())
+        .filter((a) => a.length > 0)
+    : [];
+
+  return JSON.stringify({ ...config, arguments: args }, null, 2);
+}
+
+function applyLocalConfigJsonToForm(
+  config: Record<string, unknown>,
+  form: UseFormReturn<McpCatalogFormValues>,
+) {
+  const set = (key: string, value: unknown) =>
+    form.setValue(`localConfig.${key}` as any, value, { shouldDirty: true });
+
+  if ("command" in config) set("command", config.command);
+  if ("arguments" in config)
+    set(
+      "arguments",
+      Array.isArray(config.arguments)
+        ? config.arguments.map(String).join("\n")
+        : (config.arguments ?? ""),
+    );
+  if ("transportType" in config) set("transportType", config.transportType);
+  if ("dockerImage" in config) set("dockerImage", config.dockerImage);
+  if ("httpPort" in config) set("httpPort", config.httpPort);
+  if ("httpPath" in config) set("httpPath", config.httpPath);
+  if ("serviceAccount" in config) set("serviceAccount", config.serviceAccount);
+  if ("environment" in config && Array.isArray(config.environment))
+    set("environment", config.environment);
+  if ("envFrom" in config && Array.isArray(config.envFrom))
+    set("envFrom", config.envFrom);
+  if ("imagePullSecrets" in config && Array.isArray(config.imagePullSecrets))
+    set("imagePullSecrets", config.imagePullSecrets);
 }

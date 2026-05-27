@@ -140,12 +140,14 @@ export function useCreateConversation() {
       agentId,
       modelId,
       chatApiKeyId,
+      title,
     }: NonNullable<archestraApiTypes.CreateChatConversationData["body"]>) => {
       const { data, error } = await createChatConversation({
         body: {
           agentId,
           modelId,
           chatApiKeyId: chatApiKeyId ?? undefined,
+          title,
         },
       });
       if (error) {
@@ -158,12 +160,10 @@ export function useCreateConversation() {
       if (!newConversation) return;
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
       // Immediately populate the individual conversation cache to avoid loading state
-      if (newConversation) {
-        queryClient.setQueryData(
-          ["conversation", newConversation.id],
-          newConversation,
-        );
-      }
+      queryClient.setQueryData(
+        ["conversation", newConversation.id],
+        newConversation,
+      );
     },
   });
 }

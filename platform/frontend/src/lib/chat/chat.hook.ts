@@ -124,14 +124,14 @@ export function useRecentlyGeneratedTitles(
 
       // Title was null before and now has a value -> auto-generated
       const titleGenerated = previousTitle === null && conv.title !== null;
-      // Title changed while regenerating -> regenerated
-      const titleRegenerated =
-        isRegenerating &&
+      // Title changed from one value to another (auto-regeneration or manual regeneration)
+      const titleChanged =
         previousTitle !== undefined &&
+        previousTitle !== null &&
         previousTitle !== conv.title &&
         conv.title !== null;
 
-      if (titleGenerated || titleRegenerated) {
+      if (titleGenerated || titleChanged) {
         startAnimation(conv.id);
       }
 

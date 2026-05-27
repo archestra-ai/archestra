@@ -1484,7 +1484,10 @@ export function ChatPageContent({
 
   // Handle creating conversation from browser URL input (when no conversation exists)
   const createInitialConversation = useCallback(
-    (onSuccess?: (newConversation: { id: string }) => void | Promise<void>) => {
+    (
+      onSuccess?: (newConversation: { id: string }) => void | Promise<void>,
+      title?: string,
+    ) => {
       if (createConversationMutation.isPending) {
         return false;
       }
@@ -1493,6 +1496,7 @@ export function ChatPageContent({
         agentId: initialAgentId,
         modelId: initialModel,
         chatApiKeyId: initialApiKeyId,
+        title,
       });
       if (!input) {
         return false;
@@ -1658,7 +1662,7 @@ export function ChatPageContent({
         }
 
         selectConversation(newConversation.id);
-      });
+      }, message.text?.trim());
     },
     [
       isPlaywrightSetupVisible,

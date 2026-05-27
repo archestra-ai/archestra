@@ -41,7 +41,10 @@ import {
   pruneEmptyTrailingAssistantMessage,
   restoreRenderableAssistantParts,
 } from "@/lib/chat/chat-session-utils";
-import { getChatExternalAgentId } from "@/lib/chat/chat-utils";
+import {
+  getChatExternalAgentId,
+  getConversationDisplayTitle,
+} from "@/lib/chat/chat-utils";
 import {
   extractSwapTargetAgentName,
   getRenderedToolName,
@@ -373,8 +376,6 @@ function ChatSessionHook({
   const generateTitleMutation = useGenerateConversationTitle();
   // Read from the shared TanStack cache so we only auto-title untitled chats
   const { data: conversation } = useConversation(conversationId);
-  // Track if title generation has been attempted for this conversation
-  const titleGenerationAttemptedRef = useRef(false);
   // Track when swap_agent was called so we can auto-poke the new agent on finish
   // Stores the poke text to send, or null if no swap is pending
   const swapAgentPendingRef = useRef<string | null>(null);
@@ -504,8 +505,19 @@ function ChatSessionHook({
       // Free early UI HTML blobs now that all tool calls have rendered.
       setEarlyToolUiStarts({});
 
-      // Attempt to generate title after first assistant response
-      // This will be checked when messages update in the effect below
+      // Auto-generate title after the first settled exchange if still untitled
+      const cachedTitle = queryClient.getQueryData<{ title?: string | null }>([
+        "conversation",
+        conversationId,
+      ])?.title;
+      const firstUserText = getConversationDisplayTitle(null, stableMessages);
+
+      if (cachedTitle === firstUserText) {
+        generateTitleMutation.mutate({
+          id: conversationId,
+          regenerate: true,
+        });
+      }
     },
     onError: (chatError) => {
       setOptimisticToolCalls([]);
@@ -721,45 +733,6 @@ function ChatSessionHook({
       filterOptimisticToolCalls(stableMessages, current),
     );
   }, [stableMessages, optimisticToolCalls.length]);
-
-  // Auto-generate title after the first settled exchange
-  useEffect(() => {
-    // Skip if already attempted or currently generating
-    if (
-      titleGenerationAttemptedRef.current ||
-      generateTitleMutation.isPending
-    ) {
-      return;
-    }
-
-    // Only auto-title a conversation that doesn't have a title yet. This
-    // replaces relying on exact message counts, which breaks when an agent
-    // swap inserts an extra tool-only assistant message and an auto-poke
-    // user message into the first exchange.
-    if (!conversation || conversation.title || status !== "ready") {
-      return;
-    }
-
-    const hasUserMessage = stableMessages.some((m) => m.role === "user");
-    const hasAssistantMessage = stableMessages.some(
-      (m) => m.role === "assistant",
-    );
-
-    // Title once a turn has settled. Assistant *text* is intentionally not
-    // required: an agent swap and tool-only answers produce assistant
-    // messages with no text, and the backend titles from the user message
-    // when no assistant text exists.
-    if (hasUserMessage && hasAssistantMessage) {
-      titleGenerationAttemptedRef.current = true;
-      generateTitleMutation.mutate({ id: conversationId });
-    }
-  }, [
-    stableMessages,
-    status,
-    conversationId,
-    conversation,
-    generateTitleMutation,
-  ]);
 
   // Always keep the session ref up-to-date with the latest values (including
   // function references from useChat which change every render). This is a ref

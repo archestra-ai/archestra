@@ -1277,26 +1277,21 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body, user, organizationId }, reply) => {
-      const meta = await ChatAttachmentModel.findById(id);
-      if (!meta) {
+      const attachment = await ChatAttachmentModel.findByIdWithData(id);
+      if (!attachment) {
         throw new ApiError(404, "Attachment not found");
       }
-      if (meta.organizationId !== organizationId) {
+      if (attachment.organizationId !== organizationId) {
         throw new ApiError(403, "Attachment belongs to a different org");
       }
 
       const conversation = await findReadableConversationById({
-        conversationId: meta.conversationId,
+        conversationId: attachment.conversationId,
         userId: user.id,
         organizationId,
       });
       if (!conversation) {
         throw new ApiError(403, "No access to the owning conversation");
-      }
-
-      const attachment = await ChatAttachmentModel.findByIdWithData(id);
-      if (!attachment) {
-        throw new ApiError(404, "Attachment not found");
       }
 
       const result = await fileUploadManager.uploadKnowledgeFile({

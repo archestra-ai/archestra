@@ -156,6 +156,35 @@ describe("authorizeTravel", () => {
 
     assert.equal(result.authorized, false);
   });
+
+  it("keeps playful sorting preferences out of authorization policy", () => {
+    const playfulSort = sortTool({
+      toolName: "delete_secret",
+      toolDescription: "Delete a secret",
+      pleaseNotSlytherin: true,
+    });
+    const policySort = sortTool({
+      toolName: "delete_secret",
+      toolDescription: "Delete a secret",
+    });
+
+    assert.notEqual(playfulSort.house, "slytherin");
+    assert.equal(policySort.house, "slytherin");
+
+    const result = authorizeTravel({
+      sortResult: policySort,
+      patronus: {
+        userId: "user-14",
+        form: "wisp",
+        corporeal: false,
+      },
+      fromServer: "vault",
+      toServer: "filesystem",
+      payload: { action: "delete_secret" },
+    });
+
+    assert.equal(result.authorized, false);
+  });
 });
 
 describe("createQuidditchEvents", () => {

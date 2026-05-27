@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import {
   createServer,
   type IncomingMessage,
@@ -29,7 +28,16 @@ import {
 
 const DEFAULT_PORT = 3469;
 const DEFAULT_BASE_URL = `http://localhost:${DEFAULT_PORT}`;
-const RESOURCE_TEMPLATE = "sorting-hat://app/{id}";
+const RESOURCE_TEMPLATE = "sorting-hat://app/{view}";
+const TOOL_RESOURCE_URIS = {
+  sortingHat: "sorting-hat://app/sorting-hat",
+  patronus: "sorting-hat://app/patronus",
+  floo: "sorting-hat://app/floo",
+  quidditch: "sorting-hat://app/quidditch",
+} as const;
+
+type ToolResourceUri =
+  (typeof TOOL_RESOURCE_URIS)[keyof typeof TOOL_RESOURCE_URIS];
 
 type ServerConfig = {
   port: number;
@@ -145,16 +153,16 @@ function registerResourceHandler(
   server.resource(
     "sorting-hat-app",
     new ResourceTemplate(RESOURCE_TEMPLATE, { list: undefined }),
-    (uri, variables) => {
-      const id = String(variables.id);
-      const resource = resources.get(id);
-      if (!resource) {
-        throw new Error(`Unknown Sorting Hat MCP App resource: ${id}`);
+    (uri) => {
+      const resourceUri = uri.href;
+      const resource = resources.get(resourceUri) ?? {
+        html: createDefaultResourceHtml(resourceUri),
+      };
+      if (!resource.html) {
+        throw new Error(`Unknown Sorting Hat MCP App resource: ${resourceUri}`);
       }
 
-      return {
-        contents: [createResourceContent(uri.href, resource.html)],
-      };
+      return { contents: [createResourceContent(resourceUri, resource.html)] };
     },
   );
 }
@@ -167,12 +175,16 @@ function registerTools(
     baseUrl: string;
   },
 ): void {
-  server.tool(
+  server.registerTool(
     "sorting_hat.sort",
-    "Sort an MCP tool into a risk house and return an MCP App view.",
     {
-      tool_name: z.string().min(1),
-      tool_description: z.string().optional(),
+      description:
+        "Sort an MCP tool into a risk house and return an MCP App view.",
+      inputSchema: {
+        tool_name: z.string().min(1),
+        tool_description: z.string().optional(),
+      },
+      _meta: createToolMeta(TOOL_RESOURCE_URIS.sortingHat),
     },
     async (args) => {
       const result = sortTool({
@@ -184,18 +196,25 @@ function registerTools(
       return createToolResult({
         text: JSON.stringify(result, null, 2),
         structuredContent: result,
-        resourceUri: storeResource(params.resources, html),
+        resourceUri: storeResource(
+          params.resources,
+          TOOL_RESOURCE_URIS.sortingHat,
+          html,
+        ),
         html,
       });
     },
   );
 
-  server.tool(
+  server.registerTool(
     "patronus.cast",
-    "Cast a deterministic Patronus for an Archestra user.",
     {
-      user_id: z.string().min(1),
-      charm: z.literal("expecto_patronum"),
+      description: "Cast a deterministic Patronus for an Archestra user.",
+      inputSchema: {
+        user_id: z.string().min(1),
+        charm: z.literal("expecto_patronum"),
+      },
+      _meta: createToolMeta(TOOL_RESOURCE_URIS.patronus),
     },
     async (args) => {
       const result = castPatronus({
@@ -206,28 +225,34 @@ function registerTools(
       return createToolResult({
         text: JSON.stringify(result, null, 2),
         structuredContent: result,
-        resourceUri: storeResource(params.resources, html),
+        resourceUri: storeResource(
+          params.resources,
+          TOOL_RESOURCE_URIS.patronus,
+          html,
+        ),
         html,
       });
     },
   );
 
-  server.tool(
+  server.registerTool(
     "floo.travel",
-    "Authorize and route a tool payload between MCP servers.",
     {
-      from_server: z.string().min(1),
-      to_server: z.string().min(1),
-      payload: z.unknown(),
-      user_id: z.string().min(1),
-      tool_name: z.string().min(1),
-      tool_description: z.string().optional(),
+      description: "Authorize and route a tool payload between MCP servers.",
+      inputSchema: {
+        from_server: z.string().min(1),
+        to_server: z.string().min(1),
+        payload: z.unknown(),
+        user_id: z.string().min(1),
+        tool_name: z.string().min(1),
+        tool_description: z.string().optional(),
+      },
+      _meta: createToolMeta(TOOL_RESOURCE_URIS.floo),
     },
     async (args) => {
       const sortResult = sortTool({
         toolName: args.tool_name,
         toolDescription: args.tool_description,
-        pleaseNotSlytherin: hasPleaseNotSlytherinHeader(params.request),
       });
       const patronus = castPatronus({
         userId: args.user_id,
@@ -244,18 +269,24 @@ function registerTools(
       return createToolResult({
         text: JSON.stringify(result, null, 2),
         structuredContent: result,
-        resourceUri: storeResource(params.resources, html),
+        resourceUri: storeResource(
+          params.resources,
+          TOOL_RESOURCE_URIS.floo,
+          html,
+        ),
         html,
-        isError: !result.authorized,
       });
     },
   );
 
-  server.tool(
+  server.registerTool(
     "quidditch.stream",
-    "Create a 60 fps progress event stream for a tool call.",
     {
-      tool_call_id: z.string().min(1),
+      description: "Create a 60 fps progress event stream for a tool call.",
+      inputSchema: {
+        tool_call_id: z.string().min(1),
+      },
+      _meta: createToolMeta(TOOL_RESOURCE_URIS.quidditch),
     },
     async (args) => {
       const events = createQuidditchEvents(args.tool_call_id, 60);
@@ -271,7 +302,11 @@ function registerTools(
       return createToolResult({
         text: JSON.stringify(result, null, 2),
         structuredContent: result,
-        resourceUri: storeResource(params.resources, html),
+        resourceUri: storeResource(
+          params.resources,
+          TOOL_RESOURCE_URIS.quidditch,
+          html,
+        ),
         html,
       });
     },
@@ -281,7 +316,7 @@ function registerTools(
 function createToolResult(params: {
   text: string;
   structuredContent: SortResult | PatronusResult | Record<string, unknown>;
-  resourceUri: string;
+  resourceUri: ToolResourceUri;
   html: string;
   isError?: boolean;
 }): CallToolResult {
@@ -305,11 +340,63 @@ function createToolResult(params: {
 
 function storeResource(
   resources: Map<string, AppResource>,
+  resourceUri: ToolResourceUri,
   html: string,
-): string {
-  const id = crypto.randomUUID();
-  resources.set(id, { html });
-  return `sorting-hat://app/${id}`;
+): ToolResourceUri {
+  resources.set(resourceUri, { html });
+  return resourceUri;
+}
+
+function createToolMeta(resourceUri: ToolResourceUri): Record<string, unknown> {
+  return {
+    ui: {
+      resourceUri,
+    },
+  };
+}
+
+function createDefaultResourceHtml(resourceUri: string): string {
+  if (resourceUri === TOOL_RESOURCE_URIS.sortingHat) {
+    return renderSortingHatHtml(
+      sortTool({
+        toolName: "github.merge_pull_request",
+        toolDescription:
+          "Merge an approved pull request into the default branch",
+      }),
+    );
+  }
+
+  if (resourceUri === TOOL_RESOURCE_URIS.patronus) {
+    return renderPatronusHtml(
+      castPatronus({ userId: "demo-user", charm: "expecto_patronum" }),
+    );
+  }
+
+  if (resourceUri === TOOL_RESOURCE_URIS.floo) {
+    const sortResult = sortTool({
+      toolName: "stripe.create_payment",
+      toolDescription: "Create a payment and write customer billing state",
+    });
+    const patronus = castPatronus({
+      userId: "demo-user",
+      charm: "expecto_patronum",
+    });
+    return renderFlooHtml(
+      authorizeTravel({
+        sortResult,
+        patronus,
+        fromServer: "demo",
+        toServer: "stripe",
+        payload: { action: "create_payment" },
+      }),
+    );
+  }
+
+  if (resourceUri === TOOL_RESOURCE_URIS.quidditch) {
+    return renderQuidditchHtml("demo-call");
+  }
+
+  return "";
 }
 
 function createResourceContent(uri: string, html: string): ResourceContent {

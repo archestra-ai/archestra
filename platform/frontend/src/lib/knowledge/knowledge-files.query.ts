@@ -10,6 +10,7 @@ const {
   getKnowledgeFile,
   getKnowledgeFiles,
   getKnowledgeFileUploadConfig,
+  promoteChatAttachmentToKnowledgeFile,
   updateKnowledgeFile,
   uploadKnowledgeFiles,
 } = archestraApiSdk;
@@ -128,6 +129,38 @@ export function useUploadKnowledgeFiles() {
     },
     onError: () => {
       toast.error("Failed to upload files");
+    },
+  });
+}
+
+export function usePromoteChatAttachmentToKnowledgeFile() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      attachmentId,
+      body,
+    }: {
+      attachmentId: string;
+      body: archestraApiTypes.PromoteChatAttachmentToKnowledgeFileData["body"];
+    }) => {
+      const { data, error } = await promoteChatAttachmentToKnowledgeFile({
+        path: { id: attachmentId },
+        body,
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["knowledge-files"] });
+      showUploadResultToasts([data]);
+    },
+    onError: () => {
+      toast.error("Failed to save attachment to Knowledge");
     },
   });
 }

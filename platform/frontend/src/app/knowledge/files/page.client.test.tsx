@@ -107,5 +107,11 @@ describe("KnowledgeFilesPage", () => {
     expect(
       screen.getByRole("button", { name: "Select Files" }),
     ).toBeInTheDocument();
+    expect(screen.getByText("Agents / MCP Gateways")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Choose which agents and MCP gateways can retrieve this file.",
+      ),
+    ).toBeInTheDocument();
   });
 });

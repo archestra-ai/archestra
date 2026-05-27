@@ -720,6 +720,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetChatAttachmentContent]: {
     chat: ["read"],
   },
+  [RouteId.PromoteChatAttachmentToKnowledgeFile]: {
+    chat: ["read"],
+    knowledgeFile: ["create"],
+  },
   [RouteId.GetChatAgentMcpTools]: {
     agent: ["read"],
   },

@@ -19,20 +19,12 @@ import { useCallback, useRef, useState, useTransition } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { StandardFormDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Tooltip,
@@ -40,12 +32,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  type VisibilityOption,
-  VisibilitySelector,
-} from "@/components/visibility-selector";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
-import { useProfiles } from "@/lib/agent.query";
 import {
   formatFileSize,
   type KnowledgeFile,
@@ -55,34 +42,10 @@ import {
   useUpdateKnowledgeFile,
   useUploadKnowledgeFiles,
 } from "@/lib/knowledge/knowledge-files.query";
-import { useTeams } from "@/lib/teams/team.query";
 import { formatDate } from "@/lib/utils";
+import { KnowledgeFileAccessFields } from "./_parts/knowledge-file-access-fields";
 
 const ACCEPTED_EXTENSIONS = ".txt,.md,.csv,.json,.xml,.pdf";
-
-const VISIBILITY_OPTIONS: Record<
-  ResourceVisibilityScope,
-  VisibilityOption<ResourceVisibilityScope>
-> = {
-  personal: {
-    value: "personal",
-    label: "Owner",
-    description: "Only you can view and query this file",
-    icon: User,
-  },
-  team: {
-    value: "team",
-    label: "Teams",
-    description: "Share this file with selected teams",
-    icon: Users,
-  },
-  org: {
-    value: "org",
-    label: "Organization",
-    description: "Anyone in your org can view and query this file",
-    icon: Globe,
-  },
-};
 
 export default function KnowledgeFilesPage() {
   return (
@@ -337,70 +300,15 @@ function UploadKnowledgeFilesDialog({
     files.length === 0 || teamSelectionInvalid || isUploading;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Upload Files</DialogTitle>
-          <DialogDescription>
-            Uploaded files are indexed for retrieval by the selected agents.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-5">
-          <div className="space-y-2">
-            <Label>Files</Label>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept={ACCEPTED_EXTENSIONS}
-              multiple
-              className="hidden"
-              onChange={(event) =>
-                setFiles(Array.from(event.target.files ?? []))
-              }
-            />
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Upload className="h-4 w-4" />
-              Select Files
-            </Button>
-            <p className="text-xs text-muted-foreground">
-              TXT, Markdown, CSV, JSON, XML, and PDF files up to{" "}
-              {formatFileSize(config?.maxFileSizeBytes ?? 10 * 1024 * 1024)}
-            </p>
-            {files.length > 0 && (
-              <div className="rounded-md border">
-                {files.map((file) => (
-                  <div
-                    key={`${file.name}-${file.size}-${file.lastModified}`}
-                    className="flex items-center justify-between border-b px-3 py-2 last:border-b-0"
-                  >
-                    <span className="min-w-0 truncate text-sm">
-                      {file.name}
-                    </span>
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                      {formatFileSize(file.size)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <KnowledgeFileAccessFields
-            visibility={visibility}
-            onVisibilityChange={setVisibility}
-            teamIds={teamIds}
-            onTeamIdsChange={setTeamIds}
-            agentIds={agentIds}
-            onAgentIdsChange={setAgentIds}
-          />
-        </div>
-
-        <DialogFooter>
+    <StandardFormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Upload Files"
+      description="Uploaded files are indexed for retrieval by the selected agents."
+      size="medium"
+      onSubmit={handleSubmit}
+      footer={
+        <>
           <Button
             type="button"
             variant="outline"
@@ -408,17 +316,63 @@ function UploadKnowledgeFilesDialog({
           >
             Cancel
           </Button>
-          <Button
-            type="button"
-            disabled={uploadDisabled}
-            onClick={handleSubmit}
-          >
+          <Button type="submit" disabled={uploadDisabled}>
             {isUploading && <Loader2 className="h-4 w-4 animate-spin" />}
             Upload
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </>
+      }
+    >
+      <div className="space-y-5">
+        <div className="space-y-2">
+          <Label>Files</Label>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={ACCEPTED_EXTENSIONS}
+            multiple
+            className="hidden"
+            onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <Upload className="h-4 w-4" />
+            Select Files
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            TXT, Markdown, CSV, JSON, XML, and PDF files up to{" "}
+            {formatFileSize(config?.maxFileSizeBytes ?? 10 * 1024 * 1024)}
+          </p>
+          {files.length > 0 && (
+            <div className="rounded-md border">
+              {files.map((file) => (
+                <div
+                  key={`${file.name}-${file.size}-${file.lastModified}`}
+                  className="flex items-center justify-between border-b px-3 py-2 last:border-b-0"
+                >
+                  <span className="min-w-0 truncate text-sm">{file.name}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {formatFileSize(file.size)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <KnowledgeFileAccessFields
+          visibility={visibility}
+          onVisibilityChange={setVisibility}
+          teamIds={teamIds}
+          onTeamIdsChange={setTeamIds}
+          agentIds={agentIds}
+          onAgentIdsChange={setAgentIds}
+        />
+      </div>
+    </StandardFormDialog>
   );
 }
 
@@ -449,21 +403,15 @@ function EditKnowledgeFileDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Edit File Access</DialogTitle>
-          <DialogDescription>{file.originalName}</DialogDescription>
-        </DialogHeader>
-        <KnowledgeFileAccessFields
-          visibility={visibility}
-          onVisibilityChange={setVisibility}
-          teamIds={teamIds}
-          onTeamIdsChange={setTeamIds}
-          agentIds={agentIds}
-          onAgentIdsChange={setAgentIds}
-        />
-        <DialogFooter>
+    <StandardFormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Edit File Access"
+      description={file.originalName}
+      size="medium"
+      onSubmit={handleSave}
+      footer={
+        <>
           <Button
             type="button"
             variant="outline"
@@ -472,91 +420,29 @@ function EditKnowledgeFileDialog({
             Cancel
           </Button>
           <Button
-            type="button"
+            type="submit"
             disabled={
               updateFile.isPending ||
               (visibility === "team" && teamIds.length === 0)
             }
-            onClick={handleSave}
           >
             {updateFile.isPending && (
               <Loader2 className="h-4 w-4 animate-spin" />
             )}
             Save
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function KnowledgeFileAccessFields({
-  visibility,
-  onVisibilityChange,
-  teamIds,
-  onTeamIdsChange,
-  agentIds,
-  onAgentIdsChange,
-}: {
-  visibility: ResourceVisibilityScope;
-  onVisibilityChange: (visibility: ResourceVisibilityScope) => void;
-  teamIds: string[];
-  onTeamIdsChange: (teamIds: string[]) => void;
-  agentIds: string[];
-  onAgentIdsChange: (agentIds: string[]) => void;
-}) {
-  const { data: teams } = useTeams();
-  const { data: agents } = useProfiles({
-    filters: { agentTypes: ["agent", "mcp_gateway"] },
-  });
-
-  const options = Object.values(VISIBILITY_OPTIONS).map((option) => ({
-    ...option,
-    disabled: option.value === "team" && (teams ?? []).length === 0,
-    disabledLabel:
-      option.value === "team" && (teams ?? []).length === 0
-        ? "No teams available"
-        : undefined,
-  }));
-
-  return (
-    <div className="space-y-5">
-      <VisibilitySelector
-        value={visibility}
-        options={options}
-        onValueChange={onVisibilityChange}
-      >
-        {visibility === "team" && (
-          <div className="space-y-2">
-            <Label>Teams</Label>
-            <MultiSelectCombobox
-              options={(teams ?? []).map((team) => ({
-                value: team.id,
-                label: team.name,
-              }))}
-              value={teamIds}
-              onChange={onTeamIdsChange}
-              placeholder="Search teams..."
-              emptyMessage="No teams found."
-            />
-          </div>
-        )}
-      </VisibilitySelector>
-
-      <div className="space-y-2">
-        <Label>Agents</Label>
-        <MultiSelectCombobox
-          options={(agents ?? []).map((agent) => ({
-            value: agent.id,
-            label: agent.name,
-          }))}
-          value={agentIds}
-          onChange={onAgentIdsChange}
-          placeholder="Search agents..."
-          emptyMessage="No agents found."
-        />
-      </div>
-    </div>
+        </>
+      }
+    >
+      <KnowledgeFileAccessFields
+        visibility={visibility}
+        onVisibilityChange={setVisibility}
+        teamIds={teamIds}
+        onTeamIdsChange={setTeamIds}
+        agentIds={agentIds}
+        onAgentIdsChange={setAgentIds}
+      />
+    </StandardFormDialog>
   );
 }
 

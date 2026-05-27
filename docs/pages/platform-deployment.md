@@ -1275,7 +1275,7 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
 
 #### Knowledge Files External Blob Storage
 
-Uploaded [Knowledge Files](/docs/platform-knowledge-files) store file bytes in the database by default. Set the provider to `s3` to store file bytes externally while keeping metadata and indexing state in PostgreSQL.
+Uploaded [Knowledge Files](/docs/platform-knowledge-bases#files) store file bytes in the database by default. Set the provider to `s3` to store file bytes externally while keeping metadata and indexing state in PostgreSQL.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_BLOB_STORAGE_PROVIDER`** - File byte storage provider.
   - Default: `db`

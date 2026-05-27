@@ -193,16 +193,16 @@ const contentNavGroups: NavGroup[] = [
           !pathname.startsWith("/knowledge/connectors"),
         subItems: [
           {
-            title: "Files",
-            url: "/knowledge/files",
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/knowledge/files"),
-          },
-          {
             title: "Connectors",
             url: "/knowledge/connectors",
             customIsActive: (pathname: string) =>
               pathname.startsWith("/knowledge/connectors"),
+          },
+          {
+            title: "Files",
+            url: "/knowledge/files",
+            customIsActive: (pathname: string) =>
+              pathname.startsWith("/knowledge/files"),
           },
         ],
       },

@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { vi } from "vitest";
 import db, { schema } from "@/database";
 import {
   AgentConnectorAssignmentModel,
@@ -9,8 +10,26 @@ import {
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { taskQueueService } from "@/task-queue";
-import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent, User } from "@/types";
+
+vi.mock("@/knowledge-base/file-upload/blob-storage-providers", () => {
+  const databaseProvider = {
+    name: "db",
+    put: async (params: { data: Buffer }) => ({
+      provider: "db",
+      key: null,
+      dbData: params.data,
+    }),
+    get: async (params: { dbData: Buffer | null }) => params.dbData,
+    delete: async () => {},
+  };
+
+  return {
+    getConfiguredBlobStorageProvider: () => databaseProvider,
+    getBlobStorageProvider: () => databaseProvider,
+  };
+});
 
 function buildUploadPayload(params: {
   files: Array<{ name: string; content: Buffer; mimeType: string }>;

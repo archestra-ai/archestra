@@ -1,7 +1,13 @@
 "use client";
 
 import type { ChatSkillMetadata } from "@shared";
-import { AlertTriangle, FileText, Paperclip, Sparkles } from "lucide-react";
+import {
+  AlertTriangle,
+  FilePlus2,
+  FileText,
+  Paperclip,
+  Sparkles,
+} from "lucide-react";
 import Link from "next/link";
 import {
   type KeyboardEventHandler,
@@ -37,6 +43,7 @@ interface EditableUserMessageProps {
   isEditing: boolean;
   editDisabled?: boolean;
   attachments?: FileAttachment[];
+  canPromoteAttachments?: boolean;
   /** Skill the user invoked via slash command for this message, if any. */
   skill?: ChatSkillMetadata;
   onStartEdit: (partKey: string, messageId: string) => void;
@@ -46,6 +53,7 @@ interface EditableUserMessageProps {
     partIndex: number,
     newText: string,
   ) => Promise<void>;
+  onPromoteAttachment?: (attachment: FileAttachment) => void;
 }
 
 export function EditableUserMessage({
@@ -56,10 +64,12 @@ export function EditableUserMessage({
   isEditing,
   editDisabled = false,
   attachments = [],
+  canPromoteAttachments = false,
   skill,
   onStartEdit,
   onCancelEdit,
   onSave,
+  onPromoteAttachment,
 }: EditableUserMessageProps) {
   const [editedText, setEditedText] = useState(text);
   const [isSaving, setIsSaving] = useState(false);
@@ -233,34 +243,72 @@ export function EditableUserMessage({
         {otherAttachments.length > 0 && (
           <div className="flex flex-wrap gap-1 justify-end mb-2">
             {otherAttachments.map((attachment) => (
-              <Link
+              <div
                 key={attachment.url}
-                href={attachment.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                download={attachment.filename}
-                className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2 hover:bg-muted transition-colors"
+                className="flex items-center gap-1 rounded-lg border bg-muted/50 p-1"
               >
-                {isCsvAttachment(attachment.mediaType, attachment.filename) ||
-                isPlainTextAttachment(
-                  attachment.mediaType,
-                  attachment.filename,
-                ) ? (
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                ) : (
-                  <Paperclip className="h-4 w-4 text-muted-foreground" />
-                )}
-                <span className="truncate max-w-[200px]">
-                  {attachment.filename ||
-                    getAttachmentFallbackLabel({
-                      mediaType: attachment.mediaType,
-                      filename: attachment.filename,
-                    })}
-                </span>
-              </Link>
+                <Link
+                  href={attachment.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download={attachment.filename}
+                  className="flex min-w-0 items-center gap-2 rounded-md px-1.5 py-1 text-sm transition-colors hover:bg-muted"
+                >
+                  {isCsvAttachment(attachment.mediaType, attachment.filename) ||
+                  isPlainTextAttachment(
+                    attachment.mediaType,
+                    attachment.filename,
+                  ) ? (
+                    <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  ) : (
+                    <Paperclip className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  )}
+                  <span className="truncate max-w-[200px]">
+                    {attachment.filename ||
+                      getAttachmentFallbackLabel({
+                        mediaType: attachment.mediaType,
+                        filename: attachment.filename,
+                      })}
+                  </span>
+                </Link>
+                {canPromoteAttachments &&
+                  isPromotableKnowledgeAttachment(attachment) && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 shrink-0 gap-1 px-2 text-xs"
+                      onClick={() => onPromoteAttachment?.(attachment)}
+                    >
+                      <FilePlus2 className="h-3.5 w-3.5" />
+                      Save to Knowledge
+                    </Button>
+                  )}
+              </div>
             ))}
           </div>
         )}
+        {imageAttachments.length > 0 &&
+          canPromoteAttachments &&
+          imageAttachments.some(isPromotableKnowledgeAttachment) && (
+            <div className="flex flex-wrap gap-1 justify-end mb-2">
+              {imageAttachments
+                .filter(isPromotableKnowledgeAttachment)
+                .map((attachment) => (
+                  <Button
+                    key={`promote-${attachment.url}`}
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 gap-1 text-xs"
+                    onClick={() => onPromoteAttachment?.(attachment)}
+                  >
+                    <FilePlus2 className="h-3.5 w-3.5" />
+                    Save to Knowledge
+                  </Button>
+                ))}
+            </div>
+          )}
         {/* Text message bubble - only show if there's text */}
         {text && (
           <div className="flex max-w-[80%] items-center justify-end gap-2">
@@ -285,4 +333,27 @@ export function EditableUserMessage({
       </div>
     </Message>
   );
+}
+
+function isPromotableKnowledgeAttachment(attachment: FileAttachment): boolean {
+  if (!attachment.url.includes("/api/chat/attachments/")) return false;
+  const filename = attachment.filename?.toLowerCase() ?? "";
+  const extension = filename.split(".").pop();
+  if (
+    extension &&
+    ["txt", "md", "csv", "json", "xml", "pdf"].includes(extension)
+  ) {
+    return true;
+  }
+
+  const mimeType = attachment.mediaType.split(";")[0].trim().toLowerCase();
+  return [
+    "text/plain",
+    "text/markdown",
+    "text/csv",
+    "application/json",
+    "application/xml",
+    "text/xml",
+    "application/pdf",
+  ].includes(mimeType);
 }

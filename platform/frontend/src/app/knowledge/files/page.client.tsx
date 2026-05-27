@@ -168,42 +168,44 @@ function KnowledgeFilesList() {
       header: "",
       size: 64,
       cell: ({ row }) => (
-        <div className="flex items-center justify-end gap-1">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <PermissionButton
-                permissions={{ knowledgeFile: ["update"] }}
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setEditingFile(row.original);
-                }}
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </PermissionButton>
-            </TooltipTrigger>
-            <TooltipContent>Edit file access</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <PermissionButton
-                permissions={{ knowledgeFile: ["delete"] }}
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setDeletingFileId(row.original.id);
-                }}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </PermissionButton>
-            </TooltipTrigger>
-            <TooltipContent>Delete file</TooltipContent>
-          </Tooltip>
-        </div>
+        <TooltipProvider>
+          <div className="flex items-center justify-end gap-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <PermissionButton
+                  permissions={{ knowledgeFile: ["update"] }}
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setEditingFile(row.original);
+                  }}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </PermissionButton>
+              </TooltipTrigger>
+              <TooltipContent>Edit file access</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <PermissionButton
+                  permissions={{ knowledgeFile: ["delete"] }}
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setDeletingFileId(row.original.id);
+                  }}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </PermissionButton>
+              </TooltipTrigger>
+              <TooltipContent>Delete file</TooltipContent>
+            </Tooltip>
+          </div>
+        </TooltipProvider>
       ),
     },
   ];
@@ -318,6 +320,9 @@ function UploadKnowledgeFilesDialog({
       });
       if (result) {
         setFiles([]);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
         setVisibility("personal");
         setTeamIds([]);
         setAgentIds([]);

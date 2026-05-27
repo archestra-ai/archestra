@@ -1090,13 +1090,15 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     visibility: ResourceVisibilityScopeSchema.default("personal"),
     teamIds: z.array(z.string()).default([]),
     agentIds: z.array(z.string()).default([]),
-    files: z.array(
-      z.object({
-        name: z.string(),
-        mimeType: z.string(),
-        content: z.string(),
-      }),
-    ),
+    files: z
+      .array(
+        z.object({
+          name: z.string(),
+          mimeType: z.string(),
+          content: z.string(),
+        }),
+      )
+      .max(20),
   });
 
   // ===== Knowledge File Routes =====

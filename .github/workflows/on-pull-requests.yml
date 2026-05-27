@@ -253,6 +253,29 @@ jobs:
         with:
           working-directory: ./platform
 
+      - name: Setup Rust
+        run: |
+          rustup show
+          rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
+
+      - name: Install Rust musl toolchain dependencies
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Verify Dagger version sync
+        run: ./scripts/check-dagger-version-sync.sh
+
+      - name: Rust musl checks
+        env:
+          CC_x86_64_unknown_linux_musl: musl-gcc
+        run: |
+          cargo check --workspace --locked --target x86_64-unknown-linux-musl
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+
+      - name: Rust dependency policy
+        run: cargo deny --config deny.toml check advisories bans
+
       # setup-env uses --frozen-lockfile, which skips minimum-release-age checks.
       # --fix-lockfile re-resolves and fails on immature deps (ERR_PNPM_NO_MATURE_MATCHING_VERSION).
       - name: Verify no immature dependencies

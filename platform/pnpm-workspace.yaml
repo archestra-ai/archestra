@@ -2,6 +2,7 @@ packages:
   - "backend"
   - "frontend"
   - "shared"
+  - "sandbox-rs"
   - "e2e-tests"
 
 catalog:

@@ -113,11 +113,6 @@ describe("skillSandboxRuntimeService", () => {
 });
 
 describe("__internals", () => {
-  test("shellQuote single-quotes input and escapes embedded quotes", () => {
-    expect(__internals.shellQuote("simple")).toBe("'simple'");
-    expect(__internals.shellQuote("a 'b' c")).toBe(`'a '\\''b'\\'' c'`);
-  });
-
   test("resolveArtifactPath joins relative paths against defaultCwd", () => {
     expect(
       __internals.resolveArtifactPath({
@@ -187,76 +182,5 @@ describe("__internals", () => {
         defaultCwd: "/skills/alpha",
       }),
     ).toThrow("artifact path must be under");
-  });
-
-  test("validateSnapshotFilePath accepts normal relative paths", () => {
-    expect(() =>
-      __internals.validateSnapshotFilePath("SKILL.md"),
-    ).not.toThrow();
-    expect(() =>
-      __internals.validateSnapshotFilePath("scripts/run.sh"),
-    ).not.toThrow();
-    expect(() =>
-      __internals.validateSnapshotFilePath("assets/data.bin"),
-    ).not.toThrow();
-  });
-
-  test("validateSnapshotFilePath rejects path traversal", () => {
-    expect(() =>
-      __internals.validateSnapshotFilePath("../../etc/passwd"),
-    ).toThrow("invalid snapshot file path");
-    expect(() =>
-      __internals.validateSnapshotFilePath("scripts/../../../etc/passwd"),
-    ).toThrow("invalid snapshot file path");
-    expect(() => __internals.validateSnapshotFilePath("..")).toThrow(
-      "invalid snapshot file path",
-    );
-  });
-
-  test("validateSnapshotFilePath rejects absolute paths", () => {
-    expect(() => __internals.validateSnapshotFilePath("/etc/passwd")).toThrow(
-      "invalid snapshot file path",
-    );
-    expect(() =>
-      __internals.validateSnapshotFilePath("/skills/alpha/file.txt"),
-    ).toThrow("invalid snapshot file path");
-  });
-
-  test("truncateOutput passes through small outputs", () => {
-    const result = __internals.truncateOutput("hello", 1024);
-    expect(result.truncated).toBe(false);
-    expect(result.value).toBe("hello");
-  });
-
-  test("truncateOutput truncates and marks oversize outputs", () => {
-    const result = __internals.truncateOutput("0123456789", 5);
-    expect(result.truncated).toBe(true);
-    expect(result.value).toMatch(/^01234/);
-    expect(result.value).toMatch(/output truncated/);
-  });
-
-  test("wrapWithTimeout cd's into cwd and wraps with GNU timeout", () => {
-    const wrapped = __internals.wrapWithTimeout({
-      command: "python --version",
-      cwd: "/skills/alpha",
-      timeoutSeconds: 30,
-      outputBytesLimit: 1024,
-      fileSizeLimitBytes: 16 * 1024 * 1024,
-      cpuSeconds: 30,
-      memoryBytes: 1024 * 1024 * 1024,
-      maxProcesses: 256,
-    });
-    expect(wrapped).toContain("cd '/skills/alpha'");
-    // --preserve-status must be absent: with it timeout exits 137 (SIGKILL),
-    // not 124, so timedOut detection would always be false.
-    expect(wrapped).not.toContain("--preserve-status");
-    expect(wrapped).toContain("timeout --signal=KILL 30s");
-    expect(wrapped).toContain("'python --version'");
-    // limit+1 bytes are captured so truncateOutput can detect truncation
-    expect(wrapped).toContain("head -c 1025");
-    // exit code must be explicitly forwarded (no pipeline that swallows it)
-    expect(wrapped).toContain("exit $_x");
-    // ulimit -f must be present to cap per-file writes
-    expect(wrapped).toContain("ulimit -f ");
   });
 });

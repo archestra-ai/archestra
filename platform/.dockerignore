@@ -6,6 +6,10 @@ node_modules
 dist
 .next
 .turbo
+target
+**/target
+**/*.node
+sandbox-rs/index.js
 
 # Development
 .tilt

@@ -1059,6 +1059,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       "unsupported",
       "too_large",
       "extraction_failed",
+      "failed",
     ]),
     fileId: z.string().optional(),
   });
@@ -1193,7 +1194,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body, organizationId, user }, reply) => {
-      const results: z.infer<typeof UploadResultSchema>[] = await Promise.all(
+      const settledResults = await Promise.allSettled(
         body.files.map((file) =>
           fileUploadManager.uploadKnowledgeFile({
             organizationId,
@@ -1206,6 +1207,22 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             agentIds: body.agentIds,
           }),
         ),
+      );
+      const results: z.infer<typeof UploadResultSchema>[] = settledResults.map(
+        (result, index) => {
+          if (result.status === "fulfilled") {
+            return result.value;
+          }
+
+          logger.warn(
+            { error: result.reason, filename: body.files[index]?.name },
+            "Failed to upload knowledge file",
+          );
+          return {
+            filename: body.files[index]?.name ?? "unknown",
+            status: "failed",
+          };
+        },
       );
       return reply.send({ results });
     },

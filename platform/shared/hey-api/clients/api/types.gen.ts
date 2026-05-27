@@ -34070,7 +34070,7 @@ export type UploadKnowledgeFilesResponses = {
     200: {
         results: Array<{
             filename: string;
-            status: 'created' | 'duplicate' | 'unsupported' | 'too_large' | 'extraction_failed';
+            status: 'created' | 'duplicate' | 'unsupported' | 'too_large' | 'extraction_failed' | 'failed';
             fileId?: string;
         }>;
     };
@@ -34572,7 +34572,7 @@ export type UploadConnectorFilesResponses = {
     200: {
         results: Array<{
             filename: string;
-            status: 'created' | 'duplicate' | 'unsupported' | 'too_large' | 'extraction_failed';
+            status: 'created' | 'duplicate' | 'unsupported' | 'too_large' | 'extraction_failed' | 'failed';
             fileId?: string;
         }>;
     };

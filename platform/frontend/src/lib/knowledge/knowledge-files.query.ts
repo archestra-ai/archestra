@@ -192,7 +192,8 @@ function showUploadResultToasts(results: UploadResult[]) {
     (result) =>
       result.status === "unsupported" ||
       result.status === "too_large" ||
-      result.status === "extraction_failed",
+      result.status === "extraction_failed" ||
+      result.status === "failed",
   );
 
   if (created.length > 0) {

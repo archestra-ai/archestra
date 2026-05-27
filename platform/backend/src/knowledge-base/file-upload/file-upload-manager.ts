@@ -238,7 +238,6 @@ class FileUploadManager {
         { error, blobStorageKey },
         "Failed to clean up uploaded knowledge file blob after delete",
       );
-      throw error;
     }
   }
 

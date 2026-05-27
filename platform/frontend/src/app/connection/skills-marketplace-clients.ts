@@ -12,8 +12,6 @@ export interface SkillMarketplaceInstallStep {
 
 export interface SkillMarketplaceClient {
   id: "claude-code" | "codex" | "cursor";
-  label: string;
-  sub: string;
   getInstallSteps: (
     params: SkillMarketplaceInstallParams,
   ) => SkillMarketplaceInstallStep[];
@@ -27,8 +25,6 @@ export interface SkillMarketplaceInstallParams {
 export const SKILL_MARKETPLACE_CLIENTS: SkillMarketplaceClient[] = [
   {
     id: "claude-code",
-    label: "Claude Code",
-    sub: "Anthropic CLI",
     getInstallSteps: ({ cloneUrl, marketplaceName }) => [
       {
         label: "Register the marketplace",
@@ -45,8 +41,6 @@ export const SKILL_MARKETPLACE_CLIENTS: SkillMarketplaceClient[] = [
   },
   {
     id: "codex",
-    label: "Codex",
-    sub: "OpenAI CLI",
     getInstallSteps: ({ cloneUrl }) => [
       {
         label: "Register the marketplace",
@@ -63,8 +57,6 @@ export const SKILL_MARKETPLACE_CLIENTS: SkillMarketplaceClient[] = [
   },
   {
     id: "cursor",
-    label: "Cursor",
-    sub: "Cursor IDE",
     getInstallSteps: ({ cloneUrl, marketplaceName }) => [
       {
         label: "Register the marketplace",

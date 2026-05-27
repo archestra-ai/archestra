@@ -12,7 +12,6 @@ import {
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 import { CopyButton } from "@/components/copy-button";
-import { CopyableCode } from "@/components/copyable-code";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -23,7 +22,6 @@ import {
 } from "@/components/ui/select";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
-import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   type SkillShareLink,
   useCreateSkillShareLink,
@@ -88,7 +86,6 @@ export function SkillsMarketplaceStep({
 }
 
 function SkillsMarketplaceBody({ client }: { client: ConnectClient }) {
-  const appName = useAppName();
   const { data: links, isPending: linksPending } = useListSkillShareLinks();
   const { data: totalSkills, isPending: skillsPending } = useTotalSkillCount();
   const [revealed, setRevealed] = useState<RevealedClone | null>(null);
@@ -128,7 +125,6 @@ function SkillsMarketplaceBody({ client }: { client: ConnectClient }) {
         client={client}
         link={activeLink}
         totalSkills={totalSkills ?? 0}
-        appName={appName}
         revealed={revealed}
         onReveal={setRevealed}
       />
@@ -212,7 +208,6 @@ function ExistingLinkPanel({
   client,
   link,
   totalSkills,
-  appName,
   revealed,
   onReveal,
 }: {
@@ -220,7 +215,6 @@ function ExistingLinkPanel({
   /** May be null in the brief window between create-mutation and list refetch. */
   link: SkillShareLink | null;
   totalSkills: number;
-  appName: string;
   revealed: RevealedClone | null;
   onReveal: (revealed: RevealedClone) => void;
 }) {
@@ -259,12 +253,10 @@ function ExistingLinkPanel({
 
   return (
     <div className="flex flex-col gap-5">
-      {link && (
-        <LinkMeta
-          link={link}
-          totalSkills={totalSkills}
+      {stale && (
+        <StaleNotice
           linkSkillCount={linkSkillCount}
-          stale={stale}
+          totalSkills={totalSkills}
         />
       )}
 
@@ -273,7 +265,6 @@ function ExistingLinkPanel({
           clients={visibleClients}
           cloneUrl={revealed.cloneUrl}
           marketplaceName={revealed.marketplaceName}
-          appName={appName}
         />
       ) : (
         <HiddenLinkNote />
@@ -337,57 +328,20 @@ function ExistingLinkPanel({
   );
 }
 
-function LinkMeta({
-  link,
-  totalSkills,
+function StaleNotice({
   linkSkillCount,
-  stale,
+  totalSkills,
 }: {
-  link: SkillShareLink;
-  totalSkills: number;
   linkSkillCount: number;
-  stale: boolean;
-}) {
-  const created = new Date(link.createdAt).toLocaleString();
-  const expires = link.expiresAt
-    ? new Date(link.expiresAt).toLocaleString()
-    : "never";
-  return (
-    <div className="grid gap-2 rounded-md border bg-muted/10 p-3 text-sm">
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
-        <Field label="Marketplace" value={link.marketplaceName} mono />
-        <Field label="Skills" value={`${linkSkillCount} of ${totalSkills}`} />
-        <Field label="Created" value={created} />
-        <Field label="Expires" value={expires} />
-      </div>
-      {stale && (
-        <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs dark:border-amber-900/60 dark:bg-amber-950/40">
-          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
-          <p className="text-amber-900 dark:text-amber-100">
-            The marketplace covers {linkSkillCount} of {totalSkills} current
-            skills. Refresh to bring it up to date.
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Field({
-  label,
-  value,
-  mono,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
+  totalSkills: number;
 }) {
   return (
-    <div className="flex flex-col">
-      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-        {label}
-      </span>
-      <span className={mono ? "font-mono text-xs" : "text-xs"}>{value}</span>
+    <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs dark:border-amber-900/60 dark:bg-amber-950/40">
+      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+      <p className="text-amber-900 dark:text-amber-100">
+        The marketplace covers {linkSkillCount} of {totalSkills} current skills.
+        Refresh to bring it up to date.
+      </p>
     </div>
   );
 }
@@ -405,21 +359,13 @@ function RevealedLinkSnippets({
   clients,
   cloneUrl,
   marketplaceName,
-  appName,
 }: {
   clients: SkillMarketplaceClient[];
   cloneUrl: string;
   marketplaceName: string;
-  appName: string;
 }) {
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-2">
-        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Marketplace clone URL
-        </div>
-        <CopyableCode value={cloneUrl} />
-      </div>
       {clients.length === 0 ? (
         <GenericInstallNote
           cloneUrl={cloneUrl}
@@ -432,7 +378,6 @@ function RevealedLinkSnippets({
             client={c}
             cloneUrl={cloneUrl}
             marketplaceName={marketplaceName}
-            appName={appName}
           />
         ))
       )}
@@ -502,12 +447,10 @@ function ClientInstallSnippets({
   client,
   cloneUrl,
   marketplaceName,
-  appName,
 }: {
   client: SkillMarketplaceClient;
   cloneUrl: string;
   marketplaceName: string;
-  appName: string;
 }) {
   const steps = client.getInstallSteps({ cloneUrl, marketplaceName });
   return (
@@ -515,15 +458,6 @@ function ClientInstallSnippets({
       data-testid={`skills-marketplace-snippets-${client.id}`}
       className="flex flex-col gap-2 rounded-md border bg-muted/10 p-4"
     >
-      <header className="flex items-baseline justify-between">
-        <div>
-          <div className="text-sm font-semibold">{client.label}</div>
-          <div className="text-xs text-muted-foreground">{client.sub}</div>
-        </div>
-        <span className="text-[11px] text-muted-foreground">
-          {appName} skills
-        </span>
-      </header>
       <ol className="flex flex-col gap-2">
         {steps.map((step, idx) => (
           <li

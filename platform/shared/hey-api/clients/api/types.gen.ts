@@ -31836,7 +31836,7 @@ export type GetConnectorsResponses = {
                 repos?: Array<string>;
                 includeIssues?: boolean;
                 includePullRequests?: boolean;
-                includeMarkdownFiles?: boolean;
+                includeRepositoryFiles?: boolean;
                 fileTypes?: Array<string>;
                 labelsToSkip?: Array<string>;
             } | {
@@ -31992,7 +31992,7 @@ export type CreateConnectorData = {
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
-            includeMarkdownFiles?: boolean;
+            includeRepositoryFiles?: boolean;
             fileTypes?: Array<string>;
             labelsToSkip?: Array<string>;
         } | {
@@ -32201,7 +32201,7 @@ export type CreateConnectorResponses = {
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
-            includeMarkdownFiles?: boolean;
+            includeRepositoryFiles?: boolean;
             fileTypes?: Array<string>;
             labelsToSkip?: Array<string>;
         } | {
@@ -32507,7 +32507,7 @@ export type GetConnectorResponses = {
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
-            includeMarkdownFiles?: boolean;
+            includeRepositoryFiles?: boolean;
             fileTypes?: Array<string>;
             labelsToSkip?: Array<string>;
         } | {
@@ -32649,7 +32649,7 @@ export type UpdateConnectorData = {
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
-            includeMarkdownFiles?: boolean;
+            includeRepositoryFiles?: boolean;
             fileTypes?: Array<string>;
             labelsToSkip?: Array<string>;
         } | {
@@ -32859,7 +32859,7 @@ export type UpdateConnectorResponses = {
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
-            includeMarkdownFiles?: boolean;
+            includeRepositoryFiles?: boolean;
             fileTypes?: Array<string>;
             labelsToSkip?: Array<string>;
         } | {

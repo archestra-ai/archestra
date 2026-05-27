@@ -80,7 +80,7 @@ export class GithubConnector extends BaseConnector {
 
     // Repository file count cannot be estimated without fetching the full repo
     // tree, so skip estimation entirely when file syncing is enabled.
-    if (parsed.includeMarkdownFiles) return null;
+    if (parsed.includeRepositoryFiles) return null;
 
     this.log.debug(
       { owner: parsed.owner, repos: parsed.repos },
@@ -155,7 +155,7 @@ export class GithubConnector extends BaseConnector {
     for (let repoIdx = 0; repoIdx < repos.length; repoIdx++) {
       const repo = repos[repoIdx];
       const isLastRepo = repoIdx === repos.length - 1;
-      const hasMarkdown = parsed.includeMarkdownFiles === true;
+      const hasRepositoryFiles = parsed.includeRepositoryFiles === true;
 
       if (parsed.includeIssues !== false) {
         yield* this.syncRepoItems({
@@ -165,7 +165,9 @@ export class GithubConnector extends BaseConnector {
           checkpoint,
           kind: "issue",
           isLastGroup:
-            isLastRepo && parsed.includePullRequests === false && !hasMarkdown,
+            isLastRepo &&
+            parsed.includePullRequests === false &&
+            !hasRepositoryFiles,
         });
       }
 
@@ -176,11 +178,11 @@ export class GithubConnector extends BaseConnector {
           repo,
           checkpoint,
           kind: "pr",
-          isLastGroup: isLastRepo && !hasMarkdown,
+          isLastGroup: isLastRepo && !hasRepositoryFiles,
         });
       }
 
-      if (hasMarkdown) {
+      if (hasRepositoryFiles) {
         yield* this.syncRepoFiles({
           octokit,
           config: parsed,

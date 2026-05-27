@@ -794,7 +794,7 @@ describe("GithubConnector", () => {
   });
 
   describe("repository file sync", () => {
-    test("fetches and indexes repository files when includeMarkdownFiles is true", async () => {
+    test("fetches and indexes repository files when includeRepositoryFiles is true", async () => {
       // Issues pass - empty
       mockListForRepo.mockResolvedValueOnce({ data: [] });
       // PR pass - empty
@@ -840,7 +840,7 @@ describe("GithubConnector", () => {
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
-        config: { ...validConfig, includeMarkdownFiles: true },
+        config: { ...validConfig, includeRepositoryFiles: true },
         credentials,
         checkpoint: null,
       })) {
@@ -891,7 +891,7 @@ describe("GithubConnector", () => {
       for await (const batch of connector.sync({
         config: {
           ...validConfig,
-          includeMarkdownFiles: true,
+          includeRepositoryFiles: true,
           fileTypes: [".ts"],
         },
         credentials,
@@ -913,7 +913,7 @@ describe("GithubConnector", () => {
       );
     });
 
-    test("does not fetch repository files when includeMarkdownFiles is not set", async () => {
+    test("does not fetch repository files when includeRepositoryFiles is not set", async () => {
       mockListForRepo.mockResolvedValueOnce({ data: [] });
       mockListForRepo.mockResolvedValueOnce({ data: [] });
 
@@ -958,7 +958,7 @@ describe("GithubConnector", () => {
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
-        config: { ...validConfig, includeMarkdownFiles: true },
+        config: { ...validConfig, includeRepositoryFiles: true },
         credentials,
         checkpoint: null,
       })) {
@@ -1009,7 +1009,7 @@ describe("GithubConnector", () => {
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
-        config: { ...validConfig, includeMarkdownFiles: true },
+        config: { ...validConfig, includeRepositoryFiles: true },
         credentials,
         checkpoint: null,
       })) {
@@ -1064,7 +1064,7 @@ describe("GithubConnector", () => {
 
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
-        config: { ...validConfig, includeMarkdownFiles: true },
+        config: { ...validConfig, includeRepositoryFiles: true },
         credentials,
         checkpoint: null,
       })) {

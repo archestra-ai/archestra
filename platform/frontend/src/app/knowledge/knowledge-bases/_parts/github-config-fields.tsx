@@ -38,9 +38,9 @@ export function GithubConfigFields({
   hideRepositoryOptions = false,
 }: GithubConfigFieldsProps) {
   const authMethod = form.watch(`${prefix}.authMethod`) as string | undefined;
-  const includeRepositoryFiles = form.watch(`${prefix}.includeMarkdownFiles`) as
-    | boolean
-    | undefined;
+  const includeRepositoryFiles = form.watch(
+    `${prefix}.includeRepositoryFiles`,
+  ) as boolean | undefined;
   const usesGithubApp = authMethod === "github_app";
 
   return (
@@ -217,7 +217,7 @@ export function GithubConfigFields({
 
           <FormField
             control={form.control}
-            name={`${prefix}.includeMarkdownFiles`}
+            name={`${prefix}.includeRepositoryFiles`}
             render={({ field }) => (
               <FormItem className="flex items-center justify-between rounded-lg border p-3">
                 <div className="space-y-0.5">

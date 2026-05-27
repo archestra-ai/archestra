@@ -120182,7 +120182,7 @@
                                   "includePullRequests": {
                                     "type": "boolean"
                                   },
-                                  "includeMarkdownFiles": {
+                                  "includeRepositoryFiles": {
                                     "type": "boolean"
                                   },
                                   "fileTypes": {
@@ -121315,7 +121315,7 @@
                           "includePullRequests": {
                             "type": "boolean"
                           },
-                          "includeMarkdownFiles": {
+                          "includeRepositoryFiles": {
                             "type": "boolean"
                           },
                           "fileTypes": {
@@ -122070,7 +122070,7 @@
                             "includePullRequests": {
                               "type": "boolean"
                             },
-                            "includeMarkdownFiles": {
+                            "includeRepositoryFiles": {
                               "type": "boolean"
                             },
                             "fileTypes": {
@@ -123147,7 +123147,7 @@
                             "includePullRequests": {
                               "type": "boolean"
                             },
-                            "includeMarkdownFiles": {
+                            "includeRepositoryFiles": {
                               "type": "boolean"
                             },
                             "fileTypes": {
@@ -124118,7 +124118,7 @@
                           "includePullRequests": {
                             "type": "boolean"
                           },
-                          "includeMarkdownFiles": {
+                          "includeRepositoryFiles": {
                             "type": "boolean"
                           },
                           "fileTypes": {
@@ -124871,7 +124871,7 @@
                             "includePullRequests": {
                               "type": "boolean"
                             },
-                            "includeMarkdownFiles": {
+                            "includeRepositoryFiles": {
                               "type": "boolean"
                             },
                             "fileTypes": {

@@ -252,7 +252,7 @@ describe("knowledge-connector schemas", () => {
         type: "github",
         githubUrl: "api.github.com",
         owner: "test-org",
-        includeMarkdownFiles: true,
+        includeRepositoryFiles: true,
         fileTypes: [".md", ".yaml"],
       });
 

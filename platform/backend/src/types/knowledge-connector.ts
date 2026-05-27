@@ -123,8 +123,7 @@ export const GithubConfigSchema = z.object({
   repos: z.array(z.string()).optional(),
   includeIssues: z.boolean().optional(),
   includePullRequests: z.boolean().optional(),
-  /** Backward-compatible config key for repository file indexing. */
-  includeMarkdownFiles: z.boolean().optional(),
+  includeRepositoryFiles: z.boolean().optional(),
   fileTypes: z.array(z.string()).optional(),
   labelsToSkip: z.array(z.string()).optional(),
 });

@@ -31,12 +31,23 @@ export const EmbeddingStatusSchema = z.enum([
 ]);
 export type EmbeddingStatus = z.infer<typeof EmbeddingStatusSchema>;
 
+export const EmbeddingErrorCodeSchema = z.enum([
+  "rate_limit",
+  "auth_error",
+  "model_not_found",
+  "server_error",
+  "dimensions_mismatch",
+  "unknown",
+]);
+export type EmbeddingErrorCode = z.infer<typeof EmbeddingErrorCodeSchema>;
+
 export const KbDocumentMetadataSchema = z.record(z.string(), z.unknown());
 export type KbDocumentMetadata = z.infer<typeof KbDocumentMetadataSchema>;
 
 // Shared field overrides for drizzle-zod schema generation
 const extendedFields = {
   embeddingStatus: EmbeddingStatusSchema,
+  embeddingErrorCode: EmbeddingErrorCodeSchema.nullable(),
   acl: z.array(AclEntrySchema),
   metadata: KbDocumentMetadataSchema.nullable(),
 };
@@ -50,6 +61,7 @@ export const InsertKbDocumentSchema = createInsertSchema(
   {
     ...extendedFields,
     embeddingStatus: EmbeddingStatusSchema.optional(),
+    embeddingErrorCode: EmbeddingErrorCodeSchema.nullable().optional(),
     acl: z.array(AclEntrySchema).optional(),
     metadata: KbDocumentMetadataSchema.optional(),
   },
@@ -58,6 +70,7 @@ export const UpdateKbDocumentSchema = createUpdateSchema(
   schema.kbDocumentsTable,
   {
     embeddingStatus: EmbeddingStatusSchema.optional(),
+    embeddingErrorCode: EmbeddingErrorCodeSchema.nullable().optional(),
     acl: z.array(AclEntrySchema).optional(),
     metadata: KbDocumentMetadataSchema.optional(),
   },
@@ -69,6 +82,7 @@ export const UpdateKbDocumentSchema = createUpdateSchema(
   acl: true,
   metadata: true,
   embeddingStatus: true,
+  embeddingErrorCode: true,
   chunkCount: true,
 });
 

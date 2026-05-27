@@ -2,6 +2,7 @@ packages:
   - "backend"
   - "frontend"
   - "shared"
+  - "sorting-hat-mcp"
   - "e2e-tests"
 
 catalog:

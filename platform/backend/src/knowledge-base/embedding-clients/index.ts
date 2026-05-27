@@ -1,4 +1,5 @@
 import type {
+  EmbeddingErrorCode,
   SupportedProvider,
   SupportedProviderDiscriminator,
 } from "@shared";
@@ -93,4 +94,28 @@ export function getEmbeddingRetryDelayMs(
   }
 
   return fallbackDelayMs;
+}
+
+/**
+ * Categorizes an embedding error into a structured error code.
+ * Maps API errors to an EmbeddingErrorCode enum value for persisting in the DB
+ * and displaying human-readable messages on the frontend.
+ */
+export function categorizeEmbeddingError(error: unknown): EmbeddingErrorCode {
+  if (
+    error instanceof AzureEmbeddingError ||
+    error instanceof GeminiEmbeddingError ||
+    error instanceof OpenAIEmbeddingError
+  ) {
+    const status = error.status;
+    const message = error.message.toLowerCase();
+
+    if (status === 429 || message.includes("rate limit")) return "rate_limit";
+    if (status === 401 || status === 403 || message.includes("api key") || message.includes("unauthorized") || message.includes("forbidden")) return "auth_error";
+    if (status >= 500) return "server_error";
+    if (message.includes("dimension") || message.includes("dimensionality")) return "dimensions_mismatch";
+    if ((message.includes("model") && (message.includes("not found") || message.includes("does not exist") || message.includes("not supported"))) || status === 404) return "model_not_found";
+    return "unknown";
+  }
+  return "unknown";
 }

@@ -104,6 +104,7 @@ export function ConnectionFlow({
       else {
         initial.add("mcp");
         initial.add("proxy");
+        initial.add("skills");
       }
     }
     return initial;
@@ -130,7 +131,7 @@ export function ConnectionFlow({
         ? ["mcp"]
         : fromTable && urlProxyId && !urlGatewayId
           ? ["proxy"]
-          : ["mcp", "proxy"];
+          : ["mcp", "proxy", "skills"];
     setOpenSteps((s) => new Set<OpenKey>([...s, ...toOpen]));
   };
 

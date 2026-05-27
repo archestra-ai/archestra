@@ -120076,12 +120076,6 @@
                                   "projectKey": {
                                     "type": "string"
                                   },
-                                  "projectKeys": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
-                                  },
                                   "jqlQuery": {
                                     "type": "string"
                                   },
@@ -121213,12 +121207,6 @@
                           "projectKey": {
                             "type": "string"
                           },
-                          "projectKeys": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
-                          },
                           "jqlQuery": {
                             "type": "string"
                           },
@@ -121975,12 +121963,6 @@
                             },
                             "projectKey": {
                               "type": "string"
-                            },
-                            "projectKeys": {
-                              "type": "array",
-                              "items": {
-                                "type": "string"
-                              }
                             },
                             "jqlQuery": {
                               "type": "string"
@@ -123059,12 +123041,6 @@
                             "projectKey": {
                               "type": "string"
                             },
-                            "projectKeys": {
-                              "type": "array",
-                              "items": {
-                                "type": "string"
-                              }
-                            },
                             "jqlQuery": {
                               "type": "string"
                             },
@@ -124034,12 +124010,6 @@
                           "projectKey": {
                             "type": "string"
                           },
-                          "projectKeys": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
-                          },
                           "jqlQuery": {
                             "type": "string"
                           },
@@ -124794,12 +124764,6 @@
                             },
                             "projectKey": {
                               "type": "string"
-                            },
-                            "projectKeys": {
-                              "type": "array",
-                              "items": {
-                                "type": "string"
-                              }
                             },
                             "jqlQuery": {
                               "type": "string"

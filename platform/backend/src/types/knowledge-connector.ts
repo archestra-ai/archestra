@@ -71,9 +71,8 @@ export const JiraConfigSchema = z.object({
   type: JIRA,
   jiraBaseUrl: connectorUrlSchema,
   isCloud: z.boolean(),
-  /** @deprecated use projectKeys instead. */
+  /** Single project key or comma-separated project keys. */
   projectKey: z.string().optional(),
-  projectKeys: z.array(z.string()).optional(),
   jqlQuery: z.string().optional(),
   commentEmailBlacklist: z.array(z.string()).optional(),
   labelsToSkip: z.array(z.string()).optional(),

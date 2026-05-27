@@ -75,7 +75,7 @@ export function JiraConfigFields({
 
       <FormField
         control={form.control}
-        name={`${prefix}.projectKeys`}
+        name={`${prefix}.projectKey`}
         render={({ field }) => (
           <FormItem>
             <FormLabel>Project Keys (optional)</FormLabel>

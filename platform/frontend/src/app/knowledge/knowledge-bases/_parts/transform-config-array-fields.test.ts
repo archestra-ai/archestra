@@ -25,7 +25,6 @@ describe("transformConfigArrayFields", () => {
       commentEmailBlacklist: "bot@test.com, noreply@test.com",
       states: "open, closed",
       assignmentGroups: "group1, group2",
-      projectKeys: "ENG, OPS",
       projectGids: "111, 222",
       tagsToSkip: "wip, archived",
       objects: "Account, Contact",
@@ -45,7 +44,6 @@ describe("transformConfigArrayFields", () => {
     ]);
     expect(result.states).toEqual(["open", "closed"]);
     expect(result.assignmentGroups).toEqual(["group1", "group2"]);
-    expect(result.projectKeys).toEqual(["ENG", "OPS"]);
     expect(result.projectGids).toEqual(["111", "222"]);
     expect(result.tagsToSkip).toEqual(["wip", "archived"]);
     expect(result.objects).toEqual(["Account", "Contact"]);

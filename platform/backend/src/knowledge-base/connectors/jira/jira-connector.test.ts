@@ -312,8 +312,7 @@ describe("JiraConnector", () => {
       for await (const batch of connector.sync({
         config: {
           ...validConfig,
-          projectKey: undefined,
-          projectKeys: ["ENG", "OPS"],
+          projectKey: "ENG, OPS",
         },
         credentials,
         checkpoint: null,

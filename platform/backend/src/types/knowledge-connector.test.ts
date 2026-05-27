@@ -261,15 +261,15 @@ describe("knowledge-connector schemas", () => {
   });
 
   describe("Jira connector schema", () => {
-    test("accepts multiple project keys", () => {
+    test("accepts comma-separated project keys", () => {
       const result = JiraConfigSchema.parse({
         type: "jira",
         jiraBaseUrl: "mycompany.atlassian.net",
         isCloud: true,
-        projectKeys: ["ENG", "OPS"],
+        projectKey: "ENG, OPS",
       });
 
-      expect(result.projectKeys).toEqual(["ENG", "OPS"]);
+      expect(result.projectKey).toBe("ENG, OPS");
       expect(result.jiraBaseUrl).toBe("https://mycompany.atlassian.net");
     });
   });

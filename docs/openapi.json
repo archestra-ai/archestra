@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.50"
+    "version": "1.2.51"
   },
   "components": {
     "schemas": {
@@ -69532,6 +69532,263 @@
         }
       }
     },
+    "/api/chat/attachments/{id}/content": {
+      "get": {
+        "operationId": "getChatAttachmentContent",
+        "tags": [
+          "Chat"
+        ],
+        "description": "Stream the bytes of a chat attachment by id. Auth'd to the org.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:read`: View and access chat conversations",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "chat:read"
+          ]
+        }
+      }
+    },
     "/api/chat/conversations/{id}/fork": {
       "post": {
         "operationId": "forkChatConversation",
@@ -120891,6 +121148,19 @@
                                   "owner": {
                                     "type": "string"
                                   },
+                                  "authMethod": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pat",
+                                      "github_app"
+                                    ]
+                                  },
+                                  "githubAppId": {
+                                    "type": "string"
+                                  },
+                                  "githubAppInstallationId": {
+                                    "type": "string"
+                                  },
                                   "repos": {
                                     "type": "array",
                                     "items": {
@@ -120903,8 +121173,14 @@
                                   "includePullRequests": {
                                     "type": "boolean"
                                   },
-                                  "includeMarkdownFiles": {
+                                  "includeRepositoryFiles": {
                                     "type": "boolean"
+                                  },
+                                  "fileTypes": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
                                   },
                                   "labelsToSkip": {
                                     "type": "array",
@@ -122005,6 +122281,19 @@
                           "owner": {
                             "type": "string"
                           },
+                          "authMethod": {
+                            "type": "string",
+                            "enum": [
+                              "pat",
+                              "github_app"
+                            ]
+                          },
+                          "githubAppId": {
+                            "type": "string"
+                          },
+                          "githubAppInstallationId": {
+                            "type": "string"
+                          },
                           "repos": {
                             "type": "array",
                             "items": {
@@ -122017,8 +122306,14 @@
                           "includePullRequests": {
                             "type": "boolean"
                           },
-                          "includeMarkdownFiles": {
+                          "includeRepositoryFiles": {
                             "type": "boolean"
+                          },
+                          "fileTypes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
                           },
                           "labelsToSkip": {
                             "type": "array",
@@ -122741,6 +123036,19 @@
                             "owner": {
                               "type": "string"
                             },
+                            "authMethod": {
+                              "type": "string",
+                              "enum": [
+                                "pat",
+                                "github_app"
+                              ]
+                            },
+                            "githubAppId": {
+                              "type": "string"
+                            },
+                            "githubAppInstallationId": {
+                              "type": "string"
+                            },
                             "repos": {
                               "type": "array",
                               "items": {
@@ -122753,8 +123061,14 @@
                             "includePullRequests": {
                               "type": "boolean"
                             },
-                            "includeMarkdownFiles": {
+                            "includeRepositoryFiles": {
                               "type": "boolean"
+                            },
+                            "fileTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
                             },
                             "labelsToSkip": {
                               "type": "array",
@@ -123799,6 +124113,19 @@
                             "owner": {
                               "type": "string"
                             },
+                            "authMethod": {
+                              "type": "string",
+                              "enum": [
+                                "pat",
+                                "github_app"
+                              ]
+                            },
+                            "githubAppId": {
+                              "type": "string"
+                            },
+                            "githubAppInstallationId": {
+                              "type": "string"
+                            },
                             "repos": {
                               "type": "array",
                               "items": {
@@ -123811,8 +124138,14 @@
                             "includePullRequests": {
                               "type": "boolean"
                             },
-                            "includeMarkdownFiles": {
+                            "includeRepositoryFiles": {
                               "type": "boolean"
+                            },
+                            "fileTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
                             },
                             "labelsToSkip": {
                               "type": "array",
@@ -124751,6 +125084,19 @@
                           "owner": {
                             "type": "string"
                           },
+                          "authMethod": {
+                            "type": "string",
+                            "enum": [
+                              "pat",
+                              "github_app"
+                            ]
+                          },
+                          "githubAppId": {
+                            "type": "string"
+                          },
+                          "githubAppInstallationId": {
+                            "type": "string"
+                          },
                           "repos": {
                             "type": "array",
                             "items": {
@@ -124763,8 +125109,14 @@
                           "includePullRequests": {
                             "type": "boolean"
                           },
-                          "includeMarkdownFiles": {
+                          "includeRepositoryFiles": {
                             "type": "boolean"
+                          },
+                          "fileTypes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
                           },
                           "labelsToSkip": {
                             "type": "array",
@@ -125485,6 +125837,19 @@
                             "owner": {
                               "type": "string"
                             },
+                            "authMethod": {
+                              "type": "string",
+                              "enum": [
+                                "pat",
+                                "github_app"
+                              ]
+                            },
+                            "githubAppId": {
+                              "type": "string"
+                            },
+                            "githubAppInstallationId": {
+                              "type": "string"
+                            },
                             "repos": {
                               "type": "array",
                               "items": {
@@ -125497,8 +125862,14 @@
                             "includePullRequests": {
                               "type": "boolean"
                             },
-                            "includeMarkdownFiles": {
+                            "includeRepositoryFiles": {
                               "type": "boolean"
+                            },
+                            "fileTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
                             },
                             "labelsToSkip": {
                               "type": "array",

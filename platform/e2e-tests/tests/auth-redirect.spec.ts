@@ -1,29 +1,36 @@
 import { ADMIN_EMAIL, ADMIN_PASSWORD, UI_BASE_URL } from "../consts";
 import { expect, test } from "../fixtures";
-import { loginViaUi } from "../utils";
+import { loginViaApi, loginViaUi } from "../utils";
 
 test.describe("Authentication redirect flows", {
   tag: ["@firefox", "@webkit"],
 }, () => {
-  test("sign-out works and redirects to sign-in page", async ({
-    adminPage,
-    goToPage,
-  }) => {
-    // Navigate to app
-    await goToPage(adminPage, "/chat");
+  test("sign-out works and redirects to sign-in page", async ({ browser }) => {
+    // Build a throwaway admin session instead of reusing adminAuthFile.
+    // Every chromium test starts with a copy of the same admin cookie, all
+    // mapped to one better-auth session row; signing out from the shared
+    // session deletes that row and 401s every concurrent admin-using spec.
+    // A fresh loginViaApi here creates an independent session row that this
+    // test alone owns and can safely revoke.
+    const context = await browser.newContext({ storageState: undefined });
+    const page = await context.newPage();
 
-    // Click on the user profile button to open dropdown
-    await adminPage.getByRole("button", { name: ADMIN_EMAIL }).click();
+    try {
+      const signedIn = await loginViaApi(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+      expect(signedIn, "Admin sign-in failed").toBe(true);
 
-    // Click sign out option in the dropdown
-    await adminPage.getByRole("menuitem", { name: /sign out/i }).click();
+      await page.goto(`${UI_BASE_URL}/chat`, {
+        waitUntil: "domcontentloaded",
+      });
 
-    // Should be redirected to sign-out page which handles the sign-out
-    await adminPage.waitForURL(/\/auth\/sign-out/);
+      await page.getByRole("button", { name: ADMIN_EMAIL }).click();
+      await page.getByRole("menuitem", { name: /sign out/i }).click();
 
-    // The sign-out page should render (better-auth handles the actual sign-out)
-    // After sign-out completes, the page should show the sign-out confirmation or redirect
-    await expect(adminPage.locator("body")).toBeVisible({ timeout: 10000 });
+      await page.waitForURL(/\/auth\/sign-out/, { timeout: 15_000 });
+      await page.waitForURL(/\/auth\/sign-in/, { timeout: 15_000 });
+    } finally {
+      await context.close();
+    }
   });
 
   test("redirectTo parameter preserves original URL after sign-in", async ({

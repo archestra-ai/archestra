@@ -44,12 +44,14 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     proxyTimeout: 300000, // 5 minutes in milliseconds - prevents SSE stream timeout
-    // Next defaults the proxy body limit to 10MB; raise it to the backend's
-    // 70MB bodyLimit so chat attachment uploads (50MB user cap + ~33% base64
-    // overhead + conversation history) aren't silently truncated. Truncation
-    // leaves the backend hung waiting for the missing tail of Content-Length,
-    // surfacing as a 5-minute "Internal Server Error".
-    proxyClientMaxBodySize: "70mb",
+    // Next defaults the proxy body limit to 10MB; raise it well above the
+    // backend's 70MB default so an operator who increases ARCHESTRA_API_BODY_LIMIT
+    // at runtime doesn't also have to rebuild the FE image. (next.config.ts is
+    // evaluated at build time in `output: "standalone"` mode, so this value is
+    // baked into the image — making it env-driven would silently drift from
+    // the backend's runtime value.) Anything the proxy lets through still gets
+    // sized-checked by the backend's bodyLimit, which is the authoritative cap.
+    proxyClientMaxBodySize: "200mb",
   },
   httpAgentOptions: {
     keepAlive: true,

@@ -1195,6 +1195,13 @@ const startWorker = async () => {
   }
 };
 
+// Dagger SDK v0.20.8 has a bug in bin.js:198-201 where it throws inside a
+// .catch() callback, creating an unhandled rejection that is never awaited.
+// This handler logs those leaks and keeps the server alive.
+process.on("unhandledRejection", (reason) => {
+  logger.error({ err: reason }, "Unhandled promise rejection");
+});
+
 /**
  * Only start the server if this file is being run directly (not imported)
  * This allows other scripts to import helper functions without starting the server

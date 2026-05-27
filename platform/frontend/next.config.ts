@@ -31,6 +31,10 @@ const nextConfig: NextConfig = {
   // Disable dev indicators so they don't show up in docs automated screenshots
   devIndicators: false,
   turbopack: {
+    // pin the workspace root (where pnpm-lock.yaml lives) so Next.js 16 doesn't
+    // misinfer it in this monorepo and panic with "Next.js package not found"
+    // when following pnpm's hoisted next symlink.
+    root: resolve(import.meta.dirname, ".."),
     resolveAlias: {
       "@shared/access-control": "../shared/access-control.ts",
     },

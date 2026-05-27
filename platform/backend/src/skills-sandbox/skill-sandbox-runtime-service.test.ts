@@ -10,7 +10,7 @@ describe("skillSandboxRuntimeService", () => {
     vi.unstubAllEnvs();
   });
 
-  test("is disabled when ARCHESTRA_SKILLS_SANDBOX_ENABLED is unset", () => {
+  test("is disabled when ARCHESTRA_AGENTS_SKILLS_ENABLED or ARCHESTRA_CODE_RUNTIME_ENABLED is unset", () => {
     expect(skillSandboxRuntimeService.isEnabled).toBe(false);
     expect(skillSandboxRuntimeService.isReady).toBe(false);
   });
@@ -40,9 +40,10 @@ describe("skillSandboxRuntimeService", () => {
     Number.NaN,
   ])("runCommand rejects invalid timeoutSeconds=%s before initializing", async (timeoutSeconds) => {
     vi.resetModules();
-    vi.stubEnv("ARCHESTRA_SKILLS_SANDBOX_ENABLED", "true");
+    vi.stubEnv("ARCHESTRA_AGENTS_SKILLS_ENABLED", "true");
+    vi.stubEnv("ARCHESTRA_CODE_RUNTIME_ENABLED", "true");
     vi.stubEnv(
-      "ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST",
+      "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST",
       "tcp://dagger-runtime.dagger.svc.cluster.local:1234",
     );
     const { skillSandboxRuntimeService: enabled } = await import(
@@ -60,9 +61,10 @@ describe("skillSandboxRuntimeService", () => {
 
   test("runCommand rejects empty commands", async () => {
     vi.resetModules();
-    vi.stubEnv("ARCHESTRA_SKILLS_SANDBOX_ENABLED", "true");
+    vi.stubEnv("ARCHESTRA_AGENTS_SKILLS_ENABLED", "true");
+    vi.stubEnv("ARCHESTRA_CODE_RUNTIME_ENABLED", "true");
     vi.stubEnv(
-      "ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST",
+      "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST",
       "tcp://dagger-runtime.dagger.svc.cluster.local:1234",
     );
     const { skillSandboxRuntimeService: enabled } = await import(
@@ -79,9 +81,10 @@ describe("skillSandboxRuntimeService", () => {
 
   test("runCommand rejects after maxSandboxQueueLength requests for the same sandbox", async () => {
     vi.resetModules();
-    vi.stubEnv("ARCHESTRA_SKILLS_SANDBOX_ENABLED", "true");
+    vi.stubEnv("ARCHESTRA_AGENTS_SKILLS_ENABLED", "true");
+    vi.stubEnv("ARCHESTRA_CODE_RUNTIME_ENABLED", "true");
     vi.stubEnv(
-      "ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST",
+      "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST",
       "tcp://dagger-runtime.dagger.svc.cluster.local:1234",
     );
     const { skillSandboxRuntimeService: enabled } = await import(

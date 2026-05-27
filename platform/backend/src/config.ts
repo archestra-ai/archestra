@@ -714,8 +714,9 @@ const codeRuntimeEnabled =
   codeRuntimeRequested && codeRuntimeDaggerRunnerHost !== undefined;
 
 const defaultSkillsSandboxImage = DEFAULT_SKILL_SANDBOX_IMAGE;
+// skills sandbox is on whenever both skills and the code-runtime (Dagger) are enabled.
 const skillsSandboxRequested =
-  process.env.ARCHESTRA_SKILLS_SANDBOX_ENABLED === "true";
+  process.env.ARCHESTRA_AGENTS_SKILLS_ENABLED === "true" && codeRuntimeEnabled;
 const skillsSandboxDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost({
   enabled: skillsSandboxRequested,
   envValue:

@@ -3,6 +3,7 @@ import logger from "@/logging";
 import { KbChunkModel, KbDocumentModel } from "@/models";
 import {
   callEmbedding,
+  categorizeEmbeddingError,
   type EmbeddingApiResponse,
   type EmbeddingInput,
   getEmbeddingDiscriminator,
@@ -91,6 +92,7 @@ class EmbeddingService {
     } catch (error) {
       await KbDocumentModel.update(documentId, {
         embeddingStatus: "failed",
+        embeddingErrorCode: categorizeEmbeddingError(error),
       });
       logger.error(
         {
@@ -240,6 +242,7 @@ class EmbeddingService {
       if (anyFailed) {
         await KbDocumentModel.update(documentId, {
           embeddingStatus: "failed",
+          embeddingErrorCode: "unknown",
         });
         logger.error(
           { documentId, runId: connectorRunId },

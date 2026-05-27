@@ -120157,6 +120157,19 @@
                                   "owner": {
                                     "type": "string"
                                   },
+                                  "authMethod": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pat",
+                                      "github_app"
+                                    ]
+                                  },
+                                  "githubAppId": {
+                                    "type": "string"
+                                  },
+                                  "githubAppInstallationId": {
+                                    "type": "string"
+                                  },
                                   "repos": {
                                     "type": "array",
                                     "items": {
@@ -120169,8 +120182,14 @@
                                   "includePullRequests": {
                                     "type": "boolean"
                                   },
-                                  "includeMarkdownFiles": {
+                                  "includeRepositoryFiles": {
                                     "type": "boolean"
+                                  },
+                                  "fileTypes": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
                                   },
                                   "labelsToSkip": {
                                     "type": "array",
@@ -121271,6 +121290,19 @@
                           "owner": {
                             "type": "string"
                           },
+                          "authMethod": {
+                            "type": "string",
+                            "enum": [
+                              "pat",
+                              "github_app"
+                            ]
+                          },
+                          "githubAppId": {
+                            "type": "string"
+                          },
+                          "githubAppInstallationId": {
+                            "type": "string"
+                          },
                           "repos": {
                             "type": "array",
                             "items": {
@@ -121283,8 +121315,14 @@
                           "includePullRequests": {
                             "type": "boolean"
                           },
-                          "includeMarkdownFiles": {
+                          "includeRepositoryFiles": {
                             "type": "boolean"
+                          },
+                          "fileTypes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
                           },
                           "labelsToSkip": {
                             "type": "array",
@@ -122007,6 +122045,19 @@
                             "owner": {
                               "type": "string"
                             },
+                            "authMethod": {
+                              "type": "string",
+                              "enum": [
+                                "pat",
+                                "github_app"
+                              ]
+                            },
+                            "githubAppId": {
+                              "type": "string"
+                            },
+                            "githubAppInstallationId": {
+                              "type": "string"
+                            },
                             "repos": {
                               "type": "array",
                               "items": {
@@ -122019,8 +122070,14 @@
                             "includePullRequests": {
                               "type": "boolean"
                             },
-                            "includeMarkdownFiles": {
+                            "includeRepositoryFiles": {
                               "type": "boolean"
+                            },
+                            "fileTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
                             },
                             "labelsToSkip": {
                               "type": "array",
@@ -123065,6 +123122,19 @@
                             "owner": {
                               "type": "string"
                             },
+                            "authMethod": {
+                              "type": "string",
+                              "enum": [
+                                "pat",
+                                "github_app"
+                              ]
+                            },
+                            "githubAppId": {
+                              "type": "string"
+                            },
+                            "githubAppInstallationId": {
+                              "type": "string"
+                            },
                             "repos": {
                               "type": "array",
                               "items": {
@@ -123077,8 +123147,14 @@
                             "includePullRequests": {
                               "type": "boolean"
                             },
-                            "includeMarkdownFiles": {
+                            "includeRepositoryFiles": {
                               "type": "boolean"
+                            },
+                            "fileTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
                             },
                             "labelsToSkip": {
                               "type": "array",
@@ -124017,6 +124093,19 @@
                           "owner": {
                             "type": "string"
                           },
+                          "authMethod": {
+                            "type": "string",
+                            "enum": [
+                              "pat",
+                              "github_app"
+                            ]
+                          },
+                          "githubAppId": {
+                            "type": "string"
+                          },
+                          "githubAppInstallationId": {
+                            "type": "string"
+                          },
                           "repos": {
                             "type": "array",
                             "items": {
@@ -124029,8 +124118,14 @@
                           "includePullRequests": {
                             "type": "boolean"
                           },
-                          "includeMarkdownFiles": {
+                          "includeRepositoryFiles": {
                             "type": "boolean"
+                          },
+                          "fileTypes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
                           },
                           "labelsToSkip": {
                             "type": "array",
@@ -124751,6 +124846,19 @@
                             "owner": {
                               "type": "string"
                             },
+                            "authMethod": {
+                              "type": "string",
+                              "enum": [
+                                "pat",
+                                "github_app"
+                              ]
+                            },
+                            "githubAppId": {
+                              "type": "string"
+                            },
+                            "githubAppInstallationId": {
+                              "type": "string"
+                            },
                             "repos": {
                               "type": "array",
                               "items": {
@@ -124763,8 +124871,14 @@
                             "includePullRequests": {
                               "type": "boolean"
                             },
-                            "includeMarkdownFiles": {
+                            "includeRepositoryFiles": {
                               "type": "boolean"
+                            },
+                            "fileTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
                             },
                             "labelsToSkip": {
                               "type": "array",

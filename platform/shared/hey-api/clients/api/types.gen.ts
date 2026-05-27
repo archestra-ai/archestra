@@ -31830,10 +31830,14 @@ export type GetConnectorsResponses = {
                 type: 'github';
                 githubUrl: unknown;
                 owner: string;
+                authMethod?: 'pat' | 'github_app';
+                githubAppId?: string;
+                githubAppInstallationId?: string;
                 repos?: Array<string>;
                 includeIssues?: boolean;
                 includePullRequests?: boolean;
-                includeMarkdownFiles?: boolean;
+                includeRepositoryFiles?: boolean;
+                fileTypes?: Array<string>;
                 labelsToSkip?: Array<string>;
             } | {
                 type: 'gitlab';
@@ -31982,10 +31986,14 @@ export type CreateConnectorData = {
             type: 'github';
             githubUrl: string;
             owner: string;
+            authMethod?: 'pat' | 'github_app';
+            githubAppId?: string;
+            githubAppInstallationId?: string;
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
-            includeMarkdownFiles?: boolean;
+            includeRepositoryFiles?: boolean;
+            fileTypes?: Array<string>;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -32187,10 +32195,14 @@ export type CreateConnectorResponses = {
             type: 'github';
             githubUrl: unknown;
             owner: string;
+            authMethod?: 'pat' | 'github_app';
+            githubAppId?: string;
+            githubAppInstallationId?: string;
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
-            includeMarkdownFiles?: boolean;
+            includeRepositoryFiles?: boolean;
+            fileTypes?: Array<string>;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -32489,10 +32501,14 @@ export type GetConnectorResponses = {
             type: 'github';
             githubUrl: unknown;
             owner: string;
+            authMethod?: 'pat' | 'github_app';
+            githubAppId?: string;
+            githubAppInstallationId?: string;
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
-            includeMarkdownFiles?: boolean;
+            includeRepositoryFiles?: boolean;
+            fileTypes?: Array<string>;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -32627,10 +32643,14 @@ export type UpdateConnectorData = {
             type: 'github';
             githubUrl: string;
             owner: string;
+            authMethod?: 'pat' | 'github_app';
+            githubAppId?: string;
+            githubAppInstallationId?: string;
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
-            includeMarkdownFiles?: boolean;
+            includeRepositoryFiles?: boolean;
+            fileTypes?: Array<string>;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -32833,10 +32853,14 @@ export type UpdateConnectorResponses = {
             type: 'github';
             githubUrl: unknown;
             owner: string;
+            authMethod?: 'pat' | 'github_app';
+            githubAppId?: string;
+            githubAppInstallationId?: string;
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
-            includeMarkdownFiles?: boolean;
+            includeRepositoryFiles?: boolean;
+            fileTypes?: Array<string>;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';

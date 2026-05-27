@@ -28,6 +28,10 @@ export async function createLlmProviderApiKey(
     providerOptionName?: string | RegExp;
     scope?: "personal" | "org";
     baseUrl?: string;
+    // The row assertion only applies when the caller is on the API keys
+    // management page. Quickstart-style flows host the create dialog on /chat
+    // and redirect back to /chat on success, where ChatApiKeyRow does not exist.
+    waitForRow?: boolean;
   },
 ): Promise<void> {
   const addApiKeyButton = page
@@ -67,9 +71,11 @@ export async function createLlmProviderApiKey(
   await expect(page.getByText("API key created successfully")).toBeVisible({
     timeout: 30_000,
   });
-  await expect(
-    page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${params.name}`),
-  ).toBeVisible({ timeout: 30_000 });
+  if (params.waitForRow !== false) {
+    await expect(
+      page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${params.name}`),
+    ).toBeVisible({ timeout: 30_000 });
+  }
 }
 
 export async function createVirtualKey(

@@ -34,6 +34,7 @@ import {
 } from "@/utils/llm-resolution";
 
 export const CONTEXT_COMPACTION_AUTO_THRESHOLD = 0.8;
+// max number of recent real user messages serialized into the reference block
 export const CONTEXT_COMPACTION_RECENT_USER_TURNS = 4;
 const CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS = 8_192;
 const CONTEXT_COMPACTION_RECENT_USER_REFERENCE_MAX_CHARS = 6_000;
@@ -999,59 +1000,62 @@ function splitMessagesForCompaction(messages: ChatMessage[]): {
   compactable: ChatMessage[];
   recent: ChatMessage[];
 } {
-  let userTurnsSeen = 0;
-  let recentStart = messages.length;
+  const latestRealUserIndex = findLatestRealUserMessageIndex(messages);
 
-  for (let index = messages.length - 1; index >= 0; index--) {
-    if (messages[index]?.role === "user") {
-      userTurnsSeen += 1;
-      if (userTurnsSeen === CONTEXT_COMPACTION_RECENT_USER_TURNS) {
-        recentStart = index;
-        break;
-      }
-    }
+  if (latestRealUserIndex < 0) {
+    return { compactable: messages, recent: [] };
   }
 
-  if (userTurnsSeen >= CONTEXT_COMPACTION_RECENT_USER_TURNS) {
+  const latestRealUserMessage = messages[latestRealUserIndex];
+  if (!latestRealUserMessage) {
+    return { compactable: messages, recent: [] };
+  }
+
+  if (latestRealUserIndex === messages.length - 1) {
+    // single unresolved real user turn with nothing before it — nothing to compact
+    if (messages.length === 1) {
+      return { compactable: [], recent: [latestRealUserMessage] };
+    }
     return {
-      compactable: messages.slice(0, recentStart),
-      recent: messages.slice(recentStart),
+      compactable: messages.slice(0, latestRealUserIndex),
+      recent: [latestRealUserMessage],
     };
   }
 
-  return splitLowUserTurnMessagesForCompaction(messages);
+  // latest real user message has been resolved by later turns (assistant /
+  // tool-result-only pseudo-user messages); compact everything, no anchor
+  return { compactable: messages, recent: [] };
 }
 
-function splitLowUserTurnMessagesForCompaction(messages: ChatMessage[]): {
-  compactable: ChatMessage[];
-  recent: ChatMessage[];
-} {
-  const latestUserIndex = findLatestUserMessageIndex(messages);
-  if (latestUserIndex < 0) {
-    return { compactable: [], recent: messages };
-  }
-
-  // when the latest message IS the user turn (mid-conversation auto-compact),
-  // keep it live as the "recent" anchor. when it isn't (manual compact after
-  // an assistant reply has landed), there's no in-flight user turn to anchor
-  // on, so everything becomes compactable and recent is empty — the next user
-  // turn will arrive after the summary on the following request.
-  const recentStart =
-    latestUserIndex === messages.length - 1 ? latestUserIndex : messages.length;
-  return {
-    compactable: messages.slice(0, recentStart),
-    recent: messages.slice(recentStart),
-  };
-}
-
-function findLatestUserMessageIndex(messages: ChatMessage[]): number {
+function findLatestRealUserMessageIndex(messages: ChatMessage[]): number {
   for (let index = messages.length - 1; index >= 0; index--) {
-    if (messages[index]?.role === "user") {
+    const message = messages[index];
+    if (message && isRealUserMessage(message)) {
       return index;
     }
   }
 
   return -1;
+}
+
+// a "real" user message is one the human authored — role: user with at least
+// one user-authored text or file part. messages whose parts are only tool
+// results (type starts with "tool-") happen to share role: user but should be
+// treated as transcript content, not as a fresh user turn.
+function isRealUserMessage(message: ChatMessage): boolean {
+  if (message.role !== "user" || !message.parts?.length) {
+    return false;
+  }
+
+  return message.parts.some((part) => {
+    if (part.type === "text") {
+      return typeof part.text === "string" && part.text.length > 0;
+    }
+    if (part.type === "file") {
+      return true;
+    }
+    return false;
+  });
 }
 
 /**
@@ -1076,7 +1080,7 @@ ${transcript}`;
 
 function buildRecentUserMessagesReference(messages: ChatMessage[]): string {
   const userMessages = messages
-    .filter((message) => message.role === "user")
+    .filter(isRealUserMessage)
     .slice(-CONTEXT_COMPACTION_RECENT_USER_TURNS);
 
   if (userMessages.length === 0) {

@@ -57,7 +57,7 @@ Files use the same visibility model as other knowledge resources.
 
 Chat attachments stay with one conversation unless they are saved to **Knowledge > Files**.
 
-For production deployments, file bytes are stored in PostgreSQL by default. To store bytes in S3, configure external blob storage in [Knowledge Base Configuration](/docs/platform-deployment#knowledge-files-external-blob-storage).
+For production deployments, file bytes are stored in PostgreSQL by default. To store bytes in S3, configure external blob storage in [Knowledge Base Configuration](/docs/platform-deployment#knowledge-files-external-blob-storage). Uploads are also bounded by the platform API body limit.
 
 ### Creating a Connector
 

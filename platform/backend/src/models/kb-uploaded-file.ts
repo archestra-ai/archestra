@@ -277,14 +277,16 @@ class KbUploadedFileModel {
       await tx
         .delete(schema.kbUploadedFilesTable)
         .where(eq(schema.kbUploadedFilesTable.id, params.fileId));
+      // Deleting the connector cascades agent connector assignments through
+      // the connector FK.
       await tx
         .delete(schema.knowledgeBaseConnectorsTable)
         .where(eq(schema.knowledgeBaseConnectorsTable.id, params.connectorId));
     });
   }
 
-  static computeContentHash(text: string): string {
-    return createHash("sha256").update(text, "utf8").digest("hex");
+  static computeContentHash(content: Buffer | string): string {
+    return createHash("sha256").update(content).digest("hex");
   }
 }
 

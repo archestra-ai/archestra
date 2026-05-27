@@ -64,11 +64,7 @@ class FileUploadManager {
       };
     }
 
-    const contentHash = KbUploadedFileModel.computeContentHash(
-      // Keep the Knowledge Files dedupe hash aligned with the base64 upload
-      // payload while preserving the legacy connector upload path unchanged.
-      rawBuffer.toString("base64"),
-    );
+    const contentHash = KbUploadedFileModel.computeContentHash(rawBuffer);
     // Knowledge Files use a best-effort organization-wide duplicate check for
     // reusable uploads. Concurrent uploads can still race because database
     // uniqueness remains connector-scoped.

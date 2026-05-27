@@ -9,6 +9,7 @@ import type {
   ConnectorSyncStatus,
   ConnectorType,
 } from "@/types/knowledge-connector";
+import { escapeLikePattern } from "@/utils/sql-search";
 
 class KnowledgeBaseConnectorModel {
   static async findByOrganization(params: {
@@ -77,7 +78,7 @@ class KnowledgeBaseConnectorModel {
       canReadAll,
       viewerTeamIds,
     } = params;
-    const searchPattern = search ? `%${search}%` : null;
+    const searchPattern = search ? `%${escapeLikePattern(search)}%` : null;
 
     const filters = [
       eq(schema.knowledgeBaseConnectorsTable.organizationId, organizationId),

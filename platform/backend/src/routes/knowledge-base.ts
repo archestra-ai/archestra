@@ -1419,9 +1419,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
               break;
             }
 
-            const contentHash = KbUploadedFileModel.computeContentHash(
-              entryBytes.toString("base64"),
-            );
+            const contentHash =
+              KbUploadedFileModel.computeContentHash(entryBytes);
 
             const existing = await KbUploadedFileModel.findByContentHash(
               id,
@@ -1464,9 +1463,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }
           }
         } else {
-          const contentHash = KbUploadedFileModel.computeContentHash(
-            rawBuffer.toString("base64"),
-          );
+          const contentHash = KbUploadedFileModel.computeContentHash(rawBuffer);
 
           const existing = await KbUploadedFileModel.findByContentHash(
             id,
@@ -1746,7 +1743,8 @@ function canAccessKnowledgeFile(params: {
   if (access.canReadAll) return true;
   if (file.visibility === "org") return true;
   if (file.visibility === "personal") return file.ownerId === userId;
-  return file.teamIds.some((teamId) => access.teamIds.includes(teamId));
+  const userTeamIds = new Set(access.teamIds);
+  return file.teamIds.some((teamId) => userTeamIds.has(teamId));
 }
 
 async function enrichKnowledgeFiles(params: {

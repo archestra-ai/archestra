@@ -130935,6 +130935,7 @@
                 "type": "object",
                 "properties": {
                   "files": {
+                    "maxItems": 20,
                     "type": "array",
                     "items": {
                       "type": "object",

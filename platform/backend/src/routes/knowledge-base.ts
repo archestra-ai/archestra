@@ -1327,13 +1327,15 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Connectors"],
         params: z.object({ id: z.string() }),
         body: z.object({
-          files: z.array(
-            z.object({
-              name: z.string(),
-              mimeType: z.string(),
-              content: z.string(), // base64-encoded file bytes
-            }),
-          ),
+          files: z
+            .array(
+              z.object({
+                name: z.string(),
+                mimeType: z.string(),
+                content: z.string(), // base64-encoded file bytes
+              }),
+            )
+            .max(20),
         }),
         response: constructResponseSchema(
           z.object({ results: z.array(UploadResultSchema) }),

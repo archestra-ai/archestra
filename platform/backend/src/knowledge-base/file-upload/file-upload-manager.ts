@@ -67,8 +67,9 @@ class FileUploadManager {
     const contentHash = KbUploadedFileModel.computeContentHash(
       rawBuffer.toString("base64"),
     );
-    // Knowledge Files deduplicate reusable uploads across the organization even
-    // though the legacy connector upload path remains connector-scoped.
+    // Knowledge Files use a best-effort organization-wide duplicate check for
+    // reusable uploads, while the legacy connector upload path and database
+    // uniqueness remain connector-scoped.
     const existing = await KbUploadedFileModel.findByOrganizationContentHash({
       organizationId: params.organizationId,
       contentHash,

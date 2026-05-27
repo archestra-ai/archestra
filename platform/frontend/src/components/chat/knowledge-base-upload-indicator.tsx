@@ -10,8 +10,6 @@ import {
 interface KnowledgeBaseUploadIndicatorProps {
   /** Number of files attached */
   attachmentCount: number;
-  /** Whether the current agent has a knowledge source assigned */
-  hasKnowledgeBase: boolean;
 }
 
 /**

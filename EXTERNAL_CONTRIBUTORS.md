@@ -483,3 +483,6 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @ashjkd213
 - @blogMaxAbel
 - @DaveBryan001
+- @serge2day
+- @zhangjiayang6835-cyber
+- @Ruchin-Audichya

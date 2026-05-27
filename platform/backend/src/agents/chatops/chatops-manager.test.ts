@@ -1668,6 +1668,82 @@ describe("ChatOpsManager attachment passthrough", () => {
     );
   });
 
+  test("does not fetch thread history for a top-level message with a root thread id", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const executorSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockResolvedValue({
+        text: "Fresh thread response",
+        messageId: "msg-fresh",
+        finishReason: "stop",
+        responseUiMessage: {
+          id: "msg-fresh",
+          role: "assistant",
+          parts: [{ type: "text", text: "Fresh thread response" }],
+        },
+      });
+
+    const user = await makeUser({ email: "fresh-thread@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "fresh-thread@example.com",
+    });
+    const getThreadHistorySpy = vi.fn().mockResolvedValue([
+      {
+        messageId: "old-msg",
+        senderId: "other-user",
+        senderName: "Other User",
+        text: "Old context that must not be replayed",
+        timestamp: new Date(Date.now() - 60_000),
+        isFromBot: false,
+      },
+    ]);
+    mockProvider.getThreadHistory = getThreadHistorySpy;
+
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    const message = createMockMessage({
+      threadId: "root-message-id",
+      isThreadReply: false,
+      text: "Start a new task",
+    });
+
+    const result = await manager.processMessage({
+      message,
+      provider: mockProvider,
+    });
+
+    expect(result.success).toBe(true);
+    expect(getThreadHistorySpy).not.toHaveBeenCalled();
+    expect(JSON.stringify(executorSpy.mock.calls[0][0].messages)).not.toContain(
+      "Previous conversation:",
+    );
+  });
+
   test("hands off to swapped chatops agent in the same turn", async ({
     makeUser,
     makeOrganization,

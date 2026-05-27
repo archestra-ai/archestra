@@ -1,4 +1,5 @@
 export * as agentExecution from "./agent-execution";
+export * as codeRuntime from "./code-runtime";
 export * as llm from "./llm";
 export * as mcp from "./mcp";
 export * as rag from "./rag";

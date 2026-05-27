@@ -184,6 +184,47 @@ describe("delegation tool execution", () => {
     );
   });
 
+  test("propagates chatops and scheduled run context to delegated subagents", async ({
+    makeAgent,
+    makeAgentTool,
+  }) => {
+    const targetAgent = await makeAgent({ name: "ChatOps Worker" });
+    const delegationTool = await ToolModel.findOrCreateDelegationTool(
+      targetAgent.id,
+    );
+    await makeAgentTool(testAgent.id, delegationTool.id);
+
+    mockExecuteA2AMessage.mockResolvedValue({
+      messageId: "subagent-message-chatops-context",
+      text: "Handled by subagent",
+      finishReason: "stop",
+    });
+
+    const result = await executeArchestraTool(
+      `${AGENT_TOOL_PREFIX}${slugify(targetAgent.name)}`,
+      { message: "Write the requested artifact." },
+      {
+        ...mockContext,
+        conversationId: "synthetic-chatops-isolation-key",
+        chatOpsBindingId: "chatops-binding-1",
+        chatOpsThreadId: "thread-1",
+        scheduleTriggerRunId: "schedule-run-1",
+      },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: targetAgent.id,
+        message: "Write the requested artifact.",
+        conversationId: "synthetic-chatops-isolation-key",
+        chatOpsBindingId: "chatops-binding-1",
+        chatOpsThreadId: "thread-1",
+        scheduleTriggerRunId: "schedule-run-1",
+      }),
+    );
+  });
+
   test("leaves trust propagation unset when the parent context was never evaluated", async ({
     makeAgent,
     makeAgentTool,

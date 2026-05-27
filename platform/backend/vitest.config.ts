@@ -1,9 +1,11 @@
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { defineConfig } from "vitest/config";
 
 const isCI = process.env.CI === "true";
 
 export default defineConfig({
+  plugins: [rawPythonPlugin()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
@@ -53,3 +55,15 @@ export default defineConfig({
     hookTimeout: 60000,
   },
 });
+
+function rawPythonPlugin() {
+  return {
+    name: "raw-python",
+    enforce: "pre" as const,
+    async load(id: string) {
+      if (!id.endsWith(".py")) return null;
+      const source = await readFile(id, "utf-8");
+      return `export default ${JSON.stringify(source)};`;
+    },
+  };
+}

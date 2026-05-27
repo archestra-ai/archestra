@@ -175,6 +175,30 @@ describe("chat tool execution", () => {
     );
   });
 
+  test("artifact_write succeeds without conversation persistence in chatops context", async () => {
+    const contextWithChatOps: ArchestraContext = {
+      ...mockContext,
+      conversationId: "synthetic-chatops-isolation-key",
+      chatOpsBindingId: "chatops-binding-1",
+      chatOpsThreadId: "thread-1",
+    };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}artifact_write`,
+      { content: "# ChatOps Artifact\n\nSome markdown content." },
+      contextWithChatOps,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toEqual({
+      success: true,
+      characterCount: "# ChatOps Artifact\n\nSome markdown content.".length,
+    });
+    expect((result.content[0] as any).text).toContain(
+      "ChatOps does not persist conversation artifacts",
+    );
+  });
+
   test("swap_agent succeeds with real conversation and target agent", async ({
     makeAgent,
     makeConversation,

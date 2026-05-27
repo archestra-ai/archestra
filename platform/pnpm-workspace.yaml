@@ -14,3 +14,4 @@ catalog:
   # 2026-04-28, or re-check `npm view @typescript/native-preview dist-tags`
   # and pick the newest version at least 7 days old.
   "@typescript/native-preview": 7.0.0-dev.20260415.1
+  zod: ^4.3.4

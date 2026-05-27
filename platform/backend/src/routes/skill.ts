@@ -45,7 +45,10 @@ import {
   SkillFileEncodingSchema,
   SkillWithFilesSchema,
 } from "@/types";
-import { isUniqueConstraintError } from "@/utils/db";
+import {
+  isForeignKeyConstraintError,
+  isUniqueConstraintError,
+} from "@/utils/db";
 
 /** A team a skill is assigned to (for `scope = 'team'` skills). */
 const SkillTeamSchema = z.object({ id: z.string(), name: z.string() });
@@ -120,7 +123,10 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Non-admins see only skills within their scope; admins see all.
       const accessibleSkillIds = checker.isAdmin
         ? undefined
-        : await SkillTeamModel.getUserAccessibleSkillIds(user.id);
+        : await SkillTeamModel.getUserAccessibleSkillIds({
+            organizationId,
+            userId: user.id,
+          });
 
       const [skills, total] = await Promise.all([
         SkillModel.findByOrganization({
@@ -198,27 +204,28 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userTeamIds,
         userId: user.id,
       });
+      await assertSkillTeams({ scope, teamIds, organizationId });
 
-      const skill = await SkillModel.createWithFiles({
-        skill: {
-          organizationId,
-          authorId: user.id,
-          name: parsed.name,
-          description: parsed.description,
-          content: parsed.content,
-          license: parsed.license,
-          compatibility: parsed.compatibility,
-          metadata: parsed.metadata,
-          sourceType: "manual",
-          scope,
-        },
-        files: toSkillFiles(body.files ?? []),
-      });
+      const skill = await withTeamFkErrorMapped(() =>
+        SkillModel.createWithFiles({
+          skill: {
+            organizationId,
+            authorId: user.id,
+            name: parsed.name,
+            description: parsed.description,
+            content: parsed.content,
+            license: parsed.license,
+            compatibility: parsed.compatibility,
+            metadata: parsed.metadata,
+            sourceType: "manual",
+            scope,
+          },
+          files: toSkillFiles(body.files ?? []),
+          teamIds,
+        }),
+      );
       if (!skill) {
         throw skillNameConflict(parsed.name);
-      }
-      if (teamIds.length > 0) {
-        await SkillTeamModel.syncSkillTeams(skill.id, teamIds);
       }
 
       return reply.send(await loadSkillDetail(skill));
@@ -244,6 +251,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       // 404 (not 403) so scope is not leaked to users who cannot see the skill.
       const hasAccess = await SkillTeamModel.userHasSkillAccess({
+        organizationId,
         userId: user.id,
         skill,
         isSkillAdmin: checker.isAdmin,
@@ -282,6 +290,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // 404 if the user cannot even see the skill; 403 if visible but not theirs to modify.
       const hasAccess = await SkillTeamModel.userHasSkillAccess({
+        organizationId,
         userId: user.id,
         skill: existing,
         isSkillAdmin: checker.isAdmin,
@@ -298,11 +307,16 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
 
-      // Re-authorize against the target scope/teams when the skill is moved.
+      // Re-authorize and re-sync teams only when scope or team assignments
+      // actually change. A content-only edit that echoes the existing teams
+      // must not 403 a non-admin author or needlessly rewrite team rows.
       const newScope = body.scope ?? existing.scope;
       const newTeamIds =
         newScope === "team" ? dedupe(body.teamIds ?? existingTeamIds) : [];
-      if (newScope !== existing.scope || body.teamIds !== undefined) {
+      const scopeChanged = newScope !== existing.scope;
+      const teamsChanged =
+        newScope === "team" && !sameTeamSet(newTeamIds, existingTeamIds);
+      if (scopeChanged || teamsChanged) {
         authorizeSkillScope({
           checker,
           scope: newScope,
@@ -310,6 +324,11 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           requestedTeamIds: newTeamIds,
           userTeamIds,
           userId: user.id,
+        });
+        await assertSkillTeams({
+          scope: newScope,
+          teamIds: newTeamIds,
+          organizationId,
         });
       }
 
@@ -340,7 +359,11 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!updated) {
         throw new ApiError(404, "Skill not found");
       }
-      await SkillTeamModel.syncSkillTeams(id, newTeamIds);
+      if (scopeChanged || teamsChanged) {
+        await withTeamFkErrorMapped(() =>
+          SkillTeamModel.syncSkillTeams(id, newTeamIds),
+        );
+      }
 
       return reply.send(await loadSkillDetail(updated));
     },
@@ -366,7 +389,10 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       const accessibleSkillIds = checker.isAdmin
         ? undefined
-        : await SkillTeamModel.getUserAccessibleSkillIds(user.id);
+        : await SkillTeamModel.getUserAccessibleSkillIds({
+            organizationId,
+            userId: user.id,
+          });
 
       const repos = await SkillModel.findDistinctSourceRepos({
         organizationId,
@@ -400,6 +426,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const teamIds = await SkillTeamModel.getTeamsForSkill(id);
 
       const hasAccess = await SkillTeamModel.userHasSkillAccess({
+        organizationId,
         userId: user.id,
         skill,
         isSkillAdmin: checker.isAdmin,
@@ -599,6 +626,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userTeamIds,
         userId: user.id,
       });
+      await assertSkillTeams({ scope, teamIds, organizationId });
 
       const imported = await runImport(() =>
         importSkills({
@@ -612,29 +640,29 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const created: Skill[] = [];
       const skipped: string[] = [];
       for (const item of imported) {
-        const skill = await SkillModel.createWithFiles({
-          skill: {
-            organizationId,
-            authorId: user.id,
-            name: item.parsed.name,
-            description: item.parsed.description,
-            content: item.parsed.content,
-            license: item.parsed.license,
-            compatibility: item.parsed.compatibility,
-            metadata: item.parsed.metadata,
-            sourceType: "github",
-            sourceRef: item.sourceRef,
-            sourceCommit: item.sourceCommit,
-            scope,
-          },
-          files: item.files,
-        });
+        const skill = await withTeamFkErrorMapped(() =>
+          SkillModel.createWithFiles({
+            skill: {
+              organizationId,
+              authorId: user.id,
+              name: item.parsed.name,
+              description: item.parsed.description,
+              content: item.parsed.content,
+              license: item.parsed.license,
+              compatibility: item.parsed.compatibility,
+              metadata: item.parsed.metadata,
+              sourceType: "github",
+              sourceRef: item.sourceRef,
+              sourceCommit: item.sourceCommit,
+              scope,
+            },
+            files: item.files,
+            teamIds,
+          }),
+        );
         if (!skill) {
           skipped.push(item.parsed.name);
           continue;
-        }
-        if (teamIds.length > 0) {
-          await SkillTeamModel.syncSkillTeams(skill.id, teamIds);
         }
         created.push(skill);
       }
@@ -674,6 +702,66 @@ async function loadSkillDetail(skill: Skill) {
 
 function dedupe(values: string[]): string[] {
   return [...new Set(values)];
+}
+
+/** Whether two team-id lists contain the same set of ids. */
+function sameTeamSet(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const setB = new Set(b);
+  return a.every((id) => setB.has(id));
+}
+
+/**
+ * Validate a skill's team assignments before persisting. Only meaningful for
+ * `team` scope: such a skill must have at least one team (otherwise it is
+ * invisible to everyone, including its author), and every team must exist
+ * within the organization — a stale/deleted id fails with a clean 400 instead
+ * of an FK violation mid-transaction.
+ */
+async function assertSkillTeams(params: {
+  scope: ResourceVisibilityScope;
+  teamIds: string[];
+  organizationId: string;
+}): Promise<void> {
+  if (params.scope !== "team") return;
+
+  if (params.teamIds.length === 0) {
+    throw new ApiError(
+      400,
+      "A team-scoped skill must be assigned to at least one team",
+    );
+  }
+
+  const teams = await TeamModel.findByIds(params.teamIds);
+  const validIds = new Set(
+    teams
+      .filter((team) => team.organizationId === params.organizationId)
+      .map((team) => team.id),
+  );
+  const missing = params.teamIds.filter((id) => !validIds.has(id));
+  if (missing.length > 0) {
+    throw new ApiError(400, `Unknown team id(s): ${missing.join(", ")}`);
+  }
+}
+
+/**
+ * Run a skill write, converting a `skill_team` foreign-key violation — a team
+ * deleted between {@link assertSkillTeams} and the insert — into a clean 400.
+ */
+async function withTeamFkErrorMapped<T>(
+  operation: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (isForeignKeyConstraintError(error)) {
+      throw new ApiError(
+        400,
+        "One or more of the selected teams no longer exist",
+      );
+    }
+    throw error;
+  }
 }
 
 /**

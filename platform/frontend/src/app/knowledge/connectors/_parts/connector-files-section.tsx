@@ -33,14 +33,16 @@ const ACCEPTED_EXTENSIONS =
   ".txt,.md,.csv,.json,.xml,.html,.htm,.pdf,.doc,.docx,.zip";
 const MAX_FILE_SIZE_MB = 10;
 
-function FileStatusBadge({
+export function FileStatusBadge({
   processingStatus,
   embeddingStatus,
   processingError,
+  embeddingError,
 }: {
   processingStatus?: string;
   embeddingStatus: string;
   processingError?: string | null;
+  embeddingError?: string | null;
 }) {
   if (processingStatus && processingStatus !== "completed") {
     const variants = {
@@ -95,12 +97,14 @@ function FileStatusBadge({
     failed: "Failed",
   };
 
-  return (
+  const badge = (
     <Badge
       variant={
         variants[embeddingStatus as keyof typeof variants] ?? "secondary"
       }
-      className="capitalize text-xs"
+      className={`capitalize text-xs ${
+        embeddingStatus === "failed" && embeddingError ? "cursor-help" : ""
+      }`}
     >
       {embeddingStatus === "processing" && (
         <Loader2 className="h-3 w-3 mr-1 animate-spin" />
@@ -108,6 +112,17 @@ function FileStatusBadge({
       {labels[embeddingStatus as keyof typeof labels] ?? embeddingStatus}
     </Badge>
   );
+
+  if (embeddingStatus === "failed" && embeddingError) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{badge}</TooltipTrigger>
+        <TooltipContent>{embeddingError}</TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return badge;
 }
 
 function FileStatusCell({
@@ -125,6 +140,7 @@ function FileStatusCell({
       processingStatus={current.processingStatus}
       embeddingStatus={current.embeddingStatus}
       processingError={current.processingError}
+      embeddingError={current.embeddingError}
     />
   );
 }

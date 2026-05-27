@@ -40,7 +40,10 @@ class EmbeddingService {
       return;
     }
 
-    await KbDocumentModel.update(documentId, { embeddingStatus: "processing" });
+    await KbDocumentModel.update(documentId, {
+      embeddingStatus: "processing",
+      embeddingError: null,
+    });
 
     try {
       const chunks = await KbChunkModel.findByDocument(documentId);
@@ -81,6 +84,7 @@ class EmbeddingService {
 
       await KbDocumentModel.update(documentId, {
         embeddingStatus: "completed",
+        embeddingError: null,
         chunkCount: chunks.length,
       });
 
@@ -91,6 +95,7 @@ class EmbeddingService {
     } catch (error) {
       await KbDocumentModel.update(documentId, {
         embeddingStatus: "failed",
+        embeddingError: getEmbeddingErrorMessage(error),
       });
       logger.error(
         {
@@ -151,6 +156,7 @@ class EmbeddingService {
 
       await KbDocumentModel.update(documentId, {
         embeddingStatus: "processing",
+        embeddingError: null,
       });
 
       const chunks = await KbChunkModel.findByDocument(documentId);
@@ -158,6 +164,7 @@ class EmbeddingService {
       if (chunks.length === 0) {
         await KbDocumentModel.update(documentId, {
           embeddingStatus: "completed",
+          embeddingError: null,
           chunkCount: 0,
         });
         continue;
@@ -187,6 +194,7 @@ class EmbeddingService {
       for (const { documentId } of docChunkMap) {
         await KbDocumentModel.update(documentId, {
           embeddingStatus: "pending",
+          embeddingError: null,
         });
       }
       return;
@@ -195,6 +203,7 @@ class EmbeddingService {
     const ctx = orgConfig.config;
     const embeddingResults = new Map<string, number[]>();
     const failedChunkIds = new Set<string>();
+    const failedChunkErrors = new Map<string, string>();
 
     for (let i = 0; i < allChunks.length; i += EMBEDDING_BATCH_SIZE) {
       const batch = allChunks.slice(i, i + EMBEDDING_BATCH_SIZE);
@@ -223,6 +232,7 @@ class EmbeddingService {
         );
         for (const chunk of batch) {
           failedChunkIds.add(chunk.chunkId);
+          failedChunkErrors.set(chunk.chunkId, getEmbeddingErrorMessage(error));
         }
       }
     }
@@ -238,8 +248,14 @@ class EmbeddingService {
     for (const { documentId, chunkIds, chunkCount } of docChunkMap) {
       const anyFailed = chunkIds.some((id) => failedChunkIds.has(id));
       if (anyFailed) {
+        const embeddingError =
+          chunkIds
+            .map((id) => failedChunkErrors.get(id))
+            .find((message): message is string => Boolean(message)) ??
+          "Embedding failed";
         await KbDocumentModel.update(documentId, {
           embeddingStatus: "failed",
+          embeddingError,
         });
         logger.error(
           { documentId, runId: connectorRunId },
@@ -248,6 +264,7 @@ class EmbeddingService {
       } else {
         await KbDocumentModel.update(documentId, {
           embeddingStatus: "completed",
+          embeddingError: null,
           chunkCount,
         });
         logger.info(
@@ -344,4 +361,16 @@ function chunkToEmbeddingInput(
     content + (metadataSuffix ?? ""),
     "search_document",
   );
+}
+
+function getEmbeddingErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  if (typeof error === "string" && error.trim()) {
+    return error;
+  }
+
+  return "Embedding failed";
 }

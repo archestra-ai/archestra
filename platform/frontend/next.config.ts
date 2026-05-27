@@ -44,6 +44,12 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     proxyTimeout: 300000, // 5 minutes in milliseconds - prevents SSE stream timeout
+    // Next defaults the proxy body limit to 10MB; raise it to the backend's
+    // 70MB bodyLimit so chat attachment uploads (50MB user cap + ~33% base64
+    // overhead + conversation history) aren't silently truncated. Truncation
+    // leaves the backend hung waiting for the missing tail of Content-Length,
+    // surfacing as a 5-minute "Internal Server Error".
+    proxyClientMaxBodySize: "70mb",
   },
   httpAgentOptions: {
     keepAlive: true,

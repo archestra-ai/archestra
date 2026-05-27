@@ -15,7 +15,10 @@ import {
 } from "@/models";
 import { taskQueueService } from "@/task-queue";
 import { ApiError } from "@/types";
-import { getConfiguredBlobStorageProvider } from "./blob-storage-providers";
+import {
+  getBlobStorageProvider,
+  getConfiguredBlobStorageProvider,
+} from "./blob-storage-providers";
 import type { StoredBlobPointer } from "./blob-storage-providers/types";
 
 type UploadKnowledgeFileParams = {
@@ -64,6 +67,8 @@ class FileUploadManager {
     const contentHash = KbUploadedFileModel.computeContentHash(
       rawBuffer.toString("base64"),
     );
+    // Knowledge Files deduplicate reusable uploads across the organization even
+    // though the legacy connector upload path remains connector-scoped.
     const existing = await KbUploadedFileModel.findByOrganizationContentHash({
       organizationId: params.organizationId,
       contentHash,
@@ -124,6 +129,19 @@ class FileUploadManager {
         blobStorageKey: blobPointer.key,
         processingStatus: "pending",
       });
+
+      await AgentConnectorAssignmentModel.syncForAgentAssignments({
+        connectorId: connector.id,
+        agentIds: params.agentIds,
+      });
+
+      await taskQueueService.enqueue({
+        taskType: "process_uploaded_files",
+        payload: {
+          connectorId: connector.id,
+          fileIds: [file.id],
+        },
+      });
     } catch (error) {
       await this.cleanupFailedFileCreate({
         connectorId: connector.id,
@@ -132,19 +150,6 @@ class FileUploadManager {
       });
       throw error;
     }
-
-    await AgentConnectorAssignmentModel.syncForAgentAssignments({
-      connectorId: connector.id,
-      agentIds: params.agentIds,
-    });
-
-    await taskQueueService.enqueue({
-      taskType: "process_uploaded_files",
-      payload: {
-        connectorId: connector.id,
-        fileIds: [file.id],
-      },
-    });
 
     return {
       filename: params.name,
@@ -224,7 +229,7 @@ class FileUploadManager {
     });
     await KbUploadedFileModel.delete(params.fileId);
     await KnowledgeBaseConnectorModel.delete(file.connectorId);
-    await getConfiguredBlobStorageProvider().delete({
+    await getBlobStorageProvider(file.blobStorageProvider).delete({
       key: blobStorageKey,
     });
   }

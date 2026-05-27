@@ -27,6 +27,7 @@ import config, {
   parseMetricsPort,
   parseProcessType,
   parseS3BlobStorageAuthMethod,
+  parseS3BlobStorageBucket,
   parseSampleRate,
   parseTrustProxy,
   parseVirtualKeyDefaultExpiration,
@@ -1225,6 +1226,29 @@ describe("parseS3BlobStorageAuthMethod", () => {
   test("falls back to IRSA for unsupported values", () => {
     expect(parseS3BlobStorageAuthMethod("iam-user")).toBe("irsa");
     expect(parseS3BlobStorageAuthMethod("profile")).toBe("irsa");
+  });
+});
+
+describe("parseS3BlobStorageBucket", () => {
+  test("allows empty bucket when database storage is enabled", () => {
+    expect(parseS3BlobStorageBucket({ provider: "db", value: "" })).toBe("");
+  });
+
+  test("trims configured S3 bucket", () => {
+    expect(
+      parseS3BlobStorageBucket({
+        provider: "s3",
+        value: " archestra-files ",
+      }),
+    ).toBe("archestra-files");
+  });
+
+  test("requires bucket when S3 storage is enabled", () => {
+    expect(() =>
+      parseS3BlobStorageBucket({ provider: "s3", value: "" }),
+    ).toThrow(
+      "ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_BUCKET is required when S3 blob storage is enabled",
+    );
   });
 });
 

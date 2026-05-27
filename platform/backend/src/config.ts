@@ -580,6 +580,20 @@ export function parseS3BlobStorageAuthMethod(
 }
 
 /** @public — exported for testability */
+export function parseS3BlobStorageBucket(params: {
+  provider: BlobStorageProviderType;
+  value: string | undefined;
+}): string {
+  const bucket = params.value?.trim() ?? "";
+  if (params.provider === "s3" && !bucket) {
+    throw new Error(
+      "ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_BUCKET is required when S3 blob storage is enabled",
+    );
+  }
+  return bucket;
+}
+
+/** @public — exported for testability */
 export const getAnalyticsConfig = () => ({
   enabled: process.env.ARCHESTRA_ANALYTICS !== "disabled",
   posthog: {
@@ -598,6 +612,10 @@ const mcpServerBaseImage =
 
 const defaultCodeRuntimeImage =
   "ghcr.io/astral-sh/uv:0.9.17-python3.12-bookworm-slim";
+
+const knowledgeFileBlobStorageProvider = parseBlobStorageProvider(
+  process.env.ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_BLOB_STORAGE_PROVIDER,
+);
 
 /**
  * resolves the Dagger runner host. A misconfigured host returns `undefined`
@@ -1067,13 +1085,12 @@ const config = {
       process.env.ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED !== "false",
     fileUpload: {
       blobStorage: {
-        provider: parseBlobStorageProvider(
-          process.env
-            .ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_BLOB_STORAGE_PROVIDER,
-        ),
+        provider: knowledgeFileBlobStorageProvider,
         s3: {
-          bucket:
-            process.env.ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_BUCKET || "",
+          bucket: parseS3BlobStorageBucket({
+            provider: knowledgeFileBlobStorageProvider,
+            value: process.env.ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_BUCKET,
+          }),
           region:
             process.env.ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_REGION || "",
           prefix:

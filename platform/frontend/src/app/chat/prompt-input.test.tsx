@@ -5,15 +5,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   mockUseOrganization,
   mockUseChatPlaceholder,
+  mockUseSkillsPaginated,
   mockTextInputSetInput,
   mockTextInputClear,
   mockControllerState,
+  mockFeatureState,
 } = vi.hoisted(() => ({
   mockUseOrganization: vi.fn(),
   mockUseChatPlaceholder: vi.fn(),
+  mockUseSkillsPaginated: vi.fn(),
   mockTextInputSetInput: vi.fn(),
   mockTextInputClear: vi.fn(),
   mockControllerState: { value: "" },
+  mockFeatureState: { chatSecretScanEnabled: false },
 }));
 
 // Mock ResizeObserver which is used by Radix UI components
@@ -48,13 +52,19 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
     onSubmit?: (
       message: { text: string; files: [] },
       event: React.FormEvent<HTMLFormElement>,
-    ) => void;
+    ) => void | Promise<void>;
   }) => (
     <form
       data-testid="prompt-input"
       onSubmit={(event) => {
         event.preventDefault();
-        onSubmit?.({ text: mockControllerState.value, files: [] }, event);
+        const result = onSubmit?.(
+          { text: mockControllerState.value, files: [] },
+          event,
+        );
+        if (result instanceof Promise) {
+          result.catch(() => {});
+        }
       }}
     >
       {children}
@@ -235,6 +245,10 @@ vi.mock("@/lib/chat/chat-placeholder.hook", () => ({
   useChatPlaceholder: (...args: unknown[]) => mockUseChatPlaceholder(...args),
 }));
 
+vi.mock("@/lib/skills/skill.query", () => ({
+  useSkillsPaginated: () => mockUseSkillsPaginated(),
+}));
+
 // Mock for useHasPermissions - default to non-admin
 const mockUseHasPermissions = vi.fn().mockReturnValue({
   data: false,
@@ -244,6 +258,13 @@ const mockUseHasPermissions = vi.fn().mockReturnValue({
 
 vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => mockUseHasPermissions(),
+}));
+
+vi.mock("@/lib/config/config.query", () => ({
+  useFeature: (flag: string) =>
+    flag === "chatSecretScanEnabled"
+      ? mockFeatureState.chatSecretScanEnabled
+      : undefined,
 }));
 
 // Import the component after mocks are set up
@@ -269,7 +290,12 @@ describe("ArchestraPromptInput", () => {
       placeholder: "Animated placeholder",
       isAnimating: true,
     });
+    mockUseSkillsPaginated.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+    });
     mockControllerState.value = "";
+    mockFeatureState.chatSecretScanEnabled = false;
   });
 
   describe("File Upload Button", () => {
@@ -544,129 +570,152 @@ describe("ArchestraPromptInput", () => {
       expect(onCompactConversation).toHaveBeenCalledTimes(1);
       expect(mockTextInputClear).toHaveBeenCalled();
     });
+  });
 
-    it("queues a follow-up submitted while the current response is streaming", () => {
+  describe("sensitive data detection", () => {
+    const fakeGithubToken = `ghp_${"a".repeat(36)}`;
+
+    it("flag off: plain submit works", () => {
       const onSubmit = vi.fn();
-      mockControllerState.value = "Run this next";
+      mockFeatureState.chatSecretScanEnabled = false;
+      mockControllerState.value = "just a normal message";
 
-      render(
-        <ArchestraPromptInput
-          {...defaultProps}
-          onSubmit={onSubmit}
-          status="streaming"
-        />,
-      );
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
+      fireEvent.submit(screen.getByTestId("prompt-input"));
 
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      expect(
+        screen.queryByText(
+          "Your message seems to contain sensitive data, are you sure?",
+        ),
+      ).not.toBeInTheDocument();
+    });
+
+    it("flag off: token-like content submits with no dialog", () => {
+      const onSubmit = vi.fn();
+      mockFeatureState.chatSecretScanEnabled = false;
+      mockControllerState.value = `please rotate ${fakeGithubToken}`;
+
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      expect(
+        screen.queryByText(
+          "Your message seems to contain sensitive data, are you sure?",
+        ),
+      ).not.toBeInTheDocument();
+    });
+
+    it("flag on: plain message submits as before", () => {
+      const onSubmit = vi.fn();
+      mockFeatureState.chatSecretScanEnabled = true;
+      mockControllerState.value = "just a normal message";
+
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      expect(
+        screen.queryByText(
+          "Your message seems to contain sensitive data, are you sure?",
+        ),
+      ).not.toBeInTheDocument();
+    });
+
+    it("flag on: detected token opens the dialog and suppresses onSubmit", () => {
+      const onSubmit = vi.fn();
+      mockFeatureState.chatSecretScanEnabled = true;
+      mockControllerState.value = `please rotate ${fakeGithubToken}`;
+
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
       fireEvent.submit(screen.getByTestId("prompt-input"));
 
       expect(onSubmit).not.toHaveBeenCalled();
-      expect(screen.getByText("Run this next")).toBeInTheDocument();
-      expect(screen.getByLabelText("Queued prompts")).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          "Your message seems to contain sensitive data, are you sure?",
+        ),
+      ).toBeInTheDocument();
     });
 
-    it("submits the next queued follow-up when the chat is ready again", () => {
+    it("flag on: clicking Send anyway dispatches onSubmit with the original message", () => {
       const onSubmit = vi.fn();
-      mockControllerState.value = "Run after streaming";
+      mockFeatureState.chatSecretScanEnabled = true;
+      const text = `please rotate ${fakeGithubToken}`;
+      mockControllerState.value = text;
 
-      const { rerender } = render(
-        <ArchestraPromptInput
-          {...defaultProps}
-          onSubmit={onSubmit}
-          status="streaming"
-        />,
-      );
-
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
       fireEvent.submit(screen.getByTestId("prompt-input"));
 
-      rerender(
-        <ArchestraPromptInput
-          {...defaultProps}
-          onSubmit={onSubmit}
-          status="ready"
-        />,
-      );
-
-      expect(onSubmit).toHaveBeenCalledWith(
-        { text: "Run after streaming", files: [] },
-        expect.objectContaining({ preventDefault: expect.any(Function) }),
-      );
-    });
-
-    it("keeps the queued follow-up in the queue when submitting it fails", () => {
-      const onSubmit = vi.fn(() => {
-        throw new Error("submit failed");
-      });
-      mockControllerState.value = "Retain on failure";
-
-      const { rerender } = render(
-        <ArchestraPromptInput
-          {...defaultProps}
-          onSubmit={onSubmit}
-          status="streaming"
-        />,
-      );
-
-      fireEvent.submit(screen.getByTestId("prompt-input"));
-
-      rerender(
-        <ArchestraPromptInput
-          {...defaultProps}
-          onSubmit={onSubmit}
-          status="ready"
-        />,
-      );
+      fireEvent.click(screen.getByRole("button", { name: "Send anyway" }));
 
       expect(onSubmit).toHaveBeenCalledTimes(1);
-      expect(screen.getByText("Retain on failure")).toBeInTheDocument();
+      const [message] = onSubmit.mock.calls[0];
+      expect(message.text).toBe(text);
     });
 
-    it("does not submit queued follow-ups after switching conversations", () => {
-      const onConversationASubmit = vi.fn();
-      const onConversationBSubmit = vi.fn();
-      mockControllerState.value = "Keep this in conversation A";
+    it("flag on: clicking Cancel does not call onSubmit", () => {
+      const onSubmit = vi.fn();
+      mockFeatureState.chatSecretScanEnabled = true;
+      mockControllerState.value = `please rotate ${fakeGithubToken}`;
 
-      const { rerender } = render(
-        <ArchestraPromptInput
-          {...defaultProps}
-          conversationId="conversation-a"
-          onSubmit={onConversationASubmit}
-          status="streaming"
-        />,
-      );
-
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
       fireEvent.submit(screen.getByTestId("prompt-input"));
 
-      expect(
-        screen.getByText("Keep this in conversation A"),
-      ).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
-      rerender(
-        <ArchestraPromptInput
-          {...defaultProps}
-          conversationId="conversation-b"
-          onSubmit={onConversationBSubmit}
-          status="ready"
-        />,
-      );
-
-      expect(onConversationASubmit).not.toHaveBeenCalled();
-      expect(onConversationBSubmit).not.toHaveBeenCalled();
+      expect(onSubmit).not.toHaveBeenCalled();
       expect(
-        screen.queryByText("Keep this in conversation A"),
+        screen.queryByText(
+          "Your message seems to contain sensitive data, are you sure?",
+        ),
       ).not.toBeInTheDocument();
     });
+  });
 
-    it("removes queued follow-ups from the prompt queue", () => {
-      mockControllerState.value = "Remove this queued prompt";
+  describe("skill slash commands", () => {
+    const skill = {
+      id: "skill-1",
+      name: "My Skill",
+      description: "Does things",
+    };
 
-      render(<ArchestraPromptInput {...defaultProps} status="streaming" />);
+    beforeEach(() => {
+      mockUseOrganization.mockReturnValue({
+        data: { skillSlashCommandsEnabled: true },
+        isLoading: false,
+      });
+      mockUseSkillsPaginated.mockReturnValue({
+        data: { data: [skill] },
+        isLoading: false,
+      });
+    });
 
+    it("submits a bare skill command with skill metadata and an empty prompt", () => {
+      const onSubmit = vi.fn();
+      mockControllerState.value = "/my-skill";
+
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
       fireEvent.submit(screen.getByTestId("prompt-input"));
-      fireEvent.click(screen.getByLabelText("Remove queued prompt"));
 
-      expect(
-        screen.queryByText("Remove this queued prompt"),
-      ).not.toBeInTheDocument();
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      const [message, , options] = onSubmit.mock.calls[0];
+      expect(message.text).toBe("");
+      expect(options).toEqual({ skill: { id: skill.id, name: skill.name } });
+    });
+
+    it("submits a skill command with the text after the token as the prompt", () => {
+      const onSubmit = vi.fn();
+      mockControllerState.value = "/my-skill summarize the repo";
+
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      const [message, , options] = onSubmit.mock.calls[0];
+      expect(message.text).toBe("summarize the repo");
+      expect(options).toEqual({ skill: { id: skill.id, name: skill.name } });
     });
   });
 });

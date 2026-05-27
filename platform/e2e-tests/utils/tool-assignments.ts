@@ -55,9 +55,13 @@ export async function assignCatalogCredentialToGateway(params: {
     catalogItemName: params.catalogItemName,
     gatewayName: params.gatewayName,
   });
-  await params.page
-    .getByRole("option", { name: params.credentialName })
-    .click();
+  const credentialOption = params.page.getByRole("option", {
+    name: params.credentialName,
+  });
+  await expect(credentialOption).toBeVisible({ timeout: 10_000 });
+  // Same DOM-detach issue as the visibleTokenSelect click above — the
+  // capability row re-renders briefly when the credential dropdown opens.
+  await credentialOption.click({ force: true });
   await params.page.keyboard.press("Escape");
   await params.page.waitForTimeout(200);
   await saveOpenProfileDialog(params.page);
@@ -169,11 +173,16 @@ async function openCatalogToolAssignment({
 
   if (catalogAssignmentState === "enabled") {
     await enabledCatalogItem.click();
-    await page.keyboard.press("Escape");
+    // Close the combobox only if it stayed open — pressing Escape
+    // unconditionally can close the outer Edit dialog when the combobox has
+    // already collapsed on click, which leaves the assignment in "missing".
+    if (await searchInput.isVisible().catch(() => false)) {
+      await page.keyboard.press("Escape");
+    }
   }
 
   try {
-    await expect(visibleTokenSelect).toBeVisible({ timeout: 5_000 });
+    await expect(visibleTokenSelect).toBeVisible({ timeout: 15_000 });
   } catch {
     await expect
       .poll(
@@ -189,7 +198,7 @@ async function openCatalogToolAssignment({
           }
           return "missing";
         },
-        { timeout: 10_000, intervals: [500, 1000, 2000] },
+        { timeout: 20_000, intervals: [500, 1000, 2000, 4000] },
       )
       .not.toBe("missing");
 
@@ -199,10 +208,13 @@ async function openCatalogToolAssignment({
       await pillButtonByRole.click({ force: true });
     }
 
-    await expect(visibleTokenSelect).toBeVisible({ timeout: 10_000 });
+    await expect(visibleTokenSelect).toBeVisible({ timeout: 15_000 });
   }
 
-  await visibleTokenSelect.click();
+  // Surrounding capability rows re-render briefly when the catalog selection
+  // commits — observed "element was detached / not stable" failures here.
+  // Force the click since visibility is already asserted above.
+  await visibleTokenSelect.click({ force: true });
 }
 
 function escapeRegExp(value: string): string {

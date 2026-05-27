@@ -13,6 +13,9 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: platformPkg.version,
   },
+  // Lets a second `next dev` (e.g. the Playwright MSW server on :3010) run
+  // alongside the main one without colliding on `.next/dev/lock`.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   output: "standalone",
   // Version skew protection during rolling deployments.
   // https://nextjs.org/docs/app/api-reference/config/next-config-js/deploymentId
@@ -41,6 +44,14 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     proxyTimeout: 300000, // 5 minutes in milliseconds - prevents SSE stream timeout
+    // Next defaults the proxy body limit to 10MB; raise it well above the
+    // backend's 70MB default so an operator who increases ARCHESTRA_API_BODY_LIMIT
+    // at runtime doesn't also have to rebuild the FE image. (next.config.ts is
+    // evaluated at build time in `output: "standalone"` mode, so this value is
+    // baked into the image — making it env-driven would silently drift from
+    // the backend's runtime value.) Anything the proxy lets through still gets
+    // sized-checked by the backend's bodyLimit, which is the authoritative cap.
+    proxyClientMaxBodySize: "200mb",
   },
   httpAgentOptions: {
     keepAlive: true,

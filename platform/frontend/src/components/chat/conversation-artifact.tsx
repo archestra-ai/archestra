@@ -22,6 +22,8 @@ interface ConversationArtifactPanelProps {
   className?: string;
   /** When true, the panel fills its container and doesn't manage its own width/resize */
   embedded?: boolean;
+  /** When true, hide the panel's own title + close button (the parent already provides them) */
+  hideHeader?: boolean;
 }
 
 export function ConversationArtifactPanel({
@@ -30,6 +32,7 @@ export function ConversationArtifactPanel({
   onToggle,
   className,
   embedded = false,
+  hideHeader = false,
 }: ConversationArtifactPanelProps) {
   const [width, setWidth] = useState(() => {
     if (typeof window !== "undefined") {
@@ -365,11 +368,15 @@ export function ConversationArtifactPanel({
       )}
 
       {/* Panel header */}
-      <div className="border-b px-2 pr-1 py-2 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <FileText className="h-4 w-4 text-muted-foreground" />
-          <h3 className="font-medium text-xs">Conversation Artifact</h3>
-        </div>
+      <div className="border-b px-2 pr-1 py-1 flex items-center justify-between">
+        {hideHeader ? (
+          <div />
+        ) : (
+          <div className="flex items-center gap-2">
+            <FileText className="h-4 w-4 text-muted-foreground" />
+            <h3 className="font-medium text-xs">Conversation Artifact</h3>
+          </div>
+        )}
         <div className="flex items-center gap-1">
           <Button
             variant="ghost"
@@ -389,15 +396,17 @@ export function ConversationArtifactPanel({
           >
             <Download className="h-3.5 w-3.5" />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={onToggle}
-            title="Close panel"
-          >
-            <X className="h-3.5 w-3.5" />
-          </Button>
+          {!hideHeader && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={onToggle}
+              title="Close panel"
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          )}
         </div>
       </div>
 

@@ -2,6 +2,7 @@ import type { UIMessage } from "@ai-sdk/react";
 import {
   type ArchestraToolShortName,
   type archestraApiTypes,
+  ChatMessageMetadataSchema,
   parseFullToolName,
   SWAP_AGENT_FAILED_POKE_TEXT,
   SWAP_AGENT_POKE_PREFIX,
@@ -830,6 +831,11 @@ export function ChatMessages({
                                 attachments={extractFileAttachments(
                                   message.parts,
                                 )}
+                                skill={
+                                  ChatMessageMetadataSchema.safeParse(
+                                    message.metadata,
+                                  ).data?.skill
+                                }
                                 onStartEdit={handleStartEdit}
                                 onCancelEdit={handleCancelEdit}
                                 onSave={handleSaveUserMessage}
@@ -896,6 +902,11 @@ export function ChatMessages({
                                 attachments={extractFileAttachments(
                                   message.parts,
                                 )}
+                                skill={
+                                  ChatMessageMetadataSchema.safeParse(
+                                    message.metadata,
+                                  ).data?.skill
+                                }
                                 onStartEdit={handleStartEdit}
                                 onCancelEdit={handleCancelEdit}
                                 onSave={handleSaveUserMessage}
@@ -995,6 +1006,19 @@ export function ChatMessages({
                       case "dynamic-tool": {
                         if (!isToolPart(part)) return null;
                         const toolName = part.toolName;
+
+                        // Skip if a data-tool-ui-start already owns this toolCallId
+                        // (it renders the full input/output lifecycle itself).
+                        const tcId = part.toolCallId;
+                        const hasEarlyStart =
+                          tcId &&
+                          (message.parts ?? []).some(
+                            (p) =>
+                              p.type?.startsWith("data-tool-ui-start") &&
+                              (p as { data?: { toolCallId?: string } }).data
+                                ?.toolCallId === tcId,
+                          );
+                        if (hasEarlyStart) return null;
 
                         // Look ahead for tool result (same tool call ID)
                         let toolResultPart = null;
@@ -1667,6 +1691,7 @@ const MessageTool = memo(
                 uiResourceUri={uiResourceUri}
                 agentId={agentId}
                 toolName={toolName}
+                toolCallId={part.toolCallId}
                 toolInput={part.input as Record<string, unknown>}
                 rawOutput={mcpOutput}
                 preloadedResource={
@@ -1760,6 +1785,7 @@ const MessageTool = memo(
                 uiResourceUri={uiResourceUri}
                 agentId={agentId}
                 toolName={toolName}
+                toolCallId={part.toolCallId}
                 toolInput={part.input as Record<string, unknown>}
                 rawOutput={mcpOutput}
                 preloadedResource={

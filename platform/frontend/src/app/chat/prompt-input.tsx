@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type ChatSkillMetadata,
   E2eTestId,
   getAcceptedFileTypes,
   getSupportedFileTypesDescription,
@@ -10,7 +11,6 @@ import {
 } from "@shared";
 import type { ChatStatus } from "ai";
 import { MoreVerticalIcon, PaperclipIcon, XIcon } from "lucide-react";
-import { nanoid } from "nanoid";
 import type { FormEvent, KeyboardEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -45,6 +45,7 @@ import {
   providerToLogoProvider,
 } from "@/components/chat/model-selector";
 import { PlaywrightInstallInline } from "@/components/chat/playwright-install-dialog";
+import { SensitiveDataConfirmDialog } from "@/components/chat/sensitive-data-confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -63,18 +64,26 @@ import { useChatPlaceholder } from "@/lib/chat/chat-placeholder.hook";
 import { conversationStorageKeys } from "@/lib/chat/chat-utils";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useModelSelectorDisplay } from "@/lib/chat/use-model-selector-display.hook";
+import { useFeature } from "@/lib/config/config.query";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { useOrganization } from "@/lib/organization.query";
+import { scanText } from "@/lib/sensitive-data";
+import { useSkillsPaginated } from "@/lib/skills/skill.query";
 import { cn } from "@/lib/utils";
 import {
-  PromptInputQueue,
-  type QueuedPromptInputMessage,
-} from "./prompt-input-queue";
+  buildSkillCommands,
+  parseSkillCommand,
+  type SkillCommand,
+} from "./skill-commands";
 
-interface ArchestraPromptInputProps {
+const CHAT_ATTACHMENT_MAX_BYTES = 50 * 1024 * 1024;
+const CHAT_ATTACHMENT_MAX_MB = CHAT_ATTACHMENT_MAX_BYTES / (1024 * 1024);
+
+export interface ArchestraPromptInputProps {
   onSubmit: (
     message: PromptInputMessage,
     e: FormEvent<HTMLFormElement>,
+    options?: { skill?: ChatSkillMetadata },
   ) => void;
   status: ChatStatus;
   selectedModel: string;
@@ -130,15 +139,15 @@ type SlashCommand = {
   value: string;
   name: string;
   description: string;
+  /** Set for skill commands; absent for built-in commands like /compact. */
+  skill?: ChatSkillMetadata;
 };
 
-const SLASH_COMMANDS: SlashCommand[] = [
-  {
-    value: "/compact",
-    name: "compact",
-    description: "summarize conversation to prevent hitting the context limit",
-  },
-];
+const COMPACT_COMMAND: SlashCommand = {
+  value: "/compact",
+  name: "compact",
+  description: "summarize conversation to prevent hitting the context limit",
+};
 
 // Inner component that has access to the controller context
 const PromptInputContent = ({
@@ -181,10 +190,6 @@ const PromptInputContent = ({
   const [dismissedSlashCommandValue, setDismissedSlashCommandValue] = useState<
     string | null
   >(null);
-  const [queuedMessages, setQueuedMessages] = useState<
-    QueuedPromptInputMessage[]
-  >([]);
-  const isSendingQueuedMessageRef = useRef(false);
 
   // Collapsed/expanded state for the model selector (defaults to collapsed = provider icon only)
   const { isCollapsed: showDefaultLogo, expand: expandModelSelector } =
@@ -227,6 +232,26 @@ const PromptInputContent = ({
     placeholders: orgData?.chatPlaceholders,
   });
 
+  // Skills exposed as slash commands, gated by the org flag.
+  const skillSlashCommandsEnabled = orgData?.skillSlashCommandsEnabled ?? false;
+  const { data: skillsData } = useSkillsPaginated(
+    { limit: 100 },
+    { enabled: skillSlashCommandsEnabled },
+  );
+  const skillCommands = useMemo<SkillCommand[]>(() => {
+    if (!skillSlashCommandsEnabled || !skillsData?.data) {
+      return [];
+    }
+    return buildSkillCommands(skillsData.data);
+  }, [skillSlashCommandsEnabled, skillsData]);
+
+  // /compact only applies to an existing conversation; skill commands work anywhere.
+  const slashCommands = useMemo<SlashCommand[]>(() => {
+    const compact =
+      conversationId && onCompactConversation ? [COMPACT_COMMAND] : [];
+    return [...compact, ...skillCommands];
+  }, [conversationId, onCompactConversation, skillCommands]);
+
   // RBAC: check if user can see agent picker and provider settings in chat
   const { data: canSeeAgentPicker } = useHasPermissions({
     chatAgentPicker: ["enable"],
@@ -238,14 +263,6 @@ const PromptInputContent = ({
   const storageKey = conversationId
     ? conversationStorageKeys(conversationId).draft
     : `archestra_chat_draft_new_${agentId}`;
-  const queueScopeKey = conversationId
-    ? `conversation:${conversationId}`
-    : `new:${agentId}`;
-  const visibleQueuedMessages = useMemo(
-    () =>
-      queuedMessages.filter((message) => message.scopeKey === queueScopeKey),
-    [queuedMessages, queueScopeKey],
-  );
 
   const isRestored = useRef(false);
 
@@ -302,10 +319,12 @@ const PromptInputContent = ({
   // 1. Organization must allow file uploads (allowFileUploads)
   // 2. Model must support at least one file type (modelSupportsFiles)
   const showFileUploadButton = allowFileUploads && modelSupportsFiles;
+  // The picker stays open while the user is still typing the command token;
+  // once a space is entered they have moved on to the prompt body.
   const isSlashCommandOpen =
-    !!conversationId &&
-    !!onCompactConversation &&
+    slashCommands.length > 0 &&
     controller.textInput.value.startsWith("/") &&
+    !/\s/.test(controller.textInput.value) &&
     controller.textInput.value !== dismissedSlashCommandValue;
 
   // reset the Escape dismissal once the user edits the input — typing more
@@ -325,11 +344,11 @@ const PromptInputContent = ({
 
     const query = controller.textInput.value.trim().toLowerCase();
     if (query === "/") {
-      return SLASH_COMMANDS;
+      return slashCommands;
     }
 
-    return SLASH_COMMANDS.filter((command) => command.value.startsWith(query));
-  }, [controller.textInput.value, isSlashCommandOpen]);
+    return slashCommands.filter((command) => command.value.startsWith(query));
+  }, [controller.textInput.value, isSlashCommandOpen, slashCommands]);
 
   const selectedCommandIndex =
     visibleSlashCommands.length === 0
@@ -357,58 +376,20 @@ const PromptInputContent = ({
     void onCompactConversation?.();
   }, [controller.textInput, onCompactConversation, storageKey]);
 
-  const submitQueuedMessage = useCallback(
-    (message: QueuedPromptInputMessage) => {
-      localStorage.removeItem(storageKey);
-      onSubmit({ text: message.text, files: message.files }, {
-        preventDefault: () => {},
-      } as FormEvent<HTMLFormElement>);
-    },
-    [onSubmit, storageKey],
-  );
-
-  useEffect(() => {
-    isSendingQueuedMessageRef.current = false;
-    setQueuedMessages((current) =>
-      current.filter((message) => message.scopeKey === queueScopeKey),
-    );
-  }, [queueScopeKey]);
-
-  useEffect(() => {
-    if (status !== "ready") {
-      isSendingQueuedMessageRef.current = false;
-      return;
-    }
-
-    if (visibleQueuedMessages.length === 0) {
-      return;
-    }
-    if (isSendingQueuedMessageRef.current) {
-      return;
-    }
-
-    const [nextMessage] = visibleQueuedMessages;
-    isSendingQueuedMessageRef.current = true;
-    setQueuedMessages((current) =>
-      current.filter((message) => message.id !== nextMessage.id),
-    );
-    try {
-      submitQueuedMessage(nextMessage);
-    } catch {
-      // restore the message so a failed send is not lost silently; the
-      // sending guard stays set so we do not retry in a tight loop — the
-      // next ready transition (guard reset on status change) picks it up
-      setQueuedMessages((current) => [nextMessage, ...current]);
-    }
-  }, [visibleQueuedMessages, status, submitQueuedMessage]);
-
   const selectSlashCommand = useCallback(
     (command: SlashCommand) => {
+      if (command.skill) {
+        // a skill command is a prefix — drop it into the input so the user can
+        // type an optional prompt; submitting it bare activates the skill as-is
+        controller.textInput.setInput(`${command.value} `);
+        requestAnimationFrame(() => textareaRef.current?.focus());
+        return;
+      }
       if (command.value === "/compact") {
         runCompactCommand();
       }
     },
-    [runCompactCommand],
+    [controller.textInput, runCompactCommand, textareaRef],
   );
 
   const handleTextareaKeyDown = useCallback(
@@ -458,54 +439,95 @@ const PromptInputContent = ({
     ],
   );
 
+  const sensitiveDataDetectionEnabled =
+    useFeature("chatSecretScanEnabled") ?? false;
+  const [sensitiveDataDialogOpen, setSensitiveDataDialogOpen] = useState(false);
+  const pendingSubmissionRef = useRef<{
+    outgoing: PromptInputMessage;
+    e: FormEvent<HTMLFormElement>;
+    options?: { skill: ChatSkillMetadata };
+    resolve: () => void;
+    reject: (reason?: unknown) => void;
+  } | null>(null);
+
+  const dispatchSubmit = useCallback(
+    (
+      outgoing: PromptInputMessage,
+      e: FormEvent<HTMLFormElement>,
+      options?: { skill: ChatSkillMetadata },
+    ) => {
+      localStorage.removeItem(storageKey);
+      onSubmit(outgoing, e, options);
+    },
+    [onSubmit, storageKey],
+  );
+
   const handleWrappedSubmit = useCallback(
     (message: PromptInputMessage, e: FormEvent<HTMLFormElement>) => {
-      const hasContent =
-        message.text.trim().length > 0 || message.files.length > 0;
+      const trimmed = message.text.trim();
 
-      // empty Enter during streaming would otherwise reach onSubmit; the
-      // textarea no longer blocks Enter so the parent must rely on this guard
-      if (!hasContent) {
-        e.preventDefault();
-        return;
-      }
-
-      if (message.text.trim() === "/compact" && onCompactConversation) {
+      if (trimmed === "/compact" && onCompactConversation) {
         e.preventDefault();
         runCompactCommand();
         return;
       }
 
-      if (status === "submitted" || status === "streaming") {
-        setQueuedMessages((current) => [
-          ...current,
-          {
-            id: nanoid(),
-            scopeKey: queueScopeKey,
-            text: message.text,
-            files: message.files,
-          },
-        ]);
-        return;
+      // a skill command activates the skill; any text after the token is an
+      // optional prompt — a bare skill command sends with an empty prompt
+      let outgoing = message;
+      let skill: ChatSkillMetadata | undefined;
+      const parsed = parseSkillCommand(trimmed, skillCommands);
+      if (parsed) {
+        skill = parsed.skill;
+        outgoing = { ...message, text: parsed.remaining };
       }
 
-      localStorage.removeItem(storageKey);
-      onSubmit(message, e);
+      const options = skill ? { skill } : undefined;
+
+      if (sensitiveDataDetectionEnabled && outgoing.text.length > 0) {
+        const findings = scanText(outgoing.text);
+        if (findings.length > 0) {
+          if (pendingSubmissionRef.current !== null)
+            return new Promise<void>(() => {});
+          return new Promise<void>((resolve, reject) => {
+            pendingSubmissionRef.current = {
+              outgoing,
+              e,
+              options,
+              resolve,
+              reject,
+            };
+            setSensitiveDataDialogOpen(true);
+          });
+        }
+      }
+
+      dispatchSubmit(outgoing, e, options);
     },
     [
-      onSubmit,
+      dispatchSubmit,
       onCompactConversation,
-      queueScopeKey,
       runCompactCommand,
-      status,
-      storageKey,
+      sensitiveDataDetectionEnabled,
+      skillCommands,
     ],
   );
 
-  const removeQueuedMessage = useCallback((id: string) => {
-    setQueuedMessages((current) =>
-      current.filter((message) => message.id !== id),
-    );
+  const handleSensitiveDataConfirm = useCallback(() => {
+    const pending = pendingSubmissionRef.current;
+    pendingSubmissionRef.current = null;
+    setSensitiveDataDialogOpen(false);
+    if (pending) {
+      dispatchSubmit(pending.outgoing, pending.e, pending.options);
+      pending.resolve();
+    }
+  }, [dispatchSubmit]);
+
+  const handleSensitiveDataCancel = useCallback(() => {
+    const pending = pendingSubmissionRef.current;
+    pendingSubmissionRef.current = null;
+    setSensitiveDataDialogOpen(false);
+    pending?.reject();
   }, []);
 
   const handleFileError = useCallback(
@@ -519,6 +541,12 @@ const PromptInputContent = ({
             ? "This model does not support file uploads"
             : "File format is not supported by this model",
         );
+      } else if (err.code === "max_file_size") {
+        toast.error(
+          `File is too large. Maximum size is ${CHAT_ATTACHMENT_MAX_MB} MB.`,
+        );
+      } else if (err.code === "max_files") {
+        toast.error("Too many files attached.");
       }
     },
     [showFileUploadButton],
@@ -527,11 +555,6 @@ const PromptInputContent = ({
 
   return (
     <div className="relative">
-      <PromptInputQueue
-        className="absolute inset-x-0 bottom-full z-40"
-        messages={visibleQueuedMessages}
-        onRemove={removeQueuedMessage}
-      />
       {isSlashCommandOpen && (
         <div className="absolute inset-x-0 bottom-full z-50 mb-2 overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-lg">
           <PromptInputCommand className="h-auto rounded-none bg-transparent">
@@ -542,7 +565,7 @@ const PromptInputContent = ({
               <PromptInputCommandGroup className="p-1">
                 {visibleSlashCommands.map((command, index) => (
                   <PromptInputCommandItem
-                    key={command.value}
+                    key={command.skill?.id ?? command.value}
                     value={command.value}
                     ref={(node) => {
                       commandItemRefs.current[index] = node;
@@ -568,7 +591,7 @@ const PromptInputContent = ({
                         </div>
                       </div>
                     </div>
-                    {isContextCompacting && (
+                    {isContextCompacting && command.value === "/compact" && (
                       <span className="text-xs text-muted-foreground">
                         Running
                       </span>
@@ -587,6 +610,7 @@ const PromptInputContent = ({
         accept={
           showFileUploadButton ? acceptedFileTypes : "application/x-empty"
         }
+        maxFileSize={CHAT_ATTACHMENT_MAX_BYTES}
         onError={handleFileError}
       >
         {/* File attachments display - shown inline above textarea */}
@@ -610,7 +634,9 @@ const PromptInputContent = ({
               className="px-4"
               autoFocus
               disabled={submitDisabled || isContextCompacting}
-              disableEnterSubmit={false}
+              disableEnterSubmit={
+                status === "submitted" || status === "streaming"
+              }
               onKeyDown={handleTextareaKeyDown}
               data-testid={E2eTestId.ChatPromptTextarea}
             />
@@ -915,6 +941,11 @@ const PromptInputContent = ({
           </div>
         </PromptInputFooter>
       </PromptInput>
+      <SensitiveDataConfirmDialog
+        open={sensitiveDataDialogOpen}
+        onConfirm={handleSensitiveDataConfirm}
+        onCancel={handleSensitiveDataCancel}
+      />
     </div>
   );
 };
@@ -948,9 +979,28 @@ const ArchestraPromptInput = ({
   modelSource,
   onResetModelOverride,
 }: ArchestraPromptInputProps) => {
+  const handleProviderFileError = useCallback(
+    (err: {
+      code: "max_files" | "max_file_size" | "accept";
+      message: string;
+    }) => {
+      if (err.code === "max_file_size") {
+        toast.error(
+          `File is too large. Maximum size is ${CHAT_ATTACHMENT_MAX_MB} MB.`,
+        );
+      } else if (err.code === "max_files") {
+        toast.error("Too many files attached.");
+      }
+    },
+    [],
+  );
+
   return (
     <div className="flex size-full flex-col justify-end">
-      <PromptInputProvider>
+      <PromptInputProvider
+        maxFileSize={CHAT_ATTACHMENT_MAX_BYTES}
+        onError={handleProviderFileError}
+      >
         <PromptInputContent
           onSubmit={onSubmit}
           status={status}

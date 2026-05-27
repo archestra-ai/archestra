@@ -1,4 +1,6 @@
 import { vi } from "vitest";
+import { MessageModel } from "@/models";
+import ActiveChatRunModel from "@/models/chat-active-run";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -122,8 +124,19 @@ describe("POST /api/chat slim error payload", () => {
           callback(),
       );
       mockCreateUIMessageStream.mockImplementation(
-        ({ onError }: { onError: (error: Error) => string }) =>
-          onError(new Error("Failed to fetch")),
+        ({ onError }: { onError: (error: Error) => string }) => {
+          const errorPayload = onError(new Error("Failed to fetch"));
+          return {
+            tee: () => [
+              errorPayload,
+              new ReadableStream({
+                start(controller) {
+                  controller.close();
+                },
+              }),
+            ],
+          };
+        },
       );
       mockCreateUIMessageStreamResponse.mockImplementation(
         ({ stream }: { stream: string }) =>
@@ -276,12 +289,16 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
             merge: vi.fn(),
           };
           executionPromise = execute({ writer }).catch(() => undefined);
-          return "mock-stream";
+          return new ReadableStream({
+            start(controller) {
+              controller.close();
+            },
+          });
         },
       );
 
       mockCreateUIMessageStreamResponse.mockImplementation(
-        ({ stream }: { stream: string }) =>
+        ({ stream }: { stream: ReadableStream }) =>
           new Response(stream, {
             status: 200,
             headers: { "content-type": "text/plain" },
@@ -332,6 +349,10 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(response.statusCode).toBe(200);
     await executionPromise;
     expect(capturedInnerOnError).toBeDefined();
+    const innerOnError = capturedInnerOnError;
+    if (!innerOnError) {
+      throw new Error("Expected inner onError to be captured");
+    }
 
     const stage1Error = new Error("Upstream provider error");
     const payload1 = capturedInnerOnError?.(stage1Error);
@@ -454,6 +475,76 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     );
   });
 
+  test("strips dangling tool parts when persisting a stopped turn", async () => {
+    const { default: MessageModel } = await import("@/models/message");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: "msg-user-1",
+            role: "user",
+            parts: [{ type: "text", text: "search the web" }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+    expect(capturedInnerOnFinish).toBeDefined();
+
+    // Simulate the AI SDK finalizing a stopped turn: the assistant message
+    // carries a tool call that never produced output (interrupted mid-stream).
+    await capturedInnerOnFinish?.({
+      messages: [
+        {
+          id: "msg-user-1",
+          role: "user",
+          parts: [{ type: "text", text: "search the web" }],
+        },
+        {
+          id: "msg-assistant-1",
+          role: "assistant",
+          parts: [
+            { type: "text", text: "Let me search for that." },
+            {
+              type: "tool-web__search",
+              toolCallId: "call_interrupted",
+              state: "input-streaming",
+              input: { q: "weat" },
+            },
+          ],
+        },
+      ],
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const persisted = await MessageModel.findByConversation(conversationId);
+    const assistantMessage = persisted.find((m) => m.role === "assistant");
+    expect(assistantMessage).toBeDefined();
+
+    const parts =
+      (assistantMessage?.content as { parts?: Array<Record<string, unknown>> })
+        ?.parts ?? [];
+    // the dangling tool call is gone, the streamed text is kept
+    expect(parts.some((p) => p.toolCallId === "call_interrupted")).toBe(false);
+    expect(parts.some((p) => p.type === "text")).toBe(true);
+  });
+
+  test("stop endpoint reports stopped:false when no stream is active", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversationId}/stop`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual({ stopped: false });
+  });
+
   test("emits compaction finish when compaction starts but is not beneficial", async () => {
     mockCompactMessagesForChat.mockImplementation(
       async ({ messages, onCompactionStart }) => {
@@ -494,4 +585,147 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
       data: { status: "skipped", reason: "not_beneficial" },
     });
   });
+
+  test("creates a running active run that replay clients can attach to", async () => {
+    const streamedChunk = {
+      type: "text-delta",
+      id: "text-active-run",
+      delta: "still streaming",
+    } as const;
+    let streamController!: ReadableStreamDefaultController<unknown>;
+
+    mockCreateUIMessageStreamResponse.mockImplementation(
+      ({ stream }: { stream: ReadableStream<unknown> }) =>
+        new Response(toSseStream(stream), {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        }),
+    );
+
+    mockCreateUIMessageStream.mockImplementationOnce(() => {
+      const stream = new ReadableStream<unknown>({
+        start(controller) {
+          streamController = controller;
+        },
+      });
+
+      return { tee: () => stream.tee() };
+    });
+
+    const postResponsePromise = app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: "msg-active-run-user",
+            role: "user",
+            parts: [{ type: "text", text: "hello active run" }],
+          },
+        ],
+      },
+    });
+
+    const activeRun = await waitForRunningActiveRun(conversationId);
+    const duplicateResponse = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: "msg-active-run-duplicate-user",
+            role: "user",
+            parts: [{ type: "text", text: "duplicate active run" }],
+          },
+        ],
+      },
+    });
+    expect(duplicateResponse.statusCode).toBe(409);
+    expect(duplicateResponse.json().error.message).toContain("active response");
+
+    await ActiveChatRunModel.appendEvents({
+      runId: activeRun.id,
+      seq: 1,
+      payloads: [{ type: "start" }, streamedChunk],
+    });
+
+    const replayResponsePromise = app.inject({
+      method: "GET",
+      url: `/api/chat/conversations/${conversationId}/active-run`,
+    });
+
+    await expect(
+      Promise.race([
+        replayResponsePromise.then(() => "closed"),
+        delay(50).then(() => "still-open"),
+      ]),
+    ).resolves.toBe("still-open");
+
+    await ActiveChatRunModel.markTerminal({
+      runId: activeRun.id,
+      status: "completed",
+    });
+    streamController.close();
+
+    const [postResponse, replayResponse] = await Promise.all([
+      postResponsePromise,
+      replayResponsePromise,
+    ]);
+
+    expect(postResponse.statusCode).toBe(200);
+    expect(replayResponse.statusCode).toBe(200);
+    expect(readSsePayloads(replayResponse.body)).toContainEqual(streamedChunk);
+    const persistedMessages =
+      await MessageModel.findByConversation(conversationId);
+    expect(persistedMessages).toHaveLength(1);
+    expect(persistedMessages[0]?.role).toBe("user");
+    expect(persistedMessages[0]?.content).toMatchObject({
+      parts: [{ text: "hello active run" }],
+    });
+    await expect(
+      ActiveChatRunModel.findById(activeRun.id),
+    ).resolves.toMatchObject({ status: "completed" });
+  });
 });
+
+async function waitForRunningActiveRun(conversationId: string) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const run =
+      await ActiveChatRunModel.findRunningByConversation(conversationId);
+    if (run) {
+      return run;
+    }
+    await delay(10);
+  }
+
+  throw new Error("Active run was not created");
+}
+
+function readSsePayloads(body: string): unknown[] {
+  return body
+    .split("\n\n")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.startsWith("data: "))
+    .map((entry) => entry.slice("data: ".length))
+    .filter((entry) => entry !== "[DONE]")
+    .map((entry) => JSON.parse(entry));
+}
+
+function toSseStream(stream: ReadableStream<unknown>): ReadableStream<string> {
+  return stream.pipeThrough(
+    new TransformStream<unknown, string>({
+      transform(chunk, controller) {
+        controller.enqueue(`data: ${JSON.stringify(chunk)}\n\n`);
+      },
+      flush(controller) {
+        controller.enqueue("data: [DONE]\n\n");
+      },
+    }),
+  );
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

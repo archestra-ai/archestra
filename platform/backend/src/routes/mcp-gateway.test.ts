@@ -11,7 +11,6 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import config from "@/config";
 import { TeamTokenModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import mcpGatewayRoutes from "./mcp-gateway";
@@ -30,18 +29,8 @@ function makeMcpHeaders(token: string): Record<string, string> {
 
 describe("MCP Gateway (stateless mode)", () => {
   let app: FastifyInstance;
-  // TODO: temporary workaround to unblock merging. WWW-Authenticate
-  // resource_metadata tests assert the request-Host fallback of
-  // getPublicRequestOrigin, but in CI .env.example sets ARCHESTRA_FRONTEND_URL,
-  // so config.publicOrigin short-circuits the fallback. Null it out here so
-  // the resolver falls through to request.host. Revisit once we can promote
-  // ARCHESTRA_FRONTEND_URL to the canonical origin and update these tests
-  // accordingly.
-  let originalPublicOrigin: string | null;
 
   beforeEach(async () => {
-    originalPublicOrigin = config.publicOrigin;
-    config.publicOrigin = null;
     // Create a test Fastify app
     app = Fastify().withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
@@ -51,7 +40,6 @@ describe("MCP Gateway (stateless mode)", () => {
   });
 
   afterEach(async () => {
-    config.publicOrigin = originalPublicOrigin;
     await app.close();
   });
 
@@ -211,6 +199,8 @@ describe("MCP Gateway (stateless mode)", () => {
   test("uses forwarded public origin in WWW-Authenticate when proxy trust is enabled", async ({
     makeAgent,
   }) => {
+    const originalAllowlist = process.env.ARCHESTRA_API_BASE_URL;
+    process.env.ARCHESTRA_API_BASE_URL = "https://gateway.example.com";
     const proxyApp = Fastify({
       trustProxy: true,
     }).withTypeProvider<ZodTypeProvider>();
@@ -249,12 +239,19 @@ describe("MCP Gateway (stateless mode)", () => {
       );
     } finally {
       await proxyApp.close();
+      if (originalAllowlist === undefined) {
+        delete process.env.ARCHESTRA_API_BASE_URL;
+      } else {
+        process.env.ARCHESTRA_API_BASE_URL = originalAllowlist;
+      }
     }
   });
 
   test("uses forwarded public origin when CIDR proxy trust matches the remote address", async ({
     makeAgent,
   }) => {
+    const originalAllowlist = process.env.ARCHESTRA_API_BASE_URL;
+    process.env.ARCHESTRA_API_BASE_URL = "https://gateway.example.com";
     const proxyApp = Fastify({
       trustProxy: "127.0.0.1/32",
     }).withTypeProvider<ZodTypeProvider>();
@@ -293,6 +290,11 @@ describe("MCP Gateway (stateless mode)", () => {
       );
     } finally {
       await proxyApp.close();
+      if (originalAllowlist === undefined) {
+        delete process.env.ARCHESTRA_API_BASE_URL;
+      } else {
+        process.env.ARCHESTRA_API_BASE_URL = originalAllowlist;
+      }
     }
   });
 

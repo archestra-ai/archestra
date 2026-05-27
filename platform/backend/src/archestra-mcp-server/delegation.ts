@@ -159,6 +159,9 @@ export async function handleDelegation(
       parentDelegationChain: context.delegationChain || context.agentId,
       // Propagate conversationId for browser tab isolation
       conversationId: context.conversationId,
+      chatOpsBindingId: context.chatOpsBindingId,
+      chatOpsThreadId: context.chatOpsThreadId,
+      scheduleTriggerRunId: context.scheduleTriggerRunId,
       abortSignal: context.abortSignal,
       // We only need to propagate whether the parent was already unsafe at the
       // delegation boundary. The child re-evaluates its own tool results and

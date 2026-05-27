@@ -26,6 +26,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // Agents
   agent: ["read", "create", "update", "delete", "team-admin", "admin"],
+  skill: ["read", "create", "update", "delete", "team-admin", "admin"],
   agentTrigger: ["read", "create", "update", "delete"],
   scheduledTask: ["read", "create", "update", "delete", "admin"],
 
@@ -72,6 +73,9 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   chatProviderSettings: ["enable"],
   chatExpandToolCalls: ["enable"],
 
+  // Administration
+  siteNotification: ["read", "create", "update", "delete"],
+
   // better-auth internal resource — not exposed to users, kept for ACL compatibility
   organization: ["update", "delete"],
 };
@@ -79,6 +83,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 export const editorPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete", "team-admin"],
+  skill: ["read", "create", "update", "delete", "team-admin"],
   agentTrigger: ["read", "create", "update", "delete"],
   scheduledTask: ["read", "create", "update", "delete"],
 
@@ -119,6 +124,9 @@ export const editorPermissions: Record<Resource, Action[]> = {
   secret: ["read"],
   organizationSettings: ["read", "update"],
 
+  // Administration
+  siteNotification: ["read"],
+
   // UI behavior resources
   simpleView: [],
   chatAgentPicker: ["enable"],
@@ -132,6 +140,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
 export const memberPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete"],
+  skill: ["read", "create", "update", "delete"],
   agentTrigger: [],
   scheduledTask: ["read", "create", "update", "delete"],
 
@@ -172,6 +181,9 @@ export const memberPermissions: Record<Resource, Action[]> = {
   secret: [],
   organizationSettings: [],
 
+  // Administration
+  siteNotification: ["read"],
+
   // UI behavior resources
   simpleView: ["enable"],
   chatAgentPicker: ["enable"],
@@ -210,6 +222,14 @@ export const permissionDescriptions: Record<string, string> = {
   "agent:team-admin": "Manage team assignments for agents",
   "agent:admin":
     "Full administrative control over all agents, bypassing team restrictions",
+  "skill:read":
+    "View and use agent skills within your scope (org, your teams, your own)",
+  "skill:create": "Create new agent skills",
+  "skill:update": "Modify agent skills and their team assignments",
+  "skill:delete": "Delete agent skills",
+  "skill:team-admin": "Manage team assignments for agent skills",
+  "skill:admin":
+    "Full administrative control over all agent skills, bypassing team restrictions",
   "agentTrigger:read":
     "View agent trigger configurations (Slack, MS Teams, email)",
   "agentTrigger:create": "Set up new agent triggers",
@@ -350,6 +370,12 @@ export const permissionDescriptions: Record<string, string> = {
   "chatAgentPicker:enable": "Show agent picker in chat",
   "chatProviderSettings:enable": "Show model and API key selectors in chat",
   "chatExpandToolCalls:enable": "Allow expanding tool call details in chat",
+
+  // Administration
+  "siteNotification:read": "View site-wide notifications",
+  "siteNotification:create": "Create new site notifications",
+  "siteNotification:update": "Modify site notifications",
+  "siteNotification:delete": "Delete site notifications",
 };
 
 /**
@@ -676,10 +702,16 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.StopChatStream]: {
     chat: ["read"],
   },
+  [RouteId.GetActiveChatRun]: {
+    chat: ["read"],
+  },
   [RouteId.GetChatConversations]: {
     chat: ["read"],
   },
   [RouteId.GetChatConversation]: {
+    chat: ["read"],
+  },
+  [RouteId.GetChatAttachmentContent]: {
     chat: ["read"],
   },
   [RouteId.GetChatAgentMcpTools]: {
@@ -1085,20 +1117,27 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetConnectorFile]: { knowledgeSource: ["read"] },
   [RouteId.DeleteConnectorFile]: { knowledgeSource: ["delete"] },
 
-  // Agent Skill Routes - reuse the agent RBAC resource
-  [RouteId.GetSkills]: { agent: ["read"] },
-  [RouteId.CreateSkill]: { agent: ["create"] },
-  [RouteId.GetSkill]: { agent: ["read"] },
-  [RouteId.UpdateSkill]: { agent: ["update"] },
-  [RouteId.DeleteSkill]: { agent: ["delete"] },
-  [RouteId.DiscoverGithubSkills]: { agent: ["read"] },
-  [RouteId.PreviewGithubSkill]: { agent: ["read"] },
-  [RouteId.ImportGithubSkills]: { agent: ["create"] },
-  [RouteId.GetSkillSourceRepos]: { agent: ["read"] },
-  [RouteId.EnableSkillToolDefaults]: { agent: ["update"] },
+  // Agent Skill Routes - per-instance scope is enforced in the handlers
+  [RouteId.GetSkills]: { skill: ["read"] },
+  [RouteId.CreateSkill]: { skill: ["create"] },
+  [RouteId.GetSkill]: { skill: ["read"] },
+  [RouteId.UpdateSkill]: { skill: ["update"] },
+  [RouteId.DeleteSkill]: { skill: ["delete"] },
+  [RouteId.DiscoverGithubSkills]: { skill: ["read"] },
+  [RouteId.PreviewGithubSkill]: { skill: ["read"] },
+  [RouteId.ImportGithubSkills]: { skill: ["create"] },
+  [RouteId.GetSkillSourceRepos]: { skill: ["read"] },
+  [RouteId.EnableSkillToolDefaults]: { skill: ["admin"] },
 
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},
+
+  // Site Notification Routes
+  [RouteId.GetSiteNotification]: { siteNotification: ["read"] },
+  [RouteId.GetSiteNotificationSettings]: { siteNotification: ["read"] },
+  [RouteId.CreateSiteNotification]: { siteNotification: ["create"] },
+  [RouteId.UpdateSiteNotification]: { siteNotification: ["update"] },
+  [RouteId.DeleteSiteNotification]: { siteNotification: ["delete"] },
 
   // MCP Gateway Routes - available to all authenticated users
   [RouteId.McpGatewayGet]: {}, // Server discovery endpoint
@@ -1121,7 +1160,8 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/agents/triggers/slack": { agentTrigger: ["read"] },
   "/agents/triggers/ms-teams": { agentTrigger: ["read"] },
   "/agents/triggers/email": { agentTrigger: ["read"] },
-  "/agents/skills": { agent: ["read"] },
+  "/agents/skills": { skill: ["read"] },
+  "/agents/skills/new": { skill: ["create"] },
   "/scheduled-tasks": { scheduledTask: ["read"] },
 
   // LLM

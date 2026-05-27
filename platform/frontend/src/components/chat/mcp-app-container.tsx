@@ -14,9 +14,12 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   parseFullToolName,
 } from "@shared";
+import { PanelRightOpen } from "lucide-react";
 import { useTheme } from "next-themes";
 import type React from "react";
 import { Component, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { usePinnedCanvas } from "@/components/chat/pinned-canvas-context";
 import { Button } from "@/components/ui/button";
 import { getMcpSandboxBaseUrl } from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
@@ -263,6 +266,7 @@ export function McpAppSection({
   uiResourceUri,
   agentId,
   toolName,
+  toolCallId,
   toolInput,
   rawOutput,
   preloadedResource,
@@ -272,6 +276,8 @@ export function McpAppSection({
   agentId: string;
   /** Full prefixed tool name (e.g. "system__get-system-stats") — used to derive the server prefix for oncalltool */
   toolName: string;
+  /** Stable identifier for this canvas, used to pin it to the sidebar. */
+  toolCallId?: string;
   toolInput?: Record<string, unknown>;
   rawOutput: McpToolOutput | undefined;
   /** HTML pre-fetched by the backend and delivered via SSE — skips the in-browser HTTP fetch */
@@ -283,6 +289,38 @@ export function McpAppSection({
   const [size, setSize] = useState<{ width: number; height: number } | null>(
     null,
   );
+
+  const {
+    selectedCanvasId,
+    select,
+    showInSidebar,
+    register,
+    unregister,
+    portalTarget,
+  } = usePinnedCanvas();
+
+  const parsedToolName = parseFullToolName(toolName);
+  const shortToolName = parsedToolName.toolName ?? toolName;
+  const serverName = parsedToolName.serverName;
+  const isSelected = !!toolCallId && selectedCanvasId === toolCallId;
+  const sidebarHostingActive = portalTarget !== null;
+  // When the sidebar canvas tab is open, every inline canvas is replaced by a
+  // placeholder; only the *selected* canvas's iframe lives in the sidebar.
+  const renderInSidebar = sidebarHostingActive && isSelected;
+  const renderPlaceholder = sidebarHostingActive;
+
+  // Register the canvas with the conversation-level registry so the sidebar
+  // selector can list it.
+  useEffect(() => {
+    if (!toolCallId) return;
+    register({
+      toolCallId,
+      label: shortToolName,
+      serverName,
+      createdAt: Date.now(),
+    });
+    return () => unregister(toolCallId);
+  }, [toolCallId, shortToolName, serverName, register, unregister]);
 
   // Reconstruct McpCallToolResult for AppFrame
   const toolResult = useMemo((): McpCallToolResult | undefined => {
@@ -297,12 +335,26 @@ export function McpAppSection({
     };
   }, [rawOutput]);
 
-  return (
+  const handleSelect = () => {
+    if (!toolCallId) return;
+    select(toolCallId);
+  };
+
+  const handleShowInSidebar = () => {
+    if (!toolCallId) return;
+    showInSidebar(toolCallId);
+  };
+
+  const canvas = (
     <McpAppErrorBoundary>
       <McpAppContainer
         displayMode={displayMode}
         onClose={() => setDisplayMode("inline")}
         size={size}
+        onShowInSidebar={
+          toolCallId && !renderInSidebar ? handleShowInSidebar : undefined
+        }
+        fillContainer={renderInSidebar}
       >
         <McpAppView
           toolResourceUri={uiResourceUri}
@@ -318,6 +370,62 @@ export function McpAppSection({
         />
       </McpAppContainer>
     </McpAppErrorBoundary>
+  );
+
+  if (renderPlaceholder) {
+    return (
+      <>
+        <SidebarCanvasPlaceholder
+          label={shortToolName}
+          isSelected={isSelected}
+          onSelect={handleSelect}
+        />
+        {renderInSidebar && portalTarget && createPortal(canvas, portalTarget)}
+      </>
+    );
+  }
+
+  return canvas;
+}
+
+function SidebarCanvasPlaceholder({
+  label,
+  isSelected,
+  onSelect,
+}: {
+  label: string;
+  isSelected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-md border border-dashed bg-muted/30 p-3 flex items-center justify-between gap-2 text-xs",
+        isSelected
+          ? "border-primary/50 text-foreground"
+          : "border-border text-muted-foreground",
+      )}
+    >
+      <div className="flex items-center gap-2 min-w-0">
+        <PanelRightOpen className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate font-medium">{label}</span>
+      </div>
+      {isSelected && (
+        <span className="h-7 flex items-center px-3 text-xs text-primary shrink-0">
+          Showing in sidebar
+        </span>
+      )}
+      {!isSelected && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 text-xs shrink-0"
+          onClick={onSelect}
+        >
+          Show in sidebar
+        </Button>
+      )}
+    </div>
   );
 }
 
@@ -335,11 +443,17 @@ function McpAppContainer({
   onClose,
   children,
   size,
+  onShowInSidebar,
+  fillContainer = false,
 }: {
   displayMode: McpUiDisplayMode;
   onClose: () => void;
   children: React.ReactNode;
   size: { width: number; height: number } | null;
+  /** Inline-mode action: send this canvas to the sidebar. */
+  onShowInSidebar?: () => void;
+  /** When true, the canvas fills its parent container (used when portaled to sidebar). */
+  fillContainer?: boolean;
 }) {
   const isFullscreen = displayMode === "fullscreen";
   const containerRef = useRef<HTMLDivElement>(null);
@@ -389,8 +503,9 @@ function McpAppContainer({
     <div
       ref={containerRef}
       className={cn(
-        "will-change-auto origin-center transition-all duration-400 ease-[cubic-bezier(0.23,1,0.32,1)]",
+        "will-change-auto origin-center transition-all duration-400 ease-[cubic-bezier(0.23,1,0.32,1)] relative group",
         isFullscreen ? "fixed z-[100] bg-background flex flex-col" : "",
+        fillContainer && !isFullscreen ? "h-full flex flex-col" : "",
         isFullscreen && !bounds
           ? "opacity-0 scale-95 pointer-events-none"
           : "opacity-100 scale-100",
@@ -406,51 +521,76 @@ function McpAppContainer({
           : undefined
       }
     >
-      {/* Close bar — animates in smoothly instead of snapping */}
-      <div
-        className={cn(
-          "flex items-center justify-end border-b transition-all duration-300 overflow-hidden",
-          isFullscreen
-            ? "h-12 p-2 opacity-100"
-            : "h-0 p-0 opacity-0 border-transparent",
-        )}
-      >
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={onClose}
-          aria-label="Exit fullscreen"
+      {/* Top toolbar — collapses to 0 height when there are no actions to show. */}
+      {(isFullscreen || onShowInSidebar) && (
+        <div
+          className={cn(
+            "flex items-center justify-end gap-1 transition-all duration-300 overflow-hidden",
+            isFullscreen
+              ? "h-12 p-2 border-b opacity-100"
+              : fillContainer
+                ? "h-8 p-1 border-b opacity-100"
+                : "absolute top-1 right-1 z-10 h-7",
+          )}
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M18 6 6 18" />
-            <path d="m6 6 12 12" />
-          </svg>
-        </Button>
-      </div>
+          {onShowInSidebar && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs text-muted-foreground"
+              onClick={onShowInSidebar}
+              aria-label="Show in sidebar"
+              title="Show in sidebar"
+            >
+              Show in sidebar
+            </Button>
+          )}
+          {isFullscreen && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              aria-label="Exit fullscreen"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M18 6 6 18" />
+                <path d="m6 6 12 12" />
+              </svg>
+            </Button>
+          )}
+        </div>
+      )}
 
       <div
-        style={{
-          maxHeight: isFullscreen
-            ? `${bounds?.height || 1000}px`
-            : `${Math.min(size?.height || 150, 500)}px`,
-        }}
+        style={
+          fillContainer && !isFullscreen
+            ? undefined
+            : {
+                maxHeight: isFullscreen
+                  ? `${bounds?.height || 1000}px`
+                  : `${Math.min(size?.height || 150, 500)}px`,
+              }
+        }
         className={cn(
           "transition-[max-height] duration-400 ease-[cubic-bezier(0.23,1,0.32,1)]",
           isFullscreen
-            ? "flex-1 overflow-hidden [&_iframe]:!w-full [&_iframe]:!h-full [&_iframe]:!min-h-0 [&_iframe]:!max-h-none [&_div]:!h-full"
-            : "max-w-[80%] shadow-xs border border-border/50 rounded-lg [&_iframe]:!w-full overflow-y-hidden [&_div]:!max-h-none",
+            ? "flex-1 overflow-hidden [&_iframe]:!w-full [&_iframe]:!h-full [&_iframe]:!min-h-0 [&_iframe]:!max-h-none [&>div]:!h-full"
+            : fillContainer
+              ? "flex-1 min-h-0 overflow-hidden [&_iframe]:!w-full [&_iframe]:!h-full [&_iframe]:!min-h-0 [&_iframe]:!max-h-none [&>div]:!h-full"
+              : "max-w-[80%] shadow-xs border border-border/50 rounded-lg [&_iframe]:!w-full overflow-y-hidden [&_div]:!max-h-none",
         )}
       >
         {children}

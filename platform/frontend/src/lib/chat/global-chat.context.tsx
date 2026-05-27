@@ -8,6 +8,7 @@ import {
   makeSwapAgentPokeText,
   SWAP_AGENT_FAILED_POKE_TEXT,
   SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
+  stripDanglingToolCalls,
   TOOL_ARTIFACT_WRITE_SHORT_NAME,
   TOOL_CREATE_AGENT_SHORT_NAME,
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME,
@@ -30,12 +31,16 @@ import {
   useRef,
   useState,
 } from "react";
+import { toast } from "sonner";
 import { filterOptimisticToolCalls } from "@/components/chat/chat-messages.utils";
 import {
   useConversation,
   useGenerateConversationTitle,
 } from "@/lib/chat/chat.query";
-import { restoreRenderableAssistantParts } from "@/lib/chat/chat-session-utils";
+import {
+  pruneEmptyTrailingAssistantMessage,
+  restoreRenderableAssistantParts,
+} from "@/lib/chat/chat-session-utils";
 import { getChatExternalAgentId } from "@/lib/chat/chat-utils";
 import {
   extractSwapTargetAgentName,
@@ -86,6 +91,17 @@ function isRetryableError(error: Error): boolean {
   }
 
   return RETRYABLE_CLIENT_ERRORS.some((p) => msg.includes(p));
+}
+
+function isDuplicateActiveRunError(error: Error): boolean {
+  return (
+    error.message.includes("409") ||
+    error.message.includes("already has an active response")
+  );
+}
+
+function shouldResumeActiveRun(messages: UIMessage[]): boolean {
+  return messages.at(-1)?.role === "user";
 }
 
 interface ChatSession {
@@ -398,11 +414,13 @@ function ChatSessionHook({
   const [earlyToolUiStarts, setEarlyToolUiStarts] = useState<
     ChatSession["earlyToolUiStarts"]
   >({});
+  const shouldResume = shouldResumeActiveRun(initialMessages);
 
   const {
     messages,
     sendMessage,
     regenerate,
+    resumeStream,
     status,
     setMessages,
     stop,
@@ -417,12 +435,38 @@ function ChatSessionHook({
       headers: {
         [EXTERNAL_AGENT_ID_HEADER]: getChatExternalAgentId(appName),
       },
+      prepareReconnectToStreamRequest: ({ id, headers, credentials }) => ({
+        api: `/api/chat/conversations/${id}/active-run`,
+        headers,
+        credentials,
+      }),
     }),
 
     experimental_throttle: 100,
     id: conversationId,
-    onFinish: ({ message }) => {
+    onFinish: ({ message, isAbort }) => {
       setOptimisticToolCalls([]);
+
+      // When the user stops mid-tool-call, the assistant message is left with a
+      // tool part that never produced output, which the UI renders as a
+      // perpetually "running" tool. Drop those dangling parts so the live view
+      // matches what the backend persists (and a reload would show).
+      if (isAbort) {
+        // The updater form runs against the SDK's live messages, not this
+        // callback's (throttled, possibly stale) closure, so the most recently
+        // streamed text is never rolled back.
+        setMessages((current) => {
+          const stripped = pruneEmptyTrailingAssistantMessage(
+            stripDanglingToolCalls(current),
+          );
+          // restoreRenderableAssistantParts treats the shrink as a streaming
+          // regression and would resurrect the stripped parts on the next
+          // render; sync the ref so that comparison sees no regression.
+          previousMessagesRef.current = stripped;
+          return stripped;
+        });
+      }
+
       queryClient.invalidateQueries({
         queryKey: ["conversation", conversationId],
       });
@@ -470,6 +514,13 @@ function ChatSessionHook({
         errorMessage: chatError.message,
         retryCount: retryCountRef.current,
       });
+
+      if (isDuplicateActiveRunError(chatError)) {
+        toast.error(
+          "This conversation already has a response in progress. Stop it before sending another message.",
+        );
+        return;
+      }
 
       // Auto-retry transient errors (network failures, server errors)
       // Do not retry if the error already happened this attempt cycle to avoid
@@ -616,6 +667,16 @@ function ChatSessionHook({
       });
     },
   } as Parameters<typeof useChat>[0]);
+
+  const resumeAttemptedRef = useRef(false);
+  useEffect(() => {
+    if (!shouldResume || resumeAttemptedRef.current) {
+      return;
+    }
+
+    resumeAttemptedRef.current = true;
+    void resumeStream();
+  }, [resumeStream, shouldResume]);
 
   const messagesWithRestoredAssistantParts = restoreRenderableAssistantParts({
     previousMessages: previousMessagesRef.current,

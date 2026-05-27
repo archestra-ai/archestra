@@ -19014,6 +19014,93 @@ export type StopChatStreamResponses = {
 
 export type StopChatStreamResponse = StopChatStreamResponses[keyof StopChatStreamResponses];
 
+export type GetActiveChatRunData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/active-run';
+};
+
+export type GetActiveChatRunErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetActiveChatRunError = GetActiveChatRunErrors[keyof GetActiveChatRunErrors];
+
+export type GetActiveChatRunResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+    /**
+     * Default Response
+     */
+    204: void;
+};
+
+export type GetActiveChatRunResponse = GetActiveChatRunResponses[keyof GetActiveChatRunResponses];
+
 export type GetChatConversationsData = {
     body?: never;
     path?: never;
@@ -19688,6 +19775,80 @@ export type UpdateChatConversationResponses = {
 };
 
 export type UpdateChatConversationResponse = UpdateChatConversationResponses[keyof UpdateChatConversationResponses];
+
+export type GetChatAttachmentContentData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/attachments/{id}/content';
+};
+
+export type GetChatAttachmentContentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetChatAttachmentContentError = GetChatAttachmentContentErrors[keyof GetChatAttachmentContentErrors];
 
 export type ForkChatConversationData = {
     body: {
@@ -22453,6 +22614,7 @@ export type GetPublicConfigResponses = {
     200: {
         disableBasicAuth: boolean;
         disableInvitations: boolean;
+        maintenanceMode: string | null;
         analytics: {
             enabled: boolean;
             posthog: {
@@ -22484,7 +22646,9 @@ export type GetConfigResponses = {
         };
         features: {
             orchestratorK8sRuntime: boolean;
+            codeRuntime: boolean;
             advancedToolFeaturesEnabled: boolean;
+            agentSkillsEnabled: boolean;
             byosEnabled: boolean;
             byosVaultKvVersion: '1' | '2';
             azureOpenAiEntraIdEnabled: boolean;
@@ -22503,6 +22667,8 @@ export type GetConfigResponses = {
             ngrokDomain: string;
             virtualKeyDefaultExpirationSeconds: number;
             mcpSandboxDomain: string | null;
+            maintenanceMode: string | null;
+            chatSecretScanEnabled: boolean;
         };
         providerBaseUrls: {
             [key: string]: string | null;
@@ -31738,10 +31904,14 @@ export type GetConnectorsResponses = {
                 type: 'github';
                 githubUrl: unknown;
                 owner: string;
+                authMethod?: 'pat' | 'github_app';
+                githubAppId?: string;
+                githubAppInstallationId?: string;
                 repos?: Array<string>;
                 includeIssues?: boolean;
                 includePullRequests?: boolean;
-                includeMarkdownFiles?: boolean;
+                includeRepositoryFiles?: boolean;
+                fileTypes?: Array<string>;
                 labelsToSkip?: Array<string>;
             } | {
                 type: 'gitlab';
@@ -31890,10 +32060,14 @@ export type CreateConnectorData = {
             type: 'github';
             githubUrl: string;
             owner: string;
+            authMethod?: 'pat' | 'github_app';
+            githubAppId?: string;
+            githubAppInstallationId?: string;
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
-            includeMarkdownFiles?: boolean;
+            includeRepositoryFiles?: boolean;
+            fileTypes?: Array<string>;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -32095,10 +32269,14 @@ export type CreateConnectorResponses = {
             type: 'github';
             githubUrl: unknown;
             owner: string;
+            authMethod?: 'pat' | 'github_app';
+            githubAppId?: string;
+            githubAppInstallationId?: string;
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
-            includeMarkdownFiles?: boolean;
+            includeRepositoryFiles?: boolean;
+            fileTypes?: Array<string>;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -32397,10 +32575,14 @@ export type GetConnectorResponses = {
             type: 'github';
             githubUrl: unknown;
             owner: string;
+            authMethod?: 'pat' | 'github_app';
+            githubAppId?: string;
+            githubAppInstallationId?: string;
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
-            includeMarkdownFiles?: boolean;
+            includeRepositoryFiles?: boolean;
+            fileTypes?: Array<string>;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -32535,10 +32717,14 @@ export type UpdateConnectorData = {
             type: 'github';
             githubUrl: string;
             owner: string;
+            authMethod?: 'pat' | 'github_app';
+            githubAppId?: string;
+            githubAppInstallationId?: string;
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
-            includeMarkdownFiles?: boolean;
+            includeRepositoryFiles?: boolean;
+            fileTypes?: Array<string>;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -32741,10 +32927,14 @@ export type UpdateConnectorResponses = {
             type: 'github';
             githubUrl: unknown;
             owner: string;
+            authMethod?: 'pat' | 'github_app';
+            githubAppId?: string;
+            githubAppInstallationId?: string;
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
-            includeMarkdownFiles?: boolean;
+            includeRepositoryFiles?: boolean;
+            fileTypes?: Array<string>;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -42705,6 +42895,7 @@ export type GetOrganizationResponses = {
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
         skillToolsEnabled: boolean;
+        skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
     };
 };
@@ -42985,6 +43176,7 @@ export type UpdateAppearanceSettingsResponses = {
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
         skillToolsEnabled: boolean;
+        skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
     };
 };
@@ -43136,6 +43328,7 @@ export type UpdateSecuritySettingsResponses = {
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
         skillToolsEnabled: boolean;
+        skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
     };
 };
@@ -43290,6 +43483,7 @@ export type UpdateLlmSettingsResponses = {
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
         skillToolsEnabled: boolean;
+        skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
     };
 };
@@ -43301,6 +43495,7 @@ export type UpdateAgentSettingsData = {
         defaultModelId?: string | null;
         defaultLlmApiKeyId?: string | null;
         defaultAgentId?: string | null;
+        skillSlashCommandsEnabled?: boolean;
     };
     path?: never;
     query?: never;
@@ -43442,6 +43637,7 @@ export type UpdateAgentSettingsResponses = {
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
         skillToolsEnabled: boolean;
+        skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
     };
 };
@@ -43602,6 +43798,7 @@ export type UpdateConnectionSettingsResponses = {
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
         skillToolsEnabled: boolean;
+        skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
     };
 };
@@ -43753,6 +43950,7 @@ export type UpdatePresetEntityNameResponses = {
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
         skillToolsEnabled: boolean;
+        skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
     };
 };
@@ -43903,6 +44101,7 @@ export type UpdatePresetEntityDefaultLabelResponses = {
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
         skillToolsEnabled: boolean;
+        skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
     };
 };
@@ -44053,6 +44252,7 @@ export type UpdatePresetEntityDefaultValidationRegexResponses = {
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
         skillToolsEnabled: boolean;
+        skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
     };
 };
@@ -44204,6 +44404,7 @@ export type UpdateAuthSettingsResponses = {
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
         skillToolsEnabled: boolean;
+        skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
     };
 };
@@ -44357,6 +44558,7 @@ export type UpdateKnowledgeSettingsResponses = {
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
         skillToolsEnabled: boolean;
+        skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
     };
 };
@@ -44505,6 +44707,7 @@ export type DropEmbeddingConfigResponses = {
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
         skillToolsEnabled: boolean;
+        skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
     };
 };
@@ -44742,6 +44945,7 @@ export type CompleteOnboardingResponses = {
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
         skillToolsEnabled: boolean;
+        skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
     };
 };
@@ -46822,6 +47026,448 @@ export type CheckSecretsConnectivityResponses = {
 
 export type CheckSecretsConnectivityResponse = CheckSecretsConnectivityResponses[keyof CheckSecretsConnectivityResponses];
 
+export type GetSiteNotificationData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/site-notification';
+};
+
+export type GetSiteNotificationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetSiteNotificationError = GetSiteNotificationErrors[keyof GetSiteNotificationErrors];
+
+export type GetSiteNotificationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        content: string;
+        expiresAt: string | null;
+        createdAt: string;
+        isActive: boolean;
+    } | null;
+};
+
+export type GetSiteNotificationResponse = GetSiteNotificationResponses[keyof GetSiteNotificationResponses];
+
+export type CreateSiteNotificationData = {
+    body: {
+        content: string;
+        expiresAt?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/site-notification';
+};
+
+export type CreateSiteNotificationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateSiteNotificationError = CreateSiteNotificationErrors[keyof CreateSiteNotificationErrors];
+
+export type CreateSiteNotificationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        content: string;
+        expiresAt: string | null;
+        createdAt: string;
+        isActive: boolean;
+    };
+};
+
+export type CreateSiteNotificationResponse = CreateSiteNotificationResponses[keyof CreateSiteNotificationResponses];
+
+export type GetSiteNotificationSettingsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/site-notification/settings';
+};
+
+export type GetSiteNotificationSettingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetSiteNotificationSettingsError = GetSiteNotificationSettingsErrors[keyof GetSiteNotificationSettingsErrors];
+
+export type GetSiteNotificationSettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        content: string;
+        expiresAt: string | null;
+        createdAt: string;
+        isActive: boolean;
+    } | null;
+};
+
+export type GetSiteNotificationSettingsResponse = GetSiteNotificationSettingsResponses[keyof GetSiteNotificationSettingsResponses];
+
+export type DeleteSiteNotificationData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/site-notification/{id}';
+};
+
+export type DeleteSiteNotificationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteSiteNotificationError = DeleteSiteNotificationErrors[keyof DeleteSiteNotificationErrors];
+
+export type DeleteSiteNotificationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        [key: string]: never;
+    };
+};
+
+export type DeleteSiteNotificationResponse = DeleteSiteNotificationResponses[keyof DeleteSiteNotificationResponses];
+
+export type UpdateSiteNotificationData = {
+    body: {
+        content?: string;
+        expiresAt?: string | null;
+        isActive?: boolean;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/site-notification/{id}';
+};
+
+export type UpdateSiteNotificationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateSiteNotificationError = UpdateSiteNotificationErrors[keyof UpdateSiteNotificationErrors];
+
+export type UpdateSiteNotificationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        content: string;
+        expiresAt: string | null;
+        createdAt: string;
+        isActive: boolean;
+    };
+};
+
+export type UpdateSiteNotificationResponse = UpdateSiteNotificationResponses[keyof UpdateSiteNotificationResponses];
+
 export type GetSkillsData = {
     body?: never;
     path?: never;
@@ -46908,6 +47554,7 @@ export type GetSkillsResponses = {
             id: string;
             organizationId: string;
             authorId: string | null;
+            scope: 'personal' | 'team' | 'org';
             name: string;
             description: string;
             content: string;
@@ -46922,6 +47569,11 @@ export type GetSkillsResponses = {
             createdAt: string;
             updatedAt: string;
             fileCount: number;
+            teams: Array<{
+                id: string;
+                name: string;
+            }>;
+            authorName: string | null;
         }>;
         pagination: {
             currentPage: number;
@@ -46944,6 +47596,8 @@ export type CreateSkillData = {
             content: string;
             encoding?: 'utf8' | 'base64';
         }>;
+        scope?: 'personal' | 'team' | 'org';
+        teamIds?: Array<string>;
     };
     path?: never;
     query?: never;
@@ -47023,6 +47677,7 @@ export type CreateSkillResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string;
         content: string;
@@ -47044,6 +47699,10 @@ export type CreateSkillResponses = {
             encoding: 'utf8' | 'base64';
             kind: 'reference' | 'script' | 'asset';
             createdAt: string;
+        }>;
+        teams: Array<{
+            id: string;
+            name: string;
         }>;
     };
 };
@@ -47217,6 +47876,7 @@ export type GetSkillResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string;
         content: string;
@@ -47239,6 +47899,10 @@ export type GetSkillResponses = {
             kind: 'reference' | 'script' | 'asset';
             createdAt: string;
         }>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
     };
 };
 
@@ -47252,6 +47916,8 @@ export type UpdateSkillData = {
             content: string;
             encoding?: 'utf8' | 'base64';
         }>;
+        scope?: 'personal' | 'team' | 'org';
+        teamIds?: Array<string>;
     };
     path: {
         id: string;
@@ -47333,6 +47999,7 @@ export type UpdateSkillResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string;
         content: string;
@@ -47354,6 +48021,10 @@ export type UpdateSkillResponses = {
             encoding: 'utf8' | 'base64';
             kind: 'reference' | 'script' | 'asset';
             createdAt: string;
+        }>;
+        teams: Array<{
+            id: string;
+            name: string;
         }>;
     };
 };
@@ -47732,6 +48403,8 @@ export type ImportGithubSkillsData = {
         path?: string;
         githubToken?: string;
         skillPaths: Array<string>;
+        scope?: 'personal' | 'team' | 'org';
+        teamIds?: Array<string>;
     };
     path?: never;
     query?: never;
@@ -47812,6 +48485,7 @@ export type ImportGithubSkillsResponses = {
             id: string;
             organizationId: string;
             authorId: string | null;
+            scope: 'personal' | 'team' | 'org';
             name: string;
             description: string;
             content: string;

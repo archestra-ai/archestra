@@ -319,6 +319,7 @@ export function useInternalAgents(params?: { enabled?: boolean }) {
     queryKey: internalAgentsQueryKey,
     queryFn: fetchInternalAgents,
     enabled: params?.enabled,
+    staleTime: 0,
   });
 }
 

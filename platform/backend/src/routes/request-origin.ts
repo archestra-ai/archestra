@@ -1,39 +1,89 @@
 import type { FastifyRequest } from "fastify";
-import config from "@/config";
+
+import config, { getMCPGatewayOauthAllowedPublicHosts } from "@/config";
+import logger from "@/logging";
 
 /**
- * Return the public origin used in OAuth and MCP metadata.
+ * Return the public origin for a request. This is used to build the OAuth protected resource metadata URL.
+ * It's needed to nmake sure mcp gateway oauth works out of the box, without the need to set ARCHESTRA_TRUST_PROXY. (it's too broad)
+ * Idea is to scope publc oriing only to Oauth and additionally validate hosts to prevent X-Forwarded-Host header spoofing.
  *
- * Resolution order:
+ * The code which gets the origin is taken form the fastify.
  *
- * 1. ARCHESTRA_TRUST_PROXY is set → use Fastify's `request.host` /
- *    `request.protocol`. The operator has vouched for the inbound proxy, so
- *    Fastify resolves X-Forwarded-Host / X-Forwarded-Proto into these
- *    accessors, giving an accurate per-request origin (useful for multi-host
- *    ingress).
- *
- * 2. ARCHESTRA_FRONTEND_URL is set (and proxy trust is off) → use
- *    `config.publicOrigin`. No trusted header source is available, so fall
- *    back to the server-controlled origin instead of a client-supplied raw
- *    Host.
- *
- * 3. Neither is set → use raw `request.host`. Only safe for direct dev /
- *    Docker access where the caller hits the backend directly; production
- *    deployments behind ingress should set one of the two env vars.
- *
- * TODO: revisit this logic to merge and test ARCHESTRA_FRONTEND_URL as the
- * canonical origin without breaking too many tests (today many tests assert
- * the raw-Host fallback path, which prevents ARCHESTRA_FRONTEND_URL from
- * always taking precedence).
+ * MUST BE USED ONLY FOR MCP GATEWAY OAUTH.
  */
 export function getPublicRequestOrigin(request: FastifyRequest): string {
-  const trustProxyEnabled = config.api.trustProxy !== false;
+  const result = computePublicRequestOrigin(request);
+  const directProtocol = deriveProtocol(request);
+  const directHost = request.headers.host ?? "localhost";
+  const direct = `${directProtocol}://${directHost}`;
+  logger.info(
+    { direct, result },
+    "getPublicRequestOrigin: direct and returned result",
+  );
+  return result;
+}
 
-  if (!trustProxyEnabled && config.publicOrigin) {
-    return config.publicOrigin;
+function computePublicRequestOrigin(request: FastifyRequest): string {
+  // Get the direct origin from the request firs
+  const directProtocol = deriveProtocol(request);
+  const directHost = request.headers.host ?? "localhost";
+  const direct = `${directProtocol}://${directHost}`;
+
+  // Get the forwarded origin from the request headers
+  const forwardedProto = pickFirstForwarded(
+    request.headers["x-forwarded-proto"],
+  );
+  const forwardedHost = pickFirstForwarded(request.headers["x-forwarded-host"]);
+  if (!forwardedProto && !forwardedHost) return direct;
+  const protocol = (forwardedProto ?? directProtocol).replace(/:$/, "");
+
+  // Build a candidate host from the forwarded origin
+  let candidateHost: string;
+  if (forwardedHost) {
+    try {
+      candidateHost = new URL(`${protocol}://${forwardedHost}`).host;
+    } catch {
+      return direct;
+    }
+  } else {
+    candidateHost = directHost;
   }
 
-  const host = request.host || "localhost";
-  const protocol = (request.protocol || "http").replace(/:$/, "");
-  return `${protocol}://${host}`;
+  // If trustProxy is set, the candidate is returned as-is.
+  // It's needed not to break any existing setups which already ARCHESTRA_TRUST_PROXY=true.
+  // Once we are happy with how scoped validation works, we can remove this alongside with the trustProxy.
+  if (config.api.trustProxy) {
+    return `${protocol}://${candidateHost}`;
+  }
+
+  // Check if the candidate host is in the allowed list
+  const allowed = getMCPGatewayOauthAllowedPublicHosts();
+  if (!allowed.has(candidateHost.toLowerCase())) {
+    if (forwardedHost) {
+      logger.warn(
+        { forwardedHost: candidateHost, allowed: Array.from(allowed) },
+        "getPublicRequestOrigin: forwarded host not in allowlist; using direct origin",
+      );
+    }
+    return direct;
+  }
+
+  return `${protocol}://${candidateHost}`;
+}
+
+// ===
+
+function pickFirstForwarded(
+  value: string | string[] | undefined,
+): string | undefined {
+  if (!value) return undefined;
+  const first = Array.isArray(value) ? value[0] : value;
+  const trimmed = first.split(",")[0].trim();
+  return trimmed || undefined;
+}
+
+function deriveProtocol(request: FastifyRequest): string {
+  const socket = request.socket as { encrypted?: boolean } | undefined;
+  return socket?.encrypted ? "https" : "http";
 }

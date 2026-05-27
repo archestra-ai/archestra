@@ -7,7 +7,7 @@
  * skip the cascade (installed servers drift, no UI hint). Removing a
  * field is harmless — just loses the optimization.
  */
-export const METADATA_ONLY_CATALOG_FIELDS = ["description"] as const;
+export const METADATA_ONLY_CATALOG_FIELDS = ["description", "labels"] as const;
 
 /**
  * Keys ignored during comparison: DB-managed columns the caller didn't

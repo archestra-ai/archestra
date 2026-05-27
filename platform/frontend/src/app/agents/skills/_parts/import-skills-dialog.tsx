@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes, ResourceVisibilityScope } from "@shared";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -39,6 +39,7 @@ import {
 } from "@/lib/skills/skill.query";
 import { cn } from "@/lib/utils";
 import { SkillEditorDialog } from "./skill-editor-dialog";
+import { SkillScopeSelector } from "./skill-scope-selector";
 
 type DiscoveredSkill =
   archestraApiTypes.DiscoverGithubSkillsResponses["200"]["skills"][number];
@@ -67,6 +68,9 @@ export function ImportSkillsDialog({
   const [search, setSearch] = useState("");
   const [previewSkillPath, setPreviewSkillPath] = useState<string | null>(null);
   const [discoverError, setDiscoverError] = useState<string | null>(null);
+  // scope applies to every skill selected in this import
+  const [scope, setScope] = useState<ResourceVisibilityScope>("personal");
+  const [teamIds, setTeamIds] = useState<string[]>([]);
 
   const previewBody = previewSkillPath
     ? {
@@ -88,6 +92,8 @@ export function ImportSkillsDialog({
     setSearch("");
     setPreviewSkillPath(null);
     setDiscoverError(null);
+    setScope("personal");
+    setTeamIds([]);
   };
 
   const backToDiscover = () => {
@@ -133,6 +139,8 @@ export function ImportSkillsDialog({
       ...(path.trim() && { path: path.trim() }),
       ...(githubToken.trim() && { githubToken: githubToken.trim() }),
       skillPaths: [...selected],
+      scope,
+      teamIds: scope === "team" ? teamIds : [],
     });
     if (result) {
       handleClose(false);
@@ -609,6 +617,12 @@ export function ImportSkillsDialog({
               .
             </p>
           </div>
+          <SkillScopeSelector
+            scope={scope}
+            onScopeChange={setScope}
+            teamIds={teamIds}
+            onTeamIdsChange={setTeamIds}
+          />
           {discoverError && (
             <Alert variant="destructive">
               <AlertTriangle />

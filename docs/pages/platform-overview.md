@@ -20,7 +20,7 @@ Archestra is a centralized AI Platform designed for organizations where software
 
 ## Composable Components
 
-Archestra is built as a set of composable components. Most organizations already have tools like n8n, LiteLLM, Grafana, or custom MCP servers in their infrastructure. You can adopt all of Archestra, a few components, or even just one — it integrates with what you already have. We're building an open composable platform and not willing to lock you.
+Archestra is built as a set of composable components. Most organizations already have tools like n8n, LiteLLM, Grafana, or custom MCP servers in their infrastructure. You can adopt all of Archestra, a few components, or even just one — it integrates with what you already have. We're building an open composable platform and not willing to lock you in.
 
 **[Agentic Chat](/docs/platform-chat)** — ChatGPT-like interface for non-technical users. Talk to agents via web UI, [Slack](/docs/platform-slack), [MS Teams](/docs/platform-ms-teams), or [Email](/docs/platform-agent-triggers-email).
 

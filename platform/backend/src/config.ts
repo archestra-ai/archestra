@@ -36,18 +36,8 @@ const isDevelopment = !isProduction;
 
 const appVersion = process.env.ARCHESTRA_VERSION || packageJson.version;
 
-const frontendUrl = process.env.ARCHESTRA_FRONTEND_URL?.trim();
-
-// Always-defined frontend URL with a localhost default — used for issuer,
-// authorization_endpoint, browser-facing redirects.
-const frontendBaseUrl = frontendUrl || "http://localhost:3000";
-
-// Public origin advertised in OAuth/MCP metadata. Only set when an operator
-// explicitly configures ARCHESTRA_FRONTEND_URL. When null, metadata falls back
-// to the request Host (so local dev and Docker-direct access keep working).
-// Lets deployments behind ingress publish correct URLs without enabling
-// ARCHESTRA_TRUST_PROXY.
-const publicOrigin = frontendUrl ? frontendUrl.replace(/\/$/, "") : null;
+const frontendBaseUrl =
+  process.env.ARCHESTRA_FRONTEND_URL?.trim() || "http://localhost:3000";
 const DEFAULT_POSTHOG_KEY = "phc_FFZO7LacnsvX2exKFWehLDAVaXLBfoBaJypdOuYoTk7";
 const DEFAULT_POSTHOG_HOST = "https://eu.i.posthog.com";
 
@@ -272,7 +262,9 @@ export const parseBodyLimit = (
   return defaultValue;
 };
 
-const DEFAULT_BODY_LIMIT = 50 * 1024 * 1024; // 50MB
+// 70MB body limit: accommodates the 50MB user-facing file cap with
+// headroom for base64 encoding overhead (~33%) on chat attachment uploads.
+const DEFAULT_BODY_LIMIT = 70 * 1024 * 1024;
 
 const DEFAULT_DATABASE_POOL_MAX = 50;
 const MAX_DATABASE_POOL_MAX = 500;
@@ -481,6 +473,66 @@ export const parseSampleRate = (
   return parsed;
 };
 
+/** @public — exported for testability */
+export function parseActiveChatRunPollIntervalMs(params: {
+  value: string | undefined;
+  defaultValue: number;
+  envName: string;
+}): number {
+  const trimmed = params.value?.trim();
+  if (!trimmed) {
+    return params.defaultValue;
+  }
+
+  const parsed = Number.parseInt(trimmed, 10);
+  if (Number.isNaN(parsed) || parsed <= 0) {
+    logger.warn(
+      `Invalid ${params.envName} value "${trimmed}", using default ${params.defaultValue}`,
+    );
+    return params.defaultValue;
+  }
+
+  return parsed;
+}
+
+/**
+ * Hostnames that `getPublicRequestOrigin` is willing to return when forwarded
+ * headers are trusted. Always contains the frontend origin (`frontendBaseUrl`,
+ * which defaults to http://localhost:3000 when ARCHESTRA_FRONTEND_URL is
+ * unset) plus every URL in `ARCHESTRA_API_BASE_URL` — the same
+ * comma-separated list the frontend's `getExternalProxyUrls` reads (after
+ * supervisord re-exports it as `NEXT_PUBLIC_ARCHESTRA_API_BASE_URL` for the
+ * Next.js process). The backend inherits the canonical `ARCHESTRA_API_BASE_URL`
+ * directly, so we read that here.
+ *
+ * Returned as a set of normalized `host` strings (lowercased; default ports
+ * stripped — i.e. matching what `new URL(...).host` produces).
+ * @public — exported for testability
+ */
+export const getMCPGatewayOauthAllowedPublicHosts = (): Set<string> => {
+  const hosts = new Set<string>();
+
+  const addHostFromUrl = (raw: string) => {
+    try {
+      hosts.add(new URL(raw).host.toLowerCase());
+    } catch {
+      // ignore malformed values
+    }
+  };
+
+  addHostFromUrl(frontendBaseUrl);
+
+  const externalUrls = process.env.ARCHESTRA_API_BASE_URL?.trim();
+  if (externalUrls) {
+    for (const url of externalUrls.split(",")) {
+      const trimmed = url.trim();
+      if (trimmed) addHostFromUrl(trimmed);
+    }
+  }
+
+  return hosts;
+};
+
 /**
  * Parse ARCHESTRA_TRUST_PROXY into the value Fastify's trustProxy option accepts.
  *
@@ -522,9 +574,62 @@ export const getAnalyticsConfig = () => ({
   },
 });
 
+const mcpServerBaseImage =
+  process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
+  `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:${appVersion}`;
+
+const defaultCodeRuntimeImage =
+  "ghcr.io/astral-sh/uv:0.9.17-python3.12-bookworm-slim";
+
+/**
+ * resolves the Dagger runner host. A misconfigured host returns `undefined`
+ * (and logs) rather than throwing — config is built at module import, so a
+ * throw here would crash the whole backend over one optional feature.
+ *
+ * @public — exported for testability
+ */
+export const parseCodeRuntimeDaggerRunnerHost = ({
+  enabled,
+  envValue,
+}: {
+  enabled: boolean;
+  envValue: string | undefined;
+}): string | undefined => {
+  const runnerHost = envValue?.trim();
+  if (!enabled) return runnerHost || undefined;
+
+  if (!runnerHost) {
+    logger.error(
+      "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST must be set when ARCHESTRA_CODE_RUNTIME_ENABLED=true — code runtime disabled",
+    );
+    return undefined;
+  }
+
+  if (!isSupportedDaggerRunnerHost(runnerHost)) {
+    logger.error(
+      "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST must use tcp:// or kube-pod:// — code runtime disabled",
+    );
+    return undefined;
+  }
+
+  return runnerHost;
+};
+
+const isSupportedDaggerRunnerHost = (runnerHost: string): boolean =>
+  runnerHost.startsWith("tcp://") || runnerHost.startsWith("kube-pod://");
+
+const codeRuntimeRequested =
+  process.env.ARCHESTRA_CODE_RUNTIME_ENABLED === "true";
+const codeRuntimeDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost({
+  enabled: codeRuntimeRequested,
+  envValue: process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST,
+});
+// a missing/invalid runner host disables the feature instead of crashing boot.
+const codeRuntimeEnabled =
+  codeRuntimeRequested && codeRuntimeDaggerRunnerHost !== undefined;
+
 const config = {
   frontendBaseUrl,
-  publicOrigin,
   api: {
     host: isDevelopment ? "127.0.0.1" : "0.0.0.0",
     port: getPortFromUrl(),
@@ -559,6 +664,7 @@ const config = {
   agents: {
     advancedToolFeaturesEnabled:
       process.env.ARCHESTRA_AGENTS_ADVANCED_TOOL_FEATURES_ENABLED === "true",
+    skillsEnabled: process.env.ARCHESTRA_AGENTS_SKILLS_ENABLED === "true",
     incomingEmail: {
       provider: parseIncomingEmailProvider(),
       outlook: {
@@ -780,6 +886,29 @@ const config = {
       }
       return "anthropic";
     })(),
+    activeRun: {
+      replayPollIntervalMs: parseActiveChatRunPollIntervalMs({
+        value: process.env.ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS,
+        defaultValue: 500,
+        envName: "ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS",
+      }),
+      stopPollIntervalMs: parseActiveChatRunPollIntervalMs({
+        value: process.env.ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS,
+        defaultValue:
+          process.env
+            .ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED === "true"
+            ? 500
+            : 30_000,
+        envName: "ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS",
+      }),
+      pollingCompatibilityEnabled:
+        process.env.ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED ===
+        "true",
+      notifyDatabaseUrl:
+        process.env.ARCHESTRA_CHAT_ACTIVE_RUN_NOTIFY_DATABASE_URL?.trim() || "",
+    },
+    secretScanEnabled:
+      process.env.ARCHESTRA_CHAT_SECRET_SCAN_ENABLED === "true",
   },
   enterpriseFeatures: {
     core: process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
@@ -796,9 +925,7 @@ const config = {
    */
   codegenMode: process.env.CODEGEN === "true",
   orchestrator: {
-    mcpServerBaseImage:
-      process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
-      `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:${appVersion}`,
+    mcpServerBaseImage,
     kubernetes: {
       namespace: process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE || "default",
       kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,
@@ -812,6 +939,32 @@ const config = {
         process.env.ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DOMAIN ||
         "cluster.local",
     },
+  },
+  /**
+   * sandboxed code-execution runtime — lets agents run Python through the
+   * `archestra__run_python` tool. backed by a Dagger Engine; disabled by default.
+   */
+  codeRuntime: {
+    enabled: codeRuntimeEnabled,
+    image: process.env.ARCHESTRA_CODE_RUNTIME_IMAGE || defaultCodeRuntimeImage,
+    /** runner host for the Dagger Engine (sets _EXPERIMENTAL_DAGGER_RUNNER_HOST). */
+    daggerRunnerHost: codeRuntimeDaggerRunnerHost,
+    /** path to a baked-in dagger CLI (sets _EXPERIMENTAL_DAGGER_CLI_BIN). */
+    daggerCliBin:
+      process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN || undefined,
+    /** hard wall-clock cap per run, and the default when the caller omits one. */
+    timeoutSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_CODE_RUNTIME_TIMEOUT_SECONDS,
+      60,
+    ),
+    maxConcurrent: parsePositiveInt(
+      process.env.ARCHESTRA_CODE_RUNTIME_MAX_CONCURRENT,
+      10,
+    ),
+    maxOutputBytes: parsePositiveInt(
+      process.env.ARCHESTRA_CODE_RUNTIME_MAX_OUTPUT_BYTES,
+      65536,
+    ),
   },
   vault: {
     token: process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN || DEFAULT_VAULT_TOKEN,
@@ -926,6 +1079,7 @@ const config = {
   isQuickstart: process.env.ARCHESTRA_QUICKSTART === "true",
   ngrokDomain: process.env.ARCHESTRA_NGROK_DOMAIN || "",
   processType: parseProcessType(process.env.ARCHESTRA_PROCESS_TYPE),
+  maintenanceMode: process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE || null,
 };
 
 export const shouldRunWebServer = config.processType !== "worker";

@@ -10,6 +10,7 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
+import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import {
   type TableRowAction,
@@ -17,6 +18,7 @@ import {
 } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
+import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
@@ -25,13 +27,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
-import { useOrganization } from "@/lib/organization.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  useOrganization,
+  useUpdateAgentSettings,
+} from "@/lib/organization.query";
 import {
   useDeleteSkill,
   useEnableSkillToolDefaults,
@@ -91,6 +98,8 @@ function SkillsList() {
 
   const [editingSkillId, setEditingSkillId] = useState<string | null>(null);
   const [deletingSkill, setDeletingSkill] = useState<SkillItem | null>(null);
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
 
   const items = skills?.data ?? [];
   const pagination = skills?.pagination;
@@ -151,6 +160,20 @@ function SkillsList() {
       },
     },
     {
+      id: "visibility",
+      size: 160,
+      header: "Visibility",
+      cell: ({ row }) => (
+        <ResourceVisibilityBadge
+          scope={row.original.scope}
+          teams={row.original.teams}
+          authorId={row.original.authorId}
+          authorName={row.original.authorName}
+          currentUserId={currentUserId}
+        />
+      ),
+    },
+    {
       id: "files",
       size: 150,
       header: () => <div className="text-right">Files</div>,
@@ -171,12 +194,14 @@ function SkillsList() {
           {
             icon: <Pencil className="h-4 w-4" />,
             label: "Edit",
+            permissions: { skill: ["update"] },
             onClick: () => setEditingSkillId(skill.id),
           },
           {
             icon: <Trash2 className="h-4 w-4" />,
             label: "Delete",
             variant: "destructive",
+            permissions: { skill: ["delete"] },
             onClick: () => setDeletingSkill(skill),
           },
         ];
@@ -199,7 +224,7 @@ function SkillsList() {
         description=""
         actionButton={
           !showEmptyState && (
-            <PermissionButton permissions={{ agent: ["create"] }} asChild>
+            <PermissionButton permissions={{ skill: ["create"] }} asChild>
               <Link href="/agents/skills/new">
                 <Plus className="h-4 w-4" />
                 Add new skill
@@ -232,6 +257,7 @@ function SkillsList() {
                   ))}
                 </SelectContent>
               </Select>
+              <SkillSlashCommandToggle />
             </div>
 
             <DataTable
@@ -283,6 +309,57 @@ function SkillsList() {
   );
 }
 
+/**
+ * Org-level toggle exposing skills as `/skill-name` slash commands in chat.
+ * Independent of `skillToolsEnabled` (the model-facing `activate_skill` tool).
+ */
+function SkillSlashCommandToggle() {
+  const { data: organization } = useOrganization();
+  const { data: canUpdate } = useHasPermissions({ agent: ["update"] });
+  const updateAgentSettings = useUpdateAgentSettings(
+    "Skill slash commands updated",
+    "Failed to update skill slash commands",
+  );
+  const enabled = organization?.skillSlashCommandsEnabled ?? false;
+  // Slash commands depend on skill tools — the toggle stays locked until skills
+  // are enabled for the organization (the empty-state "Enable" button).
+  const skillToolsEnabled = organization?.skillToolsEnabled ?? false;
+  const disabled =
+    !canUpdate || updateAgentSettings.isPending || !skillToolsEnabled;
+
+  return (
+    <div className="ml-auto flex items-center gap-2">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex">
+            <Switch
+              id="skill-slash-commands"
+              checked={enabled}
+              disabled={disabled}
+              onCheckedChange={(checked) =>
+                updateAgentSettings.mutate({
+                  skillSlashCommandsEnabled: checked,
+                })
+              }
+            />
+          </span>
+        </TooltipTrigger>
+        {!skillToolsEnabled && (
+          <TooltipContent>
+            Enable skills for this organization first.
+          </TooltipContent>
+        )}
+      </Tooltip>
+      <Label
+        htmlFor="skill-slash-commands"
+        className="text-sm text-muted-foreground"
+      >
+        Use skills as slash commands in chat
+      </Label>
+    </div>
+  );
+}
+
 /** Extract `owner/repo` from a `source_ref` shaped like `owner/repo@ref:path`. */
 function parseRepoFromSourceRef(sourceRef: string | null): string | null {
   if (!sourceRef) return null;
@@ -322,7 +399,7 @@ function SkillsEmptyState() {
         )}
         <div className="flex items-center justify-center">
           {alreadyEnabled ? (
-            <PermissionButton permissions={{ agent: ["create"] }} asChild>
+            <PermissionButton permissions={{ skill: ["create"] }} asChild>
               <Link href="/agents/skills/new">
                 <Plus className="mr-2 h-4 w-4" />
                 Add your first skill
@@ -330,7 +407,7 @@ function SkillsEmptyState() {
             </PermissionButton>
           ) : (
             <PermissionButton
-              permissions={{ agent: ["update"] }}
+              permissions={{ skill: ["admin"] }}
               onClick={handleEnableAndCreate}
               disabled={enableDefaults.isPending}
             >

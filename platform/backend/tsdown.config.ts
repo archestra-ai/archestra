@@ -139,6 +139,9 @@ export default defineConfig((options: UserConfig) => {
 
     // Don't bundle dependencies - use them from node_modules, except for @shared (including subpaths)
     noExternal: [/^@shared/],
+    loader: {
+      ".py": "text" as const,
+    },
     tsconfig: "./tsconfig.json",
 
     ignoreWatch: [

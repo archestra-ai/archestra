@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   buildUserSystemPromptContext,
   type ChatErrorResponse,
@@ -16,6 +17,7 @@ import {
   stepCountIs,
   streamText,
   type UIMessage,
+  type UIMessageChunk,
 } from "ai";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -39,7 +41,9 @@ import { browserStreamFeature } from "@/features/browser-stream/services/browser
 import { extractAndIngestDocuments } from "@/knowledge-base";
 import logger from "@/logging";
 import {
+  ActiveChatRunModel,
   AgentModel,
+  ChatAttachmentModel,
   ConversationChatErrorModel,
   ConversationEnabledToolModel,
   ConversationModel,
@@ -53,6 +57,10 @@ import {
   TeamModel,
 } from "@/models";
 import { startActiveChatSpan } from "@/observability/tracing";
+import {
+  ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS,
+  activeChatRunService,
+} from "@/services/active-chat-run";
 import {
   promptNeedsRendering,
   renderSystemPrompt,
@@ -81,6 +89,10 @@ import {
 } from "@/utils/llm-resolution";
 import { estimateMessagesSize } from "@/utils/message-size";
 import {
+  isSafeInlineMimeType,
+  sanitizeAttachmentContentType,
+} from "./attachment-content-type";
+import {
   buildContextCompactionStreamData,
   compactMessagesForChat,
   invalidateConversationCompactions,
@@ -96,6 +108,10 @@ import {
   ProviderError,
   sanitizeChatErrorForFrontend,
 } from "./errors";
+import { injectSkillActivation } from "./inject-skill-activation";
+import { cloneAttachmentsForFork } from "./normalization/clone-attachments-for-fork";
+import { extractInlineAttachments } from "./normalization/extract-inline-attachments";
+import { materializeAttachments } from "./normalization/materialize-attachments";
 import { normalizeChatMessages } from "./normalization/normalize-chat-messages";
 
 function getCorrelationLogFields(traceContext: {
@@ -147,7 +163,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         user,
         organizationId,
       } = request;
+
       const chatAbortController = new AbortController();
+      let activeRunError: string | null = null;
+
+      // Per-stream id. The stop signal is keyed by this id (not by conversationId)
+      // so a stale stop flag from an earlier stream can never abort a later one.
+      const streamId = randomUUID();
+      const activeStreamKey =
+        `${CacheKey.ChatActiveStream}-${conversationId}` as const;
+      let removeAbortListeners = () => {};
 
       // Flag to prevent duplicate message persistence if both onError and onFinish fire
       let messagesPersisted = false;
@@ -166,18 +191,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         } else {
           logger.error({ err, conversationId }, "Chat response stream error");
         }
-      });
-
-      // When the HTTP connection closes (stop button or navigate away), check if
-      // a stop was explicitly requested via the distributed cache. This works across
-      // pods because the cache is PostgreSQL-backed: the stop endpoint sets the flag
-      // (possibly on a different pod), then the frontend's stop() closes the stream
-      // connection which fires on THIS pod where the stream is running.
-      const removeAbortListeners = attachRequestAbortListeners({
-        request,
-        reply,
-        abortController: chatAbortController,
-        conversationId,
       });
 
       // Get conversation
@@ -199,184 +212,280 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      const { agentId, agent } = conversation;
-
-      // Extract and ingest documents to agent's knowledge base (fire and forget)
-      // This runs asynchronously to avoid blocking the chat response
-      extractAndIngestDocuments(messages, agentId).catch((error) => {
-        logger.warn(
-          { error: error instanceof Error ? error.message : String(error) },
-          "[Chat] Background document ingestion failed",
-        );
+      const activeRun = await activeChatRunService.createRun({
+        conversationId,
+        userId: user.id,
+        organizationId,
       });
 
-      const externalAgentId = agentId;
+      if (!activeRun) {
+        throw new ApiError(
+          409,
+          "This conversation already has an active response. Stop it before sending another message.",
+        );
+      }
 
-      // Fetch enabled tool IDs and custom selection status in parallel
-      const [enabledToolIds, hasCustomSelection, slimChatErrorUi] =
-        await Promise.all([
+      // Extract any inline data: URL file parts into chat_attachments so the
+      // bytes never enter the messages.content JSONB row. Runs after both
+      // the conversation existence+ownership check and the active-run
+      // acquisition so we don't write rows for requests that would
+      // 404/403/409. After this, parts[] carry tiny refs
+      // (`/api/chat/attachments/:id/content`); the LLM-call path rehydrates
+      // inline only at send time (see materializeAttachments inside
+      // buildModelMessagesForProvider).
+      // Wrapped in markTerminal cleanup: a throw here would otherwise leave
+      // the active run stuck `running`, causing subsequent sends to 409.
+      try {
+        await extractInlineAttachments({
+          messages: messages as ChatMessage[],
+          conversationId,
+          organizationId,
+          uploadedByUserId: user.id,
+        });
+      } catch (error) {
+        await ActiveChatRunModel.markTerminal({
+          runId: activeRun.id,
+          status: "failed",
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
+
+      const stopActiveRunPolling = activeChatRunService.startStopPolling({
+        runId: activeRun.id,
+        conversationId,
+        abortController: chatAbortController,
+      });
+
+      // Awaited (not fire-and-forget): the stop endpoint resolves this mapping
+      // to find the stream to abort, and the stream starts producing output
+      // immediately after. If registration lagged, an early stop would read no
+      // mapping and silently no-op. A write failure only degrades stop for this
+      // stream, so it is logged rather than failing the request.
+      // The TTL must outlive the stream (a newer stream overwrites this entry,
+      // a finished one leaves a harmless stale mapping), so it is not refreshed.
+      try {
+        await cacheManager.set(activeStreamKey, streamId, TimeInMs.Hour);
+      } catch (error) {
+        logger.warn(
+          { error, conversationId, streamId },
+          "Failed to register active chat stream",
+        );
+      }
+
+      // When the HTTP connection closes (stop button or navigate away), check if
+      // a stop was explicitly requested via the distributed cache. This works across
+      // pods because the cache is PostgreSQL-backed: the stop endpoint sets the flag
+      // (possibly on a different pod), then the frontend's stop() closes the stream
+      // connection which fires on THIS pod where the stream is running.
+      removeAbortListeners = attachRequestAbortListeners({
+        request,
+        reply,
+        abortController: chatAbortController,
+        conversationId,
+        streamId,
+      });
+
+      try {
+        const { agentId, agent } = conversation;
+
+        // Extract and ingest documents to agent's knowledge base (fire and forget)
+        // This runs asynchronously to avoid blocking the chat response
+        extractAndIngestDocuments(messages, agentId).catch((error) => {
+          logger.warn(
+            { error: error instanceof Error ? error.message : String(error) },
+            "[Chat] Background document ingestion failed",
+          );
+        });
+
+        const externalAgentId = agentId;
+
+        // Fetch enabled tool IDs and custom selection status in parallel
+        const [
+          enabledToolIds,
+          hasCustomSelection,
+          slimChatErrorUi,
+          organization,
+        ] = await Promise.all([
           ConversationEnabledToolModel.findByConversation(conversationId),
           ConversationEnabledToolModel.hasCustomSelection(conversationId),
           OrganizationModel.getSlimChatErrorUi(organizationId),
+          OrganizationModel.getById(organizationId),
         ]);
 
-      // Fetch MCP tools with enabled tool filtering
-      // Pass undefined if no custom selection (use all tools)
-      // Pass the actual array (even if empty) if there is custom selection
-      const [mcpTools, toolUiResourceUris] = await Promise.all([
-        getChatMcpTools({
-          agentName: agent.name,
-          agentId,
-          userId: user.id,
-          enabledToolIds: hasCustomSelection ? enabledToolIds : undefined,
-          conversationId: conversation.id,
-          organizationId,
-          // Pass conversationId as sessionId to group all chat requests (including delegated agents) together
-          sessionId: conversation.id,
-          // Pass agentId as initial delegation chain (will be extended by delegated agents)
-          delegationChain: agentId,
-          abortSignal: chatAbortController.signal,
-          user: { id: user.id, email: user.email, name: user.name },
-        }),
-        getChatMcpToolUiResourceUris(conversation.agentId),
-      ]);
-
-      // Build system prompt from agent's systemPrompt field
-      let systemPrompt: string | undefined;
-
-      // Build template context only when prompts use Handlebars syntax
-      let promptContext: UserSystemPromptContext | null = null;
-      if (promptNeedsRendering(agent.systemPrompt)) {
-        const userTeams = await TeamModel.getUserTeams(user.id);
-        promptContext = buildUserSystemPromptContext({
-          userName: user.name,
-          userEmail: user.email,
-          userTeams: userTeams.map((t) => t.name),
-        });
-      }
-
-      const renderedPrompt = renderSystemPrompt(
-        agent.systemPrompt,
-        promptContext,
-      );
-
-      let toolResultInstructions: string = "";
-      // Add MCP UI instruction when tools are available
-      if (Object.keys(mcpTools).length > 0) {
-        toolResultInstructions =
-          "When a tool result includes a UI resource, it means an interactive UI was rendered for the user. Respond with at most one brief sentence. Never describe, list, or explain what the UI shows.";
-      }
-
-      const toolDenialInstruction =
-        "When a tool execution is not approved by the user, do not retry it. Explain what happened and ask the user what they'd like to do instead.";
-
-      systemPrompt =
-        [renderedPrompt, toolDenialInstruction, toolResultInstructions]
-          .filter(Boolean)
-          .join("\n\n") || undefined;
-
-      // The conversation stores a model_id FK; dereference it to the
-      // proxy-facing model string + provider (env/config fallback if unset).
-      const { model: selectedModel, provider } = await resolveConversationModel(
-        conversation.modelId,
-      );
-
-      logger.info(
-        {
-          conversationId,
-          agentId,
-          userId: user.id,
-          orgId: organizationId,
-          toolCount: Object.keys(mcpTools).length,
-          hasCustomToolSelection: hasCustomSelection,
-          enabledToolCount: hasCustomSelection ? enabledToolIds.length : "all",
-          model: selectedModel,
-          provider,
-          hasSystemPrompt: !!systemPrompt,
-          externalAgentId,
-        },
-        "Starting chat stream",
-      );
-
-      // Wrap the entire chat turn in a parent span so LLM calls (via proxy)
-      // and MCP tool executions appear as children of a single trace.
-      return startActiveChatSpan({
-        agentName: agent.name,
-        agentId,
-        sessionId: conversationId,
-        user: { id: user.id, email: user.email, name: user.name },
-        callback: async () => {
-          // Create LLM model using shared service
-          // Pass conversationId as sessionId to group all requests in this chat session
-          // Pass agent's llmApiKeyId so it can be used without user access check
-          const { model } = await createLLMModelForAgent({
-            organizationId,
-            userId: user.id,
+        // Fetch MCP tools with enabled tool filtering
+        // Pass undefined if no custom selection (use all tools)
+        // Pass the actual array (even if empty) if there is custom selection
+        const [mcpTools, toolUiResourceUris] = await Promise.all([
+          getChatMcpTools({
+            agentName: agent.name,
             agentId,
+            userId: user.id,
+            enabledToolIds: hasCustomSelection ? enabledToolIds : undefined,
+            conversationId: conversation.id,
+            organizationId,
+            // Pass conversationId as sessionId to group all chat requests (including delegated agents) together
+            sessionId: conversation.id,
+            // Pass agentId as initial delegation chain (will be extended by delegated agents)
+            delegationChain: agentId,
+            abortSignal: chatAbortController.signal,
+            user: { id: user.id, email: user.email, name: user.name },
+          }),
+          getChatMcpToolUiResourceUris(conversation.agentId),
+        ]);
+
+        // Build system prompt from agent's systemPrompt field
+        let systemPrompt: string | undefined;
+
+        // Build template context only when prompts use Handlebars syntax
+        let promptContext: UserSystemPromptContext | null = null;
+        if (promptNeedsRendering(agent.systemPrompt)) {
+          const userTeams = await TeamModel.getUserTeams(user.id);
+          promptContext = buildUserSystemPromptContext({
+            userName: user.name,
+            userEmail: user.email,
+            userTeams: userTeams.map((t) => t.name),
+          });
+        }
+
+        const renderedPrompt = renderSystemPrompt(
+          agent.systemPrompt,
+          promptContext,
+        );
+
+        let toolResultInstructions: string = "";
+        // Add MCP UI instruction when tools are available
+        if (Object.keys(mcpTools).length > 0) {
+          toolResultInstructions =
+            "When a tool result includes a UI resource, it means an interactive UI was rendered for the user. Respond with at most one brief sentence. Never describe, list, or explain what the UI shows.";
+        }
+
+        const toolDenialInstruction =
+          "When a tool execution is not approved by the user, do not retry it. Explain what happened and ask the user what they'd like to do instead.";
+
+        systemPrompt =
+          [renderedPrompt, toolDenialInstruction, toolResultInstructions]
+            .filter(Boolean)
+            .join("\n\n") || undefined;
+
+        // The conversation stores a model_id FK; dereference it to the
+        // proxy-facing model string + provider (env/config fallback if unset).
+        const { model: selectedModel, provider } =
+          await resolveConversationModel(conversation.modelId);
+
+        logger.info(
+          {
+            conversationId,
+            agentId,
+            userId: user.id,
+            orgId: organizationId,
+            toolCount: Object.keys(mcpTools).length,
+            hasCustomToolSelection: hasCustomSelection,
+            enabledToolCount: hasCustomSelection
+              ? enabledToolIds.length
+              : "all",
             model: selectedModel,
             provider,
-            conversationId,
+            hasSystemPrompt: !!systemPrompt,
             externalAgentId,
-            sessionId: conversationId,
-            source: "chat",
-            agentLlmApiKeyId: agent.llmApiKeyId,
-          });
+          },
+          "Starting chat stream",
+        );
 
-          // Normalize chat history before replaying it to the model.
-          // This dedupes repeated tool parts, drops dangling interrupted tool calls,
-          // and strips heavy image/browser payloads that would otherwise bloat context.
-          const normalizedMessagesForLLM = normalizeChatMessages(
-            messages as ChatMessage[],
-          );
+        // Wrap the entire chat turn in a parent span so LLM calls (via proxy)
+        // and MCP tool executions appear as children of a single trace.
+        return startActiveChatSpan({
+          agentName: agent.name,
+          agentId,
+          sessionId: conversationId,
+          user: { id: user.id, email: user.email, name: user.name },
+          callback: async () => {
+            // Create LLM model using shared service
+            // Pass conversationId as sessionId to group all requests in this chat session
+            // Pass agent's llmApiKeyId so it can be used without user access check
+            const { model } = await createLLMModelForAgent({
+              organizationId,
+              userId: user.id,
+              agentId,
+              model: selectedModel,
+              provider,
+              conversationId,
+              externalAgentId,
+              sessionId: conversationId,
+              source: "chat",
+              agentLlmApiKeyId: agent.llmApiKeyId,
+            });
 
-          // Perplexity does NOT support tool calling - it has built-in web search instead
-          // @see https://docs.perplexity.ai/api-reference/chat-completions-post
-          const supportsToolCalling = provider !== "perplexity";
+            // When a user invoked a skill via slash command, inject its content
+            // into a copy of the messages before they reach the model. The
+            // original `messages` stay clean for persistence and the visible bubble.
+            // Slash commands depend on skill tools (the injected block references
+            // read_skill_file), so both org flags must be on.
+            const skillSlashCommandsActive =
+              !!organization?.skillSlashCommandsEnabled &&
+              !!organization?.skillToolsEnabled;
+            const messagesForLLM = skillSlashCommandsActive
+              ? await injectSkillActivation({
+                  messages: messages as ChatMessage[],
+                  organizationId,
+                  userId: user.id,
+                })
+              : (messages as ChatMessage[]);
 
-          // For Gemini image generation models, enable image output via responseModalities
-          // Known image-capable model patterns:
-          // - gemini-2.0-flash-exp-image-generation
-          // - gemini-2.5-flash-preview-native-audio-dialog (supports image output)
-          // - gemini-2.5-flash-image
-          // - gemini-3-pro-image-preview (and similar Gemini 3 image models)
-          // - Any model with "image" in the name (covers current and future image models)
-          //
-          // TODO: Use output modalities from the models DB table instead of hardcoded
-          // pattern matching. The `models` table has capability info that would be more
-          // reliable, but some models (e.g. gemini-3-pro-image-preview) currently report
-          // "capabilities unknown", so that needs to be fixed first.
-          const modelLower = selectedModel.toLowerCase();
-          const isGeminiImageModel =
-            provider === "gemini" &&
-            (modelLower.includes("image") ||
-              modelLower.includes("native-audio-dialog"));
+            // Normalize chat history before replaying it to the model.
+            // This dedupes repeated tool parts, drops dangling interrupted tool calls,
+            // and strips heavy image/browser payloads that would otherwise bloat context.
+            const normalizedMessagesForLLM =
+              normalizeChatMessages(messagesForLLM);
 
-          // Persist user's new messages immediately so they're visible on page reload.
-          // Without this, a reload during streaming shows no messages because
-          // onFinish hasn't fired yet. persistNewMessages is idempotent — it only
-          // saves messages beyond the existing count, so onFinish will only save
-          // the assistant response.
-          try {
-            await persistNewMessages(conversationId, messages, "earlyUserMsg");
-          } catch (error) {
-            logger.warn(
-              { error, conversationId },
-              "Failed to persist user messages early (will retry in onFinish)",
-            );
-          }
+            // Perplexity does NOT support tool calling - it has built-in web search instead
+            // @see https://docs.perplexity.ai/api-reference/chat-completions-post
+            const supportsToolCalling = provider !== "perplexity";
 
-          // Create stream with token usage data support
-          const response = createUIMessageStreamResponse({
-            headers: {
-              // Prevent compression middleware from buffering the stream
-              // See: https://ai-sdk.dev/docs/troubleshooting/streaming-not-working-when-proxied
-              "Content-Encoding": "none",
-            },
-            stream: createUIMessageStream({
+            // For Gemini image generation models, enable image output via responseModalities
+            // Known image-capable model patterns:
+            // - gemini-2.0-flash-exp-image-generation
+            // - gemini-2.5-flash-preview-native-audio-dialog (supports image output)
+            // - gemini-2.5-flash-image
+            // - gemini-3-pro-image-preview (and similar Gemini 3 image models)
+            // - Any model with "image" in the name (covers current and future image models)
+            //
+            // TODO: Use output modalities from the models DB table instead of hardcoded
+            // pattern matching. The `models` table has capability info that would be more
+            // reliable, but some models (e.g. gemini-3-pro-image-preview) currently report
+            // "capabilities unknown", so that needs to be fixed first.
+            const modelLower = selectedModel.toLowerCase();
+            const isGeminiImageModel =
+              provider === "gemini" &&
+              (modelLower.includes("image") ||
+                modelLower.includes("native-audio-dialog"));
+
+            // Persist user's new messages immediately so they're visible on page reload.
+            // Without this, a reload during streaming shows no messages because
+            // onFinish hasn't fired yet. persistNewMessages is idempotent — it only
+            // saves messages beyond the existing count, so onFinish will only save
+            // the assistant response.
+            try {
+              await persistNewMessages(
+                conversationId,
+                messages,
+                "earlyUserMsg",
+              );
+            } catch (error) {
+              logger.warn(
+                { error, conversationId },
+                "Failed to persist user messages early (will retry in onFinish)",
+              );
+            }
+
+            // Create stream with token usage data support
+            const uiMessageStream = createUIMessageStream({
               // Preserve incoming message IDs so the client updates existing
               // assistant messages instead of rendering duplicate ones.
               originalMessages: messages as UIMessage[],
               onError: (error) => {
+                activeRunError =
+                  error instanceof Error ? error.message : String(error);
                 // Persist messages on stream-level errors (e.g. errors thrown
                 // in execute before writer.merge() is reached). Without this,
                 // user messages are lost on refresh after an error.
@@ -571,6 +680,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 const modelMessages = await buildModelMessagesForProvider({
                   messages: compactionResult.messages,
                   provider,
+                  conversationId,
                 });
                 const streamTextConfig: Parameters<typeof streamText>[0] = {
                   model,
@@ -716,6 +826,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         );
                       }
 
+                      activeRunError =
+                        error instanceof Error ? error.message : String(error);
                       // Claim persistence before the async work below starts,
                       // otherwise onFinish can race and also persist (duplicates).
                       const shouldPersist =
@@ -779,6 +891,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     },
                     onFinish: async ({ messages: finalMessages }) => {
                       removeAbortListeners();
+                      stopActiveRunPolling();
 
                       // Only persist if not already persisted by onError
                       if (!messagesPersisted && conversationId) {
@@ -833,32 +946,75 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
                 clearInterval(heartbeatInterval);
               },
-            }),
-          });
+            });
 
-          // Log response headers for debugging
-          logger.info(
-            {
+            const [responseStream, persistenceStream] = uiMessageStream.tee();
+            activeChatRunService.drainStreamToEvents({
+              runId: activeRun.id,
               conversationId,
-              headers: Object.fromEntries(response.headers.entries()),
-              hasBody: !!response.body,
-            },
-            "Streaming chat response",
-          );
+              stream: persistenceStream as ReadableStream<UIMessageChunk>,
+              abortController: chatAbortController,
+              getTerminalStatus: async () => {
+                const latestRun = await ActiveChatRunModel.findById(
+                  activeRun.id,
+                );
+                if (latestRun?.stopRequestedAt) {
+                  return { status: "cancelled" };
+                }
+                if (activeRunError) {
+                  return { status: "failed", error: activeRunError };
+                }
+                if (chatAbortController.signal.aborted) {
+                  return { status: "cancelled" };
+                }
+                return { status: "completed" };
+              },
+            });
 
-          // Copy headers from Response to Fastify reply
-          for (const [key, value] of response.headers.entries()) {
-            reply.header(key, value);
-          }
+            const response = createUIMessageStreamResponse({
+              headers: {
+                // Prevent compression middleware from buffering the stream
+                // See: https://ai-sdk.dev/docs/troubleshooting/streaming-not-working-when-proxied
+                "Content-Encoding": "none",
+              },
+              stream: responseStream as ReadableStream<UIMessageChunk>,
+            });
 
-          // Send the Response body stream directly
-          if (!response.body) {
-            throw new ApiError(400, "No response body");
-          }
-          // biome-ignore lint/suspicious/noExplicitAny: Fastify reply.send accepts ReadableStream but TypeScript requires explicit cast
-          return reply.send(response.body as any);
-        },
-      });
+            // Log response headers for debugging
+            logger.info(
+              {
+                conversationId,
+                headers: Object.fromEntries(response.headers.entries()),
+                hasBody: !!response.body,
+              },
+              "Streaming chat response",
+            );
+
+            // Copy headers from Response to Fastify reply
+            for (const [key, value] of response.headers.entries()) {
+              reply.header(key, value);
+            }
+
+            // Send the Response body stream directly
+            if (!response.body) {
+              throw new ApiError(400, "No response body");
+            }
+            // biome-ignore lint/suspicious/noExplicitAny: Fastify reply.send accepts ReadableStream but TypeScript requires explicit cast
+            return reply.send(response.body as any);
+          },
+        });
+      } catch (error) {
+        if (!chatAbortController.signal.aborted) {
+          chatAbortController.abort();
+        }
+        stopActiveRunPolling();
+        await ActiveChatRunModel.markTerminal({
+          runId: activeRun.id,
+          status: "failed",
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
     },
   );
 
@@ -873,14 +1029,102 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.object({ stopped: z.boolean() })),
       },
     },
-    async ({ params: { id } }, reply) => {
-      // Set stop flag in distributed cache so any pod can detect it on connection close.
-      // When the frontend subsequently calls stop() to close the streaming connection,
-      // the connection-close handler on the pod running the stream will find this flag
-      // and abort the stream.
-      const cacheKey = `${CacheKey.ChatStop}-${id}` as const;
-      await cacheManager.set(cacheKey, true, TimeInMs.Minute);
+    async ({ params: { id }, user, organizationId }, reply) => {
+      // Owner-only: stop is a mutation on someone else's in-flight LLM work, so
+      // share-access (which is enough to read or reconnect to the stream) must
+      // not be enough to abort it.
+      const conversation = await ConversationModel.findById({
+        id,
+        userId: user.id,
+        organizationId,
+      });
+
+      if (!conversation) {
+        throw new ApiError(404, "Conversation not found");
+      }
+
+      const activeRun = await activeChatRunService.requestStop({
+        conversationId: id,
+        organizationId,
+      });
+
+      // Resolve the conversation's currently-running stream, then set a stop flag
+      // keyed by that stream's id. Keying by streamId (rather than conversationId)
+      // ensures the flag can only ever abort the stream it was meant for — a stale
+      // flag from an earlier stream targets a different id and is harmless.
+      // The flag lives in the distributed cache so any pod can detect it on
+      // connection close, even when the stream runs on a different pod.
+      const activeStreamKey = `${CacheKey.ChatActiveStream}-${id}` as const;
+      const streamId = await cacheManager.get<string>(activeStreamKey);
+      if (!streamId) {
+        return reply.send({ stopped: !!activeRun });
+      }
+      const stopKey = `${CacheKey.ChatStop}-${streamId}` as const;
+      try {
+        await cacheManager.set(stopKey, true, TimeInMs.Minute);
+      } catch (error) {
+        logger.warn(
+          { error, conversationId: id, streamId },
+          "Failed to set chat stop cache flag",
+        );
+      }
       return reply.send({ stopped: true });
+    },
+  );
+
+  fastify.get(
+    "/api/chat/conversations/:id/active-run",
+    {
+      schema: {
+        operationId: RouteId.GetActiveChatRun,
+        description: "Reconnect to an active chat stream for a conversation",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        response: {
+          200: z.unknown(),
+          204: z.undefined(),
+          ...ErrorResponsesSchema,
+        },
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      const conversation = await ConversationModel.findAccessibleById({
+        id,
+        userId: user.id,
+        organizationId,
+      });
+
+      if (!conversation) {
+        throw new ApiError(404, "Conversation not found");
+      }
+
+      const activeRun = await ActiveChatRunModel.findReplayableByConversation({
+        conversationId: id,
+        organizationId,
+        terminalGraceMs: ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS,
+      });
+
+      if (!activeRun) {
+        return reply.status(204).send();
+      }
+
+      const response = createUIMessageStreamResponse({
+        headers: {
+          "Content-Encoding": "none",
+        },
+        stream: activeChatRunService.createReplayStream(activeRun.id),
+      });
+
+      for (const [key, value] of response.headers.entries()) {
+        reply.header(key, value);
+      }
+
+      if (!response.body) {
+        throw new ApiError(400, "No response body");
+      }
+
+      // biome-ignore lint/suspicious/noExplicitAny: Fastify reply.send accepts ReadableStream but TypeScript requires explicit cast
+      return reply.send(response.body as any);
     },
   );
 
@@ -933,6 +1177,70 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(conversation);
+    },
+  );
+
+  fastify.get(
+    "/api/chat/attachments/:id/content",
+    {
+      schema: {
+        operationId: RouteId.GetChatAttachmentContent,
+        description:
+          "Stream the bytes of a chat attachment by id. Auth'd to the org.",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        response: ErrorResponsesSchema,
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      // Fetch metadata first (no fileData) so unauthorized requests don't
+      // trigger a large bytea read before the 403. Only load the blob once
+      // org + per-conversation access has been confirmed.
+      const meta = await ChatAttachmentModel.findById(id);
+      if (!meta) {
+        throw new ApiError(404, "Attachment not found");
+      }
+      if (meta.organizationId !== organizationId) {
+        throw new ApiError(403, "Attachment belongs to a different org");
+      }
+
+      // Verify the requester can read the conversation that owns this
+      // attachment. Without this check, any org member with chat:read could
+      // fetch any attachment in the org regardless of per-conversation ACLs.
+      const conversation = await findReadableConversationById({
+        conversationId: meta.conversationId,
+        userId: user.id,
+        organizationId,
+      });
+      if (!conversation) {
+        throw new ApiError(403, "No access to the owning conversation");
+      }
+
+      const attachment = await ChatAttachmentModel.findByIdWithData(id);
+      if (!attachment) {
+        // Soft-deleted between the metadata check and the blob fetch.
+        throw new ApiError(404, "Attachment not found");
+      }
+
+      const safeMime = sanitizeAttachmentContentType(attachment.mimeType);
+      const disposition = isSafeInlineMimeType(safeMime)
+        ? "inline"
+        : "attachment";
+      // Bypass fastify-zod's response schema (declared as the error union
+      // only) for the binary success body by writing directly to the
+      // underlying Node response. `reply.hijack()` tells Fastify to step
+      // back so its response serializer doesn't run against a Buffer.
+      reply.hijack();
+      reply.raw.writeHead(200, {
+        "Content-Type": safeMime,
+        "Content-Disposition": `${disposition}; filename="${encodeURIComponent(attachment.originalName)}"`,
+        "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "default-src 'none'; sandbox",
+        "Cache-Control": "private, max-age=3600",
+        "Content-Length": String(attachment.fileSize),
+      });
+      reply.raw.end(attachment.fileData);
+      return reply;
     },
   );
 
@@ -2173,38 +2481,70 @@ function getMessagesNotYetPersisted(params: {
   uiMessages: ChatMessage[];
 }): ChatMessage[] {
   const existingIds = new Set<string>();
+  const existingEmptyContentIdSignatures = new Map<string, number>();
 
   for (const message of params.existingMessages) {
-    for (const id of getPersistedMessageIdentityIds(message)) {
-      existingIds.add(id);
+    if (message.id) {
+      existingIds.add(message.id);
+    }
+
+    // Persisted messages are re-keyed to DB UUIDs when conversations reload, but
+    // in-flight useChat requests can still carry the original temporary content
+    // ids. Track both forms so follow-up turns after swap_agent do not get
+    // dropped just because the incoming thread is shorter than the DB thread.
+    const contentId = getMessageContentId(message.content);
+
+    if (contentId && contentId.length > 0) {
+      existingIds.add(contentId);
+      continue;
+    }
+
+    if (contentId === "") {
+      const signature = getMessageTextSignature(message.content);
+      if (signature) {
+        existingEmptyContentIdSignatures.set(
+          signature,
+          (existingEmptyContentIdSignatures.get(signature) ?? 0) + 1,
+        );
+      }
     }
   }
 
   return params.uiMessages.filter((message) => {
     const messageIds = getUiMessageIdentityIds(message);
-    if (messageIds.length === 0) {
-      return true;
+    if (messageIds.some((id) => existingIds.has(id))) {
+      return false;
     }
 
-    return messageIds.every((id) => !existingIds.has(id));
+    const signature = getMessageTextSignature(message);
+    if (signature) {
+      const remainingMatches =
+        existingEmptyContentIdSignatures.get(signature) ?? 0;
+      if (remainingMatches > 0) {
+        if (remainingMatches === 1) {
+          existingEmptyContentIdSignatures.delete(signature);
+        } else {
+          existingEmptyContentIdSignatures.set(signature, remainingMatches - 1);
+        }
+        return false;
+      }
+    }
+
+    return true;
   });
 }
 
-function getPersistedMessageIdentityIds(message: {
-  id: string;
-  content: unknown;
-}): string[] {
-  const ids = new Set<string>();
-  if (message.id) {
-    ids.add(message.id);
+function getMessageContentId(content: unknown): string | null {
+  if (
+    typeof content === "object" &&
+    content !== null &&
+    "id" in content &&
+    typeof content.id === "string"
+  ) {
+    return content.id;
   }
 
-  const contentId = getContentMessageId(message.content);
-  if (contentId) {
-    ids.add(contentId);
-  }
-
-  return [...ids];
+  return null;
 }
 
 function getUiMessageIdentityIds(message: ChatMessage): string[] {
@@ -2221,20 +2561,6 @@ function getUiMessageIdentityIds(message: ChatMessage): string[] {
   return [...ids];
 }
 
-function getContentMessageId(content: unknown): string | null {
-  if (
-    typeof content === "object" &&
-    content !== null &&
-    "id" in content &&
-    typeof content.id === "string" &&
-    content.id.length > 0
-  ) {
-    return content.id;
-  }
-
-  return null;
-}
-
 function getMessagePersistedMetadataId(message: ChatMessage): string | null {
   if (
     !("metadata" in message) ||
@@ -2248,6 +2574,40 @@ function getMessagePersistedMetadataId(message: ChatMessage): string | null {
   }
 
   return message.metadata.persistedMessageId;
+}
+
+function getMessageTextSignature(message: unknown): string | null {
+  if (typeof message !== "object" || message === null) {
+    return null;
+  }
+
+  const role =
+    "role" in message && typeof message.role === "string" ? message.role : null;
+  const parts =
+    "parts" in message && Array.isArray(message.parts) ? message.parts : null;
+
+  if (!role || !parts) {
+    return null;
+  }
+
+  const text = parts
+    .filter(
+      (part): part is { type: "text"; text: string } =>
+        typeof part === "object" &&
+        part !== null &&
+        "type" in part &&
+        part.type === "text" &&
+        "text" in part &&
+        typeof part.text === "string",
+    )
+    .map((part) => part.text)
+    .join("\n");
+
+  if (!text) {
+    return null;
+  }
+
+  return `${role}\u0000${text}`;
 }
 
 function prepareMessagesForProvider(params: {
@@ -2274,8 +2634,22 @@ function prepareMessagesForProvider(params: {
 async function buildModelMessagesForProvider(params: {
   messages: ChatMessage[];
   provider: SupportedProvider;
+  conversationId: string;
 }) {
-  const providerPreparedMessages = prepareMessagesForProvider(params);
+  // Re-inline attachment refs as base64 data URLs for the LLM call (with
+  // Anthropic cache_control marker). Refs are filtered to attachments owned
+  // by `conversationId` so a client can't reference another conversation's
+  // attachment id. Legacy inline data URLs pass through unchanged. Returns a
+  // deep copy — the original messages keep their refs for any subsequent
+  // persistence step.
+  const materialized = await materializeAttachments(
+    params.messages,
+    params.conversationId,
+  );
+  const providerPreparedMessages = prepareMessagesForProvider({
+    messages: materialized,
+    provider: params.provider,
+  });
 
   // Cast to UIMessage[] - ChatMessage is structurally compatible at runtime.
   return await convertToModelMessages(
@@ -2493,62 +2867,77 @@ function normalizeDataUrlMediaType(params: {
  * whether the close was caused by the stop button (abort) or by navigating away (ignore).
  *
  * Flow:
- * 1. Frontend stop button → calls POST /stop (sets cache flag) → then calls stop() (closes connection)
+ * 1. Frontend stop button → calls POST /stop (sets `chat-stop-<streamId>`) → then calls stop() (closes connection)
  * 2. Connection close fires on the pod running the stream → checks cache → flag found → abort
  * 3. Navigate away → connection close → checks cache → no flag → stream continues in background
  *
- * Works across pods because the cache is PostgreSQL-backed.
+ * The stop flag is keyed by `streamId`, so it can only abort the stream it was
+ * meant for. Works across pods because the cache is PostgreSQL-backed.
+ *
+ * Returns a cleanup function to call on normal stream finish: it removes the
+ * listeners and clears the distributed cache keys so no stop flag can outlive
+ * its stream.
  */
 function attachRequestAbortListeners(params: {
   request: { raw: NodeJS.EventEmitter };
   reply: { raw: NodeJS.EventEmitter & { writableEnded: boolean } };
   abortController: AbortController;
   conversationId: string;
+  streamId: string;
 }): () => void {
-  const { request, reply, abortController, conversationId } = params;
-  let didCleanup = false;
+  const { request, reply, abortController, conversationId, streamId } = params;
+  const stopKey = `${CacheKey.ChatStop}-${streamId}` as const;
+  let listenersRemoved = false;
+
+  const removeListeners = () => {
+    if (listenersRemoved) {
+      return;
+    }
+    listenersRemoved = true;
+    request.raw.removeListener("close", onConnectionClose);
+    request.raw.removeListener("aborted", onConnectionClose);
+    reply.raw.removeListener("close", onConnectionClose);
+  };
 
   const onConnectionClose = () => {
-    cleanup();
+    removeListeners();
     if (reply.raw.writableEnded || abortController.signal.aborted) {
       return;
     }
 
-    // Check the distributed cache for a stop flag set by the stop endpoint
-    const cacheKey = `${CacheKey.ChatStop}-${conversationId}` as const;
+    // Check the distributed cache for a stop flag set by the stop endpoint.
+    // getAndDelete consumes the flag atomically.
     cacheManager
-      .getAndDelete(cacheKey)
+      .getAndDelete(stopKey)
       .then((stopRequested) => {
         if (stopRequested) {
           logger.info(
-            { conversationId },
+            { conversationId, streamId },
             "Chat stop requested, aborting stream execution",
           );
           abortController.abort();
         } else {
           logger.info(
-            { conversationId },
+            { conversationId, streamId },
             "Chat connection closed (navigate away), stream continues in background",
           );
         }
       })
       .catch((err) => {
         logger.error(
-          { err, conversationId },
+          { err, conversationId, streamId },
           "Failed to check chat stop flag, not aborting",
         );
       });
   };
 
+  // Called on normal stream finish. Clears this stream's stop flag so it cannot
+  // linger. The active-stream key is intentionally left to expire on its own
+  // TTL: deleting it here could clobber a newer stream that already replaced
+  // the mapping for this conversation.
   const cleanup = () => {
-    if (didCleanup) {
-      return;
-    }
-
-    didCleanup = true;
-    request.raw.removeListener("close", onConnectionClose);
-    request.raw.removeListener("aborted", onConnectionClose);
-    reply.raw.removeListener("close", onConnectionClose);
+    removeListeners();
+    void cacheManager.delete(stopKey);
   };
 
   request.raw.on("close", onConnectionClose);
@@ -2638,8 +3027,20 @@ async function forkConversation(params: {
   });
 
   if (params.sourceConversation.messages.length > 0) {
+    // Clone any chat_attachments referenced from source messages so the fork
+    // has its own rows scoped to its conversationId — materialize and
+    // compaction both filter by conversationId, so without this the fork
+    // would silently lose every attached file on the next LLM turn.
+    const forkedMessages = await cloneAttachmentsForFork({
+      sourceMessages: params.sourceConversation
+        .messages as unknown as ChatMessage[],
+      sourceConversationId: params.sourceConversation.id,
+      newConversationId: newConversation.id,
+      newOrganizationId: params.organizationId,
+      newUploadedByUserId: params.userId,
+    });
     await MessageModel.bulkCreate(
-      params.sourceConversation.messages.map((message: { role: string }) => ({
+      forkedMessages.map((message) => ({
         conversationId: newConversation.id,
         role: message.role,
         content: message,

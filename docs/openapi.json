@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.50"
+    "version": "1.2.52"
   },
   "components": {
     "schemas": {
@@ -65624,6 +65624,274 @@
         }
       }
     },
+    "/api/chat/conversations/{id}/active-run": {
+      "get": {
+        "operationId": "getActiveChatRun",
+        "tags": [
+          "Chat"
+        ],
+        "description": "Reconnect to an active chat stream for a conversation\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:read`: View and access chat conversations",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "204": {
+            "description": "Default Response"
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "chat:read"
+          ]
+        }
+      }
+    },
     "/api/chat/conversations": {
       "get": {
         "operationId": "getChatConversations",
@@ -68526,6 +68794,263 @@
           "kind": "static",
           "permissions": [
             "chat:delete"
+          ]
+        }
+      }
+    },
+    "/api/chat/attachments/{id}/content": {
+      "get": {
+        "operationId": "getChatAttachmentContent",
+        "tags": [
+          "Chat"
+        ],
+        "description": "Stream the bytes of a chat attachment by id. Auth'd to the org.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:read`: View and access chat conversations",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "chat:read"
           ]
         }
       }
@@ -78813,6 +79338,10 @@
                     "disableInvitations": {
                       "type": "boolean"
                     },
+                    "maintenanceMode": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "analytics": {
                       "type": "object",
                       "properties": {
@@ -78846,6 +79375,7 @@
                   "required": [
                     "disableBasicAuth",
                     "disableInvitations",
+                    "maintenanceMode",
                     "analytics"
                   ],
                   "additionalProperties": false
@@ -78902,7 +79432,13 @@
                         "orchestratorK8sRuntime": {
                           "type": "boolean"
                         },
+                        "codeRuntime": {
+                          "type": "boolean"
+                        },
                         "advancedToolFeaturesEnabled": {
+                          "type": "boolean"
+                        },
+                        "agentSkillsEnabled": {
                           "type": "boolean"
                         },
                         "byosEnabled": {
@@ -78974,11 +79510,20 @@
                         "mcpSandboxDomain": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "maintenanceMode": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "chatSecretScanEnabled": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
                         "orchestratorK8sRuntime",
+                        "codeRuntime",
                         "advancedToolFeaturesEnabled",
+                        "agentSkillsEnabled",
                         "byosEnabled",
                         "byosVaultKvVersion",
                         "azureOpenAiEntraIdEnabled",
@@ -78991,7 +79536,9 @@
                         "isQuickstart",
                         "ngrokDomain",
                         "virtualKeyDefaultExpirationSeconds",
-                        "mcpSandboxDomain"
+                        "mcpSandboxDomain",
+                        "maintenanceMode",
+                        "chatSecretScanEnabled"
                       ],
                       "additionalProperties": false
                     },
@@ -119867,6 +120414,19 @@
                                   "owner": {
                                     "type": "string"
                                   },
+                                  "authMethod": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pat",
+                                      "github_app"
+                                    ]
+                                  },
+                                  "githubAppId": {
+                                    "type": "string"
+                                  },
+                                  "githubAppInstallationId": {
+                                    "type": "string"
+                                  },
                                   "repos": {
                                     "type": "array",
                                     "items": {
@@ -119879,8 +120439,14 @@
                                   "includePullRequests": {
                                     "type": "boolean"
                                   },
-                                  "includeMarkdownFiles": {
+                                  "includeRepositoryFiles": {
                                     "type": "boolean"
+                                  },
+                                  "fileTypes": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
                                   },
                                   "labelsToSkip": {
                                     "type": "array",
@@ -120981,6 +121547,19 @@
                           "owner": {
                             "type": "string"
                           },
+                          "authMethod": {
+                            "type": "string",
+                            "enum": [
+                              "pat",
+                              "github_app"
+                            ]
+                          },
+                          "githubAppId": {
+                            "type": "string"
+                          },
+                          "githubAppInstallationId": {
+                            "type": "string"
+                          },
                           "repos": {
                             "type": "array",
                             "items": {
@@ -120993,8 +121572,14 @@
                           "includePullRequests": {
                             "type": "boolean"
                           },
-                          "includeMarkdownFiles": {
+                          "includeRepositoryFiles": {
                             "type": "boolean"
+                          },
+                          "fileTypes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
                           },
                           "labelsToSkip": {
                             "type": "array",
@@ -121717,6 +122302,19 @@
                             "owner": {
                               "type": "string"
                             },
+                            "authMethod": {
+                              "type": "string",
+                              "enum": [
+                                "pat",
+                                "github_app"
+                              ]
+                            },
+                            "githubAppId": {
+                              "type": "string"
+                            },
+                            "githubAppInstallationId": {
+                              "type": "string"
+                            },
                             "repos": {
                               "type": "array",
                               "items": {
@@ -121729,8 +122327,14 @@
                             "includePullRequests": {
                               "type": "boolean"
                             },
-                            "includeMarkdownFiles": {
+                            "includeRepositoryFiles": {
                               "type": "boolean"
+                            },
+                            "fileTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
                             },
                             "labelsToSkip": {
                               "type": "array",
@@ -122775,6 +123379,19 @@
                             "owner": {
                               "type": "string"
                             },
+                            "authMethod": {
+                              "type": "string",
+                              "enum": [
+                                "pat",
+                                "github_app"
+                              ]
+                            },
+                            "githubAppId": {
+                              "type": "string"
+                            },
+                            "githubAppInstallationId": {
+                              "type": "string"
+                            },
                             "repos": {
                               "type": "array",
                               "items": {
@@ -122787,8 +123404,14 @@
                             "includePullRequests": {
                               "type": "boolean"
                             },
-                            "includeMarkdownFiles": {
+                            "includeRepositoryFiles": {
                               "type": "boolean"
+                            },
+                            "fileTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
                             },
                             "labelsToSkip": {
                               "type": "array",
@@ -123727,6 +124350,19 @@
                           "owner": {
                             "type": "string"
                           },
+                          "authMethod": {
+                            "type": "string",
+                            "enum": [
+                              "pat",
+                              "github_app"
+                            ]
+                          },
+                          "githubAppId": {
+                            "type": "string"
+                          },
+                          "githubAppInstallationId": {
+                            "type": "string"
+                          },
                           "repos": {
                             "type": "array",
                             "items": {
@@ -123739,8 +124375,14 @@
                           "includePullRequests": {
                             "type": "boolean"
                           },
-                          "includeMarkdownFiles": {
+                          "includeRepositoryFiles": {
                             "type": "boolean"
+                          },
+                          "fileTypes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
                           },
                           "labelsToSkip": {
                             "type": "array",
@@ -124461,6 +125103,19 @@
                             "owner": {
                               "type": "string"
                             },
+                            "authMethod": {
+                              "type": "string",
+                              "enum": [
+                                "pat",
+                                "github_app"
+                              ]
+                            },
+                            "githubAppId": {
+                              "type": "string"
+                            },
+                            "githubAppInstallationId": {
+                              "type": "string"
+                            },
                             "repos": {
                               "type": "array",
                               "items": {
@@ -124473,8 +125128,14 @@
                             "includePullRequests": {
                               "type": "boolean"
                             },
-                            "includeMarkdownFiles": {
+                            "includeRepositoryFiles": {
                               "type": "boolean"
+                            },
+                            "fileTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
                             },
                             "labelsToSkip": {
                               "type": "array",
@@ -161087,6 +161748,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -161144,6 +161808,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -161940,6 +162605,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -161997,6 +162665,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -163065,6 +163734,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -163122,6 +163794,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -163800,6 +164473,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -163857,6 +164533,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -164107,7 +164784,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update agent settings (default model, default agent)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, security engine, file uploads)",
+        "description": "Update agent settings (default model, default agent, skill slash commands)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, security engine, file uploads)",
         "requestBody": {
           "required": true,
           "content": {
@@ -164132,6 +164809,9 @@
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "skillSlashCommandsEnabled": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -164519,6 +165199,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -164576,6 +165259,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -165303,6 +165987,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -165360,6 +166047,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -166020,6 +166708,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -166077,6 +166768,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -166730,6 +167422,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -166787,6 +167482,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -167439,6 +168135,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -167496,6 +168195,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -168148,6 +168848,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -168205,6 +168908,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -168870,6 +169574,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -168927,6 +169634,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -169559,6 +170267,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -169616,6 +170327,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -170561,6 +171273,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "skillSlashCommandsEnabled": {
+                      "type": "boolean"
+                    },
                     "presetEntityDefaultValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -170618,6 +171333,7 @@
                     "presetEntityNamePlural",
                     "presetEntityDefaultLabel",
                     "skillToolsEnabled",
+                    "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
                   ],
                   "additionalProperties": false
@@ -178122,13 +178838,1461 @@
         }
       }
     },
+    "/api/site-notification": {
+      "get": {
+        "operationId": "getSiteNotification",
+        "tags": [
+          "Site Notification"
+        ],
+        "description": "Get the active site notification for the current organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`siteNotification:read`: View site-wide notifications",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "nullable": true,
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "content": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "isActive": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "content",
+                    "expiresAt",
+                    "createdAt",
+                    "isActive"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "siteNotification:read"
+          ]
+        }
+      },
+      "post": {
+        "operationId": "createSiteNotification",
+        "tags": [
+          "Site Notification"
+        ],
+        "description": "Create a new site notification\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`siteNotification:create`: Create new site notifications",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "content": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "expiresAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                  }
+                },
+                "required": [
+                  "content"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "content": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "isActive": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "content",
+                    "expiresAt",
+                    "createdAt",
+                    "isActive"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "siteNotification:create"
+          ]
+        }
+      }
+    },
+    "/api/site-notification/settings": {
+      "get": {
+        "operationId": "getSiteNotificationSettings",
+        "tags": [
+          "Site Notification"
+        ],
+        "description": "Get the latest site notification for settings management\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`siteNotification:read`: View site-wide notifications",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "nullable": true,
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "content": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "isActive": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "content",
+                    "expiresAt",
+                    "createdAt",
+                    "isActive"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "siteNotification:read"
+          ]
+        }
+      }
+    },
+    "/api/site-notification/{id}": {
+      "put": {
+        "operationId": "updateSiteNotification",
+        "tags": [
+          "Site Notification"
+        ],
+        "description": "Update an existing site notification\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`siteNotification:update`: Modify site notifications",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "content": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "expiresAt": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                  },
+                  "isActive": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "content": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "isActive": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "content",
+                    "expiresAt",
+                    "createdAt",
+                    "isActive"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "siteNotification:update"
+          ]
+        }
+      },
+      "delete": {
+        "operationId": "deleteSiteNotification",
+        "tags": [
+          "Site Notification"
+        ],
+        "description": "Delete a site notification\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`siteNotification:delete`: Delete site notifications",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "siteNotification:delete"
+          ]
+        }
+      }
+    },
     "/api/skills": {
       "get": {
         "operationId": "getSkills",
         "tags": [
           "Skills"
         ],
-        "description": "List all agent skills for the organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "description": "List all agent skills for the organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View and use agent skills within your scope (org, your teams, your own)",
         "parameters": [
           {
             "schema": {
@@ -178194,6 +180358,14 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "personal",
+                              "team",
+                              "org"
+                            ]
+                          },
                           "name": {
                             "type": "string"
                           },
@@ -178242,12 +180414,36 @@
                           },
                           "fileCount": {
                             "type": "number"
+                          },
+                          "teams": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "authorName": {
+                            "nullable": true,
+                            "type": "string"
                           }
                         },
                         "required": [
                           "id",
                           "organizationId",
                           "authorId",
+                          "scope",
                           "name",
                           "description",
                           "content",
@@ -178259,7 +180455,9 @@
                           "sourceCommit",
                           "createdAt",
                           "updatedAt",
-                          "fileCount"
+                          "fileCount",
+                          "teams",
+                          "authorName"
                         ],
                         "additionalProperties": false
                       }
@@ -178546,7 +180744,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agent:read"
+            "skill:read"
           ]
         }
       },
@@ -178555,7 +180753,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Create a skill from a raw SKILL.md and resource files\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:create`: Create new agents",
+        "description": "Create a skill from a raw SKILL.md and resource files\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:create`: Create new agent skills",
         "requestBody": {
           "required": true,
           "content": {
@@ -178565,10 +180763,11 @@
                 "properties": {
                   "content": {
                     "type": "string",
-                    "minLength": 1
+                    "minLength": 1,
+                    "maxLength": 10485760
                   },
                   "files": {
-                    "default": [],
+                    "maxItems": 500,
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -178578,7 +180777,8 @@
                           "minLength": 1
                         },
                         "content": {
-                          "type": "string"
+                          "type": "string",
+                          "maxLength": 13981016
                         },
                         "encoding": {
                           "type": "string",
@@ -178592,6 +180792,20 @@
                         "path",
                         "content"
                       ]
+                    }
+                  },
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "personal",
+                      "team",
+                      "org"
+                    ]
+                  },
+                  "teamIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
                     }
                   }
                 },
@@ -178621,6 +180835,14 @@
                     "authorId": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
                     },
                     "name": {
                       "type": "string"
@@ -178720,12 +180942,32 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "teams": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
                     "id",
                     "organizationId",
                     "authorId",
+                    "scope",
                     "name",
                     "description",
                     "content",
@@ -178737,7 +180979,8 @@
                     "sourceCommit",
                     "createdAt",
                     "updatedAt",
-                    "files"
+                    "files",
+                    "teams"
                   ],
                   "additionalProperties": false
                 }
@@ -178976,7 +181219,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agent:create"
+            "skill:create"
           ]
         }
       }
@@ -178987,7 +181230,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Get a skill with its resource files\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "description": "Get a skill with its resource files\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View and use agent skills within your scope (org, your teams, your own)",
         "parameters": [
           {
             "schema": {
@@ -179017,6 +181260,14 @@
                     "authorId": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
                     },
                     "name": {
                       "type": "string"
@@ -179116,12 +181367,32 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "teams": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
                     "id",
                     "organizationId",
                     "authorId",
+                    "scope",
                     "name",
                     "description",
                     "content",
@@ -179133,7 +181404,8 @@
                     "sourceCommit",
                     "createdAt",
                     "updatedAt",
-                    "files"
+                    "files",
+                    "teams"
                   ],
                   "additionalProperties": false
                 }
@@ -179372,7 +181644,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agent:read"
+            "skill:read"
           ]
         }
       },
@@ -179381,7 +181653,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Update a skill's SKILL.md and resource files\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:update`: Modify agent configuration and settings",
+        "description": "Update a skill's SKILL.md, resource files, and scope\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:update`: Modify agent skills and their team assignments",
         "requestBody": {
           "required": true,
           "content": {
@@ -179391,10 +181663,11 @@
                 "properties": {
                   "content": {
                     "type": "string",
-                    "minLength": 1
+                    "minLength": 1,
+                    "maxLength": 10485760
                   },
                   "files": {
-                    "default": [],
+                    "maxItems": 500,
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -179404,7 +181677,8 @@
                           "minLength": 1
                         },
                         "content": {
-                          "type": "string"
+                          "type": "string",
+                          "maxLength": 13981016
                         },
                         "encoding": {
                           "type": "string",
@@ -179418,6 +181692,20 @@
                         "path",
                         "content"
                       ]
+                    }
+                  },
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "personal",
+                      "team",
+                      "org"
+                    ]
+                  },
+                  "teamIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
                     }
                   }
                 },
@@ -179458,6 +181746,14 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
+                    },
                     "name": {
                       "type": "string"
                     },
@@ -179556,12 +181852,32 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "teams": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
                     "id",
                     "organizationId",
                     "authorId",
+                    "scope",
                     "name",
                     "description",
                     "content",
@@ -179573,7 +181889,8 @@
                     "sourceCommit",
                     "createdAt",
                     "updatedAt",
-                    "files"
+                    "files",
+                    "teams"
                   ],
                   "additionalProperties": false
                 }
@@ -179812,7 +182129,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agent:update"
+            "skill:update"
           ]
         }
       },
@@ -179821,7 +182138,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Delete a skill and its resource files\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:delete`: Delete agents",
+        "description": "Delete a skill and its resource files\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:delete`: Delete agent skills",
         "parameters": [
           {
             "schema": {
@@ -180084,7 +182401,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agent:delete"
+            "skill:delete"
           ]
         }
       }
@@ -180095,7 +182412,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "List distinct GitHub repositories that skills in this organization were imported from\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "description": "List distinct GitHub repositories that skills in this organization were imported from\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View and use agent skills within your scope (org, your teams, your own)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -180351,7 +182668,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agent:read"
+            "skill:read"
           ]
         }
       }
@@ -180362,7 +182679,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Enable the Agent Skill tools (`activate_skill`, `read_skill_file`) for this organization. Sets the org-level flag and backfills both tools onto every existing agent. Idempotent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:update`: Modify agent configuration and settings",
+        "description": "Enable the Agent Skill tools (`list_skills`, `activate_skill`, `read_skill_file`) for this organization. Sets the org-level flag and backfills the tools onto every existing agent. Idempotent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:admin`: Full administrative control over all agent skills, bypassing team restrictions",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -180622,7 +182939,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agent:update"
+            "skill:admin"
           ]
         }
       }
@@ -180633,7 +182950,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Discover skills in a GitHub repository\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "description": "Discover skills in a GitHub repository\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View and use agent skills within your scope (org, your teams, your own)",
         "requestBody": {
           "required": true,
           "content": {
@@ -180952,7 +183269,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agent:read"
+            "skill:read"
           ]
         }
       }
@@ -180963,7 +183280,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Fetch a single skill's manifest and files from GitHub without persisting it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "description": "Fetch a single skill's manifest and files from GitHub without persisting it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View and use agent skills within your scope (org, your teams, your own)",
         "requestBody": {
           "required": true,
           "content": {
@@ -181315,7 +183632,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agent:read"
+            "skill:read"
           ]
         }
       }
@@ -181326,7 +183643,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Import selected skills from a GitHub repository\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:create`: Create new agents",
+        "description": "Import selected skills from a GitHub repository\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:create`: Create new agent skills",
         "requestBody": {
           "required": true,
           "content": {
@@ -181346,6 +183663,20 @@
                   },
                   "skillPaths": {
                     "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "personal",
+                      "team",
+                      "org"
+                    ]
+                  },
+                  "teamIds": {
                     "type": "array",
                     "items": {
                       "type": "string"
@@ -181384,6 +183715,14 @@
                           "authorId": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "personal",
+                              "team",
+                              "org"
+                            ]
                           },
                           "name": {
                             "type": "string"
@@ -181436,6 +183775,7 @@
                           "id",
                           "organizationId",
                           "authorId",
+                          "scope",
                           "name",
                           "description",
                           "content",
@@ -181699,7 +184039,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agent:create"
+            "skill:create"
           ]
         }
       }

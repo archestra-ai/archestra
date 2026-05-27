@@ -1,1 +1,0 @@
-CREATE INDEX "kb_uploaded_files_org_content_hash_idx" ON "kb_uploaded_files" USING btree ("organization_id","content_hash");

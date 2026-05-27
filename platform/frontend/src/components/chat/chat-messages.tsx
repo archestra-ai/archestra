@@ -1430,8 +1430,8 @@ function PromoteAttachmentDialog({
       title="Save to Knowledge"
       description={
         attachment?.filename
-          ? `Make ${attachment.filename} reusable for retrieval.`
-          : "Make this chat attachment reusable for retrieval."
+          ? `Make ${attachment.filename} reusable in Knowledge. Agents and MCP Gateways you select can query it through the knowledge tool.`
+          : "Make this chat attachment reusable in Knowledge. Selected agents and MCP Gateways can query it through the knowledge tool."
       }
       size="medium"
       onSubmit={onSubmit}

@@ -1,5 +1,5 @@
 {
-  "id": "d9e1aa5a-feaa-4c7a-8c7b-bdebb74fecd6",
+  "id": "0d1c99c0-9524-43a0-ad4b-5e2aed159619",
   "prevId": "d9d0f3b5-50a0-47b9-ad3f-21d2f1b87820",
   "version": "7",
   "dialect": "postgresql",
@@ -4675,6 +4675,27 @@
           "columns": [
             {
               "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "kb_uploaded_files_org_content_hash_idx": {
+          "name": "kb_uploaded_files_org_content_hash_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "content_hash",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

@@ -23,6 +23,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   getAttachmentFallbackLabel,
   isCsvAttachment,
   isPlainTextAttachment,
@@ -273,16 +278,10 @@ export function EditableUserMessage({
                 </Link>
                 {canPromoteAttachments &&
                   isPromotableKnowledgeAttachment(attachment) && (
-                    <Button
-                      type="button"
-                      size="sm"
+                    <PromoteAttachmentButton
                       variant="ghost"
-                      className="h-7 shrink-0 gap-1 px-2 text-xs"
                       onClick={() => onPromoteAttachment?.(attachment)}
-                    >
-                      <FilePlus2 className="h-3.5 w-3.5" />
-                      Save to Knowledge
-                    </Button>
+                    />
                   )}
               </div>
             ))}
@@ -295,17 +294,11 @@ export function EditableUserMessage({
               {imageAttachments
                 .filter(isPromotableKnowledgeAttachment)
                 .map((attachment) => (
-                  <Button
+                  <PromoteAttachmentButton
                     key={`promote-${attachment.url}`}
-                    type="button"
-                    size="sm"
                     variant="outline"
-                    className="h-7 gap-1 text-xs"
                     onClick={() => onPromoteAttachment?.(attachment)}
-                  >
-                    <FilePlus2 className="h-3.5 w-3.5" />
-                    Save to Knowledge
-                  </Button>
+                  />
                 ))}
             </div>
           )}
@@ -332,6 +325,32 @@ export function EditableUserMessage({
         )}
       </div>
     </Message>
+  );
+}
+
+function PromoteAttachmentButton({
+  variant,
+  onClick,
+}: {
+  variant: "ghost" | "outline";
+  onClick: () => void;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          size="icon"
+          variant={variant}
+          className="h-7 w-7 shrink-0"
+          aria-label="Save to Knowledge"
+          onClick={onClick}
+        >
+          <FilePlus2 className="h-3.5 w-3.5" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="top">Save to Knowledge</TooltipContent>
+    </Tooltip>
   );
 }
 

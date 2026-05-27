@@ -63,6 +63,7 @@ export type ToolHeaderProps = {
   state: ToolUIPart["state"] | "output-available-dual-llm" | "output-denied";
   className?: string;
   icon?: React.ReactNode;
+  statusIcon?: React.ReactNode;
   isCollapsible?: boolean;
   /** Optional action button to display in the header (e.g., View Logs) */
   actionButton?: React.ReactNode;
@@ -70,6 +71,7 @@ export type ToolHeaderProps = {
 
 const getStatusBadge = (
   status: ToolUIPart["state"] | "output-available-dual-llm" | "output-denied",
+  statusIcon?: React.ReactNode,
 ) => {
   const labels = {
     "input-streaming": "Pending",
@@ -97,7 +99,7 @@ const getStatusBadge = (
 
   return (
     <Badge className="gap-1.5 rounded-full text-xs" variant="secondary">
-      {icons[status]}
+      {statusIcon ?? icons[status]}
       {labels[status]}
     </Badge>
   );
@@ -109,6 +111,7 @@ export const ToolHeader = ({
   type,
   state,
   icon,
+  statusIcon,
   isCollapsible = true,
   actionButton,
   ...props
@@ -127,7 +130,7 @@ export const ToolHeader = ({
         <span className="font-medium text-sm">
           {title ?? type.split("-").slice(1).join("-")}
         </span>
-        {getStatusBadge(state)}
+        {getStatusBadge(state, statusIcon)}
       </div>
     </div>
     {actionButton && (

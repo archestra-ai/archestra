@@ -43,6 +43,20 @@ describe("castPatronus", () => {
 
     assert.deepEqual(first, second);
   });
+
+  it("matches the deterministic snapshot for a known user id", () => {
+    assert.deepEqual(
+      castPatronus({
+        userId: "user-123",
+        charm: "expecto_patronum",
+      }),
+      {
+        userId: "user-123",
+        form: "phoenix",
+        corporeal: true,
+      },
+    );
+  });
 });
 
 describe("authorizeTravel", () => {

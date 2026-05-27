@@ -14,9 +14,10 @@ Sorting Hat MCP is a first-party MCP server that demonstrates tool-call routing,
 Use this system instruction when wiring the server into an agent:
 
 ```text
-Before calling a sensitive MCP tool, call sorting_hat.sort with the tool name and description.
-If the result is slytherin, call patronus.cast for the current user before calling floo.travel.
-Keep the final explanation brief and include whether the call was authorized or blocked.
+Before each MCP tool takes flight, ask the Hat to judge it right.
+Call sorting_hat.sort with name and tale, then read the house before you sail.
+If slytherin shadows mark the track, cast patronus.cast before going back.
+Then floo.travel may carry the load; say if it passed or blocked the road.
 ```
 
 ## Run locally

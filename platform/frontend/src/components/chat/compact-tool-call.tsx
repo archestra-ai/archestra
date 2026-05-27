@@ -25,6 +25,10 @@ import {
 } from "@/lib/chat/chat-tools-display.utils";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { cn } from "@/lib/utils";
+import {
+  GoldenSnitchLoader,
+  hasGryffindorSorting,
+} from "./sorting-hat-tool-ui";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
 import { ToolStatusRow } from "./tool-status-row";
 
@@ -44,6 +48,7 @@ function CompactCircle({
   onClick,
   icon,
   catalogId,
+  showGoldenSnitch,
 }: {
   toolName: string;
   state: "running" | "completed" | "error";
@@ -52,6 +57,7 @@ function CompactCircle({
   onClick: () => void;
   icon?: string | null;
   catalogId?: string;
+  showGoldenSnitch?: boolean;
 }) {
   return (
     <TooltipProvider delayDuration={200}>
@@ -76,14 +82,20 @@ function CompactCircle({
             ) : (
               <BotIcon className="size-3.5 text-muted-foreground" />
             )}
-            <span
-              className={cn(
-                "absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background",
-                state === "completed" && "bg-green-500",
-                state === "running" && "bg-blue-500 animate-pulse",
-                state === "error" && "bg-destructive",
-              )}
-            />
+            {showGoldenSnitch && state === "running" ? (
+              <span className="-bottom-1 -right-1 absolute rounded-full border-2 border-background bg-background">
+                <GoldenSnitchLoader className="size-3.5" />
+              </span>
+            ) : (
+              <span
+                className={cn(
+                  "absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background",
+                  state === "completed" && "bg-green-500",
+                  state === "running" && "bg-blue-500 animate-pulse",
+                  state === "error" && "bg-destructive",
+                )}
+              />
+            )}
           </button>
         </TooltipTrigger>
         <TooltipContent side="top" className="text-xs">
@@ -134,6 +146,10 @@ export function CompactToolGroup({
       <div className="flex flex-wrap gap-1.5 items-center">
         {tools.map((tool) => {
           const iconInfo = toolIconMap?.get(tool.toolName);
+          const state = getCompactToolState({
+            part: tool.part,
+            toolResultPart: tool.toolResultPart,
+          });
           const fallbackCatalogId =
             iconInfo?.catalogId ??
             (isToolName(tool.toolName) ? ARCHESTRA_MCP_CATALOG_ID : undefined);
@@ -141,15 +157,16 @@ export function CompactToolGroup({
             <CompactCircle
               key={tool.key}
               toolName={tool.toolName}
-              state={getCompactToolState({
-                part: tool.part,
-                toolResultPart: tool.toolResultPart,
-              })}
+              state={state}
               isExpanded={expandedKey === tool.key}
               isExpandable={canExpandToolCalls}
               onClick={() => handleToggle(tool.key)}
               icon={iconInfo?.icon}
               catalogId={fallbackCatalogId}
+              showGoldenSnitch={hasGryffindorSorting(
+                tool.part,
+                tool.toolResultPart,
+              )}
             />
           );
         })}
@@ -196,6 +213,7 @@ function ExpandedToolCard({
     toolResultPart,
     errorText,
   });
+  const showGoldenSnitch = hasGryffindorSorting(part, toolResultPart);
 
   return (
     <Tool defaultOpen={true}>
@@ -204,6 +222,11 @@ function ExpandedToolCard({
         state={headerState}
         isCollapsible={hasContent}
         actionButton={logsButton}
+        statusIcon={
+          showGoldenSnitch && headerState === "input-available" ? (
+            <GoldenSnitchLoader />
+          ) : undefined
+        }
       />
       <ToolContent>
         {hasInput ? <ToolInput input={part.input} /> : null}

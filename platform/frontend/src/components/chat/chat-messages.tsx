@@ -112,6 +112,10 @@ import {
 } from "./message-boundary-divider";
 import { PolicyDeniedTool } from "./policy-denied-tool";
 import {
+  GoldenSnitchLoader,
+  hasGryffindorSorting,
+} from "./sorting-hat-tool-ui";
+import {
   getSwapAgentBoundaryLabel,
   SwapAgentBoundaryDivider,
 } from "./swap-agent-boundary";
@@ -1612,6 +1616,16 @@ const MessageTool = memo(
     const logsButton = errorText ? (
       <ToolErrorLogsButton toolName={toolName} />
     ) : null;
+    const headerState = getHeaderState({
+      state: part.state || "input-available",
+      toolResultPart,
+      errorText,
+    });
+    const showGoldenSnitch = hasGryffindorSorting(part, toolResultPart);
+    const statusIcon =
+      showGoldenSnitch && headerState === "input-available" ? (
+        <GoldenSnitchLoader />
+      ) : undefined;
 
     // MCP App tools: compact circle + canvas below (no collapsible wrapper)
     if (uiResourceUri && !isApprovalRequested && !errorText) {
@@ -1644,15 +1658,21 @@ const MessageTool = memo(
                     ) : (
                       <BotIcon className="size-3.5 text-muted-foreground" />
                     )}
-                    <span
-                      className={cn(
-                        "absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background",
-                        compactState === "completed" && "bg-green-500",
-                        compactState === "running" &&
-                          "bg-blue-500 animate-pulse",
-                        compactState === "error" && "bg-destructive",
-                      )}
-                    />
+                    {showGoldenSnitch && compactState === "running" ? (
+                      <span className="-bottom-1 -right-1 absolute rounded-full border-2 border-background bg-background">
+                        <GoldenSnitchLoader className="size-3.5" />
+                      </span>
+                    ) : (
+                      <span
+                        className={cn(
+                          "absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background",
+                          compactState === "completed" && "bg-green-500",
+                          compactState === "running" &&
+                            "bg-blue-500 animate-pulse",
+                          compactState === "error" && "bg-destructive",
+                        )}
+                      />
+                    )}
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="top" className="text-xs">
@@ -1666,12 +1686,9 @@ const MessageTool = memo(
               <Tool defaultOpen={true}>
                 <ToolHeader
                   type={`tool-${toolName}`}
-                  state={getHeaderState({
-                    state: part.state || "input-available",
-                    toolResultPart,
-                    errorText,
-                  })}
+                  state={headerState}
                   isCollapsible={!!hasInput}
+                  statusIcon={statusIcon}
                 />
                 <ToolContent>
                   {hasInput ? <ToolInput input={part.input} /> : null}
@@ -1723,13 +1740,10 @@ const MessageTool = memo(
       >
         <ToolHeader
           type={`tool-${toolName}`}
-          state={getHeaderState({
-            state: part.state || "input-available",
-            toolResultPart,
-            errorText,
-          })}
+          state={headerState}
           isCollapsible={isExpandable}
           actionButton={logsButton}
+          statusIcon={statusIcon}
         />
         <ToolContent forceMount={uiResourceUri ? true : undefined}>
           {hasInput ? <ToolInput input={part.input} /> : null}

@@ -16,6 +16,7 @@ export const SUPPORTED_THEMES = [
   "caffeine",
   "amber-minimal",
   "cosmic-night",
+  "forbidden-forest",
   "doom-64",
   "mocha-mousse",
   "nature",

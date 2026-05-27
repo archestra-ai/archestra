@@ -56,4 +56,29 @@ describe("CompactToolGroup", () => {
       "00000000-0000-4000-8000-000000000001",
     );
   });
+
+  it("uses the Golden Snitch loader for running Gryffindor-sorted tools", () => {
+    mockIsToolName.mockReturnValue(false);
+
+    render(
+      <CompactToolGroup
+        tools={[
+          {
+            key: "tool-1",
+            toolName: "sorting_hat.sort",
+            part: {
+              type: "tool-sorting_hat.sort",
+              state: "input-available",
+              toolCallId: "call-1",
+              input: { house: "gryffindor" },
+            },
+            toolResultPart: null,
+            errorText: undefined,
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByTestId("golden-snitch-loader")).toBeInTheDocument();
+  });
 });

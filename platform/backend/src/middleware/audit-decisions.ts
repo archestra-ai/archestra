@@ -180,6 +180,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "chat interaction execution state",
   },
+  chatAttachmentsTable: {
+    audited: false,
+    reason: "chat message attachments; high-volume, surfaced via /llm/logs",
+  },
 
   // =========================================================================
   // MCP gateway runtime (dedicated /mcp/logs)

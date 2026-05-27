@@ -200,7 +200,7 @@ describe("SkillsMarketplaceStep", () => {
     // canonical clone path uses the marketplace name so multiple shares don't clobber
     expect(
       screen.getByText(
-        `git clone ${CREATE_RESPONSE.cloneUrl} ~/archestra-skills/${CREATE_RESPONSE.marketplaceName}`,
+        `git clone ${CREATE_RESPONSE.cloneUrl} ~/.archestra/skills/${CREATE_RESPONSE.marketplaceName}`,
       ),
     ).toBeInTheDocument();
   });

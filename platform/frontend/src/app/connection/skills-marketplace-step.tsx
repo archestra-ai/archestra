@@ -447,7 +447,7 @@ function GenericInstallNote({
   cloneUrl: string;
   marketplaceName: string;
 }) {
-  const localPath = `~/archestra-skills/${marketplaceName}`;
+  const localPath = `~/.archestra/skills/${marketplaceName}`;
   const cloneCmd = `git clone ${cloneUrl} ${localPath}`;
   return (
     <section

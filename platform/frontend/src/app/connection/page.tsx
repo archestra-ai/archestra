@@ -35,27 +35,29 @@ export default function ConnectionPage() {
   const { canManage } = useCanManageGateway(summaryGateway ?? undefined);
 
   return (
-    <div className="mx-auto w-full max-w-[1680px] px-6 py-6">
-      <div className="mb-7 flex flex-col gap-5">
-        <ConnectionHero hasMcps={hasMcps} />
-        {summaryGatewayId && (
-          <ExposedServersSummary
-            gatewayId={summaryGatewayId}
-            canManage={canManage}
-          />
-        )}
-      </div>
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto w-full max-w-[1680px] px-6 py-6">
+        <div className="mb-7 flex flex-col gap-5">
+          <ConnectionHero hasMcps={hasMcps} />
+          {summaryGatewayId && (
+            <ExposedServersSummary
+              gatewayId={summaryGatewayId}
+              canManage={canManage}
+            />
+          )}
+        </div>
 
-      <ConnectionFlow
-        defaultMcpGatewayId={defaultMcpGateway?.id}
-        defaultLlmProxyId={defaultLlmProxy?.id}
-        adminDefaultMcpGatewayId={adminDefaultMcpGatewayId}
-        adminDefaultLlmProxyId={adminDefaultLlmProxyId}
-        adminDefaultClientId={adminDefaultClientId}
-        shownClientIds={organization?.connectionShownClientIds ?? null}
-        shownProviders={getShownProviders(organization)}
-        connectionBaseUrls={organization?.connectionBaseUrls ?? null}
-      />
+        <ConnectionFlow
+          defaultMcpGatewayId={defaultMcpGateway?.id}
+          defaultLlmProxyId={defaultLlmProxy?.id}
+          adminDefaultMcpGatewayId={adminDefaultMcpGatewayId}
+          adminDefaultLlmProxyId={adminDefaultLlmProxyId}
+          adminDefaultClientId={adminDefaultClientId}
+          shownClientIds={organization?.connectionShownClientIds ?? null}
+          shownProviders={getShownProviders(organization)}
+          connectionBaseUrls={organization?.connectionBaseUrls ?? null}
+        />
+      </div>
     </div>
   );
 }

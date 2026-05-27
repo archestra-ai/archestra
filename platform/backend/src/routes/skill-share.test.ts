@@ -64,7 +64,9 @@ describe("skill-share routes", () => {
       const body = response.json();
       expect(typeof body.rawToken).toBe("string");
       expect(body.rawToken).toMatch(/^archestra_skl_/);
-      expect(body.marketplaceName).toMatch(/^org-[a-f0-9]{1,8}-skills$/);
+      // <app>-<org>-skills; "archestra" is the default app slug, org slug
+      // is whatever the test fixture stamped on the organization row.
+      expect(body.marketplaceName).toMatch(/^archestra-[a-z0-9-]+-skills$/);
       expect(body.cloneUrl).toContain(`/skills/m/${body.rawToken}/repo.git`);
       expect(body.link.status).toBe("active");
       expect(body.link.skills).toHaveLength(1);

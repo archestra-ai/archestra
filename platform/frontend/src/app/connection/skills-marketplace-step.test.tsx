@@ -167,7 +167,7 @@ describe("SkillsMarketplaceStep", () => {
     expect(body.expiresAt).toMatch(/^\d{4}-/);
   });
 
-  it("shows both Claude Code and Codex snippets when 'Any client' is picked", async () => {
+  it("shows a generic clone-path guide when 'Any client' is picked (no client-specific snippets)", async () => {
     listLinksMock.mockReturnValue({
       data: { links: [] },
       isPending: false,
@@ -184,22 +184,41 @@ describe("SkillsMarketplaceStep", () => {
 
     await waitFor(() =>
       expect(
-        screen.getByTestId("skills-marketplace-snippets-claude-code"),
+        screen.getByTestId("skills-marketplace-snippets-generic"),
       ).toBeInTheDocument(),
     );
+    // none of the client-specific install panels render for "Any client"
     expect(
-      screen.getByTestId("skills-marketplace-snippets-codex"),
-    ).toBeInTheDocument();
+      screen.queryByTestId("skills-marketplace-snippets-claude-code"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("skills-marketplace-snippets-codex"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("skills-marketplace-snippets-cursor"),
+    ).not.toBeInTheDocument();
+    // canonical clone path uses the marketplace name so multiple shares don't clobber
     expect(
       screen.getByText(
-        `claude plugin marketplace add ${CREATE_RESPONSE.cloneUrl}`,
+        `git clone ${CREATE_RESPONSE.cloneUrl} ~/archestra-skills/${CREATE_RESPONSE.marketplaceName}`,
       ),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        `codex plugin marketplace add ${CREATE_RESPONSE.cloneUrl}`,
-      ),
-    ).toBeInTheDocument();
+  });
+
+  it("renders nothing when the picked client doesn't support skill marketplaces", () => {
+    listLinksMock.mockReturnValue({
+      data: { links: [] },
+      isPending: false,
+    });
+    const unsupportedClient = findClient("n8n");
+    const { container } = render(
+      <SkillsMarketplaceStep
+        client={unsupportedClient}
+        expanded
+        onToggle={() => {}}
+      />,
+    );
+    expect(container.textContent).toBe("");
   });
 
   it("filters snippets to the chosen client", async () => {
@@ -251,8 +270,9 @@ describe("SkillsMarketplaceStep", () => {
     expect(vars.body.skillIds).toEqual(["skill-1", "skill-2"]);
 
     await waitFor(() =>
+      // the client here is "Any client" → generic install guide, not claude-code
       expect(
-        screen.getByTestId("skills-marketplace-snippets-claude-code"),
+        screen.getByTestId("skills-marketplace-snippets-generic"),
       ).toBeInTheDocument(),
     );
   });

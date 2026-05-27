@@ -4,11 +4,13 @@ import {
   buildClaudePluginManifest,
   buildCodexMarketplaceManifest,
   buildCodexPluginManifest,
+  buildCursorMarketplaceManifest,
+  buildCursorPluginManifest,
   isReservedMarketplaceName,
   type MarketplaceSkillInput,
   RESERVED_MARKETPLACE_NAMES,
+  resolveBundleVersion,
   resolveMarketplaceSkills,
-  resolveSkillVersion,
 } from "./manifest";
 
 function makeSkill(
@@ -23,38 +25,46 @@ function makeSkill(
   };
 }
 
-describe("resolveSkillVersion", () => {
-  test("uses skill.version verbatim when set", () => {
-    expect(resolveSkillVersion(makeSkill({ version: "1.2.3" }))).toBe("1.2.3");
-  });
-
-  test("treats blank/undefined version as missing and synthesizes a hash", () => {
-    const synthesized = resolveSkillVersion(makeSkill());
-    expect(synthesized).toMatch(/^0\.0\.0\+[a-f0-9]{12}$/);
-    expect(resolveSkillVersion(makeSkill({ version: "" }))).toBe(synthesized);
-    expect(resolveSkillVersion(makeSkill({ version: "   " }))).toBe(
-      synthesized,
+describe("resolveBundleVersion", () => {
+  test("emits 0.0.0+<12 hex> for a non-empty input", () => {
+    expect(resolveBundleVersion([makeSkill()])).toMatch(
+      /^0\.0\.0\+[a-f0-9]{12}$/,
     );
-    expect(resolveSkillVersion(makeSkill({ version: null }))).toBe(synthesized);
   });
 
-  test("synthesized version is deterministic across calls", () => {
-    const skill = makeSkill();
-    expect(resolveSkillVersion(skill)).toBe(resolveSkillVersion(skill));
+  test("is deterministic across calls with the same input", () => {
+    const skills = [
+      makeSkill({ id: "a", name: "Alpha" }),
+      makeSkill({ id: "b", name: "Beta" }),
+    ];
+    expect(resolveBundleVersion(skills)).toBe(resolveBundleVersion(skills));
   });
 
-  test("synthesized version changes when updatedAt changes", () => {
-    const a = resolveSkillVersion(makeSkill());
-    const b = resolveSkillVersion(
+  test("is independent of input order (sorted internally)", () => {
+    const ordered = [
+      makeSkill({ id: "a", name: "Alpha" }),
+      makeSkill({ id: "b", name: "Beta" }),
+    ];
+    const reversed = [...ordered].reverse();
+    expect(resolveBundleVersion(ordered)).toBe(resolveBundleVersion(reversed));
+  });
+
+  test("changes when any skill's updatedAt changes", () => {
+    const a = resolveBundleVersion([makeSkill()]);
+    const b = resolveBundleVersion([
       makeSkill({ updatedAt: new Date("2026-06-01T00:00:00.000Z") }),
-    );
+    ]);
     expect(a).not.toBe(b);
   });
 
-  test("synthesized version changes when id changes", () => {
-    const a = resolveSkillVersion(makeSkill({ id: "a" }));
-    const b = resolveSkillVersion(makeSkill({ id: "b" }));
+  test("changes when the set of skill ids changes", () => {
+    const a = resolveBundleVersion([makeSkill({ id: "x" })]);
+    const b = resolveBundleVersion([makeSkill({ id: "y" })]);
     expect(a).not.toBe(b);
+  });
+
+  test("empty input returns a stable sentinel", () => {
+    expect(resolveBundleVersion([])).toBe("0.0.0+empty");
   });
 });
 
@@ -84,7 +94,6 @@ describe("resolveMarketplaceSkills", () => {
     const [skill] = resolveMarketplaceSkills([
       makeSkill({ id: "abcdef1234567890", name: "!!!" }),
     ]);
-    expect(skill.slug).toMatch(/^skill-[a-z0-9]+$/);
     expect(skill.slug).toBe("skill-abcdef12");
   });
 
@@ -98,129 +107,146 @@ describe("resolveMarketplaceSkills", () => {
       "a",
     ]);
   });
-
-  test("attaches the resolved version on each entry", () => {
-    const [resolved] = resolveMarketplaceSkills([
-      makeSkill({ version: "9.9.9" }),
-    ]);
-    expect(resolved.version).toBe("9.9.9");
-  });
 });
 
 describe("buildClaudeMarketplaceManifest", () => {
-  test("snapshots the single-skill shape", () => {
+  test("emits a single bundle plugin pointing at plugins/<marketplaceName>", () => {
     const manifest = buildClaudeMarketplaceManifest({
-      marketplaceName: "org-abcd1234-skills",
+      marketplaceName: "archestra-acme-skills",
       ownerName: "Acme Corp",
-      skills: [makeSkill({ name: "PDF Helper" })],
+      skills: [
+        makeSkill({ id: "a", name: "PDF Helper" }),
+        makeSkill({ id: "b", name: "CSV Tools" }),
+      ],
     });
     expect(manifest).toEqual({
-      name: "org-abcd1234-skills",
+      name: "archestra-acme-skills",
       owner: { name: "Acme Corp" },
       plugins: [
         {
-          name: "pdf-helper",
-          source: "./plugins/pdf-helper",
-          description: "Helps with PDFs",
+          name: "archestra-acme-skills",
+          source: "./plugins/archestra-acme-skills",
+          description: "2 skills shared from Acme Corp",
           version: expect.stringMatching(/^0\.0\.0\+[a-f0-9]{12}$/),
         },
       ],
     });
   });
 
-  test("emits one entry per skill in input order with disambiguated slugs", () => {
+  test("uses singular 'skill' when exactly one is shared", () => {
     const manifest = buildClaudeMarketplaceManifest({
       marketplaceName: "m",
       ownerName: "Owner",
-      skills: [
-        makeSkill({ id: "1", name: "Alpha" }),
-        makeSkill({ id: "2", name: "Beta" }),
-        makeSkill({ id: "3", name: "ALPHA" }),
-      ],
+      skills: [makeSkill()],
     });
-    expect(manifest.plugins.map((p) => p.name)).toEqual([
-      "alpha",
-      "beta",
-      "alpha-2",
-    ]);
-    expect(manifest.plugins.map((p) => p.source)).toEqual([
-      "./plugins/alpha",
-      "./plugins/beta",
-      "./plugins/alpha-2",
-    ]);
-  });
-
-  test("propagates explicit skill.version", () => {
-    const manifest = buildClaudeMarketplaceManifest({
-      marketplaceName: "m",
-      ownerName: "o",
-      skills: [makeSkill({ version: "2.0.1" })],
-    });
-    expect(manifest.plugins[0].version).toBe("2.0.1");
+    expect(manifest.plugins[0].description).toBe("1 skill shared from Owner");
   });
 });
 
 describe("buildCodexMarketplaceManifest", () => {
-  test("snapshots the single-skill shape", () => {
+  test("emits a single bundle plugin with Codex policy + category", () => {
     const manifest = buildCodexMarketplaceManifest({
-      marketplaceName: "org-abcd1234-skills",
+      marketplaceName: "archestra-acme-skills",
       displayName: "Acme Skills",
       skills: [makeSkill({ name: "PDF Helper" })],
     });
     expect(manifest).toEqual({
-      name: "org-abcd1234-skills",
+      name: "archestra-acme-skills",
       displayName: "Acme Skills",
       plugins: [
         {
-          name: "pdf-helper",
-          source: { source: "local", path: "./plugins/pdf-helper" },
+          name: "archestra-acme-skills",
+          source: {
+            source: "local",
+            path: "./plugins/archestra-acme-skills",
+          },
           policy: {
             installation: "AVAILABLE",
             authentication: "ON_INSTALL",
           },
           category: "Skill",
           version: expect.stringMatching(/^0\.0\.0\+[a-f0-9]{12}$/),
-          description: "Helps with PDFs",
+          description: "1 skill shared from Acme Skills",
         },
       ],
     });
   });
-
-  test("emits one entry per skill in input order with disambiguated slugs", () => {
-    const manifest = buildCodexMarketplaceManifest({
-      marketplaceName: "m",
-      displayName: "Display",
-      skills: [
-        makeSkill({ id: "1", name: "Alpha" }),
-        makeSkill({ id: "2", name: "ALPHA" }),
-      ],
-    });
-    expect(manifest.plugins.map((p) => p.name)).toEqual(["alpha", "alpha-2"]);
-    expect(manifest.plugins[0].source.path).toBe("./plugins/alpha");
-    expect(manifest.plugins[1].source.path).toBe("./plugins/alpha-2");
-  });
 });
 
 describe("buildClaudePluginManifest", () => {
-  test("returns name, description, version", () => {
-    const skill = makeSkill();
-    expect(buildClaudePluginManifest({ skill, slug: "pdf-helper" })).toEqual({
-      name: "pdf-helper",
-      description: skill.description,
-      version: resolveSkillVersion(skill),
+  test("returns the bundle's name/description/version", () => {
+    const skills = [
+      makeSkill({ id: "a", name: "Alpha" }),
+      makeSkill({ id: "b", name: "Beta" }),
+    ];
+    expect(
+      buildClaudePluginManifest({
+        marketplaceName: "archestra-acme-skills",
+        ownerName: "Acme Corp",
+        skills,
+      }),
+    ).toEqual({
+      name: "archestra-acme-skills",
+      description: "2 skills shared from Acme Corp",
+      version: resolveBundleVersion(skills),
     });
   });
 });
 
 describe("buildCodexPluginManifest", () => {
-  test("returns the Codex per-plugin shape", () => {
-    const skill = makeSkill();
-    expect(buildCodexPluginManifest({ skill, slug: "pdf-helper" })).toEqual({
-      name: "pdf-helper",
-      version: resolveSkillVersion(skill),
-      description: skill.description,
+  test("points at ./skills/ and stamps the display name on the interface", () => {
+    const skills = [makeSkill()];
+    expect(
+      buildCodexPluginManifest({
+        marketplaceName: "archestra-acme-skills",
+        displayName: "Acme Skills",
+        skills,
+      }),
+    ).toEqual({
+      name: "archestra-acme-skills",
+      version: resolveBundleVersion(skills),
+      description: "1 skill shared from Acme Skills",
       skills: "./skills/",
-      interface: { displayName: skill.name },
+      interface: { displayName: "Acme Skills" },
+    });
+  });
+});
+
+describe("buildCursorMarketplaceManifest", () => {
+  test("mirrors Claude's shape under .cursor-plugin/", () => {
+    const manifest = buildCursorMarketplaceManifest({
+      marketplaceName: "archestra-acme-skills",
+      ownerName: "Acme Corp",
+      skills: [makeSkill({ name: "PDF Helper" })],
+    });
+    expect(manifest).toEqual({
+      name: "archestra-acme-skills",
+      owner: { name: "Acme Corp" },
+      plugins: [
+        {
+          name: "archestra-acme-skills",
+          source: "./plugins/archestra-acme-skills",
+          description: "1 skill shared from Acme Corp",
+          version: expect.stringMatching(/^0\.0\.0\+[a-f0-9]{12}$/),
+        },
+      ],
+    });
+  });
+});
+
+describe("buildCursorPluginManifest", () => {
+  test("returns the bundle's name/description/version", () => {
+    const skills = [makeSkill()];
+    expect(
+      buildCursorPluginManifest({
+        marketplaceName: "archestra-acme-skills",
+        ownerName: "Acme Corp",
+        skills,
+      }),
+    ).toEqual({
+      name: "archestra-acme-skills",
+      description: "1 skill shared from Acme Corp",
+      version: resolveBundleVersion(skills),
     });
   });
 });
@@ -238,6 +264,6 @@ describe("reserved marketplace names", () => {
   });
 
   test("allows org-scoped marketplace names", () => {
-    expect(isReservedMarketplaceName("org-abcd1234-skills")).toBe(false);
+    expect(isReservedMarketplaceName("archestra-acme-skills")).toBe(false);
   });
 });

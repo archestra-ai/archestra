@@ -668,10 +668,6 @@ const config = {
   },
   git: {
     binaryPath: process.env.ARCHESTRA_GIT_BINARY_PATH?.trim() || "git",
-    /** Committer identity stamped on every materialized marketplace commit. */
-    author:
-      process.env.ARCHESTRA_GIT_AUTHOR?.trim() ||
-      "Archestra Marketplace <marketplace@archestra.local>",
   },
   a2aGateway: {
     endpoint: "/v1/a2a",

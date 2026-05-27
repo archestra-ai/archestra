@@ -10,9 +10,17 @@ lastUpdated: 2026-05-27
 Check ../docs_writer_prompt.md before changing this file.
 -->
 
-Archestra skills can be installed into a teammate's local Claude Code or Codex CLI through each tool's native plugin marketplace. A signed share link points the client at an Archestra-hosted git repository that serves both marketplaces in parallel — Claude reads `.claude-plugin/marketplace.json`, Codex reads `.agents/plugins/marketplace.json`, and the underlying `SKILL.md` files are identical.
+Archestra skills can be installed into your local Claude Code, Codex CLI, or Cursor IDE through each tool's native plugin marketplace. A signed share link points the client at an Archestra-hosted git repository that serves all three marketplaces in parallel — Claude reads `.claude-plugin/marketplace.json`, Codex reads `.agents/plugins/marketplace.json`, Cursor reads `.cursor-plugin/marketplace.json`, and the underlying `SKILL.md` files are identical.
 
-The marketplace lives at `/connection` alongside the MCP Gateway and LLM Proxy connection flows. Picking a client (or "Any client") expands a "Share skills as a marketplace" step that snapshots every current skill into one link.
+Every shared skill is bundled into a single plugin so the user installs one thing instead of one-per-skill. The plugin name is the marketplace name (e.g. `archestra-acme-corp-skills`), and each skill lives under `skills/<slug>/` inside that plugin. Anthropic's official marketplaces follow the same one-plugin-per-toolkit convention.
+
+The marketplace lives at `/connection` alongside the MCP Gateway and LLM Proxy connection flows. Picking a client (or "Any client") expands an "Install shared skills" step that snapshots every current skill into one link.
+
+## Marketplace name
+
+The marketplace name is generated at create time and frozen on the link, since clients register marketplaces by name in their local config — changing it later would silently break every installed marketplace.
+
+Format: `<app-slug>-<org-slug>-skills` (e.g. `archestra-acme-corp-skills`). The app slug comes from the org's `appName` appearance setting and falls back to `archestra` when no white-label name is configured; the org slug comes from the better-auth organization row and falls back to a slugified org name, then a hex prefix of the org id.
 
 ## Who can share
 
@@ -38,7 +46,13 @@ codex plugin marketplace add <clone-url>
 /plugins  # then select "Install Plugin"
 ```
 
-The `/connection` step generates both snippets for the selected client and lets you copy them with one click.
+**Cursor**
+
+```
+/add-plugin <clone-url>
+```
+
+The `/connection` step generates the right snippet for the selected client and lets you copy it with one click. Picking "Any client" shows all three.
 
 ## Snapshot semantics
 
@@ -56,8 +70,9 @@ Every clone is audit-logged with the share-link ID and skill IDs — the raw tok
 
 ## Configuration
 
-Deployment-side configuration lives in three environment variables documented in [platform-deployment](/docs/platform-deployment#environment-variables):
+Deployment-side configuration lives in two environment variables documented in [platform-deployment](/docs/platform-deployment#environment-variables):
 
 - `ARCHESTRA_GIT_BINARY_PATH` — path to the `git` binary; the public endpoint shells out to `git http-backend` (CGI).
-- `ARCHESTRA_GIT_AUTHOR` — author/committer identity stamped on every materialized commit.
 - `ARCHESTRA_SKILL_MARKETPLACE_CACHE_DIR` — directory holding materialized repos. Defaults to `~/.archestra/skill-marketplace-cache`. The authoritative history lives in `skill_share_link_revision`, so the cache is safe to wipe; in prod, mount a persistent volume here to skip rebuilds on container restart.
+
+The git committer identity stamped on materialized commits is hardcoded (`Archestra Marketplace <marketplace@archestra.local>`) because the deterministic-replay contract folds it into every commit SHA; making it deployment-configurable would orphan stored revisions the moment a new value rolled out.

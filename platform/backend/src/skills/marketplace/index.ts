@@ -5,7 +5,17 @@ import { MarketplaceMaterializer } from "./materialize";
  * Process-wide materializer singleton. State is the in-memory per-link mutex
  * map + the on-disk cache dir; both must be shared across every route plugin
  * and admin handler that touches a share link.
+ *
+ * Committer identity is intentionally hardcoded: the materializer's
+ * deterministic-replay contract folds author+committer name/email into the
+ * commit SHA, so a per-deployment override would orphan every revision row
+ * the moment a new value rolled out.
  */
+const MARKETPLACE_GIT_IDENTITY = {
+  name: "Archestra Marketplace",
+  email: "marketplace@archestra.local",
+} as const;
+
 class MarketplaceMaterializerSingleton {
   private instance: MarketplaceMaterializer | null = null;
 
@@ -14,7 +24,7 @@ class MarketplaceMaterializerSingleton {
     this.instance = new MarketplaceMaterializer({
       cacheDir: config.skillMarketplace.cacheDir,
       gitBinaryPath: config.git.binaryPath,
-      identity: parseGitAuthor(config.git.author),
+      identity: MARKETPLACE_GIT_IDENTITY,
     });
     return this.instance;
   }
@@ -26,14 +36,3 @@ class MarketplaceMaterializerSingleton {
 }
 
 export const marketplaceMaterializer = new MarketplaceMaterializerSingleton();
-
-// ===== Internal helpers =====
-
-/** Parses `Name <email>` (RFC 5322-lite) into the materializer's identity shape. */
-function parseGitAuthor(raw: string): { name: string; email: string } {
-  const match = raw.match(/^\s*(.+?)\s*<([^>]+)>\s*$/);
-  if (match) {
-    return { name: match[1], email: match[2] };
-  }
-  return { name: raw.trim() || "Archestra Marketplace", email: "" };
-}

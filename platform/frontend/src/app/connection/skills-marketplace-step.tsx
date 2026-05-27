@@ -67,21 +67,22 @@ export function SkillsMarketplaceStep({
 
   if (!skillsEnabled || !canAdmin) return null;
 
-  const supported = isClientSupported(client);
+  // hide the step entirely when the picked client doesn't support installable
+  // skill marketplaces — the user already knows their tool doesn't support it,
+  // we don't need to apologize in the UI.
+  if (client && !isClientSupported(client)) return null;
+
   const state: StepState = !client ? "todo" : expanded ? "active" : "todo";
 
   return (
     <StepCard
       hideStatus
-      title="Share Skills"
+      title="Install shared skills"
       state={state}
       expanded={expanded && !!client}
       onToggle={client ? onToggle : undefined}
     >
-      {client && supported && <SkillsMarketplaceBody client={client} />}
-      {client && !supported && (
-        <UnsupportedClientNote clientLabel={client.label} />
-      )}
+      {client && <SkillsMarketplaceBody client={client} />}
     </StepCard>
   );
 }
@@ -433,16 +434,82 @@ function RevealedLinkSnippets({
         </div>
         <CopyableCode value={cloneUrl} />
       </div>
-      {clients.map((c) => (
-        <ClientInstallSnippets
-          key={c.id}
-          client={c}
+      {clients.length === 0 ? (
+        <GenericInstallNote
           cloneUrl={cloneUrl}
           marketplaceName={marketplaceName}
-          appName={appName}
         />
-      ))}
+      ) : (
+        clients.map((c) => (
+          <ClientInstallSnippets
+            key={c.id}
+            client={c}
+            cloneUrl={cloneUrl}
+            marketplaceName={marketplaceName}
+            appName={appName}
+          />
+        ))
+      )}
     </div>
+  );
+}
+
+function GenericInstallNote({
+  cloneUrl,
+  marketplaceName,
+}: {
+  cloneUrl: string;
+  marketplaceName: string;
+}) {
+  const localPath = `~/archestra-skills/${marketplaceName}`;
+  const cloneCmd = `git clone ${cloneUrl} ${localPath}`;
+  return (
+    <section
+      data-testid="skills-marketplace-snippets-generic"
+      className="flex flex-col gap-2 rounded-md border bg-muted/10 p-4"
+    >
+      <header>
+        <div className="text-sm font-semibold">Other client</div>
+        <div className="text-xs text-muted-foreground">
+          Generic install — bring your own plugin/skill marketplace flow
+        </div>
+      </header>
+      <ol className="flex flex-col gap-2">
+        <li className="flex flex-col gap-1.5 rounded border bg-background px-3 py-2 text-sm">
+          <div className="flex items-baseline gap-2">
+            <span className="font-mono text-xs text-muted-foreground">1.</span>
+            <span className="font-medium">
+              Clone the marketplace to a canonical path
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            The repo bundles <code className="font-mono">.claude-plugin/</code>,{" "}
+            <code className="font-mono">.agents/</code>, and{" "}
+            <code className="font-mono">.cursor-plugin/</code> manifests plus a
+            shared <code className="font-mono">skills/</code> tree. Cloning once
+            locally lets any client read whichever manifest it knows.
+          </p>
+          <div className="flex items-center justify-between gap-2 rounded bg-muted/40 px-2.5 py-1.5 font-mono text-xs">
+            <code className="overflow-x-auto whitespace-pre">{cloneCmd}</code>
+            <CopyButton text={cloneCmd} />
+          </div>
+        </li>
+        <li className="flex flex-col gap-1.5 rounded border bg-background px-3 py-2 text-sm">
+          <div className="flex items-baseline gap-2">
+            <span className="font-mono text-xs text-muted-foreground">2.</span>
+            <span className="font-medium">
+              Follow your client's marketplace docs
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Point your client at <code className="font-mono">{localPath}</code>{" "}
+            (or the clone URL above) using whichever local-marketplace /
+            skills-import flow it supports. For Claude Code, Codex, or Cursor,
+            pick that client at the top of this page for the exact commands.
+          </p>
+        </li>
+      </ol>
+    </section>
   );
 }
 
@@ -515,27 +582,21 @@ function SecurityNote() {
   );
 }
 
-function UnsupportedClientNote({ clientLabel }: { clientLabel: string }) {
-  return (
-    <div className="rounded-lg border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
-      Skill marketplaces work with Claude Code and Codex. {clientLabel} doesn't
-      support agent skills yet.
-    </div>
-  );
-}
-
 function isClientSupported(client: ConnectClient | null): boolean {
   if (!client) return false;
   return (
     client.id === "claude-code" ||
     client.id === "codex" ||
+    client.id === "cursor" ||
     client.id === "generic"
   );
 }
 
 function pickClientsFor(client: ConnectClient): SkillMarketplaceClient[] {
-  // "Any client" (generic) → show both. Otherwise filter to the matching one.
-  if (client.id === "generic") return SKILL_MARKETPLACE_CLIENTS;
+  // "Any client" → user explicitly picked something other than the listed
+  // ones, so showing Claude / Codex / Cursor install snippets is just noise.
+  // RevealedLinkSnippets falls back to a generic clone-path guide instead.
+  if (client.id === "generic") return [];
   return SKILL_MARKETPLACE_CLIENTS.filter((c) => c.id === client.id);
 }
 

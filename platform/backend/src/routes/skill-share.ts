@@ -1,9 +1,9 @@
-import { RouteId } from "@shared";
+import { DEFAULT_APP_NAME, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import logger from "@/logging";
-import { SkillModel, SkillShareLinkModel } from "@/models";
+import { OrganizationModel, SkillModel, SkillShareLinkModel } from "@/models";
 import { marketplaceMaterializer } from "@/skills/marketplace";
 import { isReservedMarketplaceName } from "@/skills/marketplace/manifest";
 import {
@@ -101,7 +101,7 @@ const skillShareRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const skillIds = dedupe(body.skillIds);
       await assertSkillsBelongToOrg({ skillIds, organizationId });
 
-      const marketplaceName = deriveMarketplaceName(organizationId);
+      const marketplaceName = await deriveMarketplaceName(organizationId);
       if (isReservedMarketplaceName(marketplaceName)) {
         throw new ApiError(
           400,
@@ -222,15 +222,40 @@ async function assertSkillsBelongToOrg(params: {
 }
 
 /**
- * The marketplace name is frozen at create time and embedded in the manifest.
- * Clients register marketplaces by name in their local config, so a name that
- * tracks a mutable org slug would silently break every installed marketplace.
- * Format: `org-<first 8 hex of org uuid>-skills`.
+ * Marketplace name is frozen at create time and registered in the user's local
+ * client config under this exact name — changing it later would silently break
+ * every installed marketplace, so we snapshot the current app+org branding now.
+ *
+ * Format: `<app-slug>-<org-slug>-skills`, e.g. `archestra-acme-corp-skills`.
+ * Falls back to a hex slice of the org id if both slug and name are unusable.
  */
-function deriveMarketplaceName(organizationId: string): string {
+async function deriveMarketplaceName(organizationId: string): Promise<string> {
+  const org = await OrganizationModel.getById(organizationId);
+  const appSlug = slugify(org?.appName ?? DEFAULT_APP_NAME) || "archestra";
+  const orgSlug =
+    slugify(org?.slug ?? "") ||
+    slugify(org?.name ?? "") ||
+    hexFallback(organizationId);
+  return capLength(`${appSlug}-${orgSlug}-skills`);
+}
+
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function hexFallback(organizationId: string): string {
   const cleaned = organizationId.replace(/[^a-fA-F0-9]/g, "").toLowerCase();
-  const shortId = cleaned.slice(0, 8) || "default0";
-  return `org-${shortId}-skills`;
+  return cleaned.slice(0, 8) || "default0";
+}
+
+/** Hard cap so the name stays comfortable in client config / shell completion. */
+function capLength(name: string): string {
+  const MAX = 96;
+  return name.length <= MAX ? name : name.slice(0, MAX).replace(/-+$/g, "");
 }
 
 function dedupe(values: string[]): string[] {

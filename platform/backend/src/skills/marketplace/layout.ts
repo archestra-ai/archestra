@@ -8,6 +8,8 @@ import {
   buildClaudePluginManifest,
   buildCodexMarketplaceManifest,
   buildCodexPluginManifest,
+  buildCursorMarketplaceManifest,
+  buildCursorPluginManifest,
   type MarketplaceSkillInput,
   resolveMarketplaceSkills,
 } from "./manifest";
@@ -15,7 +17,8 @@ import {
 /**
  * Pure layout builder: turns a `MaterializeRequest` into the flat list of
  * files that make up the marketplace git tree (`.claude-plugin/`, `.agents/`,
- * per-skill plugin manifests, SKILL.md, and user resource files).
+ * the single bundle plugin, and one `skills/<slug>/` directory per shared
+ * skill with its SKILL.md + resource files).
  *
  * Output is consumed both by the content-hash dedupe and the on-disk commit
  * step in `materialize.ts`. Doing this purely (no I/O) lets us hash the
@@ -44,15 +47,14 @@ export interface MaterializeRequest {
 }
 
 export function computeLayout(req: MaterializeRequest): RevisionPayloadFile[] {
-  const resolved = resolveMarketplaceSkills(
-    req.skills.map<MarketplaceSkillInput>((skill) => ({
-      id: skill.id,
-      name: skill.name,
-      description: skill.description,
-      version: skill.version,
-      updatedAt: skill.updatedAt,
-    })),
-  );
+  const manifestSkills = req.skills.map<MarketplaceSkillInput>((skill) => ({
+    id: skill.id,
+    name: skill.name,
+    description: skill.description,
+    version: skill.version,
+    updatedAt: skill.updatedAt,
+  }));
+  const resolved = resolveMarketplaceSkills(manifestSkills);
 
   const files: RevisionPayloadFile[] = [];
 
@@ -63,7 +65,7 @@ export function computeLayout(req: MaterializeRequest): RevisionPayloadFile[] {
         buildClaudeMarketplaceManifest({
           marketplaceName: req.marketplaceName,
           ownerName: req.ownerName,
-          skills: resolved,
+          skills: manifestSkills,
         }),
       ),
     ),
@@ -75,7 +77,57 @@ export function computeLayout(req: MaterializeRequest): RevisionPayloadFile[] {
         buildCodexMarketplaceManifest({
           marketplaceName: req.marketplaceName,
           displayName: req.displayName,
-          skills: resolved,
+          skills: manifestSkills,
+        }),
+      ),
+    ),
+  );
+  files.push(
+    textFile(
+      ".cursor-plugin/marketplace.json",
+      jsonStringify(
+        buildCursorMarketplaceManifest({
+          marketplaceName: req.marketplaceName,
+          ownerName: req.ownerName,
+          skills: manifestSkills,
+        }),
+      ),
+    ),
+  );
+
+  const pluginRoot = `plugins/${req.marketplaceName}`;
+  files.push(
+    textFile(
+      `${pluginRoot}/.claude-plugin/plugin.json`,
+      jsonStringify(
+        buildClaudePluginManifest({
+          marketplaceName: req.marketplaceName,
+          ownerName: req.ownerName,
+          skills: manifestSkills,
+        }),
+      ),
+    ),
+  );
+  files.push(
+    textFile(
+      `${pluginRoot}/.codex-plugin/plugin.json`,
+      jsonStringify(
+        buildCodexPluginManifest({
+          marketplaceName: req.marketplaceName,
+          displayName: req.displayName,
+          skills: manifestSkills,
+        }),
+      ),
+    ),
+  );
+  files.push(
+    textFile(
+      `${pluginRoot}/.cursor-plugin/plugin.json`,
+      jsonStringify(
+        buildCursorPluginManifest({
+          marketplaceName: req.marketplaceName,
+          ownerName: req.ownerName,
+          skills: manifestSkills,
         }),
       ),
     ),
@@ -86,34 +138,9 @@ export function computeLayout(req: MaterializeRequest): RevisionPayloadFile[] {
     const skill = skillById.get(id);
     if (!skill) continue;
 
-    const skillInput: MarketplaceSkillInput = {
-      id: skill.id,
-      name: skill.name,
-      description: skill.description,
-      version: skill.version,
-      updatedAt: skill.updatedAt,
-    };
+    const skillRoot = `${pluginRoot}/skills/${slug}`;
+    files.push(textFile(`${skillRoot}/SKILL.md`, buildSkillMarkdown(skill)));
 
-    files.push(
-      textFile(
-        `plugins/${slug}/.claude-plugin/plugin.json`,
-        jsonStringify(buildClaudePluginManifest({ skill: skillInput, slug })),
-      ),
-    );
-    files.push(
-      textFile(
-        `plugins/${slug}/.codex-plugin/plugin.json`,
-        jsonStringify(buildCodexPluginManifest({ skill: skillInput, slug })),
-      ),
-    );
-    files.push(
-      textFile(
-        `plugins/${slug}/skills/${slug}/SKILL.md`,
-        buildSkillMarkdown(skill),
-      ),
-    );
-
-    const skillRoot = `plugins/${slug}/skills/${slug}`;
     for (const file of skill.files) {
       const resolvedFile = resolveResourceFile({ file, skillRoot });
       if (resolvedFile) files.push(resolvedFile);

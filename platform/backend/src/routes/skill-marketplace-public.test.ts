@@ -249,8 +249,13 @@ describe.skipIf(!GIT_HTTP_BACKEND_AVAILABLE)(
         ),
       );
       expect(claudeManifest.name).toBe("org-test-skills");
+      // single bundle plugin named after the marketplace; individual skills
+      // live as subdirs under that plugin's skills/ directory.
       expect(claudeManifest.plugins).toHaveLength(1);
-      expect(claudeManifest.plugins[0].name).toBe("clone-me");
+      expect(claudeManifest.plugins[0].name).toBe("org-test-skills");
+      expect(claudeManifest.plugins[0].source).toBe(
+        "./plugins/org-test-skills",
+      );
 
       const codexManifest = JSON.parse(
         await fs.readFile(
@@ -260,11 +265,22 @@ describe.skipIf(!GIT_HTTP_BACKEND_AVAILABLE)(
       );
       expect(codexManifest.plugins[0].source).toEqual({
         source: "local",
-        path: "./plugins/clone-me",
+        path: "./plugins/org-test-skills",
       });
 
+      const cursorManifest = JSON.parse(
+        await fs.readFile(
+          path.join(target, ".cursor-plugin/marketplace.json"),
+          "utf8",
+        ),
+      );
+      expect(cursorManifest.plugins).toHaveLength(1);
+      expect(cursorManifest.plugins[0].source).toBe(
+        "./plugins/org-test-skills",
+      );
+
       const skillMd = await fs.readFile(
-        path.join(target, "plugins/clone-me/skills/clone-me/SKILL.md"),
+        path.join(target, "plugins/org-test-skills/skills/clone-me/SKILL.md"),
         "utf8",
       );
       expect(skillMd).toContain("name: Clone Me");

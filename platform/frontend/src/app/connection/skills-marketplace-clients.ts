@@ -11,7 +11,7 @@ export interface SkillMarketplaceInstallStep {
 }
 
 export interface SkillMarketplaceClient {
-  id: "claude-code" | "codex";
+  id: "claude-code" | "codex" | "cursor";
   label: string;
   sub: string;
   getInstallSteps: (
@@ -36,8 +36,8 @@ export const SKILL_MARKETPLACE_CLIENTS: SkillMarketplaceClient[] = [
         language: "bash",
       },
       {
-        label: "Browse and install skills",
-        body: "Run /plugin inside Claude Code; every shared skill appears as an installable plugin.",
+        label: "Browse and install the skill bundle",
+        body: "Run /plugin inside Claude Code; the shared skills are bundled into a single installable plugin.",
         code: `/plugin marketplace browse ${marketplaceName}`,
         language: "bash",
       },
@@ -54,10 +54,28 @@ export const SKILL_MARKETPLACE_CLIENTS: SkillMarketplaceClient[] = [
         language: "bash",
       },
       {
-        label: "Install a plugin",
-        body: 'Run /plugins inside Codex and pick "Install Plugin" to choose any shared skill.',
+        label: "Install the skill bundle",
+        body: 'Run /plugins inside Codex and pick "Install Plugin" to install the bundled skills.',
         code: "/plugins",
         language: "bash",
+      },
+    ],
+  },
+  {
+    id: "cursor",
+    label: "Cursor",
+    sub: "Cursor IDE",
+    getInstallSteps: ({ cloneUrl, marketplaceName }) => [
+      {
+        label: "Register the marketplace",
+        body: "Open Cursor's command palette and run /add-plugin, then paste the clone URL.",
+        code: `/add-plugin ${cloneUrl}`,
+        language: "bash",
+      },
+      {
+        label: "Install the skill bundle",
+        body: `The bundled skills appear under the "${marketplaceName}" plugin entry; install it from the marketplace view.`,
+        language: "text",
       },
     ],
   },

@@ -136,11 +136,13 @@ describe("MarketplaceMaterializer", () => {
     const expected = [
       ".claude-plugin/marketplace.json",
       ".agents/plugins/marketplace.json",
-      "plugins/pdf-helper/.claude-plugin/plugin.json",
-      "plugins/pdf-helper/.codex-plugin/plugin.json",
-      "plugins/pdf-helper/skills/pdf-helper/SKILL.md",
-      "plugins/pdf-helper/skills/pdf-helper/references/REFERENCE.md",
-      "plugins/pdf-helper/skills/pdf-helper/scripts/run.sh",
+      ".cursor-plugin/marketplace.json",
+      "plugins/org-abcd1234-skills/.claude-plugin/plugin.json",
+      "plugins/org-abcd1234-skills/.codex-plugin/plugin.json",
+      "plugins/org-abcd1234-skills/.cursor-plugin/plugin.json",
+      "plugins/org-abcd1234-skills/skills/pdf-helper/SKILL.md",
+      "plugins/org-abcd1234-skills/skills/pdf-helper/references/REFERENCE.md",
+      "plugins/org-abcd1234-skills/skills/pdf-helper/scripts/run.sh",
     ];
     for (const rel of expected) {
       await expect(
@@ -155,7 +157,11 @@ describe("MarketplaceMaterializer", () => {
       ),
     );
     expect(claudeManifest.name).toBe("org-abcd1234-skills");
-    expect(claudeManifest.plugins[0].name).toBe("pdf-helper");
+    expect(claudeManifest.plugins).toHaveLength(1);
+    expect(claudeManifest.plugins[0].name).toBe("org-abcd1234-skills");
+    expect(claudeManifest.plugins[0].source).toBe(
+      "./plugins/org-abcd1234-skills",
+    );
 
     const codexManifest = JSON.parse(
       await fs.readFile(
@@ -164,9 +170,10 @@ describe("MarketplaceMaterializer", () => {
       ),
     );
     expect(codexManifest.displayName).toBe("Acme Skills");
+    expect(codexManifest.plugins).toHaveLength(1);
     expect(codexManifest.plugins[0].source).toEqual({
       source: "local",
-      path: "./plugins/pdf-helper",
+      path: "./plugins/org-abcd1234-skills",
     });
   });
 
@@ -188,7 +195,7 @@ describe("MarketplaceMaterializer", () => {
     const raw = await fs.readFile(
       path.join(
         result.repoPath,
-        "plugins/pdf-helper/skills/pdf-helper/SKILL.md",
+        "plugins/org-abcd1234-skills/skills/pdf-helper/SKILL.md",
       ),
       "utf8",
     );
@@ -225,7 +232,7 @@ describe("MarketplaceMaterializer", () => {
     const skillMd = await fs.readFile(
       path.join(
         result.repoPath,
-        "plugins/pdf-helper/skills/pdf-helper/SKILL.md",
+        "plugins/org-abcd1234-skills/skills/pdf-helper/SKILL.md",
       ),
       "utf8",
     );
@@ -233,7 +240,7 @@ describe("MarketplaceMaterializer", () => {
     expect(skillMd).not.toContain("attacker-controlled content");
   });
 
-  test("resource file with path SKILL.md/foo does not cause mkdir collision", async () => {
+  test("resource file with path SKILL.md/foo does not collide with the generated manifest", async () => {
     const req = makeRequest({
       skills: [
         makeSkill({
@@ -257,7 +264,7 @@ describe("MarketplaceMaterializer", () => {
     const skillMd = await fs.readFile(
       path.join(
         result.repoPath,
-        "plugins/pdf-helper/skills/pdf-helper/SKILL.md",
+        "plugins/org-abcd1234-skills/skills/pdf-helper/SKILL.md",
       ),
       "utf8",
     );
@@ -266,7 +273,7 @@ describe("MarketplaceMaterializer", () => {
       fs.access(
         path.join(
           result.repoPath,
-          "plugins/pdf-helper/skills/pdf-helper/SKILL.md/injected.txt",
+          "plugins/org-abcd1234-skills/skills/pdf-helper/SKILL.md/injected.txt",
         ),
       ),
     ).rejects.toThrow();
@@ -320,13 +327,13 @@ describe("MarketplaceMaterializer", () => {
     const written = await fs.readFile(
       path.join(
         result.repoPath,
-        "plugins/pdf-helper/skills/pdf-helper/assets/icon.bin",
+        "plugins/org-abcd1234-skills/skills/pdf-helper/assets/icon.bin",
       ),
     );
     expect(Buffer.compare(written, original)).toBe(0);
   });
 
-  test("manifest ordering and plugin layout is deterministic across runs", async () => {
+  test("bundle plugin contains a deterministic skills/<slug> dir per shared skill", async () => {
     const skills = [
       makeSkill({ id: "b", name: "Beta" }),
       makeSkill({ id: "a", name: "Alpha" }),
@@ -339,15 +346,20 @@ describe("MarketplaceMaterializer", () => {
         "utf8",
       ),
     );
+    // exactly one bundle plugin regardless of how many skills are shared
     expect(manifest.plugins.map((p: { name: string }) => p.name)).toEqual([
-      "beta",
-      "alpha",
+      "org-abcd1234-skills",
     ]);
+    // each shared skill gets its own subdirectory inside the bundle plugin
     await expect(
-      fs.access(path.join(result.repoPath, "plugins/beta")),
+      fs.access(
+        path.join(result.repoPath, "plugins/org-abcd1234-skills/skills/beta"),
+      ),
     ).resolves.toBeUndefined();
     await expect(
-      fs.access(path.join(result.repoPath, "plugins/alpha")),
+      fs.access(
+        path.join(result.repoPath, "plugins/org-abcd1234-skills/skills/alpha"),
+      ),
     ).resolves.toBeUndefined();
   });
 

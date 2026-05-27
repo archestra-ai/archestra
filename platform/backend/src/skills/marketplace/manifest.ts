@@ -3,10 +3,15 @@ import { urlSlugify } from "@shared";
 
 /**
  * Pure builders for the on-disk manifests served by the shared skill
- * marketplace endpoint. The same source skills produce two parallel
- * marketplace manifests — Claude Code reads `.claude-plugin/marketplace.json`,
- * Codex CLI reads `.agents/plugins/marketplace.json` — plus per-plugin
- * manifests under each skill's `plugins/<slug>/` directory.
+ * marketplace endpoint. The same materialized repo serves three clients in
+ * parallel:
+ *
+ *   - Claude Code: `.claude-plugin/marketplace.json`
+ *   - Codex CLI:   `.agents/plugins/marketplace.json`
+ *   - Cursor:      `.cursor-plugin/marketplace.json`
+ *
+ * Each one sees a marketplace with exactly one plugin that bundles every
+ * shared skill under a single `skills/<slug>/` directory inside the plugin.
  *
  * The output here is consumed by `materialize.ts`; this module has no I/O.
  *
@@ -27,13 +32,12 @@ export interface MarketplaceSkillInput {
   updatedAt: Date;
 }
 
-/** A skill paired with its disambiguated slug and resolved version. */
+/** A skill paired with its disambiguated slug (used as its `skills/<slug>/` directory). */
 export interface ResolvedMarketplaceSkill {
   id: string;
   name: string;
   description: string;
   slug: string;
-  version: string;
   updatedAt: Date;
 }
 
@@ -80,6 +84,32 @@ export interface CodexPluginManifest {
 }
 
 /**
+ * Cursor's marketplace + plugin shape mirrors Claude's. The Cursor docs
+ * describe `.cursor-plugin/marketplace.json` as the index and
+ * `.cursor-plugin/plugin.json` per plugin; the field set we emit is
+ * intentionally a strict subset of Claude's so users on either client see
+ * the same name/description/version triple.
+ */
+export interface CursorMarketplacePluginEntry {
+  name: string;
+  source: string;
+  description: string;
+  version: string;
+}
+
+export interface CursorMarketplaceManifest {
+  name: string;
+  owner: { name: string };
+  plugins: CursorMarketplacePluginEntry[];
+}
+
+export interface CursorPluginManifest {
+  name: string;
+  description: string;
+  version: string;
+}
+
+/**
  * Marketplace names baked into Claude Code's CLI. Reused at share-link create
  * time so users never end up with a marketplace that silently shadows one of
  * Claude's built-ins. List captured from the Claude docs survey; revisit when
@@ -94,26 +124,6 @@ export const RESERVED_MARKETPLACE_NAMES: ReadonlySet<string> = new Set([
 
 export function isReservedMarketplaceName(name: string): boolean {
   return RESERVED_MARKETPLACE_NAMES.has(name.trim().toLowerCase());
-}
-
-/**
- * Pick the version string both manifests should report for a skill. Codex
- * requires a non-empty `version`; when the row has none, synthesize a
- * deterministic `0.0.0+<sha256(id+updatedAt)[0:12]>` so two replicas
- * agree on the same value.
- */
-export function resolveSkillVersion(skill: {
-  id: string;
-  updatedAt: Date;
-  version?: string | null;
-}): string {
-  const explicit = skill.version?.trim();
-  if (explicit) return explicit;
-  const hash = createHash("sha256")
-    .update(`${skill.id}:${skill.updatedAt.toISOString()}`)
-    .digest("hex")
-    .slice(0, 12);
-  return `0.0.0+${hash}`;
 }
 
 /**
@@ -139,10 +149,27 @@ export function resolveMarketplaceSkills(
       name: skill.name,
       description: skill.description,
       slug,
-      version: resolveSkillVersion(skill),
       updatedAt: skill.updatedAt,
     };
   });
+}
+
+/**
+ * Version for the single bundle plugin. Derived from the sorted set of skill
+ * (id, updatedAt) pairs so two replicas materializing the same input agree on
+ * the same value, and editing any skill bumps the version exactly once.
+ */
+export function resolveBundleVersion(skills: MarketplaceSkillInput[]): string {
+  if (skills.length === 0) return "0.0.0+empty";
+  const sorted = [...skills].sort((a, b) => a.id.localeCompare(b.id));
+  const h = createHash("sha256");
+  for (const s of sorted) {
+    h.update(s.id);
+    h.update("\0");
+    h.update(s.updatedAt.toISOString());
+    h.update("\0");
+  }
+  return `0.0.0+${h.digest("hex").slice(0, 12)}`;
 }
 
 export function buildClaudeMarketplaceManifest(params: {
@@ -150,16 +177,17 @@ export function buildClaudeMarketplaceManifest(params: {
   ownerName: string;
   skills: MarketplaceSkillInput[];
 }): ClaudeMarketplaceManifest {
-  const resolved = resolveMarketplaceSkills(params.skills);
   return {
     name: params.marketplaceName,
     owner: { name: params.ownerName },
-    plugins: resolved.map((skill) => ({
-      name: skill.slug,
-      source: `./plugins/${skill.slug}`,
-      description: skill.description,
-      version: skill.version,
-    })),
+    plugins: [
+      {
+        name: params.marketplaceName,
+        source: `./plugins/${params.marketplaceName}`,
+        description: bundleDescription(params.skills.length, params.ownerName),
+        version: resolveBundleVersion(params.skills),
+      },
+    ],
   };
 }
 
@@ -168,42 +196,82 @@ export function buildCodexMarketplaceManifest(params: {
   displayName: string;
   skills: MarketplaceSkillInput[];
 }): CodexMarketplaceManifest {
-  const resolved = resolveMarketplaceSkills(params.skills);
   return {
     name: params.marketplaceName,
     displayName: params.displayName,
-    plugins: resolved.map((skill) => ({
-      name: skill.slug,
-      source: { source: "local", path: `./plugins/${skill.slug}` },
-      policy: { installation: "AVAILABLE", authentication: "ON_INSTALL" },
-      category: "Skill",
-      version: skill.version,
-      description: skill.description,
-    })),
+    plugins: [
+      {
+        name: params.marketplaceName,
+        source: {
+          source: "local",
+          path: `./plugins/${params.marketplaceName}`,
+        },
+        policy: { installation: "AVAILABLE", authentication: "ON_INSTALL" },
+        category: "Skill",
+        version: resolveBundleVersion(params.skills),
+        description: bundleDescription(
+          params.skills.length,
+          params.displayName,
+        ),
+      },
+    ],
   };
 }
 
 export function buildClaudePluginManifest(params: {
-  skill: MarketplaceSkillInput;
-  slug: string;
+  marketplaceName: string;
+  ownerName: string;
+  skills: MarketplaceSkillInput[];
 }): ClaudePluginManifest {
   return {
-    name: params.slug,
-    description: params.skill.description,
-    version: resolveSkillVersion(params.skill),
+    name: params.marketplaceName,
+    description: bundleDescription(params.skills.length, params.ownerName),
+    version: resolveBundleVersion(params.skills),
   };
 }
 
 export function buildCodexPluginManifest(params: {
-  skill: MarketplaceSkillInput;
-  slug: string;
+  marketplaceName: string;
+  displayName: string;
+  skills: MarketplaceSkillInput[];
 }): CodexPluginManifest {
   return {
-    name: params.slug,
-    version: resolveSkillVersion(params.skill),
-    description: params.skill.description,
+    name: params.marketplaceName,
+    version: resolveBundleVersion(params.skills),
+    description: bundleDescription(params.skills.length, params.displayName),
     skills: "./skills/",
-    interface: { displayName: params.skill.name },
+    interface: { displayName: params.displayName },
+  };
+}
+
+export function buildCursorMarketplaceManifest(params: {
+  marketplaceName: string;
+  ownerName: string;
+  skills: MarketplaceSkillInput[];
+}): CursorMarketplaceManifest {
+  return {
+    name: params.marketplaceName,
+    owner: { name: params.ownerName },
+    plugins: [
+      {
+        name: params.marketplaceName,
+        source: `./plugins/${params.marketplaceName}`,
+        description: bundleDescription(params.skills.length, params.ownerName),
+        version: resolveBundleVersion(params.skills),
+      },
+    ],
+  };
+}
+
+export function buildCursorPluginManifest(params: {
+  marketplaceName: string;
+  ownerName: string;
+  skills: MarketplaceSkillInput[];
+}): CursorPluginManifest {
+  return {
+    name: params.marketplaceName,
+    description: bundleDescription(params.skills.length, params.ownerName),
+    version: resolveBundleVersion(params.skills),
   };
 }
 
@@ -218,4 +286,9 @@ function baseSlug(skill: MarketplaceSkillInput): string {
     .replace(/[^a-z0-9]/gi, "")
     .slice(0, 8)
     .toLowerCase()}`;
+}
+
+function bundleDescription(skillCount: number, sourceLabel: string): string {
+  const noun = skillCount === 1 ? "skill" : "skills";
+  return `${skillCount} ${noun} shared from ${sourceLabel}`;
 }

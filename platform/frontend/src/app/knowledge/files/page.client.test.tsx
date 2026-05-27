@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/app/knowledge/_parts/knowledge-page-layout", () => ({
@@ -92,5 +93,19 @@ describe("KnowledgeFilesPage", () => {
     expect(screen.getByText("runbook.md")).toBeInTheDocument();
     expect(screen.getByText("Support")).toBeInTheDocument();
     expect(screen.getByText("Indexed")).toBeInTheDocument();
+  });
+
+  it("opens the upload dialog from the create button", async () => {
+    const user = userEvent.setup();
+    render(<KnowledgeFilesPage />);
+
+    await user.click(screen.getByRole("button", { name: "Upload Files" }));
+
+    expect(
+      screen.getByRole("dialog", { name: "Upload Files" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Select Files" }),
+    ).toBeInTheDocument();
   });
 });

@@ -1193,10 +1193,9 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body, organizationId, user }, reply) => {
-      const results: z.infer<typeof UploadResultSchema>[] = [];
-      for (const file of body.files) {
-        results.push(
-          await fileUploadManager.uploadKnowledgeFile({
+      const results: z.infer<typeof UploadResultSchema>[] = await Promise.all(
+        body.files.map((file) =>
+          fileUploadManager.uploadKnowledgeFile({
             organizationId,
             userId: user.id,
             name: file.name,
@@ -1206,8 +1205,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             teamIds: body.teamIds,
             agentIds: body.agentIds,
           }),
-        );
-      }
+        ),
+      );
       return reply.send({ results });
     },
   );

@@ -229,9 +229,17 @@ class FileUploadManager {
     });
     await KbUploadedFileModel.delete(params.fileId);
     await KnowledgeBaseConnectorModel.delete(file.connectorId);
-    await getBlobStorageProvider(file.blobStorageProvider).delete({
-      key: blobStorageKey,
-    });
+    try {
+      await getBlobStorageProvider(file.blobStorageProvider).delete({
+        key: blobStorageKey,
+      });
+    } catch (error) {
+      logger.warn(
+        { error, blobStorageKey },
+        "Failed to clean up uploaded knowledge file blob after delete",
+      );
+      throw error;
+    }
   }
 
   getSupportedFileUploadConfig() {

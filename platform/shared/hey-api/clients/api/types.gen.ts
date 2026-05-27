@@ -19358,6 +19358,7 @@ export type GetChatConversationsResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         pinnedAt: string | null;
+        lastMessageAt: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -19506,6 +19507,7 @@ export type CreateChatConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         pinnedAt: string | null;
+        lastMessageAt: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -19736,6 +19738,7 @@ export type GetChatConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         pinnedAt: string | null;
+        lastMessageAt: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -19888,6 +19891,7 @@ export type UpdateChatConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         pinnedAt: string | null;
+        lastMessageAt: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -20200,6 +20204,7 @@ export type ForkChatConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         pinnedAt: string | null;
+        lastMessageAt: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -20449,6 +20454,7 @@ export type CompactChatConversationResponses = {
             } | Array<unknown> | null;
             artifact: string | null;
             pinnedAt: string | null;
+            lastMessageAt: string | null;
             createdAt: string;
             updatedAt: string;
             agent: {
@@ -20868,6 +20874,7 @@ export type GetSharedConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         pinnedAt: string | null;
+        lastMessageAt: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -21016,6 +21023,7 @@ export type ForkSharedConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         pinnedAt: string | null;
+        lastMessageAt: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -21166,6 +21174,7 @@ export type GenerateChatConversationTitleResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         pinnedAt: string | null;
+        lastMessageAt: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -21315,6 +21324,7 @@ export type UpdateChatMessageResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         pinnedAt: string | null;
+        lastMessageAt: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -47467,6 +47477,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         pinnedAt: string | null;
+        lastMessageAt: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {

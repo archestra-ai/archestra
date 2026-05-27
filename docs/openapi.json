@@ -66793,6 +66793,11 @@
                         "type": "string",
                         "format": "date-time"
                       },
+                      "lastMessageAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -67054,6 +67059,7 @@
                       "todoList",
                       "artifact",
                       "pinnedAt",
+                      "lastMessageAt",
                       "createdAt",
                       "updatedAt",
                       "agent",
@@ -67458,6 +67464,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "lastMessageAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -67719,6 +67730,7 @@
                     "todoList",
                     "artifact",
                     "pinnedAt",
+                    "lastMessageAt",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -68100,6 +68112,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "lastMessageAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -68361,6 +68378,7 @@
                     "todoList",
                     "artifact",
                     "pinnedAt",
+                    "lastMessageAt",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -68783,6 +68801,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "lastMessageAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -69044,6 +69067,7 @@
                     "todoList",
                     "artifact",
                     "pinnedAt",
+                    "lastMessageAt",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -70303,6 +70327,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "lastMessageAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -70564,6 +70593,7 @@
                     "todoList",
                     "artifact",
                     "pinnedAt",
+                    "lastMessageAt",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -71312,6 +71342,11 @@
                           "type": "string",
                           "format": "date-time"
                         },
+                        "lastMessageAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -71573,6 +71608,7 @@
                         "todoList",
                         "artifact",
                         "pinnedAt",
+                        "lastMessageAt",
                         "createdAt",
                         "updatedAt",
                         "agent",
@@ -72910,6 +72946,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "lastMessageAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -73174,6 +73215,7 @@
                     "todoList",
                     "artifact",
                     "pinnedAt",
+                    "lastMessageAt",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -73576,6 +73618,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "lastMessageAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -73837,6 +73884,7 @@
                     "todoList",
                     "artifact",
                     "pinnedAt",
+                    "lastMessageAt",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -74234,6 +74282,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "lastMessageAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -74495,6 +74548,7 @@
                     "todoList",
                     "artifact",
                     "pinnedAt",
+                    "lastMessageAt",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -74902,6 +74956,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "lastMessageAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -75163,6 +75222,7 @@
                     "todoList",
                     "artifact",
                     "pinnedAt",
+                    "lastMessageAt",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -180666,6 +180726,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "lastMessageAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -180927,6 +180992,7 @@
                     "todoList",
                     "artifact",
                     "pinnedAt",
+                    "lastMessageAt",
                     "createdAt",
                     "updatedAt",
                     "agent",

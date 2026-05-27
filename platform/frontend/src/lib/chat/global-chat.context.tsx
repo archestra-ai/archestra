@@ -482,6 +482,7 @@ function ChatSessionHook({
       queryClient.invalidateQueries({
         queryKey: ["conversation", conversationId],
       });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
 
       // After a swap_agent stop, poke the new agent so it responds.
       // The new /api/chat POST re-reads the conversation from DB and

@@ -50,6 +50,7 @@ const conversationsTable = pgTable("conversations", {
     >(),
   artifact: text("artifact"),
   pinnedAt: timestamp("pinned_at", { mode: "date" }),
+  lastMessageAt: timestamp("last_message_at", { mode: "date" }).defaultNow(),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .notNull()

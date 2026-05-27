@@ -49,7 +49,6 @@ import {
   getConversationDisplayTitle,
   getConversationShareTooltip,
 } from "@/lib/chat/chat-utils";
-import { useStableConversations } from "@/lib/hooks/use-stable-conversations";
 import { cn } from "@/lib/utils";
 
 const SIDEBAR_CHAT_SLOTS = 3;
@@ -102,29 +101,8 @@ export function ChatSidebarSection() {
     ? (pathname.split("/").at(-1) ?? null)
     : null;
 
-  // Stabilize conversation order to prevent sidebar "jumping" when React Query
-  // re-fetches after mutations that bump updatedAt. Order resets on page refresh.
-  const stableConversations = useStableConversations(conversations);
-
-  // Split conversations into pinned and unpinned.
-  // Default view shows exactly SIDEBAR_CHAT_SLOTS items:
-  // pinned chats first, then recent unpinned to fill remaining slots.
-  // No re-sorting here — stable order from useStableConversations is preserved
-  // for both pinned and unpinned groups to prevent jumping.
-  const { pinnedChats, recentUnpinnedChats } = useMemo(() => {
-    const pinned = stableConversations
-      .filter((c) => c.pinnedAt)
-      .slice(0, SIDEBAR_CHAT_SLOTS);
-
-    const pinnedIds = new Set(pinned.map((c) => c.id));
-    const unpinned = stableConversations.filter((c) => !pinnedIds.has(c.id));
-    const remainingSlots = Math.max(0, SIDEBAR_CHAT_SLOTS - pinned.length);
-
-    return {
-      pinnedChats: pinned,
-      recentUnpinnedChats: unpinned.slice(0, remainingSlots),
-    };
-  }, [stableConversations]);
+  const pinnedChats = conversations.filter((c) => c.pinnedAt);
+  const recentUnpinnedChats = conversations.filter((c) => !c.pinnedAt);
 
   useEffect(() => {
     if (editingId && inputRef.current) {

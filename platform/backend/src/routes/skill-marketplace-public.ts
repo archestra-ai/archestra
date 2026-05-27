@@ -25,6 +25,10 @@ const skillMarketplacePublicRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const endpoint = config.skillMarketplace.endpoint;
 
   fastify.addHook("onReady", async () => {
+    // codegen boots fastify without initializing the DB — skip the runtime
+    // probes so OpenAPI generation does not crash on a missing connection
+    if (config.codegenMode) return;
+
     const result = spawnSync(config.git.binaryPath, ["--version"]);
     if (result.error || result.status !== 0) {
       logger.error(

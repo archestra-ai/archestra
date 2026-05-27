@@ -8,7 +8,10 @@ import type {
   SkillShareLinkWithSkills,
 } from "@/types";
 
-/** Token prefix is share-link specific; deliberately distinct from team-token prefix. */
+/**
+ * Token prefix is share-link specific; deliberately distinct from team-token prefix.
+ * @public — exported for testability
+ */
 export const SKILL_SHARE_LINK_TOKEN_PREFIX = "archestra_skl_";
 
 /** Length of random bytes (24 → 32 url-safe base64 chars without padding). */
@@ -17,7 +20,7 @@ const TOKEN_RANDOM_BYTES = 24;
 /** Display prefix length: prefix (14) + 8 random chars for UI distinguishability. */
 const TOKEN_START_LENGTH = 22;
 
-export interface CreateSkillShareLinkParams {
+interface CreateSkillShareLinkParams {
   organizationId: string;
   createdByUserId: string;
   skillIds: string[];
@@ -26,12 +29,12 @@ export interface CreateSkillShareLinkParams {
   expiresAt?: Date | null;
 }
 
-export interface CreateSkillShareLinkResult {
+interface CreateSkillShareLinkResult {
   link: SkillShareLinkWithSkills;
   rawToken: string;
 }
 
-export interface ValidateSkillShareLinkResult {
+interface ValidateSkillShareLinkResult {
   link: SkillShareLink;
   skills: SkillShareLinkSkillSummary[];
 }

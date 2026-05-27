@@ -13,7 +13,7 @@ import logger from "@/logging";
  * the protocol.
  */
 
-export interface ServeGitHttpRequestParams {
+interface ServeGitHttpRequestParams {
   /** Parent directory that contains the bare/non-bare repo. */
   projectRoot: string;
   /** Path inside `projectRoot` the client requested, e.g. `/repo.git/info/refs`. */

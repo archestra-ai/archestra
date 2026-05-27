@@ -5,7 +5,7 @@ import type {
   SkillShareLinkRevision,
 } from "@/types/skill-share-link-revision";
 
-export interface AppendRevisionParams {
+interface AppendRevisionParams {
   linkId: string;
   contentHash: string;
   commitSha: string;

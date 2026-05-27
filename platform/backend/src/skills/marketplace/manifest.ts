@@ -33,7 +33,7 @@ export interface MarketplaceSkillInput {
 }
 
 /** A skill paired with its disambiguated slug (used as its `skills/<slug>/` directory). */
-export interface ResolvedMarketplaceSkill {
+interface ResolvedMarketplaceSkill {
   id: string;
   name: string;
   description: string;
@@ -41,20 +41,20 @@ export interface ResolvedMarketplaceSkill {
   updatedAt: Date;
 }
 
-export interface ClaudeMarketplacePluginEntry {
+interface ClaudeMarketplacePluginEntry {
   name: string;
   source: string;
   description: string;
   version: string;
 }
 
-export interface ClaudeMarketplaceManifest {
+interface ClaudeMarketplaceManifest {
   name: string;
   owner: { name: string };
   plugins: ClaudeMarketplacePluginEntry[];
 }
 
-export interface CodexMarketplacePluginEntry {
+interface CodexMarketplacePluginEntry {
   name: string;
   source: { source: "local"; path: string };
   policy: { installation: "AVAILABLE"; authentication: "ON_INSTALL" };
@@ -63,19 +63,19 @@ export interface CodexMarketplacePluginEntry {
   description: string;
 }
 
-export interface CodexMarketplaceManifest {
+interface CodexMarketplaceManifest {
   name: string;
   displayName: string;
   plugins: CodexMarketplacePluginEntry[];
 }
 
-export interface ClaudePluginManifest {
+interface ClaudePluginManifest {
   name: string;
   description: string;
   version: string;
 }
 
-export interface CodexPluginManifest {
+interface CodexPluginManifest {
   name: string;
   version: string;
   description: string;
@@ -90,20 +90,20 @@ export interface CodexPluginManifest {
  * intentionally a strict subset of Claude's so users on either client see
  * the same name/description/version triple.
  */
-export interface CursorMarketplacePluginEntry {
+interface CursorMarketplacePluginEntry {
   name: string;
   source: string;
   description: string;
   version: string;
 }
 
-export interface CursorMarketplaceManifest {
+interface CursorMarketplaceManifest {
   name: string;
   owner: { name: string };
   plugins: CursorMarketplacePluginEntry[];
 }
 
-export interface CursorPluginManifest {
+interface CursorPluginManifest {
   name: string;
   description: string;
   version: string;
@@ -114,6 +114,7 @@ export interface CursorPluginManifest {
  * time so users never end up with a marketplace that silently shadows one of
  * Claude's built-ins. List captured from the Claude docs survey; revisit when
  * the docs add new ones.
+ * @public — exported for testability
  */
 export const RESERVED_MARKETPLACE_NAMES: ReadonlySet<string> = new Set([
   "claude-code-marketplace",
@@ -158,6 +159,7 @@ export function resolveMarketplaceSkills(
  * Version for the single bundle plugin. Derived from the sorted set of skill
  * (id, updatedAt) pairs so two replicas materializing the same input agree on
  * the same value, and editing any skill bumps the version exactly once.
+ * @public — exported for testability
  */
 export function resolveBundleVersion(skills: MarketplaceSkillInput[]): string {
   if (skills.length === 0) return "0.0.0+empty";

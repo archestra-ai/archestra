@@ -21,9 +21,10 @@ import { computeLayout, type MaterializeRequest } from "./layout";
  * restarts, container redeploys, and host migrations.
  */
 
+/** @public — re-exported for testability */
 export type { MaterializeRequest, MaterializeSkillInput } from "./layout";
 
-export interface MaterializeResult {
+interface MaterializeResult {
   repoPath: string;
   commitHash: string;
   contentHash: string;
@@ -31,7 +32,7 @@ export interface MaterializeResult {
   reused: boolean;
 }
 
-export interface MaterializerOptions {
+interface MaterializerOptions {
   cacheDir: string;
   gitBinaryPath?: string;
   identity?: { name: string; email: string };
@@ -39,6 +40,7 @@ export interface MaterializerOptions {
   revisionStore?: RevisionStore;
 }
 
+/** @public — exported for testability */
 export interface AppendRevisionParams {
   linkId: string;
   contentHash: string;
@@ -48,6 +50,7 @@ export interface AppendRevisionParams {
   payload: RevisionPayload;
 }
 
+/** @public — exported for testability */
 export interface RevisionStore {
   getLatestByLink(linkId: string): Promise<SkillShareLinkRevision | null>;
   listByLink(linkId: string): Promise<SkillShareLinkRevision[]>;

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { ResourceVisibilityScope } from "@shared";
 import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { escapeLikePattern } from "@/utils/sql-search";
 
 type KbUploadedFile = typeof schema.kbUploadedFilesTable.$inferSelect;
 type KbUploadedFileInsert = typeof schema.kbUploadedFilesTable.$inferInsert;
@@ -46,7 +47,10 @@ class KbUploadedFileModel {
 
     if (params.search) {
       conditions.push(
-        ilike(schema.kbUploadedFilesTable.originalName, `%${params.search}%`),
+        ilike(
+          schema.kbUploadedFilesTable.originalName,
+          `%${escapeLikePattern(params.search)}%`,
+        ),
       );
     }
 
@@ -79,7 +83,10 @@ class KbUploadedFileModel {
 
     if (params.search) {
       conditions.push(
-        ilike(schema.kbUploadedFilesTable.originalName, `%${params.search}%`),
+        ilike(
+          schema.kbUploadedFilesTable.originalName,
+          `%${escapeLikePattern(params.search)}%`,
+        ),
       );
     }
 
@@ -110,7 +117,10 @@ class KbUploadedFileModel {
 
     if (params.search) {
       conditions.push(
-        ilike(schema.kbUploadedFilesTable.originalName, `%${params.search}%`),
+        ilike(
+          schema.kbUploadedFilesTable.originalName,
+          `%${escapeLikePattern(params.search)}%`,
+        ),
       );
     }
 
@@ -131,7 +141,10 @@ class KbUploadedFileModel {
 
     if (params.search) {
       conditions.push(
-        ilike(schema.kbUploadedFilesTable.originalName, `%${params.search}%`),
+        ilike(
+          schema.kbUploadedFilesTable.originalName,
+          `%${escapeLikePattern(params.search)}%`,
+        ),
       );
     }
 

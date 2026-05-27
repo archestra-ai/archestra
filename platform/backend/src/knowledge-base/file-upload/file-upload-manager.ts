@@ -5,6 +5,7 @@ import {
   extractTextFiles,
   MAX_FILE_SIZE_BYTES,
 } from "@/knowledge-base/connectors/file-upload/file-processor";
+import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
   AgentModel,
@@ -15,6 +16,7 @@ import {
 import { taskQueueService } from "@/task-queue";
 import { ApiError } from "@/types";
 import { getConfiguredBlobStorageProvider } from "./blob-storage-providers";
+import type { StoredBlobPointer } from "./blob-storage-providers/types";
 
 type UploadKnowledgeFileParams = {
   organizationId: string;
@@ -93,31 +95,43 @@ class FileUploadManager {
     });
 
     const fileId = randomUUID();
-    const blobPointer = await getConfiguredBlobStorageProvider().put({
-      organizationId: params.organizationId,
-      fileId,
-      filename: params.name,
-      mimeType: params.mimeType,
-      data: rawBuffer,
-    });
+    const blobProvider = getConfiguredBlobStorageProvider();
+    let blobPointer: StoredBlobPointer | null = null;
+    let file: Awaited<ReturnType<typeof KbUploadedFileModel.create>>;
+    try {
+      blobPointer = await blobProvider.put({
+        organizationId: params.organizationId,
+        fileId,
+        filename: params.name,
+        mimeType: params.mimeType,
+        data: rawBuffer,
+      });
 
-    const file = await KbUploadedFileModel.create({
-      id: fileId,
-      connectorId: connector.id,
-      organizationId: params.organizationId,
-      ownerId: params.userId,
-      visibility: params.visibility,
-      teamIds: params.teamIds,
-      originalName: params.name,
-      mimeType: params.mimeType,
-      fileSize: rawBuffer.byteLength,
-      contentHash,
-      fileData: blobPointer.dbData,
-      blobStorageProvider:
-        blobPointer.provider === "db" ? null : blobPointer.provider,
-      blobStorageKey: blobPointer.key,
-      processingStatus: "pending",
-    });
+      file = await KbUploadedFileModel.create({
+        id: fileId,
+        connectorId: connector.id,
+        organizationId: params.organizationId,
+        ownerId: params.userId,
+        visibility: params.visibility,
+        teamIds: params.teamIds,
+        originalName: params.name,
+        mimeType: params.mimeType,
+        fileSize: rawBuffer.byteLength,
+        contentHash,
+        fileData: blobPointer.dbData,
+        blobStorageProvider:
+          blobPointer.provider === "db" ? null : blobPointer.provider,
+        blobStorageKey: blobPointer.key,
+        processingStatus: "pending",
+      });
+    } catch (error) {
+      await this.cleanupFailedFileCreate({
+        connectorId: connector.id,
+        blobProvider,
+        blobPointer,
+      });
+      throw error;
+    }
 
     for (const agentId of params.agentIds) {
       await AgentConnectorAssignmentModel.assign(agentId, connector.id);
@@ -165,6 +179,13 @@ class FileUploadManager {
       connectorId: file.connectorId,
       agentIds: params.agentIds,
     });
+
+    if (
+      file.visibility === params.visibility &&
+      areStringSetsEqual(file.teamIds, params.teamIds)
+    ) {
+      return updated;
+    }
 
     await KbDocumentModel.deleteByConnectorAndSourceId({
       connectorId: file.connectorId,
@@ -235,6 +256,32 @@ class FileUploadManager {
       throw new ApiError(400, "One or more agents are not available");
     }
   }
+
+  private async cleanupFailedFileCreate(params: {
+    connectorId: string;
+    blobProvider: ReturnType<typeof getConfiguredBlobStorageProvider>;
+    blobPointer: StoredBlobPointer | null;
+  }) {
+    if (params.blobPointer) {
+      try {
+        await params.blobProvider.delete({ key: params.blobPointer.key });
+      } catch (error) {
+        logger.warn(
+          { error, blobStorageKey: params.blobPointer.key },
+          "Failed to clean up uploaded knowledge file blob after create failure",
+        );
+      }
+    }
+
+    try {
+      await KnowledgeBaseConnectorModel.delete(params.connectorId);
+    } catch (error) {
+      logger.warn(
+        { error, connectorId: params.connectorId },
+        "Failed to clean up knowledge file connector after create failure",
+      );
+    }
+  }
 }
 
 export const fileUploadManager = new FileUploadManager();
@@ -273,3 +320,10 @@ const SUPPORTED_KNOWLEDGE_FILE_MIME_TYPES = new Set([
   "text/markdown",
   "text/plain",
 ]);
+
+function areStringSetsEqual(left: string[], right: string[]) {
+  if (left.length !== right.length) return false;
+
+  const rightSet = new Set(right);
+  return left.every((value) => rightSet.has(value));
+}

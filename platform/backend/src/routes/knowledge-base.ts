@@ -1739,13 +1739,11 @@ async function enrichKnowledgeFiles(params: {
     agentIds,
   });
   const agentById = new Map(agentDetails.map((agent) => [agent.id, agent]));
-  const docs = await Promise.all(
-    files.map((file) =>
-      KbDocumentModel.findBySourceId({
-        connectorId: file.connectorId,
-        sourceId: file.id,
-      }),
-    ),
+  const docs = await KbDocumentModel.findByConnectorSourcePairs(
+    files.map((file) => ({
+      connectorId: file.connectorId,
+      sourceId: file.id,
+    })),
   );
   const docByFileId = new Map(
     docs

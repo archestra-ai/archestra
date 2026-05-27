@@ -2,11 +2,13 @@ import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import {
   AgentConnectorAssignmentModel,
+  KbDocumentModel,
   KbUploadedFileModel,
   KnowledgeBaseConnectorModel,
 } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { taskQueueService } from "@/task-queue";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import type { Agent, User } from "@/types";
 
@@ -138,6 +140,88 @@ describe("knowledge file routes", () => {
           }),
         ],
       }),
+    ]);
+  });
+
+  test("treats LIKE wildcard characters in file search as literals", async () => {
+    const upload = await app.inject({
+      method: "POST",
+      url: "/api/knowledge-files",
+      payload: buildUploadPayload({
+        files: [
+          {
+            name: "literal%file.txt",
+            content: Buffer.from("Percent file content"),
+            mimeType: "text/plain",
+          },
+          {
+            name: "literal-match-file.txt",
+            content: Buffer.from("Hyphen file content"),
+            mimeType: "text/plain",
+          },
+        ],
+      }),
+    });
+    expect(upload.statusCode).toBe(200);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/knowledge-files?limit=20&offset=0&search=%25",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toEqual([
+      expect.objectContaining({ originalName: "literal%file.txt" }),
+    ]);
+  });
+
+  test("does not reprocess files when only agent assignments change", async ({
+    makeAgent,
+  }) => {
+    const secondAgent = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      name: "Second Agent",
+      teams: [],
+    });
+    const upload = await app.inject({
+      method: "POST",
+      url: "/api/knowledge-files",
+      payload: buildUploadPayload({
+        agentIds: [agent.id],
+        files: [
+          {
+            name: "assignment-only.txt",
+            content: Buffer.from("Assignment content"),
+            mimeType: "text/plain",
+          },
+        ],
+      }),
+    });
+    expect(upload.statusCode).toBe(200);
+    const fileId = upload.json().results[0].fileId as string;
+
+    const enqueueSpy = vi.spyOn(taskQueueService, "enqueue");
+    const deleteDocumentSpy = vi.spyOn(
+      KbDocumentModel,
+      "deleteByConnectorAndSourceId",
+    );
+
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/knowledge-files/${fileId}`,
+      payload: {
+        visibility: "personal",
+        teamIds: [],
+        agentIds: [secondAgent.id],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(enqueueSpy).not.toHaveBeenCalled();
+    expect(deleteDocumentSpy).not.toHaveBeenCalled();
+    expect(response.json().assignedAgents).toEqual([
+      expect.objectContaining({ id: secondAgent.id, name: "Second Agent" }),
     ]);
   });
 

@@ -4,7 +4,7 @@
  * OpenRouter exposes an OpenAI-compatible API at https://openrouter.ai/api/v1
  * and recommends attribution headers (HTTP-Referer, X-OpenRouter-Title).
  */
-import { ArchestraInternalErrorCode } from "@shared";
+import { ApiError, ArchestraInternalErrorCode } from "@shared";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
 import type {
@@ -21,6 +21,7 @@ import type {
   LLMResponseAdapter,
   LLMStreamAdapter,
   Openrouter,
+  StreamAccumulatorState,
 } from "@/types";
 import {
   OpenAIRequestAdapter,
@@ -103,6 +104,7 @@ class OpenrouterResponseAdapter
   private delegate: OpenAIResponseAdapter;
 
   constructor(response: OpenrouterResponse) {
+    assertOpenrouterResponseHasOutput(response);
     this.delegate = new OpenAIResponseAdapter(response);
   }
 
@@ -150,7 +152,9 @@ class OpenrouterStreamAdapter
   }
 
   processChunk(chunk: OpenrouterStreamChunk) {
-    return this.delegate.processChunk(chunk);
+    const result = this.delegate.processChunk(chunk);
+    assertOpenrouterStreamChunkHasOutput(this.delegate.state, chunk);
+    return result;
   }
   getSSEHeaders() {
     return this.delegate.getSSEHeaders();
@@ -313,3 +317,52 @@ export const openrouterAdapterFactory: LLMProvider<
     return "Internal server error";
   },
 };
+
+function assertOpenrouterResponseHasOutput(response: OpenrouterResponse): void {
+  const choice = response.choices[0];
+  if (!choice || choice.finish_reason !== "stop") {
+    return;
+  }
+
+  const { message } = choice;
+  if (
+    hasText(message.content) ||
+    hasRefusal(message.refusal) ||
+    (message.tool_calls?.length ?? 0) > 0 ||
+    message.function_call
+  ) {
+    return;
+  }
+
+  throwEmptyOpenrouterResponseError();
+}
+
+function assertOpenrouterStreamChunkHasOutput(
+  state: StreamAccumulatorState,
+  chunk: OpenrouterStreamChunk,
+): void {
+  if (chunk.choices[0]?.finish_reason !== "stop") {
+    return;
+  }
+
+  if (state.text.length > 0 || state.toolCalls.length > 0) {
+    return;
+  }
+
+  throwEmptyOpenrouterResponseError();
+}
+
+function hasText(content: string | null | undefined): boolean {
+  return typeof content === "string" && content.length > 0;
+}
+
+function hasRefusal(refusal: string | null | undefined): boolean {
+  return typeof refusal === "string" && refusal.length > 0;
+}
+
+function throwEmptyOpenrouterResponseError(): never {
+  throw new ApiError(
+    503,
+    "OpenRouter returned an empty response without content or tool calls",
+  );
+}

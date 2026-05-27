@@ -262,7 +262,9 @@ export const parseBodyLimit = (
   return defaultValue;
 };
 
-const DEFAULT_BODY_LIMIT = 50 * 1024 * 1024; // 50MB
+// 70MB body limit: accommodates the 50MB user-facing file cap with
+// headroom for base64 encoding overhead (~33%) on chat attachment uploads.
+const DEFAULT_BODY_LIMIT = 70 * 1024 * 1024;
 
 const DEFAULT_DATABASE_POOL_MAX = 50;
 const MAX_DATABASE_POOL_MAX = 500;

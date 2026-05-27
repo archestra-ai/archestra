@@ -3,12 +3,14 @@ import {
   type ArchestraToolShortName,
   type archestraApiTypes,
   ChatMessageMetadataSchema,
+  DocsPage,
   parseFullToolName,
   type ResourceVisibilityScope,
   SWAP_AGENT_FAILED_POKE_TEXT,
   SWAP_AGENT_POKE_PREFIX,
   SWAP_AGENT_POKE_TEXT,
   SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_SWAP_AGENT_FULL_NAME,
   TOOL_SWAP_AGENT_SHORT_NAME,
   TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
@@ -52,6 +54,7 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
@@ -85,6 +88,7 @@ import {
   type SwapToolPart,
 } from "@/lib/chat/swap-agent.utils";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { usePromoteChatAttachmentToKnowledgeFile } from "@/lib/knowledge/knowledge-files.query";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
@@ -1428,11 +1432,7 @@ function PromoteAttachmentDialog({
       open={Boolean(attachment)}
       onOpenChange={onOpenChange}
       title="Save to Knowledge"
-      description={
-        attachment?.filename
-          ? `Make ${attachment.filename} reusable in Knowledge. Agents and MCP Gateways you select can query it through the knowledge tool.`
-          : "Make this chat attachment reusable in Knowledge. Selected agents and MCP Gateways can query it through the knowledge tool."
-      }
+      description={<PromoteAttachmentDialogDescription />}
       size="medium"
       onSubmit={onSubmit}
       footer={
@@ -1464,6 +1464,42 @@ function PromoteAttachmentDialog({
         onAgentIdsChange={onAgentIdsChange}
       />
     </StandardFormDialog>
+  );
+}
+
+function PromoteAttachmentDialogDescription() {
+  const docsUrl = getFrontendDocsUrl(
+    DocsPage.PlatformArchestraMcpServer,
+    TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  );
+
+  return (
+    <>
+      This file will be queryable later by the selected visibility scope and
+      Agents / MCP Gateways through the{" "}
+      <ConditionalToolDocsLink href={docsUrl}>
+        <code>{TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME}</code>
+      </ConditionalToolDocsLink>{" "}
+      tool.
+    </>
+  );
+}
+
+function ConditionalToolDocsLink({
+  href,
+  children,
+}: {
+  href: string | null;
+  children: React.ReactNode;
+}) {
+  if (!href) {
+    return children;
+  }
+
+  return (
+    <ExternalDocsLink href={href} showIcon={false}>
+      {children}
+    </ExternalDocsLink>
   );
 }
 

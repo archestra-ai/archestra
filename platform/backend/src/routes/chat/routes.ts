@@ -1277,7 +1277,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body, user, organizationId }, reply) => {
-      const attachment = await ChatAttachmentModel.findByIdWithData(id);
+      const attachment = await ConversationAttachmentModel.findByIdWithData(id);
       if (!attachment) {
         throw new ApiError(404, "Attachment not found");
       }

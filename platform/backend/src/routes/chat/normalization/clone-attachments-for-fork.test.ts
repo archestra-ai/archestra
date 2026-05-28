@@ -59,6 +59,7 @@ test("clones the underlying row and rewrites refs to the new id", async ({
 
   // The ref URL was rewritten to a NEW id, not the source id.
   const forkedPart = forked[0].parts?.[1];
+  if (!forkedPart) throw new Error("Expected cloned file part");
   expect(forkedPart.type).toBe("file");
   expect(forkedPart.url).not.toBe(refUrl(row.id));
   expect(forkedPart.url).toMatch(
@@ -70,7 +71,8 @@ test("clones the underlying row and rewrites refs to the new id", async ({
   const parsed = (forkedPart.url as string).match(
     /\/api\/chat\/attachments\/([^/]+)\/content/,
   );
-  const newId = parsed![1];
+  const newId = parsed?.[1];
+  if (!newId) throw new Error("Expected cloned attachment id");
   const clonedRow = await ConversationAttachmentModel.findByIdWithData(newId);
   expect(clonedRow).not.toBeNull();
   expect(clonedRow?.conversationId).toBe(fork.id);

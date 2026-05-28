@@ -1,6 +1,6 @@
 import { vi } from "vitest";
 import { KbUploadedFileModel } from "@/models";
-import ChatAttachmentModel from "@/models/chat-attachment";
+import ConversationAttachmentModel from "@/models/conversation-attachment";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -61,14 +61,14 @@ describe("chat attachment promotion", () => {
         userId: user.id,
       });
       const bytes = Buffer.from("Reusable chat attachment content", "utf8");
-      const attachment = await ChatAttachmentModel.create({
+      const attachment = await ConversationAttachmentModel.create({
         organizationId,
         conversationId: conversation.id,
         uploadedByUserId: user.id,
         originalName: "chat-runbook.txt",
         mimeType: "text/plain",
         fileSize: bytes.byteLength,
-        contentHash: ChatAttachmentModel.computeContentHash(bytes),
+        contentHash: ConversationAttachmentModel.computeContentHash(bytes),
         fileData: bytes,
         textPreviewStatus: "ok",
         textPreview: "Reusable chat attachment content",

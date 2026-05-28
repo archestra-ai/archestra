@@ -38,7 +38,6 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { ContextIndicator } from "@/components/chat/context-indicator";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
-import { KnowledgeBaseUploadIndicator } from "@/components/chat/knowledge-base-upload-indicator";
 import { LlmProviderApiKeySelector } from "@/components/chat/llm-provider-api-key-selector";
 import {
   ModelSelector,
@@ -911,9 +910,6 @@ const PromptInputContent = ({
             )}
           </PromptInputTools>
           <div className="flex items-center gap-2">
-            <KnowledgeBaseUploadIndicator
-              attachmentCount={controller.attachments.files.length}
-            />
             <PromptInputSpeechButton
               textareaRef={textareaRef}
               onTranscriptionChange={handleTranscriptionChange}

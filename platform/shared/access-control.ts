@@ -1131,6 +1131,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetKnowledgeFiles]: { knowledgeFile: ["read"] },
   [RouteId.UploadKnowledgeFiles]: { knowledgeFile: ["create"] },
   [RouteId.GetKnowledgeFile]: { knowledgeFile: ["read"] },
+  [RouteId.GetKnowledgeFileContent]: { knowledgeFile: ["read"] },
   [RouteId.UpdateKnowledgeFile]: { knowledgeFile: ["update"] },
   [RouteId.DeleteKnowledgeFile]: { knowledgeFile: ["delete"] },
   [RouteId.GetKnowledgeFileUploadConfig]: { knowledgeFile: ["read"] },

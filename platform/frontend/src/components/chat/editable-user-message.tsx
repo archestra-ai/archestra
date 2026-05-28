@@ -315,10 +315,10 @@ export function EditableUserMessage({
                 "shrink-0 transition-opacity",
                 isRegenerateConfirming
                   ? "opacity-100"
-                  : "opacity-0 group-hover/message:opacity-100",
+                  : "opacity-0 group-has-[[data-user-message-bubble]:hover]/message:opacity-100",
               )}
             />
-            <MessageContent className="max-w-none">
+            <MessageContent className="max-w-none" data-user-message-bubble>
               <UserMessageText text={text} />
             </MessageContent>
           </div>

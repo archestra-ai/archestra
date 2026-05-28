@@ -480,6 +480,7 @@ export const RouteId = {
   GetKnowledgeFiles: "getKnowledgeFiles",
   UploadKnowledgeFiles: "uploadKnowledgeFiles",
   GetKnowledgeFile: "getKnowledgeFile",
+  GetKnowledgeFileContent: "getKnowledgeFileContent",
   UpdateKnowledgeFile: "updateKnowledgeFile",
   DeleteKnowledgeFile: "deleteKnowledgeFile",
   GetKnowledgeFileUploadConfig: "getKnowledgeFileUploadConfig",

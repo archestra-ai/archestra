@@ -1,21 +1,32 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+
+beforeAll(() => {
+  globalThis.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+});
 
 vi.mock("@/app/knowledge/_parts/knowledge-page-layout", () => ({
   KnowledgePageLayout: ({
     title,
+    description,
     createLabel,
     onCreateClick,
     children,
   }: {
     title: string;
+    description: string;
     createLabel: string;
     onCreateClick: () => void;
     children: React.ReactNode;
   }) => (
     <div>
       <h1>{title}</h1>
+      <p>{description}</p>
       <button type="button" onClick={onCreateClick}>
         {createLabel}
       </button>
@@ -90,9 +101,19 @@ describe("KnowledgeFilesPage", () => {
     expect(
       screen.getByRole("button", { name: "Upload Files" }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Upload retrieval files, control who can access them, and choose which agents or MCP gateways can query them.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("runbook.md")).toBeInTheDocument();
     expect(screen.getByText("Support")).toBeInTheDocument();
     expect(screen.getByText("Indexed")).toBeInTheDocument();
+    expect(screen.queryByText("42 B")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "View" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Download" }),
+    ).toBeInTheDocument();
   });
 
   it("opens the upload dialog from the create button", async () => {
@@ -113,5 +134,6 @@ describe("KnowledgeFilesPage", () => {
         "Choose which agents and MCP gateways can retrieve this file.",
       ),
     ).toBeInTheDocument();
+    expect(screen.getByText("All agents and MCP gateways")).toBeInTheDocument();
   });
 });

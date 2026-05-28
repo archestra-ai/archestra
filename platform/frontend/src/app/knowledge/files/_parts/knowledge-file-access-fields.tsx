@@ -2,6 +2,8 @@
 
 import type { ResourceVisibilityScope } from "@shared";
 import { Globe, User, Users } from "lucide-react";
+import { useId } from "react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import {
@@ -50,10 +52,18 @@ export function KnowledgeFileAccessFields({
   agentIds: string[];
   onAgentIdsChange: (agentIds: string[]) => void;
 }) {
+  const allAgentsCheckboxId = useId();
   const { data: teams } = useTeams();
   const { data: agents } = useProfiles({
     filters: { agentTypes: ["agent", "mcp_gateway"] },
   });
+  const agentOptions = (agents ?? []).map((agent) => ({
+    value: agent.id,
+    label: agent.name,
+  }));
+  const allAgentIds = agentOptions.map((agent) => agent.value);
+  const allAgentsSelected =
+    allAgentIds.length > 0 && allAgentIds.every((id) => agentIds.includes(id));
 
   const options = Object.values(VISIBILITY_OPTIONS).map((option) => ({
     ...option,
@@ -96,11 +106,21 @@ export function KnowledgeFileAccessFields({
             Choose which agents and MCP gateways can retrieve this file.
           </p>
         </div>
+        <div className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+          <Checkbox
+            id={allAgentsCheckboxId}
+            checked={allAgentsSelected}
+            disabled={allAgentIds.length === 0}
+            onCheckedChange={(checked) => {
+              onAgentIdsChange(checked ? allAgentIds : []);
+            }}
+          />
+          <Label htmlFor={allAgentsCheckboxId} className="font-normal">
+            All agents and MCP gateways
+          </Label>
+        </div>
         <MultiSelectCombobox
-          options={(agents ?? []).map((agent) => ({
-            value: agent.id,
-            label: agent.name,
-          }))}
+          options={agentOptions}
           value={agentIds}
           onChange={onAgentIdsChange}
           placeholder="Search agents and MCP gateways..."

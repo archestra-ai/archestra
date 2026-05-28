@@ -4,7 +4,8 @@ import type { ResourceVisibilityScope } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
 import {
-  FileText,
+  Download,
+  Eye,
   Globe,
   Loader2,
   Pencil,
@@ -19,13 +20,19 @@ import { useCallback, useRef, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { StandardFormDialog } from "@/components/standard-dialog";
+import {
+  StandardDialog,
+  StandardFormDialog,
+} from "@/components/standard-dialog";
+import {
+  type TableRowAction,
+  TableRowActions,
+} from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Tooltip,
   TooltipContent,
@@ -57,6 +64,7 @@ export default function KnowledgeFilesPage() {
 
 function KnowledgeFilesList() {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [viewingFile, setViewingFile] = useState<KnowledgeFile | null>(null);
   const [editingFile, setEditingFile] = useState<KnowledgeFile | null>(null);
   const [deletingFileId, setDeletingFileId] = useState<string | null>(null);
   const [pageIndex, setPageIndex] = useState(0);
@@ -81,7 +89,6 @@ function KnowledgeFilesList() {
       header: "File",
       cell: ({ row }) => (
         <div className="flex min-w-0 items-center gap-2">
-          <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
           <span className="truncate text-sm font-medium">
             {row.original.originalName}
           </span>
@@ -104,15 +111,6 @@ function KnowledgeFilesList() {
       cell: ({ row }) => <FileStatusBadge file={row.original} />,
     },
     {
-      id: "size",
-      header: "Size",
-      cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground">
-          {formatFileSize(row.original.fileSize)}
-        </span>
-      ),
-    },
-    {
       id: "createdAt",
       header: "Uploaded",
       cell: ({ row }) => (
@@ -128,48 +126,40 @@ function KnowledgeFilesList() {
     },
     {
       id: "actions",
-      header: "",
-      size: 64,
-      cell: ({ row }) => (
-        <TooltipProvider>
-          <div className="flex items-center justify-end gap-1">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <PermissionButton
-                  permissions={{ knowledgeFile: ["update"] }}
-                  size="icon"
-                  variant="ghost"
-                  className="h-7 w-7"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setEditingFile(row.original);
-                  }}
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </PermissionButton>
-              </TooltipTrigger>
-              <TooltipContent>Edit file access</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <PermissionButton
-                  permissions={{ knowledgeFile: ["delete"] }}
-                  size="icon"
-                  variant="ghost"
-                  className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setDeletingFileId(row.original.id);
-                  }}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </PermissionButton>
-              </TooltipTrigger>
-              <TooltipContent>Delete file</TooltipContent>
-            </Tooltip>
-          </div>
-        </TooltipProvider>
-      ),
+      header: "Actions",
+      size: 144,
+      cell: ({ row }) => {
+        const file = row.original;
+        const actions: TableRowAction[] = [
+          {
+            icon: <Eye className="h-4 w-4" />,
+            label: "View",
+            permissions: { knowledgeFile: ["read"] },
+            onClick: () => setViewingFile(file),
+          },
+          {
+            icon: <Pencil className="h-4 w-4" />,
+            label: "Edit",
+            permissions: { knowledgeFile: ["update"] },
+            onClick: () => setEditingFile(file),
+          },
+          {
+            icon: <Download className="h-4 w-4" />,
+            label: "Download",
+            permissions: { knowledgeFile: ["read"] },
+            onClick: () => downloadKnowledgeFile(file),
+          },
+          {
+            icon: <Trash2 className="h-4 w-4" />,
+            label: "Delete",
+            permissions: { knowledgeFile: ["delete"] },
+            variant: "destructive",
+            onClick: () => setDeletingFileId(file.id),
+          },
+        ];
+
+        return <TableRowActions actions={actions} />;
+      },
     },
   ];
 
@@ -178,7 +168,7 @@ function KnowledgeFilesList() {
   return (
     <KnowledgePageLayout
       title="Files"
-      description="Upload files into knowledge retrieval and choose which agents can query them."
+      description="Upload retrieval files, control who can access them, and choose which agents or MCP gateways can query them."
       createLabel="Upload Files"
       onCreateClick={() => setIsUploadOpen(true)}
       createPermissions={{ knowledgeFile: ["create"] }}
@@ -238,6 +228,13 @@ function KnowledgeFilesList() {
         open={isUploadOpen}
         onOpenChange={setIsUploadOpen}
       />
+      {viewingFile && (
+        <ViewKnowledgeFileDialog
+          file={viewingFile}
+          open={!!viewingFile}
+          onOpenChange={(open) => !open && setViewingFile(null)}
+        />
+      )}
       {editingFile && (
         <EditKnowledgeFileDialog
           file={editingFile}
@@ -404,7 +401,14 @@ function EditKnowledgeFileDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Edit File Access"
-      description={file.originalName}
+      description={
+        <div className="space-y-1">
+          <div>{file.originalName}</div>
+          <div className="text-xs text-muted-foreground">
+            Size: {formatFileSize(file.fileSize)}
+          </div>
+        </div>
+      }
       size="medium"
       onSubmit={handleSave}
       footer={
@@ -440,6 +444,55 @@ function EditKnowledgeFileDialog({
         onAgentIdsChange={setAgentIds}
       />
     </StandardFormDialog>
+  );
+}
+
+function ViewKnowledgeFileDialog({
+  file,
+  open,
+  onOpenChange,
+}: {
+  file: KnowledgeFile;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <StandardDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="View File"
+      description={
+        <div className="space-y-1">
+          <div>{file.originalName}</div>
+          <div className="text-xs text-muted-foreground">
+            Size: {formatFileSize(file.fileSize)}
+          </div>
+        </div>
+      }
+      size="large"
+      bodyClassName="min-h-0"
+      footer={
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => downloadKnowledgeFile(file)}
+          >
+            <Download className="h-4 w-4" />
+            Download
+          </Button>
+          <Button type="button" onClick={() => onOpenChange(false)}>
+            Close
+          </Button>
+        </>
+      }
+    >
+      <iframe
+        title={file.originalName}
+        src={getKnowledgeFileContentUrl(file.id)}
+        className="h-[65vh] w-full rounded-md border bg-background"
+      />
+    </StandardDialog>
   );
 }
 
@@ -534,6 +587,19 @@ function AssignedAgentsBadge({ file }: { file: KnowledgeFile }) {
       </div>
     </TooltipProvider>
   );
+}
+
+function getKnowledgeFileContentUrl(fileId: string, download = false) {
+  return `/api/knowledge-files/${fileId}/content${download ? "?download=true" : ""}`;
+}
+
+function downloadKnowledgeFile(file: KnowledgeFile) {
+  const link = document.createElement("a");
+  link.href = getKnowledgeFileContentUrl(file.id, true);
+  link.download = file.originalName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
 }
 
 function DeleteKnowledgeFileDialog({

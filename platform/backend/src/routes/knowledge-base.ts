@@ -20,6 +20,7 @@ import {
   MAX_ZIP_TOTAL_BYTES,
 } from "@/knowledge-base/connectors/file-upload/file-processor";
 import { getConnector } from "@/knowledge-base/connectors/registry";
+import { getBlobStorageProvider } from "@/knowledge-base/file-upload/blob-storage-providers";
 import { fileUploadManager } from "@/knowledge-base/file-upload/file-upload-manager";
 import logger from "@/logging";
 import {
@@ -46,12 +47,17 @@ import {
   constructResponseSchema,
   DeleteObjectResponseSchema,
   EmbeddingStatusSchema,
+  ErrorResponsesSchema,
   KnowledgeSourceVisibilitySchema,
   SelectConnectorRunListSchema,
   SelectConnectorRunSchema,
   SelectKnowledgeBaseConnectorSchema,
   SelectKnowledgeBaseSchema,
 } from "@/types";
+import {
+  isSafeInlineMimeType,
+  sanitizeAttachmentContentType,
+} from "./chat/attachment-content-type";
 
 const AssignedAgentSummarySchema = z.object({
   id: z.string(),
@@ -1256,6 +1262,55 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       return reply.send(enriched);
+    },
+  );
+
+  fastify.get(
+    "/api/knowledge-files/:fileId/content",
+    {
+      schema: {
+        operationId: RouteId.GetKnowledgeFileContent,
+        description: "Stream uploaded Knowledge File bytes by ID",
+        tags: ["Knowledge Files"],
+        params: z.object({ fileId: z.string() }),
+        querystring: z.object({ download: z.coerce.boolean().optional() }),
+        response: ErrorResponsesSchema,
+      },
+    },
+    async (
+      { params: { fileId }, query: { download }, organizationId, user },
+      reply,
+    ) => {
+      const metadata = await findKnowledgeFileOrThrow({
+        fileId,
+        organizationId,
+        userId: user.id,
+      });
+      const file = await KbUploadedFileModel.findByIdWithData(fileId);
+      if (!file || file.organizationId !== metadata.organizationId) {
+        throw new ApiError(404, "File not found");
+      }
+
+      const blobProvider = getBlobStorageProvider(file.blobStorageProvider);
+      const data = await blobProvider.get({
+        key: file.blobStorageKey,
+        dbData: file.fileData,
+      });
+      const safeMime = sanitizeAttachmentContentType(file.mimeType);
+      const disposition =
+        download || !isSafeInlineMimeType(safeMime) ? "attachment" : "inline";
+
+      reply.hijack();
+      reply.raw.writeHead(200, {
+        "Content-Type": safeMime,
+        "Content-Disposition": `${disposition}; filename="${encodeURIComponent(file.originalName)}"`,
+        "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "default-src 'none'; sandbox",
+        "Cache-Control": "private, max-age=3600",
+        "Content-Length": String(data.byteLength),
+      });
+      reply.raw.end(data);
+      return reply;
     },
   );
 

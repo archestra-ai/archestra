@@ -1,3 +1,4 @@
+import { TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME } from "@shared";
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
@@ -6,6 +7,7 @@ import {
   KbDocumentModel,
   KbUploadedFileModel,
   KnowledgeBaseConnectorModel,
+  ToolModel,
 } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -123,6 +125,78 @@ describe("knowledge file routes", () => {
     expect(assignments.map((assignment) => assignment.agentId)).toEqual([
       agent.id,
     ]);
+  });
+
+  test("streams uploaded file content for inline preview and download", async () => {
+    const upload = await app.inject({
+      method: "POST",
+      url: "/api/knowledge-files",
+      payload: buildUploadPayload({
+        files: [
+          {
+            name: "preview.txt",
+            content: Buffer.from("Preview content"),
+            mimeType: "text/plain",
+          },
+        ],
+      }),
+    });
+    expect(upload.statusCode).toBe(200);
+    const fileId = upload.json().results[0].fileId as string;
+
+    const preview = await app.inject({
+      method: "GET",
+      url: `/api/knowledge-files/${fileId}/content`,
+    });
+
+    expect(preview.statusCode).toBe(200);
+    expect(preview.body).toBe("Preview content");
+    expect(preview.headers["content-type"]).toContain("text/plain");
+    expect(preview.headers["content-disposition"]).toContain("inline");
+
+    const download = await app.inject({
+      method: "GET",
+      url: `/api/knowledge-files/${fileId}/content?download=true`,
+    });
+
+    expect(download.statusCode).toBe(200);
+    expect(download.headers["content-disposition"]).toContain("attachment");
+  });
+
+  test("exposes the knowledge query tool immediately after assigning a file to an agent and MCP gateway", async ({
+    makeAgent,
+    seedAndAssignArchestraTools,
+  }) => {
+    await seedAndAssignArchestraTools(agent.id);
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+      name: "Support Gateway",
+      teams: [],
+    });
+    await seedAndAssignArchestraTools(gateway.id);
+
+    await expectKnowledgeQueryTool(agent.id, false);
+    await expectKnowledgeQueryTool(gateway.id, false);
+
+    const upload = await app.inject({
+      method: "POST",
+      url: "/api/knowledge-files",
+      payload: buildUploadPayload({
+        agentIds: [agent.id, gateway.id],
+        files: [
+          {
+            name: "retrieval-source.txt",
+            content: Buffer.from("Retrieval content"),
+            mimeType: "text/plain",
+          },
+        ],
+      }),
+    });
+
+    expect(upload.statusCode).toBe(200);
+    await expectKnowledgeQueryTool(agent.id, true);
+    await expectKnowledgeQueryTool(gateway.id, true);
   });
 
   test("lists uploaded files with assigned agent summaries", async () => {
@@ -388,3 +462,15 @@ describe("knowledge file routes", () => {
     expect(connectors).toEqual([]);
   });
 });
+
+async function expectKnowledgeQueryTool(agentId: string, expected: boolean) {
+  const tools = await ToolModel.getMcpToolsByAgent(agentId);
+  const toolNames = tools.map((tool) => tool.name);
+
+  if (expected) {
+    expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
+    return;
+  }
+
+  expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
+}

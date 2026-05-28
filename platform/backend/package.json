@@ -105,7 +105,7 @@
     "ai": "^6.0.82",
     "asana": "3.1.11",
     "aws4fetch": "^1.0.20",
-    "better-auth": "1.6.5",
+    "better-auth": "1.6.2",
     "botbuilder": "^4.23.3",
     "botframework-connector": "^4.23.3",
     "cheerio": "^1.2.0",

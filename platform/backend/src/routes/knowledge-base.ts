@@ -46,6 +46,7 @@ import {
   KnowledgeSourceVisibilitySchema,
   SelectConnectorRunListSchema,
   SelectConnectorRunSchema,
+  SelectKbDocumentSchema,
   SelectKnowledgeBaseConnectorSchema,
   SelectKnowledgeBaseSchema,
   UploadedFileProcessingStatusSchema,
@@ -71,6 +72,16 @@ const KnowledgeBaseWithConnectorsSchema = SelectKnowledgeBaseSchema.extend({
   ),
   totalDocsIndexed: z.number(),
   assignedAgents: z.array(AssignedAgentSummarySchema),
+});
+
+const KnowledgeBaseDocumentListItemSchema = SelectKbDocumentSchema.omit({
+  content: true,
+}).extend({
+  connectorType: ConnectorTypeSchema,
+});
+
+const KnowledgeBaseDocumentDetailSchema = SelectKbDocumentSchema.extend({
+  connectorType: ConnectorTypeSchema,
 });
 
 const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -211,7 +222,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetKnowledgeBase,
         description: "Get a knowledge base by ID",
         tags: ["Knowledge Bases"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(SelectKnowledgeBaseSchema),
       },
     },
@@ -232,7 +243,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.UpdateKnowledgeBase,
         description: "Update a knowledge base",
         tags: ["Knowledge Bases"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         body: z.object({
           name: z.string().min(1).optional(),
           description: z.string().nullable().optional(),
@@ -264,7 +275,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Delete a knowledge base and remove its connector assignments",
         tags: ["Knowledge Bases"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
@@ -291,7 +302,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetKnowledgeBaseHealth,
         description: "Check the health of a knowledge base",
         tags: ["Knowledge Bases"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(
           z.object({
             status: z.enum(["healthy", "unhealthy"]),
@@ -425,11 +436,31 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ),
       }));
 
+      const validatedData = enrichedData.filter((connector) => {
+        const parsed = SelectKnowledgeBaseConnectorSchema.safeParse(connector);
+        if (parsed.success) return true;
+        logger.warn(
+          {
+            connectorId: connector.id,
+            connectorType: connector.connectorType,
+            configType: (connector.config as Record<string, unknown> | null)
+              ?.type,
+            validationErrors: parsed.error.issues.map((i) => ({
+              path: i.path.join("."),
+              code: i.code,
+              message: i.message,
+            })),
+          },
+          "Skipping connector with invalid persisted schema",
+        );
+        return false;
+      });
+
       const currentPage = Math.floor(offset / limit) + 1;
       const totalPages = Math.ceil(total / limit);
 
       return reply.send({
-        data: enrichedData,
+        data: validatedData,
         pagination: {
           currentPage,
           limit,
@@ -467,26 +498,27 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ body, organizationId, user }, reply) => {
       const teamIds = body.teamIds ?? [];
       const visibility = body.visibility ?? "org-wide";
+
       if (body.connectorType === "file_upload") {
         throw new ApiError(
           400,
           "File uploads are managed from Knowledge > Files",
         );
       }
+
       if (isTeamScopedWithoutTeams({ visibility, teamIds })) {
         throw new ApiError(
           400,
           "At least one team must be selected for team-scoped connectors",
         );
       }
-
       if (
         visibility === "team-scoped" &&
         !config.enterpriseFeatures.knowledgeBase
       ) {
         throw new ApiError(
           403,
-          "Team-scoped connectors require an enterprise license. Please contact sales@archestra.ai to enable it.",
+          "Team-scoped connectors require an enterprise license",
         );
       }
 
@@ -562,7 +594,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetConnector,
         description: "Get a connector by ID",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(
           SelectKnowledgeBaseConnectorSchema.extend({
             totalDocsIngested: z.number(),
@@ -581,6 +613,122 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.get(
+    "/api/connectors/:id/documents",
+    {
+      schema: {
+        operationId: RouteId.GetConnectorDocuments,
+        description: "List documents for a connector",
+        tags: ["Connectors"],
+        params: z.object({ id: z.uuid() }),
+        querystring: PaginationQuerySchema.extend({
+          search: z.string().optional(),
+        }),
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(KnowledgeBaseDocumentListItemSchema),
+        ),
+      },
+    },
+    async (
+      {
+        params: { id },
+        query: { limit, offset, search },
+        organizationId,
+        user,
+      },
+      reply,
+    ) => {
+      await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
+
+      const [data, total] = await Promise.all([
+        KbDocumentModel.findListItemsByConnector({
+          connectorId: id,
+          organizationId,
+          limit,
+          offset,
+          search,
+        }),
+        KbDocumentModel.countByConnectorWithSearch({
+          connectorId: id,
+          organizationId,
+          search,
+        }),
+      ]);
+
+      return reply.send({
+        data,
+        pagination: calculatePaginationMeta(total, { limit, offset }),
+      });
+    },
+  );
+
+  fastify.get(
+    "/api/connectors/:id/documents/:docId",
+    {
+      schema: {
+        operationId: RouteId.GetConnectorDocument,
+        description: "Get a single connector document",
+        tags: ["Connectors"],
+        params: z.object({ id: z.uuid(), docId: z.uuid() }),
+        response: constructResponseSchema(KnowledgeBaseDocumentDetailSchema),
+      },
+    },
+    async ({ params: { id, docId }, organizationId, user }, reply) => {
+      await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
+
+      const existing = await KbDocumentModel.findListItemByIdAndConnector({
+        documentId: docId,
+        connectorId: id,
+        organizationId,
+      });
+      if (!existing) {
+        throw new ApiError(404, "Document not found");
+      }
+
+      return reply.send(existing);
+    },
+  );
+
+  fastify.delete(
+    "/api/connectors/:id/documents/:docId",
+    {
+      schema: {
+        operationId: RouteId.DeleteConnectorDocument,
+        description: "Delete a connector document",
+        tags: ["Connectors"],
+        params: z.object({ id: z.uuid(), docId: z.uuid() }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { id, docId }, organizationId, user }, reply) => {
+      await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
+
+      const existing = await KbDocumentModel.findListItemByIdAndConnector({
+        documentId: docId,
+        connectorId: id,
+        organizationId,
+      });
+      if (!existing) {
+        throw new ApiError(404, "Document not found");
+      }
+
+      await KbDocumentModel.delete(docId);
+      return reply.send({ success: true });
+    },
+  );
+
   fastify.put(
     "/api/connectors/:id",
     {
@@ -588,7 +736,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.UpdateConnector,
         description: "Update a connector",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         body: z.object({
           name: z.string().min(1).optional(),
           description: z.string().nullable().optional(),
@@ -620,6 +768,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { credentials: _, ...updateData } = body;
       const nextVisibility = updateData.visibility ?? connector.visibility;
       const nextTeamIds = updateData.teamIds ?? connector.teamIds;
+
       if (
         isTeamScopedWithoutTeams({
           visibility: nextVisibility,
@@ -631,15 +780,14 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "At least one team must be selected for team-scoped connectors",
         );
       }
-
       if (
-        nextVisibility === "team-scoped" &&
         connector.visibility !== "team-scoped" &&
+        nextVisibility === "team-scoped" &&
         !config.enterpriseFeatures.knowledgeBase
       ) {
         throw new ApiError(
           403,
-          "Team-scoped connectors require an enterprise license. Please contact sales@archestra.ai to enable it.",
+          "Team-scoped connectors require an enterprise license",
         );
       }
 
@@ -680,7 +828,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.DeleteConnector,
         description: "Delete a connector",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
@@ -722,7 +870,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.SyncConnector,
         description: "Manually trigger a connector sync",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(
           z.object({
             taskId: z.string(),
@@ -771,7 +919,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Force a full re-sync: deletes all documents, chunks, run history, and resets the checkpoint",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(
           z.object({
             taskId: z.string(),
@@ -826,7 +974,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.TestConnectorConnection,
         description: "Test a connector connection",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(
           z.object({
             success: z.boolean(),
@@ -865,7 +1013,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.AssignConnectorToKnowledgeBases,
         description: "Assign a connector to one or more knowledge bases",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         body: z.object({
           knowledgeBaseIds: z.array(z.string()).min(1),
         }),
@@ -899,7 +1047,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.UnassignConnectorFromKnowledgeBase,
         description: "Unassign a connector from a knowledge base",
         tags: ["Connectors"],
-        params: z.object({ id: z.string(), kbId: z.string() }),
+        params: z.object({ id: z.uuid(), kbId: z.uuid() }),
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
@@ -932,7 +1080,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetConnectorKnowledgeBases,
         description: "List knowledge bases assigned to a connector",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(
           z.object({
             data: z.array(SelectKnowledgeBaseSchema),
@@ -979,7 +1127,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetConnectorRuns,
         description: "List connector runs",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         querystring: PaginationQuerySchema,
         response: constructResponseSchema(
           createPaginatedResponseSchema(SelectConnectorRunListSchema),
@@ -1030,8 +1178,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get a single connector run (including logs)",
         tags: ["Connectors"],
         params: z.object({
-          id: z.string(),
-          runId: z.string(),
+          id: z.uuid(),
+          runId: z.uuid(),
         }),
         response: constructResponseSchema(SelectConnectorRunSchema),
       },
@@ -1301,7 +1449,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Content-Type": safeMime,
         "Content-Disposition": `${disposition}; filename="${encodeURIComponent(file.originalName)}"`,
         "X-Content-Type-Options": "nosniff",
-        "Content-Security-Policy": "default-src 'none'; sandbox",
+        "Content-Security-Policy": "default-src 'none'; frame-ancestors 'self'",
         "Cache-Control": "private, max-age=3600",
         "Content-Length": String(data.byteLength),
       });

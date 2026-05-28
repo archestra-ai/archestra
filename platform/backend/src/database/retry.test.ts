@@ -5,6 +5,7 @@ import {
   installDbErrorSafetyNet,
   isTransientDbError,
   withDbRetry,
+  withTransactionRetry,
   wrapPoolWithRetry,
 } from "./retry";
 
@@ -240,6 +241,24 @@ describe("withDbRetry", () => {
     expect(fn).toHaveBeenCalledTimes(2);
 
     vi.useRealTimers();
+  });
+});
+
+describe("withTransactionRetry", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("retries the whole transaction operation on transient errors", async () => {
+    const runTransaction = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Connection terminated unexpectedly"))
+      .mockResolvedValue("committed");
+
+    const result = await withTransactionRetry(runTransaction);
+
+    expect(result).toBe("committed");
+    expect(runTransaction).toHaveBeenCalledTimes(2);
   });
 });
 

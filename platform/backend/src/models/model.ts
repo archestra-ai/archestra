@@ -9,7 +9,7 @@ import {
   or,
   sql,
 } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import type {
   CreateModel,
@@ -247,7 +247,7 @@ class ModelModel {
     );
 
     // Wrap all batches in a transaction to ensure atomicity
-    const results = await db.transaction(async (tx) => {
+    const results = await withDbTransaction(async (tx) => {
       const batchResults: Model[] = [];
 
       for (let i = 0; i < dataArray.length; i += BATCH_SIZE) {
@@ -314,7 +314,7 @@ class ModelModel {
       "Starting batched full model upsert",
     );
 
-    const results = await db.transaction(async (tx) => {
+    const results = await withDbTransaction(async (tx) => {
       const batchResults: Model[] = [];
 
       for (let i = 0; i < dataArray.length; i += BATCH_SIZE) {

@@ -24,6 +24,7 @@ vi.mock("@sentry/node", async (importOriginal) => {
   };
 });
 
+import config from "@/config";
 // Import after mock setup
 import { isDatabaseHealthy } from "@/database";
 import healthRoutes from "@/routes/health";
@@ -797,6 +798,31 @@ describe("health endpoints", () => {
       const body = response.json();
       expect(body.status).toBe("degraded");
       expect(body.database).toBe("disconnected");
+    });
+
+    test("returns 200 without checking the database in maintenance mode", async () => {
+      const originalMaintenanceMode = config.maintenanceMode;
+      config.maintenanceMode = "Scheduled maintenance";
+      mockIsDatabaseHealthy.mockClear();
+
+      try {
+        const app = createFastifyInstance();
+        await app.register(healthRoutes);
+
+        const response = await app.inject({
+          method: "GET",
+          url: "/ready",
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toMatchObject({
+          status: "maintenance",
+          database: "not_checked",
+        });
+        expect(mockIsDatabaseHealthy).not.toHaveBeenCalled();
+      } finally {
+        config.maintenanceMode = originalMaintenanceMode;
+      }
     });
   });
 });

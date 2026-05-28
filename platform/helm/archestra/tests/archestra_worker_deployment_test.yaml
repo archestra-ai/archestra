@@ -4,6 +4,14 @@ templates:
 values:
   - ../ci/test-values.yaml
 tests:
+  - it: omits the worker deployment when maintenance mode is enabled
+    set:
+      archestra.env:
+        ARCHESTRA_MAINTENANCE_MODE_MESSAGE: "Scheduled maintenance"
+    asserts:
+      - hasDocuments:
+          count: 0
+
   - it: worker deployment has default resources configured
     asserts:
       - equal:

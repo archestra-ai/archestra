@@ -16,7 +16,7 @@ import {
 } from "@shared";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import config, { getProviderEnvApiKey } from "@/config";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -504,7 +504,7 @@ async function migratePlaywrightToolsToDynamicCredential(): Promise<void> {
 }
 
 async function migrateSecretsToEncrypted(): Promise<void> {
-  await db.transaction(async (tx) => {
+  await withDbTransaction(async (tx) => {
     const rows = await tx.select().from(schema.secretsTable);
     let migrated = 0;
 

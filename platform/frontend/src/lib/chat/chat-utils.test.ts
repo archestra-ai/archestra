@@ -312,4 +312,48 @@ describe("mergePersistedMessageMetadata", () => {
       [PERSISTED_MESSAGE_ID_METADATA_KEY]: "db-user-1",
     });
   });
+
+  it("refreshes persisted user file URLs when the live message already has a persisted id", () => {
+    const liveMessages = [
+      {
+        id: "live-user-1",
+        role: "user",
+        metadata: {
+          [PERSISTED_MESSAGE_ID_METADATA_KEY]: "db-user-1",
+        },
+        parts: [
+          { type: "text", text: "read this" },
+          {
+            type: "file",
+            url: "data:application/pdf;base64,JVBERi0=",
+            mediaType: "application/pdf",
+            filename: "sample.pdf",
+          },
+        ],
+      },
+    ] as UIMessage[];
+    const persistedMessages = [
+      {
+        id: "db-user-1",
+        role: "user",
+        parts: [
+          { type: "text", text: "read this" },
+          {
+            type: "file",
+            url: "/api/chat/attachments/11111111-1111-1111-1111-111111111111/content",
+            mediaType: "application/pdf",
+            filename: "sample.pdf",
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    const mergedMessages = mergePersistedMessageMetadata({
+      liveMessages,
+      persistedMessages,
+    });
+
+    expect(mergedMessages).not.toBe(liveMessages);
+    expect(mergedMessages[0]?.parts).toBe(persistedMessages[0]?.parts);
+  });
 });

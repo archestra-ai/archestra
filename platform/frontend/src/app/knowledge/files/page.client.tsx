@@ -38,12 +38,6 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import {
@@ -555,29 +549,16 @@ function AssignedAgentsBadge({ file }: { file: KnowledgeFile }) {
   const hiddenAgents = file.assignedAgents.slice(2);
 
   return (
-    <TooltipProvider>
-      <div className="flex min-w-0 flex-wrap items-center gap-1">
-        {visibleAgents.map((agent) => (
-          <Badge key={agent.id} variant="outline" className="max-w-[140px]">
-            <span className="truncate">{agent.name}</span>
-          </Badge>
-        ))}
-        {hiddenAgents.length > 0 && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Badge variant="outline">+{hiddenAgents.length}</Badge>
-            </TooltipTrigger>
-            <TooltipContent>
-              <div className="space-y-1">
-                {hiddenAgents.map((agent) => (
-                  <div key={agent.id}>{agent.name}</div>
-                ))}
-              </div>
-            </TooltipContent>
-          </Tooltip>
-        )}
-      </div>
-    </TooltipProvider>
+    <div className="flex min-w-0 flex-wrap items-center gap-1">
+      {visibleAgents.map((agent) => (
+        <Badge key={agent.id} variant="outline" className="max-w-[140px]">
+          <span className="truncate">{agent.name}</span>
+        </Badge>
+      ))}
+      {hiddenAgents.length > 0 && (
+        <Badge variant="outline">+{hiddenAgents.length} more</Badge>
+      )}
+    </div>
   );
 }
 

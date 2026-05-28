@@ -30,7 +30,6 @@ export function MaintenanceModeOverlay() {
           Maintenance in Progress
         </h1>
         <p className="text-muted-foreground text-sm">{maintenanceMessage}</p>
-        <p className="text-xs text-muted-foreground">Please check back soon.</p>
       </div>
     </div>
   );

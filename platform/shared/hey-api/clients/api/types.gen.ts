@@ -23681,7 +23681,7 @@ export type GetHealthResponses = {
      */
     200: {
         name: string;
-        status: string;
+        status: 'ok';
         version: string;
     };
 };
@@ -23701,9 +23701,9 @@ export type GetReadyErrors = {
      */
     503: {
         name: string;
-        status: string;
+        status: 'degraded';
         version: string;
-        database: string;
+        database: 'disconnected';
     };
 };
 
@@ -23715,9 +23715,9 @@ export type GetReadyResponses = {
      */
     200: {
         name: string;
-        status: string;
+        status: 'ok' | 'maintenance';
         version: string;
-        database: string;
+        database: 'connected' | 'not_checked';
     };
 };
 
@@ -33294,6 +33294,308 @@ export type UpdateConnectorResponses = {
 };
 
 export type UpdateConnectorResponse = UpdateConnectorResponses[keyof UpdateConnectorResponses];
+
+export type GetConnectorDocumentsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        limit?: number;
+        offset?: number;
+        search?: string;
+    };
+    url: '/api/connectors/{id}/documents';
+};
+
+export type GetConnectorDocumentsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetConnectorDocumentsError = GetConnectorDocumentsErrors[keyof GetConnectorDocumentsErrors];
+
+export type GetConnectorDocumentsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            organizationId: string;
+            sourceId: string | null;
+            connectorId: string;
+            title: string;
+            contentHash: string;
+            sourceUrl: string | null;
+            acl: Array<string>;
+            metadata: {
+                [key: string]: unknown;
+            } | null;
+            embeddingStatus: 'pending' | 'processing' | 'completed' | 'failed';
+            chunkCount: number;
+            createdAt: string;
+            updatedAt: string;
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce';
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetConnectorDocumentsResponse = GetConnectorDocumentsResponses[keyof GetConnectorDocumentsResponses];
+
+export type DeleteConnectorDocumentData = {
+    body?: never;
+    path: {
+        id: string;
+        docId: string;
+    };
+    query?: never;
+    url: '/api/connectors/{id}/documents/{docId}';
+};
+
+export type DeleteConnectorDocumentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteConnectorDocumentError = DeleteConnectorDocumentErrors[keyof DeleteConnectorDocumentErrors];
+
+export type DeleteConnectorDocumentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteConnectorDocumentResponse = DeleteConnectorDocumentResponses[keyof DeleteConnectorDocumentResponses];
+
+export type GetConnectorDocumentData = {
+    body?: never;
+    path: {
+        id: string;
+        docId: string;
+    };
+    query?: never;
+    url: '/api/connectors/{id}/documents/{docId}';
+};
+
+export type GetConnectorDocumentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetConnectorDocumentError = GetConnectorDocumentErrors[keyof GetConnectorDocumentErrors];
+
+export type GetConnectorDocumentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        sourceId: string | null;
+        connectorId: string;
+        title: string;
+        content: string;
+        contentHash: string;
+        sourceUrl: string | null;
+        acl: Array<string>;
+        metadata: {
+            [key: string]: unknown;
+        } | null;
+        embeddingStatus: 'pending' | 'processing' | 'completed' | 'failed';
+        chunkCount: number;
+        createdAt: string;
+        updatedAt: string;
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce';
+    };
+};
+
+export type GetConnectorDocumentResponse = GetConnectorDocumentResponses[keyof GetConnectorDocumentResponses];
 
 export type SyncConnectorData = {
     body?: never;

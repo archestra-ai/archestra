@@ -1,6 +1,6 @@
 import { MODEL_MARKER_PATTERNS, type SupportedProvider } from "@shared";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import type { LlmProviderApiKey, Model } from "@/types";
 
 /**
@@ -98,7 +98,7 @@ class LlmProviderApiKeyModelLinkModel {
       new Map(models.map((model) => [model.id, model])).values(),
     );
 
-    await db.transaction(async (tx) => {
+    await withDbTransaction(async (tx) => {
       // Delete existing links for this API key
       await tx
         .delete(schema.llmProviderApiKeyModelsTable)

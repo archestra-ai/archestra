@@ -56,6 +56,21 @@ vi.mock("@/lib/knowledge/knowledge-files.query", () => ({
           teamIds: [],
           assignedAgents: [
             { id: "agent-1", name: "Support", agentType: "agent" },
+            {
+              id: "gateway-1",
+              name: "My Gateway",
+              agentType: "mcp_gateway",
+            },
+            {
+              id: "agent-2",
+              name: "Hidden Assistant",
+              agentType: "agent",
+            },
+            {
+              id: "gateway-2",
+              name: "Hidden Gateway",
+              agentType: "mcp_gateway",
+            },
           ],
         },
       ],
@@ -108,6 +123,10 @@ describe("KnowledgeFilesPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("runbook.md")).toBeInTheDocument();
     expect(screen.getByText("Support")).toBeInTheDocument();
+    expect(screen.getByText("My Gateway")).toBeInTheDocument();
+    expect(screen.getByText("+2 more")).toBeInTheDocument();
+    expect(screen.queryByText("Hidden Assistant")).not.toBeInTheDocument();
+    expect(screen.queryByText("Hidden Gateway")).not.toBeInTheDocument();
     expect(screen.getByText("Indexed")).toBeInTheDocument();
     expect(screen.queryByText("42 B")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "View" })).toBeInTheDocument();

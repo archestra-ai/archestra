@@ -55,7 +55,6 @@ export function KnowledgeFileViewerDialog({
     >
       <iframe
         title={file.originalName}
-        sandbox=""
         src={getKnowledgeFileContentUrl(file.id)}
         className="min-h-0 flex-1 rounded-md border bg-background"
       />

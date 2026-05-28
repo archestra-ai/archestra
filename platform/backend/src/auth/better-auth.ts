@@ -25,7 +25,7 @@ import { createAccessControl } from "better-auth/plugins/access";
 import { and, eq, ne } from "drizzle-orm";
 import { z } from "zod";
 import config from "@/config";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import { LOG_LEVEL } from "@/logging/log-level";
 // Import directly from files to avoid circular dependency through barrel export
@@ -1553,7 +1553,7 @@ async function cleanupRejectedSsoLogin(params: {
   userId: string;
   sessionId: string;
 }) {
-  await db.transaction(async (tx) => {
+  await withDbTransaction(async (tx) => {
     await SessionModel.deleteById(params.sessionId, tx);
     await AccountModel.deleteByUserIdAndProviderId({
       userId: params.userId,

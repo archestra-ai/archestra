@@ -153,6 +153,9 @@ describe("knowledge file routes", () => {
     expect(preview.body).toBe("Preview content");
     expect(preview.headers["content-type"]).toContain("text/plain");
     expect(preview.headers["content-disposition"]).toContain("inline");
+    expect(preview.headers["content-security-policy"]).toBe(
+      "default-src 'none'; frame-ancestors 'self'",
+    );
 
     const download = await app.inject({
       method: "GET",

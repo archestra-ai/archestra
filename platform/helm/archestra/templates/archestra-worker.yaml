@@ -1,4 +1,4 @@
-{{- if .Values.archestra.worker.enabled }}
+{{- if and .Values.archestra.worker.enabled (ne (include "archestra-platform.maintenanceModeEnabled" .) "true") }}
 {{- $workerPodAnnotations := mergeOverwrite (dict) (.Values.archestra.podAnnotations | default dict) (.Values.archestra.worker.podAnnotations | default dict) }}
 {{- if hasKey $workerPodAnnotations "prometheus.io/scrape" }}
 {{- $workerPodAnnotations = mergeOverwrite $workerPodAnnotations (dict "prometheus.io/port" "9000" "prometheus.io/path" "/metrics") }}

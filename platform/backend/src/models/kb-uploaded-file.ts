@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { ResourceVisibilityScope } from "@shared";
 import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import type { UploadedFileProcessingStatus } from "@/types";
 import { escapeLikePattern } from "@/utils/sql-search";
 
@@ -266,7 +266,7 @@ class KbUploadedFileModel {
     fileId: string;
     connectorId: string;
   }): Promise<void> {
-    await db.transaction(async (tx) => {
+    await withDbTransaction(async (tx) => {
       await tx
         .delete(schema.kbDocumentsTable)
         .where(

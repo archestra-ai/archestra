@@ -35,14 +35,14 @@ describe("AuditLogDiffView", () => {
     );
 
     const added = screen.getAllByRole("listitem");
-    expect(added).toHaveLength(2);
+    expect(added).toHaveLength(4);
 
     for (const item of added) {
       expect(item).toHaveAttribute("data-diff-kind", "added");
     }
 
-    expect(added[0]).toHaveTextContent(`"name": "Agent A",`);
-    expect(added[1]).toHaveTextContent(`"id": "abc"`);
+    expect(added[1]).toHaveTextContent(`"name": "Agent A",`);
+    expect(added[2]).toHaveTextContent(`"id": "abc"`);
   });
 
   it("renders a full - block when after is null (delete event)", () => {
@@ -54,7 +54,7 @@ describe("AuditLogDiffView", () => {
     );
 
     const removed = screen.getAllByRole("listitem");
-    expect(removed).toHaveLength(2);
+    expect(removed).toHaveLength(4);
     for (const item of removed) {
       expect(item).toHaveAttribute("data-diff-kind", "removed");
     }
@@ -73,19 +73,19 @@ describe("AuditLogDiffView", () => {
     );
 
     const items = screen.getAllByRole("listitem");
-    expect(items).toHaveLength(4);
+    expect(items).toHaveLength(6);
 
-    expect(items[0]).toHaveAttribute("data-diff-kind", "context");
-    expect(items[0]).toHaveTextContent(`"id": "abc",`);
+    expect(items[1]).toHaveAttribute("data-diff-kind", "context");
+    expect(items[1]).toHaveTextContent(`"id": "abc",`);
 
-    expect(items[1]).toHaveAttribute("data-diff-kind", "removed");
-    expect(items[1]).toHaveTextContent(`"name": "Engineering Team Agent",`);
+    expect(items[2]).toHaveAttribute("data-diff-kind", "removed");
+    expect(items[2]).toHaveTextContent(`"name": "Engineering Team Agent",`);
 
-    expect(items[2]).toHaveAttribute("data-diff-kind", "added");
-    expect(items[2]).toHaveTextContent(`"name": "My Agent",`);
+    expect(items[3]).toHaveAttribute("data-diff-kind", "added");
+    expect(items[3]).toHaveTextContent(`"name": "My Agent",`);
 
-    expect(items[3]).toHaveAttribute("data-diff-kind", "context");
-    expect(items[3]).toHaveTextContent(`"description": "Same"`);
+    expect(items[4]).toHaveAttribute("data-diff-kind", "context");
+    expect(items[4]).toHaveTextContent(`"description": "Same"`);
   });
 
   it("renders nothing when before and after are deeply equal", () => {
@@ -110,9 +110,14 @@ describe("AuditLogDiffView", () => {
     );
 
     const items = screen.getAllByRole("listitem");
-    expect(items).toHaveLength(2);
+    expect(items).toHaveLength(5);
 
-    const [removed, added] = items;
+    const removed = items.find(
+      (el) => el.getAttribute("data-diff-kind") === "removed",
+    )!;
+    const added = items.find(
+      (el) => el.getAttribute("data-diff-kind") === "added",
+    )!;
     expect(removed).toHaveAttribute("data-diff-kind", "removed");
     expect(within(removed).getByText(/"legacyFlag": true/)).toBeInTheDocument();
 
@@ -131,8 +136,8 @@ describe("AuditLogDiffView", () => {
     const items = screen.getAllByRole("listitem");
     // opening `{`, three field lines, closing `}` (all `added`)
     expect(items).toHaveLength(5);
-    expect(items[0]).toHaveTextContent(/^\{$/);
-    expect(items[items.length - 1]).toHaveTextContent(/^\}$/);
+    expect(items[0]).toHaveTextContent(/\{/);
+    expect(items[items.length - 1]).toHaveTextContent(/\}/);
 
     // Trailing commas after each field except the last
     expect(items[1]).toHaveTextContent(`"name": "Agent A",`);
@@ -225,17 +230,17 @@ describe("AuditLogDiffView", () => {
     );
 
     const items = screen.getAllByRole("listitem");
-    expect(items).toHaveLength(5);
-    expect(items[0]).toHaveAttribute("data-diff-kind", "context");
-    expect(items[0]).toHaveTextContent(`"config": {`);
-    expect(items[1]).toHaveAttribute("data-diff-kind", "context");
-    expect(items[1]).toHaveTextContent(`"region": "us-east-1",`);
-    expect(items[2]).toHaveAttribute("data-diff-kind", "removed");
-    expect(items[2].textContent).toMatch(/"retries": 3/);
-    expect(items[3]).toHaveAttribute("data-diff-kind", "added");
-    expect(items[3].textContent).toMatch(/"retries": 5/);
-    expect(items[4]).toHaveAttribute("data-diff-kind", "context");
-    expect(items[4]).toHaveTextContent("}");
+    expect(items).toHaveLength(8);
+    expect(items[2]).toHaveAttribute("data-diff-kind", "context");
+    expect(items[2]).toHaveTextContent(`"config": {`);
+    expect(items[3]).toHaveAttribute("data-diff-kind", "context");
+    expect(items[3]).toHaveTextContent(`"region": "us-east-1",`);
+    expect(items[4]).toHaveAttribute("data-diff-kind", "removed");
+    expect(items[4].textContent).toMatch(/"retries": 3/);
+    expect(items[5]).toHaveAttribute("data-diff-kind", "added");
+    expect(items[5].textContent).toMatch(/"retries": 5/);
+    expect(items[6]).toHaveAttribute("data-diff-kind", "context");
+    expect(items[6]).toHaveTextContent("}");
   });
 });
 

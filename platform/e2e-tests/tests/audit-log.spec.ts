@@ -80,7 +80,11 @@ test.describe("Audit log UI", {
     await goToAdminPage(AUDIT_LOGS_PATH);
     await adminPage.waitForLoadState("domcontentloaded");
 
-    const firstRow = adminPage.locator("tbody tr").first();
+    // Only real data rows have cells with data-column-id; the empty-state row
+    // is a single colSpan <tr> without that attribute, so this selector skips it.
+    const firstRow = adminPage
+      .locator("tbody tr:has(td[data-column-id])")
+      .first();
     const hasRow = await firstRow
       .waitFor({ state: "visible", timeout: 15_000 })
       .then(() => true)

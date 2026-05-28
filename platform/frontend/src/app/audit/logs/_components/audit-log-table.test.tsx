@@ -364,7 +364,7 @@ describe("AuditLogTable", () => {
     );
 
     expect(push).toHaveBeenCalled();
-    const url = String(push.mock.calls[0][0]);
+    const url = String(push.mock.calls[push.mock.calls.length - 1][0]);
     expect(url).not.toContain("action=agent.updated");
     expect(url).not.toContain("search=findme");
     expect(url).not.toContain("outcome=denied");

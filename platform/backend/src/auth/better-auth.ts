@@ -408,6 +408,21 @@ export const auth = betterAuth({
   },
 });
 
+// TEMPORARY DIAGNOSTIC — remove once the setup-teams 429 flake is resolved.
+// The e2e env sets ARCHESTRA_AUTH_RATE_LIMIT_DISABLED=true and the chart
+// renders it into the pod, yet better-auth's limiter still 429s sign-in under
+// CI parallelism. Log the runtime-effective flag so a CI pod log reveals
+// whether the disable actually takes effect at construction time, instead of
+// us deducing it from source. (better-auth derives rateLimit.enabled directly
+// from this, so the parsed flag is the decisive value.)
+logger.info(
+  {
+    rawEnv: process.env.ARCHESTRA_AUTH_RATE_LIMIT_DISABLED ?? null,
+    authRateLimitDisabled: config.authRateLimitDisabled,
+  },
+  "[auth-diagnostic] startup rate-limit config",
+);
+
 function getBetterAuthLogLevel(
   logLevel: string,
 ): "debug" | "info" | "warn" | "error" | undefined {

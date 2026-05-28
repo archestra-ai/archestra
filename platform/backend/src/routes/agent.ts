@@ -17,6 +17,7 @@ import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import {
   AgentLabelModel,
   AgentModel,
+  AgentVersionModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
   MemberModel,
@@ -497,6 +498,18 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...(body.scope !== "team" && { teams: [] }),
       };
       const agent = await AgentModel.create(createData, user.id);
+
+      if (agent.systemPrompt) {
+        await AgentVersionModel.record({
+          agentId: agent.id,
+          organizationId,
+          systemPrompt: agent.systemPrompt,
+          source: "create",
+          userId: user.id,
+          userName: user.name,
+        });
+      }
+
       // We need to re-init metrics with the new label keys in case label keys changed.
       // Otherwise the newly added labels will not make it to metrics. The labels with new keys, that is.
       await initializeObservabilityMetrics();
@@ -948,6 +961,17 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!agent) {
         throw new ApiError(404, "Agent not found");
+      }
+
+      if (updateData.systemPrompt !== undefined) {
+        await AgentVersionModel.record({
+          agentId: agent.id,
+          organizationId,
+          systemPrompt: agent.systemPrompt,
+          source: "update",
+          userId: user.id,
+          userName: user.name,
+        });
       }
 
       // Only re-init metrics when labels were part of the update payload,

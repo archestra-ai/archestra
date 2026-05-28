@@ -1786,6 +1786,13 @@
       "when": 1779807387011,
       "tag": "0254_black_skin",
       "breakpoints": true
+    },
+    {
+      "idx": 255,
+      "version": "7",
+      "when": 1779938153261,
+      "tag": "0255_panoramic_gamora",
+      "breakpoints": true
     }
   ]
 }

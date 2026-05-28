@@ -22,7 +22,7 @@ describe("getSkillPermissionChecker", () => {
     expect(checker.isAdmin).toBe(true);
   });
 
-  test("member role gets canRead but NOT canExecute by default", async ({
+  test("member role gets canRead and canExecute (but not isAdmin) by default", async ({
     makeUser,
     makeOrganization,
     makeMember,
@@ -37,7 +37,7 @@ describe("getSkillPermissionChecker", () => {
     });
 
     expect(checker.canRead).toBe(true);
-    expect(checker.canExecute).toBe(false);
+    expect(checker.canExecute).toBe(true);
     expect(checker.isAdmin).toBe(false);
   });
 

@@ -3,6 +3,8 @@
 const assert = require("node:assert/strict");
 const sandbox = require("./index.cjs");
 
+// asserts the NAPI binding surfaces validation errors with the right code.
+// `cwd` outside the sandbox roots should be rejected before any engine call.
 const invalidInput = {
   snapshots: [
     {
@@ -21,15 +23,14 @@ const invalidInput = {
     maxProcesses: 16,
   },
   command: "echo hi",
-  cwd: "/skills/test",
+  cwd: "/etc",
   timeoutSeconds: 1,
-  extraAptPackages: ["bash;curl"],
 };
 
 (async () => {
   await assert.rejects(sandbox.runSandbox(invalidInput), (error) => {
     assert.equal(error.code, "ARCHESTRA_INVALID_INPUT");
-    assert.match(error.message, /invalid apt package name/);
+    assert.match(error.message, /cwd must be under/);
     return true;
   });
 

@@ -11,9 +11,13 @@ import {
   SkillSandboxFileSnapshotModel,
   SkillSandboxModel,
 } from "@/models";
-import type { SkillSandbox } from "@/types";
+import type { SkillSandbox, SkillSandboxFileSnapshot } from "@/types";
 import { asSandboxId, type SandboxId } from "@/types";
-import { SKILL_SANDBOX_HOME, SKILL_SANDBOX_ROOT } from "./runtime-image";
+import {
+  SKILL_SANDBOX_HOME,
+  SKILL_SANDBOX_ROOT,
+  skillRootPath,
+} from "./runtime-image";
 import {
   type ArtifactRef,
   type CommandResult,
@@ -22,6 +26,20 @@ import {
   SKILL_SANDBOX_LIMITS,
   SkillSandboxError,
 } from "./types";
+
+const CONSUMER_ID = "skill-sandbox";
+// synthetic exit code recorded when the runtime errored mid-call and the real
+// exit status was lost. distinct from any value the wrapped bash subprocess
+// can produce (which is bounded to 0..255).
+const SYNTHETIC_ENGINE_FAILURE_EXIT_CODE = -1;
+// must match `DEFAULT_VENV_PYTHON` in sandbox-core/src/session.rs; we don't
+// re-export it from the napi crate to avoid coupling the TS adapter to Rust
+// build state.
+const VENV_PYTHON = "/home/sandbox/.venv/bin/python";
+const REQUIREMENTS_FILE = "requirements.txt";
+// covers the cold first install for a typical skill (pillow + a few siblings);
+// subsequent calls hit Dagger's layer cache and finish in ms.
+const REQUIREMENTS_INSTALL_TIMEOUT_SECONDS = 180;
 
 /**
  * Orchestrates DB-backed skill sandboxes: loads snapshots + replay log,
@@ -48,11 +66,11 @@ class SkillSandboxRuntimeService {
 
   async init(): Promise<void> {
     if (!config.skillsSandbox.enabled) return;
-    await daggerRuntimeService.init();
+    await daggerRuntimeService.attach(CONSUMER_ID);
   }
 
   async shutdown(): Promise<void> {
-    await daggerRuntimeService.shutdown();
+    await daggerRuntimeService.detach(CONSUMER_ID);
   }
 
   async runCommand(params: RunCommandParams): Promise<CommandResult> {
@@ -63,7 +81,8 @@ class SkillSandboxRuntimeService {
     return this.runExclusive(params.sandboxId, async () => {
       const sandbox = await this.loadSandbox(params.sandboxId);
       const cwd = params.cwd ?? sandbox.defaultCwd;
-      const { snapshots, replayCommands } = await this.buildContext(sandbox);
+      const { snapshots, replayCommands, pythonpath } =
+        await this.buildContext(sandbox);
 
       let executed: Awaited<ReturnType<typeof daggerRuntimeService.runCommand>>;
       try {
@@ -73,10 +92,26 @@ class SkillSandboxRuntimeService {
           timeoutSeconds,
           snapshots,
           replayCommands,
+          pythonpath,
           outputBytesLimit: config.skillsSandbox.outputBytesLimit,
           fileSizeLimitBytes: config.skillsSandbox.artifactBytesLimit,
+          cpuSeconds: config.skillsSandbox.cpuLimit,
+          memoryBytes: config.skillsSandbox.memoryLimit,
+          maxProcesses: SKILL_SANDBOX_LIMITS.maxProcesses,
         });
       } catch (error) {
+        // engine-level failure (unreachable / internal panic) — the command
+        // may have already run inside Dagger but we lost the result. Record a
+        // synthetic row so subsequent replays re-execute it instead of
+        // silently dropping it from the log, then surface the error.
+        if (shouldRecordOnFailure(error)) {
+          await this.appendSyntheticRow({
+            sandboxId: params.sandboxId,
+            command: params.command,
+            cwd: params.cwd ?? null,
+            timeoutSeconds,
+          });
+        }
         throw this.toSkillError(error);
       }
 
@@ -122,7 +157,8 @@ class SkillSandboxRuntimeService {
         path: params.path,
         defaultCwd: sandbox.defaultCwd,
       });
-      const { snapshots, replayCommands } = await this.buildContext(sandbox);
+      const { snapshots, replayCommands, pythonpath } =
+        await this.buildContext(sandbox);
 
       let artifact: Awaited<
         ReturnType<typeof daggerRuntimeService.readArtifact>
@@ -132,7 +168,12 @@ class SkillSandboxRuntimeService {
           snapshots,
           replayCommands,
           path: resolvedPath,
+          defaultCwd: sandbox.defaultCwd,
+          pythonpath,
           fileSizeLimitBytes: config.skillsSandbox.artifactBytesLimit,
+          cpuSeconds: config.skillsSandbox.cpuLimit,
+          memoryBytes: config.skillsSandbox.memoryLimit,
+          maxProcesses: SKILL_SANDBOX_LIMITS.maxProcesses,
         });
       } catch (error) {
         throw this.toSkillError(error);
@@ -166,6 +207,38 @@ class SkillSandboxRuntimeService {
 
   // === private ===
 
+  /**
+   * Best-effort append of a placeholder command row when the runtime failed in
+   * a way that may have left the command partially executed inside Dagger.
+   * Replays re-execute it on the next call, restoring deterministic state.
+   * Failures of this append are logged and swallowed — the original error is
+   * what the caller cares about.
+   */
+  private async appendSyntheticRow(args: {
+    sandboxId: SandboxId;
+    command: string;
+    cwd: string | null;
+    timeoutSeconds: number;
+  }): Promise<void> {
+    try {
+      await SkillSandboxCommandModel.append({
+        sandboxId: args.sandboxId,
+        command: args.command,
+        cwd: args.cwd,
+        stdout: "",
+        stderr: "",
+        exitCode: SYNTHETIC_ENGINE_FAILURE_EXIT_CODE,
+        durationMs: 0,
+        timeoutSeconds: args.timeoutSeconds,
+      });
+    } catch (dbError) {
+      logger.error(
+        { err: dbError, sandboxId: args.sandboxId },
+        "[SkillSandbox] failed to persist synthetic command row after engine error",
+      );
+    }
+  }
+
   private ensureEnabled(): void {
     if (!this.isEnabled) {
       throw new SkillSandboxError("the skill sandbox runtime is not enabled");
@@ -195,6 +268,7 @@ class SkillSandboxRuntimeService {
   private async buildContext(sandbox: SkillSandbox): Promise<{
     snapshots: SnapshotFile[];
     replayCommands: ReplayCommand[];
+    pythonpath: string | undefined;
   }> {
     const snapshotRows = await SkillSandboxFileSnapshotModel.listBySandbox(
       sandbox.id,
@@ -205,6 +279,7 @@ class SkillSandboxRuntimeService {
       );
     }
     const log = await SkillSandboxCommandModel.listBySandbox(sandbox.id);
+    const installCommands = autoInstallCommands(sandbox, snapshotRows);
     return {
       snapshots: snapshotRows.map(
         (snapshot): SnapshotFile => ({
@@ -214,13 +289,21 @@ class SkillSandboxRuntimeService {
           content: snapshot.content,
         }),
       ),
-      replayCommands: log.map(
-        (entry): ReplayCommand => ({
-          command: entry.command,
-          cwd: entry.cwd ?? undefined,
-          timeoutSeconds: entry.timeoutSeconds,
-        }),
-      ),
+      // installs run first so the user's persisted commands see the deps. We
+      // do NOT persist these to the command log: they're derived from the
+      // skill's requirements.txt snapshot and re-emitted each materialize.
+      // Dagger's content-addressed layer cache makes the repeat cost near-zero.
+      replayCommands: [
+        ...installCommands,
+        ...log.map(
+          (entry): ReplayCommand => ({
+            command: entry.command,
+            cwd: entry.cwd ?? undefined,
+            timeoutSeconds: entry.timeoutSeconds,
+          }),
+        ),
+      ],
+      pythonpath: pythonpathForSandbox(sandbox, snapshotRows),
     };
   }
 
@@ -300,6 +383,17 @@ export const skillSandboxRuntimeService = new SkillSandboxRuntimeService();
 
 // === internal helpers ===
 
+function shouldRecordOnFailure(error: unknown): boolean {
+  if (!(error instanceof DaggerRuntimeError)) return false;
+  switch (error.code) {
+    case "ARCHESTRA_ENGINE_UNREACHABLE":
+    case "ARCHESTRA_INTERNAL":
+      return true;
+    default:
+      return false;
+  }
+}
+
 function validateCommand(command: string): void {
   if (!command.trim()) {
     throw new SkillSandboxError("command must be a non-empty string");
@@ -311,6 +405,70 @@ function validateCommand(command: string): void {
       `command is too large (> ${SKILL_SANDBOX_LIMITS.maxCommandBytes} bytes)`,
     );
   }
+}
+
+/**
+ * Synthesise one `uv pip install -r requirements.txt` per mounted skill that
+ * ships a top-level requirements.txt. Primary skill first so its deps take
+ * precedence on version conflicts; rest in deterministic alphabetical order.
+ * Returns [] for skills without a requirements.txt — skill authors aren't
+ * required to declare one.
+ */
+function autoInstallCommands(
+  sandbox: SkillSandbox,
+  snapshotRows: SkillSandboxFileSnapshot[],
+): ReplayCommand[] {
+  const namesWithReqs = new Set<string>();
+  let primary: string | undefined;
+  for (const row of snapshotRows) {
+    if (row.path === REQUIREMENTS_FILE) {
+      namesWithReqs.add(row.skillName);
+      if (sandbox.primarySkillId && row.skillId === sandbox.primarySkillId) {
+        primary = row.skillName;
+      }
+    }
+  }
+  if (namesWithReqs.size === 0) return [];
+  const ordered: string[] = [];
+  if (primary) ordered.push(primary);
+  for (const name of [...namesWithReqs].sort()) {
+    if (name !== primary) ordered.push(name);
+  }
+  return ordered.map((name): ReplayCommand => {
+    const reqPath = `${skillRootPath(name)}/${REQUIREMENTS_FILE}`;
+    return {
+      command: `uv pip install --python ${VENV_PYTHON} --quiet -r ${reqPath}`,
+      cwd: SKILL_SANDBOX_HOME,
+      timeoutSeconds: REQUIREMENTS_INSTALL_TIMEOUT_SECONDS,
+    };
+  });
+}
+
+/**
+ * Build the PYTHONPATH for a sandbox: every mounted skill's root, primary
+ * first so `import core...` resolves there before any same-named module in a
+ * secondary skill. Falls back to the union of snapshot skill names when the
+ * primary FK is null (skill was deleted after sandbox creation).
+ */
+function pythonpathForSandbox(
+  sandbox: SkillSandbox,
+  snapshotRows: SkillSandboxFileSnapshot[],
+): string | undefined {
+  const skillNames = new Set<string>();
+  let primary: string | undefined;
+  for (const row of snapshotRows) {
+    skillNames.add(row.skillName);
+    if (sandbox.primarySkillId && row.skillId === sandbox.primarySkillId) {
+      primary = row.skillName;
+    }
+  }
+  if (skillNames.size === 0) return undefined;
+  const ordered: string[] = [];
+  if (primary) ordered.push(primary);
+  for (const name of [...skillNames].sort()) {
+    if (name !== primary) ordered.push(name);
+  }
+  return ordered.map((name) => skillRootPath(name)).join(":");
 }
 
 function resolveArtifactPath(params: {
@@ -349,4 +507,6 @@ function resolveArtifactPath(params: {
 export const __internals = {
   resolveArtifactPath,
   asSandboxId,
+  pythonpathForSandbox,
+  autoInstallCommands,
 };

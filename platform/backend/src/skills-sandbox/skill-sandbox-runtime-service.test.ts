@@ -183,4 +183,87 @@ describe("__internals", () => {
       }),
     ).toThrow("artifact path must be under");
   });
+
+  test("pythonpathForSandbox puts primary first, then alphabetical secondaries", () => {
+    const sandbox = makeFakeSandbox({ primarySkillId: "skill-b-id" });
+    const snapshots = [
+      makeSnapshotRow("skill-a-id", "skill-a"),
+      makeSnapshotRow("skill-b-id", "skill-b"),
+      makeSnapshotRow("skill-c-id", "skill-c"),
+    ];
+    expect(__internals.pythonpathForSandbox(sandbox, snapshots)).toBe(
+      "/skills/skill-b:/skills/skill-a:/skills/skill-c",
+    );
+  });
+
+  test("pythonpathForSandbox falls back to alphabetical when primary is missing", () => {
+    const sandbox = makeFakeSandbox({ primarySkillId: null });
+    const snapshots = [
+      makeSnapshotRow("skill-z-id", "skill-z"),
+      makeSnapshotRow("skill-a-id", "skill-a"),
+    ];
+    expect(__internals.pythonpathForSandbox(sandbox, snapshots)).toBe(
+      "/skills/skill-a:/skills/skill-z",
+    );
+  });
+
+  test("autoInstallCommands emits one uv install per skill with requirements.txt, primary first", () => {
+    const sandbox = makeFakeSandbox({ primarySkillId: "skill-b-id" });
+    const snapshots = [
+      makeSnapshotRow("skill-a-id", "skill-a", "SKILL.md"),
+      makeSnapshotRow("skill-a-id", "skill-a", "requirements.txt"),
+      makeSnapshotRow("skill-b-id", "skill-b", "SKILL.md"),
+      makeSnapshotRow("skill-b-id", "skill-b", "requirements.txt"),
+      makeSnapshotRow("skill-c-id", "skill-c", "SKILL.md"),
+      // no requirements.txt — skipped
+    ];
+    const installs = __internals.autoInstallCommands(sandbox, snapshots);
+    expect(installs.map((c) => c.command)).toEqual([
+      "uv pip install --python /home/sandbox/.venv/bin/python --quiet -r /skills/skill-b/requirements.txt",
+      "uv pip install --python /home/sandbox/.venv/bin/python --quiet -r /skills/skill-a/requirements.txt",
+    ]);
+    expect(installs.every((c) => c.cwd === "/home/sandbox")).toBe(true);
+    expect(installs.every((c) => c.timeoutSeconds === 180)).toBe(true);
+  });
+
+  test("autoInstallCommands returns [] when no skill ships requirements.txt", () => {
+    const sandbox = makeFakeSandbox({ primarySkillId: "skill-a-id" });
+    const snapshots = [
+      makeSnapshotRow("skill-a-id", "skill-a", "SKILL.md"),
+      makeSnapshotRow("skill-a-id", "skill-a", "core/util.py"),
+    ];
+    expect(__internals.autoInstallCommands(sandbox, snapshots)).toEqual([]);
+  });
 });
+
+function makeFakeSandbox(overrides: {
+  primarySkillId: string | null;
+}): import("@/types").SkillSandbox {
+  return {
+    id: "sandbox-1",
+    organizationId: "org-1",
+    userId: "user-1",
+    conversationId: null,
+    agentId: null,
+    primarySkillId: overrides.primarySkillId,
+    defaultCwd: "/skills/skill-b",
+    createdAt: new Date(),
+  };
+}
+
+function makeSnapshotRow(
+  skillId: string,
+  skillName: string,
+  path: string = "SKILL.md",
+): import("@/types").SkillSandboxFileSnapshot {
+  return {
+    id: `snap-${skillId}-${path}`,
+    sandboxId: "sandbox-1",
+    skillId,
+    skillName,
+    path,
+    encoding: "utf8",
+    content: "",
+    createdAt: new Date(),
+  };
+}

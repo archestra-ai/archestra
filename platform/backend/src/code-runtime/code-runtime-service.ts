@@ -11,6 +11,7 @@ import {
   type RunCodeResult,
 } from "./types";
 
+const CONSUMER_ID = "code-runtime";
 const SKILL_NAME = "_code";
 const SCRIPT_FILE = "main.py";
 const SKILL_DIR = `/skills/${SKILL_NAME}`;
@@ -32,11 +33,11 @@ class CodeRuntimeService {
 
   async init(): Promise<void> {
     if (!config.codeRuntime.enabled) return;
-    await daggerRuntimeService.init();
+    await daggerRuntimeService.attach(CONSUMER_ID);
   }
 
   async shutdown(): Promise<void> {
-    await daggerRuntimeService.shutdown();
+    await daggerRuntimeService.detach(CONSUMER_ID);
   }
 
   async run(params: RunCodeParams): Promise<RunCodeResult> {
@@ -61,6 +62,9 @@ class CodeRuntimeService {
           },
         ],
         outputBytesLimit: config.codeRuntime.maxOutputBytes,
+        cpuSeconds: CODE_RUNTIME_LIMITS.maxCpuSeconds,
+        memoryBytes: CODE_RUNTIME_LIMITS.maxMemoryBytes,
+        maxProcesses: CODE_RUNTIME_LIMITS.maxProcesses,
       });
       const durationMs = executed.durationMs;
       metrics.codeRuntime.reportRun(

@@ -1,0 +1,1 @@
+ALTER TABLE "skill_sandboxes" DROP COLUMN "base_image";

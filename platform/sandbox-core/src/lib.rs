@@ -122,9 +122,9 @@ pub struct RunSandboxInput {
     pub cwd: String,
     #[cfg_attr(feature = "napi", napi(js_name = "timeoutSeconds"))]
     pub timeout_seconds: u32,
-    /// optional debian packages to install on top of the warm base before this run.
-    #[cfg_attr(feature = "napi", napi(js_name = "extraAptPackages"))]
-    pub extra_apt_packages: Vec<String>,
+    /// PYTHONPATH applied to the materialized container. Lets skill modules
+    /// (`/skills/<name>`) resolve via `import` from any cwd.
+    pub pythonpath: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -137,8 +137,14 @@ pub struct ReadArtifactInput {
     pub replay_commands: Vec<ReplayCommand>,
     pub limits: Limits,
     pub path: String,
-    #[cfg_attr(feature = "napi", napi(js_name = "extraAptPackages"))]
-    pub extra_apt_packages: Vec<String>,
+    /// the cwd a replayed entry with `cwd: None` should default to. matches
+    /// the sandbox's stored `defaultCwd`, so artifact extraction replays in
+    /// the same directory as the original commands.
+    #[cfg_attr(feature = "napi", napi(js_name = "defaultCwd"))]
+    pub default_cwd: String,
+    /// PYTHONPATH applied during the replay used to read the artifact. Should
+    /// match what was set on the original runs so imports resolve identically.
+    pub pythonpath: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -178,8 +184,10 @@ pub async fn check_session(input: CheckSessionInput) -> Result<()> {
 #[tracing::instrument(skip_all, fields(traceparent = input.traceparent.as_deref()))]
 pub async fn run_sandbox(input: RunSandboxInput) -> Result<CommandExecution> {
     let traceparent = input.traceparent.clone();
-    validate_apt_packages(&input.extra_apt_packages)?;
     validate_cwd(&input.cwd)?;
+    if let Some(pp) = input.pythonpath.as_deref() {
+        validate_pythonpath(pp)?;
+    }
     session::submit(move |reply| session::SessionMsg::Run {
         req: session::RunRequest {
             snapshots: input.snapshots,
@@ -188,8 +196,8 @@ pub async fn run_sandbox(input: RunSandboxInput) -> Result<CommandExecution> {
             command: input.command,
             cwd: input.cwd,
             timeout_seconds: input.timeout_seconds,
-            extra_apt_packages: input.extra_apt_packages,
             traceparent,
+            pythonpath: input.pythonpath,
         },
         reply,
     })
@@ -199,16 +207,20 @@ pub async fn run_sandbox(input: RunSandboxInput) -> Result<CommandExecution> {
 #[tracing::instrument(skip_all, fields(traceparent = input.traceparent.as_deref()))]
 pub async fn read_artifact(input: ReadArtifactInput) -> Result<ArtifactBytes> {
     let traceparent = input.traceparent.clone();
-    validate_apt_packages(&input.extra_apt_packages)?;
     validate_artifact_path(&input.path)?;
+    validate_cwd(&input.default_cwd)?;
+    if let Some(pp) = input.pythonpath.as_deref() {
+        validate_pythonpath(pp)?;
+    }
     session::submit(move |reply| session::SessionMsg::ReadArtifact {
         req: session::ArtifactRequest {
             snapshots: input.snapshots,
             replay_commands: input.replay_commands,
             limits: input.limits,
             path: input.path,
-            extra_apt_packages: input.extra_apt_packages,
+            default_cwd: input.default_cwd,
             traceparent,
+            pythonpath: input.pythonpath,
         },
         reply,
     })
@@ -304,6 +316,41 @@ pub(crate) fn validate_artifact_path(path: &str) -> Result<()> {
     Ok(())
 }
 
+pub(crate) fn validate_pythonpath(pythonpath: &str) -> Result<()> {
+    // PYTHONPATH is passed straight to `with_env_variable`, but the model can
+    // smuggle additional roots via `:` separators; bound each entry to the
+    // sandbox-allowed roots so it can't escape into `/etc` etc.
+    if pythonpath.is_empty() {
+        return Err(SandboxError::InvalidInput(
+            "pythonpath must not be empty".to_string(),
+        ));
+    }
+    for entry in pythonpath.split(':') {
+        if entry.is_empty()
+            || entry.contains('\0')
+            || entry.split('/').any(|segment| segment == "..")
+        {
+            return Err(SandboxError::InvalidInput(format!(
+                "invalid pythonpath entry: {entry:?}"
+            )));
+        }
+        if !entry.starts_with('/') {
+            return Err(SandboxError::InvalidInput(format!(
+                "pythonpath entries must be absolute: {entry:?}"
+            )));
+        }
+        let allowed = [SKILL_SANDBOX_ROOT, SKILL_SANDBOX_HOME]
+            .iter()
+            .any(|root| entry == *root || entry.starts_with(&format!("{root}/")));
+        if !allowed {
+            return Err(SandboxError::InvalidInput(format!(
+                "pythonpath entries must be under {SKILL_SANDBOX_ROOT} or {SKILL_SANDBOX_HOME}: {entry:?}"
+            )));
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn validate_cwd(cwd: &str) -> Result<()> {
     if cwd.contains('\0') || cwd.split('/').any(|segment| segment == "..") {
         return Err(SandboxError::InvalidInput(format!("invalid cwd: {cwd:?}")));
@@ -322,28 +369,6 @@ pub(crate) fn validate_cwd(cwd: &str) -> Result<()> {
         )));
     }
     Ok(())
-}
-
-pub(crate) fn validate_apt_packages(packages: &[String]) -> Result<()> {
-    packages
-        .iter()
-        .try_for_each(|package| validate_apt_package_name(package))
-}
-
-fn validate_apt_package_name(package: &str) -> Result<()> {
-    match package {
-        "" => Err(SandboxError::InvalidInput(
-            "apt package name must be non-empty".to_string(),
-        )),
-        _ if package.chars().all(is_valid_apt_package_char) => Ok(()),
-        _ => Err(SandboxError::InvalidInput(format!(
-            "invalid apt package name: {package:?}"
-        ))),
-    }
-}
-
-fn is_valid_apt_package_char(ch: char) -> bool {
-    ch.is_ascii_lowercase() || ch.is_ascii_digit() || matches!(ch, '.' | '_' | '+' | '-')
 }
 
 pub(crate) fn format_artifact_error(prefix: &str, path: &str, stderr: &str) -> String {
@@ -385,15 +410,6 @@ mod tests {
     }
 
     #[test]
-    fn apt_package_validation_rejects_shell_metacharacters() {
-        assert!(validate_apt_package_name("ca-certificates").is_ok());
-        assert!(validate_apt_package_name("libssl3").is_ok());
-        assert!(validate_apt_package_name("bash;curl").is_err());
-        assert!(validate_apt_package_name("curl evil").is_err());
-        assert!(validate_apt_package_name("").is_err());
-    }
-
-    #[test]
     fn wrap_uses_timeout_and_preserves_exit_code() {
         let wrapped = wrap_with_timeout(
             "python --version",
@@ -431,6 +447,19 @@ mod tests {
         assert!(validate_artifact_path("/skills/alpha/foo`bar").is_err());
         assert!(validate_artifact_path("/skills/alpha/foo\\bar").is_err());
         assert!(validate_artifact_path("/skills/alpha/foo\nbar").is_err());
+    }
+
+    #[test]
+    fn validate_pythonpath_enforces_sandbox_roots() {
+        assert!(validate_pythonpath("/skills/alpha").is_ok());
+        assert!(validate_pythonpath("/skills/alpha:/home/sandbox/lib").is_ok());
+        assert!(validate_pythonpath("/home/sandbox").is_ok());
+        assert!(validate_pythonpath("").is_err());
+        assert!(validate_pythonpath("/etc").is_err());
+        assert!(validate_pythonpath("relative/path").is_err());
+        assert!(validate_pythonpath("/skills/../etc").is_err());
+        assert!(validate_pythonpath("/skills/alpha:").is_err());
+        assert!(validate_pythonpath("/skills/alpha:/etc").is_err());
     }
 
     #[test]

@@ -32,7 +32,17 @@ export interface ReadArtifactInput {
   replayCommands: Array<ReplayCommand>
   limits: Limits
   path: string
-  extraAptPackages: Array<string>
+  /**
+   * the cwd a replayed entry with `cwd: None` should default to. matches
+   * the sandbox's stored `defaultCwd`, so artifact extraction replays in
+   * the same directory as the original commands.
+   */
+  defaultCwd: string
+  /**
+   * PYTHONPATH applied during the replay used to read the artifact. Should
+   * match what was set on the original runs so imports resolve identically.
+   */
+  pythonpath?: string
 }
 
 export interface ReplayCommand {
@@ -49,8 +59,11 @@ export interface RunSandboxInput {
   command: string
   cwd: string
   timeoutSeconds: number
-  /** optional debian packages to install on top of the warm base before this run. */
-  extraAptPackages: Array<string>
+  /**
+   * PYTHONPATH applied to the materialized container. Lets skill modules
+   * (`/skills/<name>`) resolve via `import` from any cwd.
+   */
+  pythonpath?: string
 }
 
 export interface SnapshotFile {

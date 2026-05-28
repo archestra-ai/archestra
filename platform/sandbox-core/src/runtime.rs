@@ -9,9 +9,9 @@ use tracing::Span;
 use crate::session::{ArtifactRequest, RunRequest, Session};
 use crate::{
     ARTIFACT_NOT_FOUND_EXIT_CODE, ARTIFACT_TOO_LARGE_EXIT_CODE, ArtifactBytes, CommandExecution,
-    Limits, ReplayCommand, Result, SKILL_SANDBOX_HOME, SKILL_SANDBOX_ROOT, SKILL_SANDBOX_USER,
-    SandboxError, SnapshotFile, TIMEOUT_EXIT_CODE, USER_EXIT_124_REMAP, tracing_ctx,
-    validate_artifact_path, validate_cwd, wrap_with_timeout,
+    Limits, Result, SKILL_SANDBOX_ROOT, SKILL_SANDBOX_USER, SandboxError, SnapshotFile,
+    TIMEOUT_EXIT_CODE, USER_EXIT_124_REMAP, tracing_ctx, validate_artifact_path, validate_cwd,
+    wrap_with_timeout,
 };
 
 pub(crate) async fn execute_run(
@@ -20,7 +20,6 @@ pub(crate) async fn execute_run(
 ) -> Result<CommandExecution> {
     attach_trace(req.traceparent.as_deref());
     validate_cwd(&req.cwd)?;
-    crate::validate_apt_packages(&req.extra_apt_packages)?;
 
     let warm = session.ensure_warm().await?;
     let started = Instant::now();
@@ -32,6 +31,9 @@ pub(crate) async fn execute_run(
         any_exit_opts(),
     );
 
+    // dagger-sdk returns stdout/stderr as Strings, so non-UTF-8 bytes are
+    // lossily decoded at the GraphQL layer. for binary output the command
+    // should redirect to a file and use the artifact-read path (base64-safe).
     let stdout_raw = executed.stdout().await.map_err(SandboxError::engine)?;
     let stderr_raw = executed.stderr().await.map_err(SandboxError::engine)?;
     let raw_exit = executed.exit_code().await.map_err(SandboxError::engine)? as i32;
@@ -59,19 +61,23 @@ pub(crate) async fn execute_read_artifact(
     req: ArtifactRequest,
 ) -> Result<ArtifactBytes> {
     attach_trace(req.traceparent.as_deref());
-    crate::validate_apt_packages(&req.extra_apt_packages)?;
     validate_artifact_path(&req.path)?;
 
     let warm = session.ensure_warm().await?;
+    // replay must use the same cwd as the original run, otherwise commands
+    // recorded with `cwd: None` materialise in the wrong directory and
+    // subsequent artifact reads can't find their files. pythonpath forwards
+    // for the same reason: replayed `python` invocations need the same module
+    // search path as the live ones.
     let run = RunRequest {
         snapshots: req.snapshots,
         replay_commands: req.replay_commands,
         limits: req.limits.clone(),
         command: String::new(),
-        cwd: SKILL_SANDBOX_HOME.to_string(),
+        cwd: req.default_cwd,
         timeout_seconds: 0,
-        extra_apt_packages: req.extra_apt_packages,
         traceparent: None,
+        pythonpath: req.pythonpath,
     };
     let materialized = materialize(session.client(), warm, &run).await?;
     let bytes_limit = u64::from(req.limits.file_size_limit_bytes);
@@ -94,12 +100,20 @@ pub(crate) async fn execute_read_artifact(
     match exit_code {
         0 => {}
         ARTIFACT_NOT_FOUND_EXIT_CODE => {
-            let message = crate::format_artifact_error("failed to read artifact", &req.path, &stderr);
-            return Err(SandboxError::ArtifactNotFound { path: req.path, message });
+            let message =
+                crate::format_artifact_error("failed to read artifact", &req.path, &stderr);
+            return Err(SandboxError::ArtifactNotFound {
+                path: req.path,
+                message,
+            });
         }
         ARTIFACT_TOO_LARGE_EXIT_CODE => {
-            let message = crate::format_artifact_error("failed to read artifact", &req.path, &stderr);
-            return Err(SandboxError::ArtifactTooLarge { path: req.path, message });
+            let message =
+                crate::format_artifact_error("failed to read artifact", &req.path, &stderr);
+            return Err(SandboxError::ArtifactTooLarge {
+                path: req.path,
+                message,
+            });
         }
         other => {
             return Err(SandboxError::Internal(format!(
@@ -135,26 +149,8 @@ pub(crate) async fn execute_check_session(
     Ok(())
 }
 
-async fn materialize(
-    client: &DaggerConn,
-    warm: Container,
-    req: &RunRequest,
-) -> Result<Container> {
+async fn materialize(client: &DaggerConn, warm: Container, req: &RunRequest) -> Result<Container> {
     let mut container = warm;
-
-    if !req.extra_apt_packages.is_empty() {
-        let packages = req.extra_apt_packages.join(" ");
-        container = container
-            .with_user("root")
-            .with_exec(vec![
-                "sh".to_string(),
-                "-c".to_string(),
-                format!(
-                    "apt-get update -qq && apt-get install -y --no-install-recommends {packages} && rm -rf /var/lib/apt/lists/*"
-                ),
-            ])
-            .with_user(SKILL_SANDBOX_USER);
-    }
 
     if !req.snapshots.is_empty() {
         let mut by_skill: BTreeMap<String, Vec<&SnapshotFile>> = BTreeMap::new();
@@ -180,9 +176,20 @@ async fn materialize(
 
     container = container.with_workdir(&req.cwd);
 
+    if let Some(pythonpath) = &req.pythonpath {
+        container = container.with_env_variable("PYTHONPATH", pythonpath);
+    }
+
+    // replay re-executes every prior command on each call: per-call cost is
+    // O(history). we lean on Dagger's content-addressed layer cache to keep
+    // the wall-clock cost near-zero when the prefix is unchanged. if cache
+    // misses become a real concern, key a per-sandbox materialised container
+    // off the log hash and replay only the new delta.
     for entry in &req.replay_commands {
+        // replay cwds are historical data: they were validated when first
+        // accepted and trusting them here keeps pre-existing sandboxes with
+        // legacy cwds usable. Live `req.cwd` is validated at the entry points.
         let cwd = entry.cwd.as_deref().unwrap_or(&req.cwd);
-        validate_cwd(cwd)?;
         let wrapped = wrap_with_timeout(&entry.command, cwd, entry.timeout_seconds, &req.limits);
         container = container.with_exec_opts(
             vec!["bash".to_string(), "-c".to_string(), wrapped],
@@ -248,6 +255,3 @@ fn any_exit_opts<'a>() -> ContainerWithExecOpts<'a> {
 fn output_limit(limits: &Limits) -> usize {
     limits.output_bytes_limit as usize
 }
-
-// silence dead-code warnings on imports kept for surface clarity.
-const _: fn(&[ReplayCommand]) = |_| {};

@@ -50,6 +50,18 @@ import type { ArchestraContext } from "./types";
 
 const MAX_SKILLS_PER_SANDBOX = 16;
 
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ALIAS_REGEX = /^s\d+$/;
+const SandboxIdOrAliasSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .refine(
+    (value) => UUID_REGEX.test(value) || ALIAS_REGEX.test(value),
+    "must be a UUID or a sandbox alias like `s1`",
+  );
+
 const CreateSkillSandboxSchema = z
   .strictObject({
     skillNames: z
@@ -85,22 +97,21 @@ const SkillRootSchema = z.object({
 
 const CreateSkillSandboxOutputSchema = z.object({
   sandboxId: z.string(),
+  /** Short, per-conversation alias usable in place of `sandboxId`. */
+  alias: z.string(),
   defaultCwd: z.string(),
   skillRoots: z.array(SkillRootSchema),
 });
 
 const RunSkillCommandSchema = z
   .strictObject({
-    sandboxId: z
-      .string()
-      .uuid()
-      .optional()
-      .describe(
-        "Sandbox to run the command in. When omitted, the most recent " +
-          "sandbox attached to the current conversation is used; if no such " +
-          "sandbox exists or the call has no conversation context, the call " +
-          "is rejected.",
-      ),
+    sandboxId: SandboxIdOrAliasSchema.optional().describe(
+      "Sandbox to run the command in. Accepts either the full UUID or the " +
+        "short alias from create_skill_sandbox (e.g. `s1`, `s2`). When " +
+        "omitted, the most recent sandbox attached to the current " +
+        "conversation is used; rejected when no conversation context exists " +
+        "or the alias cannot be resolved.",
+    ),
     command: z
       .string()
       .min(1)
@@ -147,15 +158,12 @@ const RunSkillCommandOutputSchema = z.object({
 
 const GetSkillSandboxArtifactSchema = z
   .strictObject({
-    sandboxId: z
-      .string()
-      .uuid()
-      .optional()
-      .describe(
-        "Sandbox to read the artifact from. When omitted, the most recent " +
-          "sandbox attached to the current conversation is used; rejected " +
-          "when no conversation context is available.",
-      ),
+    sandboxId: SandboxIdOrAliasSchema.optional().describe(
+      "Sandbox to read the artifact from. Accepts either the full UUID or " +
+        "the short alias (e.g. `s1`). When omitted, the most recent sandbox " +
+        "attached to the current conversation is used; rejected when no " +
+        "conversation context is available.",
+    ),
     path: z
       .string()
       .min(1)
@@ -272,6 +280,13 @@ const registry = defineArchestraTools([
 
       const defaultCwd = skillRootPath(primary.name);
 
+      // count sandboxes already attached to this conversation BEFORE creating
+      // the new one, so the alias for the new sandbox is `s${count+1}`.
+      const priorCount = context.conversationId
+        ? (await SkillSandboxModel.listForConversation(context.conversationId))
+            .length
+        : 0;
+
       let sandbox: Awaited<ReturnType<typeof SkillSandboxModel.create>>;
       try {
         sandbox = await SkillSandboxModel.create({
@@ -280,7 +295,6 @@ const registry = defineArchestraTools([
             userId: userCtx.userId,
             conversationId: context.conversationId ?? null,
             agentId: context.agentId ?? null,
-            baseImage: config.skillsSandbox.image,
             primarySkillId: primary.id,
             defaultCwd,
           },
@@ -292,6 +306,12 @@ const registry = defineArchestraTools([
         }
         throw err;
       }
+
+      const alias = aliasForNewSandbox(
+        context.conversationId,
+        priorCount,
+        sandbox.id,
+      );
 
       logger.info(
         {
@@ -313,14 +333,22 @@ const registry = defineArchestraTools([
       return structuredSuccessResult(
         {
           sandboxId: sandbox.id,
+          alias,
           defaultCwd,
           skillRoots,
         },
         [
-          `Created skill sandbox ${sandbox.id}.`,
+          `Created skill sandbox ${alias} (${sandbox.id}).`,
           `Default working directory: ${defaultCwd}`,
           `Skill roots (under ${SKILL_SANDBOX_ROOT}):`,
           ...skillRoots.map((r) => `  - ${r.skillName} -> ${r.rootPath}`),
+          "",
+          renderFullEnvTrailer({
+            alias,
+            sandboxId: sandbox.id,
+            defaultCwd,
+            skillNames: skills.map((s) => s.name),
+          }),
         ].join("\n"),
       );
     },
@@ -373,9 +401,13 @@ const registry = defineArchestraTools([
           "[SkillSandbox] command executed",
         );
 
+        const envTrailer = await renderCompactEnvTrailerFor(
+          resolved.sandboxId,
+          userCtx,
+        );
         return structuredSuccessResult(
           { ...result },
-          formatCommandSummary(result),
+          [formatCommandSummary(result), "", envTrailer].join("\n"),
         );
       } catch (error) {
         if (error instanceof SkillSandboxError) {
@@ -436,9 +468,17 @@ const registry = defineArchestraTools([
           "[SkillSandbox] artifact exported",
         );
 
+        const envTrailer = await renderCompactEnvTrailerFor(
+          resolved.sandboxId,
+          userCtx,
+        );
         return structuredSuccessResult(
           { ...result },
-          `Exported artifact ${result.artifactId} from ${result.path} (${result.sizeBytes} bytes).`,
+          [
+            `Exported artifact ${result.artifactId} from ${result.path} (${result.sizeBytes} bytes).`,
+            "",
+            envTrailer,
+          ].join("\n"),
         );
       } catch (error) {
         if (error instanceof SkillSandboxError) {
@@ -476,9 +516,10 @@ function dedupe(values: string[]): string[] {
 }
 
 /**
- * Resolves an explicit `sandboxId` (and authorizes it) or, when omitted, looks
- * up the most recent sandbox attached to the current conversation. Returns an
- * error string when no sandbox can be resolved.
+ * Resolves an explicit `sandboxId` (UUID or `s\d+` alias, authorized against
+ * the caller) or, when omitted, looks up the most recent sandbox attached to
+ * the current conversation. Returns an error string when no sandbox can be
+ * resolved.
  */
 async function resolveSandboxId(params: {
   sandboxId: string | undefined;
@@ -487,6 +528,25 @@ async function resolveSandboxId(params: {
 }): Promise<{ sandboxId: SandboxId } | { error: string }> {
   const { sandboxId, userCtx, conversationId } = params;
   if (sandboxId) {
+    if (ALIAS_REGEX.test(sandboxId)) {
+      if (!conversationId) {
+        return {
+          error: `Sandbox alias \`${sandboxId}\` can only be used inside a conversation; pass the full UUID instead.`,
+        };
+      }
+      const accessible = await accessibleConversationSandboxes(
+        conversationId,
+        userCtx,
+      );
+      const idx = parseAlias(sandboxId);
+      const match = accessible[idx];
+      if (!match) {
+        return {
+          error: `No sandbox with alias \`${sandboxId}\` exists in this conversation.`,
+        };
+      }
+      return { sandboxId: asSandboxId(match.id) };
+    }
     const sandbox = await SkillSandboxModel.findById(sandboxId);
     if (
       !sandbox ||
@@ -504,11 +564,9 @@ async function resolveSandboxId(params: {
         "No sandboxId was provided and there is no conversation context to infer one from. Pass `sandboxId` explicitly.",
     };
   }
-  const all = await SkillSandboxModel.listForConversation(conversationId);
-  const accessible = all.filter(
-    (s) =>
-      s.organizationId === userCtx.organizationId &&
-      s.userId === userCtx.userId,
+  const accessible = await accessibleConversationSandboxes(
+    conversationId,
+    userCtx,
   );
   if (accessible.length === 0) {
     return {
@@ -523,6 +581,101 @@ async function resolveSandboxId(params: {
     };
   }
   return { sandboxId: asSandboxId(accessible[0].id) };
+}
+
+/**
+ * Conversation sandboxes the caller can access, oldest first so the alias for
+ * the n-th created sandbox is stably `s${n}` (`s1` = first-created).
+ * `listForConversation` returns newest-first; we reverse here.
+ */
+async function accessibleConversationSandboxes(
+  conversationId: string,
+  userCtx: UserContext,
+) {
+  const all = await SkillSandboxModel.listForConversation(conversationId);
+  return all
+    .filter(
+      (s) =>
+        s.organizationId === userCtx.organizationId &&
+        s.userId === userCtx.userId,
+    )
+    .reverse();
+}
+
+function parseAlias(alias: string): number {
+  return parseInt(alias.slice(1), 10) - 1;
+}
+
+/**
+ * Compute `s${n}` alias for a freshly-created sandbox. Caller passes the
+ * pre-create count of sandboxes in the conversation; alias is `s${count+1}`.
+ * For sandboxes without a conversation context we return the UUID itself.
+ */
+function aliasForNewSandbox(
+  conversationId: string | undefined,
+  priorCount: number,
+  sandboxId: string,
+): string {
+  if (!conversationId) return sandboxId;
+  return `s${priorCount + 1}`;
+}
+
+/**
+ * Full env trailer printed after `create_skill_sandbox`. Lists everything the
+ * model needs to know to use the sandbox correctly: alias for cheap referral,
+ * cwd, pythonpath, the uv-only deps policy. Costs ~80 tokens to render but
+ * typically saves several exploratory calls (see the analysis around the
+ * slack-gif chat session).
+ */
+function renderFullEnvTrailer(args: {
+  alias: string;
+  sandboxId: string;
+  defaultCwd: string;
+  skillNames: string[];
+}): string {
+  const pythonpath = args.skillNames.map(skillRootPath).join(":");
+  const sandboxLine =
+    args.alias === args.sandboxId
+      ? `sandbox:   ${args.sandboxId}`
+      : `sandbox:   ${args.alias}  (${args.sandboxId})`;
+  return [
+    "--- env ---",
+    sandboxLine,
+    `cwd:       ${args.defaultCwd}`,
+    `pythonpath: ${pythonpath}`,
+    "python:    uv-managed venv at /home/sandbox/.venv",
+    "  preinstalled: numpy, pandas, httpx",
+    "add deps:  `uv add <pkg>` — pip is disabled in this sandbox",
+  ].join("\n");
+}
+
+/**
+ * Compact trailer printed after `run_skill_command` and
+ * `get_skill_sandbox_artifact`. Doesn't repeat the python/uv prose the model
+ * already saw on create — just keeps the alias and cwd in front of it so
+ * subsequent calls can use the short id.
+ */
+async function renderCompactEnvTrailerFor(
+  sandboxId: SandboxId,
+  userCtx: UserContext,
+): Promise<string> {
+  const sandbox = await SkillSandboxModel.findById(sandboxId);
+  if (!sandbox) return "";
+  const alias = await aliasForExistingSandbox(sandbox, userCtx);
+  return `--- env ---\nsandbox: ${alias}  cwd: ${sandbox.defaultCwd}`;
+}
+
+async function aliasForExistingSandbox(
+  sandbox: { id: string; conversationId: string | null },
+  userCtx: UserContext,
+): Promise<string> {
+  if (!sandbox.conversationId) return sandbox.id;
+  const accessible = await accessibleConversationSandboxes(
+    sandbox.conversationId,
+    userCtx,
+  );
+  const idx = accessible.findIndex((s) => s.id === sandbox.id);
+  return idx === -1 ? sandbox.id : `s${idx + 1}`;
 }
 
 function formatCommandSummary(result: {

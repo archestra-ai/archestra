@@ -1,38 +1,3 @@
-/**
- * Base container image for the skill sandbox runtime.
- *
- * The image must be Debian-based (bookworm or later) because the sandbox build
- * step always runs apt-get to layer in the baseline toolchain defined by
- * SKILL_SANDBOX_APT_PACKAGES. Using a non-Debian image (Alpine, distroless,
- * etc.) will cause materialization to fail.
- *
- * Admins can override via `ARCHESTRA_SKILLS_SANDBOX_IMAGE` to supply a
- * Debian-based image that already includes uncommon system dependencies needed
- * by their skills.
- *
- * The default points at a uv-flavored Debian base that ships Python 3.12 and
- * matches the `code-runtime` image lineage; node/npm/npx are added by the
- * native sandbox setup layer.
- */
-export const DEFAULT_SKILL_SANDBOX_IMAGE =
-  "ghcr.io/astral-sh/uv:0.9.17-python3.12-bookworm-slim";
-
-/**
- * Apt packages layered on top of the base image to provide a consistent shell
- * toolchain. Custom images must be Debian-based (bookworm or later) because
- * the sandbox build step always runs apt-get to install these packages.
- */
-export const SKILL_SANDBOX_APT_PACKAGES = [
-  "bash",
-  "curl",
-  "git",
-  "jq",
-  "ca-certificates",
-  "build-essential",
-  "nodejs",
-  "npm",
-] as const;
-
 /** Root mountpoint inside the container for skill files. */
 export const SKILL_SANDBOX_ROOT = "/skills";
 

@@ -7,7 +7,8 @@ use std::time::Duration;
 
 use dagger_sdk::{Config, Container, DaggerConn, connect_opts};
 use futures_util::FutureExt;
-use tokio::sync::{Mutex, OnceCell, mpsc, oneshot};
+use futures_util::future::{BoxFuture, Shared};
+use tokio::sync::{Mutex, OnceCell, Semaphore, mpsc, oneshot};
 
 use crate::{
     ArtifactBytes, CommandExecution, Result, SKILL_SANDBOX_HOME, SKILL_SANDBOX_ROOT,
@@ -33,6 +34,10 @@ pub const DEFAULT_APT_PACKAGES: &[&str] = &[
 
 const CHANNEL_CAPACITY: usize = 64;
 const SESSION_READY_TIMEOUT: Duration = Duration::from_secs(60);
+// Rust-side cap on concurrent Dagger handlers. Defense in depth — the TS
+// adapter caps its own queue at a smaller value, but if any other caller ever
+// reaches the NAPI surface directly we still want the engine protected.
+const MAX_CONCURRENT_HANDLERS: usize = 32;
 
 pub(crate) struct RunRequest {
     pub snapshots: Vec<crate::SnapshotFile>,
@@ -41,8 +46,11 @@ pub(crate) struct RunRequest {
     pub command: String,
     pub cwd: String,
     pub timeout_seconds: u32,
-    pub extra_apt_packages: Vec<String>,
     pub traceparent: Option<String>,
+    /// optional PYTHONPATH applied as a container env var for the materialized
+    /// run. used to make a skill's modules importable from any cwd without
+    /// forcing the model to cd into the skill root.
+    pub pythonpath: Option<String>,
 }
 
 pub(crate) struct ArtifactRequest {
@@ -50,8 +58,12 @@ pub(crate) struct ArtifactRequest {
     pub replay_commands: Vec<crate::ReplayCommand>,
     pub limits: crate::Limits,
     pub path: String,
-    pub extra_apt_packages: Vec<String>,
+    pub default_cwd: String,
     pub traceparent: Option<String>,
+    /// same semantics as `RunRequest::pythonpath`; forwarded to the synthetic
+    /// run used to replay history before reading the artifact, so module
+    /// imports resolve identically to the original commands.
+    pub pythonpath: Option<String>,
 }
 
 pub(crate) enum SessionMsg {
@@ -75,12 +87,9 @@ pub(crate) struct SessionHandle {
 
 impl SessionHandle {
     async fn send(&self, msg: SessionMsg) -> Result<()> {
-        self.tx
-            .send(msg)
-            .await
-            .map_err(|_| SandboxError::EngineUnreachable(
-                "the Dagger session is not running".to_string(),
-            ))
+        self.tx.send(msg).await.map_err(|_| {
+            SandboxError::EngineUnreachable("the Dagger session is not running".to_string())
+        })
     }
 
     fn is_open(&self) -> bool {
@@ -88,23 +97,57 @@ impl SessionHandle {
     }
 }
 
-static HANDLE_SLOT: OnceCell<Mutex<Option<Arc<SessionHandle>>>> = OnceCell::const_new();
+type SharedSpawn = Shared<BoxFuture<'static, Result<Arc<SessionHandle>>>>;
+
+struct Slot {
+    handle: Option<Arc<SessionHandle>>,
+    /// the in-flight spawn future, shared so concurrent callers all await the
+    /// same connect attempt instead of serially retrying after a 60s timeout.
+    spawning: Option<SharedSpawn>,
+}
+
+static HANDLE_SLOT: OnceCell<Mutex<Slot>> = OnceCell::const_new();
 
 /// returns a live handle, spawning the actor on first call or after a previous
 /// session torn down (engine restart, panic in the connect closure).
 pub(crate) async fn current() -> Result<Arc<SessionHandle>> {
     let slot = HANDLE_SLOT
-        .get_or_init(|| async { Mutex::new(None) })
+        .get_or_init(|| async {
+            Mutex::new(Slot {
+                handle: None,
+                spawning: None,
+            })
+        })
         .await;
-    let mut guard = slot.lock().await;
-    if let Some(handle) = guard.as_ref() {
-        if handle.is_open() {
-            return Ok(handle.clone());
+
+    // pick up either the live handle or a shared in-flight spawn; release the
+    // lock before awaiting so concurrent callers don't block on each other.
+    let spawn_fut = {
+        let mut guard = slot.lock().await;
+        if let Some(handle) = guard.handle.as_ref() {
+            if handle.is_open() {
+                return Ok(handle.clone());
+            }
+            guard.handle = None;
         }
+        if let Some(s) = guard.spawning.clone() {
+            s
+        } else {
+            let fut: BoxFuture<'static, Result<Arc<SessionHandle>>> = spawn().boxed();
+            let shared = fut.shared();
+            guard.spawning = Some(shared.clone());
+            shared
+        }
+    };
+
+    let result = spawn_fut.await;
+
+    let mut guard = slot.lock().await;
+    guard.spawning = None;
+    if let Ok(handle) = &result {
+        guard.handle = Some(handle.clone());
     }
-    let handle = spawn().await?;
-    *guard = Some(handle.clone());
-    Ok(handle)
+    result
 }
 
 /// submit a request and await the reply.
@@ -115,9 +158,9 @@ where
     let (reply_tx, reply_rx) = oneshot::channel();
     let handle = current().await?;
     handle.send(build(reply_tx)).await?;
-    reply_rx
-        .await
-        .map_err(|_| SandboxError::internal("the Dagger session dropped a request before replying"))?
+    reply_rx.await.map_err(|_| {
+        SandboxError::internal("the Dagger session dropped a request before replying")
+    })?
 }
 
 async fn spawn() -> Result<Arc<SessionHandle>> {
@@ -171,6 +214,7 @@ async fn run_loop(client: DaggerConn, mut rx: mpsc::Receiver<SessionMsg>) {
         client,
         warm: OnceCell::new(),
     });
+    let permits = Arc::new(Semaphore::new(MAX_CONCURRENT_HANDLERS));
     // kick warmup off in the background so it overlaps with the first request
     {
         let session = session.clone();
@@ -179,8 +223,16 @@ async fn run_loop(client: DaggerConn, mut rx: mpsc::Receiver<SessionMsg>) {
         });
     }
     while let Some(msg) = rx.recv().await {
+        // back-pressure: hold the recv loop until a permit is available, so we
+        // never spawn more than MAX_CONCURRENT_HANDLERS tasks against Dagger.
+        let permit = permits
+            .clone()
+            .acquire_owned()
+            .await
+            .expect("session semaphore was closed");
         let session = session.clone();
         tokio::spawn(async move {
+            let _permit = permit;
             handle(session, msg).await;
         });
     }
@@ -212,15 +264,27 @@ pub const DEFAULT_VENV_DIR: &str = "/home/sandbox/.venv";
 pub const DEFAULT_VENV_PYTHON: &str = "/home/sandbox/.venv/bin/python";
 pub const DEFAULT_PYTHON_REQUIREMENTS: &[&str] = &["numpy", "pandas", "httpx"];
 
+/// shell snippet baked into the warm base: writes a `pip` shim that redirects
+/// to uv and aliases `pip3`/`pip3.12` to the same shim. we `rm -f` first
+/// because the upstream uv-python image ships `pip` as a symlink to `pip3`,
+/// so a naive `> /usr/local/bin/pip` would follow the symlink and write to
+/// `pip3` instead — and the follow-up `cp pip pip3` would refuse with
+/// "are the same file". kept as a const so it shows up verbatim in build
+/// logs and survives `cargo fmt`.
+const PIP_SHIM_SETUP: &str = "rm -f /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.12 && printf '%s\\n' '#!/bin/sh' 'echo \"error: pip is disabled in this sandbox. Use \\\"uv add <pkg>\\\" instead.\" >&2' 'exit 1' > /usr/local/bin/pip && chmod +x /usr/local/bin/pip && ln -s pip /usr/local/bin/pip3 && ln -s pip /usr/local/bin/pip3.12";
+
 async fn build_warm_base(client: &DaggerConn) -> Result<Container> {
     let image = env::var("ARCHESTRA_DAGGER_RUNTIME_IMAGE")
         .unwrap_or_else(|_| DEFAULT_BASE_IMAGE.to_string());
     let apt_packages = DEFAULT_APT_PACKAGES.join(" ");
     let py_requirements = DEFAULT_PYTHON_REQUIREMENTS.join(" ");
 
-    // root setup: apt packages + sandbox dirs + ownership.
+    // root setup: apt packages + sandbox dirs + ownership + pip shim. the shim
+    // redirects any `pip` invocation to uv so the model is never tempted to
+    // install into ~/.local (which the venv python won't see). `uv pip` is
+    // unaffected because it's a subcommand of `uv`, not a separate binary.
     let root_setup = format!(
-        "apt-get update -qq && apt-get install -y --no-install-recommends {apt_packages} && rm -rf /var/lib/apt/lists/* && mkdir -p {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT} && chown -R 1000:1000 {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT}"
+        "apt-get update -qq && apt-get install -y --no-install-recommends {apt_packages} && rm -rf /var/lib/apt/lists/* && mkdir -p {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT} && chown -R 1000:1000 {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT} && {PIP_SHIM_SETUP}"
     );
     // user setup: uv venv + default python packages, owned by sandbox user.
     let user_setup = format!(
@@ -253,8 +317,8 @@ async fn handle(session: Arc<Session>, msg: SessionMsg) {
             let _ = reply.send(result);
         }
         SessionMsg::CheckSession { traceparent, reply } => {
-            let result = catch_panic(crate::runtime::execute_check_session(session, traceparent))
-                .await;
+            let result =
+                catch_panic(crate::runtime::execute_check_session(session, traceparent)).await;
             let _ = reply.send(result);
         }
     }
@@ -284,4 +348,3 @@ fn panic_message(payload: &(dyn Any + Send)) -> &str {
     }
     "unknown panic payload"
 }
-

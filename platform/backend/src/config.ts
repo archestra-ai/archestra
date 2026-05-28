@@ -14,7 +14,6 @@ import {
 } from "@shared";
 import dotenv from "dotenv";
 import logger from "@/logging";
-import { DEFAULT_SKILL_SANDBOX_IMAGE } from "@/skills-sandbox/runtime-image";
 import {
   type EmailProviderType,
   EmailProviderTypeSchema,
@@ -715,7 +714,6 @@ const codeRuntimeDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost({
 const codeRuntimeEnabled =
   codeRuntimeRequested && codeRuntimeDaggerRunnerHost !== undefined;
 
-const defaultSkillsSandboxImage = DEFAULT_SKILL_SANDBOX_IMAGE;
 // skills sandbox is on whenever both skills and the code-runtime (Dagger) are enabled.
 const skillsSandboxRequested =
   process.env.ARCHESTRA_AGENTS_SKILLS_ENABLED === "true" && codeRuntimeEnabled;
@@ -1069,7 +1067,6 @@ const config = {
    */
   codeRuntime: {
     enabled: codeRuntimeEnabled,
-    image: process.env.ARCHESTRA_CODE_RUNTIME_IMAGE || defaultCodeRuntimeImage,
     /** runner host for the Dagger Engine (sets _EXPERIMENTAL_DAGGER_RUNNER_HOST). */
     daggerRunnerHost: codeRuntimeDaggerRunnerHost,
     /** path to a baked-in dagger CLI (sets _EXPERIMENTAL_DAGGER_CLI_BIN). */
@@ -1096,8 +1093,6 @@ const config = {
    */
   skillsSandbox: {
     enabled: skillsSandboxEnabled,
-    image:
-      process.env.ARCHESTRA_SKILLS_SANDBOX_IMAGE || defaultSkillsSandboxImage,
     daggerRunnerHost: skillsSandboxDaggerRunnerHost,
     daggerCliBin:
       process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_CLI_BIN ||
@@ -1136,8 +1131,6 @@ const config = {
    */
   daggerRuntime: {
     enabled: daggerRuntimeEnabled,
-    image:
-      process.env.ARCHESTRA_DAGGER_RUNTIME_IMAGE || defaultDaggerRuntimeImage,
     runnerHost: daggerRuntimeRunnerHost,
     cliBin:
       process.env.ARCHESTRA_DAGGER_RUNTIME_CLI_BIN ||
@@ -1151,6 +1144,15 @@ const config = {
     maxQueueLength: parsePositiveInt(
       process.env.ARCHESTRA_DAGGER_RUNTIME_MAX_QUEUE_LENGTH,
       50,
+    ),
+    /**
+     * extra wall-clock budget (seconds) added to a request's own timeoutSeconds
+     * before the JS-side backstop fires and assumes the engine is wedged.
+     * needs to cover cold-image pull + warm-base build for the first request.
+     */
+    nativeBackstopBufferSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_DAGGER_RUNTIME_NATIVE_BACKSTOP_BUFFER_SECONDS,
+      180,
     ),
     defaults: {
       outputBytesLimit: parsePositiveInt(

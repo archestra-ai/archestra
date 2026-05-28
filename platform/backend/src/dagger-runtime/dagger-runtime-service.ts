@@ -38,18 +38,22 @@ type NativeSandboxErrorCode =
   | "ARCHESTRA_INTERNAL"
   | "ARCHESTRA_INVALID_INPUT";
 
-export interface RunCommandParams {
+interface LimitOverrides {
+  outputBytesLimit?: number;
+  fileSizeLimitBytes?: number;
+  cpuSeconds?: number;
+  memoryBytes?: number;
+  maxProcesses?: number;
+}
+
+export interface RunCommandParams extends LimitOverrides {
   command: string;
   cwd: string;
   timeoutSeconds: number;
   snapshots?: SnapshotFile[];
   replayCommands?: ReplayCommand[];
-  /** override the default per-call output cap. */
-  outputBytesLimit?: number;
-  /** override the per-call artifact size cap. */
-  fileSizeLimitBytes?: number;
-  /** ad-hoc apt packages installed on top of the warm base. usually empty. */
-  extraAptPackages?: string[];
+  /** colon-joined absolute paths added to PYTHONPATH inside the container. */
+  pythonpath?: string;
 }
 
 export interface RunCommandResult {
@@ -61,12 +65,18 @@ export interface RunCommandResult {
   truncated: boolean;
 }
 
-export interface ReadArtifactParams {
+export interface ReadArtifactParams extends LimitOverrides {
   path: string;
+  /**
+   * cwd a replayed entry with no stored cwd should default to. mirrors the
+   * sandbox's `defaultCwd` so artifact extraction replays land in the same
+   * directory as the original run.
+   */
+  defaultCwd: string;
   snapshots?: SnapshotFile[];
   replayCommands?: ReplayCommand[];
-  fileSizeLimitBytes?: number;
-  extraAptPackages?: string[];
+  /** mirrors `RunCommandParams.pythonpath`. */
+  pythonpath?: string;
 }
 
 export interface ReadArtifactResult {
@@ -80,12 +90,21 @@ export interface ReadArtifactResult {
  * long-lived Dagger session with a pre-warmed base container, so per-call
  * overhead is dominated by the command itself rather than session/image setup.
  */
+interface Waiter {
+  resolve: () => void;
+  reject: (err: DaggerRuntimeError) => void;
+}
+
 class DaggerRuntimeService {
   private status: DaggerRuntimeStatus = "disabled";
   private initPromise: Promise<void> | null = null;
   private lastInitAttemptAt = 0;
   private activeRuns = 0;
-  private readonly waiters: Array<() => void> = [];
+  private readonly waiters: Waiter[] = [];
+  // consumers attached to the shared service. shutdown only fires when the
+  // last consumer detaches, so one adapter can't tear down a runtime that
+  // the other one still depends on.
+  private readonly consumers = new Set<string>();
 
   get isEnabled(): boolean {
     return config.daggerRuntime.enabled;
@@ -100,7 +119,7 @@ class DaggerRuntimeService {
       this.status = "disabled";
       return;
     }
-    if (this.status === "ready" || this.status === "stopped") return;
+    if (this.status === "ready") return;
     if (this.initPromise) return this.initPromise;
 
     const now = Date.now();
@@ -121,20 +140,18 @@ class DaggerRuntimeService {
     await this.ensureReady();
     await this.acquire();
     try {
-      const result = await runSandbox({
-        traceparent: getTraceparent(),
-        snapshots: params.snapshots ?? [],
-        replayCommands: params.replayCommands ?? [],
-        limits: this.limits({
-          outputBytesLimit: params.outputBytesLimit,
-          fileSizeLimitBytes: params.fileSizeLimitBytes,
+      return await this.withBackstop(params.timeoutSeconds, () =>
+        runSandbox({
+          traceparent: getTraceparent(),
+          snapshots: params.snapshots ?? [],
+          replayCommands: params.replayCommands ?? [],
+          limits: this.limits(params),
+          command: params.command,
+          cwd: params.cwd,
+          timeoutSeconds: params.timeoutSeconds,
+          pythonpath: params.pythonpath,
         }),
-        command: params.command,
-        cwd: params.cwd,
-        timeoutSeconds: params.timeoutSeconds,
-        extraAptPackages: params.extraAptPackages ?? [],
-      });
-      return result;
+      );
     } catch (error) {
       throw this.normalizeError(error);
     } finally {
@@ -146,17 +163,17 @@ class DaggerRuntimeService {
     await this.ensureReady();
     await this.acquire();
     try {
-      const result = await readArtifact({
-        traceparent: getTraceparent(),
-        snapshots: params.snapshots ?? [],
-        replayCommands: params.replayCommands ?? [],
-        limits: this.limits({
-          fileSizeLimitBytes: params.fileSizeLimitBytes,
+      return await this.withBackstop(ARTIFACT_BUDGET_SECONDS, () =>
+        readArtifact({
+          traceparent: getTraceparent(),
+          snapshots: params.snapshots ?? [],
+          replayCommands: params.replayCommands ?? [],
+          limits: this.limits(params),
+          path: params.path,
+          defaultCwd: params.defaultCwd,
+          pythonpath: params.pythonpath,
         }),
-        path: params.path,
-        extraAptPackages: params.extraAptPackages ?? [],
-      });
-      return result;
+      );
     } catch (error) {
       throw this.normalizeError(error);
     } finally {
@@ -164,10 +181,29 @@ class DaggerRuntimeService {
     }
   }
 
-  async shutdown(): Promise<void> {
-    if (this.status !== "disabled") {
-      this.status = "stopped";
+  /** attach a consumer (adapter) to the shared runtime. */
+  async attach(consumerId: string): Promise<void> {
+    this.consumers.add(consumerId);
+    await this.init();
+  }
+
+  /** detach a consumer. only shuts down the runtime when the last one leaves. */
+  async detach(consumerId: string): Promise<void> {
+    this.consumers.delete(consumerId);
+    if (this.consumers.size === 0) {
+      await this.shutdown();
     }
+  }
+
+  async shutdown(): Promise<void> {
+    if (this.status === "disabled") return;
+    this.status = "stopped";
+    this.drainWaiters(
+      new DaggerRuntimeError(
+        "the Dagger runtime is shutting down",
+        "ARCHESTRA_ENGINE_UNREACHABLE",
+      ),
+    );
   }
 
   // === private ===
@@ -228,19 +264,16 @@ class DaggerRuntimeService {
     }
   }
 
-  private limits(overrides?: {
-    outputBytesLimit?: number;
-    fileSizeLimitBytes?: number;
-  }) {
+  private limits(overrides?: LimitOverrides) {
     const { defaults } = config.daggerRuntime;
     return {
       outputBytesLimit:
         overrides?.outputBytesLimit ?? defaults.outputBytesLimit,
       fileSizeLimitBytes:
         overrides?.fileSizeLimitBytes ?? defaults.fileSizeLimitBytes,
-      cpuSeconds: defaults.cpuSeconds,
-      memoryBytes: defaults.memoryBytes,
-      maxProcesses: defaults.maxProcesses,
+      cpuSeconds: overrides?.cpuSeconds ?? defaults.cpuSeconds,
+      memoryBytes: overrides?.memoryBytes ?? defaults.memoryBytes,
+      maxProcesses: overrides?.maxProcesses ?? defaults.maxProcesses,
     };
   }
 
@@ -255,15 +288,58 @@ class DaggerRuntimeService {
         "ARCHESTRA_ENGINE_UNREACHABLE",
       );
     }
-    await new Promise<void>((resolve) => this.waiters.push(resolve));
+    await new Promise<void>((resolve, reject) =>
+      this.waiters.push({ resolve, reject }),
+    );
   }
 
   private release(): void {
     const next = this.waiters.shift();
     if (next) {
-      next();
+      next.resolve();
     } else {
       this.activeRuns--;
+    }
+  }
+
+  private drainWaiters(err: DaggerRuntimeError): void {
+    while (this.waiters.length > 0) {
+      const w = this.waiters.shift();
+      w?.reject(err);
+    }
+  }
+
+  /**
+   * JS-side backstop: if the native call doesn't return within the request's
+   * own budget plus a config buffer, assume the engine is wedged. The buffer
+   * has to cover cold-image pull + warm-base build for the very first request.
+   */
+  private async withBackstop<T>(
+    budgetSeconds: number,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    const totalMs =
+      (budgetSeconds + config.daggerRuntime.nativeBackstopBufferSeconds) * 1000;
+    let backstopHandle: NodeJS.Timeout | undefined;
+    try {
+      return await new Promise<T>((resolve, reject) => {
+        backstopHandle = setTimeout(() => {
+          if (this.status !== "stopped") this.status = "error";
+          logger.error(
+            { totalMs },
+            "[DaggerRuntime] native call exceeded backstop — engine assumed wedged",
+          );
+          reject(
+            new DaggerRuntimeError(
+              "the Dagger runtime native call did not return within the backstop window",
+              "ARCHESTRA_ENGINE_UNREACHABLE",
+            ),
+          );
+        }, totalMs);
+        fn().then(resolve, reject);
+      });
+    } finally {
+      if (backstopHandle) clearTimeout(backstopHandle);
     }
   }
 
@@ -276,16 +352,29 @@ class DaggerRuntimeService {
       case "ARCHESTRA_INVALID_INPUT":
         return new DaggerRuntimeError(native.message, native.code);
       case "ARCHESTRA_ENGINE_UNREACHABLE":
-      case "ARCHESTRA_INTERNAL":
-      case null:
-        this.status = "error";
+        // genuine engine outage — flip status so the cooldown gate kicks in.
+        // never overwrite 'stopped': shutdown is the terminal state and
+        // late-arriving errors must not silently re-enable retries.
+        if (this.status !== "stopped") this.status = "error";
         logger.error(
           { err: error, code: native.code },
-          "[DaggerRuntime] execution failed",
+          "[DaggerRuntime] engine unreachable",
         );
         return new DaggerRuntimeError(
           "the Dagger runtime is not available (engine unreachable)",
           "ARCHESTRA_ENGINE_UNREACHABLE",
+        );
+      case "ARCHESTRA_INTERNAL":
+      case null:
+        // per-call failure that doesn't necessarily mean the engine is gone.
+        // surface the original message and leave runtime status untouched.
+        logger.warn(
+          { err: error, code: native.code },
+          "[DaggerRuntime] execution failed",
+        );
+        return new DaggerRuntimeError(
+          native.message || "the Dagger runtime call failed",
+          "ARCHESTRA_INTERNAL",
         );
     }
   }
@@ -294,6 +383,8 @@ class DaggerRuntimeService {
 export const daggerRuntimeService = new DaggerRuntimeService();
 
 const INIT_RETRY_COOLDOWN_MS = 10_000;
+// artifact reads have no per-call timeout; cap their backstop budget here.
+const ARTIFACT_BUDGET_SECONDS = 60;
 
 function getTraceparent(): string | undefined {
   const carrier: Record<string, string> = {};

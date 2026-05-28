@@ -30,8 +30,6 @@ const skillSandboxesTable = pgTable(
     agentId: uuid("agent_id").references(() => agentsTable.id, {
       onDelete: "set null",
     }),
-    /** Container image identifier. Admin-configurable; see runtime-image.ts. */
-    baseImage: text("base_image").notNull(),
     /**
      * Primary skill the sandbox was created for. Determines `defaultCwd` and
      * sets the canonical skill root for relative paths in commands.

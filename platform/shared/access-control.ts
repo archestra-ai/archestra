@@ -152,7 +152,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
 export const memberPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete"],
-  skill: ["read", "create", "update", "delete"],
+  skill: ["read", "create", "update", "delete", "execute"],
   agentTrigger: [],
   scheduledTask: ["read", "create", "update", "delete"],
 

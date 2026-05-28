@@ -1,6 +1,10 @@
 "use client";
 
-import type { ResourceVisibilityScope } from "@shared";
+import {
+  KNOWLEDGE_FILE_ACCEPT_ATTRIBUTE,
+  KNOWLEDGE_FILE_SUPPORTED_FORMATS_LABEL,
+  type ResourceVisibilityScope,
+} from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -52,8 +56,6 @@ import {
 } from "@/lib/knowledge/knowledge-files.query";
 import { cn, formatDate } from "@/lib/utils";
 import { KnowledgeFileAccessFields } from "./_parts/knowledge-file-access-fields";
-
-const ACCEPTED_EXTENSIONS = ".txt,.md,.csv,.json,.xml,.pdf";
 
 export default function KnowledgeFilesPage() {
   return (
@@ -334,7 +336,7 @@ function UploadKnowledgeFilesDialog({
           <input
             ref={fileInputRef}
             type="file"
-            accept={ACCEPTED_EXTENSIONS}
+            accept={KNOWLEDGE_FILE_ACCEPT_ATTRIBUTE}
             multiple
             className="hidden"
             onChange={(event) => handleSelectedFiles(event.target.files ?? [])}
@@ -373,7 +375,7 @@ function UploadKnowledgeFilesDialog({
             </p>
           </Button>
           <p className="text-xs text-muted-foreground">
-            TXT, Markdown, CSV, JSON, XML, and PDF files up to{" "}
+            {KNOWLEDGE_FILE_SUPPORTED_FORMATS_LABEL} files up to{" "}
             {formatFileSize(config?.maxFileSizeBytes ?? 10 * 1024 * 1024)}
           </p>
           {files.length > 0 && (
@@ -507,7 +509,7 @@ function ViewKnowledgeFileDialog({
         </div>
       }
       size="large"
-      bodyClassName="min-h-0"
+      bodyClassName="flex min-h-0 flex-col"
       footer={
         <>
           <Button
@@ -527,7 +529,7 @@ function ViewKnowledgeFileDialog({
       <iframe
         title={file.originalName}
         src={getKnowledgeFileContentUrl(file.id)}
-        className="h-[65vh] w-full rounded-md border bg-background"
+        className="min-h-0 flex-1 rounded-md border bg-background"
       />
     </StandardDialog>
   );

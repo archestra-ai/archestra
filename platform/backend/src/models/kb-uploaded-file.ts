@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { ResourceVisibilityScope } from "@shared";
 import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import type { UploadedFileProcessingStatus } from "@/types";
 import { escapeLikePattern } from "@/utils/sql-search";
 
 type KbUploadedFile = typeof schema.kbUploadedFilesTable.$inferSelect;
@@ -225,7 +226,7 @@ class KbUploadedFileModel {
 
   static async updateProcessingStatus(
     id: string,
-    status: string,
+    status: UploadedFileProcessingStatus,
     error?: string | null,
   ): Promise<void> {
     await db

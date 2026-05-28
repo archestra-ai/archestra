@@ -53,6 +53,7 @@ import {
   SelectConnectorRunSchema,
   SelectKnowledgeBaseConnectorSchema,
   SelectKnowledgeBaseSchema,
+  UploadedFileProcessingStatusSchema,
 } from "@/types";
 import {
   isSafeInlineMimeType,
@@ -1083,7 +1084,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     contentHash: z.string(),
     blobStorageProvider: z.string().nullable().optional(),
     createdAt: z.string(),
-    processingStatus: z.string(),
+    processingStatus: UploadedFileProcessingStatusSchema,
     processingError: z.string().nullable(),
     embeddingStatus: EmbeddingStatusSchema,
   });

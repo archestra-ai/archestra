@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
-import type { ResourceVisibilityScope } from "@shared";
+import {
+  type ResourceVisibilityScope,
+  SUPPORTED_KNOWLEDGE_FILE_EXTENSIONS,
+  SUPPORTED_KNOWLEDGE_FILE_MIME_TYPES,
+} from "@shared";
 import config from "@/config";
 import {
   extractTextFiles,
@@ -321,33 +325,20 @@ function isSupportedKnowledgeFileFormat(
   mimeType: string,
 ): boolean {
   const extension = filename.split(".").pop()?.toLowerCase();
-  if (extension && SUPPORTED_KNOWLEDGE_FILE_EXTENSIONS.has(extension)) {
+  if (extension && supportedKnowledgeFileExtensions.has(extension)) {
     return true;
   }
 
   const normalizedMimeType = mimeType.split(";")[0].trim().toLowerCase();
-  return SUPPORTED_KNOWLEDGE_FILE_MIME_TYPES.has(normalizedMimeType);
+  return supportedKnowledgeFileMimeTypes.has(normalizedMimeType);
 }
 
-const SUPPORTED_KNOWLEDGE_FILE_EXTENSIONS = new Set([
-  "txt",
-  "md",
-  "csv",
-  "json",
-  "xml",
-  "pdf",
-]);
-
-const SUPPORTED_KNOWLEDGE_FILE_MIME_TYPES = new Set([
-  "application/csv",
-  "application/json",
-  "application/pdf",
-  "application/vnd.ms-excel",
-  "application/xml",
-  "text/csv",
-  "text/markdown",
-  "text/plain",
-]);
+const supportedKnowledgeFileExtensions = new Set<string>(
+  SUPPORTED_KNOWLEDGE_FILE_EXTENSIONS,
+);
+const supportedKnowledgeFileMimeTypes = new Set<string>(
+  SUPPORTED_KNOWLEDGE_FILE_MIME_TYPES,
+);
 
 function areStringSetsEqual(left: string[], right: string[]) {
   if (left.length !== right.length) return false;

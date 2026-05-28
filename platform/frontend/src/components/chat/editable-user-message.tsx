@@ -1,6 +1,10 @@
 "use client";
 
-import type { ChatSkillMetadata } from "@shared";
+import {
+  type ChatSkillMetadata,
+  SUPPORTED_KNOWLEDGE_FILE_EXTENSIONS,
+  SUPPORTED_KNOWLEDGE_FILE_MIME_TYPES,
+} from "@shared";
 import {
   AlertTriangle,
   FilePlus2,
@@ -304,7 +308,7 @@ export function EditableUserMessage({
           )}
         {/* Text message bubble - only show if there's text */}
         {text && (
-          <div className="flex max-w-[80%] items-center justify-end gap-2">
+          <div className="group/user-message-text-row flex max-w-[80%] items-center justify-end gap-2">
             <MessageActions
               textToCopy={text}
               onEditClick={handleStartEdit}
@@ -315,10 +319,10 @@ export function EditableUserMessage({
                 "shrink-0 transition-opacity",
                 isRegenerateConfirming
                   ? "opacity-100"
-                  : "opacity-0 group-has-[[data-user-message-bubble]:hover]/message:opacity-100",
+                  : "pointer-events-none opacity-0 group-hover/user-message-text-row:pointer-events-auto group-hover/user-message-text-row:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100",
               )}
             />
-            <MessageContent className="max-w-none" data-user-message-bubble>
+            <MessageContent className="max-w-none">
               <UserMessageText text={text} />
             </MessageContent>
           </div>
@@ -358,21 +362,17 @@ function isPromotableKnowledgeAttachment(attachment: FileAttachment): boolean {
   if (!attachment.url.includes("/api/chat/attachments/")) return false;
   const filename = attachment.filename?.toLowerCase() ?? "";
   const extension = filename.split(".").pop();
-  if (
-    extension &&
-    ["txt", "md", "csv", "json", "xml", "pdf"].includes(extension)
-  ) {
+  if (extension && supportedKnowledgeFileExtensions.has(extension)) {
     return true;
   }
 
   const mimeType = attachment.mediaType.split(";")[0].trim().toLowerCase();
-  return [
-    "text/plain",
-    "text/markdown",
-    "text/csv",
-    "application/json",
-    "application/xml",
-    "text/xml",
-    "application/pdf",
-  ].includes(mimeType);
+  return supportedKnowledgeFileMimeTypes.has(mimeType);
 }
+
+const supportedKnowledgeFileExtensions = new Set<string>(
+  SUPPORTED_KNOWLEDGE_FILE_EXTENSIONS,
+);
+const supportedKnowledgeFileMimeTypes = new Set<string>(
+  SUPPORTED_KNOWLEDGE_FILE_MIME_TYPES,
+);

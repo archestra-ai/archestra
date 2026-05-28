@@ -10,6 +10,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { UploadedFileProcessingStatus } from "@/types/kb-uploaded-file";
 import knowledgeBaseConnectorsTable from "./knowledge-base-connector";
 
 const bytea = customType<{ data: Buffer; driverParam: Buffer }>({
@@ -41,7 +42,10 @@ const kbUploadedFilesTable = pgTable(
     fileData: bytea("file_data"),
     blobStorageProvider: text("blob_storage_provider"),
     blobStorageKey: text("blob_storage_key"),
-    processingStatus: text("processing_status").notNull().default("completed"),
+    processingStatus: text("processing_status")
+      .$type<UploadedFileProcessingStatus>()
+      .notNull()
+      .default("completed"),
     processingError: text("processing_error"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },

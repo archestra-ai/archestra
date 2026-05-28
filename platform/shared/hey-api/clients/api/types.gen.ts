@@ -34060,7 +34060,7 @@ export type GetKnowledgeFilesResponses = {
             contentHash: string;
             blobStorageProvider?: string | null;
             createdAt: string;
-            processingStatus: string;
+            processingStatus: 'pending' | 'processing' | 'completed' | 'failed';
             processingError: string | null;
             embeddingStatus: 'pending' | 'processing' | 'completed' | 'failed';
             assignedAgents: Array<{
@@ -34353,7 +34353,7 @@ export type GetKnowledgeFileResponses = {
         contentHash: string;
         blobStorageProvider?: string | null;
         createdAt: string;
-        processingStatus: string;
+        processingStatus: 'pending' | 'processing' | 'completed' | 'failed';
         processingError: string | null;
         embeddingStatus: 'pending' | 'processing' | 'completed' | 'failed';
         assignedAgents: Array<{
@@ -34460,7 +34460,7 @@ export type UpdateKnowledgeFileResponses = {
         contentHash: string;
         blobStorageProvider?: string | null;
         createdAt: string;
-        processingStatus: string;
+        processingStatus: 'pending' | 'processing' | 'completed' | 'failed';
         processingError: string | null;
         embeddingStatus: 'pending' | 'processing' | 'completed' | 'failed';
         assignedAgents: Array<{
@@ -34644,7 +34644,7 @@ export type GetConnectorFilesResponses = {
             contentHash: string;
             blobStorageProvider?: string | null;
             createdAt: string;
-            processingStatus: string;
+            processingStatus: 'pending' | 'processing' | 'completed' | 'failed';
             processingError: string | null;
             embeddingStatus: 'pending' | 'processing' | 'completed' | 'failed';
         }>;
@@ -34933,7 +34933,7 @@ export type GetConnectorFileResponses = {
         contentHash: string;
         blobStorageProvider?: string | null;
         createdAt: string;
-        processingStatus: string;
+        processingStatus: 'pending' | 'processing' | 'completed' | 'failed';
         processingError: string | null;
         embeddingStatus: 'pending' | 'processing' | 'completed' | 'failed';
     };

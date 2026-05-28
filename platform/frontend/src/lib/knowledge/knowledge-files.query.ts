@@ -25,10 +25,32 @@ type KnowledgeFilesPaginatedParams = Pick<
   KnowledgeFilesQuery,
   "limit" | "offset" | "search"
 >;
+type KnowledgeFileStatusFields = Pick<
+  KnowledgeFile,
+  "processingStatus" | "embeddingStatus"
+>;
+type KnowledgeFileStatus =
+  KnowledgeFileStatusFields[keyof KnowledgeFileStatusFields];
+type UploadKnowledgeFilesParams = Omit<
+  archestraApiTypes.UploadKnowledgeFilesData["body"],
+  "files"
+> & {
+  files: File[];
+};
+type PromoteChatAttachmentParams = {
+  attachmentId: archestraApiTypes.PromoteChatAttachmentToKnowledgeFileData["path"]["id"];
+  body: archestraApiTypes.PromoteChatAttachmentToKnowledgeFileData["body"];
+};
+type UpdateKnowledgeFileParams = {
+  fileId: archestraApiTypes.UpdateKnowledgeFileData["path"]["fileId"];
+  body: archestraApiTypes.UpdateKnowledgeFileData["body"];
+};
+type DeleteKnowledgeFileParams =
+  archestraApiTypes.DeleteKnowledgeFileData["path"]["fileId"];
 type UploadResult =
   archestraApiTypes.UploadKnowledgeFilesResponses["200"]["results"][number];
 
-const ACTIVE_STATUSES = new Set(["pending", "processing"]);
+const ACTIVE_STATUSES = new Set<KnowledgeFileStatus>(["pending", "processing"]);
 
 export function useKnowledgeFilesPaginated(
   params: KnowledgeFilesPaginatedParams,
@@ -45,10 +67,9 @@ export function useKnowledgeFilesPaginated(
       return data;
     },
     refetchInterval: (query) => {
-      const hasActive = query.state.data?.data.some((file) => {
-        if (ACTIVE_STATUSES.has(file.processingStatus)) return true;
-        return ACTIVE_STATUSES.has(file.embeddingStatus);
-      });
+      const hasActive = query.state.data?.data.some(
+        hasActiveKnowledgeFileStatus,
+      );
       return hasActive ? 3000 : false;
     },
   });
@@ -69,9 +90,7 @@ export function useKnowledgeFile(fileId: string) {
     refetchInterval: (query) => {
       const file = query.state.data;
       if (!file) return false;
-      if (ACTIVE_STATUSES.has(file.processingStatus)) return 3000;
-      if (ACTIVE_STATUSES.has(file.embeddingStatus)) return 3000;
-      return false;
+      return hasActiveKnowledgeFileStatus(file) ? 3000 : false;
     },
   });
 }
@@ -94,12 +113,7 @@ export function useUploadKnowledgeFiles() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (params: {
-      files: File[];
-      visibility: archestraApiTypes.UploadKnowledgeFilesData["body"]["visibility"];
-      teamIds: string[];
-      agentIds: string[];
-    }) => {
+    mutationFn: async (params: UploadKnowledgeFilesParams) => {
       const files = await Promise.all(
         params.files.map(async (file) => ({
           name: file.name,
@@ -137,13 +151,7 @@ export function usePromoteChatAttachmentToKnowledgeFile() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({
-      attachmentId,
-      body,
-    }: {
-      attachmentId: string;
-      body: archestraApiTypes.PromoteChatAttachmentToKnowledgeFileData["body"];
-    }) => {
+    mutationFn: async ({ attachmentId, body }: PromoteChatAttachmentParams) => {
       const { data, error } = await promoteChatAttachmentToKnowledgeFile({
         path: { id: attachmentId },
         body,
@@ -172,13 +180,7 @@ export function usePromoteChatAttachmentToKnowledgeFile() {
 export function useUpdateKnowledgeFile() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({
-      fileId,
-      body,
-    }: {
-      fileId: string;
-      body: archestraApiTypes.UpdateKnowledgeFileData["body"];
-    }) => {
+    mutationFn: async ({ fileId, body }: UpdateKnowledgeFileParams) => {
       const { data, error } = await updateKnowledgeFile({
         path: { fileId },
         body,
@@ -203,7 +205,7 @@ export function useUpdateKnowledgeFile() {
 export function useDeleteKnowledgeFile() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (fileId: string) => {
+    mutationFn: async (fileId: DeleteKnowledgeFileParams) => {
       const { data, error } = await deleteKnowledgeFile({ path: { fileId } });
       if (error) {
         handleApiError(error);
@@ -226,6 +228,13 @@ export function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function hasActiveKnowledgeFileStatus(file: KnowledgeFileStatusFields) {
+  return (
+    ACTIVE_STATUSES.has(file.processingStatus) ||
+    ACTIVE_STATUSES.has(file.embeddingStatus)
+  );
 }
 
 function showUploadResultToasts(results: UploadResult[]) {

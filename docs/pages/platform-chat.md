@@ -35,4 +35,4 @@ Uploaded text files and PDFs are included in the compaction transcript when extr
 
 ### File Attachments
 
-Chat attachments are scoped to their conversation. Users with Knowledge File upload permission can save a sent attachment to [Knowledge Files](/docs/platform-knowledge-bases#files), choose visibility, and select the agents or MCP Gateways that can retrieve it later.
+Chat attachments are scoped to their conversation. Users with `knowledgeFile:create` can save a sent attachment to [Knowledge Files](/docs/platform-knowledge-bases#files), choose visibility, and select the agents or MCP Gateways that can retrieve it later.

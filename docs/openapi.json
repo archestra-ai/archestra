@@ -129546,7 +129546,13 @@
                             "type": "string"
                           },
                           "processingStatus": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "processing",
+                              "completed",
+                              "failed"
+                            ]
                           },
                           "processingError": {
                             "nullable": true,
@@ -130313,7 +130319,13 @@
                       "type": "string"
                     },
                     "processingStatus": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "processing",
+                        "completed",
+                        "failed"
+                      ]
                     },
                     "processingError": {
                       "nullable": true,
@@ -130716,7 +130728,13 @@
                       "type": "string"
                     },
                     "processingStatus": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "processing",
+                        "completed",
+                        "failed"
+                      ]
                     },
                     "processingError": {
                       "nullable": true,
@@ -131991,7 +132009,13 @@
                             "type": "string"
                           },
                           "processingStatus": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "processing",
+                              "completed",
+                              "failed"
+                            ]
                           },
                           "processingError": {
                             "nullable": true,
@@ -132389,7 +132413,13 @@
                       "type": "string"
                     },
                     "processingStatus": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "processing",
+                        "completed",
+                        "failed"
+                      ]
                     },
                     "processingError": {
                       "nullable": true,

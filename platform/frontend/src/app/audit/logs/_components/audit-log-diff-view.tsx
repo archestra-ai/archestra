@@ -5,9 +5,9 @@ import { cn } from "@/lib/utils";
 /** Top-level audit `before` / `after` payloads from the API. */
 export type AuditSnapshot = Record<string, unknown>;
 
-type DiffKind = "context" | "added" | "removed";
+export type DiffKind = "context" | "added" | "removed";
 
-type DiffLine = {
+export type DiffLine = {
   kind: DiffKind;
   /** Number of indent levels (2 spaces per level). */
   indent: number;
@@ -116,7 +116,7 @@ function indentSpaces(level: number): string {
   return INDENT.repeat(level);
 }
 
-function computeDiffLines(
+export function computeDiffLines(
   before: AuditSnapshot | null,
   after: AuditSnapshot | null,
 ): DiffLine[] {

@@ -1,5 +1,5 @@
 import logger from "@/logging";
-import ChatAttachmentModel from "@/models/chat-attachment";
+import ConversationAttachmentModel from "@/models/conversation-attachment";
 import type { ChatMessage, ChatMessagePart } from "@/types";
 import { loadPdfParser } from "../context-compaction";
 
@@ -39,7 +39,8 @@ export async function extractInlineAttachments(args: {
         if (!decoded) continue;
 
         const { buffer, mimeType } = decoded;
-        const contentHash = ChatAttachmentModel.computeContentHash(buffer);
+        const contentHash =
+          ConversationAttachmentModel.computeContentHash(buffer);
         const filename =
           typeof part.filename === "string" && part.filename.length > 0
             ? part.filename
@@ -55,12 +56,12 @@ export async function extractInlineAttachments(args: {
         // creating orphan attachment rows on every turn. Scope is intentional
         // — same conversation = same security boundary, no cross-conv issues.
         let attachment =
-          await ChatAttachmentModel.findByConversationAndContentHash(
+          await ConversationAttachmentModel.findByConversationAndContentHash(
             conversationId,
             contentHash,
           );
         if (!attachment) {
-          attachment = await ChatAttachmentModel.create({
+          attachment = await ConversationAttachmentModel.create({
             organizationId,
             conversationId,
             uploadedByUserId,
@@ -151,7 +152,11 @@ async function extractTextPreview(
       .toString("utf8")
       .replaceAll(String.fromCharCode(0), "")
       .slice(0, TEXT_PREVIEW_MAX_CHARS);
-    await ChatAttachmentModel.updateTextPreview(attachmentId, "ok", text);
+    await ConversationAttachmentModel.updateTextPreview(
+      attachmentId,
+      "ok",
+      text,
+    );
     return;
   }
 
@@ -159,7 +164,7 @@ async function extractTextPreview(
     mimeType !== "application/pdf" ||
     buffer.byteLength > SYNC_PDF_PARSE_MAX_BYTES
   ) {
-    await ChatAttachmentModel.updateTextPreview(
+    await ConversationAttachmentModel.updateTextPreview(
       attachmentId,
       "unsupported",
       null,
@@ -175,13 +180,21 @@ async function extractTextPreview(
     const text = (parsed.text ?? "")
       .replaceAll(String.fromCharCode(0), "")
       .slice(0, TEXT_PREVIEW_MAX_CHARS);
-    await ChatAttachmentModel.updateTextPreview(attachmentId, "ok", text);
+    await ConversationAttachmentModel.updateTextPreview(
+      attachmentId,
+      "ok",
+      text,
+    );
   } catch (err) {
     logger.warn(
       { err, attachmentId },
       "[extractInlineAttachments] PDF text extraction failed",
     );
-    await ChatAttachmentModel.updateTextPreview(attachmentId, "failed", null);
+    await ConversationAttachmentModel.updateTextPreview(
+      attachmentId,
+      "failed",
+      null,
+    );
   }
 }
 

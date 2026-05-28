@@ -1,4 +1,4 @@
-import ChatAttachmentModel from "@/models/chat-attachment";
+import ConversationAttachmentModel from "@/models/conversation-attachment";
 import { expect, test } from "@/test";
 import type { ChatMessage } from "@/types";
 import {
@@ -60,7 +60,9 @@ test("rewrites data: URL file part to attachment ref and persists bytes", async 
 
   const id = expectPresent(parseAttachmentIdFromUrl(url));
 
-  const row = expectPresent(await ChatAttachmentModel.findByIdWithData(id));
+  const row = expectPresent(
+    await ConversationAttachmentModel.findByIdWithData(id),
+  );
   expect(row.fileData.equals(bytes)).toBe(true);
   expect(row.originalName).toBe("hello.txt");
   expect(row.mimeType).toBe("text/plain");
@@ -193,8 +195,8 @@ test("same bytes in different conversations are stored independently", async ({
   );
   expect(id1).not.toBe(id2);
 
-  const r1 = await ChatAttachmentModel.findById(id1);
-  const r2 = await ChatAttachmentModel.findById(id2);
+  const r1 = await ConversationAttachmentModel.findById(id1);
+  const r2 = await ConversationAttachmentModel.findById(id2);
   expect(r1?.conversationId).toBe(convo1.id);
   expect(r2?.conversationId).toBe(convo2.id);
   expect(r1?.originalName).toBe("x.txt");
@@ -272,7 +274,7 @@ test("text-like mime types get textPreview populated", async ({
       expectPresent(messages[0].parts?.[0]).url as string,
     ),
   );
-  const row = await ChatAttachmentModel.findById(id);
+  const row = await ConversationAttachmentModel.findById(id);
   expect(row?.textPreviewStatus).toBe("ok");
   expect(row?.textPreview).toBe("name,age\nAlice,30\nBob,25");
 });
@@ -337,9 +339,10 @@ test("skips messages already persisted on a prior turn (legacy data: URLs in his
 
   // Only ONE row was created (for the fresh message) — confirms we did not
   // burn a hash+DB-hit on the legacy turn.
-  const rows = await ChatAttachmentModel.findByConversationIdWithoutData(
-    conversation.id,
-  );
+  const rows =
+    await ConversationAttachmentModel.findByConversationIdWithoutData(
+      conversation.id,
+    );
   expect(rows.length).toBe(1);
   expect(rows[0].originalName).toBe("fresh.txt");
 });

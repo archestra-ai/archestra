@@ -1,4 +1,4 @@
-import ChatAttachmentModel from "@/models/chat-attachment";
+import ConversationAttachmentModel from "@/models/conversation-attachment";
 import { expect, test } from "@/test";
 import type { ChatMessage } from "@/types";
 import { cloneAttachmentsForFork } from "./clone-attachments-for-fork";
@@ -17,17 +17,21 @@ test("clones the underlying row and rewrites refs to the new id", async ({
     organizationId: agent.organizationId,
   });
   const bytes = Buffer.from("forkable-bytes", "utf8");
-  const row = await ChatAttachmentModel.create({
+  const row = await ConversationAttachmentModel.create({
     organizationId: source.organizationId,
     conversationId: source.id,
     uploadedByUserId: source.userId,
     originalName: "doc.pdf",
     mimeType: "application/pdf",
     fileSize: bytes.byteLength,
-    contentHash: ChatAttachmentModel.computeContentHash(bytes),
+    contentHash: ConversationAttachmentModel.computeContentHash(bytes),
     fileData: bytes,
   });
-  await ChatAttachmentModel.updateTextPreview(row.id, "ok", "FORK_PREVIEW");
+  await ConversationAttachmentModel.updateTextPreview(
+    row.id,
+    "ok",
+    "FORK_PREVIEW",
+  );
 
   const sourceMessages: ChatMessage[] = [
     {
@@ -67,7 +71,7 @@ test("clones the underlying row and rewrites refs to the new id", async ({
     /\/api\/chat\/attachments\/([^/]+)\/content/,
   );
   const newId = parsed![1];
-  const clonedRow = await ChatAttachmentModel.findByIdWithData(newId);
+  const clonedRow = await ConversationAttachmentModel.findByIdWithData(newId);
   expect(clonedRow).not.toBeNull();
   expect(clonedRow!.conversationId).toBe(fork.id);
   expect(clonedRow!.organizationId).toBe(fork.organizationId);
@@ -79,7 +83,7 @@ test("clones the underlying row and rewrites refs to the new id", async ({
   expect(clonedRow!.textPreviewStatus).toBe("ok");
 
   // Source row stays untouched — fork is a copy, not a move.
-  const sourceRow = await ChatAttachmentModel.findByIdWithData(row.id);
+  const sourceRow = await ConversationAttachmentModel.findByIdWithData(row.id);
   expect(sourceRow).not.toBeNull();
   expect(sourceRow!.conversationId).toBe(source.id);
 
@@ -99,14 +103,14 @@ test("deduplicates identical refs into a single clone", async ({
     organizationId: agent.organizationId,
   });
   const bytes = Buffer.from("once", "utf8");
-  const row = await ChatAttachmentModel.create({
+  const row = await ConversationAttachmentModel.create({
     organizationId: source.organizationId,
     conversationId: source.id,
     uploadedByUserId: source.userId,
     originalName: "once.txt",
     mimeType: "text/plain",
     fileSize: bytes.byteLength,
-    contentHash: ChatAttachmentModel.computeContentHash(bytes),
+    contentHash: ConversationAttachmentModel.computeContentHash(bytes),
     fileData: bytes,
   });
 
@@ -229,14 +233,14 @@ test("refuses to clone a row whose conversationId is NOT the source (IDOR guard)
     organizationId: agent.organizationId,
   });
   const secretBytes = Buffer.from("FOREIGN_SECRET_BYTES", "utf8");
-  const foreignRow = await ChatAttachmentModel.create({
+  const foreignRow = await ConversationAttachmentModel.create({
     organizationId: foreign.organizationId,
     conversationId: foreign.id,
     uploadedByUserId: foreign.userId,
     originalName: "secret.bin",
     mimeType: "application/octet-stream",
     fileSize: secretBytes.byteLength,
-    contentHash: ChatAttachmentModel.computeContentHash(secretBytes),
+    contentHash: ConversationAttachmentModel.computeContentHash(secretBytes),
     fileData: secretBytes,
   });
 
@@ -270,13 +274,12 @@ test("refuses to clone a row whose conversationId is NOT the source (IDOR guard)
   expect(forked[0].parts![0].url).toBe(refUrl(foreignRow.id));
 
   // No new row was created in the fork pointing at the foreign bytes.
-  const forkRows = await ChatAttachmentModel.findByConversationIdWithoutData(
-    fork.id,
-  );
+  const forkRows =
+    await ConversationAttachmentModel.findByConversationIdWithoutData(fork.id);
   expect(forkRows.length).toBe(0);
 
   // The foreign row is untouched.
-  const stillForeign = await ChatAttachmentModel.findByIdWithData(
+  const stillForeign = await ConversationAttachmentModel.findByIdWithData(
     foreignRow.id,
   );
   expect(stillForeign!.conversationId).toBe(foreign.id);

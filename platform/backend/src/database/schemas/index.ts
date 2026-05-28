@@ -46,12 +46,12 @@ export {
   chatActiveRunEventsTable,
   chatActiveRunsTable,
 } from "./chat-active-run";
-export { default as chatAttachmentsTable } from "./chat-attachment";
 export { default as chatopsChannelBindingsTable } from "./chatops-channel-binding";
 export { default as chatopsProcessedMessagesTable } from "./chatops-processed-message";
 export { default as chatopsThreadAgentOverrideTable } from "./chatops-thread-agent-override";
 export { default as connectorRunsTable } from "./connector-run";
 export { default as conversationsTable } from "./conversation";
+export { default as conversationAttachmentsTable } from "./conversation-attachment";
 export { default as conversationChatErrorsTable } from "./conversation-chat-error";
 export { default as conversationCompactionsTable } from "./conversation-compaction";
 export { default as conversationEnabledToolsTable } from "./conversation-enabled-tool";

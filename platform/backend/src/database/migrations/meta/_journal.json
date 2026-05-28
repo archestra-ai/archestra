@@ -1793,6 +1793,13 @@
       "when": 1779899471178,
       "tag": "0255_ambiguous_omega_sentinel",
       "breakpoints": true
+    },
+    {
+      "idx": 256,
+      "version": "7",
+      "when": 1779944476369,
+      "tag": "0256_rename_chat_attachments_to_conversation_attachments",
+      "breakpoints": true
     }
   ]
 }

@@ -18,6 +18,7 @@ export const RouteId = {
   GetAgentVersions: "getAgentVersions",
   GetAgentVersion: "getAgentVersion",
   GetAgentVersionDiff: "getAgentVersionDiff",
+  RestoreAgentVersion: "restoreAgentVersion",
 
   // Schedule Trigger Routes
   GetScheduleTriggers: "getScheduleTriggers",

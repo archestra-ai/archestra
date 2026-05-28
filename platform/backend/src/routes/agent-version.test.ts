@@ -348,6 +348,147 @@ describe("agent-version routes", () => {
   });
 
   // ===
+  // POST /api/agents/:id/versions/:versionId/restore
+  // ===
+
+  describe("POST /api/agents/:id/versions/:versionId/restore", () => {
+    test("restores agent prompt to a prior version and writes a new restore row", async () => {
+      const agent = await createAgentWithPrompt("Prompt A");
+      await app.inject({
+        method: "PUT",
+        url: `/api/agents/${agent.id}`,
+        payload: { systemPrompt: "Prompt B" },
+      });
+
+      const listRes = await app.inject({
+        method: "GET",
+        url: `/api/agents/${agent.id}/versions`,
+      });
+      const v1Id = listRes
+        .json()
+        .data.find((v: { versionNumber: number }) => v.versionNumber === 1).id;
+
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/agents/${agent.id}/versions/${v1Id}/restore`,
+        payload: {},
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+
+      // Agent prompt is reverted to v1
+      expect(body.agent.systemPrompt).toBe("Prompt A");
+
+      // A new version row is created with source='restore'
+      expect(body.restoredVersion).not.toBeNull();
+      expect(body.restoredVersion.source).toBe("restore");
+      expect(body.restoredVersion.versionNumber).toBe(3);
+    });
+
+    test("after restore, listing versions shows the new restore entry at the top", async () => {
+      const agent = await createAgentWithPrompt("Prompt A");
+      await app.inject({
+        method: "PUT",
+        url: `/api/agents/${agent.id}`,
+        payload: { systemPrompt: "Prompt B" },
+      });
+
+      const listRes = await app.inject({
+        method: "GET",
+        url: `/api/agents/${agent.id}/versions`,
+      });
+      const v1Id = listRes
+        .json()
+        .data.find((v: { versionNumber: number }) => v.versionNumber === 1).id;
+
+      await app.inject({
+        method: "POST",
+        url: `/api/agents/${agent.id}/versions/${v1Id}/restore`,
+        payload: {},
+      });
+
+      const afterRes = await app.inject({
+        method: "GET",
+        url: `/api/agents/${agent.id}/versions`,
+      });
+
+      const versions = afterRes.json().data;
+      expect(versions[0].source).toBe("restore");
+      expect(versions[0].versionNumber).toBe(3);
+      expect(afterRes.json().total).toBe(3);
+    });
+
+    test("restoring the currently-live prompt is a no-op: returns agent but restoredVersion=null", async () => {
+      const agent = await createAgentWithPrompt("Prompt A");
+
+      const listRes = await app.inject({
+        method: "GET",
+        url: `/api/agents/${agent.id}/versions`,
+      });
+      const v1Id = listRes.json().data[0].id;
+
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/agents/${agent.id}/versions/${v1Id}/restore`,
+        payload: {},
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.agent.systemPrompt).toBe("Prompt A");
+      // Dedup: prompt is already live, so no new version row
+      expect(body.restoredVersion).toBeNull();
+
+      // Version count must not have grown
+      const afterListRes = await app.inject({
+        method: "GET",
+        url: `/api/agents/${agent.id}/versions`,
+      });
+      expect(afterListRes.json().total).toBe(1);
+    });
+
+    test("returns 404 when versionId belongs to a different agent", async () => {
+      const agent1 = await createAgentWithPrompt("Agent 1 prompt");
+      const agent2 = await createAgentWithPrompt("Agent 2 prompt");
+
+      const a2List = await app.inject({
+        method: "GET",
+        url: `/api/agents/${agent2.id}/versions`,
+      });
+      const a2v1Id = a2List.json().data[0].id;
+
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/agents/${agent1.id}/versions/${a2v1Id}/restore`,
+        payload: {},
+      });
+
+      expect(res.statusCode).toBe(404);
+    });
+
+    test("returns 404 when caller lacks update permission (cross-org agent)", async ({
+      makeAgent,
+      makeOrganization,
+    }) => {
+      const otherOrg = await makeOrganization();
+      const agent = await makeAgent({
+        organizationId: otherOrg.id,
+        agentType: "agent",
+      });
+      const fakeVersionId = crypto.randomUUID();
+
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/agents/${agent.id}/versions/${fakeVersionId}/restore`,
+        payload: {},
+      });
+
+      expect(res.statusCode).toBe(404);
+    });
+  });
+
+  // ===
   // Permission check
   // ===
 
@@ -358,9 +499,7 @@ describe("agent-version routes", () => {
       makeUser,
       makeMember,
     }) => {
-      // Create agent in caller's org but as a member-level user who still has read
-      // To test a true 404-on-no-permission we need a type the user can't read.
-      // Simplest: create a separate org's agent and try to access cross-org.
+      // Cross-org agent: the caller's organizationId won't match, so 404.
       const otherOrg = await makeOrganization();
       const agent = await makeAgent({
         organizationId: otherOrg.id,

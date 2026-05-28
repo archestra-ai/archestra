@@ -1,12 +1,16 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getAgentTypePermissionChecker } from "@/auth";
-import { AgentModel, AgentVersionModel } from "@/models";
+import {
+  getAgentTypePermissionChecker,
+  requireAgentModifyPermission,
+} from "@/auth";
+import { AgentModel, AgentVersionModel, TeamModel } from "@/models";
 import {
   ApiError,
   constructResponseSchema,
   PromptSnapshotV1Schema,
+  SelectAgentSchema,
   UuidIdSchema,
 } from "@/types";
 
@@ -241,6 +245,109 @@ const agentVersionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           label: targetLabel,
         },
         changed: baseSnapshot.systemPrompt !== targetSystemPrompt,
+      });
+    },
+  );
+
+  fastify.post(
+    "/api/agents/:id/versions/:versionId/restore",
+    {
+      schema: {
+        operationId: RouteId.RestoreAgentVersion,
+        description:
+          "Restore an agent's system prompt to a prior version. Writes a new version row with source='restore'.",
+        tags: ["Agent Versions"],
+        params: z.object({
+          id: UuidIdSchema,
+          versionId: UuidIdSchema,
+        }),
+        body: z.object({}),
+        response: constructResponseSchema(
+          z.object({
+            agent: SelectAgentSchema,
+            restoredVersion: z
+              .object({
+                id: z.string(),
+                versionNumber: z.number(),
+                source: z.literal("restore"),
+                createdAt: z.string(),
+              })
+              .nullable(),
+          }),
+        ),
+      },
+    },
+    async ({ params: { id, versionId }, user, organizationId }, reply) => {
+      // Fetch agent with admin=true so we can evaluate type-based permissions
+      const agent = await AgentModel.findById(id, user.id, true);
+      if (!agent || agent.organizationId !== organizationId) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+
+      // Restore requires update permission (return 404 to avoid leaking existence)
+      try {
+        checker.require(agent.agentType, "update");
+      } catch {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Scope-based modify check (mirrors UpdateAgent logic)
+      const userTeamIds = !checker.isAdmin(agent.agentType)
+        ? await TeamModel.getUserTeamIds(user.id)
+        : [];
+
+      requireAgentModifyPermission({
+        checker,
+        agentType: agent.agentType,
+        agentScope: agent.scope,
+        agentAuthorId: agent.authorId,
+        agentTeamIds: agent.teams.map((t) => t.id),
+        userTeamIds,
+        userId: user.id,
+      });
+
+      // Fetch the target version and verify it belongs to this agent
+      const version = await AgentVersionModel.findById(versionId);
+      if (!version || version.agentId !== id) {
+        throw new ApiError(404, "Version not found");
+      }
+
+      const snapshot = PromptSnapshotV1Schema.parse(version.snapshot);
+
+      // Apply the restore by writing the historical prompt back to the agent
+      const updated = await AgentModel.update(id, {
+        systemPrompt: snapshot.systemPrompt,
+      });
+      if (!updated) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Record a new version row for the restore (dedup: returns null when prompt
+      // already matches current, e.g. restoring the version that is already live)
+      const newVersion = await AgentVersionModel.record({
+        agentId: id,
+        organizationId,
+        systemPrompt: snapshot.systemPrompt,
+        source: "restore",
+        userId: user.id,
+        userName: user.name,
+      });
+
+      return reply.send({
+        agent: updated,
+        restoredVersion: newVersion
+          ? {
+              id: newVersion.id,
+              versionNumber: newVersion.versionNumber,
+              source: "restore" as const,
+              createdAt: new Date().toISOString(),
+            }
+          : null,
       });
     },
   );

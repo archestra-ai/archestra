@@ -399,6 +399,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAgentVersions]: {},
   [RouteId.GetAgentVersion]: {},
   [RouteId.GetAgentVersionDiff]: {},
+  [RouteId.RestoreAgentVersion]: {},
 
   // Generic agent CRUD routes - enforcement is handled dynamically in route handlers
   // based on agentType (agent, mcp_gateway, llm_proxy map to agent, mcpGateway, llmProxy resources)

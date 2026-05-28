@@ -141,8 +141,8 @@ function CitationChip({
     return (
       <Button
         type="button"
-        variant="outline"
-        className="group h-auto max-w-[260px] justify-start gap-1.5 px-2 py-1.5 text-xs"
+        variant="ghost"
+        className="group h-auto max-w-[260px] justify-start gap-1.5 rounded-md border bg-card px-2 py-1.5 text-xs transition-colors hover:border-accent-foreground/20 hover:bg-accent"
         onClick={() =>
           onOpenKnowledgeFile({
             id: knowledgeFileId,

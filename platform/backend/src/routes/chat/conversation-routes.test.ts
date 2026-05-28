@@ -1,5 +1,5 @@
-import ChatAttachmentModel from "@/models/chat-attachment";
 import ConversationModel from "@/models/conversation";
+import ConversationAttachmentModel from "@/models/conversation-attachment";
 import MessageModel from "@/models/message";
 import ScheduleTriggerRunModel from "@/models/schedule-trigger-run";
 import type { FastifyInstanceWithZod } from "@/server";
@@ -310,17 +310,17 @@ describe("chat conversation and message routes", () => {
       agentId: agent.id,
     });
     const bytes = Buffer.from("integration-test-bytes", "utf8");
-    const sourceRow = await ChatAttachmentModel.create({
+    const sourceRow = await ConversationAttachmentModel.create({
       organizationId,
       conversationId: source.id,
       uploadedByUserId: currentUser.id,
       originalName: "doc.pdf",
       mimeType: "application/pdf",
       fileSize: bytes.byteLength,
-      contentHash: ChatAttachmentModel.computeContentHash(bytes),
+      contentHash: ConversationAttachmentModel.computeContentHash(bytes),
       fileData: bytes,
     });
-    await ChatAttachmentModel.updateTextPreview(
+    await ConversationAttachmentModel.updateTextPreview(
       sourceRow.id,
       "ok",
       "INTEGRATION_PREVIEW",
@@ -372,7 +372,7 @@ describe("chat conversation and message routes", () => {
     expect(newId).not.toBe(sourceRow.id);
 
     // The cloned row is scoped to the FORK conversation with identical bytes.
-    const clonedRow = await ChatAttachmentModel.findByIdWithData(newId);
+    const clonedRow = await ConversationAttachmentModel.findByIdWithData(newId);
     expect(clonedRow).not.toBeNull();
     expect(clonedRow?.conversationId).toBe(forkBody.id);
     expect(clonedRow?.organizationId).toBe(organizationId);
@@ -382,7 +382,7 @@ describe("chat conversation and message routes", () => {
     expect(clonedRow?.textPreview).toBe("INTEGRATION_PREVIEW");
 
     // Source attachment is untouched — fork is a copy, not a move.
-    const stillSource = await ChatAttachmentModel.findByIdWithData(
+    const stillSource = await ConversationAttachmentModel.findByIdWithData(
       sourceRow.id,
     );
     expect(stillSource?.conversationId).toBe(source.id);
@@ -417,14 +417,14 @@ describe("chat conversation and message routes", () => {
       agentId: foreignAgent.id,
     });
     const secretBytes = Buffer.from("FOREIGN_SECRET", "utf8");
-    const foreignRow = await ChatAttachmentModel.create({
+    const foreignRow = await ConversationAttachmentModel.create({
       organizationId,
       conversationId: foreign.id,
       uploadedByUserId: otherUser.id,
       originalName: "secret.bin",
       mimeType: "application/octet-stream",
       fileSize: secretBytes.byteLength,
-      contentHash: ChatAttachmentModel.computeContentHash(secretBytes),
+      contentHash: ConversationAttachmentModel.computeContentHash(secretBytes),
       fileData: secretBytes,
     });
 
@@ -468,7 +468,9 @@ describe("chat conversation and message routes", () => {
     // No attachment row exists scoped to the fork (the foreign bytes did NOT
     // get copied across the conversation boundary).
     const forkAttachments =
-      await ChatAttachmentModel.findByConversationIdWithoutData(forkBody.id);
+      await ConversationAttachmentModel.findByConversationIdWithoutData(
+        forkBody.id,
+      );
     expect(forkAttachments.length).toBe(0);
   });
 

@@ -43,7 +43,7 @@ import logger from "@/logging";
 import {
   ActiveChatRunModel,
   AgentModel,
-  ChatAttachmentModel,
+  ConversationAttachmentModel,
   ConversationChatErrorModel,
   ConversationEnabledToolModel,
   ConversationModel,
@@ -1196,7 +1196,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Fetch metadata first (no fileData) so unauthorized requests don't
       // trigger a large bytea read before the 403. Only load the blob once
       // org + per-conversation access has been confirmed.
-      const meta = await ChatAttachmentModel.findById(id);
+      const meta = await ConversationAttachmentModel.findById(id);
       if (!meta) {
         throw new ApiError(404, "Attachment not found");
       }
@@ -1216,7 +1216,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(403, "No access to the owning conversation");
       }
 
-      const attachment = await ChatAttachmentModel.findByIdWithData(id);
+      const attachment = await ConversationAttachmentModel.findByIdWithData(id);
       if (!attachment) {
         // Soft-deleted between the metadata check and the blob fetch.
         throw new ApiError(404, "Attachment not found");

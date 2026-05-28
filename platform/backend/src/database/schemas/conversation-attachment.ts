@@ -17,8 +17,8 @@ const bytea = customType<{ data: Buffer; driverParam: Buffer }>({
   },
 });
 
-const chatAttachmentsTable = pgTable(
-  "chat_attachments",
+const conversationAttachmentsTable = pgTable(
+  "conversation_attachments",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     organizationId: text("organization_id").notNull(),
@@ -37,8 +37,10 @@ const chatAttachmentsTable = pgTable(
     deletedAt: timestamp("deleted_at", { mode: "date" }),
   },
   (table) => [
-    index("chat_attachments_conversation_id_idx").on(table.conversationId),
-    index("chat_attachments_org_created_at_idx").on(
+    index("conversation_attachments_conversation_id_idx").on(
+      table.conversationId,
+    ),
+    index("conversation_attachments_org_created_at_idx").on(
       table.organizationId,
       table.createdAt,
     ),
@@ -46,10 +48,12 @@ const chatAttachmentsTable = pgTable(
     // findByConversationAndContentHash → create pair on the same bytes would
     // otherwise produce two rows. Partial — only enforced on live rows so
     // soft-deleted history can carry duplicates without conflicting.
-    uniqueIndex("chat_attachments_conversation_id_content_hash_live_uidx")
+    uniqueIndex(
+      "conversation_attachments_conversation_id_content_hash_live_uidx",
+    )
       .on(table.conversationId, table.contentHash)
       .where(sql`${table.deletedAt} IS NULL`),
   ],
 );
 
-export default chatAttachmentsTable;
+export default conversationAttachmentsTable;

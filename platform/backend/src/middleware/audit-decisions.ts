@@ -180,9 +180,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "chat interaction execution state",
   },
-  chatAttachmentsTable: {
+  conversationAttachmentsTable: {
     audited: false,
-    reason: "chat message attachments; high-volume, surfaced via /llm/logs",
+    reason:
+      "conversation message attachments; high-volume, surfaced via /llm/logs",
   },
 
   // =========================================================================
@@ -330,6 +331,19 @@ export const AUDIT_DECISIONS = {
   skillFilesTable: {
     audited: false,
     reason: "child of skill; parent (skill) audited",
+  },
+  skillShareLinksTable: {
+    audited: false,
+    reason:
+      "skill share links; admin share/revoke not yet wired for audit (follow-up)",
+  },
+  skillShareLinkSkillsTable: {
+    audited: false,
+    reason: "join: share link × skill; parent (skillShareLinks) carries signal",
+  },
+  skillShareLinkRevisionsTable: {
+    audited: false,
+    reason: "child of skillShareLinks; revision history",
   },
   kbChunksTable: {
     audited: false,

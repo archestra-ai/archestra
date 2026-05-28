@@ -499,6 +499,11 @@ export const RouteId = {
 
   // Audit Log Routes
   GetAuditLogs: "getAuditLogs",
+
+  // Skill Share Link Routes
+  GetSkillShareLinks: "getSkillShareLinks",
+  CreateSkillShareLink: "createSkillShareLink",
+  RevokeSkillShareLink: "revokeSkillShareLink",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

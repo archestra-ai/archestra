@@ -3,6 +3,7 @@ import { archestraApiSdk } from "@shared";
 import {
   ADMIN_EMAIL,
   DEFAULT_TEAM_NAME,
+  E2eTestId,
   EDITOR_EMAIL,
   ENGINEERING_TEAM_NAME,
   MARKETING_TEAM_NAME,
@@ -13,7 +14,6 @@ import {
   addCustomSelfHostedCatalogItem,
   addSharedLocalConnection,
   assignCatalogCredentialToGateway,
-  clickButton,
   closeOpenDialogs,
   createSharedTestGatewayViaApi,
   createTeamMcpGatewayViaApi,
@@ -193,19 +193,28 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
         await expect(visibleStaticCredentials).toHaveLength(
           expectedAssignableCredentials.length,
         );
+        // Force the click: the credential option list re-renders when the
+        // dropdown opens, detaching the node mid-click. Same DOM-detach race
+        // assignCatalogCredentialToGateway already handles this way.
         await page
           .getByRole("option", {
             name: expectedAssignableCredentials[0] ?? "",
           })
-          .click();
+          .click({ force: true });
         await page.keyboard.press("Escape");
         await page.waitForTimeout(200);
         await saveOpenProfileDialog(page);
 
-        // Then we revoke first credential in Manage Credentials dialog, then close dialog
+        // Revoke the admin's own (personal) credential, then close dialog.
+        // Target it by its deterministic test-id rather than the first Revoke
+        // button: the row order isn't guaranteed, so a position-based click
+        // can revoke the team credential instead, leaving ADMIN_EMAIL present
+        // and failing the assertion below.
         await goToPage(page, "/mcp/registry");
         await openManageCredentialsDialog(page, catalogItemName);
-        await clickButton({ page, options: { name: "Revoke" }, first: true });
+        await page
+          .getByTestId(`${E2eTestId.RevokeCredentialButton}-personal`)
+          .click();
         await page.waitForLoadState("domcontentloaded");
         await closeOpenDialogs(page);
 

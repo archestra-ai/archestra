@@ -47,12 +47,12 @@ export {
   chatActiveRunEventsTable,
   chatActiveRunsTable,
 } from "./chat-active-run";
-export { default as chatAttachmentsTable } from "./chat-attachment";
 export { default as chatopsChannelBindingsTable } from "./chatops-channel-binding";
 export { default as chatopsProcessedMessagesTable } from "./chatops-processed-message";
 export { default as chatopsThreadAgentOverrideTable } from "./chatops-thread-agent-override";
 export { default as connectorRunsTable } from "./connector-run";
 export { default as conversationsTable } from "./conversation";
+export { default as conversationAttachmentsTable } from "./conversation-attachment";
 export { default as conversationChatErrorsTable } from "./conversation-chat-error";
 export { default as conversationCompactionsTable } from "./conversation-compaction";
 export { default as conversationEnabledToolsTable } from "./conversation-enabled-tool";
@@ -107,6 +107,11 @@ export { default as sessionsTable } from "./session";
 export { default as siteNotificationsTable } from "./site-notification";
 export { default as skillsTable } from "./skill";
 export { default as skillFilesTable } from "./skill-file";
+export {
+  default as skillShareLinksTable,
+  skillShareLinkSkillsTable,
+} from "./skill-share-link";
+export { default as skillShareLinkRevisionsTable } from "./skill-share-link-revision";
 export { default as skillTeamsTable } from "./skill-team";
 export { default as tasksTable } from "./task";
 export { team as teamsTable, teamMember as teamMembersTable } from "./team";

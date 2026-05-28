@@ -393,6 +393,43 @@ describe("ChatMessages", () => {
     );
   });
 
+  it("renders unavailable tool failures as tool rows without global chat errors", () => {
+    const unavailableToolError =
+      'The requested tool is not available in this chat. Use one of the available tools, or continue without calling a tool.\n\nDetails:\n{"requestedToolName":"missing_tool"}';
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "dynamic-tool",
+            toolName: "missing_tool",
+            toolCallId: "call-1",
+            state: "output-error",
+            input: {},
+            errorText: unavailableToolError,
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(screen.queryByTestId("inline-chat-error")).not.toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button")[0]);
+    expect(screen.getByText("tool-missing_tool")).toBeInTheDocument();
+    expect(
+      screen.getByText(/The requested tool is not available in this chat/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/requestedToolName/)).toBeInTheDocument();
+  });
+
   it("does not render persisted chat errors before live messages without timestamps", () => {
     const messages = [
       {

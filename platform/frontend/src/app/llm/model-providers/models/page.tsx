@@ -157,7 +157,12 @@ export default function ModelsPage() {
   const setModelProvidersAction = useSetModelProvidersAction();
   useEffect(() => {
     setModelProvidersAction(
-      <Button onClick={handleRefresh} disabled={isRefreshingModels}>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleRefresh}
+        disabled={isRefreshingModels}
+      >
         <RefreshCw
           className={`h-4 w-4 ${isRefreshingModels ? "animate-spin" : ""}`}
         />

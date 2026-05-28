@@ -1,3 +1,4 @@
+import { TimeInMs } from "@shared";
 import { vi } from "vitest";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
@@ -10,7 +11,12 @@ import { modelSyncService } from "@/services/model-sync";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
-import { syncModelsForVisibleApiKeys } from "./llm-provider-models";
+import {
+  getStaleModelSyncApiKeys,
+  isModelSyncStateStale,
+  syncModelsForVisibleApiKeys,
+  triggerLazyModelSyncForStaleApiKeys,
+} from "./llm-provider-models";
 
 vi.mock("@/clients/gemini-client", () => ({
   isVertexAiEnabled: vi.fn(() => false),
@@ -335,5 +341,141 @@ describe("chat model routes", () => {
 
     expect(mockSyncSystemKeys).toHaveBeenCalledWith(organizationId);
     expect(syncSpy).not.toHaveBeenCalled();
+  });
+
+  test("isModelSyncStateStale uses provider-specific TTLs", () => {
+    const now = new Date("2026-05-28T12:00:00.000Z");
+
+    expect(isModelSyncStateStale({ provider: "openrouter", now })).toBe(true);
+    expect(
+      isModelSyncStateStale({
+        provider: "openrouter",
+        now,
+        syncState: {
+          linkedModelCount: 1,
+          oldestLastSyncedAt: new Date(now.getTime() - 59 * TimeInMs.Minute),
+        },
+      }),
+    ).toBe(false);
+    expect(
+      isModelSyncStateStale({
+        provider: "openrouter",
+        now,
+        syncState: {
+          linkedModelCount: 1,
+          oldestLastSyncedAt: new Date(now.getTime() - 2 * TimeInMs.Hour),
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isModelSyncStateStale({
+        provider: "openai",
+        now,
+        syncState: {
+          linkedModelCount: 1,
+          oldestLastSyncedAt: new Date(now.getTime() - 2 * TimeInMs.Hour),
+        },
+      }),
+    ).toBe(false);
+  });
+
+  test("getStaleModelSyncApiKeys treats unlinked and old OpenRouter keys as stale", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const now = new Date("2026-05-28T12:00:00.000Z");
+    const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+    const staleOpenRouterKey = await makeLlmProviderApiKey(
+      organizationId,
+      secret.id,
+      { provider: "openrouter", scope: "personal", userId: user.id },
+    );
+    const freshOpenAiKey = await makeLlmProviderApiKey(
+      organizationId,
+      secret.id,
+      { provider: "openai", scope: "personal", userId: user.id },
+    );
+    const unlinkedGeminiKey = await makeLlmProviderApiKey(
+      organizationId,
+      secret.id,
+      { provider: "gemini", scope: "personal", userId: user.id },
+    );
+
+    const staleModel = await ModelModel.create({
+      externalId: "openrouter/openai/gpt-4o-mini",
+      provider: "openrouter",
+      modelId: "openai/gpt-4o-mini",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      lastSyncedAt: new Date(now.getTime() - 2 * TimeInMs.Hour),
+    });
+    const freshModel = await ModelModel.create({
+      externalId: "openai/gpt-4o-mini",
+      provider: "openai",
+      modelId: "gpt-4o-mini",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      lastSyncedAt: new Date(now.getTime() - 2 * TimeInMs.Hour),
+    });
+
+    await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+      staleOpenRouterKey.id,
+      [{ id: staleModel.id, modelId: staleModel.modelId }],
+      "openrouter",
+    );
+    await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+      freshOpenAiKey.id,
+      [{ id: freshModel.id, modelId: freshModel.modelId }],
+      "openai",
+    );
+
+    const staleKeys = await getStaleModelSyncApiKeys({
+      apiKeys: [staleOpenRouterKey, freshOpenAiKey, unlinkedGeminiKey],
+      now,
+    });
+
+    expect(staleKeys.map((key) => key.id).sort()).toEqual(
+      [staleOpenRouterKey.id, unlinkedGeminiKey.id].sort(),
+    );
+  });
+
+  test("triggerLazyModelSyncForStaleApiKeys dedupes in-flight syncs", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: "openrouter-key" } });
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openrouter",
+      scope: "personal",
+      userId: user.id,
+    });
+    mockGetSecretValueForLlmProviderApiKey.mockResolvedValue("openrouter-key");
+
+    let resolveSync: ((value: number) => void) | undefined;
+    const syncSpy = vi
+      .spyOn(modelSyncService, "syncModelsForApiKey")
+      .mockImplementation(
+        () =>
+          new Promise<number>((resolve) => {
+            resolveSync = resolve;
+          }),
+      );
+
+    const firstSyncs = await triggerLazyModelSyncForStaleApiKeys({
+      organizationId,
+      apiKeys: [apiKey],
+    });
+    const secondSyncs = await triggerLazyModelSyncForStaleApiKeys({
+      organizationId,
+      apiKeys: [apiKey],
+    });
+
+    expect(firstSyncs).toHaveLength(1);
+    expect(secondSyncs).toHaveLength(1);
+    expect(secondSyncs[0]).toBe(firstSyncs[0]);
+    expect(syncSpy).toHaveBeenCalledTimes(1);
+
+    resolveSync?.(1);
+    await Promise.all(firstSyncs);
   });
 });

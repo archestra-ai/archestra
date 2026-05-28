@@ -3,7 +3,9 @@ import {
   isFreeModel,
   isProviderApiKeyOptional,
   RouteId,
+  type SupportedProvider,
   SupportedProvidersSchema,
+  TimeInMs,
 } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -24,12 +26,24 @@ import { systemKeyManager } from "@/services/system-key-manager";
 import {
   ApiError,
   constructResponseSchema,
+  type LlmProviderApiKeyWithScopeInfo,
   ModelCapabilitiesSchema,
   ModelWithApiKeysSchema,
   PatchModelBodySchema,
   SelectModelSchema,
   UuidIdSchema,
 } from "@/types";
+
+const DEFAULT_LAZY_MODEL_SYNC_TTL_MS = TimeInMs.Day;
+const LAZY_MODEL_SYNC_TTL_BY_PROVIDER: Partial<
+  Record<SupportedProvider, number>
+> = {
+  openrouter: TimeInMs.Hour,
+  ollama: 5 * TimeInMs.Minute,
+  vllm: 5 * TimeInMs.Minute,
+};
+
+const lazyModelSyncsByApiKeyId = new Map<string, Promise<void>>();
 
 const LlmModelSchema = z.object({
   id: z.string(),
@@ -107,6 +121,24 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         apiKeyId && accessibleKeyIds.includes(apiKeyId)
           ? [apiKeyId]
           : accessibleKeyIds;
+      const modelQueryApiKeys = apiKeys.filter((apiKey) =>
+        apiKeyIds.includes(apiKey.id),
+      );
+
+      void triggerLazyModelSyncForStaleApiKeys({
+        organizationId,
+        apiKeys: modelQueryApiKeys,
+      }).catch((error) => {
+        logger.error(
+          {
+            organizationId,
+            errorMessage:
+              error instanceof Error ? error.message : String(error),
+          },
+          "Failed to schedule lazy model sync",
+        );
+      });
+
       const dbModels =
         await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds(apiKeyIds);
 
@@ -293,52 +325,153 @@ export async function syncModelsForVisibleApiKeys(params: {
   await Promise.all(
     apiKeys
       .filter((apiKey) => !shouldHandleWithSystemKeySync(apiKey))
-      .map(async (apiKey) => {
-        let secretValue: string | null = null;
-
-        if (apiKey.secretId) {
-          secretValue = (await getSecretValueForLlmProviderApiKey(
-            apiKey.secretId,
-          )) as string | null;
-        }
-
-        if (
-          !secretValue &&
-          !isProviderApiKeyOptional({
-            provider: apiKey.provider,
-            azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
-          })
-        ) {
-          if (apiKey.secretId) {
-            logger.warn(
-              { apiKeyId: apiKey.id, provider: apiKey.provider },
-              "No secret value for API key, skipping sync",
-            );
-          }
-          return;
-        }
-
-        try {
-          await modelSyncService.syncModelsForApiKey({
-            apiKeyId: apiKey.id,
-            provider: apiKey.provider,
-            apiKeyValue: secretValue ?? "",
-            baseUrl: apiKey.baseUrl,
-            extraHeaders: apiKey.extraHeaders,
-          });
-        } catch (error) {
-          logger.error(
-            {
-              apiKeyId: apiKey.id,
-              provider: apiKey.provider,
-              errorMessage:
-                error instanceof Error ? error.message : String(error),
-            },
-            "Failed to sync models for API key",
-          );
-        }
-      }),
+      .map((apiKey) => syncVisibleApiKeyModels({ apiKey, organizationId })),
   );
+}
+
+export async function triggerLazyModelSyncForStaleApiKeys(params: {
+  organizationId: string;
+  apiKeys: LlmProviderApiKeyWithScopeInfo[];
+  now?: Date;
+}): Promise<Array<Promise<void>>> {
+  const staleApiKeys = await getStaleModelSyncApiKeys(params);
+  const syncs = staleApiKeys.map((apiKey) =>
+    scheduleLazyModelSyncForApiKey({
+      apiKey,
+      organizationId: params.organizationId,
+    }),
+  );
+
+  if (syncs.length > 0) {
+    logger.info(
+      {
+        organizationId: params.organizationId,
+        apiKeyIds: staleApiKeys.map((apiKey) => apiKey.id),
+      },
+      "Scheduled lazy model sync for stale API keys",
+    );
+  }
+
+  return syncs;
+}
+
+export async function getStaleModelSyncApiKeys(params: {
+  apiKeys: LlmProviderApiKeyWithScopeInfo[];
+  now?: Date;
+}): Promise<LlmProviderApiKeyWithScopeInfo[]> {
+  const { apiKeys, now = new Date() } = params;
+  const syncStates =
+    await LlmProviderApiKeyModelLinkModel.getModelSyncStatesForApiKeys(
+      apiKeys.map((apiKey) => apiKey.id),
+    );
+
+  return apiKeys.filter((apiKey) =>
+    isModelSyncStateStale({
+      provider: apiKey.provider,
+      syncState: syncStates.get(apiKey.id),
+      now,
+    }),
+  );
+}
+
+export function isModelSyncStateStale(params: {
+  provider: SupportedProvider;
+  syncState?: { linkedModelCount: number; oldestLastSyncedAt: Date | null };
+  now?: Date;
+}): boolean {
+  const { provider, syncState, now = new Date() } = params;
+  if (!syncState || syncState.linkedModelCount === 0) {
+    return true;
+  }
+  if (!syncState.oldestLastSyncedAt) {
+    return true;
+  }
+
+  const ttl =
+    LAZY_MODEL_SYNC_TTL_BY_PROVIDER[provider] ?? DEFAULT_LAZY_MODEL_SYNC_TTL_MS;
+  return now.getTime() - syncState.oldestLastSyncedAt.getTime() >= ttl;
+}
+
+async function syncVisibleApiKeyModels(params: {
+  apiKey: LlmProviderApiKeyWithScopeInfo;
+  organizationId: string;
+}): Promise<void> {
+  const { apiKey, organizationId } = params;
+
+  if (shouldHandleWithSystemKeySync(apiKey)) {
+    await systemKeyManager.syncSystemKeys(organizationId);
+    return;
+  }
+
+  let secretValue: string | null = null;
+  if (apiKey.secretId) {
+    secretValue = (await getSecretValueForLlmProviderApiKey(apiKey.secretId)) as
+      | string
+      | null;
+  }
+
+  if (
+    !secretValue &&
+    !isProviderApiKeyOptional({
+      provider: apiKey.provider,
+      azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+    })
+  ) {
+    if (apiKey.secretId) {
+      logger.warn(
+        { apiKeyId: apiKey.id, provider: apiKey.provider },
+        "No secret value for API key, skipping sync",
+      );
+    }
+    return;
+  }
+
+  try {
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId: apiKey.id,
+      provider: apiKey.provider,
+      apiKeyValue: secretValue ?? "",
+      baseUrl: apiKey.baseUrl,
+      extraHeaders: apiKey.extraHeaders,
+    });
+  } catch (error) {
+    logger.error(
+      {
+        apiKeyId: apiKey.id,
+        provider: apiKey.provider,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      },
+      "Failed to sync models for API key",
+    );
+  }
+}
+
+function scheduleLazyModelSyncForApiKey(params: {
+  apiKey: LlmProviderApiKeyWithScopeInfo;
+  organizationId: string;
+}): Promise<void> {
+  const { apiKey } = params;
+  const inFlight = lazyModelSyncsByApiKeyId.get(apiKey.id);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const sync = syncVisibleApiKeyModels(params)
+    .catch((error) => {
+      logger.error(
+        {
+          apiKeyId: apiKey.id,
+          provider: apiKey.provider,
+          errorMessage: error instanceof Error ? error.message : String(error),
+        },
+        "Failed to lazily sync models for API key",
+      );
+    })
+    .finally(() => {
+      lazyModelSyncsByApiKeyId.delete(apiKey.id);
+    });
+  lazyModelSyncsByApiKeyId.set(apiKey.id, sync);
+  return sync;
 }
 
 function shouldHandleWithSystemKeySync(apiKey: {

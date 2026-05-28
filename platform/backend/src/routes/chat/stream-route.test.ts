@@ -1,3 +1,4 @@
+import { NoSuchToolError } from "ai";
 import { vi } from "vitest";
 import { MessageModel } from "@/models";
 import ActiveChatRunModel from "@/models/chat-active-run";
@@ -377,6 +378,180 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(errorsAfterFinish).toHaveLength(1);
   });
 
+  test("formats unavailable tool calls as tool-level errors without persisting chat errors", async ({
+    expect,
+  }) => {
+    const { default: ConversationChatErrorModel } = await import(
+      "@/models/conversation-chat-error"
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: "msg-1",
+            role: "user",
+            parts: [{ type: "text", text: "hello" }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+    expect(capturedInnerOnError).toBeDefined();
+
+    const unavailableToolError = new NoSuchToolError({
+      toolName: "missing_tool",
+      availableTools: ["known_tool"],
+    });
+    const payload1 = capturedInnerOnError?.(unavailableToolError);
+    const payload2 = capturedInnerOnError?.(unavailableToolError);
+
+    expect(payload1).toBe(payload2);
+    expect(payload1).toContain(
+      "The requested tool is not available in this chat.",
+    );
+    expect(payload1).toContain('"requestedToolName": "missing_tool"');
+    expect(payload1).toContain('"availableToolNames"');
+    expect(payload1).toContain("known_tool");
+    expect(payload1).toContain("Model tried to call unavailable tool");
+
+    await new Promise((resolve) => setImmediate(resolve));
+    const persistedErrors =
+      await ConversationChatErrorModel.findByConversation(conversationId);
+    expect(persistedErrors).toHaveLength(0);
+  });
+
+  test("rewrites unavailable tool stream chunks to structured tool errors", async ({
+    expect,
+  }) => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: "msg-1",
+            role: "user",
+            parts: [{ type: "text", text: "hello" }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    const streamTextConfig = mockStreamText.mock.calls[0]?.[0];
+    const transformFactory = streamTextConfig?.experimental_transform;
+    expect(typeof transformFactory).toBe("function");
+    if (typeof transformFactory !== "function") {
+      throw new Error("Expected unavailable tool transform to be configured");
+    }
+
+    const transform = transformFactory({
+      tools: { known_tool: { inputSchema: {} } },
+      stopStream: vi.fn(),
+    });
+    const rewritten = await transformOne(transform, {
+      type: "tool-error",
+      toolCallId: "call-1",
+      toolName: "missing_tool",
+      input: {},
+      error:
+        "Model tried to call unavailable tool 'missing_tool'. Available tools: known_tool.",
+      dynamic: true,
+    });
+
+    expect(rewritten).toMatchObject({
+      type: "tool-error",
+      toolName: "missing_tool",
+      error: {
+        type: "unavailable_tool",
+        requestedToolName: "missing_tool",
+        availableToolNames: ["known_tool"],
+        originalErrorMessage:
+          "Model tried to call unavailable tool 'missing_tool'. Available tools: known_tool.",
+      },
+    });
+  });
+
+  test("repairs only exact unavailable tool suffix artifacts", async ({
+    expect,
+  }) => {
+    mockGetChatMcpTools.mockResolvedValueOnce({
+      archestra_staging__list_agents: { inputSchema: {} },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: "msg-1",
+            role: "user",
+            parts: [{ type: "text", text: "hello" }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    const streamTextConfig = mockStreamText.mock.calls[0]?.[0];
+    const repairToolCall = streamTextConfig?.experimental_repairToolCall;
+    expect(typeof repairToolCall).toBe("function");
+    if (typeof repairToolCall !== "function") {
+      throw new Error("Expected unavailable tool repair to be configured");
+    }
+
+    const repaired = await repairToolCall({
+      system: undefined,
+      messages: [],
+      toolCall: {
+        type: "tool-call",
+        toolCallId: "call-1",
+        toolName: "archestra_staging__list_agents<|channel|>commentary",
+        input: "{}",
+      },
+      tools: { archestra_staging__list_agents: { inputSchema: {} } },
+      inputSchema: async () => ({}),
+      error: new NoSuchToolError({
+        toolName: "archestra_staging__list_agents<|channel|>commentary",
+        availableTools: ["archestra_staging__list_agents"],
+      }),
+    });
+    expect(repaired).toMatchObject({
+      toolName: "archestra_staging__list_agents",
+    });
+
+    const notRepaired = await repairToolCall({
+      system: undefined,
+      messages: [],
+      toolCall: {
+        type: "tool-call",
+        toolCallId: "call-2",
+        toolName: "missing_tool<|channel|>commentary",
+        input: "{}",
+      },
+      tools: { archestra_staging__list_agents: { inputSchema: {} } },
+      inputSchema: async () => ({}),
+      error: new NoSuchToolError({
+        toolName: "missing_tool<|channel|>commentary",
+        availableTools: ["archestra_staging__list_agents"],
+      }),
+    });
+    expect(notRepaired).toBeNull();
+  });
+
   test("persists user message with new DB id on provider error and allows subsequent PATCH", async ({
     expect,
   }) => {
@@ -701,6 +876,21 @@ async function waitForRunningActiveRun(conversationId: string) {
   }
 
   throw new Error("Active run was not created");
+}
+
+async function transformOne(
+  transform: TransformStream<unknown, unknown>,
+  chunk: unknown,
+) {
+  const writer = transform.writable.getWriter();
+  const reader = transform.readable.getReader();
+  const readPromise = reader.read();
+  await writer.write(chunk);
+  const result = await readPromise;
+  await writer.close();
+  writer.releaseLock();
+  reader.releaseLock();
+  return result.value;
 }
 
 function readSsePayloads(body: string): unknown[] {

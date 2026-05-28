@@ -14,6 +14,7 @@ import {
   createUIMessageStreamResponse,
   generateText,
   hasToolCall,
+  NoSuchToolError,
   stepCountIs,
   streamText,
   type UIMessage,
@@ -138,6 +139,18 @@ function getMinimalFrontendError(errorForFrontend: ChatErrorResponse) {
     ...(errorForFrontend.spanId ? { spanId: errorForFrontend.spanId } : {}),
   };
 }
+
+const UNAVAILABLE_TOOL_ERROR_MESSAGE =
+  "The requested tool is not available in this chat. Use one of the available tools, or continue without calling a tool.";
+const TOOL_NAME_SUFFIX_ARTIFACTS = ["<|channel|>commentary"] as const;
+
+type UnavailableToolErrorDetails = {
+  type: "unavailable_tool";
+  message: string;
+  requestedToolName: string;
+  availableToolNames: string[];
+  originalErrorMessage: string;
+};
 
 const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
@@ -484,6 +497,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               // assistant messages instead of rendering duplicate ones.
               originalMessages: messages as UIMessage[],
               onError: (error) => {
+                const unavailableToolErrorText =
+                  getUnavailableToolErrorText(error);
+                if (unavailableToolErrorText) {
+                  logger.info(
+                    {
+                      conversationId,
+                      unavailableToolError:
+                        getUnavailableToolErrorDetails(error),
+                    },
+                    "Returning unavailable tool error without chat error mapping before stream starts",
+                  );
+                  return unavailableToolErrorText;
+                }
+
                 activeRunError =
                   error instanceof Error ? error.message : String(error);
                 // Persist messages on stream-level errors (e.g. errors thrown
@@ -702,6 +729,49 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   },
                 };
 
+                if (supportsToolCalling) {
+                  streamTextConfig.experimental_repairToolCall = async ({
+                    error,
+                    toolCall,
+                    tools,
+                  }) => {
+                    if (!NoSuchToolError.isInstance(error)) {
+                      return null;
+                    }
+
+                    const repairedToolName = repairToolNameSuffixArtifact({
+                      requestedToolName: toolCall.toolName,
+                      availableToolNames: Object.keys(tools),
+                    });
+                    if (!repairedToolName) {
+                      return null;
+                    }
+
+                    logger.info(
+                      {
+                        conversationId,
+                        requestedToolName: toolCall.toolName,
+                        repairedToolName,
+                      },
+                      "Repaired unavailable tool call suffix artifact",
+                    );
+
+                    return { ...toolCall, toolName: repairedToolName };
+                  };
+
+                  streamTextConfig.experimental_transform = ({ tools }) =>
+                    new TransformStream({
+                      transform(chunk, controller) {
+                        controller.enqueue(
+                          rewriteUnavailableToolStreamChunk({
+                            chunk,
+                            availableToolNames: Object.keys(tools),
+                          }),
+                        );
+                      },
+                    });
+                }
+
                 // Only include system property if we have actual content
                 if (systemPrompt) {
                   streamTextConfig.system = systemPrompt;
@@ -789,6 +859,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   result.toUIMessageStream({
                     originalMessages: messages as UIMessage[],
                     onError: (error) => {
+                      const unavailableToolErrorText =
+                        getUnavailableToolErrorText(error);
+                      if (unavailableToolErrorText) {
+                        logger.info(
+                          {
+                            conversationId,
+                            unavailableToolError:
+                              getUnavailableToolErrorDetails(error),
+                          },
+                          "Returning unavailable tool error as tool-level error",
+                        );
+                        return unavailableToolErrorText;
+                      }
+
                       if (chatErrorHandled) {
                         return serializedChatError;
                       }
@@ -2362,6 +2446,165 @@ export async function generateConversationTitle(
 // ============================================================================
 // Helper Functions
 // ============================================================================
+
+function getUnavailableToolErrorText(error: unknown): string | null {
+  const details = getUnavailableToolErrorDetails(error);
+  if (!details) {
+    return null;
+  }
+
+  return formatUnavailableToolErrorDetails(details);
+}
+
+function rewriteUnavailableToolStreamChunk<T>(params: {
+  chunk: T;
+  availableToolNames: string[];
+}): T {
+  const { chunk, availableToolNames } = params;
+  if (!isRecord(chunk) || typeof chunk.type !== "string") {
+    return chunk;
+  }
+
+  if (chunk.type === "tool-call" && "error" in chunk) {
+    const details = getUnavailableToolErrorDetails(
+      chunk.error,
+      availableToolNames,
+    );
+    if (details) {
+      return { ...chunk, error: details } as T;
+    }
+  }
+
+  if (chunk.type === "tool-error") {
+    const requestedToolName =
+      typeof chunk.toolName === "string" ? chunk.toolName : null;
+    const originalErrorMessage = getOriginalErrorMessage(chunk.error);
+    if (
+      requestedToolName &&
+      !availableToolNames.includes(requestedToolName) &&
+      isUnavailableToolErrorMessage(originalErrorMessage, requestedToolName)
+    ) {
+      return {
+        ...chunk,
+        error: buildUnavailableToolErrorDetails({
+          requestedToolName,
+          availableToolNames,
+          originalErrorMessage,
+        }),
+      } as T;
+    }
+  }
+
+  return chunk;
+}
+
+function repairToolNameSuffixArtifact(params: {
+  requestedToolName: string;
+  availableToolNames: string[];
+}): string | null {
+  const { requestedToolName, availableToolNames } = params;
+  for (const suffix of TOOL_NAME_SUFFIX_ARTIFACTS) {
+    if (!requestedToolName.endsWith(suffix)) {
+      continue;
+    }
+
+    const candidate = requestedToolName.slice(0, -suffix.length);
+    if (availableToolNames.includes(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+function getUnavailableToolErrorDetails(
+  error: unknown,
+  fallbackAvailableToolNames: string[] = [],
+): UnavailableToolErrorDetails | null {
+  if (isUnavailableToolErrorDetails(error)) {
+    return error;
+  }
+
+  if (!NoSuchToolError.isInstance(error)) {
+    return null;
+  }
+
+  return buildUnavailableToolErrorDetails({
+    requestedToolName: error.toolName,
+    availableToolNames: error.availableTools ?? fallbackAvailableToolNames,
+    originalErrorMessage: error.message,
+  });
+}
+
+function buildUnavailableToolErrorDetails(params: {
+  requestedToolName: string;
+  availableToolNames: string[];
+  originalErrorMessage: string;
+}): UnavailableToolErrorDetails {
+  return {
+    type: "unavailable_tool",
+    message: UNAVAILABLE_TOOL_ERROR_MESSAGE,
+    requestedToolName: params.requestedToolName,
+    availableToolNames: params.availableToolNames,
+    originalErrorMessage: params.originalErrorMessage,
+  };
+}
+
+function formatUnavailableToolErrorDetails(
+  details: UnavailableToolErrorDetails,
+): string {
+  return `${details.message}\n\nDetails:\n${JSON.stringify(
+    {
+      type: details.type,
+      requestedToolName: details.requestedToolName,
+      availableToolNames: details.availableToolNames,
+      originalErrorMessage: details.originalErrorMessage,
+    },
+    null,
+    2,
+  )}`;
+}
+
+function isUnavailableToolErrorDetails(
+  error: unknown,
+): error is UnavailableToolErrorDetails {
+  return (
+    isRecord(error) &&
+    error.type === "unavailable_tool" &&
+    error.message === UNAVAILABLE_TOOL_ERROR_MESSAGE &&
+    typeof error.requestedToolName === "string" &&
+    Array.isArray(error.availableToolNames) &&
+    error.availableToolNames.every(
+      (toolName) => typeof toolName === "string",
+    ) &&
+    typeof error.originalErrorMessage === "string"
+  );
+}
+
+function isUnavailableToolErrorMessage(
+  message: string,
+  requestedToolName: string,
+): boolean {
+  return message.includes(
+    `Model tried to call unavailable tool '${requestedToolName}'`,
+  );
+}
+
+function getOriginalErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === "string") {
+    return error;
+  }
+
+  return String(error);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
 
 /**
  * Persists new messages to the database for a conversation.

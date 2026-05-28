@@ -10,8 +10,7 @@ use crate::session::{ArtifactRequest, RunRequest, Session};
 use crate::{
     ARTIFACT_NOT_FOUND_EXIT_CODE, ARTIFACT_TOO_LARGE_EXIT_CODE, ArtifactBytes, CommandExecution,
     Limits, Result, SKILL_SANDBOX_ROOT, SKILL_SANDBOX_USER, SandboxError, SnapshotFile,
-    TIMEOUT_EXIT_CODE, USER_EXIT_124_REMAP, tracing_ctx, validate_artifact_path, validate_cwd,
-    wrap_with_timeout,
+    TIMEOUT_EXIT_CODE, tracing_ctx, validate_artifact_path, validate_cwd, wrap_with_timeout,
 };
 
 pub(crate) async fn execute_run(
@@ -25,26 +24,28 @@ pub(crate) async fn execute_run(
     let started = Instant::now();
     let materialized = materialize(session.client(), warm, &req).await?;
 
-    let wrapped = wrap_with_timeout(&req.command, &req.cwd, req.timeout_seconds, &req.limits);
-    let executed = materialized.with_exec_opts(
-        vec!["bash".to_string(), "-c".to_string(), wrapped],
-        any_exit_opts(),
-    );
+    let wrapped = wrap_with_timeout(&req.command, req.timeout_seconds, &req.limits);
+    let executed = materialized
+        .with_workdir(&req.cwd)
+        .with_exec_opts(
+            vec!["bash".to_string(), "-c".to_string(), wrapped],
+            any_exit_opts(),
+        );
 
     // dagger-sdk returns stdout/stderr as Strings, so non-UTF-8 bytes are
     // lossily decoded at the GraphQL layer. for binary output the command
     // should redirect to a file and use the artifact-read path (base64-safe).
-    let stdout_raw = executed.stdout().await.map_err(SandboxError::engine)?;
-    let stderr_raw = executed.stderr().await.map_err(SandboxError::engine)?;
-    let raw_exit = executed.exit_code().await.map_err(SandboxError::engine)? as i32;
+    let stdout_raw = executed.stdout().await.map_err(SandboxError::from_sdk)?;
+    let stderr_raw = executed.stderr().await.map_err(SandboxError::from_sdk)?;
+    let raw_exit = executed
+        .exit_code()
+        .await
+        .map_err(SandboxError::from_sdk)? as i32;
     let stdout = crate::truncate_output(&stdout_raw, output_limit(&req.limits));
     let stderr = crate::truncate_output(&stderr_raw, output_limit(&req.limits));
 
-    let (exit_code, timed_out) = match raw_exit {
-        TIMEOUT_EXIT_CODE => (TIMEOUT_EXIT_CODE, true),
-        USER_EXIT_124_REMAP => (TIMEOUT_EXIT_CODE, false),
-        other => (other, false),
-    };
+    let timed_out = raw_exit == TIMEOUT_EXIT_CODE;
+    let exit_code = raw_exit;
 
     Ok(CommandExecution {
         stdout: stdout.value,
@@ -93,9 +94,9 @@ pub(crate) async fn execute_read_artifact(
         any_exit_opts(),
     );
 
-    let base64_stdout = encoder.stdout().await.map_err(SandboxError::engine)?;
-    let exit_code = encoder.exit_code().await.map_err(SandboxError::engine)?;
-    let stderr = encoder.stderr().await.map_err(SandboxError::engine)?;
+    let base64_stdout = encoder.stdout().await.map_err(SandboxError::from_sdk)?;
+    let exit_code = encoder.exit_code().await.map_err(SandboxError::from_sdk)?;
+    let stderr = encoder.stderr().await.map_err(SandboxError::from_sdk)?;
 
     match exit_code {
         0 => {}
@@ -174,8 +175,6 @@ async fn materialize(client: &DaggerConn, warm: Container, req: &RunRequest) -> 
             .with_user(SKILL_SANDBOX_USER);
     }
 
-    container = container.with_workdir(&req.cwd);
-
     if let Some(pythonpath) = &req.pythonpath {
         container = container.with_env_variable("PYTHONPATH", pythonpath);
     }
@@ -189,12 +188,16 @@ async fn materialize(client: &DaggerConn, warm: Container, req: &RunRequest) -> 
         // replay cwds are historical data: they were validated when first
         // accepted and trusting them here keeps pre-existing sandboxes with
         // legacy cwds usable. Live `req.cwd` is validated at the entry points.
+        // each command is wrapped with its own `with_workdir` so cwd switches
+        // happen via Dagger's container layer (no shell `cd` needed).
         let cwd = entry.cwd.as_deref().unwrap_or(&req.cwd);
-        let wrapped = wrap_with_timeout(&entry.command, cwd, entry.timeout_seconds, &req.limits);
-        container = container.with_exec_opts(
-            vec!["bash".to_string(), "-c".to_string(), wrapped],
-            any_exit_opts(),
-        );
+        let wrapped = wrap_with_timeout(&entry.command, entry.timeout_seconds, &req.limits);
+        container = container
+            .with_workdir(cwd)
+            .with_exec_opts(
+                vec!["bash".to_string(), "-c".to_string(), wrapped],
+                any_exit_opts(),
+            );
     }
 
     let _ = client; // reserved for future host()-based bulk uploads

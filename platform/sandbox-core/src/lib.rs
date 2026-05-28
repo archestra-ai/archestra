@@ -14,17 +14,17 @@ pub(crate) const SKILL_SANDBOX_USER: &str = "1000:1000";
 pub(crate) const TIMEOUT_EXIT_CODE: i32 = 124;
 pub(crate) const ARTIFACT_TOO_LARGE_EXIT_CODE: isize = 65;
 pub(crate) const ARTIFACT_NOT_FOUND_EXIT_CODE: isize = 66;
-// wrap_with_timeout remaps a user script's literal exit 124 to this sentinel so
-// the outer process can distinguish "timeout(1) fired" (true 124) from a script
-// that simply exited 124. A user script that explicitly exits 222 will be
-// reported as exit 124 (not-timed-out) — acceptable tradeoff.
-pub(crate) const USER_EXIT_124_REMAP: i32 = 222;
 
 pub type Result<T> = std::result::Result<T, SandboxError>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SandboxError {
     EngineUnreachable(String),
+    /// A command inside the materialised chain returned non-zero exit and the
+    /// dagger SDK refused to honour `expect=Any` (typical for signal-killed
+    /// processes, e.g. SIGXFSZ → exit 153). Distinct from `EngineUnreachable`
+    /// so adapters can surface "command exited N" instead of "engine down".
+    CommandFailed { exit_code: i32, message: String },
     ArtifactTooLarge { path: String, message: String },
     ArtifactNotFound { path: String, message: String },
     InvalidInput(String),
@@ -35,6 +35,7 @@ impl SandboxError {
     pub fn code(&self) -> &'static str {
         match self {
             Self::EngineUnreachable(_) => "ARCHESTRA_ENGINE_UNREACHABLE",
+            Self::CommandFailed { .. } => "ARCHESTRA_COMMAND_FAILED",
             Self::ArtifactTooLarge { .. } => "ARCHESTRA_ARTIFACT_TOO_LARGE",
             Self::ArtifactNotFound { .. } => "ARCHESTRA_ARTIFACT_NOT_FOUND",
             Self::InvalidInput(_) => "ARCHESTRA_INVALID_INPUT",
@@ -46,15 +47,38 @@ impl SandboxError {
         Self::EngineUnreachable(error.to_string())
     }
 
+    /// Categorise an error returned by the dagger SDK during exec evaluation.
+    /// SDK errors with an embedded `exit code: N` come from a container exec
+    /// that returned non-zero (kill-by-signal counts here too); everything
+    /// else is a real transport/engine failure.
+    pub(crate) fn from_sdk(error: impl fmt::Display) -> Self {
+        let message = error.to_string();
+        match parse_sdk_exit_code(&message) {
+            Some(exit_code) => Self::CommandFailed { exit_code, message },
+            None => Self::EngineUnreachable(message),
+        }
+    }
+
     pub(crate) fn internal(message: impl Into<String>) -> Self {
         Self::Internal(message.into())
     }
+}
+
+fn parse_sdk_exit_code(message: &str) -> Option<i32> {
+    const NEEDLE: &str = "exit code: ";
+    let idx = message.find(NEEDLE)?;
+    let rest = &message[idx + NEEDLE.len()..];
+    let end = rest
+        .find(|c: char| !c.is_ascii_digit())
+        .unwrap_or(rest.len());
+    rest[..end].parse().ok()
 }
 
 impl fmt::Display for SandboxError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::EngineUnreachable(message)
+            | Self::CommandFailed { message, .. }
             | Self::ArtifactTooLarge { message, .. }
             | Self::ArtifactNotFound { message, .. }
             | Self::InvalidInput(message)
@@ -233,26 +257,24 @@ pub async fn read_artifact(input: ReadArtifactInput) -> Result<ArtifactBytes> {
 
 pub(crate) fn wrap_with_timeout(
     command: &str,
-    cwd: &str,
     timeout_seconds: u32,
     limits: &Limits,
 ) -> String {
-    let file_limit_blocks = u64::from(limits.file_size_limit_bytes).div_ceil(512);
     let memory_kilobytes = u64::from(limits.memory_bytes).div_ceil(1024);
     let output_head_bytes = (limits.output_bytes_limit as usize) + 1;
-    let user_wrapped = format!(
-        "{}; _i=$?; if [ $_i -eq {} ]; then exit {}; else exit $_i; fi",
-        command, TIMEOUT_EXIT_CODE, USER_EXIT_124_REMAP,
-    );
+    // cwd is set via `container.with_workdir(cwd)` upstream (no shell `cd` needed).
+    // dropped `ulimit -f` (file size — blocked `uv pip install` with SIGXFSZ on
+    // packages larger than the limit) and `ulimit -u` (max processes — better
+    // handled by the engine pod's cgroup `pids.max`). kept `-t` (CPU) and `-v`
+    // (memory) as light per-command guards on top of pod cgroups.
+    // dropped the user-exit-124 → 222 remap: exit 124 now unambiguously means
+    // `timeout(1)` fired, since nothing else in the wrapper can produce it.
     format!(
-        "cd {} && _d=$(mktemp -d) || {{ echo 'mktemp failed' >&2; exit 1; }}; ulimit -f {} 2>/dev/null; ulimit -t {} 2>/dev/null; ulimit -v {} 2>/dev/null; ulimit -u {} 2>/dev/null; timeout --signal=KILL {}s bash -c {} >\"$_d/o\" 2>\"$_d/e\"; _x=$?; head -c {} \"$_d/o\"; head -c {} \"$_d/e\" >&2; rm -rf \"$_d\"; exit $_x",
-        shell_quote(cwd),
-        file_limit_blocks,
+        "_d=$(mktemp -d) || {{ echo 'mktemp failed' >&2; exit 1; }}; ulimit -t {} 2>/dev/null; ulimit -v {} 2>/dev/null; timeout --signal=KILL {}s bash -c {} >\"$_d/o\" 2>\"$_d/e\"; _x=$?; head -c {} \"$_d/o\"; head -c {} \"$_d/e\" >&2; rm -rf \"$_d\"; exit $_x",
         limits.cpu_seconds,
         memory_kilobytes,
-        limits.max_processes,
         timeout_seconds,
-        shell_quote(&user_wrapped),
+        shell_quote(command),
         output_head_bytes,
         output_head_bytes,
     )
@@ -413,7 +435,6 @@ mod tests {
     fn wrap_uses_timeout_and_preserves_exit_code() {
         let wrapped = wrap_with_timeout(
             "python --version",
-            "/skills/alpha",
             30,
             &Limits {
                 output_bytes_limit: 1024,
@@ -423,12 +444,33 @@ mod tests {
                 max_processes: 256,
             },
         );
-        assert!(wrapped.contains("cd '/skills/alpha'"));
         assert!(wrapped.contains("timeout --signal=KILL 30s"));
         assert!(wrapped.contains("python --version"));
-        assert!(wrapped.contains("if [ $_i -eq 124 ]; then exit 222"));
         assert!(wrapped.contains("head -c 1025"));
         assert!(wrapped.contains("exit $_x"));
+        // wrap no longer cd's (workdir is set via Container.with_workdir),
+        // no longer sets ulimit -f / -u, and no longer remaps exit 124.
+        assert!(!wrapped.contains("cd '"));
+        assert!(!wrapped.contains("ulimit -f"));
+        assert!(!wrapped.contains("ulimit -u"));
+        assert!(!wrapped.contains("if [ $_i -eq 124 ]"));
+    }
+
+    #[test]
+    fn from_sdk_parses_exit_code_into_command_failed() {
+        let err = SandboxError::from_sdk(
+            "process \"/.init bash -c …\" did not complete successfully: exit code: 153",
+        );
+        assert!(matches!(
+            err,
+            SandboxError::CommandFailed {
+                exit_code: 153,
+                ..
+            }
+        ));
+        // a plain transport error stays as EngineUnreachable
+        let err = SandboxError::from_sdk("connection refused");
+        assert!(matches!(err, SandboxError::EngineUnreachable(_)));
     }
 
     #[test]

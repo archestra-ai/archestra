@@ -728,6 +728,18 @@ const skillsSandboxEnabled =
 
 // the unified Dagger runtime fronts both code-runtime and skills sandbox; either
 // feature flag turning on lights up the shared session + warm base.
+// when operators explicitly scope the two features to different hosts the
+// runtime can only honour one — warn loudly so this isn't silently lost.
+if (
+  process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST &&
+  process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST &&
+  process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST !==
+    process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST
+) {
+  logger.warn(
+    `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST (${process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST}) and ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST (${process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST}) differ — both features share one Dagger session, so the code-runtime host wins and the skill-sandbox value is ignored`,
+  );
+}
 const daggerRuntimeRunnerHost =
   codeRuntimeDaggerRunnerHost ?? skillsSandboxDaggerRunnerHost;
 const daggerRuntimeEnabled =

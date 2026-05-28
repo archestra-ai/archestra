@@ -10,6 +10,8 @@ import logger from "@/logging";
 import {
   SkillInvalidFilePathError,
   SkillModel,
+  SkillSandboxCommandModel,
+  SkillSandboxFileSnapshotModel,
   SkillSandboxModel,
   SkillTeamModel,
 } from "@/models";
@@ -17,7 +19,10 @@ import {
   SKILL_SANDBOX_ROOT,
   skillRootPath,
 } from "@/skills-sandbox/runtime-image";
-import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
+import {
+  __internals as skillSandboxInternals,
+  skillSandboxRuntimeService,
+} from "@/skills-sandbox/skill-sandbox-runtime-service";
 import {
   SKILL_SANDBOX_LIMITS,
   SkillSandboxError,
@@ -280,11 +285,17 @@ const registry = defineArchestraTools([
 
       const defaultCwd = skillRootPath(primary.name);
 
-      // count sandboxes already attached to this conversation BEFORE creating
-      // the new one, so the alias for the new sandbox is `s${count+1}`.
+      // count sandboxes the caller can already see in this conversation BEFORE
+      // creating the new one, so the alias for the new sandbox is `s${count+1}`.
+      // must use the filtered list (matching resolveSandboxId), otherwise the
+      // alias we promise at create time cannot be looked up at run time.
       const priorCount = context.conversationId
-        ? (await SkillSandboxModel.listForConversation(context.conversationId))
-            .length
+        ? (
+            await accessibleConversationSandboxes(
+              context.conversationId,
+              userCtx,
+            )
+          ).length
         : 0;
 
       let sandbox: Awaited<ReturnType<typeof SkillSandboxModel.create>>;
@@ -305,6 +316,31 @@ const registry = defineArchestraTools([
           return errorResult(err.message);
         }
         throw err;
+      }
+
+      // Persist `uv pip install -r requirements.txt` setup rows once per
+      // requirements-bearing skill. These are real command-log entries, not
+      // a synthetic prepend at materialize time — every run replays the log
+      // uniformly, so install + user commands share one code path and one
+      // Dagger layer cache. exitCode=0 is a placeholder; replay re-executes.
+      const snapshotRows = await SkillSandboxFileSnapshotModel.listBySandbox(
+        sandbox.id,
+      );
+      const installs = skillSandboxInternals.autoInstallCommands(
+        sandbox,
+        snapshotRows,
+      );
+      for (const install of installs) {
+        await SkillSandboxCommandModel.append({
+          sandboxId: sandbox.id,
+          command: install.command,
+          cwd: install.cwd ?? null,
+          stdout: "",
+          stderr: "",
+          exitCode: 0,
+          durationMs: 0,
+          timeoutSeconds: install.timeoutSeconds,
+        });
       }
 
       const alias = aliasForNewSandbox(
@@ -347,7 +383,10 @@ const registry = defineArchestraTools([
             alias,
             sandboxId: sandbox.id,
             defaultCwd,
-            skillNames: skills.map((s) => s.name),
+            skillNames: orderedSkillNames(
+              skills.map((s) => s.name),
+              primary.name,
+            ),
           }),
         ].join("\n"),
       );
@@ -513,6 +552,19 @@ function requireUserContext(context: ArchestraContext): UserContext | null {
 
 function dedupe(values: string[]): string[] {
   return [...new Set(values)];
+}
+
+/**
+ * Same order the runtime applies to PYTHONPATH (primary first, then the rest
+ * alphabetical). Keep the trailer string honest so the model's import-resolution
+ * mental model matches what runs inside the container.
+ */
+function orderedSkillNames(
+  skillNames: string[],
+  primaryName: string,
+): string[] {
+  const rest = skillNames.filter((n) => n !== primaryName).sort();
+  return [primaryName, ...rest];
 }
 
 /**

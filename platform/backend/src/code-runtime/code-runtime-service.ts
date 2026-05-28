@@ -3,6 +3,7 @@ import {
   DaggerRuntimeError,
   daggerRuntimeService,
 } from "@/dagger-runtime/dagger-runtime-service";
+import logger from "@/logging";
 import * as metrics from "@/observability/metrics";
 import {
   CODE_RUNTIME_LIMITS,
@@ -88,11 +89,7 @@ class CodeRuntimeService {
         "runtime_error",
         (Date.now() - startedAt) / 1000,
       );
-      if (error instanceof DaggerRuntimeError) {
-        throw new CodeRuntimeError(error.message);
-      }
-      if (error instanceof CodeRuntimeError) throw error;
-      throw error;
+      throw toCodeRuntimeError(error);
     }
   }
 
@@ -112,6 +109,42 @@ class CodeRuntimeService {
 export const codeRuntimeService = new CodeRuntimeService();
 
 // === internal helpers ===
+
+/**
+ * Hide the underlying runtime (Dagger) from user-visible errors. Mirrors the
+ * skill-sandbox adapter's translation table so callers see consistent wording
+ * across `run_python` and `run_skill_command`.
+ */
+function toCodeRuntimeError(error: unknown): CodeRuntimeError {
+  if (error instanceof CodeRuntimeError) return error;
+  if (error instanceof DaggerRuntimeError) {
+    switch (error.code) {
+      case "ARCHESTRA_INVALID_INPUT":
+        // INVALID_INPUT messages from the runtime layer mention "Dagger"; the
+        // user-facing shape should match skill-sandbox's "not enabled" path.
+        return new CodeRuntimeError("the code runtime is not enabled");
+      case "ARCHESTRA_COMMAND_FAILED":
+        logger.error({ err: error }, "[CodeRuntime] script command failed");
+        return new CodeRuntimeError(
+          `script execution failed: ${error.message}`,
+        );
+      case "ARCHESTRA_ENGINE_UNREACHABLE":
+      case "ARCHESTRA_INTERNAL":
+        logger.error({ err: error }, "[CodeRuntime] runtime error");
+        return new CodeRuntimeError(
+          "the code runtime is not available (engine unreachable)",
+        );
+      case "ARCHESTRA_ARTIFACT_NOT_FOUND":
+      case "ARCHESTRA_ARTIFACT_TOO_LARGE":
+        // not reachable from run() (no artifact read), but cover the union.
+        return new CodeRuntimeError(error.message);
+    }
+  }
+  logger.error({ err: error }, "[CodeRuntime] unexpected error");
+  return new CodeRuntimeError(
+    "the code runtime is not available (engine unreachable)",
+  );
+}
 
 interface ValidatedRunParams {
   code: string;

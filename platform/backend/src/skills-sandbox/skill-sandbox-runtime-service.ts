@@ -170,6 +170,10 @@ class SkillSandboxRuntimeService {
           path: resolvedPath,
           defaultCwd: sandbox.defaultCwd,
           pythonpath,
+          // must match runCommand's limit: wrap_with_timeout bakes
+          // `head -c <outputBytesLimit+1>` into the replay bash, so a mismatch
+          // here invalidates Dagger's per-replay layer cache.
+          outputBytesLimit: config.skillsSandbox.outputBytesLimit,
           fileSizeLimitBytes: config.skillsSandbox.artifactBytesLimit,
           cpuSeconds: config.skillsSandbox.cpuLimit,
           memoryBytes: config.skillsSandbox.memoryLimit,
@@ -279,7 +283,6 @@ class SkillSandboxRuntimeService {
       );
     }
     const log = await SkillSandboxCommandModel.listBySandbox(sandbox.id);
-    const installCommands = autoInstallCommands(sandbox, snapshotRows);
     return {
       snapshots: snapshotRows.map(
         (snapshot): SnapshotFile => ({
@@ -289,20 +292,21 @@ class SkillSandboxRuntimeService {
           content: snapshot.content,
         }),
       ),
-      // installs run first so the user's persisted commands see the deps. We
-      // do NOT persist these to the command log: they're derived from the
-      // skill's requirements.txt snapshot and re-emitted each materialize.
-      // Dagger's content-addressed layer cache makes the repeat cost near-zero.
-      replayCommands: [
-        ...installCommands,
-        ...log.map(
-          (entry): ReplayCommand => ({
-            command: entry.command,
-            cwd: entry.cwd ?? undefined,
-            timeoutSeconds: entry.timeoutSeconds,
-          }),
-        ),
-      ],
+      // uniform replay: every command (including the requirements-install
+      // setup steps written at create_skill_sandbox time) lives in the
+      // command log. no synthetic "auto-install" prepend here — that lived as
+      // its own code path and broke Dagger cache reuse on every config knob.
+      replayCommands: log.map(
+        (entry): ReplayCommand => ({
+          command: entry.command,
+          // pin replays to defaultCwd when the original entry has no stored
+          // cwd, so the Rust fallback doesn't pick up the live call's cwd
+          // (would break replay determinism and the runCommand↔exportArtifact
+          // cache).
+          cwd: entry.cwd ?? sandbox.defaultCwd,
+          timeoutSeconds: entry.timeoutSeconds,
+        }),
+      ),
       pythonpath: pythonpathForSandbox(sandbox, snapshotRows),
     };
   }
@@ -313,8 +317,22 @@ class SkillSandboxRuntimeService {
       switch (error.code) {
         case "ARCHESTRA_ARTIFACT_NOT_FOUND":
         case "ARCHESTRA_ARTIFACT_TOO_LARGE":
-        case "ARCHESTRA_INVALID_INPUT":
           return new SkillSandboxError(error.message);
+        case "ARCHESTRA_COMMAND_FAILED":
+          // A replay or setup command exited non-zero and the SDK refused
+          // expect=Any (typically a signal kill, e.g. SIGXFSZ→153). Surface
+          // the exit code to the model so it can react instead of looping.
+          logger.error({ err: error }, "[SkillSandbox] sandbox command failed");
+          return new SkillSandboxError(
+            `a setup or replay command in this sandbox failed: ${error.message}`,
+          );
+        case "ARCHESTRA_INVALID_INPUT":
+          // INVALID_INPUT from the runtime layer says "the Dagger runtime is
+          // not enabled"; replace with adapter-specific wording so we never
+          // leak the underlying implementation to the model/user.
+          return new SkillSandboxError(
+            "the skill sandbox runtime is not enabled",
+          );
         case "ARCHESTRA_ENGINE_UNREACHABLE":
         case "ARCHESTRA_INTERNAL":
           logger.error({ err: error }, "[SkillSandbox] runtime error");
@@ -385,13 +403,12 @@ export const skillSandboxRuntimeService = new SkillSandboxRuntimeService();
 
 function shouldRecordOnFailure(error: unknown): boolean {
   if (!(error instanceof DaggerRuntimeError)) return false;
-  switch (error.code) {
-    case "ARCHESTRA_ENGINE_UNREACHABLE":
-    case "ARCHESTRA_INTERNAL":
-      return true;
-    default:
-      return false;
-  }
+  // ARCHESTRA_ENGINE_UNREACHABLE is also raised by the JS-side backstop timer
+  // alone (no native attempt). Persisting a synthetic row there would re-run
+  // the user's command on every subsequent replay forever, including the
+  // non-idempotent ones (rm, apt, network). Only persist when the native side
+  // actually executed and the engine failed mid-stream.
+  return error.code === "ARCHESTRA_INTERNAL";
 }
 
 function validateCommand(command: string): void {

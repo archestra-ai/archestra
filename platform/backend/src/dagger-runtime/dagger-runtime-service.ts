@@ -34,6 +34,7 @@ export class DaggerRuntimeError extends Error {
 type NativeSandboxErrorCode =
   | "ARCHESTRA_ARTIFACT_NOT_FOUND"
   | "ARCHESTRA_ARTIFACT_TOO_LARGE"
+  | "ARCHESTRA_COMMAND_FAILED"
   | "ARCHESTRA_ENGINE_UNREACHABLE"
   | "ARCHESTRA_INTERNAL"
   | "ARCHESTRA_INVALID_INPUT";
@@ -120,6 +121,10 @@ class DaggerRuntimeService {
       return;
     }
     if (this.status === "ready") return;
+    // shutdown is terminal — drainWaiters has already rejected callers as
+    // unreachable, so re-running doInit would silently revive a runtime no
+    // consumer registered for and contradict the consumer reference-count.
+    if (this.status === "stopped") return;
     if (this.initPromise) return this.initPromise;
 
     const now = Date.now();
@@ -243,14 +248,20 @@ class DaggerRuntimeService {
 
     try {
       await checkSession({ traceparent: getTraceparent() });
+      // shutdown() may have fired while we were awaiting; don't revive it.
+      // re-read status as the union type since TS narrows past the await.
+      if ((this.status as DaggerRuntimeStatus) === "stopped") return;
       this.status = "ready";
       logger.info("[DaggerRuntime] ready — shared session + warm base online");
     } catch (error) {
-      this.status = "error";
+      if ((this.status as DaggerRuntimeStatus) !== "stopped") {
+        this.status = "error";
+      }
       logger.error(
         { err: error },
         "[DaggerRuntime] failed to initialize — sandbox execution unavailable",
       );
+      throw error;
     }
   }
 
@@ -349,6 +360,7 @@ class DaggerRuntimeService {
     switch (native.code) {
       case "ARCHESTRA_ARTIFACT_NOT_FOUND":
       case "ARCHESTRA_ARTIFACT_TOO_LARGE":
+      case "ARCHESTRA_COMMAND_FAILED":
       case "ARCHESTRA_INVALID_INPUT":
         return new DaggerRuntimeError(native.message, native.code);
       case "ARCHESTRA_ENGINE_UNREACHABLE":
@@ -406,6 +418,7 @@ function getNativeSandboxError(error: unknown): {
   switch (code) {
     case "ARCHESTRA_ARTIFACT_NOT_FOUND":
     case "ARCHESTRA_ARTIFACT_TOO_LARGE":
+    case "ARCHESTRA_COMMAND_FAILED":
     case "ARCHESTRA_ENGINE_UNREACHABLE":
     case "ARCHESTRA_INTERNAL":
     case "ARCHESTRA_INVALID_INPUT":

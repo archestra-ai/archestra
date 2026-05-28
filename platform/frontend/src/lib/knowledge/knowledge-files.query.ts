@@ -98,6 +98,7 @@ export function useKnowledgeFile(fileId: string) {
 export function useKnowledgeFileUploadConfig() {
   return useQuery({
     queryKey: ["knowledge-files", "config"],
+    staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       const { data, error } = await getKnowledgeFileUploadConfig();
       if (error) {

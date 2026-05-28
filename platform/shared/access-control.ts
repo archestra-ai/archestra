@@ -395,7 +395,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOrganization]: {},
   [RouteId.CompleteOnboarding]: {},
 
-  // Agent Version Routes - enforcement is handled dynamically in route handlers
+  // Agent   Routes - enforcement is handled dynamically in route handlers
   [RouteId.GetAgentVersions]: {},
   [RouteId.GetAgentVersion]: {},
   [RouteId.GetAgentVersionDiff]: {},

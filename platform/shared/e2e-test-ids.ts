@@ -124,6 +124,10 @@ export const E2eTestId = {
   ImpersonationBanner: "impersonation-banner",
   ImpersonationStopButton: "impersonation-stop-button",
   ImpersonationViewAsButton: "impersonation-view-as-button",
+  // Prompt Version History
+  PromptHistoryTab: "prompt-history-tab",
+  PromptVersionList: "prompt-version-list",
+  RestorePromptButton: "restore-prompt-button",
 } as const;
 
 export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];

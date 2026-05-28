@@ -67,12 +67,12 @@ vi.mock("@/lib/knowledge/connector.query", () => ({
 }));
 
 describe("KnowledgeBasesPage", () => {
-  it("navigates to KB detail page on row click", async () => {
+  it("does not navigate to a KB detail page on row click", async () => {
     const user = userEvent.setup();
     render(<KnowledgeBasesPage />);
 
     await user.click(screen.getByText("KB One"));
 
-    expect(mockPush).toHaveBeenCalledWith("/knowledge/knowledge-bases/kb-1");
+    expect(mockPush).not.toHaveBeenCalled();
   });
 });

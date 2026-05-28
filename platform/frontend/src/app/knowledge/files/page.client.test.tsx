@@ -126,7 +126,9 @@ describe("KnowledgeFilesPage", () => {
       screen.getByRole("dialog", { name: "Upload Files" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Select Files" }),
+      screen.getByRole("button", {
+        name: /Drop files here or click to browse/,
+      }),
     ).toBeInTheDocument();
     expect(screen.getByText("Agents / MCP Gateways")).toBeInTheDocument();
     expect(

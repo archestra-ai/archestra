@@ -39,6 +39,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import {
   formatFileSize,
@@ -49,7 +50,7 @@ import {
   useUpdateKnowledgeFile,
   useUploadKnowledgeFiles,
 } from "@/lib/knowledge/knowledge-files.query";
-import { formatDate } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import { KnowledgeFileAccessFields } from "./_parts/knowledge-file-access-fields";
 
 const ACCEPTED_EXTENSIONS = ".txt,.md,.csv,.json,.xml,.pdf";
@@ -88,11 +89,16 @@ function KnowledgeFilesList() {
       accessorKey: "originalName",
       header: "File",
       cell: ({ row }) => (
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-sm font-medium">
-            {row.original.originalName}
-          </span>
-        </div>
+        <TruncatedTooltip content={row.original.originalName}>
+          <button
+            type="button"
+            className="flex min-w-0 max-w-full items-center gap-2 bg-transparent p-0 text-left"
+          >
+            <span className="truncate text-sm font-medium">
+              {row.original.originalName}
+            </span>
+          </button>
+        </TruncatedTooltip>
       ),
     },
     {
@@ -262,6 +268,7 @@ function UploadKnowledgeFilesDialog({
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const [visibility, setVisibility] =
     useState<ResourceVisibilityScope>("personal");
   const [teamIds, setTeamIds] = useState<string[]>([]);
@@ -293,12 +300,16 @@ function UploadKnowledgeFilesDialog({
   const uploadDisabled =
     files.length === 0 || teamSelectionInvalid || isUploading;
 
+  const handleSelectedFiles = (selectedFiles: FileList | File[]) => {
+    setFiles(Array.from(selectedFiles));
+  };
+
   return (
     <StandardFormDialog
       open={open}
       onOpenChange={onOpenChange}
       title="Upload Files"
-      description="Uploaded files are indexed for retrieval by the selected agents."
+      description="Uploaded files are indexed for retrieval by the selected Agents / MCP Gateways."
       size="medium"
       onSubmit={handleSubmit}
       footer={
@@ -326,15 +337,40 @@ function UploadKnowledgeFilesDialog({
             accept={ACCEPTED_EXTENSIONS}
             multiple
             className="hidden"
-            onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
+            onChange={(event) => handleSelectedFiles(event.target.files ?? [])}
           />
           <Button
             type="button"
             variant="outline"
+            className={cn(
+              "flex h-auto min-h-24 w-full cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed bg-transparent p-6 text-center hover:bg-muted/30",
+              isDraggingFiles
+                ? "border-primary bg-primary/5"
+                : "border-muted-foreground/25 hover:border-muted-foreground/50",
+            )}
             onClick={() => fileInputRef.current?.click()}
+            onDragEnter={(event) => {
+              event.preventDefault();
+              setIsDraggingFiles(true);
+            }}
+            onDragOver={(event) => {
+              event.preventDefault();
+              setIsDraggingFiles(true);
+            }}
+            onDragLeave={(event) => {
+              event.preventDefault();
+              setIsDraggingFiles(false);
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              setIsDraggingFiles(false);
+              handleSelectedFiles(event.dataTransfer.files);
+            }}
           >
-            <Upload className="h-4 w-4" />
-            Select Files
+            <Upload className="mb-2 h-7 w-7 text-muted-foreground" />
+            <p className="text-sm font-medium">
+              Drop files here or click to browse
+            </p>
           </Button>
           <p className="text-xs text-muted-foreground">
             TXT, Markdown, CSV, JSON, XML, and PDF files up to{" "}
@@ -364,6 +400,7 @@ function UploadKnowledgeFilesDialog({
           onTeamIdsChange={setTeamIds}
           agentIds={agentIds}
           onAgentIdsChange={setAgentIds}
+          defaultToAllAgents
         />
       </div>
     </StandardFormDialog>
@@ -402,8 +439,8 @@ function EditKnowledgeFileDialog({
       onOpenChange={onOpenChange}
       title="Edit File Access"
       description={
-        <div className="space-y-1">
-          <div>{file.originalName}</div>
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="min-w-0 flex-1 truncate">{file.originalName}</div>
           <div className="text-xs text-muted-foreground">
             Size: {formatFileSize(file.fileSize)}
           </div>
@@ -462,8 +499,8 @@ function ViewKnowledgeFileDialog({
       onOpenChange={onOpenChange}
       title="View File"
       description={
-        <div className="space-y-1">
-          <div>{file.originalName}</div>
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="min-w-0 flex-1 truncate">{file.originalName}</div>
           <div className="text-xs text-muted-foreground">
             Size: {formatFileSize(file.fileSize)}
           </div>

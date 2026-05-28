@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-05-26
+lastUpdated: 2026-05-28
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -91,7 +91,7 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | MCP Registry | `read` |
 | MCP Server Installations | `read`, `create`, `delete` |
 | MCP Server Installation Requests | `read`, `create`, `update` |
-| Knowledge Files | `read`, `create`, `update`, `delete` |
+| Knowledge Files | `read` |
 | Knowledge Sources | `read`, `query` |
 | Chats | `read`, `create`, `update`, `delete` |
 | API Keys | `read`, `create`, `delete` |

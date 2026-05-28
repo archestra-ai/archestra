@@ -10922,6 +10922,7 @@ export type GetAgentsResponses = {
                 valueId?: string;
             }>;
             authorName?: string | null;
+            authorEmail?: string | null;
             knowledgeBaseIds: Array<string>;
             connectorIds: Array<string>;
             suggestedPrompts: Array<{
@@ -11143,6 +11144,7 @@ export type CreateAgentResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        authorEmail?: string | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
         suggestedPrompts: Array<{
@@ -11332,6 +11334,7 @@ export type GetAllAgentsResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        authorEmail?: string | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
         suggestedPrompts: Array<{
@@ -11500,6 +11503,7 @@ export type GetDefaultMcpGatewayResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        authorEmail?: string | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
         suggestedPrompts: Array<{
@@ -11668,6 +11672,7 @@ export type GetDefaultLlmProxyResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        authorEmail?: string | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
         suggestedPrompts: Array<{
@@ -11915,6 +11920,7 @@ export type ImportAgentResponses = {
                 valueId?: string;
             }>;
             authorName?: string | null;
+            authorEmail?: string | null;
             knowledgeBaseIds: Array<string>;
             connectorIds: Array<string>;
             suggestedPrompts: Array<{
@@ -12176,6 +12182,7 @@ export type GetAgentResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        authorEmail?: string | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
         suggestedPrompts: Array<{
@@ -12390,6 +12397,7 @@ export type UpdateAgentResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        authorEmail?: string | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
         suggestedPrompts: Array<{
@@ -12560,6 +12568,7 @@ export type CloneAgentResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        authorEmail?: string | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
         suggestedPrompts: Array<{

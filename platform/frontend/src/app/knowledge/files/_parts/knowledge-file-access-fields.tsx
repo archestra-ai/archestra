@@ -2,8 +2,8 @@
 
 import type { ResourceVisibilityScope } from "@shared";
 import { Globe, User, Users } from "lucide-react";
-import { useId } from "react";
-import { Checkbox } from "@/components/ui/checkbox";
+import { useEffect, useMemo, useRef } from "react";
+import { AgentSelector } from "@/components/agent-selector";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import {
@@ -44,6 +44,7 @@ export function KnowledgeFileAccessFields({
   onTeamIdsChange,
   agentIds,
   onAgentIdsChange,
+  defaultToAllAgents = false,
 }: {
   visibility: ResourceVisibilityScope;
   onVisibilityChange: (visibility: ResourceVisibilityScope) => void;
@@ -51,19 +52,30 @@ export function KnowledgeFileAccessFields({
   onTeamIdsChange: (teamIds: string[]) => void;
   agentIds: string[];
   onAgentIdsChange: (agentIds: string[]) => void;
+  defaultToAllAgents?: boolean;
 }) {
-  const allAgentsCheckboxId = useId();
+  const initializedDefaultAgentsRef = useRef(false);
   const { data: teams } = useTeams();
   const { data: agents } = useProfiles({
     filters: { agentTypes: ["agent", "mcp_gateway"] },
   });
-  const agentOptions = (agents ?? []).map((agent) => ({
-    value: agent.id,
-    label: agent.name,
-  }));
-  const allAgentIds = agentOptions.map((agent) => agent.value);
-  const allAgentsSelected =
-    allAgentIds.length > 0 && allAgentIds.every((id) => agentIds.includes(id));
+  const allAgentIds = useMemo(
+    () => (agents ?? []).map((agent) => agent.id),
+    [agents],
+  );
+
+  useEffect(() => {
+    if (initializedDefaultAgentsRef.current || !defaultToAllAgents) {
+      return;
+    }
+
+    if (allAgentIds.length === 0 || agentIds.length > 0) {
+      return;
+    }
+
+    initializedDefaultAgentsRef.current = true;
+    onAgentIdsChange(allAgentIds);
+  }, [agentIds.length, allAgentIds, defaultToAllAgents, onAgentIdsChange]);
 
   const options = Object.values(VISIBILITY_OPTIONS).map((option) => ({
     ...option,
@@ -103,28 +115,18 @@ export function KnowledgeFileAccessFields({
         <div className="space-y-1">
           <Label>Agents / MCP Gateways</Label>
           <p className="text-xs text-muted-foreground">
-            Choose which agents and MCP gateways can retrieve this file.
+            Choose which agents and MCP gateways can retrieve this file, or make
+            it available to all of them.
           </p>
         </div>
-        <div className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-          <Checkbox
-            id={allAgentsCheckboxId}
-            checked={allAgentsSelected}
-            disabled={allAgentIds.length === 0}
-            onCheckedChange={(checked) => {
-              onAgentIdsChange(checked ? allAgentIds : []);
-            }}
-          />
-          <Label htmlFor={allAgentsCheckboxId} className="font-normal">
-            All agents and MCP gateways
-          </Label>
-        </div>
-        <MultiSelectCombobox
-          options={agentOptions}
+        <AgentSelector
+          mode="multiple"
+          agents={agents ?? []}
           value={agentIds}
-          onChange={onAgentIdsChange}
+          onValueChange={onAgentIdsChange}
           placeholder="Search agents and MCP gateways..."
           emptyMessage="No agents or MCP gateways found."
+          allOption={{ label: "All agents and MCP gateways" }}
         />
       </div>
     </div>

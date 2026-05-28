@@ -1772,6 +1772,34 @@
       "when": 1779702877983,
       "tag": "0252_round_the_twelve",
       "breakpoints": true
+    },
+    {
+      "idx": 253,
+      "version": "7",
+      "when": 1779870185058,
+      "tag": "0253_rename-github-repository-files-flag",
+      "breakpoints": true
+    },
+    {
+      "idx": 254,
+      "version": "7",
+      "when": 1779807387011,
+      "tag": "0254_black_skin",
+      "breakpoints": true
+    },
+    {
+      "idx": 255,
+      "version": "7",
+      "when": 1779899471178,
+      "tag": "0255_ambiguous_omega_sentinel",
+      "breakpoints": true
+    },
+    {
+      "idx": 256,
+      "version": "7",
+      "when": 1779944476369,
+      "tag": "0256_rename_chat_attachments_to_conversation_attachments",
+      "breakpoints": true
     }
   ]
 }

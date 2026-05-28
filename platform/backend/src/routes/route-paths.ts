@@ -10,6 +10,12 @@ export const METRICS_PATH = "/metrics";
 export const WELL_KNOWN_OAUTH_PREFIX = "/.well-known/oauth-";
 export const WELL_KNOWN_ACME_PREFIX = "/.well-known/acme-challenge/";
 export const MCP_GATEWAY_PREFIX = "/v1/mcp";
+/**
+ * Public unauthenticated git smart-HTTP endpoint backing the skill marketplace.
+ * Routes under this prefix authenticate via the URL token (no session); they
+ * are allowlisted in the auth middleware in the same shape as MCP_GATEWAY_PREFIX.
+ */
+export const SKILL_MARKETPLACE_PREFIX = "/skills/m";
 
 export const ORGANIZATION_APPEARANCE_SETTINGS_PATH =
   "/api/organization/appearance-settings";

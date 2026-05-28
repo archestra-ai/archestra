@@ -17,6 +17,7 @@ export { default as ChatOpsProcessedMessageModel } from "./chatops-processed-mes
 export { default as ChatOpsThreadAgentOverrideModel } from "./chatops-thread-agent-override";
 export { default as ConnectorRunModel } from "./connector-run";
 export { default as ConversationModel } from "./conversation";
+export { default as ConversationAttachmentModel } from "./conversation-attachment";
 export { default as ConversationChatErrorModel } from "./conversation-chat-error";
 export { default as ConversationCompactionModel } from "./conversation-compaction";
 export { default as ConversationEnabledToolModel } from "./conversation-enabled-tool";
@@ -55,6 +56,8 @@ export { default as SecretModel } from "./secret";
 export { default as SessionModel } from "./session";
 export { default as SkillModel } from "./skill";
 export { default as SkillFileModel } from "./skill-file";
+export { default as SkillShareLinkModel } from "./skill-share-link";
+export { default as SkillShareLinkRevisionModel } from "./skill-share-link-revision";
 export { default as SkillTeamModel } from "./skill-team";
 export { default as StatisticsModel } from "./statistics";
 export { default as TaskModel } from "./task";

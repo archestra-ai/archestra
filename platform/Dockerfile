@@ -32,8 +32,8 @@ RUN git clone --depth 1 --branch "${KIND_VERSION}" https://github.com/kubernetes
     test "$(git -C /kind rev-parse HEAD)" = "${KIND_COMMIT}" && \
     cd /kind && \
     go mod edit -go=1.25.10 && \
-    # golang.org/x/net <0.53.0: multiple HIGH CVEs (Scout-flagged at 0.51.0); fixed in >= 0.53.0
-    go get golang.org/x/net@v0.53.0 && \
+    # golang.org/x/net <0.55.0: CVE-2026-39821 (CRITICAL); fixed in >= 0.55.0
+    go get golang.org/x/net@v0.55.0 && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /kind-binary .
 RUN git clone --depth 1 --branch "${DOCKER_CLI_VERSION}" https://github.com/docker/cli.git /docker-cli && \
     test "$(git -C /docker-cli rev-parse HEAD)" = "${DOCKER_CLI_COMMIT}" && \
@@ -47,12 +47,13 @@ RUN git clone --depth 1 --branch "${DOCKER_CLI_VERSION}" https://github.com/dock
     # CVE-2026-34986: go-jose uncaught exception fixed in >= 4.1.4
     go get github.com/go-jose/go-jose/v4@v4.1.4 && \
     # x/sys/x/term must be pinned for `go mod vendor` to find windows/registry and plan9 sub-pkgs.
-    go get golang.org/x/sys@v0.42.0 && \
-    go get golang.org/x/term@v0.42.0 && \
-    # golang.org/x/net <0.53.0: multiple HIGH CVEs (Scout-flagged at 0.51.0); fixed in >= 0.53.0.
+    # Versions must satisfy x/net@v0.55.0 requirements: x/sys >= v0.45.0, x/term >= v0.43.0.
+    go get golang.org/x/sys@v0.45.0 && \
+    go get golang.org/x/term@v0.43.0 && \
+    # golang.org/x/net <0.55.0: CVE-2026-39821 (CRITICAL); fixed in >= 0.55.0.
     # Must be the LAST `go get` before `go mod vendor` — earlier `go get`s for grpc/otel/x/sys
-    # transitively pull x/net@v0.52.0 and would otherwise override our explicit requirement.
-    go get golang.org/x/net@v0.53.0 && \
+    # transitively pull older x/net and would otherwise override our explicit requirement.
+    go get golang.org/x/net@v0.55.0 && \
     go mod vendor && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor \
     -ldflags "-X github.com/docker/cli/cli/version.Version=${DOCKER_CLI_VERSION#v}" \
@@ -73,8 +74,8 @@ RUN git clone --depth 1 --branch "${DAGGER_VERSION}" https://github.com/dagger/d
     go get github.com/go-git/go-git/v5@v5.19.0 && \
     # cve-2026-44973: go-billy path traversal fixed in >= 5.9.0
     go get github.com/go-git/go-billy/v5@v5.9.0 && \
-    # cve-2026-33814: x/net issue fixed in >= 0.53.0
-    go get golang.org/x/net@v0.54.0 && \
+    # cve-2026-39821: x/net CRITICAL fixed in >= 0.55.0
+    go get golang.org/x/net@v0.55.0 && \
     # cve-2026-46597: x/crypto issue fixed in >= 0.52.0; keep this after x/net.
     go get golang.org/x/crypto@v0.52.0 && \
     go get github.com/moby/go-archive@v0.2.0 github.com/moby/profiles/seccomp@v0.2.3 github.com/moby/sys/reexec@v0.1.0 github.com/moby/sys/user@v0.4.0 && \
@@ -91,8 +92,8 @@ RUN git clone --depth 1 --branch "${KUBECTL_VERSION}" https://github.com/kuberne
     go get github.com/moby/spdystream@v0.5.1 && \
     # cve-2026-29181: OTel resource exhaustion fixed in >= 1.41.0.
     go get go.opentelemetry.io/otel@v1.41.0 go.opentelemetry.io/otel/metric@v1.41.0 go.opentelemetry.io/otel/trace@v1.41.0 go.opentelemetry.io/otel/sdk@v1.41.0 && \
-    # cve-2026-33814: x/net issue fixed in >= 0.53.0.
-    go get golang.org/x/net@v0.53.0 && \
+    # cve-2026-39821: x/net CRITICAL fixed in >= 0.55.0.
+    go get golang.org/x/net@v0.55.0 && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=readonly \
     -ldflags "-X k8s.io/component-base/version.gitVersion=${KUBECTL_VERSION} -X k8s.io/component-base/version.gitCommit=${KUBECTL_COMMIT} -X k8s.io/component-base/version.gitTreeState=clean" \
     -o /kubectl-binary ./cmd/kubectl

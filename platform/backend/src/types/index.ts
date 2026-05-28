@@ -56,6 +56,8 @@ export * from "./secret";
 export * from "./secrets-manager";
 export * from "./session";
 export * from "./skill";
+export * from "./skill-share-link";
+export * from "./skill-share-link-revision";
 export * from "./statistics";
 export * from "./task";
 export * from "./team";

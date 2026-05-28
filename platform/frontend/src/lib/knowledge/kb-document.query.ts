@@ -6,20 +6,119 @@ import { toast } from "sonner";
 import { handleApiError } from "@/lib/utils";
 
 const {
+  deleteConnectorDocument,
   getKnowledgeBaseDocuments,
+  getConnectorDocument,
+  getConnectorDocuments,
   getKnowledgeBaseDocument,
   deleteKnowledgeBaseDocument,
 } = archestraApiSdk;
+
+type ConnectorDocumentsQuery = NonNullable<
+  archestraApiTypes.GetConnectorDocumentsData["query"]
+>;
 
 type KnowledgeBaseDocumentsQuery = NonNullable<
   archestraApiTypes.GetKnowledgeBaseDocumentsData["query"]
 >;
 
 export type KnowledgeBaseDocumentListItem =
-  archestraApiTypes.GetKnowledgeBaseDocumentsResponses["200"]["data"][number];
+  archestraApiTypes.GetConnectorDocumentsResponses["200"]["data"][number];
 
 export type KnowledgeBaseDocumentDetail =
-  archestraApiTypes.GetKnowledgeBaseDocumentResponses["200"];
+  archestraApiTypes.GetConnectorDocumentResponses["200"];
+
+export function useConnectorDocuments(params: {
+  connectorId: string;
+  limit: number;
+  offset: number;
+  search?: string;
+}) {
+  return useQuery({
+    queryKey: [
+      "connector-documents",
+      params.connectorId,
+      params.limit,
+      params.offset,
+      params.search ?? "",
+    ],
+    placeholderData: (previousData) => previousData,
+    queryFn: async () => {
+      const query: ConnectorDocumentsQuery = {
+        limit: params.limit,
+        offset: params.offset,
+        ...(params.search ? { search: params.search } : {}),
+      };
+      const { data, error } = await getConnectorDocuments({
+        path: { id: params.connectorId },
+        query,
+      });
+      if (error) {
+        handleApiError(error);
+        throw error;
+      }
+      return data;
+    },
+    enabled: !!params.connectorId,
+  });
+}
+
+export function useConnectorDocument(params: {
+  connectorId: string;
+  docId: string;
+  enabled?: boolean;
+}) {
+  return useQuery({
+    queryKey: ["connector-document", params.connectorId, params.docId],
+    queryFn: async () => {
+      const { data, error } = await getConnectorDocument({
+        path: { id: params.connectorId, docId: params.docId },
+      });
+      if (error) {
+        handleApiError(error);
+        throw error;
+      }
+      return data;
+    },
+    enabled:
+      Boolean(params.connectorId) &&
+      Boolean(params.docId) &&
+      (params.enabled ?? true),
+  });
+}
+
+export function useDeleteConnectorDocument() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: { connectorId: string; docId: string }) => {
+      const { data, error } = await deleteConnectorDocument({
+        path: {
+          id: params.connectorId,
+          docId: params.docId,
+        },
+      });
+      if (error) {
+        handleApiError(error);
+        throw error;
+      }
+      return data;
+    },
+    onSuccess: (data, variables) => {
+      if (!data) return;
+      queryClient.invalidateQueries({
+        queryKey: ["connector-documents", variables.connectorId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["connector-document", variables.connectorId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["connectors", variables.connectorId],
+      });
+      queryClient.invalidateQueries({ queryKey: ["connectors"] });
+      toast.success("Document deleted successfully");
+    },
+  });
+}
 
 export function useKnowledgeBaseDocuments(params: {
   knowledgeBaseId: string;

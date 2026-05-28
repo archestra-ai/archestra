@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { DocumentsTab } from "./documents-tab";
+import { ConnectorDocumentsTable } from "./connector-documents-table";
 
 const mockSetPagination = vi.fn();
 const mockUpdateQueryParams = vi.fn();
@@ -11,7 +11,7 @@ const mockPush = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockPush }),
   useSearchParams: () => new URLSearchParams(""),
-  usePathname: () => "/knowledge/knowledge-bases/kb-1",
+  usePathname: () => "/knowledge/connectors/connector-1",
 }));
 
 const mockDocument = {
@@ -49,7 +49,7 @@ vi.mock("@/lib/hooks/use-data-table-query-params", () => ({
 }));
 
 vi.mock("@/lib/knowledge/kb-document.query", () => ({
-  useKnowledgeBaseDocuments: () => ({
+  useConnectorDocuments: () => ({
     data: {
       data: [mockDocument, mockLongContentDocument],
       pagination: {
@@ -63,7 +63,7 @@ vi.mock("@/lib/knowledge/kb-document.query", () => ({
     },
     isPending: false,
   }),
-  useKnowledgeBaseDocument: ({ docId }: { docId: string }) => ({
+  useConnectorDocument: ({ docId }: { docId: string }) => ({
     data:
       docId === "doc-2"
         ? {
@@ -75,32 +75,28 @@ vi.mock("@/lib/knowledge/kb-document.query", () => ({
             content: "Detailed content preview",
           },
   }),
-  useDeleteKnowledgeBaseDocument: () => ({
+  useDeleteConnectorDocument: () => ({
     mutateAsync: mockDeleteMutateAsync,
     isPending: false,
   }),
 }));
 
-vi.mock("@/lib/knowledge/connector.query", () => ({
-  useConnectors: () => ({ data: [], isPending: false }),
-}));
-
-describe("DocumentsTab", () => {
+describe("ConnectorDocumentsTable", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockDeleteMutateAsync.mockResolvedValue({ success: true });
   });
 
   it("renders document list row", () => {
-    render(<DocumentsTab knowledgeBaseId="kb-1" />);
+    render(<ConnectorDocumentsTable connectorId="connector-1" />);
     expect(screen.getByText("Quarterly Plan")).toBeInTheDocument();
-    expect(screen.getAllByText("jira").length).toBeGreaterThan(0);
+    expect(screen.queryByText("jira")).not.toBeInTheDocument();
     expect(screen.getByText("Long Doc")).toBeInTheDocument();
   });
 
   it("opens preview dialog from row action", async () => {
     const user = userEvent.setup();
-    render(<DocumentsTab knowledgeBaseId="kb-1" />);
+    render(<ConnectorDocumentsTable connectorId="connector-1" />);
 
     await user.click(screen.getAllByLabelText("Preview")[0]);
 
@@ -109,7 +105,7 @@ describe("DocumentsTab", () => {
 
   it("shows truncation notice for long document previews", async () => {
     const user = userEvent.setup();
-    render(<DocumentsTab knowledgeBaseId="kb-1" />);
+    render(<ConnectorDocumentsTable connectorId="connector-1" />);
 
     await user.click(screen.getAllByText("Long Doc")[0]);
 
@@ -118,7 +114,7 @@ describe("DocumentsTab", () => {
 
   it("deletes document via confirmation dialog", async () => {
     const user = userEvent.setup();
-    render(<DocumentsTab knowledgeBaseId="kb-1" />);
+    render(<ConnectorDocumentsTable connectorId="connector-1" />);
 
     await user.click(screen.getAllByLabelText("Delete")[0]);
 
@@ -130,7 +126,7 @@ describe("DocumentsTab", () => {
 
     await waitFor(() => {
       expect(mockDeleteMutateAsync).toHaveBeenCalledWith({
-        knowledgeBaseId: "kb-1",
+        connectorId: "connector-1",
         docId: "doc-1",
       });
     });

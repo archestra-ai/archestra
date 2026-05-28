@@ -193,9 +193,6 @@ function KnowledgeBasesList() {
         <DataTable
           columns={columns}
           data={items}
-          onRowClick={(row) =>
-            router.push(`/knowledge/knowledge-bases/${row.id}`)
-          }
           renderSubComponent={({ row }) => (
             <ExpandedConnectors knowledgeBaseId={row.original.id} />
           )}

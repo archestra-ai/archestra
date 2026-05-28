@@ -18,6 +18,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { ConnectorDocumentsTable } from "@/app/knowledge/connectors/_parts/connector-documents-table";
 import { ConnectorRunDetailsDialog } from "@/app/knowledge/connectors/_parts/connector-run-details-dialog";
 import { ConnectorStatusDot } from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
@@ -372,6 +373,12 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
             <KnowledgeBasesMetadataItem connectorId={connectorId} />
           </div>
         </div>
+
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold">Documents</h2>
+          <ConnectorDocumentsTable connectorId={connectorId} />
+        </div>
+
         <h2 className="text-lg font-semibold">Sync Runs</h2>
 
         <LoadingWrapper

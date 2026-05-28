@@ -11,7 +11,6 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { CreateConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/create-connector-dialog";
-import { DocumentsTab } from "@/app/knowledge/knowledge-bases/[id]/_parts/documents-tab";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
@@ -278,7 +277,6 @@ function KnowledgeBaseDetail({ id }: { id: string }) {
         >
           <TabsList>
             <TabsTrigger value="connectors">Connectors</TabsTrigger>
-            <TabsTrigger value="documents">Documents</TabsTrigger>
           </TabsList>
 
           <TabsContent value="connectors" className="space-y-4">
@@ -310,10 +308,6 @@ function KnowledgeBaseDetail({ id }: { id: string }) {
                 />
               )}
             </LoadingWrapper>
-          </TabsContent>
-
-          <TabsContent value="documents">
-            <DocumentsTab knowledgeBaseId={id} />
           </TabsContent>
         </Tabs>
 

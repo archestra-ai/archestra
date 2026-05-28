@@ -13,33 +13,27 @@ import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
-import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
-import { useConnectors } from "@/lib/knowledge/connector.query";
 import {
   type KnowledgeBaseDocumentListItem,
-  useDeleteKnowledgeBaseDocument,
-  useKnowledgeBaseDocument,
-  useKnowledgeBaseDocuments,
+  useConnectorDocument,
+  useConnectorDocuments,
+  useDeleteConnectorDocument,
 } from "@/lib/knowledge/kb-document.query";
 import { formatDate } from "@/lib/utils";
-import { ConnectorTypeIcon } from "../../_parts/connector-icons";
 
 type PaginationMeta =
-  archestraApiTypes.GetKnowledgeBaseDocumentsResponses["200"]["pagination"];
+  archestraApiTypes.GetConnectorDocumentsResponses["200"]["pagination"];
 
 const DEFAULT_DOCUMENT_PAGE_SIZE = 10;
 const MAX_PREVIEW_CHARS = 20_000;
 
-export function DocumentsTab({ knowledgeBaseId }: { knowledgeBaseId: string }) {
+export function ConnectorDocumentsTable({
+  connectorId,
+}: {
+  connectorId: string;
+}) {
   const {
     searchParams,
     pageIndex,
@@ -49,15 +43,14 @@ export function DocumentsTab({ knowledgeBaseId }: { knowledgeBaseId: string }) {
     updateQueryParams,
   } = useDataTableQueryParams({ defaultPageSize: DEFAULT_DOCUMENT_PAGE_SIZE });
   const search = searchParams.get("search") ?? "";
-  const connectorIdParam = searchParams.get("connectorId");
 
   const [selectedPreviewDoc, setSelectedPreviewDoc] =
     useState<KnowledgeBaseDocumentListItem | null>(null);
   const [deletingDoc, setDeletingDoc] =
     useState<KnowledgeBaseDocumentListItem | null>(null);
 
-  const { data: previewDocDetail } = useKnowledgeBaseDocument({
-    knowledgeBaseId,
+  const { data: previewDocDetail } = useConnectorDocument({
+    connectorId,
     docId: selectedPreviewDoc?.id ?? "",
     enabled: selectedPreviewDoc !== null,
   });
@@ -66,14 +59,13 @@ export function DocumentsTab({ knowledgeBaseId }: { knowledgeBaseId: string }) {
     data: documentsResponse,
     isPending,
     isError,
-  } = useKnowledgeBaseDocuments({
-    knowledgeBaseId,
+  } = useConnectorDocuments({
+    connectorId,
     limit: pageSize,
     offset,
     search,
-    connectorId: connectorIdParam || undefined,
   });
-  const deleteDocumentMutation = useDeleteKnowledgeBaseDocument();
+  const deleteDocumentMutation = useDeleteConnectorDocument();
 
   const hasLoadError = isError;
 
@@ -81,8 +73,6 @@ export function DocumentsTab({ knowledgeBaseId }: { knowledgeBaseId: string }) {
   const paginationMeta: PaginationMeta | null =
     documentsResponse?.pagination ?? null;
   const totalDocuments = paginationMeta?.total ?? 0;
-
-  const { data: connectors } = useConnectors(knowledgeBaseId);
 
   const columns = useMemo<ColumnDef<KnowledgeBaseDocumentListItem>[]>(
     () => [
@@ -129,23 +119,6 @@ export function DocumentsTab({ knowledgeBaseId }: { knowledgeBaseId: string }) {
           ) : (
             <span className="text-sm text-muted-foreground">-</span>
           ),
-      },
-      {
-        id: "connectorType",
-        accessorKey: "connectorType",
-        header: "Connector",
-        cell: ({ row }) => (
-          <Badge
-            variant="outline"
-            className="flex w-fit items-center gap-1.5 px-2 py-0.5"
-          >
-            <ConnectorTypeIcon
-              type={row.original.connectorType}
-              className="h-3.5 w-3.5 shrink-0"
-            />
-            <span className="capitalize">{row.original.connectorType}</span>
-          </Badge>
-        ),
       },
       {
         id: "updatedAt",
@@ -201,27 +174,6 @@ export function DocumentsTab({ knowledgeBaseId }: { knowledgeBaseId: string }) {
               })
             }
           />
-          <Select
-            value={searchParams.get("connectorId") || "all"}
-            onValueChange={(val: string) =>
-              updateQueryParams({
-                connectorId: val === "all" ? null : val,
-                page: "1",
-              })
-            }
-          >
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="All Connectors" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Connectors</SelectItem>
-              {connectors?.map((conn) => (
-                <SelectItem key={conn.id} value={conn.id}>
-                  {conn.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
       </div>
 
@@ -236,13 +188,10 @@ export function DocumentsTab({ knowledgeBaseId }: { knowledgeBaseId: string }) {
           total: totalDocuments,
         }}
         onPaginationChange={setPagination}
-        hasActiveFilters={
-          Boolean(search) || Boolean(searchParams.get("connectorId"))
-        }
+        hasActiveFilters={Boolean(search)}
         onClearFilters={() =>
           updateQueryParams({
             search: null,
-            connectorId: null,
             page: "1",
           })
         }
@@ -291,12 +240,12 @@ export function DocumentsTab({ knowledgeBaseId }: { knowledgeBaseId: string }) {
           if (!open) setDeletingDoc(null);
         }}
         title="Delete Document"
-        description="Are you sure you want to delete this document from the knowledge base? It may return on a future connector re-sync."
+        description="Are you sure you want to delete this document from the connector? It may return on a future connector re-sync."
         isPending={deleteDocumentMutation.isPending}
         onConfirm={async () => {
           if (!deletingDoc) return;
           const result = await deleteDocumentMutation.mutateAsync({
-            knowledgeBaseId,
+            connectorId,
             docId: deletingDoc.id,
           });
           if (result) {

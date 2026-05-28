@@ -297,10 +297,11 @@ Example advanced config:
 
 ## Managing Connectors
 
-Connectors can be managed from either the **Connectors** page or a Knowledge Base's detail page. After creation you can:
+Connectors can be managed from the **Connectors** page. Open a connector to:
 
 - **Toggle enabled/disabled** -- suspends or resumes the cron schedule
 - **Trigger sync** -- runs an immediate sync outside the schedule
+- **View indexed documents** -- search and page through the documents produced by that connector, preview source content, and delete documents that should be removed before the next sync
 - **View runs** -- see sync history with status, document counts, and errors
 
 ## Adding New Connector Types

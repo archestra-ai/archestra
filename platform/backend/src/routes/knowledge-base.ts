@@ -732,6 +732,122 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.get(
+    "/api/connectors/:id/documents",
+    {
+      schema: {
+        operationId: RouteId.GetConnectorDocuments,
+        description: "List documents for a connector",
+        tags: ["Connectors"],
+        params: z.object({ id: z.uuid() }),
+        querystring: PaginationQuerySchema.extend({
+          search: z.string().optional(),
+        }),
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(KnowledgeBaseDocumentListItemSchema),
+        ),
+      },
+    },
+    async (
+      {
+        params: { id },
+        query: { limit, offset, search },
+        organizationId,
+        user,
+      },
+      reply,
+    ) => {
+      await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
+
+      const [data, total] = await Promise.all([
+        KbDocumentModel.findListItemsByConnector({
+          connectorId: id,
+          organizationId,
+          limit,
+          offset,
+          search,
+        }),
+        KbDocumentModel.countByConnectorWithSearch({
+          connectorId: id,
+          organizationId,
+          search,
+        }),
+      ]);
+
+      return reply.send({
+        data,
+        pagination: calculatePaginationMeta(total, { limit, offset }),
+      });
+    },
+  );
+
+  fastify.get(
+    "/api/connectors/:id/documents/:docId",
+    {
+      schema: {
+        operationId: RouteId.GetConnectorDocument,
+        description: "Get a single connector document",
+        tags: ["Connectors"],
+        params: z.object({ id: z.uuid(), docId: z.uuid() }),
+        response: constructResponseSchema(KnowledgeBaseDocumentDetailSchema),
+      },
+    },
+    async ({ params: { id, docId }, organizationId, user }, reply) => {
+      await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
+
+      const existing = await KbDocumentModel.findListItemByIdAndConnector({
+        documentId: docId,
+        connectorId: id,
+        organizationId,
+      });
+      if (!existing) {
+        throw new ApiError(404, "Document not found");
+      }
+
+      return reply.send(existing);
+    },
+  );
+
+  fastify.delete(
+    "/api/connectors/:id/documents/:docId",
+    {
+      schema: {
+        operationId: RouteId.DeleteConnectorDocument,
+        description: "Delete a connector document",
+        tags: ["Connectors"],
+        params: z.object({ id: z.uuid(), docId: z.uuid() }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { id, docId }, organizationId, user }, reply) => {
+      await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
+
+      const existing = await KbDocumentModel.findListItemByIdAndConnector({
+        documentId: docId,
+        connectorId: id,
+        organizationId,
+      });
+      if (!existing) {
+        throw new ApiError(404, "Document not found");
+      }
+
+      await KbDocumentModel.delete(docId);
+      return reply.send({ success: true });
+    },
+  );
+
   fastify.put(
     "/api/connectors/:id",
     {

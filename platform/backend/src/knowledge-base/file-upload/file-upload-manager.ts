@@ -101,7 +101,6 @@ class FileUploadManager {
       connectorType: "file_upload",
       config: { type: "file_upload" },
       secretId: null,
-      schedule: "0 */6 * * *",
       enabled: false,
     });
 

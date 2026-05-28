@@ -1,6 +1,7 @@
 import { DEFAULT_APP_NAME, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import logger from "@/logging";
 import { OrganizationModel, SkillModel, SkillShareLinkModel } from "@/models";
 import { marketplaceMaterializer } from "@/skills/marketplace";
@@ -68,7 +69,9 @@ const skillShareRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(ListSkillShareLinksResponseSchema),
       },
     },
-    async ({ query, organizationId }, reply) => {
+    async ({ query, organizationId, user }, reply) => {
+      await requireSkillAdmin({ userId: user.id, organizationId });
+
       const links = await SkillShareLinkModel.listByOrganization({
         organizationId,
         skillId: query.skillId,
@@ -94,6 +97,7 @@ const skillShareRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { body, organizationId, user } = request;
+      await requireSkillAdmin({ userId: user.id, organizationId });
 
       await assertSkillsBelongToOrg({
         skillIds: body.skillIds,
@@ -157,6 +161,8 @@ const skillShareRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, organizationId, user }, reply) => {
+      await requireSkillAdmin({ userId: user.id, organizationId });
+
       const existing = await SkillShareLinkModel.findById(id);
       if (!existing || existing.organizationId !== organizationId) {
         throw new ApiError(404, "Skill share link not found");
@@ -189,6 +195,19 @@ const skillShareRoutes: FastifyPluginAsyncZod = async (fastify) => {
 export default skillShareRoutes;
 
 // ===== Internal helpers =====
+
+async function requireSkillAdmin(params: {
+  userId: string;
+  organizationId: string;
+}): Promise<void> {
+  const checker = await getSkillPermissionChecker(params);
+  if (!checker.isAdmin) {
+    throw new ApiError(
+      403,
+      "Only users with skill:admin can manage skill share links",
+    );
+  }
+}
 
 async function assertSkillsBelongToOrg(params: {
   skillIds: string[];

@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { promises as fs } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -229,22 +229,13 @@ describe.skipIf(!GIT_HTTP_BACKEND_AVAILABLE)(
 
       const cloneUrl = `${baseUrl}/skills/m/${rawToken}/repo.git`;
       const target = path.join(cloneDir, "out");
-      // spawnSync blocks the vitest worker thread, so vitest's testTimeout
-      // cannot interrupt it. cap the child explicitly so a stalled clone
-      // surfaces as a test failure instead of an indefinite worker hang.
-      const result = spawnSync("git", ["clone", "--quiet", cloneUrl, target], {
-        env: {
-          ...process.env,
-          // disable any system-wide credential helpers that might prompt
-          GIT_TERMINAL_PROMPT: "0",
-        },
-        timeout: 20_000,
-        killSignal: "SIGKILL",
-      });
-      if (result.status !== 0) {
-        const signalNote = result.signal ? ` (killed by ${result.signal})` : "";
+      // must be async spawn — spawnSync blocks the event loop in this same
+      // process, which prevents the in-process Fastify server from servicing
+      // the incoming git request and deadlocks the test.
+      const result = await runGitClone(cloneUrl, target);
+      if (result.code !== 0) {
         throw new Error(
-          `git clone failed (${result.status})${signalNote}: ${result.stderr?.toString() ?? ""}`,
+          `git clone failed (${result.code}, signal=${result.signal ?? "none"}): ${result.stderr}`,
         );
       }
 
@@ -294,3 +285,32 @@ describe.skipIf(!GIT_HTTP_BACKEND_AVAILABLE)(
     }, 30_000);
   },
 );
+
+async function runGitClone(
+  cloneUrl: string,
+  target: string,
+): Promise<{
+  code: number | null;
+  signal: NodeJS.Signals | null;
+  stderr: string;
+}> {
+  return new Promise((resolve) => {
+    const child = spawn("git", ["clone", "--quiet", cloneUrl, target], {
+      env: {
+        ...process.env,
+        GIT_TERMINAL_PROMPT: "0",
+      },
+    });
+    let stderr = "";
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    const killTimer = setTimeout(() => {
+      child.kill("SIGKILL");
+    }, 20_000);
+    child.once("close", (code, signal) => {
+      clearTimeout(killTimer);
+      resolve({ code, signal, stderr });
+    });
+  });
+}

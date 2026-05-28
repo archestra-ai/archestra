@@ -1,0 +1,87 @@
+{{- if .Values.networkPolicy.create }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "archestra-dagger-runtime.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "archestra-dagger-runtime.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "archestra-dagger-runtime.engineSelectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  {{- if or .Values.networkPolicy.ingress.allowedClients .Values.networkPolicy.ingress.additionalRules }}
+  ingress:
+    {{- if .Values.networkPolicy.ingress.allowedClients }}
+    - from:
+        {{- range .Values.networkPolicy.ingress.allowedClients }}
+        - namespaceSelector:
+            {{- with .namespace }}
+            matchLabels:
+              kubernetes.io/metadata.name: {{ . | quote }}
+            {{- else }}
+            {}
+            {{- end }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .podLabels | nindent 14 }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.port }}
+    {{- end }}
+    {{- with .Values.networkPolicy.ingress.additionalRules }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- else }}
+  ingress: []
+  {{- end }}
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.egress.dns.namespace | quote }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.egress.dns.podLabels | nindent 14 }}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+              - 100.64.0.0/10
+              - 127.0.0.0/8
+              - 0.0.0.0/32
+              {{- range .Values.networkPolicy.egress.additionalDeniedCidrs }}
+              - {{ . }}
+              {{- end }}
+      ports:
+        - protocol: TCP
+          port: 443
+    {{- if .Values.networkPolicy.egress.allowIpv6 }}
+    - to:
+        - ipBlock:
+            cidr: ::/0
+            except:
+              - ::1/128
+              - fc00::/7
+              - fe80::/10
+      ports:
+        - protocol: TCP
+          port: 443
+    {{- end }}
+    {{- with .Values.networkPolicy.egress.additionalRules }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}

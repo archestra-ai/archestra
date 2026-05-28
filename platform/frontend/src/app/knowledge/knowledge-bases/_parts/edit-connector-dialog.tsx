@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { useUpdateConnector } from "@/lib/knowledge/connector.query";
 import {
   ConnectorAdvancedConfigFields,
@@ -109,13 +110,19 @@ export function EditConnectorDialog({
 
   const needsEmail = connectorNeedsEmail(connectorType);
   const isCloud = form.watch("config.isCloud") as boolean | undefined;
+  const authMethod = form.watch("config.authMethod") as string | undefined;
   const emailRequired = needsEmail && isCloud !== false;
-  const { apiTokenHelpText, apiTokenLabel, apiTokenPlaceholder } =
-    getConnectorCredentialConfig({
-      type: connectorType,
-      emailRequired,
-      mode: "edit",
-    });
+  const {
+    apiTokenHelpText,
+    apiTokenLabel,
+    apiTokenMultiline,
+    apiTokenPlaceholder,
+  } = getConnectorCredentialConfig({
+    type: connectorType,
+    emailRequired,
+    mode: "edit",
+    authMethod,
+  });
 
   const handleSubmit = async (values: EditConnectorFormValues) => {
     const hasCredentials = values.apiToken.length > 0;
@@ -296,14 +303,25 @@ export function EditConnectorDialog({
                   <FormItem>
                     <FormLabel>{apiTokenLabel}</FormLabel>
                     <FormControl>
-                      <Input
-                        type="password"
-                        placeholder={apiTokenPlaceholder}
-                        autoComplete="new-password"
-                        data-1p-ignore
-                        data-lpignore="true"
-                        {...field}
-                      />
+                      {apiTokenMultiline ? (
+                        <Textarea
+                          placeholder={apiTokenPlaceholder}
+                          rows={5}
+                          autoComplete="new-password"
+                          data-1p-ignore
+                          data-lpignore="true"
+                          {...field}
+                        />
+                      ) : (
+                        <Input
+                          type="password"
+                          placeholder={apiTokenPlaceholder}
+                          autoComplete="new-password"
+                          data-1p-ignore
+                          data-lpignore="true"
+                          {...field}
+                        />
+                      )}
                     </FormControl>
                     <FormDescription>
                       Leave empty to keep existing credentials unchanged.

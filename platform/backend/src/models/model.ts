@@ -1,5 +1,14 @@
 import type { SupportedProvider } from "@shared";
-import { and, eq, ilike, inArray, notInArray, or, sql } from "drizzle-orm";
+import {
+  and,
+  count,
+  eq,
+  ilike,
+  inArray,
+  notInArray,
+  or,
+  sql,
+} from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type {
@@ -628,6 +637,49 @@ class ModelModel {
     }
 
     return true;
+  }
+
+  static async countAll(): Promise<number> {
+    const [row] = await db.select({ c: count() }).from(schema.modelsTable);
+    return Number(row?.c ?? 0);
+  }
+
+  /**
+   * Snapshot for audit logs (global model row — `organizationId` is unused).
+   */
+  // Globally scoped audit snapshot: LLM model catalog entries are platform-wide;
+  // the modelsTable has no organizationId column, and the admin-only route
+  // handler is likewise unscoped. Intentional match.
+  static async findByIdForAudit(
+    id: string,
+    _organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const row = await ModelModel.findById(id);
+    if (!row) return null;
+
+    const caps = ModelModel.toCapabilities(row);
+    return {
+      id: row.id,
+      modelId: row.modelId,
+      provider: row.provider,
+      description: row.description ?? null,
+      ignored: row.ignored,
+      embeddingDimensions: row.embeddingDimensions,
+      discoveredViaLlmProxy: row.discoveredViaLlmProxy,
+      contextLength: caps.contextLength,
+      pricePerMillionInput: caps.pricePerMillionInput,
+      pricePerMillionOutput: caps.pricePerMillionOutput,
+      isCustomPrice: caps.isCustomPrice,
+      priceSource: caps.priceSource,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  }
+
+  static async snapshotModelCatalogForAudit(): Promise<
+    Record<string, unknown>
+  > {
+    return { llmModelRowCount: await ModelModel.countAll() };
   }
 }
 

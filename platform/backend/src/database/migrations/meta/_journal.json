@@ -1751,6 +1751,69 @@
       "when": 1779376560111,
       "tag": "0249_eminent_toad",
       "breakpoints": true
+    },
+    {
+      "idx": 250,
+      "version": "7",
+      "when": 1779469676725,
+      "tag": "0250_backfill-skill-permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 251,
+      "version": "7",
+      "when": 1779690347135,
+      "tag": "0251_closed_tarantula",
+      "breakpoints": true
+    },
+    {
+      "idx": 252,
+      "version": "7",
+      "when": 1779702877983,
+      "tag": "0252_round_the_twelve",
+      "breakpoints": true
+    },
+    {
+      "idx": 253,
+      "version": "7",
+      "when": 1779870185058,
+      "tag": "0253_rename-github-repository-files-flag",
+      "breakpoints": true
+    },
+    {
+      "idx": 254,
+      "version": "7",
+      "when": 1779807387011,
+      "tag": "0254_black_skin",
+      "breakpoints": true
+    },
+    {
+      "idx": 255,
+      "version": "7",
+      "when": 1779899471178,
+      "tag": "0255_ambiguous_omega_sentinel",
+      "breakpoints": true
+    },
+    {
+      "idx": 256,
+      "version": "7",
+      "when": 1779944476369,
+      "tag": "0256_rename_chat_attachments_to_conversation_attachments",
+      "breakpoints": true
+    },
+    {
+      "idx": 257,
+      "version": "7",
+      "when": 1779957730121,
+      "tag": "0257_stale_starfox",
+      "breakpoints": true
+    },
+    {
+      "idx": 258,
+      "version": "7",
+      "when": 1779975331173,
+      "tag": "0258_powerful_colonel_america",
+      "breakpoints": true
     }
   ]
 }

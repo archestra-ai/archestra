@@ -282,7 +282,7 @@ You can generate an API key from the [OpenRouter dashboard](https://openrouter.a
 
 OpenRouter exposes `:free` model variants that cost nothing. An OpenRouter API key is still required to use them, but OpenRouter doesn't charge for requests that route to free models. Model providers may use the data from free model requests to improve their models, so it may be not suitable for sensitive data.
 
-**Free Models Router** (`openrouter/free`) is OpenRouter's [built-in router](https://openrouter.ai/openrouter/free) that picks a free model per request, filtering for the features the request needs (tool calling, structured outputs, image input). 
+**Free Models Router** (`openrouter/free`) is OpenRouter's [built-in router](https://openrouter.ai/openrouter/free) that picks a free model per request, filtering for the features the request needs (tool calling, structured outputs, image input).
 
 When an OpenRouter key is added to an organization that has no default model configured, Archestra sets the Free Models Router as the organization default, giving a zero-cost starting point. An explicitly chosen default is never overridden.
 

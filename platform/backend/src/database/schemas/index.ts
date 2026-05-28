@@ -1,3 +1,43 @@
+/**
+ * SQL table names use plural snake_case (`agents`, `mcp_servers`, `conversations`).
+ * File names stay singular kebab-case (`mcp-server.ts`); TS exports below are
+ * always `${plural}Table` regardless of the underlying SQL name.
+ *
+ * Two singular-name exceptions exist:
+ *
+ * 1. Library-owned (permanent — better-auth defines these, do not rename):
+ *      account, apikey, invitation, jwks, member, organization, session, team,
+ *      team_member, two_factor, user, verification,
+ *      oauth_access_token, oauth_client, oauth_consent, oauth_refresh_token
+ *
+ * 2. Status-quo drift (app-code singular names predating this policy — eligible
+ *    to be renamed to plural in future migrations):
+ *      a2a_context, a2a_message, a2a_task, a2a_task_approval_request,
+ *      agent_connector_assignment, agent_knowledge_base, agent_team,
+ *      chatops_channel_binding, chatops_processed_message,
+ *      chatops_thread_agent_override,
+ *      conversation_share_team, conversation_share_user,
+ *      identity_provider, incoming_email_subscription, internal_mcp_catalog,
+ *      knowledge_base_connector_assignment, limit_model_usage,
+ *      mcp_catalog_team, mcp_preset_entry, mcp_server,
+ *      mcp_server_installation_request, mcp_server_user,
+ *      organization_role, processed_email, secret,
+ *      site_notification, skill_team,
+ *      team_external_group, team_token, team_vault_folder, user_token,
+ *      virtual_api_key_provider_api_key, virtual_api_key_team
+ *
+ * New tables must be plural. Tables not listed in (1) or (2) must be plural.
+ *
+ * Prefix guidance (judgment-based, not lint-enforced): a table scoped to a
+ * single conversation should use the `conversation_` prefix so it sits with
+ * its siblings (`conversation_compactions`, `conversation_enabled_tools`,
+ * `conversation_shares`, `conversation_attachments`). Reserve `chat_` for
+ * feature/runtime concerns, not durable conversation children. A
+ * `conversation_id` column is a strong signal but not a law — two standing
+ * exceptions carry `conversation_id` without the prefix:
+ *   - messages — a top-level entity named for itself, not a conversation child
+ *   - chat_active_runs — ephemeral run state predating this guidance
+ */
 export { default as a2aContextsTable } from "./a2a-context";
 export { default as a2aMessagesTable } from "./a2a-message";
 export { default as a2aTasksTable } from "./a2a-task";
@@ -11,12 +51,18 @@ export { default as agentSuggestedPromptsTable } from "./agent-suggested-prompt"
 export { default as agentTeamsTable } from "./agent-team";
 export { default as agentToolsTable } from "./agent-tool";
 export { default as apikeysTable } from "./api-key";
+export { default as auditLogsTable } from "./audit-log";
 export { default as browserTabStatesTable } from "./browser-tab-state";
+export {
+  chatActiveRunEventsTable,
+  chatActiveRunsTable,
+} from "./chat-active-run";
 export { default as chatopsChannelBindingsTable } from "./chatops-channel-binding";
 export { default as chatopsProcessedMessagesTable } from "./chatops-processed-message";
 export { default as chatopsThreadAgentOverrideTable } from "./chatops-thread-agent-override";
 export { default as connectorRunsTable } from "./connector-run";
 export { default as conversationsTable } from "./conversation";
+export { default as conversationAttachmentsTable } from "./conversation-attachment";
 export { default as conversationChatErrorsTable } from "./conversation-chat-error";
 export { default as conversationCompactionsTable } from "./conversation-compaction";
 export { default as conversationEnabledToolsTable } from "./conversation-enabled-tool";
@@ -68,8 +114,14 @@ export { default as scheduleTriggersTable } from "./schedule-trigger";
 export { default as scheduleTriggerRunsTable } from "./schedule-trigger-run";
 export { default as secretsTable } from "./secret";
 export { default as sessionsTable } from "./session";
+export { default as siteNotificationsTable } from "./site-notification";
 export { default as skillsTable } from "./skill";
 export { default as skillFilesTable } from "./skill-file";
+export {
+  default as skillShareLinksTable,
+  skillShareLinkSkillsTable,
+} from "./skill-share-link";
+export { default as skillShareLinkRevisionsTable } from "./skill-share-link-revision";
 export { default as skillTeamsTable } from "./skill-team";
 export { default as tasksTable } from "./task";
 export { team as teamsTable, teamMember as teamMembersTable } from "./team";

@@ -613,6 +613,28 @@ class VirtualApiKeyModel {
     return rows.map((row) => row.teamId);
   }
 
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const row = await VirtualApiKeyModel.findById(id);
+    if (!row || row.organizationId !== organizationId) return null;
+
+    const teamIds = await VirtualApiKeyModel.getTeamIdsForVirtualApiKey(id);
+
+    return {
+      id: row.id,
+      organizationId: row.organizationId,
+      name: row.name,
+      scope: row.scope,
+      authorId: row.authorId,
+      teamIds: [...teamIds].sort(),
+      tokenStart: row.tokenStart,
+      expiresAt: row.expiresAt?.toISOString() ?? null,
+      createdAt: row.createdAt.toISOString(),
+    };
+  }
+
   static async getVisibilityForVirtualApiKeyIds(
     virtualApiKeyIds: string[],
   ): Promise<{

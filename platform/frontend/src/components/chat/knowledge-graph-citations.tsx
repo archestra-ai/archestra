@@ -7,6 +7,10 @@ import {
 import { ChevronDown, ChevronUp, ExternalLink, FileText } from "lucide-react";
 import { useState } from "react";
 import {
+  KnowledgeFileViewerDialog,
+  type KnowledgeFileViewerFile,
+} from "@/app/knowledge/files/_parts/knowledge-file-viewer-dialog";
+import {
   ConnectorTypeIcon,
   hasConnectorIcon,
 } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
@@ -27,6 +31,8 @@ export interface ExtractedCitation {
   sourceUrl: string | null;
   connectorType: string | null;
   documentId: string;
+  sourceId: string | null;
+  knowledgeFileId: string | null;
 }
 
 export function extractCitations(
@@ -49,6 +55,7 @@ export function extractCitations(
         sourceUrl?: string | null;
         connectorType?: string | null;
         documentId?: string;
+        sourceId?: string | null;
       };
     }> = [];
 
@@ -85,6 +92,9 @@ export function extractCitations(
         sourceUrl: c.sourceUrl ?? null,
         connectorType: c.connectorType ?? null,
         documentId: c.documentId,
+        sourceId: c.sourceId ?? null,
+        knowledgeFileId:
+          c.connectorType === "file_upload" && c.sourceId ? c.sourceId : null,
       });
     }
   }
@@ -107,7 +117,13 @@ export interface KnowledgeGraphCitationsProps {
 
 const VISIBLE_COUNT = 3;
 
-function CitationChip({ citation }: { citation: ExtractedCitation }) {
+function CitationChip({
+  citation,
+  onOpenKnowledgeFile,
+}: {
+  citation: ExtractedCitation;
+  onOpenKnowledgeFile: (file: KnowledgeFileViewerFile) => void;
+}) {
   const content = (
     <>
       <SourceIcon connectorType={citation.connectorType} />
@@ -119,6 +135,25 @@ function CitationChip({ citation }: { citation: ExtractedCitation }) {
       )}
     </>
   );
+
+  const knowledgeFileId = citation.knowledgeFileId;
+  if (knowledgeFileId) {
+    return (
+      <Button
+        type="button"
+        variant="ghost"
+        className="group h-auto max-w-[260px] justify-start gap-1.5 rounded-md border bg-card px-2 py-1.5 text-xs transition-colors hover:border-accent-foreground/20 hover:bg-accent"
+        onClick={() =>
+          onOpenKnowledgeFile({
+            id: knowledgeFileId,
+            originalName: citation.title,
+          })
+        }
+      >
+        {content}
+      </Button>
+    );
+  }
 
   if (citation.sourceUrl) {
     return (
@@ -144,6 +179,8 @@ export function KnowledgeGraphCitations({
   parts,
 }: KnowledgeGraphCitationsProps) {
   const [expanded, setExpanded] = useState(false);
+  const [viewingFile, setViewingFile] =
+    useState<KnowledgeFileViewerFile | null>(null);
   const citations = extractCitations(parts);
 
   if (citations.length === 0) return null;
@@ -161,7 +198,11 @@ export function KnowledgeGraphCitations({
       </p>
       <div className="flex flex-wrap items-center gap-1.5">
         {visibleCitations.map((citation) => (
-          <CitationChip key={citation.documentId} citation={citation} />
+          <CitationChip
+            key={citation.documentId}
+            citation={citation}
+            onOpenKnowledgeFile={setViewingFile}
+          />
         ))}
         {hasMore && (
           <Button
@@ -184,6 +225,13 @@ export function KnowledgeGraphCitations({
           </Button>
         )}
       </div>
+      {viewingFile && (
+        <KnowledgeFileViewerDialog
+          file={viewingFile}
+          open={!!viewingFile}
+          onOpenChange={(open) => !open && setViewingFile(null)}
+        />
+      )}
     </div>
   );
 }

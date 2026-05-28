@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import config from "@/config";
 import logger from "@/logging";
-import { wrapPoolWithRetry } from "./retry";
+import { installDbErrorSafetyNet, wrapPoolWithRetry } from "./retry";
 import * as schema from "./schemas";
 import {
   DATABASE_URL_VAULT_REF_ENV,
@@ -64,6 +64,7 @@ export async function initializeDatabase(): Promise<void> {
   });
 
   instrumentDrizzleClient(db, { dbSystem: "postgresql" });
+  installDbErrorSafetyNet();
   logger.info(
     { poolMax: config.database.poolMax },
     "Database connection pool initialized",

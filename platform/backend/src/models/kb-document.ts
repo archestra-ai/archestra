@@ -1,4 +1,4 @@
-import { and, count, desc, eq, ilike, inArray, sql } from "drizzle-orm";
+import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   AclEntry,
@@ -249,6 +249,26 @@ class KbDocumentModel {
         and(
           eq(schema.kbDocumentsTable.connectorId, params.connectorId),
           inArray(schema.kbDocumentsTable.sourceId, params.sourceIds),
+        ),
+      );
+  }
+
+  static async findByConnectorSourcePairs(
+    pairs: { connectorId: string; sourceId: string }[],
+  ): Promise<KbDocument[]> {
+    if (pairs.length === 0) return [];
+
+    return await db
+      .select()
+      .from(schema.kbDocumentsTable)
+      .where(
+        or(
+          ...pairs.map((pair) =>
+            and(
+              eq(schema.kbDocumentsTable.connectorId, pair.connectorId),
+              eq(schema.kbDocumentsTable.sourceId, pair.sourceId),
+            ),
+          ),
         ),
       );
   }

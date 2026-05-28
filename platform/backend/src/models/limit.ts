@@ -526,6 +526,118 @@ class LimitModel {
 
     return limits;
   }
+
+  // Org-scoped audit snapshot via the entity FK.  limitsTable has no
+  // organizationId column of its own, so tenancy is resolved through the
+  // entity that owns the limit (organization/team/agent/user/virtual_key).
+  //
+  // The route handler for PATCH/DELETE /api/limits/:id does not enforce this
+  // predicate today, but the audit fetcher must — the preHandler runs before
+  // route authz, so an unscoped fetch would write another tenant's limit row
+  // into the caller's audit_logs even when the route ultimately rejects the
+  // request.  Returns null whenever the limit does not belong to the caller's
+  // organization.
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select()
+      .from(schema.limitsTable)
+      .where(eq(schema.limitsTable.id, id))
+      .limit(1);
+
+    if (!row) return null;
+
+    const inOrg = await LimitModel.isEntityInOrganization(
+      row.entityType,
+      row.entityId,
+      organizationId,
+    );
+    if (!inOrg) return null;
+
+    return {
+      id: row.id,
+      entityType: row.entityType,
+      entityId: row.entityId,
+      limitType: row.limitType,
+      limitValue: row.limitValue,
+      mcpServerName: row.mcpServerName ?? null,
+      toolName: row.toolName ?? null,
+      model: row.model ?? null,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  }
+
+  /**
+   * Verify that a limit's entity (the row identified by `entityType` and
+   * `entityId`) belongs to `organizationId`.  Each entity type lives in a
+   * different table, so the FK path differs per branch.  Used by the
+   * snapshot-before-authz scope predicate in `findByIdForAudit`.
+   */
+  private static async isEntityInOrganization(
+    entityType: LimitEntityType,
+    entityId: string,
+    organizationId: string,
+  ): Promise<boolean> {
+    switch (entityType) {
+      case "organization":
+        return entityId === organizationId;
+      case "team": {
+        const [hit] = await db
+          .select({ id: schema.teamsTable.id })
+          .from(schema.teamsTable)
+          .where(
+            and(
+              eq(schema.teamsTable.id, entityId),
+              eq(schema.teamsTable.organizationId, organizationId),
+            ),
+          )
+          .limit(1);
+        return Boolean(hit);
+      }
+      case "agent": {
+        const [hit] = await db
+          .select({ id: schema.agentsTable.id })
+          .from(schema.agentsTable)
+          .where(
+            and(
+              eq(schema.agentsTable.id, entityId),
+              eq(schema.agentsTable.organizationId, organizationId),
+            ),
+          )
+          .limit(1);
+        return Boolean(hit);
+      }
+      case "user": {
+        const [hit] = await db
+          .select({ id: schema.membersTable.id })
+          .from(schema.membersTable)
+          .where(
+            and(
+              eq(schema.membersTable.userId, entityId),
+              eq(schema.membersTable.organizationId, organizationId),
+            ),
+          )
+          .limit(1);
+        return Boolean(hit);
+      }
+      case "virtual_key": {
+        const [hit] = await db
+          .select({ id: schema.virtualApiKeysTable.id })
+          .from(schema.virtualApiKeysTable)
+          .where(
+            and(
+              eq(schema.virtualApiKeysTable.id, entityId),
+              eq(schema.virtualApiKeysTable.organizationId, organizationId),
+            ),
+          )
+          .limit(1);
+        return Boolean(hit);
+      }
+    }
+  }
 }
 
 /**

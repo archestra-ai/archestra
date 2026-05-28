@@ -9,7 +9,7 @@ archestra:
   # We use the "generic" updater with inline annotation to preserve YAML comments throughout the file.
   # See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
   # See: https://github.com/googleapis/release-please/issues/2195
-  imageTag: "1.2.50" # x-release-please-version
+  imageTag: "1.2.52" # x-release-please-version
 
   # Image pull policy for the Archestra container
   # Options: Always, IfNotPresent, Never
@@ -167,6 +167,57 @@ archestra:
   #         optional: true
   envFrom: []
 
+  # code execution runtime configuration.
+  # enables the archestra__run_python tool and points the backend at a Dagger
+  # runtime pod. The Python execution image remains a backend default;
+  # override ARCHESTRA_CODE_RUNTIME_IMAGE through archestra.env only when required.
+  codeRuntime:
+    # enable or disable code execution runtime support.
+    enabled: false
+
+    # hard wall-clock limit per run, and the default when the caller omits one.
+    timeoutSeconds: 60
+
+    # maximum number of concurrent runs across all conversations per backend process.
+    maxConcurrent: 10
+
+    # stdout and stderr are each truncated to this many bytes.
+    maxOutputBytes: 65536
+
+    dagger:
+      # explicit Dagger runner host. Leave empty to use the kube-pod:// pod target below.
+      # supported schemes are kube-pod:// for the secure default and tcp:// for
+      # explicit advanced deployments that provide their own transport security.
+      runnerHost: ""
+
+      managed:
+        # deploy a Dagger Engine as part of this Helm release. When false, point
+        # dagger.pod at an externally deployed Dagger Engine pod instead.
+        enabled: false
+        serviceAccount:
+          # create a tokenless service account for the privileged engine pod.
+          create: true
+          automountServiceAccountToken: false
+          annotations: {}
+
+      pod:
+        # pod created by the managed Dagger subchart or companion chart.
+        name: dagger-runtime-engine-0
+        # leave empty to use the release namespace when managed.enabled=true,
+        # or the default external companion-chart namespace (`dagger`) otherwise.
+        namespace: ""
+        container: dagger-engine
+        # optional kube context for out-of-cluster clients. leave empty for in-cluster use.
+        context: ""
+
+      rbac:
+        # create a narrow Role/RoleBinding that lets the Archestra ServiceAccount
+        # exec into the Dagger Engine pod when using kube-pod://.
+        create: true
+        # defaults to dagger.pod.namespace. set explicitly when runnerHost points
+        # at a kube-pod:// URL whose namespace differs from dagger.pod.namespace.
+        namespace: ""
+
   # Additional volumes to mount into the platform and worker pods
   # Useful for mounting credential files such as a Vertex AI service account key
   # Example:
@@ -217,6 +268,26 @@ archestra:
       # cause). The setup-postgres-extensions init container uses the same budget.
       timeoutSeconds: 300
 
+    # Worker pods only: block startup until the web Deployment has applied
+    # database migrations. The web pod runs `pnpm db:migrate` before it starts
+    # listening on port 9000, so a successful TCP connect to the platform
+    # Service means the schema is ready. Without this gate the worker boots in
+    # parallel with migrations, queries tables that do not exist yet (e.g.
+    # "organization"), crashes, and only recovers on a pod restart.
+    #
+    # This is the gate for *fresh installs* (no previous web pods exist, so
+    # Service reachability is an accurate signal). *Upgrades* are covered by the
+    # pre-upgrade migration Job (see archestra.migrationJob), because during an
+    # upgrade the Service still routes to the previous revision's web pods.
+    #
+    # Disable this if migrations are applied out-of-band before the worker
+    # Deployment is rolled out.
+    waitForMigrations:
+      enabled: true
+      # Maximum seconds to wait for the web Deployment to finish migrations
+      # before the init container gives up and fails.
+      timeoutSeconds: 600
+
     # Vault secret injection init container
     # Similar to Vault Agent Injector (writes secrets to a shared volume) but:
     # - No extra infrastructure needed (no Vault Agent Injector deployment)
@@ -246,6 +317,33 @@ archestra:
 
     # Resource requests/limits applied to ALL init containers.
     # Required on clusters that enforce ResourceQuota (e.g., OpenShift restricted-v2 SCC).
+    resources: {}
+
+  # Database migration Job.
+  #
+  # Runs `pnpm db:migrate` as a Helm pre-upgrade hook so the target version's
+  # schema is applied before the web and worker Deployments roll. This closes
+  # the rolling-upgrade gap that the worker's wait-for-migrations init container
+  # cannot cover: during an upgrade the platform Service still routes to the
+  # previous revision's web pods, so a reachability check passes before the new
+  # migrations have run.
+  #
+  # Intentionally pre-upgrade only (not pre-install): on a fresh install the
+  # bundled PostgreSQL subchart does not exist yet when pre-install hooks run,
+  # so the Job would deadlock. Fresh installs are covered by the web pod running
+  # migrations on startup (the worker waits via the wait-for-migrations init
+  # container).
+  #
+  # Disable this if migrations are applied by an external pipeline.
+  migrationJob:
+    enabled: true
+    # Number of retries before the Job is marked failed (which aborts the
+    # `helm upgrade`).
+    backoffLimit: 3
+    # Hard cap on Job runtime. Set to null to disable the deadline.
+    activeDeadlineSeconds: 600
+    # Resource requests/limits for the migration container.
+    # If not set, inherits from archestra.resources.
     resources: {}
 
   # Resource requests and limits for the Archestra container
@@ -692,6 +790,64 @@ archestra:
         type: HTTP
         requestPath: /health
         port: 3000
+
+# dagger subchart values used only when archestra.codeRuntime.dagger.managed.enabled=true.
+# the Dagger Engine runs in the same namespace as the Archestra release so it can
+# be installed with the same `helm upgrade`.
+dagger:
+  fullnameOverride: dagger-runtime
+
+  engine:
+    kind: StatefulSet
+    # kube-pod:// uses kubectl exec + buildctl dial-stdio, so no TCP listener is
+    # needed by default. Set this to 1234 only when intentionally enabling the
+    # plaintext tcp:// transport through additional Service wiring.
+    port:
+
+    existingServiceAccount:
+      name: dagger-runtime
+
+    configJson: |
+      {
+        "logLevel": "info",
+        "security": {
+          "insecureRootCapabilities": false
+        },
+        "gc": {
+          "maxUsedSpace": "40GB",
+          "reservedSpace": "5GB",
+          "minFreeSpace": "20%"
+        }
+      }
+
+    resources:
+      requests:
+        cpu: "2"
+        memory: 8Gi
+      limits:
+        memory: 16Gi
+
+    statefulSet:
+      persistentVolumeClaim:
+        enabled: true
+        resources:
+          requests:
+            storage: 50Gi
+
+    hostPath:
+      dataVolume:
+        enabled: false
+      runVolume:
+        enabled: false
+
+    volumeMounts:
+      - name: run
+        mountPath: /run/dagger
+
+    volumes:
+      - name: run
+        emptyDir:
+          medium: Memory
 
 # PostgreSQL configuration
 postgresql:

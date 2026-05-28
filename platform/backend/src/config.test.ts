@@ -16,13 +16,19 @@ import config, {
   getOtelExporterOtlpLogEndpoint,
   getOtlpAuthHeaders,
   getTrustedOrigins,
+  parseActiveChatRunPollIntervalMs,
+  parseAuditLogRetentionDays,
+  parseBlobStorageProvider,
   parseBodyLimit,
+  parseCodeRuntimeDaggerRunnerHost,
   parseCommaSeparatedList,
   parseConnectorSyncMaxDuration,
   parseContentMaxLength,
   parseDatabasePoolMax,
   parseMetricsPort,
   parseProcessType,
+  parseS3BlobStorageAuthMethod,
+  parseS3BlobStorageBucket,
   parseSampleRate,
   parseTrustProxy,
   parseVirtualKeyDefaultExpiration,
@@ -900,6 +906,145 @@ describe("parseMetricsPort", () => {
   });
 });
 
+describe("parseActiveChatRunPollIntervalMs", () => {
+  test("returns default when value is missing", () => {
+    expect(
+      parseActiveChatRunPollIntervalMs({
+        value: undefined,
+        defaultValue: 500,
+        envName: "ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS",
+      }),
+    ).toBe(500);
+  });
+
+  test("returns default when value is empty", () => {
+    expect(
+      parseActiveChatRunPollIntervalMs({
+        value: "   ",
+        defaultValue: 500,
+        envName: "ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS",
+      }),
+    ).toBe(500);
+  });
+
+  test("parses a positive integer", () => {
+    expect(
+      parseActiveChatRunPollIntervalMs({
+        value: "1000",
+        defaultValue: 500,
+        envName: "ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS",
+      }),
+    ).toBe(1000);
+  });
+
+  test("returns default and warns for zero", () => {
+    expect(
+      parseActiveChatRunPollIntervalMs({
+        value: "0",
+        defaultValue: 500,
+        envName: "ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS",
+      }),
+    ).toBe(500);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS value "0", using default 500',
+    );
+  });
+
+  test("returns default and warns for negative values", () => {
+    expect(
+      parseActiveChatRunPollIntervalMs({
+        value: "-1",
+        defaultValue: 500,
+        envName: "ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS",
+      }),
+    ).toBe(500);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS value "-1", using default 500',
+    );
+  });
+
+  test("returns default and warns for non-numeric values", () => {
+    expect(
+      parseActiveChatRunPollIntervalMs({
+        value: "abc",
+        defaultValue: 500,
+        envName: "ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS",
+      }),
+    ).toBe(500);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS value "abc", using default 500',
+    );
+  });
+});
+
+describe("chat active run config", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    vi.resetModules();
+    process.env = { ...originalEnv };
+    process.env.ARCHESTRA_DATABASE_URL =
+      "postgresql://archestra:pass@localhost:5432/archestra";
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test("uses listen/notify by default", async () => {
+    delete process.env.ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS;
+    delete process.env.ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS;
+    delete process.env.ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED;
+    delete process.env.ARCHESTRA_CHAT_ACTIVE_RUN_NOTIFY_DATABASE_URL;
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.chat.activeRun).toMatchObject({
+      replayPollIntervalMs: 500,
+      stopPollIntervalMs: 30_000,
+      pollingCompatibilityEnabled: false,
+      notifyDatabaseUrl: "",
+    });
+  });
+
+  test("reads active run polling compatibility env vars", async () => {
+    process.env.ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS = "750";
+    process.env.ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS = "1250";
+    process.env.ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED =
+      "true";
+    process.env.ARCHESTRA_CHAT_ACTIVE_RUN_NOTIFY_DATABASE_URL =
+      " postgresql://notify:pass@localhost:5432/archestra ";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.chat.activeRun).toMatchObject({
+      replayPollIntervalMs: 750,
+      stopPollIntervalMs: 1250,
+      pollingCompatibilityEnabled: true,
+      notifyDatabaseUrl: "postgresql://notify:pass@localhost:5432/archestra",
+    });
+  });
+
+  test("keeps polling compatibility disabled for non-true values", async () => {
+    process.env.ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED =
+      "false";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.chat.activeRun.pollingCompatibilityEnabled).toBe(false);
+  });
+
+  test("uses short stop polling default in polling compatibility mode", async () => {
+    delete process.env.ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS;
+    process.env.ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED =
+      "true";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.chat.activeRun.stopPollIntervalMs).toBe(500);
+  });
+});
+
 describe("getCorsOrigins", () => {
   const originalEnv = process.env;
 
@@ -934,7 +1079,7 @@ describe("getCorsOrigins", () => {
     test("should return frontend URL when set", async () => {
       process.env.NODE_ENV = "production";
       process.env.ARCHESTRA_FRONTEND_URL = "https://app.example.com";
-      delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
+      process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS = "";
 
       const { getCorsOrigins: fn } = await import("./config");
       expect(fn()).toEqual(["https://app.example.com"]);
@@ -956,7 +1101,7 @@ describe("getCorsOrigins", () => {
     test("should add loopback equivalents for localhost origins", async () => {
       process.env.NODE_ENV = "production";
       process.env.ARCHESTRA_FRONTEND_URL = "http://localhost:3000";
-      delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
+      process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS = "";
 
       const { getCorsOrigins: fn } = await import("./config");
       const result = fn();
@@ -1051,6 +1196,63 @@ describe("parseConnectorSyncMaxDuration", () => {
   });
 });
 
+describe("parseBlobStorageProvider", () => {
+  test("defaults to database storage", () => {
+    expect(parseBlobStorageProvider(undefined)).toBe("db");
+    expect(parseBlobStorageProvider("")).toBe("db");
+  });
+
+  test("accepts s3 case-insensitively", () => {
+    expect(parseBlobStorageProvider("s3")).toBe("s3");
+    expect(parseBlobStorageProvider(" S3 ")).toBe("s3");
+  });
+
+  test("falls back to database storage for unsupported values", () => {
+    expect(parseBlobStorageProvider("gcs")).toBe("db");
+    expect(parseBlobStorageProvider("local")).toBe("db");
+  });
+});
+
+describe("parseS3BlobStorageAuthMethod", () => {
+  test("defaults to IRSA", () => {
+    expect(parseS3BlobStorageAuthMethod(undefined)).toBe("irsa");
+    expect(parseS3BlobStorageAuthMethod("")).toBe("irsa");
+  });
+
+  test("accepts static access key auth case-insensitively", () => {
+    expect(parseS3BlobStorageAuthMethod("static")).toBe("static");
+    expect(parseS3BlobStorageAuthMethod(" STATIC ")).toBe("static");
+  });
+
+  test("falls back to IRSA for unsupported values", () => {
+    expect(parseS3BlobStorageAuthMethod("iam-user")).toBe("irsa");
+    expect(parseS3BlobStorageAuthMethod("profile")).toBe("irsa");
+  });
+});
+
+describe("parseS3BlobStorageBucket", () => {
+  test("allows empty bucket when database storage is enabled", () => {
+    expect(parseS3BlobStorageBucket({ provider: "db", value: "" })).toBe("");
+  });
+
+  test("trims configured S3 bucket", () => {
+    expect(
+      parseS3BlobStorageBucket({
+        provider: "s3",
+        value: " archestra-files ",
+      }),
+    ).toBe("archestra-files");
+  });
+
+  test("requires bucket when S3 storage is enabled", () => {
+    expect(() =>
+      parseS3BlobStorageBucket({ provider: "s3", value: "" }),
+    ).toThrow(
+      "ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_BUCKET is required when S3 blob storage is enabled",
+    );
+  });
+});
+
 describe("parseProcessType", () => {
   test("should return 'all' when undefined", () => {
     expect(parseProcessType(undefined)).toBe("all");
@@ -1135,6 +1337,59 @@ describe("parseSampleRate", () => {
 
   test("should return default for non-numeric value", () => {
     expect(parseSampleRate("abc", 0.1)).toBe(0.1);
+  });
+});
+
+describe("parseCodeRuntimeDaggerRunnerHost", () => {
+  test("should return undefined when runtime is disabled and host is unset", () => {
+    expect(
+      parseCodeRuntimeDaggerRunnerHost({ enabled: false, envValue: undefined }),
+    ).toBeUndefined();
+  });
+
+  test("should not validate host while runtime is disabled", () => {
+    expect(
+      parseCodeRuntimeDaggerRunnerHost({
+        enabled: false,
+        envValue: "kube-pod://dagger-engine?namespace=dagger",
+      }),
+    ).toBe("kube-pod://dagger-engine?namespace=dagger");
+  });
+
+  test("should return undefined when runtime is enabled but host is unset", () => {
+    expect(
+      parseCodeRuntimeDaggerRunnerHost({ enabled: true, envValue: undefined }),
+    ).toBeUndefined();
+  });
+
+  test("should trim and return kube-pod runner host", () => {
+    expect(
+      parseCodeRuntimeDaggerRunnerHost({
+        enabled: true,
+        envValue:
+          " kube-pod://dagger-runtime-engine-0?namespace=dagger&container=dagger-engine ",
+      }),
+    ).toBe(
+      "kube-pod://dagger-runtime-engine-0?namespace=dagger&container=dagger-engine",
+    );
+  });
+
+  test("should trim and return TCP runner host", () => {
+    expect(
+      parseCodeRuntimeDaggerRunnerHost({
+        enabled: true,
+        envValue: " tcp://dagger-runtime.dagger.svc.cluster.local:1234 ",
+      }),
+    ).toBe("tcp://dagger-runtime.dagger.svc.cluster.local:1234");
+  });
+
+  test("should return undefined for unsupported runner hosts", () => {
+    expect(
+      parseCodeRuntimeDaggerRunnerHost({
+        enabled: true,
+        envValue: "unix:///run/dagger/engine.sock",
+      }),
+    ).toBeUndefined();
   });
 });
 
@@ -1312,5 +1567,38 @@ describe("getMCPGatewayOauthAllowedPublicHosts", () => {
     expect(getMCPGatewayOauthAllowedPublicHosts().has("api.example.com")).toBe(
       true,
     );
+  });
+});
+
+describe("parseAuditLogRetentionDays", () => {
+  test("returns 0 (disabled) when env var is not set", () => {
+    expect(parseAuditLogRetentionDays(undefined)).toBe(0);
+  });
+
+  test("returns 0 (disabled) when env var is empty string", () => {
+    expect(parseAuditLogRetentionDays("")).toBe(0);
+  });
+
+  test("returns 0 to keep the sweep disabled", () => {
+    expect(parseAuditLogRetentionDays("0")).toBe(0);
+  });
+
+  test("returns a valid positive integer (opt-in)", () => {
+    expect(parseAuditLogRetentionDays("90")).toBe(90);
+    expect(parseAuditLogRetentionDays("365")).toBe(365);
+  });
+
+  test("trims whitespace before parsing", () => {
+    expect(parseAuditLogRetentionDays("  30  ")).toBe(30);
+  });
+
+  test("returns default and warns on non-numeric value", () => {
+    expect(parseAuditLogRetentionDays("abc")).toBe(0);
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("abc"));
+  });
+
+  test("returns default and warns on negative value", () => {
+    expect(parseAuditLogRetentionDays("-1")).toBe(0);
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("-1"));
   });
 });

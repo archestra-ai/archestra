@@ -31,10 +31,12 @@ import { LOG_LEVEL } from "@/logging/log-level";
 // Import directly from files to avoid circular dependency through barrel export
 import AccountModel from "@/models/account";
 import AgentModel from "@/models/agent";
+import AuditLogModel from "@/models/audit-log";
 import InvitationModel from "@/models/invitation";
 import MemberModel from "@/models/member";
 import SessionModel from "@/models/session";
 import UserModel from "@/models/user";
+import type { AuditEventName } from "@/types/audit-log";
 import { linkedIdentityProviderPlugin } from "./linked-idp";
 
 const { ssoConfig, syncSsoRole, syncSsoTeams } = config.enterpriseFeatures.core
@@ -408,6 +410,107 @@ export const auth = betterAuth({
   },
 });
 
+// TEMPORARY DIAGNOSTIC — remove once the setup-teams 429 flake is resolved.
+// The e2e env sets ARCHESTRA_AUTH_RATE_LIMIT_DISABLED=true and the chart
+// renders it into the pod, yet better-auth's limiter still 429s sign-in under
+// CI parallelism. Log the runtime-effective flag so a CI pod log reveals
+// whether the disable actually takes effect at construction time, instead of
+// us deducing it from source. (better-auth derives rateLimit.enabled directly
+// from this, so the parsed flag is the decisive value.)
+logger.info(
+  {
+    rawEnv: process.env.ARCHESTRA_AUTH_RATE_LIMIT_DISABLED ?? null,
+    authRateLimitDisabled: config.authRateLimitDisabled,
+  },
+  "[auth-diagnostic] startup rate-limit config",
+);
+
+/**
+ * Per-request stashes used to ferry data from the `before` hook to the
+ * `after` hook (prior member role, removed-member identity, sign-out session).
+ *
+ * Keyed by the better-auth `Request`. We use WeakMap so that if the `after`
+ * hook never fires (client abort, throw inside better-auth, etc.) the stash
+ * is reclaimed once the request object is GC'd — no manual cleanup needed.
+ */
+
+type SignOutAuditStash = {
+  user: { id: string; email: string; name?: string | null };
+  session: { id: string; activeOrganizationId?: string | null };
+};
+
+const signOutAuditSessionByRequest = new WeakMap<Request, SignOutAuditStash>();
+
+type MemberRoleUpdateStash = {
+  memberId: string;
+  priorRole: string;
+};
+
+const memberRoleUpdateByRequest = new WeakMap<Request, MemberRoleUpdateStash>();
+
+type MemberRemoveStash = {
+  memberId: string;
+  organizationId: string;
+  role: string;
+  email: string;
+  name: string | null;
+};
+
+const memberRemoveByRequest = new WeakMap<Request, MemberRemoveStash>();
+
+function isAuthSignOutPath(path: string | undefined): boolean {
+  if (!path) return false;
+  const p = path.split("?")[0] ?? path;
+  if (p === "/sign-out" || p === "sign-out") return true;
+  if (p.endsWith("/sign-out")) return true;
+  if (p.includes("/sign-out/")) return true;
+  return false;
+}
+
+async function stashSignOutSessionForAudit(
+  ctx: HookEndpointContext,
+): Promise<void> {
+  const { path, request, context } = ctx;
+  if (!isAuthSignOutPath(path) || !request) return;
+
+  type SessionBundle = {
+    user: { id: string; email: string; name?: string | null };
+    session: { id: string; activeOrganizationId?: string | null };
+  };
+
+  const bundle = context?.session as Partial<SessionBundle> | undefined;
+  let user = bundle?.user;
+  let session = bundle?.session;
+
+  if (!user || !session) {
+    try {
+      const headers = new Headers(request.headers as HeadersInit);
+      const resolved = await auth.api.getSession({ headers });
+      if (resolved?.user && resolved?.session) {
+        user = resolved.user as SessionBundle["user"];
+        session = resolved.session as SessionBundle["session"];
+      }
+    } catch (err) {
+      logger.debug(
+        { err },
+        "[auth:audit] sign-out stash: getSession fallback failed",
+      );
+    }
+  }
+
+  if (!user || !session) return;
+  signOutAuditSessionByRequest.set(request, { user, session });
+}
+
+function consumeStashedSignOutSession(
+  request: Request | undefined,
+): SignOutAuditStash | undefined {
+  if (!request) return undefined;
+  const v = signOutAuditSessionByRequest.get(request);
+  if (v) signOutAuditSessionByRequest.delete(request);
+  return v;
+}
+
 function getBetterAuthLogLevel(
   logLevel: string,
 ): "debug" | "info" | "warn" | "error" | undefined {
@@ -512,12 +615,76 @@ function shouldTrustAllOriginsForIdentityProviderRegistration(
  */
 export async function handleBeforeHook(ctx: HookEndpointContext) {
   const { path, method, body } = ctx;
+  const beforeRequest = ctx.request as Request | undefined;
 
   if (!path) {
     return ctx;
   }
 
   logger.trace({ path, method }, "[auth:beforeHook] Processing auth request");
+
+  if (isAuthSignOutPath(path)) {
+    await stashSignOutSessionForAudit(ctx);
+  }
+
+  if (
+    path === "/organization/update-member" &&
+    method === "POST" &&
+    beforeRequest
+  ) {
+    const memberId = body.memberId as string | undefined;
+    if (memberId) {
+      const [existing] = await db
+        .select({ id: schema.membersTable.id, role: schema.membersTable.role })
+        .from(schema.membersTable)
+        .where(eq(schema.membersTable.id, memberId))
+        .limit(1);
+      if (existing) {
+        memberRoleUpdateByRequest.set(beforeRequest, {
+          memberId,
+          priorRole: existing.role,
+        });
+      }
+    }
+  }
+
+  if (
+    path === "/organization/remove-member" &&
+    method === "POST" &&
+    beforeRequest
+  ) {
+    const memberIdOrEmail = body.memberIdOrEmail as string | undefined;
+    if (memberIdOrEmail) {
+      const [existing] = await db
+        .select({
+          id: schema.membersTable.id,
+          organizationId: schema.membersTable.organizationId,
+          role: schema.membersTable.role,
+          email: schema.usersTable.email,
+          name: schema.usersTable.name,
+        })
+        .from(schema.membersTable)
+        .innerJoin(
+          schema.usersTable,
+          eq(schema.membersTable.userId, schema.usersTable.id),
+        )
+        .where(
+          memberIdOrEmail.includes("@")
+            ? eq(schema.usersTable.email, memberIdOrEmail)
+            : eq(schema.membersTable.id, memberIdOrEmail),
+        )
+        .limit(1);
+      if (existing) {
+        memberRemoveByRequest.set(beforeRequest, {
+          memberId: existing.id,
+          organizationId: existing.organizationId,
+          role: existing.role,
+          email: existing.email,
+          name: existing.name ?? null,
+        });
+      }
+    }
+  }
 
   // Block invitation creation when invitations are disabled
   if (path === "/organization/invite-member" && method === "POST") {
@@ -737,11 +904,262 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         { invitationId },
         "[auth:afterHook] Deleting canceled invitation",
       );
+      // Capture invitation data before deleting so we can audit it
+      let canceledInvitation:
+        | Awaited<ReturnType<typeof InvitationModel.getById>>
+        | undefined;
+      try {
+        canceledInvitation = await InvitationModel.getById(invitationId);
+      } catch (err) {
+        logger.debug(
+          { err },
+          "[auth:audit] cancel-invitation: failed to fetch invitation for audit",
+        );
+      }
       try {
         await InvitationModel.delete(invitationId);
         logger.info(`✅ Invitation ${invitationId} deleted from database`);
       } catch (error) {
         logger.error({ err: error }, "❌ Failed to delete invitation:");
+      }
+      if (canceledInvitation && request) {
+        try {
+          const headers = new Headers(request.headers as HeadersInit);
+          const resolved = await auth.api.getSession({ headers });
+          if (resolved?.user && resolved?.session) {
+            await AuditLogModel.create({
+              organizationId: canceledInvitation.organizationId,
+              actorId: resolved.user.id,
+              actorType: "user",
+              actorName: resolved.user.name ?? null,
+              actorEmail: resolved.user.email,
+              action: "invitation.deleted",
+              outcome: "success",
+              resourceType: "invitation",
+              resourceId: canceledInvitation.id,
+              before: {
+                email: canceledInvitation.email,
+                role: canceledInvitation.role ?? null,
+                status: canceledInvitation.status,
+              },
+              after: null,
+              httpMethod: "POST",
+              httpPath: path,
+              httpRoute: null,
+              httpStatus: null,
+              requestId: null,
+              sourceIp: resolveAuthClientIp(request),
+              userAgent: request.headers.get("user-agent") ?? null,
+              occurredAt: new Date(),
+            });
+          }
+        } catch (err) {
+          logger.error(
+            { err },
+            "[auth:audit] failed to write cancel-invitation audit row",
+          );
+        }
+      }
+    }
+  }
+
+  // Audit invitation sent
+  if (path === "/organization/invite-member" && method === "POST" && request) {
+    const email = body.email as string | undefined;
+    const role = body.role as string | undefined;
+    const orgId = body.organizationId as string | undefined;
+    if (email && orgId) {
+      try {
+        const headers = new Headers(request.headers as HeadersInit);
+        const resolved = await auth.api.getSession({ headers });
+        if (resolved?.user && resolved?.session) {
+          // Find the invitation that was just created so we have its id.
+          // The same email may have older canceled/expired rows, so narrow to
+          // the org + pending status and prefer the most recent.
+          const invitation = await InvitationModel.findByEmail(email).then(
+            (rows) =>
+              rows
+                .filter(
+                  (r) => r.organizationId === orgId && r.status === "pending",
+                )
+                .sort(
+                  (a, b) =>
+                    (b.createdAt?.getTime() ?? 0) -
+                    (a.createdAt?.getTime() ?? 0),
+                )[0] ?? null,
+          );
+          await AuditLogModel.create({
+            organizationId: orgId,
+            actorId: resolved.user.id,
+            actorType: "user",
+            actorName: resolved.user.name ?? null,
+            actorEmail: resolved.user.email,
+            action: "invitation.created",
+            outcome: "success",
+            resourceType: "invitation",
+            resourceId: invitation?.id ?? null,
+            before: null,
+            after: { email, role: role ?? null },
+            httpMethod: "POST",
+            httpPath: path,
+            httpRoute: null,
+            httpStatus: null,
+            requestId: null,
+            sourceIp: resolveAuthClientIp(request),
+            userAgent: request.headers.get("user-agent") ?? null,
+            occurredAt: new Date(),
+          });
+        }
+      } catch (err) {
+        logger.error(
+          { err },
+          "[auth:audit] failed to write invite-member audit row",
+        );
+      }
+    }
+  }
+
+  // Audit invitation accepted by an already-authenticated user
+  if (
+    path === "/organization/accept-invitation" &&
+    method === "POST" &&
+    request
+  ) {
+    const invitationId = body.invitationId as string | undefined;
+    if (invitationId) {
+      try {
+        const headers = new Headers(request.headers as HeadersInit);
+        const resolved = await auth.api.getSession({ headers });
+        if (resolved?.user && resolved?.session) {
+          const invitation = await InvitationModel.getById(invitationId);
+          if (invitation) {
+            await AuditLogModel.create({
+              organizationId: invitation.organizationId,
+              actorId: resolved.user.id,
+              actorType: "user",
+              actorName: resolved.user.name ?? null,
+              actorEmail: resolved.user.email,
+              action: "member.created",
+              outcome: "success",
+              resourceType: "member",
+              resourceId: invitationId,
+              before: null,
+              after: {
+                email: invitation.email,
+                role: invitation.role ?? null,
+                invitationId,
+              },
+              httpMethod: "POST",
+              httpPath: path,
+              httpRoute: null,
+              httpStatus: null,
+              requestId: null,
+              sourceIp: resolveAuthClientIp(request),
+              userAgent: request.headers.get("user-agent") ?? null,
+              occurredAt: new Date(),
+            });
+          }
+        }
+      } catch (err) {
+        logger.error(
+          { err },
+          "[auth:audit] failed to write accept-invitation audit row",
+        );
+      }
+    }
+  }
+
+  // Audit member role changes
+  if (path === "/organization/update-member" && method === "POST" && request) {
+    const stash = memberRoleUpdateByRequest.get(request);
+    memberRoleUpdateByRequest.delete(request);
+    const newRole = body.role as string | undefined;
+    if (stash && newRole && stash.priorRole !== newRole) {
+      try {
+        const headers = new Headers(request.headers as HeadersInit);
+        const resolved = await auth.api.getSession({ headers });
+        if (resolved?.user && resolved?.session) {
+          const [member] = await db
+            .select({
+              userId: schema.membersTable.userId,
+              organizationId: schema.membersTable.organizationId,
+            })
+            .from(schema.membersTable)
+            .where(eq(schema.membersTable.id, stash.memberId))
+            .limit(1);
+          if (member) {
+            await AuditLogModel.create({
+              organizationId: member.organizationId,
+              actorId: resolved.user.id,
+              actorType: "user",
+              actorName: resolved.user.name ?? null,
+              actorEmail: resolved.user.email,
+              action: "member.role_updated",
+              outcome: "success",
+              resourceType: "member",
+              resourceId: stash.memberId,
+              before: { role: stash.priorRole },
+              after: { role: newRole },
+              httpMethod: "POST",
+              httpPath: path,
+              httpRoute: null,
+              httpStatus: null,
+              requestId: null,
+              sourceIp: resolveAuthClientIp(request),
+              userAgent: request.headers.get("user-agent") ?? null,
+              occurredAt: new Date(),
+            });
+          }
+        }
+      } catch (err) {
+        logger.error(
+          { err },
+          "[auth:audit] failed to write member role update audit row",
+        );
+      }
+    }
+  }
+
+  // Audit member removal
+  if (path === "/organization/remove-member" && method === "POST" && request) {
+    const stash = memberRemoveByRequest.get(request);
+    memberRemoveByRequest.delete(request);
+    if (stash) {
+      try {
+        const headers = new Headers(request.headers as HeadersInit);
+        const resolved = await auth.api.getSession({ headers });
+        if (resolved?.user && resolved?.session) {
+          await AuditLogModel.create({
+            organizationId: stash.organizationId,
+            actorId: resolved.user.id,
+            actorType: "user",
+            actorName: resolved.user.name ?? null,
+            actorEmail: resolved.user.email,
+            action: "member.deleted",
+            outcome: "success",
+            resourceType: "member",
+            resourceId: stash.memberId,
+            before: {
+              email: stash.email,
+              name: stash.name,
+              role: stash.role,
+            },
+            after: null,
+            httpMethod: "POST",
+            httpPath: path,
+            httpRoute: null,
+            httpStatus: null,
+            requestId: null,
+            sourceIp: resolveAuthClientIp(request),
+            userAgent: request.headers.get("user-agent") ?? null,
+            occurredAt: new Date(),
+          });
+        }
+      } catch (err) {
+        logger.error(
+          { err },
+          "[auth:audit] failed to write remove-member audit row",
+        );
       }
     }
   }
@@ -768,6 +1186,86 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
   // NOTE: User deletion on member removal is handled in routes/auth.ts
   // Better-auth handles member deletion, we just clean up orphaned users
 
+  // Capture sign-out audit event (session is often cleared before/without
+  // reliable context in the after hook — see stashSignOutSessionForAudit).
+  if (isAuthSignOutPath(path)) {
+    const fromBefore = consumeStashedSignOutSession(request);
+    if (fromBefore) {
+      void writeAuthAuditLog({
+        user: fromBefore.user,
+        session: fromBefore.session,
+        action: "auth.signed_out",
+        path,
+        request,
+      }).catch((err) =>
+        logger.error(
+          { err },
+          "[auth:audit] failed to write sign-out audit row (pre-hook capture)",
+        ),
+      );
+      return ctx;
+    }
+
+    const sessionCtx = context?.session as
+      | {
+          user?: { id: string; email: string; name?: string | null };
+          session?: { id: string; activeOrganizationId?: string | null };
+        }
+      | undefined;
+    if (sessionCtx?.user && sessionCtx?.session) {
+      void writeAuthAuditLog({
+        user: sessionCtx.user,
+        session: sessionCtx.session,
+        action: "auth.signed_out",
+        path,
+        request,
+      }).catch((err) =>
+        logger.error(
+          { err },
+          "[auth:audit] failed to write sign-out audit row",
+        ),
+      );
+    } else {
+      // better-auth may not always populate context.session on sign-out
+      // (e.g. revoke-session or token-based flows).  Try to resolve the
+      // actor from the incoming request headers so we still capture the event.
+      logger.debug(
+        { path, hasContext: !!context, hasSession: !!sessionCtx },
+        "[auth:afterHook] sign-out: context.session not populated, attempting header-based resolution",
+      );
+      try {
+        const headers = new Headers(
+          request?.headers as HeadersInit | undefined,
+        );
+        const resolved = await auth.api.getSession({ headers });
+        if (resolved?.user && resolved?.session) {
+          void writeAuthAuditLog({
+            user: resolved.user,
+            session: resolved.session,
+            action: "auth.signed_out",
+            path,
+            request,
+          }).catch((err) =>
+            logger.error(
+              { err },
+              "[auth:audit] failed to write sign-out audit row (fallback)",
+            ),
+          );
+        } else {
+          logger.debug(
+            "[auth:afterHook] sign-out: could not resolve session from headers either, skipping audit",
+          );
+        }
+      } catch (err) {
+        logger.debug(
+          { err },
+          "[auth:afterHook] sign-out: header-based session resolution failed, skipping audit",
+        );
+      }
+    }
+    return ctx;
+  }
+
   if (path.startsWith("/sign-up")) {
     const newSession = context?.newSession;
 
@@ -785,19 +1283,35 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         ?.split("invitationId=")[1]
         ?.split("&")[0];
 
-      // If there is no invitation ID, it means this is a direct sign-up which is not allowed
-      if (!invitationId) {
+      if (invitationId) {
         logger.debug(
-          "[auth:afterHook] Sign-up without invitation ID, skipping",
+          { invitationId, userId: user.id },
+          "[auth:afterHook] Accepting invitation after sign-up",
         );
-        return;
+        // Accept first so the membership row exists when writeAuthAuditLog
+        // falls back to MemberModel.getFirstMembershipForUser for the org.
+        await InvitationModel.accept(session, user, invitationId);
+      } else {
+        logger.debug(
+          { userId: user.id },
+          "[auth:afterHook] Direct sign-up (no invitation id)",
+        );
       }
 
-      logger.debug(
-        { invitationId, userId: user.id },
-        "[auth:afterHook] Accepting invitation after sign-up",
+      // Audit every completed sign-up (invitation-based or direct).  For
+      // direct sign-ups the org resolves via getFirstMembershipForUser inside
+      // writeAuthAuditLog; if the user has no membership yet the audit row
+      // is skipped (logged as debug) instead of throwing.
+      void writeAuthAuditLog({
+        user,
+        session,
+        action: "auth.signed_up",
+        path,
+        request,
+      }).catch((err) =>
+        logger.error({ err }, "[auth:audit] failed to write sign-up audit row"),
       );
-      return await InvitationModel.accept(session, user, invitationId);
+      return;
     }
   }
 
@@ -830,6 +1344,22 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
           sessionId,
         });
       }
+
+      // Audit: successful sign-in or SSO callback (fires after domain check so
+      // rejected SSO logins that throw above never produce a row)
+      const authAction: AuditEventName = path.startsWith("/sso/callback")
+        ? "auth.sso_callback"
+        : "auth.signed_in";
+      void writeAuthAuditLog({
+        user,
+        session,
+        action: authAction,
+        path,
+        request,
+        ...(providerIdHint ? { providerId: providerIdHint } : {}),
+      }).catch((err) =>
+        logger.error({ err }, "[auth:audit] failed to write sign-in audit row"),
+      );
 
       // Auto-accept any pending invitations for this user's email
       try {
@@ -1047,4 +1577,100 @@ async function cleanupRejectedSsoLogin(params: {
       await UserModel.delete(params.userId, tx);
     }
   });
+}
+
+/**
+ * Writes a single auth-event row to audit_logs.
+ * Always called with `void … .catch(logger.error)` so it never blocks or throws.
+ */
+async function writeAuthAuditLog(params: {
+  user: { id: string; name?: string | null; email: string };
+  session: { id: string; activeOrganizationId?: string | null };
+  action: AuditEventName;
+  path: string;
+  request?: Request;
+  providerId?: string;
+}): Promise<void> {
+  const { user, session, action, path, request, providerId } = params;
+
+  const organizationId =
+    session.activeOrganizationId ??
+    (await MemberModel.getFirstMembershipForUser(user.id))?.organizationId;
+
+  if (!organizationId) {
+    logger.debug(
+      { userId: user.id, action },
+      "[auth:audit] skipping: no organization found for actor",
+    );
+    return;
+  }
+
+  const sourceIp = resolveAuthClientIp(request);
+  const userAgent = request?.headers.get("user-agent") ?? null;
+
+  // SSO callbacks are actor_type="sso"; all other auth events are actor_type="user".
+  const actorType = action === "auth.sso_callback" ? "sso" : "user";
+
+  let after: Record<string, unknown> | null = null;
+  if (action === "auth.signed_in" || action === "auth.sso_callback") {
+    after = { sessionId: session.id };
+    if (providerId) {
+      after.providerId = providerId;
+    }
+  } else if (action === "auth.signed_out") {
+    after = { sessionId: session.id, ended: true };
+  } else if (action === "auth.signed_up") {
+    after = { sessionId: session.id, userId: user.id };
+  }
+
+  await AuditLogModel.create({
+    organizationId,
+    actorId: user.id,
+    actorType,
+    actorName: user.name ?? null,
+    actorEmail: user.email,
+    action,
+    outcome: "success",
+    resourceType: "auth",
+    resourceId: user.id,
+    before: null,
+    after,
+    httpMethod: "POST",
+    httpPath: path,
+    httpRoute: null,
+    httpStatus: null,
+    // better-auth operates on Web Request objects; Fastify's request.id is not
+    // accessible here. requestId is null for all auth-surface audit rows.
+    requestId: null,
+    sourceIp,
+    userAgent,
+    occurredAt: new Date(),
+  });
+}
+
+/**
+ * Resolve the client IP for auth audit events. Better-auth hands us a Web
+ * `Request` with no socket-level remote address.
+ *
+ * Priority:
+ * 1. `x-archestra-client-ip` — injected by the Fastify auth route handlers
+ *    from `request.ip` after stripping any client-supplied copy. When present
+ *    this is the most trustworthy source because Fastify has already applied
+ *    the `trustProxy` / `ARCHESTRA_TRUST_PROXY` setting.
+ * 2. `x-forwarded-for` — forwarded verbatim from the Fastify request. Used as
+ *    a fallback for deployments where `socket.remoteAddress` is unavailable
+ *    (e.g. Unix-socket listeners) or where `ARCHESTRA_TRUST_PROXY` has not
+ *    been configured. Note: without a trusted-proxy config this value can be
+ *    set by clients; IPs here are informational and not used for access control.
+ */
+function resolveAuthClientIp(request: Request | undefined): string | null {
+  if (!request) return null;
+  const injected = request.headers.get("x-archestra-client-ip");
+  if (injected) return injected;
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  if (forwardedFor) {
+    const first = forwardedFor.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  return null;
 }

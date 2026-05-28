@@ -23,6 +23,7 @@ export type VisibilityOption<Value extends string> = {
 
 export function VisibilitySelector<Value extends string>({
   label = "Visibility",
+  description,
   heading,
   value,
   options,
@@ -30,6 +31,7 @@ export function VisibilitySelector<Value extends string>({
   children,
 }: {
   label?: string;
+  description?: string;
   heading?: string;
   value: Value;
   options: VisibilityOption<Value>[];
@@ -47,7 +49,12 @@ export function VisibilitySelector<Value extends string>({
         {heading ? (
           <h3 className="text-sm font-semibold">{heading}</h3>
         ) : (
-          <Label>{label}</Label>
+          <div className="space-y-1">
+            <Label>{label}</Label>
+            {description ? (
+              <p className="text-xs text-muted-foreground">{description}</p>
+            ) : null}
+          </div>
         )}
 
         {isStatic ? (

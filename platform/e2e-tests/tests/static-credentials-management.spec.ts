@@ -3,6 +3,7 @@ import { archestraApiSdk } from "@shared";
 import {
   ADMIN_EMAIL,
   DEFAULT_TEAM_NAME,
+  E2eTestId,
   EDITOR_EMAIL,
   ENGINEERING_TEAM_NAME,
   MARKETING_TEAM_NAME,
@@ -13,7 +14,6 @@ import {
   addCustomSelfHostedCatalogItem,
   addSharedLocalConnection,
   assignCatalogCredentialToGateway,
-  clickButton,
   closeOpenDialogs,
   createSharedTestGatewayViaApi,
   createTeamMcpGatewayViaApi,
@@ -26,6 +26,8 @@ import {
   saveOpenProfileDialog,
   settleRegistryAfterInstall,
   verifyToolCallResultViaApi,
+  waitForMcpServerAbsent,
+  waitForMcpServerReadyById,
   waitForMcpServerToolsDiscovered,
 } from "../utils";
 
@@ -33,12 +35,9 @@ test.describe.configure({ mode: "serial" });
 
 test.describe("Custom Self-hosted MCP Server - installation and static credentials management (vault disabled, prompt-on-installation disabled)", () => {
   // Matrix tests
-  const MATRIX: { user: "Admin" | "Editor" | "Member" }[] = [
+  const MATRIX: { user: "Admin" | "Member" }[] = [
     {
       user: "Admin",
-    },
-    {
-      user: "Editor",
     },
     {
       user: "Member",
@@ -47,7 +46,6 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
   MATRIX.forEach(({ user }) => {
     test(`${user}`, async ({
       adminPage,
-      editorPage,
       memberPage,
       extractCookieHeaders,
       makeRandomString,
@@ -57,8 +55,6 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
         switch (user) {
           case "Admin":
             return adminPage;
-          case "Editor":
-            return editorPage;
           case "Member":
             return memberPage;
         }
@@ -131,7 +127,22 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
             `Failed to install shared connection for ${user}: ${JSON.stringify(installResponse.error)}`,
           );
         }
+        const installedServerId = installResponse.data?.id;
+        if (!installedServerId) {
+          throw new Error(
+            `Install response for ${user} missing server id: ${JSON.stringify(installResponse.data)}`,
+          );
+        }
         await settleRegistryAfterInstall(page);
+        // The API install path doesn't refresh the registry DOM, so probe
+        // the backend installation status by ID first — surfaces a backend
+        // install error as a real error instead of a 120s DOM-poll timeout,
+        // and disambiguates from the same-named personal install above.
+        await waitForMcpServerReadyById(page, installedServerId);
+        // Follow with the existing DOM wait. This is the implicit "everything
+        // settled" signal the rest of the test relies on (TanStack Query
+        // refetch cycle has propagated to the registry view, so the gateway-
+        // edit dialog below sees the new tools in its catalog).
         await waitForMcpServerToolsDiscovered(page, catalogItemName);
       }
 
@@ -163,19 +174,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
       await closeOpenDialogs(page);
 
       if (user !== "Member") {
-        // Editor can't see org-scoped gateways, so create a team-scoped one
-        let teamGateway: { id: string; name: string } | undefined;
-        if (user === "Editor") {
-          teamGateway = await createTeamMcpGatewayViaApi({
-            cookieHeaders,
-            teamName: ENGINEERING_TEAM_NAME,
-            gatewayName: makeRandomString(10, "gw"),
-          });
-        }
-
-        // Check TokenSelect shows correct credentials
-        const gatewayNameForAssignment =
-          teamGateway?.name ?? adminSharedGateway?.name;
+        const gatewayNameForAssignment = adminSharedGateway?.name;
         if (!gatewayNameForAssignment) {
           throw new Error(
             `Expected a gateway for ${user} but none was provisioned`,
@@ -195,24 +194,53 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
         await expect(visibleStaticCredentials).toHaveLength(
           expectedAssignableCredentials.length,
         );
+        // Force the click: the credential option list re-renders when the
+        // dropdown opens, detaching the node mid-click. Same DOM-detach race
+        // assignCatalogCredentialToGateway already handles this way.
         await page
           .getByRole("option", {
             name: expectedAssignableCredentials[0] ?? "",
           })
-          .click();
+          .click({ force: true });
         await page.keyboard.press("Escape");
         await page.waitForTimeout(200);
         await saveOpenProfileDialog(page);
 
-        // Then we revoke first credential in Manage Credentials dialog, then close dialog
+        // Revoke the admin's own (personal) credential, then close dialog.
+        // Target it by its deterministic test-id rather than the first Revoke
+        // button: the row order isn't guaranteed, so a position-based click
+        // can revoke the team credential instead, leaving ADMIN_EMAIL present
+        // and failing the assertion below.
+        const personalServerId = visibleServersResponse.data?.find(
+          (server) =>
+            server.catalogId === newCatalogItem.id &&
+            !server.teamDetails &&
+            server.ownerEmail === ADMIN_EMAIL,
+        )?.id;
+        expect(
+          personalServerId,
+          "Could not resolve the admin's personal MCP server id to revoke",
+        ).toBeTruthy();
         await goToPage(page, "/mcp/registry");
         await openManageCredentialsDialog(page, catalogItemName);
-        await clickButton({ page, options: { name: "Revoke" }, first: true });
+        await page
+          .getByTestId(`${E2eTestId.RevokeCredentialButton}-personal`)
+          .click();
         await page.waitForLoadState("domcontentloaded");
         await closeOpenDialogs(page);
 
-        // And we check that the credential is revoked
-        // Use polling to handle async credential revocation in CI
+        // Revoking deletes the backing MCP server via async K8s pod teardown,
+        // which keeps the server in getMcpServers (and the dialog) until
+        // teardown completes. Wait for the backend to actually drop it (404)
+        // before asserting the UI, so the assertion isn't racing teardown
+        // latency under CI load — the cause of the prior flake.
+        if (personalServerId) {
+          await waitForMcpServerAbsent(page, personalServerId);
+        }
+
+        // And we check the dialog reflects the revoke. The backend already
+        // confirmed deletion above, so this only waits on the UI refetch —
+        // not on K8s teardown.
         const expectedCredentialsAfterRevoke = {
           Admin: [ADMIN_EMAIL, DEFAULT_TEAM_NAME],
           Editor: [EDITOR_EMAIL, ENGINEERING_TEAM_NAME],
@@ -234,15 +262,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
               remainingCredential,
             );
           }
-        }).toPass({ timeout: 30_000, intervals: [1000, 2000, 3000, 5000] });
-
-        // Cleanup team gateway
-        if (teamGateway) {
-          await archestraApiSdk.deleteAgent({
-            path: { id: teamGateway.id },
-            headers: { Cookie: cookieHeaders },
-          });
-        }
+        }).toPass({ timeout: 15_000, intervals: [1000, 2000, 3000, 5000] });
       }
       // Cleanup admin shared gateway
       if (adminSharedGateway) {

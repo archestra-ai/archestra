@@ -1,6 +1,6 @@
 {
   "name": "@backend",
-  "version": "1.2.50",
+  "version": "1.2.52",
   "description": "",
   "author": "",
   "private": true,
@@ -25,7 +25,9 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:clean": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/clean-db-on-dev.ts",
+    "code-runtime:bench": "tsdown --config tsdown.code-runtime-benchmark.config.ts --logLevel error && ARCHESTRA_LOGGING_LEVEL=${ARCHESTRA_LOGGING_LEVEL:-warn} node --enable-source-maps dist/code-runtime-benchmark/code-runtime-benchmark.mjs",
     "db:seed:mock-data": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/seed-mock-data.ts",
+    "db:hydrate-from": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/hydrate-from.ts",
     "codegen:access-control-docs": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/codegen-access-control-docs.ts",
     "codegen:archestra-mcp-server-docs": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/codegen-archestra-mcp-server-docs.ts",
     "codegen:openapi": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/codegen-openapi.ts",
@@ -47,6 +49,7 @@
     "@anthropic-ai/tokenizer": "^0.0.4",
     "@aws-crypto/sha256-js": "^5.2.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1003.0",
+    "@aws-sdk/client-s3": "^3.1038.0",
     "@aws-sdk/credential-providers": "^3.1003.0",
     "@azure/identity": "^4.13.0",
     "@better-auth/api-key": "^1.6.5",
@@ -54,6 +57,7 @@
     "@better-auth/oauth-provider": "1.6.5",
     "@better-auth/sso": "1.6.5",
     "@chonkiejs/core": "^0.0.7",
+    "@dagger.io/dagger": "0.20.8",
     "@fastify/cors": "^11.1.0",
     "@fastify/formbody": "^8.0.2",
     "@fastify/http-proxy": "^11.4.4",
@@ -140,7 +144,7 @@
     "quick-lru": "^7.3.0",
     "tiktoken": "^1.0.22",
     "ws": "^8.20.1",
-    "zod": "^4.3.4"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.3.16",

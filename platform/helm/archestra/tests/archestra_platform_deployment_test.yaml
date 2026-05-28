@@ -276,6 +276,22 @@ tests:
           path: spec.template.spec.initContainers[1].image
           value: busybox:1.36
 
+  - it: should not gate the web pod on a wait-for-migrations init container
+    documentIndex: 1
+    # The web pod runs migrations itself; gating it on the platform Service
+    # (as the worker does) would deadlock startup. Only setup-postgres-extensions
+    # and wait-for-postgres are expected here.
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.initContainers
+          count: 2
+      - notEqual:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-for-migrations
+      - notEqual:
+          path: spec.template.spec.initContainers[1].name
+          value: wait-for-migrations
+
   - it: should allow overriding the wait-for-postgres image
     documentIndex: 1
     set:
@@ -443,6 +459,88 @@ tests:
           content:
             name: CUSTOM_VAR
             value: "custom-value"
+
+  - it: should not set code runtime environment variables by default
+    documentIndex: 1
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_ENABLED
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+
+  - it: should set code runtime environment variables when enabled
+    documentIndex: 1
+    set:
+      archestra.codeRuntime.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_ENABLED
+            value: "true"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+            value: kube-pod://dagger-runtime-engine-0?namespace=dagger&container=dagger-engine
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_TIMEOUT_SECONDS
+            value: "60"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_MAX_CONCURRENT
+            value: "10"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_MAX_OUTPUT_BYTES
+            value: "65536"
+
+  - it: should support custom code runtime Dagger runner host
+    documentIndex: 1
+    set:
+      archestra.codeRuntime.enabled: true
+      archestra.codeRuntime.dagger.runnerHost: tcp://dagger-runtime.custom.svc.cluster.local:1234
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+            value: tcp://dagger-runtime.custom.svc.cluster.local:1234
+
+  - it: should use the release namespace for managed code runtime Dagger pod
+    documentIndex: 1
+    set:
+      archestra.codeRuntime.enabled: true
+      archestra.codeRuntime.dagger.managed.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+            value: kube-pod://dagger-runtime-engine-0?namespace=NAMESPACE&container=dagger-engine
+
+  - it: should support custom code runtime Dagger pod settings
+    documentIndex: 1
+    set:
+      archestra.codeRuntime.enabled: true
+      archestra.codeRuntime.dagger.pod.name: dagger-engine-3
+      archestra.codeRuntime.dagger.pod.namespace: code-runtime
+      archestra.codeRuntime.dagger.pod.container: custom-engine
+      archestra.codeRuntime.dagger.pod.context: prod-cluster
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+            value: kube-pod://dagger-engine-3?namespace=code-runtime&container=custom-engine&context=prod-cluster
 
   - it: should include ARCHESTRA_DATABASE_URL alongside custom env vars
     documentIndex: 1

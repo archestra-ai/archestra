@@ -51,12 +51,16 @@ import {
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { fastifyAuthPlugin } from "@/auth";
 import { cacheManager } from "@/cache-manager";
+import { codeRuntimeService } from "@/code-runtime/code-runtime-service";
 import config, { shouldRunWebServer, shouldRunWorker } from "@/config";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import { seedRequiredStartingData } from "@/database/seed";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import { enterpriseLicenseMiddleware } from "@/middleware";
+import { initAuditDecisions } from "@/middleware/audit-decisions";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import { initAuditRegistry } from "@/middleware/audit-log-registry";
 import OrganizationModel from "@/models/organization";
 import { initializeObservabilityMetrics } from "@/observability";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
@@ -87,6 +91,7 @@ import {
   HEALTH_PATH,
   MCP_GATEWAY_PREFIX,
   READY_PATH,
+  SKILL_MARKETPLACE_PREFIX,
 } from "./routes/route-paths";
 import {
   UserConfigFieldDefaultSchema,
@@ -776,12 +781,15 @@ const startWebServer = async () => {
    * - /health: Kubernetes liveness probe
    * - /ready: Kubernetes readiness probe (checks database connectivity)
    * - GET /v1/mcp/*: MCP Gateway SSE polling (happens every second)
+   * - /skills/m/*: public marketplace git endpoint — URL contains raw share token
    */
   const shouldSkipRequestLogging = (url: string, method: string): boolean => {
     if (url === HEALTH_PATH || url === READY_PATH) return true;
     // Skip MCP Gateway SSE polling (GET requests to /v1/mcp/*)
     if (method === "GET" && url.startsWith(`${MCP_GATEWAY_PREFIX}/`))
       return true;
+    // token is embedded in the URL path; never log it
+    if (url.startsWith(`${SKILL_MARKETPLACE_PREFIX}/`)) return true;
     return false;
   };
 
@@ -833,6 +841,13 @@ const startWebServer = async () => {
    */
   fastify.register(enterpriseLicenseMiddleware);
 
+  // Extend the audit registry and audit decisions with EE entries
+  // (identity providers) if applicable, then register the audit hooks.
+  // Done before routes so the hooks are active for all subsequent requests.
+  await initAuditRegistry();
+  await initAuditDecisions();
+  registerAuditLogHook(fastify);
+
   try {
     // Initialize database connection first
     await initializeDatabase();
@@ -875,6 +890,11 @@ const startWebServer = async () => {
     );
 
     startMcpServerRuntime(fastify);
+
+    // Start the sandboxed code runtime in the background (non-blocking pre-warm).
+    codeRuntimeService.init().catch((error) => {
+      logger.error({ err: error }, "Failed to initialize code runtime");
+    });
 
     // Initialize incoming email provider (if configured)
     // This handles auto-setup of webhook subscription if ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL is set
@@ -1007,6 +1027,9 @@ const startWebServer = async () => {
         // Stop cache manager's background cleanup
         cacheManager.shutdown();
 
+        // Stop accepting new code-runtime runs
+        await codeRuntimeService.shutdown();
+
         // Stop task queue worker (waits for in-flight tasks to drain)
         if (shouldRunWorker) {
           await taskQueueService.stopWorker();
@@ -1098,6 +1121,11 @@ const startWorker = async () => {
     await taskQueueService.seedPeriodicTasks();
     taskQueueService.startWorker();
 
+    // Pre-warm the code runtime so scheduled agents avoid a cold first run.
+    codeRuntimeService.init().catch((error) => {
+      logger.error({ err: error }, "Failed to initialize code runtime");
+    });
+
     // Worker server for Kubernetes probes, Prometheus scraping,
     // and LLM Proxy / MCP Gateway routes for A2A and scheduled task execution.
     // These routes handle their own auth (Bearer tokens / API keys) and are
@@ -1148,6 +1176,7 @@ const startWorker = async () => {
       try {
         await healthServer.close();
         cacheManager.shutdown();
+        await codeRuntimeService.shutdown();
         await taskQueueService.stopWorker();
         clearTimeout(forceExitTimeout);
         process.exit(0);

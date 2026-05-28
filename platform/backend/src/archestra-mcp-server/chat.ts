@@ -187,6 +187,8 @@ const registry = defineArchestraTools([
       );
 
       try {
+        let successMessage = `Successfully updated artifact (${args.content.length} characters)`;
+
         // Scheduled run context — write to the run (conversationId is a
         // synthetic isolation key, not a real DB conversation)
         if (context.scheduleTriggerRunId) {
@@ -200,6 +202,16 @@ const registry = defineArchestraTools([
               "Failed to update scheduled run artifact. The run may no longer exist.",
             );
           }
+        } else if (context.chatOpsBindingId) {
+          logger.info(
+            {
+              agentId: contextAgent.id,
+              chatOpsBindingId: context.chatOpsBindingId,
+              chatOpsThreadId: context.chatOpsThreadId ?? null,
+            },
+            "artifact_write completed in chatops context without persistent artifact storage",
+          );
+          successMessage = `Accepted artifact content (${args.content.length} characters). ChatOps does not persist conversation artifacts, so include relevant artifact content in the final response.`;
         } else if (
           context.conversationId &&
           context.userId &&
@@ -225,7 +237,7 @@ const registry = defineArchestraTools([
 
         return structuredSuccessResult(
           { success: true, characterCount: args.content.length },
-          `Successfully updated artifact (${args.content.length} characters)`,
+          successMessage,
         );
       } catch (error) {
         return catchError(error, "writing artifact");

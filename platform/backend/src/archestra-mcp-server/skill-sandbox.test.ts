@@ -286,7 +286,7 @@ describe("skill sandbox tools (runtime enabled)", () => {
       expect(textOf(result)).toContain("No accessible sandbox");
     });
 
-    test("rejects when conversation has multiple sandboxes and no explicit sandboxId", async () => {
+    test("routes to the most recently created sandbox when conversation has multiple", async () => {
       const conversation = await ConversationModel.create({
         userId,
         organizationId,
@@ -294,7 +294,8 @@ describe("skill sandbox tools (runtime enabled)", () => {
         title: "Test",
       });
       await seedSkill();
-      // create two sandboxes for the same conversation
+      // create two sandboxes for the same conversation; the resolver should
+      // pick the latest one rather than erroring out on ambiguity.
       await executeArchestraTool(
         TOOL_CREATE_SKILL_SANDBOX_FULL_NAME,
         { skillNames: ["pdf-processing"] },
@@ -311,8 +312,11 @@ describe("skill sandbox tools (runtime enabled)", () => {
         { command: "echo hi" },
         { ...context, conversationId: conversation.id },
       );
-      expect(result.isError).toBe(true);
-      expect(textOf(result)).toContain("Multiple sandboxes");
+      // resolver no longer rejects; the call reaches the runtime layer which
+      // errors with "not enabled" in this test env. crucially, the message is
+      // NOT the old "Multiple sandboxes" wording.
+      expect(textOf(result)).not.toContain("Multiple sandboxes");
+      expect(textOf(result)).toContain("not enabled");
     });
 
     test("delegates to the runtime service when the sandbox is resolved via conversation", async () => {

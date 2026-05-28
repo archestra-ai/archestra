@@ -626,13 +626,23 @@ async function resolveSandboxId(params: {
         "No sandbox is attached to the current conversation. Call create_skill_sandbox first or pass `sandboxId` explicitly.",
     };
   }
+  // When several sandboxes exist (usually because earlier failed calls left
+  // orphans), route to the most-recently-created one — that matches the
+  // intuition of "use the sandbox I just made". The compact env trailer
+  // printed after each call shows the resolved alias so the caller can
+  // switch back to an older one explicitly if they need to.
+  const chosen = accessible[accessible.length - 1];
   if (accessible.length > 1) {
-    return {
-      error:
-        "Multiple sandboxes are attached to the current conversation. Pass `sandboxId` explicitly.",
-    };
+    logger.debug(
+      {
+        conversationId,
+        chosenSandboxId: chosen.id,
+        candidateCount: accessible.length,
+      },
+      "[SkillSandbox] resolved sandboxId from latest of multiple conversation sandboxes",
+    );
   }
-  return { sandboxId: asSandboxId(accessible[0].id) };
+  return { sandboxId: asSandboxId(chosen.id) };
 }
 
 /**

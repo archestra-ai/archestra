@@ -625,6 +625,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
+      if (isTeamScopedWithoutTeams({ visibility, teamIds })) {
+        throw new ApiError(
+          400,
+          "At least one team must be selected for team-scoped connectors",
+        );
+      }
       if (
         visibility === "team-scoped" &&
         !config.enterpriseFeatures.knowledgeBase
@@ -632,12 +638,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(
           403,
           "Team-scoped connectors require an enterprise license",
-        );
-      }
-      if (isTeamScopedWithoutTeams({ visibility, teamIds })) {
-        throw new ApiError(
-          400,
-          "At least one team must be selected for team-scoped connectors",
         );
       }
 
@@ -773,16 +773,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const nextTeamIds = updateData.teamIds ?? connector.teamIds;
 
       if (
-        connector.visibility !== "team-scoped" &&
-        nextVisibility === "team-scoped" &&
-        !config.enterpriseFeatures.knowledgeBase
-      ) {
-        throw new ApiError(
-          403,
-          "Team-scoped connectors require an enterprise license",
-        );
-      }
-      if (
         isTeamScopedWithoutTeams({
           visibility: nextVisibility,
           teamIds: nextTeamIds,
@@ -791,6 +781,16 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(
           400,
           "At least one team must be selected for team-scoped connectors",
+        );
+      }
+      if (
+        connector.visibility !== "team-scoped" &&
+        nextVisibility === "team-scoped" &&
+        !config.enterpriseFeatures.knowledgeBase
+      ) {
+        throw new ApiError(
+          403,
+          "Team-scoped connectors require an enterprise license",
         );
       }
 

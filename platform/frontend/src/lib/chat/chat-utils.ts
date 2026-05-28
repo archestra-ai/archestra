@@ -107,17 +107,22 @@ export function mergePersistedMessageMetadata(params: {
 
   const mergedMessages = params.liveMessages.map((liveMessage) => {
     const liveMetadata = getObjectMetadata(liveMessage);
-    if (typeof liveMetadata[PERSISTED_MESSAGE_ID_METADATA_KEY] === "string") {
-      return liveMessage;
-    }
-
-    const persistedIndex = remainingPersistedMessages.findIndex(
-      (persistedMessage) =>
-        messagesHaveSameRenderableContent({
-          liveMessage,
-          persistedMessage,
-        }),
-    );
+    const persistedMessageId = liveMetadata[PERSISTED_MESSAGE_ID_METADATA_KEY];
+    const persistedIndexById =
+      typeof persistedMessageId === "string"
+        ? remainingPersistedMessages.findIndex(
+            (persistedMessage) => persistedMessage.id === persistedMessageId,
+          )
+        : -1;
+    const persistedIndex =
+      persistedIndexById === -1
+        ? remainingPersistedMessages.findIndex((persistedMessage) =>
+            messagesHaveSameRenderableContent({
+              liveMessage,
+              persistedMessage,
+            }),
+          )
+        : persistedIndexById;
 
     if (persistedIndex === -1) {
       return liveMessage;
@@ -127,14 +132,22 @@ export function mergePersistedMessageMetadata(params: {
       persistedIndex,
       1,
     );
+    if (!persistedMessage) {
+      return liveMessage;
+    }
 
-    changed = true;
+    const parts = mergePersistedUserFileParts({
+      liveMessage,
+      persistedMessage,
+    });
+
+    changed =
+      changed ||
+      parts !== liveMessage.parts ||
+      typeof persistedMessageId !== "string";
     return {
       ...liveMessage,
-      parts: mergePersistedUserFileParts({
-        liveMessage,
-        persistedMessage,
-      }),
+      parts,
       metadata: {
         ...getObjectMetadata(persistedMessage),
         ...liveMetadata,

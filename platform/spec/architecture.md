@@ -1,6 +1,6 @@
 # Backend architecture
 
-A small set of rules for how routes, services, and models interact in the Fastify + Drizzle backend. 
+A small set of rules for how routes, services, and models interact in the Fastify + Drizzle backend.
 
 ## Layers
 
@@ -8,11 +8,11 @@ A small set of rules for how routes, services, and models interact in the Fastif
 routes → services → models → database
 ```
 
-- **Routes** (`backend/src/routes/`) — Fastify handlers. Parse and validate the request (Zod schemas via `fastify-type-provider-zod`), call a model or a service, serialize the response. No business logic.
+- **Routes** (`backend/src/routes/`) — Fastify handlers. Parse and validate the request (Zod schemas via `fastify-type-provider-zod`), call a service, serialize the response. No business logic, no direct model access.
 - **Services** (`backend/src/services/`) — Business logic, cross-model orchestration, transactions.
 - **Models** (`backend/src/models/`) — Database access only. One file per table. Models own Drizzle queries; nothing else owns them.
 
-Dependencies go one way: routes can use services or models; services can use models;
+Dependencies go one way: routes use services; services use models. Routes never reach into models directly.
 
 ## Principles
 
@@ -20,5 +20,5 @@ Dependencies go one way: routes can use services or models; services can use mod
 
 ### 2. Models do not call services. Imports go one way only: `services → models`, never the reverse.
 
-### 3. Business logic lives in services. Anything that touches more than one model, external API Calls, scoped Authorization checks should belong to the service.
+### 3. Business logic lives in services. Anything that touches more than one model, makes external API calls, or performs scoped authorization checks should belong to a service.
 

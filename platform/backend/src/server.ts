@@ -27,7 +27,7 @@ import {
   LocalConfigEnvironmentDefaultSchema,
   SUPPORTED_EMBEDDING_DIMENSIONS,
 } from "@shared";
-import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
+import Fastify, { type FastifyRequest } from "fastify";
 import metricsPlugin from "fastify-metrics";
 import {
   createJsonSchemaTransformObject,
@@ -82,7 +82,6 @@ import {
   Xai,
   Zhipuai,
 } from "@/types";
-import { mapServiceErrorToHttp } from "@/types/api";
 import websocketService from "@/websocket";
 import * as routes from "./routes";
 import {
@@ -450,10 +449,7 @@ export const createFastifyInstance = () =>
         });
       }
 
-      if (handleServiceError(error, request, reply)) return;
-
       // Handle ApiError objects
-      // TODO: it's unlcear for now if we move forward with APIError or fine with DomainLevelErrors now.
       if (error instanceof ApiError) {
         const { statusCode, message, type, internalCode } = error;
         const logPayload = {
@@ -1188,41 +1184,6 @@ const startWorker = async () => {
     process.exit(1);
   }
 };
-
-/**
- * handleServiceError maps service errors to HTTP.
- * (using Pino's `err` key so the built-in serializer walks the full `cause`
- * Returns `true` if the error was handled, `false` if error is not a service error.
- */
-function handleServiceError(
-  error: unknown,
-  request: FastifyRequest,
-  reply: FastifyReply,
-): boolean {
-  const mapping = mapServiceErrorToHttp(error);
-  if (!mapping) return false;
-
-  const message = (error as Error).message;
-  const logPayload = {
-    ...buildRequestErrorContext(request),
-    err: error,
-    statusCode: mapping.statusCode,
-    userId: request.user?.id,
-    organizationId: request.organizationId,
-  };
-
-  if (mapping.statusCode >= 500) {
-    request.log.error(logPayload, "HTTP 50x from domain error");
-  } else {
-    request.log.info(logPayload, "HTTP 4xx from domain error");
-  }
-
-  reply.status(mapping.statusCode).send({
-    error: { message, type: mapping.type },
-  });
-
-  return true;
-}
 
 /**
  * Only start the server if this file is being run directly (not imported)

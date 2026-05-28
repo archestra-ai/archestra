@@ -20,14 +20,5 @@ Dependencies go one way: routes can use services or models; services can use mod
 
 ### 2. Models do not call services. Imports go one way only: `services → models`, never the reverse.
 
-### 3. Business logic lives in services. Anything that touched more than one model, external API Calls, scoped Authorization checls.
-
-## Errors
-
-Domain errors are defined in `backend/src/errors.ts`ю Each carries one message — the user-facing string returned in the API response and cause for the engineering context.
-
-### Database errors are translated at the model boundary
-
-Services must stay database-agnostic — they never reference Drizzle, `pg`, or SQLSTATE codes. Translation from driver errors to domain errors happens in the **model layer**.
-
+### 3. Business logic lives in services. Anything that touches more than one model, external API Calls, scoped Authorization checks should belong to the service.
 

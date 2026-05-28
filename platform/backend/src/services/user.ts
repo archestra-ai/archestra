@@ -1,6 +1,6 @@
 import type { Permissions } from "@shared";
-import { NotFoundError } from "@/errors";
 import { MemberModel, OrganizationRoleModel } from "@/models";
+import { ApiError } from "@/types";
 
 export async function getUserPermissions(params: {
   userId: string;
@@ -14,7 +14,7 @@ export async function getUserPermissions(params: {
   // TODO: this should be handled by MemberModel.getByUserId.
   // Do not touching it now because getByUserId is used all over the codebase now.
   if (!member || !member.role) {
-    throw new NotFoundError("User is not a member of any organization");
+    throw new ApiError(404, "User is not a member of any organization");
   }
 
   return OrganizationRoleModel.getPermissions(
@@ -32,7 +32,7 @@ export async function listImpersonableUsers(params: {
     params.organizationId,
   );
   // filtering out the current user and system admins.
-  // impersonation is a feature provided by better-auth and 
+  // impersonation is a feature provided by better-auth and
   // system admins are not impersonable in the  better-auth's adminRoles.
   // in fact system admin is the first users bootstrapped in archestra.
   return members

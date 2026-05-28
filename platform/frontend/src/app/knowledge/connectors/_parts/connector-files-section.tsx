@@ -33,14 +33,25 @@ const ACCEPTED_EXTENSIONS =
   ".txt,.md,.csv,.json,.xml,.html,.htm,.pdf,.doc,.docx,.zip";
 const MAX_FILE_SIZE_MB = 10;
 
+const EMBEDDING_ERROR_LABELS: Record<string, string> = {
+  rate_limit: "Rate limit exceeded - the embedding API is being throttled. Try again later.",
+  auth_error: "Authentication failed - check your embedding API key.",
+  model_not_found: "Embedding model not found - check the model name in your configuration.",
+  server_error: "Embedding server error - the API returned a server error. Try again later.",
+  dimensions_mismatch: "Dimension mismatch - the configured embedding dimensions are not supported by this model.",
+  unknown: "An unknown error occurred during embedding. Check the logs for more details.",
+};
+
 function FileStatusBadge({
   processingStatus,
   embeddingStatus,
   processingError,
+  embeddingErrorCode,
 }: {
   processingStatus?: string;
   embeddingStatus: string;
   processingError?: string | null;
+  embeddingErrorCode?: string | null;
 }) {
   if (processingStatus && processingStatus !== "completed") {
     const variants = {
@@ -81,31 +92,56 @@ function FileStatusBadge({
     );
   }
 
-  const variants = {
+  const embeddingVariants = {
     completed: "default",
     pending: "secondary",
     processing: "secondary",
     failed: "destructive",
   } as const;
 
-  const labels = {
+  const embeddingLabels = {
     completed: "Indexed",
     pending: "Pending",
     processing: "Indexing…",
     failed: "Failed",
   };
 
+  const variant =
+    embeddingVariants[embeddingStatus as keyof typeof embeddingVariants] ??
+    "secondary";
+  const label =
+    embeddingLabels[embeddingStatus as keyof typeof embeddingLabels] ??
+    embeddingStatus;
+
+  if (embeddingStatus === "failed") {
+    const errorMessage = embeddingErrorCode
+      ? EMBEDDING_ERROR_LABELS[embeddingErrorCode] ?? embeddingErrorCode
+      : "An unknown error occurred during embedding.";
+
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge
+            variant={variant}
+            className="capitalize text-xs cursor-help"
+          >
+            {embeddingStatus === "processing" && (
+              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+            )}
+            {label}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent>{errorMessage}</TooltipContent>
+      </Tooltip>
+    );
+  }
+
   return (
-    <Badge
-      variant={
-        variants[embeddingStatus as keyof typeof variants] ?? "secondary"
-      }
-      className="capitalize text-xs"
-    >
+    <Badge variant={variant} className="capitalize text-xs">
       {embeddingStatus === "processing" && (
         <Loader2 className="h-3 w-3 mr-1 animate-spin" />
       )}
-      {labels[embeddingStatus as keyof typeof labels] ?? embeddingStatus}
+      {label}
     </Badge>
   );
 }
@@ -125,6 +161,7 @@ function FileStatusCell({
       processingStatus={current.processingStatus}
       embeddingStatus={current.embeddingStatus}
       processingError={current.processingError}
+      embeddingErrorCode={current.embeddingErrorCode}
     />
   );
 }

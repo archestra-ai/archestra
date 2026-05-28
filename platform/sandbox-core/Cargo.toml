@@ -10,7 +10,7 @@ napi = ["dep:napi", "dep:napi-derive"]
 
 [dependencies]
 base64 = "0.22"
-dagger-sdk = "=0.20.8"
+dagger-sdk = "=0.21.0"
 futures-util = "0.3"
 napi = { version = "3", optional = true }
 napi-derive = { version = "3", optional = true }

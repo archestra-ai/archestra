@@ -44,6 +44,8 @@ const LAZY_MODEL_SYNC_TTL_BY_PROVIDER: Partial<
 };
 
 const lazyModelSyncsByApiKeyId = new Map<string, Promise<void>>();
+const LAZY_MODEL_SYNC_STATUS_HEADER = "x-archestra-lazy-model-sync";
+const LAZY_MODEL_SYNC_STATUS_PENDING = "pending";
 
 const LlmModelSchema = z.object({
   id: z.string(),
@@ -125,10 +127,18 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         apiKeyIds.includes(apiKey.id),
       );
 
-      void triggerLazyModelSyncForStaleApiKeys({
-        organizationId,
-        apiKeys: modelQueryApiKeys,
-      }).catch((error) => {
+      try {
+        const lazyModelSyncs = await triggerLazyModelSyncForStaleApiKeys({
+          organizationId,
+          apiKeys: modelQueryApiKeys,
+        });
+        if (lazyModelSyncs.length > 0) {
+          reply.header(
+            LAZY_MODEL_SYNC_STATUS_HEADER,
+            LAZY_MODEL_SYNC_STATUS_PENDING,
+          );
+        }
+      } catch (error) {
         logger.error(
           {
             organizationId,
@@ -137,7 +147,7 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
           "Failed to schedule lazy model sync",
         );
-      });
+      }
 
       const dbModels =
         await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds(apiKeyIds);

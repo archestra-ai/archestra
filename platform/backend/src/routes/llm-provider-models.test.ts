@@ -241,6 +241,39 @@ describe("chat model routes", () => {
     ]);
   });
 
+  test("GET /api/llm-models/available marks responses when lazy sync is pending", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: "openrouter-key" } });
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openrouter",
+      scope: "personal",
+      userId: user.id,
+    });
+    mockGetSecretValueForLlmProviderApiKey.mockResolvedValue("openrouter-key");
+    const syncSpy = vi
+      .spyOn(modelSyncService, "syncModelsForApiKey")
+      .mockResolvedValue(0);
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/llm-models/available?apiKeyId=${apiKey.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["x-archestra-lazy-model-sync"]).toBe("pending");
+    expect(response.json()).toEqual([]);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(syncSpy).toHaveBeenCalledWith({
+      apiKeyId: apiKey.id,
+      provider: "openrouter",
+      apiKeyValue: "openrouter-key",
+      baseUrl: null,
+      extraHeaders: null,
+    });
+  });
+
   test("syncModelsForVisibleApiKeys syncs visible keys and preserves baseUrl", async ({
     makeSecret,
   }) => {

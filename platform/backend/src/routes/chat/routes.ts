@@ -142,7 +142,6 @@ function getMinimalFrontendError(errorForFrontend: ChatErrorResponse) {
 
 const UNAVAILABLE_TOOL_ERROR_MESSAGE =
   "The requested tool is not available in this chat. Use one of the available tools, or continue without calling a tool.";
-const TOOL_NAME_SUFFIX_ARTIFACTS = ["<|channel|>commentary"] as const;
 
 type UnavailableToolErrorDetails = {
   type: "unavailable_tool";
@@ -730,35 +729,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 };
 
                 if (supportsToolCalling) {
-                  streamTextConfig.experimental_repairToolCall = async ({
-                    error,
-                    toolCall,
-                    tools,
-                  }) => {
-                    if (!NoSuchToolError.isInstance(error)) {
-                      return null;
-                    }
-
-                    const repairedToolName = repairToolNameSuffixArtifact({
-                      requestedToolName: toolCall.toolName,
-                      availableToolNames: Object.keys(tools),
-                    });
-                    if (!repairedToolName) {
-                      return null;
-                    }
-
-                    logger.info(
-                      {
-                        conversationId,
-                        requestedToolName: toolCall.toolName,
-                        repairedToolName,
-                      },
-                      "Repaired unavailable tool call suffix artifact",
-                    );
-
-                    return { ...toolCall, toolName: repairedToolName };
-                  };
-
                   streamTextConfig.experimental_transform = ({ tools }) =>
                     new TransformStream({
                       transform(chunk, controller) {
@@ -2496,25 +2466,6 @@ function rewriteUnavailableToolStreamChunk<T>(params: {
   }
 
   return chunk;
-}
-
-function repairToolNameSuffixArtifact(params: {
-  requestedToolName: string;
-  availableToolNames: string[];
-}): string | null {
-  const { requestedToolName, availableToolNames } = params;
-  for (const suffix of TOOL_NAME_SUFFIX_ARTIFACTS) {
-    if (!requestedToolName.endsWith(suffix)) {
-      continue;
-    }
-
-    const candidate = requestedToolName.slice(0, -suffix.length);
-    if (availableToolNames.includes(candidate)) {
-      return candidate;
-    }
-  }
-
-  return null;
 }
 
 function getUnavailableToolErrorDetails(

@@ -106,4 +106,43 @@ describe("chat attachment promotion", () => {
       originalName: "chat-runbook.txt",
     });
   });
+
+  test("returns not found when promoting an attachment from an unreadable conversation", async ({
+    makeUser,
+  }) => {
+    user = await makeUser();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/chat/attachments/${attachmentId}/promote-to-knowledge-file`,
+      payload: {
+        visibility: "personal",
+        teamIds: [],
+        agentIds: [],
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.message).toBe("Attachment not found");
+  });
+
+  test("returns not found when promoting an attachment outside the active organization", async ({
+    makeOrganization,
+  }) => {
+    const otherOrganization = await makeOrganization();
+    organizationId = otherOrganization.id;
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/chat/attachments/${attachmentId}/promote-to-knowledge-file`,
+      payload: {
+        visibility: "personal",
+        teamIds: [],
+        agentIds: [],
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.message).toBe("Attachment not found");
+  });
 });

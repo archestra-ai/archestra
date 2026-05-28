@@ -470,12 +470,6 @@ export const RouteId = {
   GetConnectorRuns: "getConnectorRuns",
   GetConnectorRun: "getConnectorRun",
 
-  // Connector File Upload Routes
-  UploadConnectorFiles: "uploadConnectorFiles",
-  GetConnectorFiles: "getConnectorFiles",
-  GetConnectorFile: "getConnectorFile",
-  DeleteConnectorFile: "deleteConnectorFile",
-
   // Knowledge File Routes
   GetKnowledgeFiles: "getKnowledgeFiles",
   UploadKnowledgeFiles: "uploadKnowledgeFiles",

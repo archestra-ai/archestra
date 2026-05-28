@@ -163,6 +163,44 @@ describe("knowledge file routes", () => {
     expect(download.headers["content-disposition"]).toContain("attachment");
   });
 
+  test("does not expose personal files to other users in the same organization", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const upload = await app.inject({
+      method: "POST",
+      url: "/api/knowledge-files",
+      payload: buildUploadPayload({
+        files: [
+          {
+            name: "private-notes.txt",
+            content: Buffer.from("Private notes"),
+            mimeType: "text/plain",
+          },
+        ],
+      }),
+    });
+    expect(upload.statusCode).toBe(200);
+    const fileId = upload.json().results[0].fileId as string;
+
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, organizationId);
+    user = otherUser;
+
+    const list = await app.inject({
+      method: "GET",
+      url: "/api/knowledge-files?limit=20&offset=0",
+    });
+    expect(list.statusCode).toBe(200);
+    expect(list.json().data).toEqual([]);
+
+    const file = await app.inject({
+      method: "GET",
+      url: `/api/knowledge-files/${fileId}`,
+    });
+    expect(file.statusCode).toBe(404);
+  });
+
   test("exposes the knowledge query tool immediately after assigning a file to an agent and MCP gateway", async ({
     makeAgent,
     seedAndAssignArchestraTools,

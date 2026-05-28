@@ -56,8 +56,6 @@ const kbUploadedFilesTable = pgTable(
       table.organizationId,
       table.contentHash,
     ),
-    // Keep the legacy connector upload path idempotent per connector.
-    // Knowledge Files additionally deduplicate by organization in KbUploadedFileModel.
     uniqueIndex("kb_uploaded_files_content_hash_uidx").on(
       table.connectorId,
       table.contentHash,

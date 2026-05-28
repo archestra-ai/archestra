@@ -1121,12 +1121,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetConnectorRuns]: { knowledgeSource: ["read"] },
   [RouteId.GetConnectorRun]: { knowledgeSource: ["read"] },
 
-  // Connector File Upload Routes
-  [RouteId.UploadConnectorFiles]: { knowledgeSource: ["update"] },
-  [RouteId.GetConnectorFiles]: { knowledgeSource: ["read"] },
-  [RouteId.GetConnectorFile]: { knowledgeSource: ["read"] },
-  [RouteId.DeleteConnectorFile]: { knowledgeSource: ["delete"] },
-
   // Knowledge File Routes
   [RouteId.GetKnowledgeFiles]: { knowledgeFile: ["read"] },
   [RouteId.UploadKnowledgeFiles]: { knowledgeFile: ["create"] },

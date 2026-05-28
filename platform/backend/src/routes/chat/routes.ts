@@ -1282,7 +1282,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Attachment not found");
       }
       if (attachment.organizationId !== organizationId) {
-        throw new ApiError(403, "Attachment belongs to a different org");
+        throw new ApiError(404, "Attachment not found");
       }
 
       const conversation = await findReadableConversationById({
@@ -1291,7 +1291,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       if (!conversation) {
-        throw new ApiError(403, "No access to the owning conversation");
+        throw new ApiError(404, "Attachment not found");
       }
 
       const result = await fileUploadManager.uploadKnowledgeFile({

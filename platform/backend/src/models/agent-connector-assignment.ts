@@ -92,6 +92,32 @@ class AgentConnectorAssignmentModel {
       .onConflictDoNothing();
   }
 
+  static async syncForAgentAssignments(params: {
+    connectorId: string;
+    agentIds: string[];
+  }): Promise<void> {
+    await db
+      .delete(schema.agentConnectorAssignmentsTable)
+      .where(
+        eq(
+          schema.agentConnectorAssignmentsTable.connectorId,
+          params.connectorId,
+        ),
+      );
+
+    if (params.agentIds.length === 0) return;
+
+    await db
+      .insert(schema.agentConnectorAssignmentsTable)
+      .values(
+        params.agentIds.map((agentId) => ({
+          agentId,
+          connectorId: params.connectorId,
+        })),
+      )
+      .onConflictDoNothing();
+  }
+
   /**
    * Batch fetch: for a list of connector IDs, return a map of connectorId → agentId[].
    */

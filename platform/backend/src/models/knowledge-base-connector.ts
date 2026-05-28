@@ -9,6 +9,7 @@ import type {
   ConnectorSyncStatus,
   ConnectorType,
 } from "@/types/knowledge-connector";
+import { escapeLikePattern } from "@/utils/sql-search";
 
 class KnowledgeBaseConnectorModel {
   static async findByOrganization(params: {
@@ -63,6 +64,7 @@ class KnowledgeBaseConnectorModel {
     offset: number;
     search?: string;
     connectorType?: ConnectorType;
+    excludeConnectorTypes?: ConnectorType[];
     canReadAll?: boolean;
     viewerTeamIds?: string[];
   }): Promise<{ data: KnowledgeBaseConnector[]; total: number }> {
@@ -72,16 +74,25 @@ class KnowledgeBaseConnectorModel {
       offset,
       search,
       connectorType,
+      excludeConnectorTypes,
       canReadAll,
       viewerTeamIds,
     } = params;
-    const searchPattern = search ? `%${search}%` : null;
+    const searchPattern = search ? `%${escapeLikePattern(search)}%` : null;
 
     const filters = [
       eq(schema.knowledgeBaseConnectorsTable.organizationId, organizationId),
       buildVisibilityFilter({ canReadAll, teamIds: viewerTeamIds }),
       ...(connectorType
         ? [eq(schema.knowledgeBaseConnectorsTable.connectorType, connectorType)]
+        : []),
+      ...(excludeConnectorTypes && excludeConnectorTypes.length > 0
+        ? [
+            sql`${schema.knowledgeBaseConnectorsTable.connectorType} NOT IN (${sql.join(
+              excludeConnectorTypes.map((type) => sql`${type}`),
+              sql`, `,
+            )})`,
+          ]
         : []),
       ...(searchPattern
         ? [

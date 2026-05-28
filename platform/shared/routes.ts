@@ -289,6 +289,7 @@ export const RouteId = {
   GetSharedConversation: "getSharedConversation",
   ForkSharedConversation: "forkSharedConversation",
   GetChatAttachmentContent: "getChatAttachmentContent",
+  PromoteChatAttachmentToKnowledgeFile: "promoteChatAttachmentToKnowledgeFile",
   GetLlmModels: "getLlmModels",
   SyncLlmModels: "syncLlmModels",
 
@@ -469,11 +470,14 @@ export const RouteId = {
   GetConnectorRuns: "getConnectorRuns",
   GetConnectorRun: "getConnectorRun",
 
-  // Connector File Upload Routes
-  UploadConnectorFiles: "uploadConnectorFiles",
-  GetConnectorFiles: "getConnectorFiles",
-  GetConnectorFile: "getConnectorFile",
-  DeleteConnectorFile: "deleteConnectorFile",
+  // Knowledge File Routes
+  GetKnowledgeFiles: "getKnowledgeFiles",
+  UploadKnowledgeFiles: "uploadKnowledgeFiles",
+  GetKnowledgeFile: "getKnowledgeFile",
+  GetKnowledgeFileContent: "getKnowledgeFileContent",
+  UpdateKnowledgeFile: "updateKnowledgeFile",
+  DeleteKnowledgeFile: "deleteKnowledgeFile",
+  GetKnowledgeFileUploadConfig: "getKnowledgeFileUploadConfig",
 
   // Invitation Routes
   CheckInvitation: "checkInvitation",

@@ -30,6 +30,7 @@ export const DocsPage = {
   PlatformIdentityProviders: "platform-identity-providers",
   PlatformKnowledgeBases: "platform-knowledge-bases",
   PlatformKnowledgeConnectors: "platform-knowledge-connectors",
+  PlatformKnowledgeFiles: "platform-knowledge-files",
   PlatformKnowledgeGraphs: "platform-knowledge-graphs",
   PlatformLethalTrifecta: "platform-lethal-trifecta",
   PlatformLlmProxyAuthentication: "platform-llm-proxy-authentication",

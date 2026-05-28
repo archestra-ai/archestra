@@ -5,8 +5,14 @@ import {
   extractTextFiles,
   isSupportedMimeType,
 } from "@/knowledge-base/connectors/file-upload/file-processor";
+import { buildKnowledgeFileDocumentAccessControlList } from "@/knowledge-base/file-upload/access-control";
+import { getBlobStorageProvider } from "@/knowledge-base/file-upload/blob-storage-providers";
 import logger from "@/logging";
-import { KbUploadedFileModel, KnowledgeBaseConnectorModel } from "@/models";
+import {
+  KbUploadedFileModel,
+  KnowledgeBaseConnectorModel,
+  UserModel,
+} from "@/models";
 import { taskQueueService } from "@/task-queue";
 
 /**
@@ -45,17 +51,23 @@ export async function handleProcessUploadedFiles(
     return;
   }
 
-  const acl =
-    knowledgeSourceAccessControlService.buildConnectorDocumentAccessControlList(
-      { connector },
-    );
-
   const files = await KbUploadedFileModel.findByIdsWithData(fileIds);
   const documentIds: string[] = [];
 
   for (const file of files) {
     try {
       await KbUploadedFileModel.updateProcessingStatus(file.id, "processing");
+      const owner = file.ownerId ? await UserModel.getById(file.ownerId) : null;
+      const acl =
+        file.ownerId || file.visibility !== "org"
+          ? buildKnowledgeFileDocumentAccessControlList({
+              visibility: file.visibility,
+              teamIds: file.teamIds,
+              ownerEmail: owner?.email,
+            })
+          : knowledgeSourceAccessControlService.buildConnectorDocumentAccessControlList(
+              { connector },
+            );
 
       if (!isSupportedMimeType(file.originalName, file.mimeType)) {
         await KbUploadedFileModel.updateProcessingStatus(
@@ -68,8 +80,14 @@ export async function handleProcessUploadedFiles(
 
       let extraction: Awaited<ReturnType<typeof extractTextFiles>>;
       try {
+        const rawBytes = await getBlobStorageProvider(
+          file.blobStorageProvider,
+        ).get({
+          key: file.blobStorageKey,
+          dbData: file.fileData,
+        });
         extraction = await extractTextFiles(
-          file.fileData,
+          rawBytes,
           file.mimeType,
           file.originalName,
         );

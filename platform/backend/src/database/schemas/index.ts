@@ -27,6 +27,16 @@
  *      virtual_api_key_provider_api_key, virtual_api_key_team
  *
  * New tables must be plural. Tables not listed in (1) or (2) must be plural.
+ *
+ * Prefix guidance (judgment-based, not lint-enforced): a table scoped to a
+ * single conversation should use the `conversation_` prefix so it sits with
+ * its siblings (`conversation_compactions`, `conversation_enabled_tools`,
+ * `conversation_shares`, `conversation_attachments`). Reserve `chat_` for
+ * feature/runtime concerns, not durable conversation children. A
+ * `conversation_id` column is a strong signal but not a law — two standing
+ * exceptions carry `conversation_id` without the prefix:
+ *   - messages — a top-level entity named for itself, not a conversation child
+ *   - chat_active_runs — ephemeral run state predating this guidance
  */
 export { default as a2aContextsTable } from "./a2a-context";
 export { default as a2aMessagesTable } from "./a2a-message";

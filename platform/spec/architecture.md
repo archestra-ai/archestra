@@ -12,7 +12,6 @@ routes → services → models → database
 - **Services** (`backend/src/services/`) — Business logic, cross-model orchestration, transactions.
 - **Models** (`backend/src/models/`) — Database access only. One file per table. Models own Drizzle queries; nothing else owns them.
 
-Dependencies go one way: routes use services; services use models. Routes never reach into models directly.
 
 ## Principles
 
@@ -20,5 +19,5 @@ Dependencies go one way: routes use services; services use models. Routes never 
 
 ### 2. Models do not call services. Imports go one way only: `services → models`, never the reverse.
 
-### 3. Business logic lives in services. Anything that touches more than one model, makes external API calls, or performs scoped authorization checks should belong to a service.
+### 3. Business logic lives in services. Anything that touches more than one model, makes external API calls, or performs scoped authorization checks should belong to a service. Dependencies go one way: routes use services; services use models. If all route is just one model call it's OK to use a model directly.
 

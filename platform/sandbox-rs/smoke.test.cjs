@@ -4,9 +4,6 @@ const assert = require("node:assert/strict");
 const sandbox = require("./index.cjs");
 
 const invalidInput = {
-  image: "debian:bookworm-slim",
-  defaultCwd: "/skills/test",
-  aptPackages: ["bash;curl"],
   snapshots: [
     {
       skillName: "test",
@@ -26,17 +23,15 @@ const invalidInput = {
   command: "echo hi",
   cwd: "/skills/test",
   timeoutSeconds: 1,
+  extraAptPackages: ["bash;curl"],
 };
 
 (async () => {
-  await assert.rejects(
-    sandbox.runSandboxCommand(invalidInput),
-    (error) => {
-      assert.equal(error.code, "ARCHESTRA_INVALID_INPUT");
-      assert.match(error.message, /invalid apt package name/);
-      return true;
-    },
-  );
+  await assert.rejects(sandbox.runSandbox(invalidInput), (error) => {
+    assert.equal(error.code, "ARCHESTRA_INVALID_INPUT");
+    assert.match(error.message, /invalid apt package name/);
+    return true;
+  });
 
   assert.equal(Object.hasOwn(sandbox, "__testPanic"), false);
 })();

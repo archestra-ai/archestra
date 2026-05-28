@@ -1,0 +1,287 @@
+use std::any::Any;
+use std::env;
+use std::panic::AssertUnwindSafe;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Duration;
+
+use dagger_sdk::{Config, Container, DaggerConn, connect_opts};
+use futures_util::FutureExt;
+use tokio::sync::{Mutex, OnceCell, mpsc, oneshot};
+
+use crate::{
+    ArtifactBytes, CommandExecution, Result, SKILL_SANDBOX_HOME, SKILL_SANDBOX_ROOT,
+    SKILL_SANDBOX_USER, SandboxError,
+};
+
+/// debian + python + uv + node + npm + common cli, warmed once per process.
+/// override with `ARCHESTRA_DAGGER_RUNTIME_IMAGE` for a custom debian-based base.
+pub const DEFAULT_BASE_IMAGE: &str = "ghcr.io/astral-sh/uv:0.9.17-python3.12-bookworm-slim";
+
+/// layered on top of the base on first warm; the toolbelt every sandbox can rely on.
+pub const DEFAULT_APT_PACKAGES: &[&str] = &[
+    "bash",
+    "coreutils",
+    "curl",
+    "git",
+    "jq",
+    "ca-certificates",
+    "build-essential",
+    "nodejs",
+    "npm",
+];
+
+const CHANNEL_CAPACITY: usize = 64;
+const SESSION_READY_TIMEOUT: Duration = Duration::from_secs(60);
+
+pub(crate) struct RunRequest {
+    pub snapshots: Vec<crate::SnapshotFile>,
+    pub replay_commands: Vec<crate::ReplayCommand>,
+    pub limits: crate::Limits,
+    pub command: String,
+    pub cwd: String,
+    pub timeout_seconds: u32,
+    pub extra_apt_packages: Vec<String>,
+    pub traceparent: Option<String>,
+}
+
+pub(crate) struct ArtifactRequest {
+    pub snapshots: Vec<crate::SnapshotFile>,
+    pub replay_commands: Vec<crate::ReplayCommand>,
+    pub limits: crate::Limits,
+    pub path: String,
+    pub extra_apt_packages: Vec<String>,
+    pub traceparent: Option<String>,
+}
+
+pub(crate) enum SessionMsg {
+    Run {
+        req: RunRequest,
+        reply: oneshot::Sender<Result<CommandExecution>>,
+    },
+    ReadArtifact {
+        req: ArtifactRequest,
+        reply: oneshot::Sender<Result<ArtifactBytes>>,
+    },
+    CheckSession {
+        traceparent: Option<String>,
+        reply: oneshot::Sender<Result<()>>,
+    },
+}
+
+pub(crate) struct SessionHandle {
+    tx: mpsc::Sender<SessionMsg>,
+}
+
+impl SessionHandle {
+    async fn send(&self, msg: SessionMsg) -> Result<()> {
+        self.tx
+            .send(msg)
+            .await
+            .map_err(|_| SandboxError::EngineUnreachable(
+                "the Dagger session is not running".to_string(),
+            ))
+    }
+
+    fn is_open(&self) -> bool {
+        !self.tx.is_closed()
+    }
+}
+
+static HANDLE_SLOT: OnceCell<Mutex<Option<Arc<SessionHandle>>>> = OnceCell::const_new();
+
+/// returns a live handle, spawning the actor on first call or after a previous
+/// session torn down (engine restart, panic in the connect closure).
+pub(crate) async fn current() -> Result<Arc<SessionHandle>> {
+    let slot = HANDLE_SLOT
+        .get_or_init(|| async { Mutex::new(None) })
+        .await;
+    let mut guard = slot.lock().await;
+    if let Some(handle) = guard.as_ref() {
+        if handle.is_open() {
+            return Ok(handle.clone());
+        }
+    }
+    let handle = spawn().await?;
+    *guard = Some(handle.clone());
+    Ok(handle)
+}
+
+/// submit a request and await the reply.
+pub(crate) async fn submit<T, F>(build: F) -> Result<T>
+where
+    F: FnOnce(oneshot::Sender<Result<T>>) -> SessionMsg,
+{
+    let (reply_tx, reply_rx) = oneshot::channel();
+    let handle = current().await?;
+    handle.send(build(reply_tx)).await?;
+    reply_rx
+        .await
+        .map_err(|_| SandboxError::internal("the Dagger session dropped a request before replying"))?
+}
+
+async fn spawn() -> Result<Arc<SessionHandle>> {
+    let (msg_tx, msg_rx) = mpsc::channel::<SessionMsg>(CHANNEL_CAPACITY);
+    let (ready_tx, ready_rx) = oneshot::channel::<()>();
+    let (fail_tx, fail_rx) = oneshot::channel::<SandboxError>();
+
+    tokio::spawn(async move {
+        let cfg = Config::builder()
+            .workdir_path(PathBuf::from("/"))
+            .load_workspace_modules(false)
+            .build();
+        let mut ready_tx = Some(ready_tx);
+        let mut fail_tx = Some(fail_tx);
+        let result = connect_opts(cfg, move |client| async move {
+            if let Some(tx) = ready_tx.take() {
+                let _ = tx.send(());
+            }
+            run_loop(client, msg_rx).await;
+            Ok(())
+        })
+        .await;
+        if let Err(err) = result {
+            if let Some(tx) = fail_tx.take() {
+                let _ = tx.send(SandboxError::engine(err));
+            }
+        }
+    });
+
+    tokio::select! {
+        ready = ready_rx => match ready {
+            Ok(()) => Ok(Arc::new(SessionHandle { tx: msg_tx })),
+            Err(_) => Err(SandboxError::EngineUnreachable(
+                "the Dagger session task exited before reporting ready".to_string(),
+            )),
+        },
+        failure = fail_rx => match failure {
+            Ok(err) => Err(err),
+            Err(_) => Err(SandboxError::EngineUnreachable(
+                "the Dagger session failed without a diagnostic".to_string(),
+            )),
+        },
+        _ = tokio::time::sleep(SESSION_READY_TIMEOUT) => Err(SandboxError::EngineUnreachable(
+            format!("the Dagger session did not become ready within {}s", SESSION_READY_TIMEOUT.as_secs()),
+        )),
+    }
+}
+
+async fn run_loop(client: DaggerConn, mut rx: mpsc::Receiver<SessionMsg>) {
+    let session = Arc::new(Session {
+        client,
+        warm: OnceCell::new(),
+    });
+    // kick warmup off in the background so it overlaps with the first request
+    {
+        let session = session.clone();
+        tokio::spawn(async move {
+            let _ = session.ensure_warm().await;
+        });
+    }
+    while let Some(msg) = rx.recv().await {
+        let session = session.clone();
+        tokio::spawn(async move {
+            handle(session, msg).await;
+        });
+    }
+}
+
+pub(crate) struct Session {
+    client: DaggerConn,
+    warm: OnceCell<Container>,
+}
+
+impl Session {
+    pub(crate) fn client(&self) -> &DaggerConn {
+        &self.client
+    }
+
+    pub(crate) async fn ensure_warm(&self) -> Result<Container> {
+        let container = self
+            .warm
+            .get_or_try_init(|| async { build_warm_base(&self.client).await })
+            .await?;
+        Ok(container.clone())
+    }
+}
+
+/// venv pre-baked into the warm base, owned by the sandbox user; reused by every
+/// `python3` command so per-call uv installs are layered on (fast) instead of
+/// recreated (slow).
+pub const DEFAULT_VENV_DIR: &str = "/home/sandbox/.venv";
+pub const DEFAULT_VENV_PYTHON: &str = "/home/sandbox/.venv/bin/python";
+pub const DEFAULT_PYTHON_REQUIREMENTS: &[&str] = &["numpy", "pandas", "httpx"];
+
+async fn build_warm_base(client: &DaggerConn) -> Result<Container> {
+    let image = env::var("ARCHESTRA_DAGGER_RUNTIME_IMAGE")
+        .unwrap_or_else(|_| DEFAULT_BASE_IMAGE.to_string());
+    let apt_packages = DEFAULT_APT_PACKAGES.join(" ");
+    let py_requirements = DEFAULT_PYTHON_REQUIREMENTS.join(" ");
+
+    // root setup: apt packages + sandbox dirs + ownership.
+    let root_setup = format!(
+        "apt-get update -qq && apt-get install -y --no-install-recommends {apt_packages} && rm -rf /var/lib/apt/lists/* && mkdir -p {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT} && chown -R 1000:1000 {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT}"
+    );
+    // user setup: uv venv + default python packages, owned by sandbox user.
+    let user_setup = format!(
+        "uv venv --python python3 {DEFAULT_VENV_DIR} && uv pip install --python {DEFAULT_VENV_PYTHON} {py_requirements}"
+    );
+    client
+        .container()
+        .from(&image)
+        .with_exec(vec!["sh".to_string(), "-c".to_string(), root_setup])
+        .with_user(SKILL_SANDBOX_USER)
+        .with_env_variable("HOME", SKILL_SANDBOX_HOME)
+        .with_env_variable("SKILL_SANDBOX_ROOT", SKILL_SANDBOX_ROOT)
+        .with_env_variable("VIRTUAL_ENV", DEFAULT_VENV_DIR)
+        .with_env_variable("PATH", format!("{DEFAULT_VENV_DIR}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"))
+        .with_exec(vec!["sh".to_string(), "-c".to_string(), user_setup])
+        .sync()
+        .await
+        .map_err(SandboxError::engine)
+        .map(|id| client.load_container_from_id(id))
+}
+
+async fn handle(session: Arc<Session>, msg: SessionMsg) {
+    match msg {
+        SessionMsg::Run { req, reply } => {
+            let result = catch_panic(crate::runtime::execute_run(session, req)).await;
+            let _ = reply.send(result);
+        }
+        SessionMsg::ReadArtifact { req, reply } => {
+            let result = catch_panic(crate::runtime::execute_read_artifact(session, req)).await;
+            let _ = reply.send(result);
+        }
+        SessionMsg::CheckSession { traceparent, reply } => {
+            let result = catch_panic(crate::runtime::execute_check_session(session, traceparent))
+                .await;
+            let _ = reply.send(result);
+        }
+    }
+}
+
+async fn catch_panic<T, Fut>(fut: Fut) -> Result<T>
+where
+    Fut: std::future::Future<Output = Result<T>>,
+{
+    AssertUnwindSafe(fut)
+        .catch_unwind()
+        .await
+        .unwrap_or_else(|payload| {
+            Err(SandboxError::Internal(format!(
+                "rust panic: {}",
+                panic_message(payload.as_ref()),
+            )))
+        })
+}
+
+fn panic_message(payload: &(dyn Any + Send)) -> &str {
+    if let Some(s) = payload.downcast_ref::<&'static str>() {
+        return s;
+    }
+    if let Some(s) = payload.downcast_ref::<String>() {
+        return s.as_str();
+    }
+    "unknown panic payload"
+}
+

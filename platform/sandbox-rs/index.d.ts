@@ -5,28 +5,8 @@ export interface ArtifactBytes {
   sizeBytes: number
 }
 
-export interface CheckCodeRuntimeSessionInput {
+export interface CheckSessionInput {
   traceparent?: string
-  image: string
-}
-
-export interface CheckDaggerSessionInput {
-  traceparent?: string
-}
-
-export interface CodeRun {
-  stdout: string
-  stderr: string
-  exitCode: number
-  timedOut: boolean
-  truncated: boolean
-}
-
-export interface CodeRuntimeLimits {
-  maxOutputBytes: number
-  maxCpuSeconds: number
-  maxMemoryBytes: number
-  maxProcesses: number
 }
 
 export interface CommandExecution {
@@ -46,15 +26,13 @@ export interface Limits {
   maxProcesses: number
 }
 
-export interface ReadSandboxArtifactInput {
+export interface ReadArtifactInput {
   traceparent?: string
-  image: string
-  defaultCwd: string
-  aptPackages: Array<string>
   snapshots: Array<SnapshotFile>
   replayCommands: Array<ReplayCommand>
   limits: Limits
   path: string
+  extraAptPackages: Array<string>
 }
 
 export interface ReplayCommand {
@@ -63,27 +41,16 @@ export interface ReplayCommand {
   timeoutSeconds: number
 }
 
-export interface RunCodeInput {
+export interface RunSandboxInput {
   traceparent?: string
-  image: string
-  runnerScript: string
-  code: string
-  requirements: Array<string>
-  timeoutSeconds: number
-  limits: CodeRuntimeLimits
-}
-
-export interface RunSandboxCommandInput {
-  traceparent?: string
-  image: string
-  defaultCwd: string
-  aptPackages: Array<string>
   snapshots: Array<SnapshotFile>
   replayCommands: Array<ReplayCommand>
   limits: Limits
   command: string
   cwd: string
   timeoutSeconds: number
+  /** optional debian packages to install on top of the warm base before this run. */
+  extraAptPackages: Array<string>
 }
 
 export interface SnapshotFile {
@@ -92,12 +59,8 @@ export interface SnapshotFile {
   encoding: string
   content: string
 }
-export declare function checkCodeRuntimeSession(input: CheckCodeRuntimeSessionInput): Promise<void>
+export declare function checkSession(input?: CheckSessionInput | undefined | null): Promise<void>
 
-export declare function checkDaggerSession(input?: CheckDaggerSessionInput | undefined | null): Promise<void>
+export declare function readArtifact(input: ReadArtifactInput): Promise<ArtifactBytes>
 
-export declare function readSandboxArtifact(input: ReadSandboxArtifactInput): Promise<ArtifactBytes>
-
-export declare function runCodeRuntime(input: RunCodeInput): Promise<CodeRun>
-
-export declare function runSandboxCommand(input: RunSandboxCommandInput): Promise<CommandExecution>
+export declare function runSandbox(input: RunSandboxInput): Promise<CommandExecution>

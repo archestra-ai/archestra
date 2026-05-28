@@ -384,15 +384,11 @@ export function ImportSkillsDialog({
                     className="relative w-full"
                   />
                   <div className="flex items-center justify-between gap-3">
-                    <div
-                      role="button"
-                      aria-disabled={selectableFiltered.length === 0}
-                      onClick={
-                        selectableFiltered.length === 0
-                          ? undefined
-                          : toggleAllFiltered
-                      }
-                      className="flex cursor-pointer items-center gap-2 text-xs font-medium text-muted-foreground select-none hover:text-foreground aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:text-muted-foreground"
+                    <button
+                      type="button"
+                      disabled={selectableFiltered.length === 0}
+                      onClick={toggleAllFiltered}
+                      className="flex cursor-pointer items-center gap-2 text-xs font-medium text-muted-foreground select-none hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-muted-foreground"
                     >
                       <Checkbox
                         checked={
@@ -414,7 +410,7 @@ export function ImportSkillsDialog({
                             ? `Select all (${selectableFiltered.length} visible)`
                             : "Select all"}
                       </span>
-                    </div>
+                    </button>
                     <span className="text-xs tabular-nums text-muted-foreground">
                       {selected.size} of {totalImportable} selected
                       {totalExisting > 0 && ` · ${totalExisting} imported`}

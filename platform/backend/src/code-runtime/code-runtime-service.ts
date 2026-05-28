@@ -1,13 +1,8 @@
-import {
-  checkCodeRuntimeSession,
-  runCodeRuntime,
-} from "@archestra/sandbox-rs";
-import {
-  context as otelContext,
-  propagation as otelPropagation,
-} from "@opentelemetry/api";
 import config from "@/config";
-import logger from "@/logging";
+import {
+  DaggerRuntimeError,
+  daggerRuntimeService,
+} from "@/dagger-runtime/dagger-runtime-service";
 import * as metrics from "@/observability/metrics";
 import {
   CODE_RUNTIME_LIMITS,
@@ -16,285 +11,84 @@ import {
   type RunCodeResult,
 } from "./types";
 
-type RuntimeStatus =
-  | "disabled"
-  | "initializing"
-  | "ready"
-  | "error"
-  | "stopped";
-type CapturedRun = {
-  stdout: string;
-  stderr: string;
-  exitCode: number;
-  truncated: boolean;
-  timedOut: boolean;
-};
-type ValidatedRunParams = { code: string; requirements: string[] };
-
-class CodeRuntimeBackstopError extends CodeRuntimeError {
-  constructor(readonly pipeline: Promise<unknown>) {
-    super("the code run exceeded its time budget");
-  }
-}
+const SKILL_NAME = "_code";
+const SCRIPT_FILE = "main.py";
+const SKILL_DIR = `/skills/${SKILL_NAME}`;
+const VENV_PYTHON = "/home/sandbox/.venv/bin/python";
 
 /**
- * runs agent-provided Python scripts in throwaway Dagger containers.
- *
- * each call gets a fresh container filesystem; only Dagger-managed base image
- * and uv package caches persist across calls. concurrency across conversations
- * is capped by a semaphore.
+ * Thin adapter over the unified `daggerRuntimeService`. Takes a Python script
+ * (and optional pip requirements), snapshots it into the shared warm sandbox,
+ * and runs it. The native side owns the Dagger session + warm venv.
  */
 class CodeRuntimeService {
-  private status: RuntimeStatus = "disabled";
-  private initPromise: Promise<void> | null = null;
-  private lastInitAttemptAt = 0;
-  private activeRuns = 0;
-  private readonly waiters: Array<() => void> = [];
-
-  /** whether the runtime is configured on (independent of engine health). */
   get isEnabled(): boolean {
-    return config.codeRuntime.enabled;
+    return config.codeRuntime.enabled && daggerRuntimeService.isEnabled;
   }
 
-  /** whether the engine is reachable and the base image is pre-warmed. */
   get isReady(): boolean {
-    return this.status === "ready";
+    return daggerRuntimeService.isReady;
   }
 
-  /**
-   * connects to the Dagger Engine and pre-pulls the base image so the first
-   * real run is fast. Idempotent and safe to call from any process — the first
-   * call does the work, later calls await it. Never throws.
-   */
-  init(): Promise<void> {
-    if (!config.codeRuntime.enabled) {
-      this.status = "disabled";
-      return Promise.resolve();
-    }
-
-    if (this.status === "ready" || this.status === "stopped") {
-      return Promise.resolve();
-    }
-
-    if (this.initPromise) return this.initPromise;
-
-    const now = Date.now();
-    if (
-      this.status === "error" &&
-      now - this.lastInitAttemptAt < INIT_RETRY_COOLDOWN_MS
-    ) {
-      return Promise.resolve();
-    }
-
-    this.initPromise = this.doInit().finally(() => {
-      this.initPromise = null;
-    });
-    return this.initPromise;
+  async init(): Promise<void> {
+    if (!config.codeRuntime.enabled) return;
+    await daggerRuntimeService.init();
   }
 
-  /**
-   * executes a Python script and returns its output. Throws
-   * {@link CodeRuntimeError} when the run cannot be performed; a non-zero
-   * script exit is a normal result.
-   */
+  async shutdown(): Promise<void> {
+    await daggerRuntimeService.shutdown();
+  }
+
   async run(params: RunCodeParams): Promise<RunCodeResult> {
-    if (!config.codeRuntime.enabled) {
+    if (!this.isEnabled) {
       throw new CodeRuntimeError("the code runtime is not enabled");
     }
-    const runParams = validateRunParams(params);
+    const validated = validateRunParams(params);
     const timeoutSeconds = this.resolveTimeout(params.timeoutSeconds);
-    // lazily initialize so scheduled-agent runs in worker processes work too.
-    await this.init();
-    if (this.status === "stopped") {
-      throw new CodeRuntimeError("the code runtime is stopped");
-    }
-    if (this.status !== "ready") {
-      throw new CodeRuntimeError(
-        "the code runtime is not available (engine unreachable)",
-      );
-    }
 
     const startedAt = Date.now();
-    let acquired = false;
-    let releaseWhenSettled: Promise<unknown> | null = null;
     try {
-      await this.acquire();
-      acquired = true;
-      const result = await this.execute({
-        params: runParams,
-        startedAt,
+      const executed = await daggerRuntimeService.runCommand({
+        command: buildPythonCommand(validated.requirements),
+        cwd: SKILL_DIR,
         timeoutSeconds,
+        snapshots: [
+          {
+            skillName: SKILL_NAME,
+            path: SCRIPT_FILE,
+            encoding: "utf8",
+            content: validated.code,
+          },
+        ],
+        outputBytesLimit: config.codeRuntime.maxOutputBytes,
       });
+      const durationMs = executed.durationMs;
       metrics.codeRuntime.reportRun(
-        result.timedOut
+        executed.timedOut
           ? "timeout"
-          : result.exitCode === 0
+          : executed.exitCode === 0
             ? "ok"
             : "script_error",
-        result.durationMs / 1000,
+        durationMs / 1000,
       );
-      return result;
+      return {
+        stdout: executed.stdout,
+        stderr: executed.stderr,
+        exitCode: executed.exitCode,
+        durationMs,
+        timedOut: executed.timedOut,
+        truncated: executed.truncated,
+      };
     } catch (error) {
-      if (error instanceof CodeRuntimeBackstopError) {
-        releaseWhenSettled = error.pipeline;
-      }
-      const runtimeError = await this.normalizeRunError(error);
       metrics.codeRuntime.reportRun(
         "runtime_error",
         (Date.now() - startedAt) / 1000,
       );
-      throw runtimeError;
-    } finally {
-      if (acquired) {
-        if (releaseWhenSettled) {
-          // the backstop already tore the session down; wait briefly for the
-          // doomed pipeline to settle, then free the slot regardless so a hung
-          // engine cannot leak concurrency permanently.
-          const settled = releaseWhenSettled.catch((error) => {
-            logger.error(
-              { err: error },
-              "[CodeRuntime] Dagger pipeline failed after backstop timeout",
-            );
-          });
-          void raceWithTimeout(settled, BACKSTOP_RELEASE_GRACE_MS).finally(
-            () => {
-              this.release();
-            },
-          );
-        } else {
-          this.release();
-        }
+      if (error instanceof DaggerRuntimeError) {
+        throw new CodeRuntimeError(error.message);
       }
-    }
-  }
-
-  /** stops accepting new runs; Dagger sessions are opened per native call. */
-  async shutdown(): Promise<void> {
-    if (this.status !== "disabled") {
-      this.status = "stopped";
-    }
-  }
-
-  // === private ===
-
-  private async doInit(): Promise<void> {
-    if (!config.codeRuntime.enabled) {
-      this.status = "disabled";
-      return;
-    }
-
-    this.applyDaggerEnv();
-    this.lastInitAttemptAt = Date.now();
-    this.status = "initializing";
-
-    try {
-      await checkCodeRuntimeSession({
-        image: config.codeRuntime.image,
-        traceparent: getTraceparent(),
-      });
-      this.status = "ready";
-      logger.info(
-        { image: config.codeRuntime.image },
-        "[CodeRuntime] ready — base image and default packages pre-warmed",
-      );
-    } catch (error) {
-      this.status = "error";
-      logger.error(
-        { err: error },
-        "[CodeRuntime] failed to initialize — code execution unavailable",
-      );
-    }
-  }
-
-  private async execute({
-    params,
-    startedAt,
-    timeoutSeconds,
-  }: {
-    params: ValidatedRunParams;
-    startedAt: number;
-    timeoutSeconds: number;
-  }): Promise<RunCodeResult> {
-    const pipeline = this.executeNative({
-      params,
-      timeoutSeconds,
-    });
-
-    // the in-container `timeout` should always fire first; this backstop only
-    // catches a hung engine/session so the agent is never blocked indefinitely.
-    const backstopMs = (timeoutSeconds + BACKSTOP_BUFFER_SECONDS) * 1000;
-    if ((await raceWithTimeout(pipeline, backstopMs)) === "timeout") {
-      this.status = "error";
-      throw new CodeRuntimeBackstopError(pipeline);
-    }
-
-    const run = await pipeline;
-    return {
-      stdout: run.stdout,
-      stderr: run.stderr,
-      exitCode: run.exitCode,
-      durationMs: Date.now() - startedAt,
-      timedOut: run.timedOut,
-      truncated: run.truncated,
-    };
-  }
-
-  private async executeNative({
-    params,
-    timeoutSeconds,
-  }: {
-    params: ValidatedRunParams;
-    timeoutSeconds: number;
-  }): Promise<CapturedRun> {
-    const runnerScript = await loadRunnerScript();
-    return runCodeRuntime({
-      traceparent: getTraceparent(),
-      image: config.codeRuntime.image,
-      runnerScript,
-      code: params.code,
-      requirements: params.requirements,
-      timeoutSeconds,
-      limits: {
-        maxOutputBytes: config.codeRuntime.maxOutputBytes,
-        maxCpuSeconds: CODE_RUNTIME_LIMITS.maxCpuSeconds,
-        maxMemoryBytes: CODE_RUNTIME_LIMITS.maxMemoryBytes,
-        maxProcesses: CODE_RUNTIME_LIMITS.maxProcesses,
-      },
-    });
-  }
-
-  private async normalizeRunError(error: unknown): Promise<CodeRuntimeError> {
-    if (error instanceof CodeRuntimeError) return error;
-
-    const nativeError = getNativeSandboxError(error);
-    switch (nativeError.code) {
-      case "ARCHESTRA_INVALID_INPUT":
-        return new CodeRuntimeError(nativeError.message);
-      case "ARCHESTRA_ENGINE_UNREACHABLE":
-      case "ARCHESTRA_INTERNAL":
-      case "ARCHESTRA_ARTIFACT_NOT_FOUND":
-      case "ARCHESTRA_ARTIFACT_TOO_LARGE":
-      case null:
-        this.status = "error";
-        logger.error(
-          { err: error, code: nativeError.code },
-          "[CodeRuntime] Dagger execution failed",
-        );
-        return new CodeRuntimeError(
-          "the code runtime is not available (engine unreachable)",
-        );
-    }
-  }
-
-  /**
-   * points the Rust Dagger SDK at a pre-deployed engine and a baked-in CLI so it
-   * never tries to provision its own or download the CLI at runtime.
-   */
-  private applyDaggerEnv(): void {
-    const { daggerRunnerHost, daggerCliBin } = config.codeRuntime;
-    process.env._EXPERIMENTAL_DAGGER_RUNNER_HOST = daggerRunnerHost;
-    if (daggerCliBin) {
-      process.env._EXPERIMENTAL_DAGGER_CLI_BIN = daggerCliBin;
+      if (error instanceof CodeRuntimeError) throw error;
+      throw error;
     }
   }
 
@@ -309,59 +103,24 @@ class CodeRuntimeService {
     }
     return Math.min(requested, max);
   }
-
-  private async acquire(): Promise<void> {
-    if (this.activeRuns < config.codeRuntime.maxConcurrent) {
-      this.activeRuns++;
-      return;
-    }
-    // cap the queue so a wedged engine cannot pile up unbounded waiters.
-    if (this.waiters.length >= CODE_RUNTIME_LIMITS.maxQueueLength) {
-      throw new CodeRuntimeError(
-        "the code runtime is at capacity — too many runs are already queued",
-      );
-    }
-    // wait for a slot; release() hands one over without decrementing.
-    await new Promise<void>((resolve) => this.waiters.push(resolve));
-  }
-
-  private release(): void {
-    const next = this.waiters.shift();
-    if (next) {
-      next();
-    } else {
-      this.activeRuns--;
-    }
-  }
 }
 
 export const codeRuntimeService = new CodeRuntimeService();
 
 // === internal helpers ===
 
-let runnerScriptPromise: Promise<string> | null = null;
-
-async function loadRunnerScript(): Promise<string> {
-  runnerScriptPromise ??= import("./runner.py").then(
-    (module) => module.default,
-  );
-  return runnerScriptPromise;
+interface ValidatedRunParams {
+  code: string;
+  requirements: string[];
 }
-
-/** extra time beyond the script's own timeout before the hung-run backstop fires. */
-const BACKSTOP_BUFFER_SECONDS = 60;
-/** how long to wait for a backstopped pipeline to settle before freeing its slot. */
-const BACKSTOP_RELEASE_GRACE_MS = 30_000;
-const INIT_RETRY_COOLDOWN_MS = 10_000;
 
 function validateRunParams(params: RunCodeParams): ValidatedRunParams {
   const codeBytes = Buffer.byteLength(params.code, "utf8");
   if (codeBytes > CODE_RUNTIME_LIMITS.maxCodeBytes) {
     throw new CodeRuntimeError(
-      `code is too large (${formatBytes(codeBytes)} > ${formatBytes(CODE_RUNTIME_LIMITS.maxCodeBytes)})`,
+      `code is too large (${codeBytes} bytes > ${CODE_RUNTIME_LIMITS.maxCodeBytes} bytes)`,
     );
   }
-
   return {
     code: params.code,
     requirements: normalizeRequirements(params.requirements),
@@ -375,16 +134,15 @@ function normalizeRequirements(requirements: string[] | undefined): string[] {
       `too many requirements (${requirements.length} > ${CODE_RUNTIME_LIMITS.maxRequirements})`,
     );
   }
-
   return requirements.map((requirement, index) => {
     const normalized = requirement.trim();
-    const bytes = Buffer.byteLength(normalized, "utf8");
     if (!normalized) {
       throw new CodeRuntimeError(`requirement ${index + 1} is empty`);
     }
+    const bytes = Buffer.byteLength(normalized, "utf8");
     if (bytes > CODE_RUNTIME_LIMITS.maxRequirementBytes) {
       throw new CodeRuntimeError(
-        `requirement ${index + 1} is too large (${formatBytes(bytes)} > ${formatBytes(CODE_RUNTIME_LIMITS.maxRequirementBytes)})`,
+        `requirement ${index + 1} is too large (${bytes} bytes > ${CODE_RUNTIME_LIMITS.maxRequirementBytes} bytes)`,
       );
     }
     if (/[\r\n\0]/.test(normalized)) {
@@ -396,59 +154,14 @@ function normalizeRequirements(requirements: string[] | undefined): string[] {
   });
 }
 
-function formatBytes(bytes: number): string {
-  return `${bytes} bytes`;
+function buildPythonCommand(requirements: string[]): string {
+  const installStep =
+    requirements.length > 0
+      ? `uv pip install --python ${VENV_PYTHON} ${requirements.map(shellQuote).join(" ")} >&2 && `
+      : "";
+  return `${installStep}${VENV_PYTHON} ${SKILL_DIR}/${SCRIPT_FILE}`;
 }
 
-function getTraceparent(): string | undefined {
-  const carrier: Record<string, string> = {};
-  otelPropagation.inject(otelContext.active(), carrier);
-  return carrier.traceparent;
-}
-
-function getNativeSandboxError(error: unknown): {
-  code:
-    | "ARCHESTRA_ARTIFACT_NOT_FOUND"
-    | "ARCHESTRA_ARTIFACT_TOO_LARGE"
-    | "ARCHESTRA_ENGINE_UNREACHABLE"
-    | "ARCHESTRA_INTERNAL"
-    | "ARCHESTRA_INVALID_INPUT"
-    | null;
-  message: string;
-} {
-  if (!(error instanceof Error)) {
-    return { code: null, message: String(error) };
-  }
-  const code =
-    typeof (error as Error & { code?: unknown }).code === "string"
-      ? (error as Error & { code: string }).code
-      : null;
-
-  switch (code) {
-    case "ARCHESTRA_ARTIFACT_NOT_FOUND":
-    case "ARCHESTRA_ARTIFACT_TOO_LARGE":
-    case "ARCHESTRA_ENGINE_UNREACHABLE":
-    case "ARCHESTRA_INTERNAL":
-    case "ARCHESTRA_INVALID_INPUT":
-      return { code, message: error.message };
-    default:
-      return { code: null, message: error.message };
-  }
-}
-
-async function raceWithTimeout(
-  work: Promise<unknown>,
-  ms: number,
-): Promise<"done" | "timeout"> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<"timeout">((resolve) => {
-    timer = setTimeout(() => resolve("timeout"), ms);
-  });
-  try {
-    return await Promise.race([work.then(() => "done" as const), timeout]);
-  } finally {
-    if (timer) {
-      clearTimeout(timer);
-    }
-  }
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
 }

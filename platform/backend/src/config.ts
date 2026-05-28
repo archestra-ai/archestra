@@ -662,6 +662,8 @@ const mcpServerBaseImage =
 const defaultCodeRuntimeImage =
   "ghcr.io/astral-sh/uv:0.9.17-python3.12-bookworm-slim";
 
+const defaultDaggerRuntimeImage = defaultCodeRuntimeImage;
+
 const knowledgeFileBlobStorageProvider = parseBlobStorageProvider(
   process.env.ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_BLOB_STORAGE_PROVIDER,
 );
@@ -725,6 +727,14 @@ const skillsSandboxDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost({
 });
 const skillsSandboxEnabled =
   skillsSandboxRequested && skillsSandboxDaggerRunnerHost !== undefined;
+
+// the unified Dagger runtime fronts both code-runtime and skills sandbox; either
+// feature flag turning on lights up the shared session + warm base.
+const daggerRuntimeRunnerHost =
+  codeRuntimeDaggerRunnerHost ?? skillsSandboxDaggerRunnerHost;
+const daggerRuntimeEnabled =
+  (codeRuntimeEnabled || skillsSandboxEnabled) &&
+  daggerRuntimeRunnerHost !== undefined;
 
 const config = {
   frontendBaseUrl,
@@ -1117,6 +1127,53 @@ const config = {
       process.env.ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT,
       16 * 1024 * 1024,
     ),
+  },
+  /**
+   * unified Dagger runtime — one shared session with a pre-warmed base
+   * container that hosts both `archestra__run_python` and skill-sandbox
+   * commands. The Rust crate (`@archestra/sandbox-rs`) owns the session;
+   * this block only carries enable + connection knobs.
+   */
+  daggerRuntime: {
+    enabled: daggerRuntimeEnabled,
+    image:
+      process.env.ARCHESTRA_DAGGER_RUNTIME_IMAGE || defaultDaggerRuntimeImage,
+    runnerHost: daggerRuntimeRunnerHost,
+    cliBin:
+      process.env.ARCHESTRA_DAGGER_RUNTIME_CLI_BIN ||
+      process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_CLI_BIN ||
+      process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN ||
+      undefined,
+    maxConcurrent: parsePositiveInt(
+      process.env.ARCHESTRA_DAGGER_RUNTIME_MAX_CONCURRENT,
+      10,
+    ),
+    maxQueueLength: parsePositiveInt(
+      process.env.ARCHESTRA_DAGGER_RUNTIME_MAX_QUEUE_LENGTH,
+      50,
+    ),
+    defaults: {
+      outputBytesLimit: parsePositiveInt(
+        process.env.ARCHESTRA_DAGGER_RUNTIME_OUTPUT_BYTES_LIMIT,
+        256 * 1024,
+      ),
+      fileSizeLimitBytes: parsePositiveInt(
+        process.env.ARCHESTRA_DAGGER_RUNTIME_FILE_SIZE_LIMIT_BYTES,
+        16 * 1024 * 1024,
+      ),
+      cpuSeconds: parsePositiveInt(
+        process.env.ARCHESTRA_DAGGER_RUNTIME_CPU_SECONDS,
+        30,
+      ),
+      memoryBytes: parsePositiveInt(
+        process.env.ARCHESTRA_DAGGER_RUNTIME_MEMORY_BYTES,
+        1024 * 1024 * 1024,
+      ),
+      maxProcesses: parsePositiveInt(
+        process.env.ARCHESTRA_DAGGER_RUNTIME_MAX_PROCESSES,
+        256,
+      ),
+    },
   },
   vault: {
     token: process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN || DEFAULT_VAULT_TOKEN,

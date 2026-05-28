@@ -19,19 +19,16 @@ const candidates = [
 ].filter(Boolean);
 
 const nativeBinding = loadBinding();
-const exported = {
-  checkCodeRuntimeSession: wrapNative("checkCodeRuntimeSession"),
-  checkDaggerSession: wrapNative("checkDaggerSession"),
-  readSandboxArtifact: wrapNative("readSandboxArtifact"),
-  runCodeRuntime: wrapNative("runCodeRuntime"),
-  runSandboxCommand: wrapNative("runSandboxCommand"),
-};
+
+// explicit per-name assignments so Node's cjs-module-lexer can expose them
+// as named ESM exports (consumers do `import { runSandbox } from ...`)
+module.exports.checkSession = wrapNative("checkSession");
+module.exports.runSandbox = wrapNative("runSandbox");
+module.exports.readArtifact = wrapNative("readArtifact");
 
 if (typeof nativeBinding.__testPanic === "function") {
-  exported.__testPanic = wrapNativeSync("__testPanic");
+  module.exports.__testPanic = wrapNativeSync("__testPanic");
 }
-
-module.exports = exported;
 
 function loadBinding() {
   const errors = [];

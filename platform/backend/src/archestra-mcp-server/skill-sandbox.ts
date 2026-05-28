@@ -252,19 +252,25 @@ const registry = defineArchestraTools([
         );
       }
 
+      const resolved = await Promise.all(
+        requestedNames.map(async (name) => {
+          const skill = await SkillModel.findByName(
+            userCtx.organizationId,
+            name,
+          );
+          if (!skill) return { name, skill: null };
+          const hasAccess = await SkillTeamModel.userHasSkillAccess({
+            organizationId: userCtx.organizationId,
+            userId: userCtx.userId,
+            skill,
+            isSkillAdmin: checker.isAdmin,
+          });
+          return { name, skill: hasAccess ? skill : null };
+        }),
+      );
       const skills: Skill[] = [];
-      for (const name of requestedNames) {
-        const skill = await SkillModel.findByName(userCtx.organizationId, name);
+      for (const { name, skill } of resolved) {
         if (!skill) {
-          return errorResult(`No skill named "${name}" exists.`);
-        }
-        const hasAccess = await SkillTeamModel.userHasSkillAccess({
-          organizationId: userCtx.organizationId,
-          userId: userCtx.userId,
-          skill,
-          isSkillAdmin: checker.isAdmin,
-        });
-        if (!hasAccess) {
           return errorResult(`No skill named "${name}" exists.`);
         }
         skills.push(skill);

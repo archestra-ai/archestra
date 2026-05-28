@@ -279,15 +279,15 @@ class SkillSandboxRuntimeService {
     replayCommands: ReplayCommand[];
     pythonpath: string | undefined;
   }> {
-    const snapshotRows = await SkillSandboxFileSnapshotModel.listBySandbox(
-      sandbox.id,
-    );
+    const [snapshotRows, log] = await Promise.all([
+      SkillSandboxFileSnapshotModel.listBySandbox(sandbox.id),
+      SkillSandboxCommandModel.listBySandbox(sandbox.id),
+    ]);
     if (snapshotRows.length === 0) {
       throw new SkillSandboxError(
         `sandbox ${sandbox.id} has no file snapshots — recreate the sandbox`,
       );
     }
-    const log = await SkillSandboxCommandModel.listBySandbox(sandbox.id);
     return {
       snapshots: snapshotRows.map(
         (snapshot): SnapshotFile => ({
@@ -436,6 +436,19 @@ function validateCommand(command: string): void {
  * Returns [] for skills without a requirements.txt — skill authors aren't
  * required to declare one.
  */
+/**
+ * Order skill names primary-first, then the rest alphabetically — so the
+ * primary skill's modules and requirements take precedence over same-named
+ * ones in secondary skills.
+ */
+function orderPrimaryFirst(
+  names: Iterable<string>,
+  primary: string | undefined,
+): string[] {
+  const rest = [...new Set(names)].filter((name) => name !== primary).sort();
+  return primary ? [primary, ...rest] : rest;
+}
+
 function autoInstallCommands(
   sandbox: SkillSandbox,
   snapshotRows: SkillSandboxFileSnapshot[],
@@ -451,19 +464,16 @@ function autoInstallCommands(
     }
   }
   if (namesWithReqs.size === 0) return [];
-  const ordered: string[] = [];
-  if (primary) ordered.push(primary);
-  for (const name of [...namesWithReqs].sort()) {
-    if (name !== primary) ordered.push(name);
-  }
-  return ordered.map((name): ReplayCommand => {
-    const reqPath = `${skillRootPath(name)}/${REQUIREMENTS_FILE}`;
-    return {
-      command: `uv pip install --python ${VENV_PYTHON} --quiet -r ${reqPath}`,
-      cwd: SKILL_SANDBOX_HOME,
-      timeoutSeconds: REQUIREMENTS_INSTALL_TIMEOUT_SECONDS,
-    };
-  });
+  return orderPrimaryFirst(namesWithReqs, primary).map(
+    (name): ReplayCommand => {
+      const reqPath = `${skillRootPath(name)}/${REQUIREMENTS_FILE}`;
+      return {
+        command: `uv pip install --python ${VENV_PYTHON} --quiet -r ${reqPath}`,
+        cwd: SKILL_SANDBOX_HOME,
+        timeoutSeconds: REQUIREMENTS_INSTALL_TIMEOUT_SECONDS,
+      };
+    },
+  );
 }
 
 /**
@@ -485,11 +495,7 @@ function pythonpathForSandbox(
     }
   }
   if (skillNames.size === 0) return undefined;
-  const ordered: string[] = [];
-  if (primary) ordered.push(primary);
-  for (const name of [...skillNames].sort()) {
-    if (name !== primary) ordered.push(name);
-  }
+  const ordered = orderPrimaryFirst(skillNames, primary);
   return ordered.map((name) => skillRootPath(name)).join(":");
 }
 

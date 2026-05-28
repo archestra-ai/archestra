@@ -278,16 +278,10 @@ function extractArtifact(
   toolResultPart: ToolUIPart | DynamicToolUIPart | null,
   part: ToolUIPart | DynamicToolUIPart,
 ): ArtifactRef | null {
-  const candidates: unknown[] = [];
   const resultOutput = toolResultPart?.output ?? part.output;
-  if (resultOutput && typeof resultOutput === "object") {
-    candidates.push(resultOutput);
-    const inner = (resultOutput as { structuredContent?: unknown })
-      .structuredContent;
-    if (inner) candidates.push(inner);
-  }
-  for (const candidate of candidates) {
-    if (isArtifactRef(candidate)) return candidate;
-  }
-  return null;
+  if (!resultOutput || typeof resultOutput !== "object") return null;
+  if (isArtifactRef(resultOutput)) return resultOutput;
+  const inner = (resultOutput as { structuredContent?: unknown })
+    .structuredContent;
+  return isArtifactRef(inner) ? inner : null;
 }

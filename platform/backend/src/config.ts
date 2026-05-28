@@ -1121,10 +1121,6 @@ const config = {
       process.env.ARCHESTRA_SKILLS_SANDBOX_OUTPUT_BYTES_LIMIT,
       256 * 1024,
     ),
-    maxConcurrent: parsePositiveInt(
-      process.env.ARCHESTRA_SKILLS_SANDBOX_MAX_CONCURRENT,
-      5,
-    ),
     artifactBytesLimit: parsePositiveInt(
       process.env.ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT,
       16 * 1024 * 1024,

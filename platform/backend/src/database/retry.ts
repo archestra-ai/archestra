@@ -146,6 +146,19 @@ export async function withDbRetry<T>(
   throw new Error("withDbRetry: unreachable");
 }
 
+/**
+ * Retry a full database transaction callback on transient connection errors.
+ *
+ * Transaction retries must wrap the whole transaction because checked-out
+ * transaction clients are not covered by the pool.query() wrapper.
+ * @public — exported for testability and standalone Drizzle clients.
+ */
+export async function withTransactionRetry<T>(
+  runTransaction: () => Promise<T>,
+): Promise<T> {
+  return withDbRetry(runTransaction);
+}
+
 /** Symbol marker to prevent double-wrapping the same pool */
 const RETRY_WRAPPED = Symbol("retryWrapped");
 

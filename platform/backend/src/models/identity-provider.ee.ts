@@ -14,7 +14,7 @@ import {
   extractGroupsFromClaims,
 } from "@/auth/idp-team-sync-cache.ee";
 import config from "@/config";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import { evaluateRoleMappingTemplate } from "@/templating";
 import type {
@@ -813,7 +813,7 @@ class IdentityProviderModel {
     }
 
     // Wrap deletions in a transaction to ensure atomicity
-    await db.transaction(async (tx) => {
+    await withDbTransaction(async (tx) => {
       /**
        * Clean up associated SSO accounts to prevent orphaned records
        * This is important because orphaned accounts can cause issues with future IdP logins

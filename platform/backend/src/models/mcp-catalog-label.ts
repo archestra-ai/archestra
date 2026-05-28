@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, or } from "drizzle-orm";
 import { uniqBy } from "lodash-es";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import type { AgentLabelGetResponse, AgentLabelWithDetails } from "@/types";
 import AgentLabelModel from "./agent-label";
 
@@ -122,7 +122,7 @@ class McpCatalogLabelModel {
     catalogId: string,
     labels: AgentLabelWithDetails[],
   ): Promise<void> {
-    const affectedPairs = await db.transaction(async (tx) => {
+    const affectedPairs = await withDbTransaction(async (tx) => {
       const previousLabels = await tx
         .select({
           keyId: schema.mcpCatalogLabelsTable.keyId,

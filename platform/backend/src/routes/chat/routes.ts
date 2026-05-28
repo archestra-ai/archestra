@@ -37,7 +37,7 @@ import {
   isApiKeyRequired,
 } from "@/clients/llm-client";
 import config from "@/config";
-import db from "@/database";
+import { withDbTransaction } from "@/database";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
 import { extractAndIngestDocuments } from "@/knowledge-base";
 import { fileUploadManager } from "@/knowledge-base/file-upload/file-upload-manager";
@@ -2118,7 +2118,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // run the message edit, optional subsequent-message deletion, and
       // compaction invalidation inside one transaction so a crash can't leave
       // stale compactions pointing at a now-edited or truncated history
-      await db.transaction(async (tx) => {
+      await withDbTransaction(async (tx) => {
         await MessageModel.updateTextPartAndDeleteSubsequent(
           message.id,
           partIndex,

@@ -1,5 +1,5 @@
 import { and, eq, inArray, lt, or, type SQL, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import type {
   CreateLimit,
@@ -474,7 +474,7 @@ class LimitModel {
       return;
     }
 
-    await db.transaction(async (tx) => {
+    await withDbTransaction(async (tx) => {
       const limits = await tx
         .update(schema.limitsTable)
         .set({ lastCleanup: now, updatedAt: now })

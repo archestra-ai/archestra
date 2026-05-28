@@ -1,4 +1,4 @@
-import db, { schema } from "@/database";
+import { schema, withDbTransaction } from "@/database";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import { chunkDocument } from "@/knowledge-base/chunker";
 import {
@@ -131,7 +131,7 @@ export async function handleProcessUploadedFiles(
         extractedFile.text,
       );
 
-      const txResult = await db.transaction(async (tx) => {
+      const txResult = await withDbTransaction(async (tx) => {
         const [doc] = await tx
           .insert(schema.kbDocumentsTable)
           .values({

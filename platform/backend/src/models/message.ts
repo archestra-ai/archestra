@@ -1,5 +1,5 @@
 import { and, eq, gt, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import type { InsertMessage, Message } from "@/types";
 
 type DbExecutor =
@@ -247,7 +247,7 @@ class MessageModel {
 
     // when no outer transaction is provided, wrap so update + delete remain atomic
     if (executor === db) {
-      return await db.transaction(async (tx) => run(tx));
+      return await withDbTransaction(async (tx) => run(tx));
     }
     return await run(executor);
   }

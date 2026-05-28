@@ -1,6 +1,6 @@
 import type { UIMessageChunk } from "ai";
 import { and, asc, desc, eq, gt, lt, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import type {
   ChatActiveRun,
   ChatActiveRunEvent,
@@ -34,7 +34,7 @@ class ActiveChatRunModel {
       return;
     }
 
-    await db.transaction(async (tx) => {
+    await withDbTransaction(async (tx) => {
       await tx.insert(schema.chatActiveRunEventsTable).values({
         runId: params.runId,
         seq: params.seq,

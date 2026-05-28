@@ -229,16 +229,22 @@ describe.skipIf(!GIT_HTTP_BACKEND_AVAILABLE)(
 
       const cloneUrl = `${baseUrl}/skills/m/${rawToken}/repo.git`;
       const target = path.join(cloneDir, "out");
+      // spawnSync blocks the vitest worker thread, so vitest's testTimeout
+      // cannot interrupt it. cap the child explicitly so a stalled clone
+      // surfaces as a test failure instead of an indefinite worker hang.
       const result = spawnSync("git", ["clone", "--quiet", cloneUrl, target], {
         env: {
           ...process.env,
           // disable any system-wide credential helpers that might prompt
           GIT_TERMINAL_PROMPT: "0",
         },
+        timeout: 20_000,
+        killSignal: "SIGKILL",
       });
       if (result.status !== 0) {
+        const signalNote = result.signal ? ` (killed by ${result.signal})` : "";
         throw new Error(
-          `git clone failed (${result.status}): ${result.stderr.toString()}`,
+          `git clone failed (${result.status})${signalNote}: ${result.stderr?.toString() ?? ""}`,
         );
       }
 

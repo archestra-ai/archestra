@@ -96,9 +96,6 @@ async function runCgiBridge(params: RunCgiBridgeParams): Promise<void> {
     headersBuf = Buffer.alloc(0);
 
     const { status, headers } = parseCgiHeaders(headerBytes.toString("utf8"));
-    // pass as raw [k1, v1, k2, v2, ...] so repeated header names (e.g. multiple
-    // Cache-Control / Pragma lines emitted by git http-backend's hdr_nocache)
-    // are preserved instead of collapsing to the last value
     res.writeHead(status, headers);
     flushBufferedBody(remainder);
     headersFlushed = true;
@@ -195,14 +192,13 @@ const LF_LF = Buffer.from("\n\n", "ascii");
 
 interface ParsedCgiHeaders {
   status: number;
-  /** Flat [k1, v1, k2, v2, ...] so repeated header names are preserved. */
-  headers: string[];
+  headers: Record<string, string>;
 }
 
 function parseCgiHeaders(raw: string): ParsedCgiHeaders {
   const lines = raw.split(/\r?\n/).filter((line) => line.length > 0);
   let status = 200;
-  const headers: string[] = [];
+  const headers: Record<string, string> = {};
 
   for (const line of lines) {
     const idx = line.indexOf(":");
@@ -214,7 +210,7 @@ function parseCgiHeaders(raw: string): ParsedCgiHeaders {
       if (Number.isFinite(code)) status = code;
       continue;
     }
-    headers.push(key, value);
+    headers[key] = value;
   }
 
   return { status, headers };

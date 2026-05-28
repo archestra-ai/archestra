@@ -213,7 +213,7 @@ describe("AgentSettingsPage", () => {
 
     renderPage();
 
-    expect(screen.getByText("gemini-2.5-pro")).toBeInTheDocument();
+    expect(screen.getByText("Gemini 2.5 Pro")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Reset" }));
 

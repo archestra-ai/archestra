@@ -1,0 +1,94 @@
+{{- if .Values.archestra.migrationJob.enabled }}
+{{/*
+Database migration Job.
+
+Runs `pnpm db:migrate` as a Helm pre-upgrade hook so the target version's
+schema is applied *before* the web and worker Deployments roll. This closes the
+rolling-upgrade gap that the worker's wait-for-migrations init container cannot
+cover on its own: during an upgrade the platform Service still routes to the
+previous revision's ready web pods, so a generic reachability check passes
+before the new migrations have run.
+
+Intentionally pre-upgrade only (not pre-install): on a fresh install the bundled
+PostgreSQL subchart has not been created yet when pre-install hooks run, so the
+Job would deadlock waiting for a database that does not exist. Fresh installs
+are covered instead by the web pod running migrations on startup, gated for the
+worker by the wait-for-migrations init container (no previous pods exist, so
+Service reachability is an accurate signal).
+*/}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "archestra-platform.fullname" . }}-migrate
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "archestra-platform.migrationJobLabels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-upgrade
+    helm.sh/hook-weight: "-5"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.archestra.migrationJob.backoffLimit | default 3 }}
+  {{- with .Values.archestra.migrationJob.activeDeadlineSeconds }}
+  activeDeadlineSeconds: {{ . }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "archestra-platform.migrationJobLabels" . | nindent 8 }}
+        {{- with .Values.archestra.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "archestra-platform.serviceAccountName" . }}
+      restartPolicy: Never
+      initContainers:
+        {{- include "archestra-platform.initContainers" . | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}-migrate
+          image: {{ include "archestra-platform.image" . }}
+          imagePullPolicy: {{ .Values.archestra.imagePullPolicy | default "IfNotPresent" }}
+          workingDir: /app/backend
+          {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
+          {{- include "archestra-platform.vaultSecretsCommand" "pnpm db:migrate" | nindent 10 }}
+          {{- else }}
+          command: ["pnpm", "db:migrate"]
+          {{- end }}
+          env:
+            {{- include "archestra-platform.env" . | nindent 12 }}
+          {{- with .Values.archestra.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with (.Values.archestra.migrationJob.resources | default .Values.archestra.resources) }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- /*
+          The migration container only needs the Vault secrets volume (for the
+          DB URL). The shared volumeMounts helper also wires up the diagnostics
+          PVC, which can be ReadWriteOnce and is held by the running web/worker
+          pods during a pre-upgrade hook -- mounting it here could leave the Job
+          unschedulable. So only the Vault volume is wired up.
+          */}}
+          {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
+          volumeMounts:
+            - name: vault-secrets
+              mountPath: /vault/secrets
+              readOnly: true
+          {{- end }}
+      {{- with .Values.archestra.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.archestra.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
+      volumes:
+        - name: vault-secrets
+          emptyDir:
+            medium: Memory
+      {{- end }}
+{{- end }}

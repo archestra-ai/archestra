@@ -268,6 +268,26 @@ archestra:
       # cause). The setup-postgres-extensions init container uses the same budget.
       timeoutSeconds: 300
 
+    # Worker pods only: block startup until the web Deployment has applied
+    # database migrations. The web pod runs `pnpm db:migrate` before it starts
+    # listening on port 9000, so a successful TCP connect to the platform
+    # Service means the schema is ready. Without this gate the worker boots in
+    # parallel with migrations, queries tables that do not exist yet (e.g.
+    # "organization"), crashes, and only recovers on a pod restart.
+    #
+    # This is the gate for *fresh installs* (no previous web pods exist, so
+    # Service reachability is an accurate signal). *Upgrades* are covered by the
+    # pre-upgrade migration Job (see archestra.migrationJob), because during an
+    # upgrade the Service still routes to the previous revision's web pods.
+    #
+    # Disable this if migrations are applied out-of-band before the worker
+    # Deployment is rolled out.
+    waitForMigrations:
+      enabled: true
+      # Maximum seconds to wait for the web Deployment to finish migrations
+      # before the init container gives up and fails.
+      timeoutSeconds: 600
+
     # Vault secret injection init container
     # Similar to Vault Agent Injector (writes secrets to a shared volume) but:
     # - No extra infrastructure needed (no Vault Agent Injector deployment)
@@ -297,6 +317,33 @@ archestra:
 
     # Resource requests/limits applied to ALL init containers.
     # Required on clusters that enforce ResourceQuota (e.g., OpenShift restricted-v2 SCC).
+    resources: {}
+
+  # Database migration Job.
+  #
+  # Runs `pnpm db:migrate` as a Helm pre-upgrade hook so the target version's
+  # schema is applied before the web and worker Deployments roll. This closes
+  # the rolling-upgrade gap that the worker's wait-for-migrations init container
+  # cannot cover: during an upgrade the platform Service still routes to the
+  # previous revision's web pods, so a reachability check passes before the new
+  # migrations have run.
+  #
+  # Intentionally pre-upgrade only (not pre-install): on a fresh install the
+  # bundled PostgreSQL subchart does not exist yet when pre-install hooks run,
+  # so the Job would deadlock. Fresh installs are covered by the web pod running
+  # migrations on startup (the worker waits via the wait-for-migrations init
+  # container).
+  #
+  # Disable this if migrations are applied by an external pipeline.
+  migrationJob:
+    enabled: true
+    # Number of retries before the Job is marked failed (which aborts the
+    # `helm upgrade`).
+    backoffLimit: 3
+    # Hard cap on Job runtime. Set to null to disable the deadline.
+    activeDeadlineSeconds: 600
+    # Resource requests/limits for the migration container.
+    # If not set, inherits from archestra.resources.
     resources: {}
 
   # Resource requests and limits for the Archestra container

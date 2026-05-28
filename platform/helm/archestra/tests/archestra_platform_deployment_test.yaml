@@ -276,6 +276,22 @@ tests:
           path: spec.template.spec.initContainers[1].image
           value: busybox:1.36
 
+  - it: should not gate the web pod on a wait-for-migrations init container
+    documentIndex: 1
+    # The web pod runs migrations itself; gating it on the platform Service
+    # (as the worker does) would deadlock startup. Only setup-postgres-extensions
+    # and wait-for-postgres are expected here.
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.initContainers
+          count: 2
+      - notEqual:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-for-migrations
+      - notEqual:
+          path: spec.template.spec.initContainers[1].name
+          value: wait-for-migrations
+
   - it: should allow overriding the wait-for-postgres image
     documentIndex: 1
     set:

@@ -102,6 +102,14 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
     from === "knowledge-bases"
       ? "Back to Knowledge Bases"
       : "Back to Connectors";
+  const currentTab = searchParams.get("tab") === "runs" ? "runs" : "documents";
+  const tabs = [
+    { label: "Documents", href: `/knowledge/connectors/${connectorId}` },
+    {
+      label: "Sync Runs",
+      href: `/knowledge/connectors/${connectorId}?tab=runs`,
+    },
+  ];
 
   const { data: connector, isPending } = useConnector(connectorId);
   const syncConnector = useSyncConnector();
@@ -228,34 +236,51 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
   return (
     <PageLayout
       title={
-        <div className="flex items-center gap-2.5">
-          <ConnectorStatusDot
-            enabled={connector.enabled}
-            lastSyncStatus={connector.lastSyncStatus}
-          />
-          <div>
-            <span>{connector.name}</span>
-            {connector.description ? (
-              <p className="text-sm font-normal text-muted-foreground mt-1 line-clamp-2 max-w-2xl">
-                {connector.description.length > 300
-                  ? `${connector.description.slice(0, 300)}…`
-                  : connector.description}
-              </p>
-            ) : (
-              <div>
-                <Badge variant="secondary" className="gap-1.5 capitalize mt-1">
-                  <ConnectorTypeIcon
-                    type={connector.connectorType}
-                    className="h-3.5 w-3.5"
-                  />
-                  {connector.connectorType}
-                </Badge>
-              </div>
-            )}
+        <div className="space-y-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            asChild
+            className="-ml-2 h-7 px-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            <Link href={backHref}>
+              <ArrowLeft className="h-4 w-4" />
+              {backLabel}
+            </Link>
+          </Button>
+          <div className="flex items-center gap-2.5">
+            <ConnectorStatusDot
+              enabled={connector.enabled}
+              lastSyncStatus={connector.lastSyncStatus}
+            />
+            <div>
+              <span>{connector.name}</span>
+              {connector.description ? (
+                <p className="text-sm font-normal text-muted-foreground mt-1 line-clamp-2 max-w-2xl">
+                  {connector.description.length > 300
+                    ? `${connector.description.slice(0, 300)}…`
+                    : connector.description}
+                </p>
+              ) : (
+                <div>
+                  <Badge
+                    variant="secondary"
+                    className="gap-1.5 capitalize mt-1"
+                  >
+                    <ConnectorTypeIcon
+                      type={connector.connectorType}
+                      className="h-3.5 w-3.5"
+                    />
+                    {connector.connectorType}
+                  </Badge>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       }
       description=""
+      tabs={tabs}
       actionButton={
         <div className="flex flex-wrap items-center gap-2">
           <Tooltip>
@@ -346,13 +371,6 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
       }
     >
       <div className="space-y-6">
-        <Button variant="ghost" size="sm" asChild>
-          <Link href={backHref}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            {backLabel}
-          </Link>
-        </Button>
-
         <div className="rounded-lg border p-4">
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-sm">
             <MetadataItem label="Last Sync">
@@ -374,36 +392,33 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
           </div>
         </div>
 
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold">Documents</h2>
+        {currentTab === "documents" ? (
           <ConnectorDocumentsTable connectorId={connectorId} />
-        </div>
-
-        <h2 className="text-lg font-semibold">Sync Runs</h2>
-
-        <LoadingWrapper
-          isPending={isRunsPending}
-          loadingFallback={<LoadingSpinner />}
-        >
-          {(runsData?.data ?? []).length === 0 ? (
-            <div className="text-muted-foreground">
-              No sync runs yet. Trigger a manual sync or wait for the scheduled
-              sync.
-            </div>
-          ) : (
-            <DataTable
-              columns={columns}
-              data={runsData?.data ?? []}
-              manualPagination={true}
-              pagination={{
-                pageIndex,
-                pageSize,
-                total: runsData?.pagination?.total ?? 0,
-              }}
-              onPaginationChange={handlePaginationChange}
-            />
-          )}
-        </LoadingWrapper>
+        ) : (
+          <LoadingWrapper
+            isPending={isRunsPending}
+            loadingFallback={<LoadingSpinner />}
+          >
+            {(runsData?.data ?? []).length === 0 ? (
+              <div className="text-muted-foreground">
+                No sync runs yet. Trigger a manual sync or wait for the
+                scheduled sync.
+              </div>
+            ) : (
+              <DataTable
+                columns={columns}
+                data={runsData?.data ?? []}
+                manualPagination={true}
+                pagination={{
+                  pageIndex,
+                  pageSize,
+                  total: runsData?.pagination?.total ?? 0,
+                }}
+                onPaginationChange={handlePaginationChange}
+              />
+            )}
+          </LoadingWrapper>
+        )}
 
         <ConnectorRunDetailsDialog
           connectorId={connectorId}

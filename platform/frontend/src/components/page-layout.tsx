@@ -19,6 +19,20 @@ function isTabActive(
   tabHref: string,
   allTabs: { href: string }[],
 ) {
+  const current = new URL(currentUrl, "http://localhost");
+  const tab = new URL(tabHref, "http://localhost");
+  const hasQueryTabs = allTabs.some((item) => item.href.includes("?"));
+
+  if (hasQueryTabs) {
+    if (tab.search) {
+      return current.pathname === tab.pathname && current.search === tab.search;
+    }
+
+    return (
+      current.pathname === tab.pathname && !current.searchParams.has("tab")
+    );
+  }
+
   // Sort tabs by href length (longest first)
   const sortedTabs = [...allTabs].sort((a, b) => b.href.length - a.href.length);
 
@@ -62,7 +76,7 @@ export function PageLayout({
 
   // Check if the active tab is in the overflow
   const activeOverflowTab = mobileOverflowTabs.find((tab) =>
-    isTabActive(pathname, tab.href, tabs),
+    isTabActive(currentUrl, tab.href, tabs),
   );
 
   return (

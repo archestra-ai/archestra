@@ -176,6 +176,13 @@ jobs:
           # allow-licenses: MIT
           license-check: "false"
           comment-summary-in-pr: on-failure
+          # GHSA-82j2-j2ch-gfr8 (rustls-webpki <0.103.13 CRL-parsing DoS) is a
+          # transitive dep of dagger-sdk, which pins reqwest 0.11 + rustls-tls
+          # (rustls 0.21 caps rustls-webpki at <0.102) — no patched version is
+          # reachable. The Dagger client only does TLS against a trusted local
+          # engine session, so attacker-controlled CRL parsing is not reachable.
+          # Revisit once dagger-sdk moves to reqwest 0.12 / rustls 0.23.
+          allow-ghsas: GHSA-82j2-j2ch-gfr8
 
   dependency-review-merge-group:
     name: Dependency Review

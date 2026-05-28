@@ -658,11 +658,6 @@ const mcpServerBaseImage =
   process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
   `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:${appVersion}`;
 
-const defaultCodeRuntimeImage =
-  "ghcr.io/astral-sh/uv:0.9.17-python3.12-bookworm-slim";
-
-const defaultDaggerRuntimeImage = defaultCodeRuntimeImage;
-
 const knowledgeFileBlobStorageProvider = parseBlobStorageProvider(
   process.env.ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_BLOB_STORAGE_PROVIDER,
 );

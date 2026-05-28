@@ -25,22 +25,17 @@ pub(crate) async fn execute_run(
     let materialized = materialize(session.client(), warm, &req).await?;
 
     let wrapped = wrap_with_timeout(&req.command, req.timeout_seconds, &req.limits);
-    let executed = materialized
-        .with_workdir(&req.cwd)
-        .with_exec_opts(
-            vec!["bash".to_string(), "-c".to_string(), wrapped],
-            any_exit_opts(),
-        );
+    let executed = materialized.with_workdir(&req.cwd).with_exec_opts(
+        vec!["bash".to_string(), "-c".to_string(), wrapped],
+        any_exit_opts(),
+    );
 
     // dagger-sdk returns stdout/stderr as Strings, so non-UTF-8 bytes are
     // lossily decoded at the GraphQL layer. for binary output the command
     // should redirect to a file and use the artifact-read path (base64-safe).
     let stdout_raw = executed.stdout().await.map_err(SandboxError::from_sdk)?;
     let stderr_raw = executed.stderr().await.map_err(SandboxError::from_sdk)?;
-    let raw_exit = executed
-        .exit_code()
-        .await
-        .map_err(SandboxError::from_sdk)? as i32;
+    let raw_exit = executed.exit_code().await.map_err(SandboxError::from_sdk)? as i32;
     let stdout = crate::truncate_output(&stdout_raw, output_limit(&req.limits));
     let stderr = crate::truncate_output(&stderr_raw, output_limit(&req.limits));
 
@@ -192,12 +187,10 @@ async fn materialize(client: &DaggerConn, warm: Container, req: &RunRequest) -> 
         // happen via Dagger's container layer (no shell `cd` needed).
         let cwd = entry.cwd.as_deref().unwrap_or(&req.cwd);
         let wrapped = wrap_with_timeout(&entry.command, entry.timeout_seconds, &req.limits);
-        container = container
-            .with_workdir(cwd)
-            .with_exec_opts(
-                vec!["bash".to_string(), "-c".to_string(), wrapped],
-                any_exit_opts(),
-            );
+        container = container.with_workdir(cwd).with_exec_opts(
+            vec!["bash".to_string(), "-c".to_string(), wrapped],
+            any_exit_opts(),
+        );
     }
 
     let _ = client; // reserved for future host()-based bulk uploads

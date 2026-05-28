@@ -24,9 +24,18 @@ pub enum SandboxError {
     /// dagger SDK refused to honour `expect=Any` (typical for signal-killed
     /// processes, e.g. SIGXFSZ → exit 153). Distinct from `EngineUnreachable`
     /// so adapters can surface "command exited N" instead of "engine down".
-    CommandFailed { exit_code: i32, message: String },
-    ArtifactTooLarge { path: String, message: String },
-    ArtifactNotFound { path: String, message: String },
+    CommandFailed {
+        exit_code: i32,
+        message: String,
+    },
+    ArtifactTooLarge {
+        path: String,
+        message: String,
+    },
+    ArtifactNotFound {
+        path: String,
+        message: String,
+    },
     InvalidInput(String),
     Internal(String),
 }
@@ -255,11 +264,7 @@ pub async fn read_artifact(input: ReadArtifactInput) -> Result<ArtifactBytes> {
 // helpers (used by runtime.rs + tests)
 // ============================================================================
 
-pub(crate) fn wrap_with_timeout(
-    command: &str,
-    timeout_seconds: u32,
-    limits: &Limits,
-) -> String {
+pub(crate) fn wrap_with_timeout(command: &str, timeout_seconds: u32, limits: &Limits) -> String {
     let memory_kilobytes = u64::from(limits.memory_bytes).div_ceil(1024);
     let output_head_bytes = (limits.output_bytes_limit as usize) + 1;
     // cwd is set via `container.with_workdir(cwd)` upstream (no shell `cd` needed).
@@ -463,10 +468,7 @@ mod tests {
         );
         assert!(matches!(
             err,
-            SandboxError::CommandFailed {
-                exit_code: 153,
-                ..
-            }
+            SandboxError::CommandFailed { exit_code: 153, .. }
         ));
         // a plain transport error stays as EngineUnreachable
         let err = SandboxError::from_sdk("connection refused");

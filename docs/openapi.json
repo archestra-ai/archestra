@@ -161549,7 +161549,8 @@
                                   "admin",
                                   "cancel",
                                   "enable",
-                                  "query"
+                                  "query",
+                                  "execute"
                                 ]
                               }
                             }
@@ -161904,7 +161905,8 @@
                           "admin",
                           "cancel",
                           "enable",
-                          "query"
+                          "query",
+                          "execute"
                         ]
                       }
                     }
@@ -161957,7 +161959,8 @@
                             "admin",
                             "cancel",
                             "enable",
-                            "query"
+                            "query",
+                            "execute"
                           ]
                         }
                       }
@@ -162299,7 +162302,8 @@
                             "admin",
                             "cancel",
                             "enable",
-                            "query"
+                            "query",
+                            "execute"
                           ]
                         }
                       }
@@ -162606,7 +162610,8 @@
                           "admin",
                           "cancel",
                           "enable",
-                          "query"
+                          "query",
+                          "execute"
                         ]
                       }
                     }
@@ -162680,7 +162685,8 @@
                             "admin",
                             "cancel",
                             "enable",
-                            "query"
+                            "query",
+                            "execute"
                           ]
                         }
                       }
@@ -185909,6 +185915,38 @@
         }
       }
     },
+    "/api/skill-sandbox/artifacts/{artifactId}": {
+      "get": {
+        "operationId": "getSkillSandboxArtifact",
+        "tags": [
+          "Skills"
+        ],
+        "description": "Stream the raw bytes of a skill sandbox artifact. Inline for known-safe raster images; download for everything else.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:execute`: Execute skill scripts",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "artifactId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "skill:execute"
+          ]
+        }
+      }
+    },
     "/api/skill-share-links": {
       "get": {
         "operationId": "getSkillShareLinks",
@@ -194339,7 +194377,8 @@
                         "admin",
                         "cancel",
                         "enable",
-                        "query"
+                        "query",
+                        "execute"
                       ]
                     }
                   }

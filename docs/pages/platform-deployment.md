@@ -1279,6 +1279,40 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
   - Default: `true`
   - Set to `false` to use vector similarity search only.
 
+#### Knowledge Files External Blob Storage
+
+Uploaded [Knowledge Files](/docs/platform-knowledge-bases#files) store file bytes in the database by default. Set the provider to `s3` to store file bytes externally while keeping metadata and indexing state in PostgreSQL.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_BLOB_STORAGE_PROVIDER`** - File byte storage provider.
+  - Default: `db`
+  - Values: `db`, `s3`
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_BUCKET`** - S3 bucket for uploaded file bytes.
+  - Required when `ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_BLOB_STORAGE_PROVIDER=s3`
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_REGION`** - AWS region for the S3 bucket.
+  - Required when `ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_BLOB_STORAGE_PROVIDER=s3`
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_PREFIX`** - Optional object key prefix.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_ENDPOINT`** - Optional S3-compatible endpoint.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_FORCE_PATH_STYLE`** - Use path-style URLs for S3-compatible storage.
+  - Default: `false`
+  - Set to `true` when required by your S3-compatible provider.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_AUTH_METHOD`** - S3 authentication method.
+  - Default: `irsa`
+  - Values: `irsa`, `static`
+  - `irsa`: use the AWS default credential chain, including IAM Roles for Service Accounts on EKS.
+  - `static`: use `ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_ACCESS_KEY_ID` and `ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_SECRET_ACCESS_KEY`.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_ACCESS_KEY_ID`** - Static S3 access key ID.
+  - Used only when `ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_AUTH_METHOD=static`
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_SECRET_ACCESS_KEY`** - Static S3 secret access key.
+  - Used only when `ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_AUTH_METHOD=static`
+
 ### Maintenance Mode
 
 - **`ARCHESTRA_MAINTENANCE_MODE_MESSAGE`** - Enables maintenance mode and displays a custom message to all users blocking access to the platform.

@@ -35796,6 +35796,10 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "authorEmail": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "knowledgeBaseIds": {
                             "type": "array",
                             "items": {
@@ -36809,6 +36813,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "authorEmail": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "knowledgeBaseIds": {
                       "type": "array",
                       "items": {
@@ -37584,6 +37592,10 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "authorEmail": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "knowledgeBaseIds": {
                         "type": "array",
                         "items": {
@@ -38290,6 +38302,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "authorEmail": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "knowledgeBaseIds": {
                       "type": "array",
                       "items": {
@@ -38993,6 +39009,10 @@
                       }
                     },
                     "authorName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "authorEmail": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -40044,6 +40064,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "authorEmail": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "knowledgeBaseIds": {
                           "type": "array",
                           "items": {
@@ -40794,6 +40818,10 @@
                       }
                     },
                     "authorName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "authorEmail": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -41764,6 +41792,10 @@
                       }
                     },
                     "authorName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "authorEmail": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -42754,6 +42786,10 @@
                       }
                     },
                     "authorName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "authorEmail": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -69051,6 +69087,333 @@
           "kind": "static",
           "permissions": [
             "chat:read"
+          ]
+        }
+      }
+    },
+    "/api/chat/attachments/{id}/promote-to-knowledge-file": {
+      "post": {
+        "operationId": "promoteChatAttachmentToKnowledgeFile",
+        "tags": [
+          "Chat"
+        ],
+        "description": "Promote a conversation attachment into a reusable Knowledge File\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:read`: View and access chat conversations\n`knowledgeFile:create`: Upload Knowledge Files",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "visibility": {
+                    "default": "personal",
+                    "type": "string",
+                    "enum": [
+                      "personal",
+                      "team",
+                      "org"
+                    ]
+                  },
+                  "teamIds": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "agentIds": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "filename": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "created",
+                        "duplicate",
+                        "unsupported",
+                        "too_large",
+                        "extraction_failed",
+                        "failed"
+                      ]
+                    },
+                    "fileId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "filename",
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "chat:read",
+            "knowledgeFile:create"
           ]
         }
       }
@@ -128812,60 +129175,13 @@
         }
       }
     },
-    "/api/connectors/{id}/files": {
-      "post": {
-        "operationId": "uploadConnectorFiles",
+    "/api/knowledge-files/config": {
+      "get": {
+        "operationId": "getKnowledgeFileUploadConfig",
         "tags": [
-          "Connectors"
+          "Knowledge Files"
         ],
-        "description": "Upload files to a file-upload connector. Send files as base64-encoded content in a JSON array.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify Knowledge Bases and Connectors",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "files": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "name": {
-                          "type": "string"
-                        },
-                        "mimeType": {
-                          "type": "string"
-                        },
-                        "content": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "name",
-                        "mimeType",
-                        "content"
-                      ]
-                    }
-                  }
-                },
-                "required": [
-                  "files"
-                ]
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          }
-        ],
+        "description": "Get Knowledge Files upload configuration\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeFile:read`: View uploaded Knowledge Files",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -128874,38 +129190,20 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "results": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "filename": {
-                            "type": "string"
-                          },
-                          "status": {
-                            "type": "string",
-                            "enum": [
-                              "created",
-                              "duplicate",
-                              "unsupported",
-                              "too_large",
-                              "extraction_failed"
-                            ]
-                          },
-                          "fileId": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "filename",
-                          "status"
-                        ],
-                        "additionalProperties": false
-                      }
+                    "maxFileSizeBytes": {
+                      "type": "number"
+                    },
+                    "externalBlobStorageEnabled": {
+                      "type": "boolean"
+                    },
+                    "blobStorageProvider": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "results"
+                    "maxFileSizeBytes",
+                    "externalBlobStorageEnabled",
+                    "blobStorageProvider"
                   ],
                   "additionalProperties": false
                 }
@@ -129144,16 +129442,18 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "knowledgeSource:update"
+            "knowledgeFile:read"
           ]
         }
-      },
+      }
+    },
+    "/api/knowledge-files": {
       "get": {
-        "operationId": "getConnectorFiles",
+        "operationId": "getKnowledgeFiles",
         "tags": [
-          "Connectors"
+          "Knowledge Files"
         ],
-        "description": "List files uploaded to a file-upload connector\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
+        "description": "List uploaded Knowledge Files\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeFile:read`: View uploaded Knowledge Files",
         "parameters": [
           {
             "schema": {
@@ -129184,14 +129484,6 @@
             "in": "query",
             "name": "search",
             "required": false
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
           }
         ],
         "responses": {
@@ -129213,6 +129505,24 @@
                           "connectorId": {
                             "type": "string"
                           },
+                          "ownerId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "visibility": {
+                            "type": "string",
+                            "enum": [
+                              "personal",
+                              "team",
+                              "org"
+                            ]
+                          },
+                          "teamIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "originalName": {
                             "type": "string",
                             "minLength": 1
@@ -129228,11 +129538,21 @@
                           "contentHash": {
                             "type": "string"
                           },
+                          "blobStorageProvider": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "createdAt": {
                             "type": "string"
                           },
                           "processingStatus": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "processing",
+                              "completed",
+                              "failed"
+                            ]
                           },
                           "processingError": {
                             "nullable": true,
@@ -129246,11 +129566,36 @@
                               "completed",
                               "failed"
                             ]
+                          },
+                          "assignedAgents": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "agentType": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name",
+                                "agentType"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
                           "id",
                           "connectorId",
+                          "visibility",
+                          "teamIds",
                           "originalName",
                           "mimeType",
                           "fileSize",
@@ -129258,7 +129603,8 @@
                           "createdAt",
                           "processingStatus",
                           "processingError",
-                          "embeddingStatus"
+                          "embeddingStatus",
+                          "assignedAgents"
                         ],
                         "additionalProperties": false
                       }
@@ -129545,36 +129891,78 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "knowledgeSource:read"
+            "knowledgeFile:read"
           ]
         }
-      }
-    },
-    "/api/connectors/{id}/files/{fileId}": {
-      "get": {
-        "operationId": "getConnectorFile",
+      },
+      "post": {
+        "operationId": "uploadKnowledgeFiles",
         "tags": [
-          "Connectors"
+          "Knowledge Files"
         ],
-        "description": "Get a single uploaded file by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "fileId",
-            "required": true
+        "description": "Upload files into Knowledge Files\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeFile:create`: Upload Knowledge Files",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "visibility": {
+                    "default": "personal",
+                    "type": "string",
+                    "enum": [
+                      "personal",
+                      "team",
+                      "org"
+                    ]
+                  },
+                  "teamIds": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "agentIds": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "files": {
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "mimeType": {
+                          "type": "string"
+                        },
+                        "content": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9+/]*={0,2}$"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "mimeType",
+                        "content"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "files"
+                ]
+              }
+            }
           }
-        ],
+        },
         "responses": {
           "200": {
             "description": "Default Response",
@@ -129583,58 +129971,39 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "connectorId": {
-                      "type": "string"
-                    },
-                    "originalName": {
-                      "type": "string",
-                      "minLength": 1
-                    },
-                    "mimeType": {
-                      "type": "string"
-                    },
-                    "fileSize": {
-                      "type": "integer",
-                      "minimum": 0,
-                      "maximum": 9007199254740991
-                    },
-                    "contentHash": {
-                      "type": "string"
-                    },
-                    "createdAt": {
-                      "type": "string"
-                    },
-                    "processingStatus": {
-                      "type": "string"
-                    },
-                    "processingError": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "embeddingStatus": {
-                      "type": "string",
-                      "enum": [
-                        "pending",
-                        "processing",
-                        "completed",
-                        "failed"
-                      ]
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "filename": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "created",
+                              "duplicate",
+                              "unsupported",
+                              "too_large",
+                              "extraction_failed",
+                              "failed"
+                            ]
+                          },
+                          "fileId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "filename",
+                          "status"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
-                    "id",
-                    "connectorId",
-                    "originalName",
-                    "mimeType",
-                    "fileSize",
-                    "contentHash",
-                    "createdAt",
-                    "processingStatus",
-                    "processingError",
-                    "embeddingStatus"
+                    "results"
                   ],
                   "additionalProperties": false
                 }
@@ -129873,25 +130242,800 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "knowledgeSource:read"
+            "knowledgeFile:create"
           ]
         }
-      },
-      "delete": {
-        "operationId": "deleteConnectorFile",
+      }
+    },
+    "/api/knowledge-files/{fileId}": {
+      "get": {
+        "operationId": "getKnowledgeFile",
         "tags": [
-          "Connectors"
+          "Knowledge Files"
         ],
-        "description": "Delete an uploaded file and its indexed content\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors",
+        "description": "Get an uploaded Knowledge File by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeFile:read`: View uploaded Knowledge Files",
         "parameters": [
           {
             "schema": {
               "type": "string"
             },
             "in": "path",
-            "name": "id",
+            "name": "fileId",
             "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "connectorId": {
+                      "type": "string"
+                    },
+                    "ownerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "visibility": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
+                    },
+                    "teamIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "originalName": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "mimeType": {
+                      "type": "string"
+                    },
+                    "fileSize": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "contentHash": {
+                      "type": "string"
+                    },
+                    "blobStorageProvider": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "processingStatus": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "processing",
+                        "completed",
+                        "failed"
+                      ]
+                    },
+                    "processingError": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "embeddingStatus": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "processing",
+                        "completed",
+                        "failed"
+                      ]
+                    },
+                    "assignedAgents": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "agentType": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "agentType"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "connectorId",
+                    "visibility",
+                    "teamIds",
+                    "originalName",
+                    "mimeType",
+                    "fileSize",
+                    "contentHash",
+                    "createdAt",
+                    "processingStatus",
+                    "processingError",
+                    "embeddingStatus",
+                    "assignedAgents"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
           },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "knowledgeFile:read"
+          ]
+        }
+      },
+      "put": {
+        "operationId": "updateKnowledgeFile",
+        "tags": [
+          "Knowledge Files"
+        ],
+        "description": "Update an uploaded Knowledge File\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeFile:update`: Modify Knowledge File visibility and agent access",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "visibility": {
+                    "type": "string",
+                    "enum": [
+                      "personal",
+                      "team",
+                      "org"
+                    ]
+                  },
+                  "teamIds": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "agentIds": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "visibility"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "fileId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "connectorId": {
+                      "type": "string"
+                    },
+                    "ownerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "visibility": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
+                    },
+                    "teamIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "originalName": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "mimeType": {
+                      "type": "string"
+                    },
+                    "fileSize": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "contentHash": {
+                      "type": "string"
+                    },
+                    "blobStorageProvider": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "processingStatus": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "processing",
+                        "completed",
+                        "failed"
+                      ]
+                    },
+                    "processingError": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "embeddingStatus": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "processing",
+                        "completed",
+                        "failed"
+                      ]
+                    },
+                    "assignedAgents": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "agentType": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "agentType"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "connectorId",
+                    "visibility",
+                    "teamIds",
+                    "originalName",
+                    "mimeType",
+                    "fileSize",
+                    "contentHash",
+                    "createdAt",
+                    "processingStatus",
+                    "processingError",
+                    "embeddingStatus",
+                    "assignedAgents"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "knowledgeFile:update"
+          ]
+        }
+      },
+      "delete": {
+        "operationId": "deleteKnowledgeFile",
+        "tags": [
+          "Knowledge Files"
+        ],
+        "description": "Delete an uploaded Knowledge File and indexed content\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeFile:delete`: Delete Knowledge Files",
+        "parameters": [
           {
             "schema": {
               "type": "string"
@@ -130153,7 +131297,270 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "knowledgeSource:delete"
+            "knowledgeFile:delete"
+          ]
+        }
+      }
+    },
+    "/api/knowledge-files/{fileId}/content": {
+      "get": {
+        "operationId": "getKnowledgeFileContent",
+        "tags": [
+          "Knowledge Files"
+        ],
+        "description": "Stream uploaded Knowledge File bytes by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeFile:read`: View uploaded Knowledge Files",
+        "parameters": [
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "download",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "fileId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "knowledgeFile:read"
           ]
         }
       }

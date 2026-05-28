@@ -3,7 +3,7 @@ import logger from "@/logging";
 import { extractTextFromDocx } from "../docx-text-extractor";
 
 export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
-export const MAX_ZIP_TOTAL_BYTES = 50 * 1024 * 1024;
+const MAX_ZIP_TOTAL_BYTES = 50 * 1024 * 1024;
 
 type FileKind = "text" | "pdf" | "docx" | "doc" | "zip" | "unsupported";
 

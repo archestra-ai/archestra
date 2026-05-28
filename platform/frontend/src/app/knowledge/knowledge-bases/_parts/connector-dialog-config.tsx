@@ -153,11 +153,6 @@ export const CONNECTOR_OPTIONS: ConnectorOption[] = [
     label: CONNECTOR_DISPLAY_LABELS.salesforce,
     description: "Sync CRM objects from Salesforce",
   },
-  {
-    type: "file_upload",
-    label: CONNECTOR_DISPLAY_LABELS.file_upload,
-    description: "Upload your own text files and zip archives",
-  },
 ];
 
 const CONNECTOR_URL_CONFIGS: Record<ConnectorType, ConnectorUrlConfig | null> =

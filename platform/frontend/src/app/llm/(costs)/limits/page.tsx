@@ -59,6 +59,7 @@ import { UserSearchableSelect } from "@/components/user-searchable-select";
 import { VirtualKeySearchableSelect } from "@/components/virtual-key-searchable-select";
 import { useProfiles } from "@/lib/agent.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { formatResetCountdown } from "@/lib/utils/date-time";
 import {
   useCreateLimit,
   useDeleteLimit,
@@ -487,13 +488,26 @@ export default function LimitsPage() {
       {
         accessorKey: "cleanupInterval",
         header: "Cleanup",
-        size: 140,
-        minSize: 120,
+        size: 180,
+        minSize: 140,
         cell: ({ row }) => {
           const cleanupInterval =
             (row.original.cleanupInterval as LimitCleanupInterval | null) ??
             DEFAULT_LIMIT_CLEANUP_INTERVAL;
-          return CLEANUP_INTERVAL_LABELS[cleanupInterval];
+          const countdown = formatResetCountdown(
+            row.original.lastCleanup,
+            cleanupInterval,
+          );
+          return (
+            <div className="flex flex-col gap-0.5">
+              <span>{CLEANUP_INTERVAL_LABELS[cleanupInterval]}</span>
+              {countdown && (
+                <span className="text-xs text-muted-foreground">
+                  {countdown}
+                </span>
+              )}
+            </div>
+          );
         },
       },
       {

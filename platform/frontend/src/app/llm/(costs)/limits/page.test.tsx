@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import LimitsPage, { getLimitModels } from "./page";
 
 const mockSetCostsAction = vi.fn();
@@ -302,12 +302,18 @@ vi.mock("@/components/searchable-multi-select", () => ({
 
 describe("LimitsPage", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-15T12:00:00.000Z"));
     vi.clearAllMocks();
     mockUseHasPermissions.mockReturnValue({ data: true, isPending: false });
     mockUseLimits.mockReturnValue({ data: [], isPending: false });
     mockUseAllVirtualApiKeys.mockReturnValue({
       data: { data: [], pagination: { total: 0 } },
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("shows a settings notice when a default user limit is configured", () => {
@@ -528,5 +534,88 @@ describe("LimitsPage", () => {
     render(<LimitsPage />);
     const row = screen.getByTestId("data-table-row-limit-proxy");
     expect(row).toHaveTextContent("Unknown LLM proxy");
+  });
+
+  it("shows cleanup interval label in table", () => {
+    mockUseLimits.mockReturnValue({
+      data: [
+        {
+          id: "limit-cleanup",
+          entityType: "organization",
+          entityId: "org-1",
+          limitType: "token_cost",
+          limitValue: 1000,
+          model: null,
+          mcpServerName: null,
+          toolName: null,
+          cleanupInterval: "24h",
+          lastCleanup: "2026-03-15T06:00:00.000Z",
+          createdAt: "2026-01-01",
+          updatedAt: "2026-01-01",
+          modelUsage: [],
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<LimitsPage />);
+    const row = screen.getByTestId("data-table-row-limit-cleanup");
+    expect(row).toHaveTextContent("Every 24 hours");
+  });
+
+  it("shows reset countdown when lastCleanup is set", () => {
+    mockUseLimits.mockReturnValue({
+      data: [
+        {
+          id: "limit-countdown",
+          entityType: "organization",
+          entityId: "org-1",
+          limitType: "token_cost",
+          limitValue: 1000,
+          model: null,
+          mcpServerName: null,
+          toolName: null,
+          cleanupInterval: "1w",
+          lastCleanup: "2026-03-10T12:00:00.000Z",
+          createdAt: "2026-01-01",
+          updatedAt: "2026-01-01",
+          modelUsage: [],
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<LimitsPage />);
+    const row = screen.getByTestId("data-table-row-limit-countdown");
+    // 5 days after March 10 = March 15 (current fake time), so ~2 days left
+    expect(row).toHaveTextContent(/resets/);
+  });
+
+  it("does not show countdown when lastCleanup is null", () => {
+    mockUseLimits.mockReturnValue({
+      data: [
+        {
+          id: "limit-no-cleanup",
+          entityType: "organization",
+          entityId: "org-1",
+          limitType: "token_cost",
+          limitValue: 1000,
+          model: null,
+          mcpServerName: null,
+          toolName: null,
+          cleanupInterval: "1w",
+          lastCleanup: null,
+          createdAt: "2026-01-01",
+          updatedAt: "2026-01-01",
+          modelUsage: [],
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<LimitsPage />);
+    const row = screen.getByTestId("data-table-row-limit-no-cleanup");
+    expect(row).toHaveTextContent("Every week");
+    expect(row).not.toHaveTextContent(/resets/);
   });
 });

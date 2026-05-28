@@ -183813,7 +183813,7 @@
                           },
                           "tokenStart": {
                             "type": "string",
-                            "maxLength": 14
+                            "maxLength": 22
                           },
                           "name": {
                             "nullable": true,
@@ -184155,7 +184155,7 @@
                 "properties": {
                   "skillIds": {
                     "minItems": 1,
-                    "maxItems": 50,
+                    "maxItems": 500,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -184206,7 +184206,7 @@
                         },
                         "tokenStart": {
                           "type": "string",
-                          "maxLength": 14
+                          "maxLength": 22
                         },
                         "name": {
                           "nullable": true,

@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { count, desc, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type { AgentVersion, PromptSnapshotV1 } from "@/types";
@@ -106,6 +106,53 @@ class AgentVersionModel {
     );
 
     return (version as AgentVersion) ?? null;
+  }
+
+  static async findById(id: string): Promise<AgentVersion | null> {
+    logger.debug({ id }, "AgentVersionModel.findById: fetching");
+
+    const [version] = await db
+      .select()
+      .from(schema.agentVersionsTable)
+      .where(eq(schema.agentVersionsTable.id, id))
+      .limit(1);
+
+    logger.debug(
+      { id, found: !!version },
+      "AgentVersionModel.findById: completed",
+    );
+
+    return (version as AgentVersion) ?? null;
+  }
+
+  static async list(
+    agentId: string,
+    params: { limit: number; offset: number },
+  ): Promise<{ versions: AgentVersion[]; total: number }> {
+    logger.debug({ agentId, ...params }, "AgentVersionModel.list: fetching");
+
+    const [totalResult, versions] = await Promise.all([
+      db
+        .select({ total: count() })
+        .from(schema.agentVersionsTable)
+        .where(eq(schema.agentVersionsTable.agentId, agentId)),
+      db
+        .select()
+        .from(schema.agentVersionsTable)
+        .where(eq(schema.agentVersionsTable.agentId, agentId))
+        .orderBy(desc(schema.agentVersionsTable.versionNumber))
+        .limit(params.limit)
+        .offset(params.offset),
+    ]);
+
+    const total = totalResult[0]?.total ?? 0;
+
+    logger.debug(
+      { agentId, total, returned: versions.length },
+      "AgentVersionModel.list: completed",
+    );
+
+    return { versions: versions as AgentVersion[], total };
   }
 }
 

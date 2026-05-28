@@ -14,6 +14,11 @@ export const RouteId = {
   GetLabelKeys: "getLabelKeys",
   GetLabelValues: "getLabelValues",
 
+  // Agent Version Routes
+  GetAgentVersions: "getAgentVersions",
+  GetAgentVersion: "getAgentVersion",
+  GetAgentVersionDiff: "getAgentVersionDiff",
+
   // Schedule Trigger Routes
   GetScheduleTriggers: "getScheduleTriggers",
   CreateScheduleTrigger: "createScheduleTrigger",

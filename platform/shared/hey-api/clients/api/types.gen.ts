@@ -14237,6 +14237,297 @@ export type GetAllDelegationConnectionsResponses = {
 
 export type GetAllDelegationConnectionsResponse = GetAllDelegationConnectionsResponses[keyof GetAllDelegationConnectionsResponses];
 
+export type GetAgentVersionsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/agents/{id}/versions';
+};
+
+export type GetAgentVersionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentVersionsError = GetAgentVersionsErrors[keyof GetAgentVersionsErrors];
+
+export type GetAgentVersionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            versionNumber: number;
+            source: 'create' | 'update' | 'restore';
+            createdBy: string | null;
+            createdByName: string | null;
+            createdAt: string;
+            promptPreview: string | null;
+        }>;
+        total: number;
+    };
+};
+
+export type GetAgentVersionsResponse = GetAgentVersionsResponses[keyof GetAgentVersionsResponses];
+
+export type GetAgentVersionData = {
+    body?: never;
+    path: {
+        id: string;
+        versionId: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/versions/{versionId}';
+};
+
+export type GetAgentVersionErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentVersionError = GetAgentVersionErrors[keyof GetAgentVersionErrors];
+
+export type GetAgentVersionResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        agentId: string;
+        versionNumber: number;
+        snapshot: {
+            version: '1';
+            systemPrompt: string | null;
+        };
+        source: 'create' | 'update' | 'restore';
+        createdBy: string | null;
+        createdByName: string | null;
+        createdAt: string;
+    };
+};
+
+export type GetAgentVersionResponse = GetAgentVersionResponses[keyof GetAgentVersionResponses];
+
+export type GetAgentVersionDiffData = {
+    body?: never;
+    path: {
+        id: string;
+        versionId: string;
+    };
+    query: {
+        against: string;
+    };
+    url: '/api/agents/{id}/versions/{versionId}/diff';
+};
+
+export type GetAgentVersionDiffErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentVersionDiffError = GetAgentVersionDiffErrors[keyof GetAgentVersionDiffErrors];
+
+export type GetAgentVersionDiffResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        base: {
+            versionNumber: number;
+            systemPrompt: string | null;
+            createdAt: string;
+        };
+        target: {
+            versionNumber: number | null;
+            systemPrompt: string | null;
+            label: string;
+        };
+        changed: boolean;
+    };
+};
+
+export type GetAgentVersionDiffResponse = GetAgentVersionDiffResponses[keyof GetAgentVersionDiffResponses];
+
 export type AnthropicMessagesWithDefaultAgentData = {
     body: AnthropicMessagesRequestInput;
     headers: {

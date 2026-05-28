@@ -25,6 +25,11 @@ import {
 } from "@/lib/chat/chat-tools-display.utils";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { cn } from "@/lib/utils";
+import {
+  type ArtifactRef,
+  isArtifactRef,
+  SandboxArtifactPreview,
+} from "./sandbox-artifact-preview";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
 import { ToolStatusRow } from "./tool-status-row";
 
@@ -178,6 +183,7 @@ function ExpandedToolCard({
   }) => void;
 }) {
   const { part, toolResultPart, toolName, errorText } = tool;
+  const artifact = errorText ? null : extractArtifact(toolResultPart, part);
   const hasInput = part.input && Object.keys(part.input).length > 0;
   const isApprovalRequested = part.state === "approval-requested";
   const hasContent = Boolean(
@@ -256,7 +262,32 @@ function ExpandedToolCard({
             errorText={errorText}
           />
         )}
+        {artifact ? <SandboxArtifactPreview artifact={artifact} /> : null}
       </ToolContent>
     </Tool>
   );
+}
+
+/**
+ * Pull an ArtifactRef out of a tool result if the structured content looks
+ * like one. Both shapes the SDK can return are covered:
+ *   - flattened MCP structuredContent at `output.structuredContent`
+ *   - the SDK's normalized object directly on `output`
+ */
+function extractArtifact(
+  toolResultPart: ToolUIPart | DynamicToolUIPart | null,
+  part: ToolUIPart | DynamicToolUIPart,
+): ArtifactRef | null {
+  const candidates: unknown[] = [];
+  const resultOutput = toolResultPart?.output ?? part.output;
+  if (resultOutput && typeof resultOutput === "object") {
+    candidates.push(resultOutput);
+    const inner = (resultOutput as { structuredContent?: unknown })
+      .structuredContent;
+    if (inner) candidates.push(inner);
+  }
+  for (const candidate of candidates) {
+    if (isArtifactRef(candidate)) return candidate;
+  }
+  return null;
 }

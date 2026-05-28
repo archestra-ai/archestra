@@ -13,6 +13,7 @@ import {
 } from "@/models";
 import type { SkillSandbox, SkillSandboxFileSnapshot } from "@/types";
 import { asSandboxId, type SandboxId } from "@/types";
+import { resolveArtifactMime } from "./mime-sniff";
 import {
   SKILL_SANDBOX_HOME,
   SKILL_SANDBOX_ROOT,
@@ -184,12 +185,16 @@ class SkillSandboxRuntimeService {
       }
 
       const data = Buffer.from(artifact.dataBase64, "base64");
+      const mimeType = resolveArtifactMime({
+        buffer: data,
+        claimed: params.mimeType,
+      });
       let row: Awaited<ReturnType<typeof SkillSandboxArtifactModel.create>>;
       try {
         row = await SkillSandboxArtifactModel.create({
           sandboxId: params.sandboxId,
           path: resolvedPath,
-          mimeType: params.mimeType ?? "application/octet-stream",
+          mimeType,
           sizeBytes: data.byteLength,
           data,
         });

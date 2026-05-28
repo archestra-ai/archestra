@@ -500,6 +500,7 @@ export const RouteId = {
   ImportGithubSkills: "importGithubSkills",
   GetSkillSourceRepos: "getSkillSourceRepos",
   EnableSkillToolDefaults: "enableSkillToolDefaults",
+  GetSkillSandboxArtifact: "getSkillSandboxArtifact",
 
   // Audit Log Routes
   GetAuditLogs: "getAuditLogs",

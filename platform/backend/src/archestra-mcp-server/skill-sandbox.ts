@@ -10,11 +10,13 @@ import logger from "@/logging";
 import {
   SkillInvalidFilePathError,
   SkillModel,
+  SkillSandboxArtifactModel,
   SkillSandboxCommandModel,
   SkillSandboxFileSnapshotModel,
   SkillSandboxModel,
   SkillTeamModel,
 } from "@/models";
+import { isInlineSafeImageMime } from "@/skills-sandbox/mime-sniff";
 import {
   SKILL_SANDBOX_ROOT,
   skillRootPath,
@@ -197,7 +199,15 @@ const GetSkillSandboxArtifactOutputSchema = z.object({
   path: z.string(),
   mimeType: z.string(),
   sizeBytes: z.number(),
+  /**
+   * Stable URL the frontend can fetch the bytes from (auth-scoped to the
+   * caller). Relative to the backend origin; safe to pass straight to `<img
+   * src>` or `<a href>` in the same-origin chat UI.
+   */
+  downloadUrl: z.string(),
 });
+
+const INLINE_IMAGE_MAX_BYTES = 1024 * 1024;
 
 const registry = defineArchestraTools([
   defineArchestraTool({
@@ -507,18 +517,32 @@ const registry = defineArchestraTools([
           "[SkillSandbox] artifact exported",
         );
 
+        const downloadUrl = `/api/skill-sandbox/artifacts/${result.artifactId}`;
         const envTrailer = await renderCompactEnvTrailerFor(
           resolved.sandboxId,
           userCtx,
         );
-        return structuredSuccessResult(
-          { ...result },
-          [
-            `Exported artifact ${result.artifactId} from ${result.path} (${result.sizeBytes} bytes).`,
-            "",
-            envTrailer,
-          ].join("\n"),
-        );
+        const structuredContent = { ...result, downloadUrl };
+        const text = [
+          `Exported artifact ${result.artifactId} from ${result.path} (${result.sizeBytes} bytes).`,
+          `Download: ${downloadUrl}`,
+          "",
+          envTrailer,
+        ].join("\n");
+
+        // For small inline-safe raster images, attach the bytes as an MCP
+        // image content block so vision-capable models can verify what they
+        // produced on the next turn. Over the cap or non-raster mimes:
+        // metadata + URL only.
+        const inlineImage = await maybeInlineImageContent(result);
+        if (inlineImage) {
+          return {
+            content: [{ type: "text" as const, text }, inlineImage],
+            structuredContent,
+            isError: false,
+          };
+        }
+        return structuredSuccessResult(structuredContent, text);
       } catch (error) {
         if (error instanceof SkillSandboxError) {
           return errorResult(error.message);
@@ -552,6 +576,32 @@ function requireUserContext(context: ArchestraContext): UserContext | null {
 
 function dedupe(values: string[]): string[] {
   return [...new Set(values)];
+}
+
+/**
+ * Returns an MCP image content block for inline-safe raster artifacts under
+ * the size cap, or null otherwise. The bytes are re-fetched from the DB
+ * (cheap at <=1 MiB) so `exportArtifact` stays a pure metadata-returning
+ * call.
+ */
+async function maybeInlineImageContent(ref: {
+  artifactId: string;
+  mimeType: string;
+  sizeBytes: number;
+}): Promise<{ type: "image"; data: string; mimeType: string } | null> {
+  if (!isInlineSafeImageMime(ref.mimeType)) return null;
+  if (ref.sizeBytes > INLINE_IMAGE_MAX_BYTES) return null;
+  const row = await SkillSandboxArtifactModel.findById(ref.artifactId);
+  if (!row) return null;
+  // bytea round-trips as Buffer in production (pg) but as a comma-separated
+  // string in PGlite; normalize so .toString("base64") is meaningful either
+  // way.
+  const data = Buffer.isBuffer(row.data) ? row.data : Buffer.from(row.data);
+  return {
+    type: "image" as const,
+    data: data.toString("base64"),
+    mimeType: ref.mimeType,
+  };
 }
 
 /**

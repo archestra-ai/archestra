@@ -37,7 +37,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Resource | Actions |
 |----------|--------|
 | Agents | `read`, `create`, `update`, `delete`, `team-admin` |
-| Skills | `read`, `create`, `update`, `delete`, `team-admin` |
+| Skills | `read`, `create`, `update`, `delete`, `team-admin`, `execute` |
 | Agent Triggers | `read`, `create`, `update`, `delete` |
 | Scheduled Tasks | `read`, `create`, `update`, `delete` |
 | LLM Proxies | `read`, `create`, `update`, `delete`, `team-admin` |
@@ -79,7 +79,7 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Resource | Actions |
 |----------|--------|
 | Agents | `read`, `create`, `update`, `delete` |
-| Skills | `read`, `create`, `update`, `delete` |
+| Skills | `read`, `create`, `update`, `delete`, `execute` |
 | Scheduled Tasks | `read`, `create`, `update`, `delete` |
 | LLM Proxies | `read`, `create`, `update`, `delete` |
 | LLM Provider API Keys | `read` |

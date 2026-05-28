@@ -1155,6 +1155,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.ImportGithubSkills]: { skill: ["create"] },
   [RouteId.GetSkillSourceRepos]: { skill: ["read"] },
   [RouteId.EnableSkillToolDefaults]: { skill: ["admin"] },
+  [RouteId.GetSkillSandboxArtifact]: { skill: ["execute"] },
 
   // Audit Log Routes
   [RouteId.GetAuditLogs]: {

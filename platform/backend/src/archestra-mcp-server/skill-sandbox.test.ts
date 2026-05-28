@@ -9,6 +9,7 @@ import config from "@/config";
 import {
   ConversationModel,
   SkillModel,
+  SkillSandboxArtifactModel,
   SkillSandboxFileSnapshotModel,
   SkillSandboxModel,
 } from "@/models";
@@ -435,9 +436,93 @@ describe("skill sandbox tools (runtime enabled)", () => {
       const structured = structuredOf<{
         artifactId: string;
         sizeBytes: number;
+        downloadUrl: string;
       }>(result);
       expect(structured.artifactId).toBe("artifact-1");
       expect(structured.sizeBytes).toBe(42);
+      expect(structured.downloadUrl).toBe(
+        "/api/skill-sandbox/artifacts/artifact-1",
+      );
+      // non-image mime → no inline image content block, just the text part
+      const contentTypes = (result.content as Array<{ type: string }>).map(
+        (c) => c.type,
+      );
+      expect(contentTypes).toEqual(["text"]);
+    });
+
+    test("attaches an MCP image content block for inline-safe PNGs under the cap", async () => {
+      await seedSkill();
+      const created = await executeArchestraTool(
+        TOOL_CREATE_SKILL_SANDBOX_FULL_NAME,
+        { skillNames: ["pdf-processing"] },
+        context,
+      );
+      const { sandboxId } = structuredOf<{ sandboxId: string }>(created);
+
+      const pngBytes = Buffer.concat([
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+        Buffer.alloc(128, 0xab),
+      ]);
+      // create a real artifact row so the inline-image helper can load the
+      // bytes via SkillSandboxArtifactModel.findById
+      const row = await SkillSandboxArtifactModel.create({
+        sandboxId,
+        path: "/skills/pdf-processing/preview.png",
+        mimeType: "image/png",
+        sizeBytes: pngBytes.byteLength,
+        data: pngBytes,
+      });
+      vi.spyOn(skillSandboxRuntimeService, "exportArtifact").mockResolvedValue({
+        artifactId: row.id,
+        sandboxId: sandboxId as any,
+        path: row.path,
+        mimeType: row.mimeType,
+        sizeBytes: row.sizeBytes,
+      });
+
+      const result = await executeArchestraTool(
+        TOOL_GET_SKILL_SANDBOX_ARTIFACT_FULL_NAME,
+        { sandboxId, path: "preview.png", mimeType: "image/png" },
+        context,
+      );
+
+      expect(result.isError).toBe(false);
+      const contents = result.content as Array<{
+        type: string;
+        data?: string;
+        mimeType?: string;
+      }>;
+      expect(contents.map((c) => c.type)).toEqual(["text", "image"]);
+      expect(contents[1].mimeType).toBe("image/png");
+      expect(contents[1].data).toBe(pngBytes.toString("base64"));
+    });
+
+    test("omits the inline image block when an image exceeds the 1MiB cap", async () => {
+      await seedSkill();
+      const created = await executeArchestraTool(
+        TOOL_CREATE_SKILL_SANDBOX_FULL_NAME,
+        { skillNames: ["pdf-processing"] },
+        context,
+      );
+      const { sandboxId } = structuredOf<{ sandboxId: string }>(created);
+
+      vi.spyOn(skillSandboxRuntimeService, "exportArtifact").mockResolvedValue({
+        artifactId: "big-png",
+        sandboxId: sandboxId as any,
+        path: "/skills/pdf-processing/big.png",
+        mimeType: "image/png",
+        sizeBytes: 2 * 1024 * 1024, // 2 MiB > 1 MiB cap
+      });
+
+      const result = await executeArchestraTool(
+        TOOL_GET_SKILL_SANDBOX_ARTIFACT_FULL_NAME,
+        { sandboxId, path: "big.png", mimeType: "image/png" },
+        context,
+      );
+
+      expect(result.isError).toBe(false);
+      const contents = result.content as Array<{ type: string }>;
+      expect(contents.map((c) => c.type)).toEqual(["text"]);
     });
   });
 });

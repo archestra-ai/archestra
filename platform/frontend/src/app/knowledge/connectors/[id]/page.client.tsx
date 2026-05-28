@@ -102,12 +102,13 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
     from === "knowledge-bases"
       ? "Back to Knowledge Bases"
       : "Back to Connectors";
-  const currentTab = searchParams.get("tab") === "runs" ? "runs" : "documents";
+  const currentTab =
+    searchParams.get("tab") === "documents" ? "documents" : "runs";
   const tabs = [
-    { label: "Documents", href: `/knowledge/connectors/${connectorId}` },
+    { label: "Sync Runs", href: `/knowledge/connectors/${connectorId}` },
     {
-      label: "Sync Runs",
-      href: `/knowledge/connectors/${connectorId}?tab=runs`,
+      label: "Documents",
+      href: `/knowledge/connectors/${connectorId}?tab=documents`,
     },
   ];
 
@@ -236,46 +237,30 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
   return (
     <PageLayout
       title={
-        <div className="space-y-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            asChild
-            className="-ml-2 h-7 px-2 text-sm font-medium text-muted-foreground hover:text-foreground"
-          >
-            <Link href={backHref}>
-              <ArrowLeft className="h-4 w-4" />
-              {backLabel}
-            </Link>
-          </Button>
-          <div className="flex items-center gap-2.5">
-            <ConnectorStatusDot
-              enabled={connector.enabled}
-              lastSyncStatus={connector.lastSyncStatus}
-            />
-            <div>
-              <span>{connector.name}</span>
-              {connector.description ? (
-                <p className="text-sm font-normal text-muted-foreground mt-1 line-clamp-2 max-w-2xl">
-                  {connector.description.length > 300
-                    ? `${connector.description.slice(0, 300)}…`
-                    : connector.description}
-                </p>
-              ) : (
-                <div>
-                  <Badge
-                    variant="secondary"
-                    className="gap-1.5 capitalize mt-1"
-                  >
-                    <ConnectorTypeIcon
-                      type={connector.connectorType}
-                      className="h-3.5 w-3.5"
-                    />
-                    {connector.connectorType}
-                  </Badge>
-                </div>
-              )}
-            </div>
+        <div className="flex items-center gap-2.5">
+          <ConnectorStatusDot
+            enabled={connector.enabled}
+            lastSyncStatus={connector.lastSyncStatus}
+          />
+          <div>
+            <span>{connector.name}</span>
+            {connector.description ? (
+              <p className="text-sm font-normal text-muted-foreground mt-1 line-clamp-2 max-w-2xl">
+                {connector.description.length > 300
+                  ? `${connector.description.slice(0, 300)}…`
+                  : connector.description}
+              </p>
+            ) : (
+              <div>
+                <Badge variant="secondary" className="gap-1.5 capitalize mt-1">
+                  <ConnectorTypeIcon
+                    type={connector.connectorType}
+                    className="h-3.5 w-3.5"
+                  />
+                  {connector.connectorType}
+                </Badge>
+              </div>
+            )}
           </div>
         </div>
       }
@@ -371,6 +356,13 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
       }
     >
       <div className="space-y-6">
+        <Button variant="ghost" size="sm" asChild>
+          <Link href={backHref}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            {backLabel}
+          </Link>
+        </Button>
+
         <div className="rounded-lg border p-4">
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-sm">
             <MetadataItem label="Last Sync">

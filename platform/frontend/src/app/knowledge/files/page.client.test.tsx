@@ -133,9 +133,8 @@ describe("KnowledgeFilesPage", () => {
     expect(screen.getByText("Agents / MCP Gateways")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Choose which agents and MCP gateways can retrieve this file.",
+        "Choose which agents and MCP gateways can retrieve this file, or make it available to all of them.",
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText("All agents and MCP gateways")).toBeInTheDocument();
   });
 });

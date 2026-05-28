@@ -92,14 +92,15 @@ function KnowledgeFilesList() {
       header: "File",
       cell: ({ row }) => (
         <TruncatedTooltip content={row.original.originalName}>
-          <button
+          <Button
             type="button"
-            className="flex min-w-0 max-w-full items-center gap-2 bg-transparent p-0 text-left"
+            variant="ghost"
+            className="h-auto min-w-0 max-w-full justify-start bg-transparent p-0 text-left hover:bg-transparent"
           >
             <span className="truncate text-sm font-medium">
               {row.original.originalName}
             </span>
-          </button>
+          </Button>
         </TruncatedTooltip>
       ),
     },

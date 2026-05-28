@@ -29,6 +29,9 @@ vi.mock("@/models/llm-provider-api-key-model", () => ({
 import { FAST_MODELS } from "@shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { createDirectLLMModel } from "@/clients/llm-client";
+import ConversationModel from "@/models/conversation";
+import MessageModel from "@/models/message";
+import { test } from "@/test";
 import type { ChatMessage } from "@/types";
 import {
   __test,
@@ -591,6 +594,199 @@ describe("getMessagesNotYetPersisted", () => {
       "user-2",
       "assistant-2",
     ]);
+  });
+});
+
+describe("persistNewMessages", () => {
+  // Regression coverage for #4030: approving or declining a tool and then
+  // reloading must restore the resolved turn. The real flow persists four
+  // times — the user message and the assistant turn are saved during the
+  // first request, then the approval resume re-sends the same turn, which
+  // must update the existing assistant row in place rather than appending
+  // duplicate rows and orphaning the original approval-requested row.
+  const userMessage = {
+    id: "user-1",
+    role: "user",
+    parts: [{ type: "text", text: "Run the print test tool." }],
+  };
+
+  const printToolPart = {
+    type: "tool-print_test",
+    toolCallId: "call-1",
+    input: {},
+  };
+
+  const approvalRequested = {
+    id: "assistant-1",
+    role: "assistant",
+    parts: [{ ...printToolPart, state: "approval-requested" }],
+  };
+
+  // The approval resume re-sends the assistant turn with the answer applied.
+  const approvalResponded = {
+    id: "assistant-1",
+    role: "assistant",
+    parts: [{ ...printToolPart, state: "approval-responded" }],
+  };
+
+  const resolvedCases = [
+    {
+      decision: "approved",
+      toolState: "output-available",
+      resolvedAssistant: {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            ...printToolPart,
+            state: "output-available",
+            output: { result: ["archestra-4030-repro"] },
+          },
+          { type: "text", text: "The print test tool ran successfully." },
+        ],
+      },
+    },
+    {
+      decision: "declined",
+      toolState: "output-denied",
+      resolvedAssistant: {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          { ...printToolPart, state: "output-denied" },
+          { type: "text", text: "Understood, I will not run that tool." },
+        ],
+      },
+    },
+  ];
+
+  for (const testCase of resolvedCases) {
+    test(`reconciles the resolved turn after a tool call is ${testCase.decision}, without duplicate rows (#4030)`, async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const organization = await makeOrganization();
+      await makeMember(user.id, organization.id, { role: "admin" });
+      const agent = await makeAgent({
+        organizationId: organization.id,
+        authorId: user.id,
+        scope: "personal",
+      });
+      const conversation = await ConversationModel.create({
+        userId: user.id,
+        organizationId: organization.id,
+        agentId: agent.id,
+        selectedModel: "gpt-4o",
+        selectedProvider: "openai",
+      });
+
+      // First request: the user message is persisted early, then the
+      // assistant turn is persisted on finish while the tool waits for
+      // approval.
+      await __test.persistNewMessages(
+        conversation.id,
+        [userMessage],
+        "earlyUserMsg",
+      );
+      await __test.persistNewMessages(
+        conversation.id,
+        [userMessage, approvalRequested],
+        "onFinish",
+      );
+
+      // Resume request: the client re-sends the answered turn. The early
+      // persist must not duplicate it, and the finish persist must update
+      // the existing assistant row to its resolved state.
+      await __test.persistNewMessages(
+        conversation.id,
+        [userMessage, approvalResponded],
+        "earlyUserMsg",
+      );
+      await __test.persistNewMessages(
+        conversation.id,
+        [userMessage, testCase.resolvedAssistant],
+        "onFinish",
+      );
+
+      const stored = await MessageModel.findByConversation(conversation.id);
+      expect(stored.filter((row) => row.role === "user")).toHaveLength(1);
+
+      const assistantRows = stored.filter((row) => row.role === "assistant");
+      expect(assistantRows).toHaveLength(1);
+
+      const storedParts: Array<Record<string, unknown>> =
+        assistantRows[0]?.content?.parts ?? [];
+      const resolvedToolPart = storedParts.find(
+        (part) => part.toolCallId === "call-1",
+      );
+      expect(resolvedToolPart?.state).toBe(testCase.toolState);
+      expect(storedParts.some((part) => part.type === "text")).toBe(true);
+    });
+  }
+});
+
+describe("getMessagesWithChangedContent", () => {
+  it("only updates rows still in approval-requested state, matched by toolCallId", () => {
+    // The narrow scope: this update path resolves an approval-requested tool
+    // call by toolCallId. Unrelated content changes on other rows are ignored
+    // so a client can't repurpose this path to overwrite earlier messages —
+    // those edits still go through updateTextPartAndDeleteSubsequent.
+    const changed = __test.getMessagesWithChangedContent({
+      existingMessages: [
+        {
+          id: "db-text",
+          content: {
+            id: "user-1",
+            role: "user",
+            parts: [{ type: "text", text: "hello" }],
+          },
+        },
+        {
+          id: "db-pending",
+          content: {
+            id: "assistant-1",
+            role: "assistant",
+            parts: [
+              {
+                type: "tool-print_test",
+                toolCallId: "call-1",
+                state: "approval-requested",
+                input: {},
+              },
+            ],
+          },
+        },
+      ],
+      uiMessages: [
+        // Unrelated text edit — must be ignored.
+        {
+          id: "user-1",
+          role: "user",
+          parts: [{ type: "text", text: "hello (edited)" }],
+        },
+        // Resolved version of the approval-requested call.
+        {
+          id: "assistant-1",
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-print_test",
+              toolCallId: "call-1",
+              state: "output-available",
+              input: {},
+              output: { ok: true },
+            },
+            { type: "text", text: "done" },
+          ],
+        },
+      ],
+    });
+
+    expect(changed).toHaveLength(1);
+    expect(changed[0]?.id).toBe("db-pending");
   });
 });
 

@@ -161,7 +161,7 @@ export function useUploadConnectorFiles(connectorId: string) {
       }
       if (extractionFailed > 0) {
         toast.error(
-          `${extractionFailed} file${extractionFailed > 1 ? "s" : ""} failed to extract text — the file may be corrupted or use unsupported formatting`,
+          `${extractionFailed} file${extractionFailed > 1 ? "s" : ""} failed to extract text - the file may be corrupted or use unsupported formatting`,
         );
       }
     },

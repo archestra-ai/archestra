@@ -236,93 +236,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  fastify.get(
-    "/api/knowledge-bases/:id/documents",
-    {
-      schema: {
-        operationId: RouteId.GetKnowledgeBaseDocuments,
-        description: "List documents for a knowledge base",
-        tags: ["Knowledge Bases"],
-        params: z.object({ id: z.uuid() }),
-        querystring: PaginationQuerySchema.extend({
-          search: z.string().optional(),
-          connectorId: z.uuid().optional(),
-        }),
-        response: constructResponseSchema(
-          createPaginatedResponseSchema(KnowledgeBaseDocumentListItemSchema),
-        ),
-      },
-    },
-    async (
-      {
-        params: { id },
-        query: { limit, offset, search, connectorId },
-        organizationId,
-        user,
-      },
-      reply,
-    ) => {
-      await findKnowledgeBaseOrThrow({
-        id,
-        organizationId,
-        userId: user.id,
-      });
-
-      const [data, total] = await Promise.all([
-        KbDocumentModel.findListItemsByKnowledgeBase({
-          knowledgeBaseId: id,
-          organizationId,
-          limit,
-          offset,
-          search,
-          connectorId,
-        }),
-        KbDocumentModel.countByKnowledgeBaseWithSearch({
-          knowledgeBaseId: id,
-          organizationId,
-          search,
-          connectorId,
-        }),
-      ]);
-
-      return reply.send({
-        data,
-        pagination: calculatePaginationMeta(total, { limit, offset }),
-      });
-    },
-  );
-
-  fastify.get(
-    "/api/knowledge-bases/:id/documents/:docId",
-    {
-      schema: {
-        operationId: RouteId.GetKnowledgeBaseDocument,
-        description: "Get a single knowledge base document",
-        tags: ["Knowledge Bases"],
-        params: z.object({ id: z.uuid(), docId: z.uuid() }),
-        response: constructResponseSchema(KnowledgeBaseDocumentDetailSchema),
-      },
-    },
-    async ({ params: { id, docId }, organizationId, user }, reply) => {
-      await findKnowledgeBaseOrThrow({
-        id,
-        organizationId,
-        userId: user.id,
-      });
-
-      const existing = await KbDocumentModel.findListItemByIdAndKnowledgeBase({
-        documentId: docId,
-        knowledgeBaseId: id,
-        organizationId,
-      });
-      if (!existing) {
-        throw new ApiError(404, "Document not found");
-      }
-
-      return reply.send(existing);
-    },
-  );
-
   fastify.put(
     "/api/knowledge-bases/:id",
     {
@@ -378,38 +291,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Knowledge base not found");
       }
 
-      return reply.send({ success: true });
-    },
-  );
-
-  fastify.delete(
-    "/api/knowledge-bases/:id/documents/:docId",
-    {
-      schema: {
-        operationId: RouteId.DeleteKnowledgeBaseDocument,
-        description: "Delete a knowledge base document",
-        tags: ["Knowledge Bases"],
-        params: z.object({ id: z.uuid(), docId: z.uuid() }),
-        response: constructResponseSchema(DeleteObjectResponseSchema),
-      },
-    },
-    async ({ params: { id, docId }, organizationId, user }, reply) => {
-      await findKnowledgeBaseOrThrow({
-        id,
-        organizationId,
-        userId: user.id,
-      });
-
-      const existing = await KbDocumentModel.findListItemByIdAndKnowledgeBase({
-        documentId: docId,
-        knowledgeBaseId: id,
-        organizationId,
-      });
-      if (!existing) {
-        throw new ApiError(404, "Document not found");
-      }
-
-      await KbDocumentModel.delete(docId);
       return reply.send({ success: true });
     },
   );

@@ -63,9 +63,9 @@ vi.mock("@/lib/knowledge/kb-document.query", () => ({
     },
     isPending: false,
   }),
-  useConnectorDocument: ({ docId }: { docId: string }) => ({
+  useConnectorDocument: ({ path }: { path: { docId: string } }) => ({
     data:
-      docId === "doc-2"
+      path.docId === "doc-2"
         ? {
             id: "doc-2",
             content: "a".repeat(25_000),
@@ -126,7 +126,7 @@ describe("ConnectorDocumentsTable", () => {
 
     await waitFor(() => {
       expect(mockDeleteMutateAsync).toHaveBeenCalledWith({
-        connectorId: "connector-1",
+        id: "connector-1",
         docId: "doc-1",
       });
     });

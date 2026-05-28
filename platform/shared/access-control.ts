@@ -1101,11 +1101,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetKnowledgeBases]: { knowledgeSource: ["read"] },
   [RouteId.CreateKnowledgeBase]: { knowledgeSource: ["create"] },
   [RouteId.GetKnowledgeBase]: { knowledgeSource: ["read"] },
-  [RouteId.GetKnowledgeBaseDocuments]: { knowledgeSource: ["read"] },
-  [RouteId.GetKnowledgeBaseDocument]: { knowledgeSource: ["read"] },
   [RouteId.UpdateKnowledgeBase]: { knowledgeSource: ["update"] },
   [RouteId.DeleteKnowledgeBase]: { knowledgeSource: ["delete"] },
-  [RouteId.DeleteKnowledgeBaseDocument]: { knowledgeSource: ["delete"] },
   [RouteId.GetKnowledgeBaseHealth]: { knowledgeSource: ["read"] },
 
   // Knowledge Base Connector Routes

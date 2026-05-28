@@ -50,8 +50,7 @@ export function ConnectorDocumentsTable({
     useState<KnowledgeBaseDocumentListItem | null>(null);
 
   const { data: previewDocDetail } = useConnectorDocument({
-    connectorId,
-    docId: selectedPreviewDoc?.id ?? "",
+    path: { id: connectorId, docId: selectedPreviewDoc?.id ?? "" },
     enabled: selectedPreviewDoc !== null,
   });
 
@@ -60,10 +59,12 @@ export function ConnectorDocumentsTable({
     isPending,
     isError,
   } = useConnectorDocuments({
-    connectorId,
-    limit: pageSize,
-    offset,
-    search,
+    path: { id: connectorId },
+    query: {
+      limit: pageSize,
+      offset,
+      ...(search ? { search } : {}),
+    },
   });
   const deleteDocumentMutation = useDeleteConnectorDocument();
 
@@ -245,7 +246,7 @@ export function ConnectorDocumentsTable({
         onConfirm={async () => {
           if (!deletingDoc) return;
           const result = await deleteDocumentMutation.mutateAsync({
-            connectorId,
+            id: connectorId,
             docId: deletingDoc.id,
           });
           if (result) {

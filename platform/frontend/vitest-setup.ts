@@ -131,14 +131,3 @@ vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
     return Object.assign(Object.create(mockCanvasContext), { canvas: this });
   },
 );
-
-class ResizeObserver {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-}
-
-const globalWithResizeObserver = globalThis as typeof globalThis & {
-  ResizeObserver: typeof ResizeObserver;
-};
-globalWithResizeObserver.ResizeObserver = ResizeObserver;

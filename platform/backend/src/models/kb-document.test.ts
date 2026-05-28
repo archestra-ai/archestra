@@ -461,66 +461,6 @@ describe("KbDocumentModel", () => {
     });
   });
 
-  describe("countByKnowledgeBase", () => {
-    test("counts documents for a knowledge base", async ({
-      makeOrganization,
-      makeKnowledgeBase,
-      makeKnowledgeBaseConnector,
-    }) => {
-      const org = await makeOrganization();
-      const kb = await makeKnowledgeBase(org.id);
-      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
-
-      const _doc = await KbDocumentModel.create(
-        createDocumentData(connector.id, org.id, {
-          title: "My Document",
-          content: "Document content here",
-        }),
-      );
-
-      const count = await KbDocumentModel.countByKnowledgeBase({
-        knowledgeBaseId: kb.id,
-        organizationId: org.id,
-      });
-      expect(count).toBe(1);
-    });
-
-    test("returns 0 when knowledge base has no documents", async ({
-      makeOrganization,
-      makeKnowledgeBase,
-    }) => {
-      const org = await makeOrganization();
-      const kb = await makeKnowledgeBase(org.id);
-
-      const count = await KbDocumentModel.countByKnowledgeBase({
-        knowledgeBaseId: kb.id,
-        organizationId: org.id,
-      });
-      expect(count).toBe(0);
-    });
-
-    test("does not count documents from other knowledge bases", async ({
-      makeOrganization,
-      makeKnowledgeBase,
-      makeKnowledgeBaseConnector,
-    }) => {
-      const org = await makeOrganization();
-      const kb1 = await makeKnowledgeBase(org.id);
-      const kb2 = await makeKnowledgeBase(org.id);
-      const connector1 = await makeKnowledgeBaseConnector(kb1.id, org.id);
-      const connector2 = await makeKnowledgeBaseConnector(kb2.id, org.id);
-      await KbDocumentModel.create(createDocumentData(connector1.id, org.id));
-      await KbDocumentModel.create(createDocumentData(connector1.id, org.id));
-      await KbDocumentModel.create(createDocumentData(connector2.id, org.id));
-
-      const count = await KbDocumentModel.countByKnowledgeBase({
-        knowledgeBaseId: kb1.id,
-        organizationId: org.id,
-      });
-      expect(count).toBe(2);
-    });
-  });
-
   describe("updateAclByConnector", () => {
     test("updates only documents whose ACL differs from the target ACL", async ({
       makeOrganization,

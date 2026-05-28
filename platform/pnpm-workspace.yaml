@@ -71,6 +71,10 @@ engineStrict: true
 # Packages requiring scripts must be manually rebuilt with: pnpm rebuild <package-name>
 ignoreScripts: true
 
+# Runtime containers build dependencies into the image. Do not let `pnpm run`
+# or `pnpm exec` try to repair dependencies on startup.
+verifyDepsBeforeRun: false
+
 # Security: Delay installation of newly published packages.
 # 10080 minutes = 7 days.
 # https://daniakash.com/posts/simplest-supply-chain-defense/

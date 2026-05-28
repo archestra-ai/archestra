@@ -15,13 +15,6 @@ export const SKILL_SANDBOX_LIMITS = {
   maxCommandBytes: 16 * 1024,
 } as const;
 
-export type SkillSandboxStatus =
-  | "disabled"
-  | "initializing"
-  | "ready"
-  | "error"
-  | "stopped";
-
 export interface RunCommandParams {
   sandboxId: SandboxId;
   command: string;

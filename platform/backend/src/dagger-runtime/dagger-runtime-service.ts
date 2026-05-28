@@ -1,10 +1,4 @@
-import {
-  checkSession,
-  type ReplayCommand,
-  readArtifact,
-  runSandbox,
-  type SnapshotFile,
-} from "@archestra/sandbox-rs";
+import type { ReplayCommand, SnapshotFile } from "@archestra/sandbox-rs";
 import {
   context as otelContext,
   propagation as otelPropagation,
@@ -12,7 +6,17 @@ import {
 import config from "@/config";
 import logger from "@/logging";
 
-export type DaggerRuntimeStatus =
+// lazy-load the native addon: importing this module for codegen / openapi
+// generation, or running with the runtime disabled, must not require the
+// platform-specific `.node` binary to be present.
+type NativeBindings = typeof import("@archestra/sandbox-rs");
+let nativeBindings: Promise<NativeBindings> | null = null;
+function loadNative(): Promise<NativeBindings> {
+  nativeBindings ??= import("@archestra/sandbox-rs");
+  return nativeBindings;
+}
+
+type DaggerRuntimeStatus =
   | "disabled"
   | "initializing"
   | "ready"
@@ -47,7 +51,7 @@ interface LimitOverrides {
   maxProcesses?: number;
 }
 
-export interface RunCommandParams extends LimitOverrides {
+interface RunCommandParams extends LimitOverrides {
   command: string;
   cwd: string;
   timeoutSeconds: number;
@@ -57,7 +61,7 @@ export interface RunCommandParams extends LimitOverrides {
   pythonpath?: string;
 }
 
-export interface RunCommandResult {
+interface RunCommandResult {
   stdout: string;
   stderr: string;
   exitCode: number;
@@ -66,7 +70,7 @@ export interface RunCommandResult {
   truncated: boolean;
 }
 
-export interface ReadArtifactParams extends LimitOverrides {
+interface ReadArtifactParams extends LimitOverrides {
   path: string;
   /**
    * cwd a replayed entry with no stored cwd should default to. mirrors the
@@ -80,7 +84,7 @@ export interface ReadArtifactParams extends LimitOverrides {
   pythonpath?: string;
 }
 
-export interface ReadArtifactResult {
+interface ReadArtifactResult {
   dataBase64: string;
   sizeBytes: number;
 }
@@ -143,6 +147,7 @@ class DaggerRuntimeService {
 
   async runCommand(params: RunCommandParams): Promise<RunCommandResult> {
     await this.ensureReady();
+    const { runSandbox } = await loadNative();
     await this.acquire();
     try {
       return await this.withBackstop(params.timeoutSeconds, () =>
@@ -166,6 +171,7 @@ class DaggerRuntimeService {
 
   async readArtifact(params: ReadArtifactParams): Promise<ReadArtifactResult> {
     await this.ensureReady();
+    const { readArtifact } = await loadNative();
     await this.acquire();
     try {
       return await this.withBackstop(ARTIFACT_BUDGET_SECONDS, () =>
@@ -247,6 +253,7 @@ class DaggerRuntimeService {
     this.status = "initializing";
 
     try {
+      const { checkSession } = await loadNative();
       await checkSession({ traceparent: getTraceparent() });
       // shutdown() may have fired while we were awaiting; don't revive it.
       // re-read status as the union type since TS narrows past the await.

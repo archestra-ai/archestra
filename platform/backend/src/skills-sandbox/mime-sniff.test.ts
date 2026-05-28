@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  isInlineSafeImageMime,
-  resolveArtifactMime,
-  sniffImageMime,
-} from "./mime-sniff";
+import { isInlineSafeImageMime, resolveArtifactMime } from "./mime-sniff";
 
 const PNG_HEADER = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00,
@@ -16,26 +12,16 @@ const WEBP_HEADER = Buffer.from([
   0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50,
 ]);
 
-describe("sniffImageMime", () => {
+describe("resolveArtifactMime", () => {
   it.each([
     ["png", PNG_HEADER, "image/png"],
     ["jpeg", JPEG_HEADER, "image/jpeg"],
     ["gif89a", GIF89A_HEADER, "image/gif"],
     ["webp", WEBP_HEADER, "image/webp"],
-  ])("detects %s by magic bytes", (_label, buffer, expected) => {
-    expect(sniffImageMime(buffer)).toBe(expected);
+  ])("sniffs %s from magic bytes when unclaimed", (_label, buffer, expected) => {
+    expect(resolveArtifactMime({ buffer, claimed: undefined })).toBe(expected);
   });
 
-  it("returns null for non-image bytes", () => {
-    expect(sniffImageMime(Buffer.from("<html><body>hi</body></html>"))).toBe(
-      null,
-    );
-    expect(sniffImageMime(Buffer.from("PDF-1.4 ..."))).toBe(null);
-    expect(sniffImageMime(Buffer.from([]))).toBe(null);
-  });
-});
-
-describe("resolveArtifactMime", () => {
   it("keeps the claimed mime when bytes don't match a known image signature", () => {
     // sniff returns null for the HTML bytes, so the claim survives. the
     // browser-side defense (Content-Type: image/png + nosniff) prevents the

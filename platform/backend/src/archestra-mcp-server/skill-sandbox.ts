@@ -532,8 +532,10 @@ const registry = defineArchestraTools([
         );
         const structuredContent = { ...result, downloadUrl };
         const text = [
-          `Saved as ${result.path} (${result.sizeBytes} bytes).`,
-          `artifact: ${result.artifactId}`,
+          `Saved ${result.path} (${result.sizeBytes} bytes) as artifact ${result.artifactId}.`,
+          // surface the real download URL: the model must link the user here,
+          // not to the in-sandbox path (which is dead outside the container).
+          `Download URL (use this for links, not the sandbox path): ${downloadUrl}`,
           "",
           envTrailer,
         ].join("\n");

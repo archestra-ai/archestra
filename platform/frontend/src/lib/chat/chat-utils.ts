@@ -131,6 +131,10 @@ export function mergePersistedMessageMetadata(params: {
     changed = true;
     return {
       ...liveMessage,
+      parts: mergePersistedUserFileParts({
+        liveMessage,
+        persistedMessage,
+      }),
       metadata: {
         ...getObjectMetadata(persistedMessage),
         ...liveMetadata,
@@ -151,6 +155,21 @@ function messagesHaveSameRenderableContent(params: {
     getMessageText(params.liveMessage) ===
       getMessageText(params.persistedMessage)
   );
+}
+
+function mergePersistedUserFileParts(params: {
+  liveMessage: UIMessage;
+  persistedMessage: UIMessage;
+}) {
+  if (
+    params.liveMessage.role !== "user" ||
+    !params.liveMessage.parts.some((part) => part.type === "file") ||
+    !params.persistedMessage.parts.some((part) => part.type === "file")
+  ) {
+    return params.liveMessage.parts;
+  }
+
+  return params.persistedMessage.parts;
 }
 
 function getMessageText(message: UIMessage) {

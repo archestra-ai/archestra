@@ -17,6 +17,7 @@ import config, {
   getOtlpAuthHeaders,
   getTrustedOrigins,
   parseActiveChatRunPollIntervalMs,
+  parseBlobStorageProvider,
   parseBodyLimit,
   parseCodeRuntimeDaggerRunnerHost,
   parseCommaSeparatedList,
@@ -25,6 +26,8 @@ import config, {
   parseDatabasePoolMax,
   parseMetricsPort,
   parseProcessType,
+  parseS3BlobStorageAuthMethod,
+  parseS3BlobStorageBucket,
   parseSampleRate,
   parseTrustProxy,
   parseVirtualKeyDefaultExpiration,
@@ -1075,7 +1078,7 @@ describe("getCorsOrigins", () => {
     test("should return frontend URL when set", async () => {
       process.env.NODE_ENV = "production";
       process.env.ARCHESTRA_FRONTEND_URL = "https://app.example.com";
-      delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
+      process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS = "";
 
       const { getCorsOrigins: fn } = await import("./config");
       expect(fn()).toEqual(["https://app.example.com"]);
@@ -1097,7 +1100,7 @@ describe("getCorsOrigins", () => {
     test("should add loopback equivalents for localhost origins", async () => {
       process.env.NODE_ENV = "production";
       process.env.ARCHESTRA_FRONTEND_URL = "http://localhost:3000";
-      delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
+      process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS = "";
 
       const { getCorsOrigins: fn } = await import("./config");
       const result = fn();
@@ -1189,6 +1192,63 @@ describe("parseConnectorSyncMaxDuration", () => {
 
   test("should parse large value", () => {
     expect(parseConnectorSyncMaxDuration("7200")).toBe(7200);
+  });
+});
+
+describe("parseBlobStorageProvider", () => {
+  test("defaults to database storage", () => {
+    expect(parseBlobStorageProvider(undefined)).toBe("db");
+    expect(parseBlobStorageProvider("")).toBe("db");
+  });
+
+  test("accepts s3 case-insensitively", () => {
+    expect(parseBlobStorageProvider("s3")).toBe("s3");
+    expect(parseBlobStorageProvider(" S3 ")).toBe("s3");
+  });
+
+  test("falls back to database storage for unsupported values", () => {
+    expect(parseBlobStorageProvider("gcs")).toBe("db");
+    expect(parseBlobStorageProvider("local")).toBe("db");
+  });
+});
+
+describe("parseS3BlobStorageAuthMethod", () => {
+  test("defaults to IRSA", () => {
+    expect(parseS3BlobStorageAuthMethod(undefined)).toBe("irsa");
+    expect(parseS3BlobStorageAuthMethod("")).toBe("irsa");
+  });
+
+  test("accepts static access key auth case-insensitively", () => {
+    expect(parseS3BlobStorageAuthMethod("static")).toBe("static");
+    expect(parseS3BlobStorageAuthMethod(" STATIC ")).toBe("static");
+  });
+
+  test("falls back to IRSA for unsupported values", () => {
+    expect(parseS3BlobStorageAuthMethod("iam-user")).toBe("irsa");
+    expect(parseS3BlobStorageAuthMethod("profile")).toBe("irsa");
+  });
+});
+
+describe("parseS3BlobStorageBucket", () => {
+  test("allows empty bucket when database storage is enabled", () => {
+    expect(parseS3BlobStorageBucket({ provider: "db", value: "" })).toBe("");
+  });
+
+  test("trims configured S3 bucket", () => {
+    expect(
+      parseS3BlobStorageBucket({
+        provider: "s3",
+        value: " archestra-files ",
+      }),
+    ).toBe("archestra-files");
+  });
+
+  test("requires bucket when S3 storage is enabled", () => {
+    expect(() =>
+      parseS3BlobStorageBucket({ provider: "s3", value: "" }),
+    ).toThrow(
+      "ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_BUCKET is required when S3 blob storage is enabled",
+    );
   });
 });
 

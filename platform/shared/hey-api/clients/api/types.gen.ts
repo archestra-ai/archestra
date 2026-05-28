@@ -10922,6 +10922,7 @@ export type GetAgentsResponses = {
                 valueId?: string;
             }>;
             authorName?: string | null;
+            authorEmail?: string | null;
             knowledgeBaseIds: Array<string>;
             connectorIds: Array<string>;
             suggestedPrompts: Array<{
@@ -11143,6 +11144,7 @@ export type CreateAgentResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        authorEmail?: string | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
         suggestedPrompts: Array<{
@@ -11332,6 +11334,7 @@ export type GetAllAgentsResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        authorEmail?: string | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
         suggestedPrompts: Array<{
@@ -11500,6 +11503,7 @@ export type GetDefaultMcpGatewayResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        authorEmail?: string | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
         suggestedPrompts: Array<{
@@ -11668,6 +11672,7 @@ export type GetDefaultLlmProxyResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        authorEmail?: string | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
         suggestedPrompts: Array<{
@@ -11915,6 +11920,7 @@ export type ImportAgentResponses = {
                 valueId?: string;
             }>;
             authorName?: string | null;
+            authorEmail?: string | null;
             knowledgeBaseIds: Array<string>;
             connectorIds: Array<string>;
             suggestedPrompts: Array<{
@@ -12176,6 +12182,7 @@ export type GetAgentResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        authorEmail?: string | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
         suggestedPrompts: Array<{
@@ -12390,6 +12397,7 @@ export type UpdateAgentResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        authorEmail?: string | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
         suggestedPrompts: Array<{
@@ -12560,6 +12568,7 @@ export type CloneAgentResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        authorEmail?: string | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
         suggestedPrompts: Array<{
@@ -19849,6 +19858,97 @@ export type GetChatAttachmentContentErrors = {
 };
 
 export type GetChatAttachmentContentError = GetChatAttachmentContentErrors[keyof GetChatAttachmentContentErrors];
+
+export type PromoteChatAttachmentToKnowledgeFileData = {
+    body: {
+        visibility?: 'personal' | 'team' | 'org';
+        teamIds?: Array<string>;
+        agentIds?: Array<string>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/attachments/{id}/promote-to-knowledge-file';
+};
+
+export type PromoteChatAttachmentToKnowledgeFileErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type PromoteChatAttachmentToKnowledgeFileError = PromoteChatAttachmentToKnowledgeFileErrors[keyof PromoteChatAttachmentToKnowledgeFileErrors];
+
+export type PromoteChatAttachmentToKnowledgeFileResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        filename: string;
+        status: 'created' | 'duplicate' | 'unsupported' | 'too_large' | 'extraction_failed' | 'failed';
+        fileId?: string;
+    };
+};
+
+export type PromoteChatAttachmentToKnowledgeFileResponse = PromoteChatAttachmentToKnowledgeFileResponses[keyof PromoteChatAttachmentToKnowledgeFileResponses];
 
 export type ForkChatConversationData = {
     body: {
@@ -33782,20 +33882,14 @@ export type GetConnectorRunResponses = {
 
 export type GetConnectorRunResponse = GetConnectorRunResponses[keyof GetConnectorRunResponses];
 
-export type GetConnectorFilesData = {
+export type GetKnowledgeFileUploadConfigData = {
     body?: never;
-    path: {
-        id: string;
-    };
-    query?: {
-        limit?: number;
-        offset?: number;
-        search?: string;
-    };
-    url: '/api/connectors/{id}/files';
+    path?: never;
+    query?: never;
+    url: '/api/knowledge-files/config';
 };
 
-export type GetConnectorFilesErrors = {
+export type GetKnowledgeFileUploadConfigErrors = {
     /**
      * Default Response
      */
@@ -33858,9 +33952,98 @@ export type GetConnectorFilesErrors = {
     };
 };
 
-export type GetConnectorFilesError = GetConnectorFilesErrors[keyof GetConnectorFilesErrors];
+export type GetKnowledgeFileUploadConfigError = GetKnowledgeFileUploadConfigErrors[keyof GetKnowledgeFileUploadConfigErrors];
 
-export type GetConnectorFilesResponses = {
+export type GetKnowledgeFileUploadConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        maxFileSizeBytes: number;
+        externalBlobStorageEnabled: boolean;
+        blobStorageProvider: string;
+    };
+};
+
+export type GetKnowledgeFileUploadConfigResponse = GetKnowledgeFileUploadConfigResponses[keyof GetKnowledgeFileUploadConfigResponses];
+
+export type GetKnowledgeFilesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+        search?: string;
+    };
+    url: '/api/knowledge-files';
+};
+
+export type GetKnowledgeFilesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetKnowledgeFilesError = GetKnowledgeFilesErrors[keyof GetKnowledgeFilesErrors];
+
+export type GetKnowledgeFilesResponses = {
     /**
      * Default Response
      */
@@ -33868,14 +34051,23 @@ export type GetConnectorFilesResponses = {
         data: Array<{
             id: string;
             connectorId: string;
+            ownerId?: string | null;
+            visibility: 'personal' | 'team' | 'org';
+            teamIds: Array<string>;
             originalName: string;
             mimeType: string;
             fileSize: number;
             contentHash: string;
+            blobStorageProvider?: string | null;
             createdAt: string;
-            processingStatus: string;
+            processingStatus: 'pending' | 'processing' | 'completed' | 'failed';
             processingError: string | null;
             embeddingStatus: 'pending' | 'processing' | 'completed' | 'failed';
+            assignedAgents: Array<{
+                id: string;
+                name: string;
+                agentType: string;
+            }>;
         }>;
         pagination: {
             currentPage: number;
@@ -33888,24 +34080,25 @@ export type GetConnectorFilesResponses = {
     };
 };
 
-export type GetConnectorFilesResponse = GetConnectorFilesResponses[keyof GetConnectorFilesResponses];
+export type GetKnowledgeFilesResponse = GetKnowledgeFilesResponses[keyof GetKnowledgeFilesResponses];
 
-export type UploadConnectorFilesData = {
+export type UploadKnowledgeFilesData = {
     body: {
+        visibility?: 'personal' | 'team' | 'org';
+        teamIds?: Array<string>;
+        agentIds?: Array<string>;
         files: Array<{
             name: string;
             mimeType: string;
             content: string;
         }>;
     };
-    path: {
-        id: string;
-    };
+    path?: never;
     query?: never;
-    url: '/api/connectors/{id}/files';
+    url: '/api/knowledge-files';
 };
 
-export type UploadConnectorFilesErrors = {
+export type UploadKnowledgeFilesErrors = {
     /**
      * Default Response
      */
@@ -33968,34 +34161,33 @@ export type UploadConnectorFilesErrors = {
     };
 };
 
-export type UploadConnectorFilesError = UploadConnectorFilesErrors[keyof UploadConnectorFilesErrors];
+export type UploadKnowledgeFilesError = UploadKnowledgeFilesErrors[keyof UploadKnowledgeFilesErrors];
 
-export type UploadConnectorFilesResponses = {
+export type UploadKnowledgeFilesResponses = {
     /**
      * Default Response
      */
     200: {
         results: Array<{
             filename: string;
-            status: 'created' | 'duplicate' | 'unsupported' | 'too_large' | 'extraction_failed';
+            status: 'created' | 'duplicate' | 'unsupported' | 'too_large' | 'extraction_failed' | 'failed';
             fileId?: string;
         }>;
     };
 };
 
-export type UploadConnectorFilesResponse = UploadConnectorFilesResponses[keyof UploadConnectorFilesResponses];
+export type UploadKnowledgeFilesResponse = UploadKnowledgeFilesResponses[keyof UploadKnowledgeFilesResponses];
 
-export type DeleteConnectorFileData = {
+export type DeleteKnowledgeFileData = {
     body?: never;
     path: {
-        id: string;
         fileId: string;
     };
     query?: never;
-    url: '/api/connectors/{id}/files/{fileId}';
+    url: '/api/knowledge-files/{fileId}';
 };
 
-export type DeleteConnectorFileErrors = {
+export type DeleteKnowledgeFileErrors = {
     /**
      * Default Response
      */
@@ -34058,9 +34250,9 @@ export type DeleteConnectorFileErrors = {
     };
 };
 
-export type DeleteConnectorFileError = DeleteConnectorFileErrors[keyof DeleteConnectorFileErrors];
+export type DeleteKnowledgeFileError = DeleteKnowledgeFileErrors[keyof DeleteKnowledgeFileErrors];
 
-export type DeleteConnectorFileResponses = {
+export type DeleteKnowledgeFileResponses = {
     /**
      * Default Response
      */
@@ -34069,19 +34261,18 @@ export type DeleteConnectorFileResponses = {
     };
 };
 
-export type DeleteConnectorFileResponse = DeleteConnectorFileResponses[keyof DeleteConnectorFileResponses];
+export type DeleteKnowledgeFileResponse = DeleteKnowledgeFileResponses[keyof DeleteKnowledgeFileResponses];
 
-export type GetConnectorFileData = {
+export type GetKnowledgeFileData = {
     body?: never;
     path: {
-        id: string;
         fileId: string;
     };
     query?: never;
-    url: '/api/connectors/{id}/files/{fileId}';
+    url: '/api/knowledge-files/{fileId}';
 };
 
-export type GetConnectorFileErrors = {
+export type GetKnowledgeFileErrors = {
     /**
      * Default Response
      */
@@ -34144,27 +34335,219 @@ export type GetConnectorFileErrors = {
     };
 };
 
-export type GetConnectorFileError = GetConnectorFileErrors[keyof GetConnectorFileErrors];
+export type GetKnowledgeFileError = GetKnowledgeFileErrors[keyof GetKnowledgeFileErrors];
 
-export type GetConnectorFileResponses = {
+export type GetKnowledgeFileResponses = {
     /**
      * Default Response
      */
     200: {
         id: string;
         connectorId: string;
+        ownerId?: string | null;
+        visibility: 'personal' | 'team' | 'org';
+        teamIds: Array<string>;
         originalName: string;
         mimeType: string;
         fileSize: number;
         contentHash: string;
+        blobStorageProvider?: string | null;
         createdAt: string;
-        processingStatus: string;
+        processingStatus: 'pending' | 'processing' | 'completed' | 'failed';
         processingError: string | null;
         embeddingStatus: 'pending' | 'processing' | 'completed' | 'failed';
+        assignedAgents: Array<{
+            id: string;
+            name: string;
+            agentType: string;
+        }>;
     };
 };
 
-export type GetConnectorFileResponse = GetConnectorFileResponses[keyof GetConnectorFileResponses];
+export type GetKnowledgeFileResponse = GetKnowledgeFileResponses[keyof GetKnowledgeFileResponses];
+
+export type UpdateKnowledgeFileData = {
+    body: {
+        visibility: 'personal' | 'team' | 'org';
+        teamIds?: Array<string>;
+        agentIds?: Array<string>;
+    };
+    path: {
+        fileId: string;
+    };
+    query?: never;
+    url: '/api/knowledge-files/{fileId}';
+};
+
+export type UpdateKnowledgeFileErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateKnowledgeFileError = UpdateKnowledgeFileErrors[keyof UpdateKnowledgeFileErrors];
+
+export type UpdateKnowledgeFileResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        connectorId: string;
+        ownerId?: string | null;
+        visibility: 'personal' | 'team' | 'org';
+        teamIds: Array<string>;
+        originalName: string;
+        mimeType: string;
+        fileSize: number;
+        contentHash: string;
+        blobStorageProvider?: string | null;
+        createdAt: string;
+        processingStatus: 'pending' | 'processing' | 'completed' | 'failed';
+        processingError: string | null;
+        embeddingStatus: 'pending' | 'processing' | 'completed' | 'failed';
+        assignedAgents: Array<{
+            id: string;
+            name: string;
+            agentType: string;
+        }>;
+    };
+};
+
+export type UpdateKnowledgeFileResponse = UpdateKnowledgeFileResponses[keyof UpdateKnowledgeFileResponses];
+
+export type GetKnowledgeFileContentData = {
+    body?: never;
+    path: {
+        fileId: string;
+    };
+    query?: {
+        download?: boolean;
+    };
+    url: '/api/knowledge-files/{fileId}/content';
+};
+
+export type GetKnowledgeFileContentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetKnowledgeFileContentError = GetKnowledgeFileContentErrors[keyof GetKnowledgeFileContentErrors];
 
 export type GetLimitsData = {
     body?: never;

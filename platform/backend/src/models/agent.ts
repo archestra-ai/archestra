@@ -77,7 +77,7 @@ class AgentModel {
   }
 
   /**
-   * Populate authorName on agents by looking up user names from the user table.
+   * Populate author identity on agents by looking up users in one batch.
    */
   private static async populateAuthorNames(agents: Agent[]): Promise<void> {
     const authorIds = [
@@ -88,15 +88,19 @@ class AgentModel {
     if (authorIds.length === 0) return;
 
     const users = await db
-      .select({ id: schema.usersTable.id, name: schema.usersTable.name })
+      .select({
+        id: schema.usersTable.id,
+        name: schema.usersTable.name,
+        email: schema.usersTable.email,
+      })
       .from(schema.usersTable)
       .where(inArray(schema.usersTable.id, authorIds));
 
-    const nameMap = new Map(users.map((u) => [u.id, u.name]));
+    const authorMap = new Map(users.map((user) => [user.id, user]));
     for (const agent of agents) {
-      agent.authorName = agent.authorId
-        ? (nameMap.get(agent.authorId) ?? null)
-        : null;
+      const author = agent.authorId ? authorMap.get(agent.authorId) : null;
+      agent.authorName = author?.name ?? null;
+      agent.authorEmail = author?.email ?? null;
     }
   }
 

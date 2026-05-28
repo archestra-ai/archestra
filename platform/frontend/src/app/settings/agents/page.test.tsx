@@ -12,8 +12,15 @@ let mockApiKeys: Array<{
   provider: string;
   scope: string;
 }> = [];
-let mockAgents: Array<{ id: string; name: string; icon?: string | null }> = [];
-const mockSearchableSelect = vi.fn(
+let mockAgents: Array<{
+  id: string;
+  name: string;
+  icon?: string | null;
+  agentType: "agent";
+  scope: "personal" | "team" | "org";
+  authorEmail?: string | null;
+}> = [];
+const mockAgentSelector = vi.fn(
   ({ value, placeholder }: { value: string; placeholder?: string }) => (
     <div>{value || placeholder}</div>
   ),
@@ -92,15 +99,9 @@ vi.mock("@/components/settings/settings-block", () => ({
     hasChanges ? <div>Unsaved changes</div> : null,
 }));
 
-vi.mock("@/components/ui/searchable-select", () => ({
-  SearchableSelect: (props: Record<string, unknown>) =>
-    mockSearchableSelect(props as { value: string }),
-}));
-
-vi.mock("@/components/log-filter-option", () => ({
-  ProfileFilterOption: ({ profile }: { profile: { name: string } }) => (
-    <span>profile:{profile.name}</span>
-  ),
+vi.mock("@/components/agent-selector", () => ({
+  AgentSelector: (props: Record<string, unknown>) =>
+    mockAgentSelector(props as { value: string }),
 }));
 
 vi.mock("@/components/ui/select", () => ({
@@ -212,7 +213,7 @@ describe("AgentSettingsPage", () => {
 
     renderPage();
 
-    expect(screen.getByText("gemini-2.5-pro")).toBeInTheDocument();
+    expect(screen.getByText("Gemini 2.5 Pro")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Reset" }));
 
@@ -241,44 +242,37 @@ describe("AgentSettingsPage", () => {
     expect(screen.getByText("Free models only")).toBeInTheDocument();
   });
 
-  it("uses the shared profile filter renderer for org agent rows in the default agent dropdown", () => {
+  it("uses the shared agent selector for the default agent dropdown", () => {
     mockAgents = [
       {
         id: "agent-1",
         name: "Agent Builder Agent",
         icon: "🧰",
+        agentType: "agent",
+        scope: "org",
       },
     ];
 
     renderPage();
 
-    const searchableSelectCall = mockSearchableSelect.mock.calls.find(
+    const agentSelectorCall = mockAgentSelector.mock.calls.find(
       ([props]) =>
         (props as { searchPlaceholder?: string }).searchPlaceholder ===
         "Search agents...",
     );
-    expect(searchableSelectCall).toBeDefined();
+    expect(agentSelectorCall).toBeDefined();
 
-    const items = (
-      searchableSelectCall?.[0] as unknown as {
-        items: Array<{
-          value: string;
-          label: string;
-          content?: React.ReactNode;
-          selectedContent?: React.ReactNode;
-        }>;
-      }
-    ).items;
+    const props = agentSelectorCall?.[0] as unknown as {
+      mode: string;
+      agents: typeof mockAgents;
+      personalDefaultOption: { value: string; label: string };
+    };
 
-    expect(items[0]).toMatchObject({
+    expect(props.mode).toBe("single");
+    expect(props.agents).toEqual(mockAgents);
+    expect(props.personalDefaultOption).toMatchObject({
       value: "__personal__",
       label: "User's personal agent",
     });
-    expect(items[1]).toMatchObject({
-      value: "agent-1",
-      label: "Agent Builder Agent",
-    });
-    expect(items[1].content).toBeTruthy();
-    expect(items[1].selectedContent).toBeTruthy();
   });
 });

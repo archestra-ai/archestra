@@ -1,5 +1,6 @@
 "use client";
 
+import type { Permissions } from "@shared";
 import { Plus } from "lucide-react";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
@@ -12,6 +13,7 @@ export function KnowledgePageLayout({
   description,
   createLabel,
   onCreateClick,
+  createPermissions = { knowledgeSource: ["create"] },
   isPending,
   children,
 }: {
@@ -19,6 +21,7 @@ export function KnowledgePageLayout({
   description: string;
   createLabel: string;
   onCreateClick: () => void;
+  createPermissions?: Permissions;
   isPending: boolean;
   children: React.ReactNode;
 }) {
@@ -31,7 +34,7 @@ export function KnowledgePageLayout({
         description={description}
         actionButton={
           <PermissionButton
-            permissions={{ knowledgeSource: ["create"] }}
+            permissions={createPermissions}
             onClick={onCreateClick}
             disabled={!isKnowledgeBaseConfigured}
           >

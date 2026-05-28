@@ -207,6 +207,7 @@ export const SelectAgentSchema = createSelectSchema(
   teams: z.array(AgentTeamInfoSchema),
   labels: z.array(AgentLabelWithDetailsSchema),
   authorName: z.string().nullable().optional(),
+  authorEmail: z.string().nullable().optional(),
   knowledgeBaseIds: z.array(z.string()),
   connectorIds: z.array(z.string()),
   suggestedPrompts: z

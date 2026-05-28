@@ -1,4 +1,4 @@
-{{- if .Values.archestra.migrationJob.enabled }}
+{{- if and .Values.archestra.migrationJob.enabled (ne (include "archestra-platform.maintenanceModeEnabled" .) "true") }}
 {{/*
 Database migration Job.
 

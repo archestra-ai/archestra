@@ -127,6 +127,14 @@ tests:
       - hasDocuments:
           count: 0
 
+  - it: is omitted entirely when maintenance mode is enabled
+    set:
+      archestra.env:
+        ARCHESTRA_MAINTENANCE_MODE_MESSAGE: "Scheduled maintenance"
+    asserts:
+      - hasDocuments:
+          count: 0
+
   - it: sources the database URL from Vault when vault secret injection is enabled
     set:
       archestra.initContainers.vaultSecrets.enabled: true

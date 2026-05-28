@@ -5,7 +5,12 @@ node_modules
 # Build outputs
 dist
 .next
+**/.next
+**/.next-pw
 .turbo
+**/.turbo
+**/playwright-report
+**/tsconfig.tsbuildinfo
 
 # Development
 .tilt

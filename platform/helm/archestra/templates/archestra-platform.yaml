@@ -102,8 +102,10 @@ spec:
       {{- end }}
     spec:
       serviceAccountName: {{ include "archestra-platform.serviceAccountName" . }}
+      {{- if ne (include "archestra-platform.maintenanceModeEnabled" .) "true" }}
       initContainers:
         {{- include "archestra-platform.initContainers" . | nindent 8 }}
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: {{ include "archestra-platform.image" . }}

@@ -82989,7 +82989,10 @@
                       "type": "string"
                     },
                     "status": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "ok"
+                      ]
                     },
                     "version": {
                       "type": "string"
@@ -83025,13 +83028,21 @@
                       "type": "string"
                     },
                     "status": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "maintenance"
+                      ]
                     },
                     "version": {
                       "type": "string"
                     },
                     "database": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "connected",
+                        "not_checked"
+                      ]
                     }
                   },
                   "required": [
@@ -83056,13 +83067,19 @@
                       "type": "string"
                     },
                     "status": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "degraded"
+                      ]
                     },
                     "version": {
                       "type": "string"
                     },
                     "database": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "disconnected"
+                      ]
                     }
                   },
                   "required": [

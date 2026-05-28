@@ -1449,7 +1449,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Content-Type": safeMime,
         "Content-Disposition": `${disposition}; filename="${encodeURIComponent(file.originalName)}"`,
         "X-Content-Type-Options": "nosniff",
-        "Content-Security-Policy": "default-src 'none'; sandbox",
+        "Content-Security-Policy": "default-src 'none'; frame-ancestors 'self'",
         "Cache-Control": "private, max-age=3600",
         "Content-Length": String(data.byteLength),
       });

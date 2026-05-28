@@ -23681,7 +23681,7 @@ export type GetHealthResponses = {
      */
     200: {
         name: string;
-        status: string;
+        status: 'ok';
         version: string;
     };
 };
@@ -23701,9 +23701,9 @@ export type GetReadyErrors = {
      */
     503: {
         name: string;
-        status: string;
+        status: 'degraded';
         version: string;
-        database: string;
+        database: 'disconnected';
     };
 };
 
@@ -23715,9 +23715,9 @@ export type GetReadyResponses = {
      */
     200: {
         name: string;
-        status: string;
+        status: 'ok' | 'maintenance';
         version: string;
-        database: string;
+        database: 'connected' | 'not_checked';
     };
 };
 

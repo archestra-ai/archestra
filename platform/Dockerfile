@@ -105,28 +105,14 @@ ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
 
-RUN corepack prepare pnpm@10.33.0 --activate
-
-# CVE-2026-33671: pnpm 10.33.0 bundles picomatch 4.0.3 inside its own node_modules.
-# Corepack caches it at /root/.cache/node/corepack/, and it is inherited by every
-# downstream stage. Replace it with the 4.0.4 package tree so Scout does not flag
-# the cached copy in the final image.
-RUN set -eux; \
-    cd /tmp; \
-    wget -q -O picomatch-4.0.4.tgz https://registry.npmjs.org/picomatch/-/picomatch-4.0.4.tgz; \
-    echo "515b5ab666558ed9a117483a310892aede54a68dd78f2d8db6604513e578571c  picomatch-4.0.4.tgz" | sha256sum -c -; \
-    target=/root/.cache/node/corepack/v1/pnpm/10.33.0/dist/node_modules/picomatch; \
-    rm -rf "$target"/*; \
-    tar -xzf picomatch-4.0.4.tgz --strip-components=1 -C "$target"; \
-    rm -f picomatch-4.0.4.tgz; \
-    grep -q '"version": "4.0.4"' "$target/package.json"
+RUN corepack prepare pnpm@11.4.0 --activate
 
 # Dependencies stage
 FROM base AS deps
 WORKDIR /app
 
 # Copy package files for all workspaces
-# .npmrc must be included so minimum-release-age / ignore-scripts are enforced
+# pnpm-workspace.yaml contains pnpm v11 project settings.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json .npmrc ./
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
@@ -288,7 +274,7 @@ RUN mkdir -p /var/lib/postgresql/data /run/postgresql && \
 VOLUME /var/lib/postgresql/data /app/data
 
 # Copy package files
-# .npmrc must be included so minimum-release-age / ignore-scripts are enforced
+# pnpm-workspace.yaml contains pnpm v11 project settings.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/

@@ -288,6 +288,25 @@ app.kubernetes.io/part-of: archestra
 {{- end }}
 
 {{/*
+Database migration Job labels.
+
+Mirrors the worker label scheme: the `app.kubernetes.io/name` is suffixed with
+`-migrate` so the platform Service (which selects on the unsuffixed name) never
+routes traffic to the short-lived migration pod.
+*/}}
+{{- define "archestra-platform.migrationJobLabels" -}}
+helm.sh/chart: {{ include "archestra-platform.chart" . }}
+app.kubernetes.io/name: {{ include "archestra-platform.name" . }}-migrate
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/component: migrate
+{{- if .Chart.AppVersion }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- end }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+app.kubernetes.io/part-of: archestra
+{{- end }}
+
+{{/*
 Shared init containers for both platform and worker Deployments.
 Handles Vault secret injection, pgvector extension setup, and PostgreSQL readiness.
 */}}
@@ -390,6 +409,52 @@ Handles Vault secret injection, pgvector extension setup, and PostgreSQL readine
       {{- else }}
       echo "Skipping PostgreSQL readiness check"
       {{- end }}
+{{- end }}
+
+{{/*
+Worker-only init container that blocks worker startup until the web Deployment
+has applied database migrations, by waiting for the platform Service to accept
+connections on port 9000 (the web pod only listens after running migrations and
+seeding required data).
+
+This is reliable on a *fresh install*: no previous web pods exist, so Service
+reachability can only mean this release's migrations have completed. On an
+*upgrade* the Service still routes to the previous revision's web pods, so this
+check alone would let new worker pods start before the new migrations run --
+that case is covered instead by the pre-upgrade migration Job (migration-job.yaml).
+
+Without any gate the worker boots in parallel with migrations, queries tables
+that do not exist yet (e.g. "organization"), crashes, and only recovers on a
+pod restart.
+*/}}
+{{- define "archestra-platform.waitForMigrationsInitContainer" -}}
+{{- if .Values.archestra.initContainers.waitForMigrations.enabled }}
+- name: wait-for-migrations
+  image: {{ .Values.archestra.initContainers.busyboxImage | default "busybox:1.36" }}
+  {{- with .Values.archestra.initContainers.resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  command:
+    - sh
+    - -c
+    - |
+      HOST={{ include "archestra-platform.fullname" . | quote }}
+      PORT=9000
+      echo "Waiting for migrations (platform web server at ${HOST}:${PORT})..."
+      max_attempts={{ .Values.archestra.initContainers.waitForMigrations.timeoutSeconds | default 600 }}
+      attempt=0
+      until nc -z "${HOST}" "${PORT}"; do
+        attempt=$((attempt + 1))
+        if [ "$attempt" -ge "$max_attempts" ]; then
+          echo "Platform web server at ${HOST}:${PORT} did not become reachable after ${max_attempts}s - giving up" >&2
+          exit 1
+        fi
+        echo "Platform web server is unavailable - sleeping (${attempt}/${max_attempts})"
+        sleep 1
+      done
+      echo "Platform web server is up - migrations applied, continuing"
+{{- end }}
 {{- end }}
 
 {{/*

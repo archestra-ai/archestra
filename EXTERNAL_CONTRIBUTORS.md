@@ -488,3 +488,8 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @Ruchin-Audichya
 - @WestCraneLi
 - @lry3069-afk
+- @MrBlue-1996
+- @wpggLabs
+- @Akshitguptaa
+- @cybrdelic
+- @xoriium

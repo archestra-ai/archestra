@@ -1148,6 +1148,13 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetSkillSourceRepos]: { skill: ["read"] },
   [RouteId.EnableSkillToolDefaults]: { skill: ["admin"] },
 
+  // Skill Share Link Routes - admin-only. Per-skill org-isolation enforced in handlers.
+  // The public marketplace git endpoint stays outside this map; it is allowlisted in
+  // the auth middleware (`SKILL_MARKETPLACE_PREFIX`), mirroring `MCP_GATEWAY_PREFIX`.
+  [RouteId.GetSkillShareLinks]: { skill: ["admin"] },
+  [RouteId.CreateSkillShareLink]: { skill: ["admin"] },
+  [RouteId.RevokeSkillShareLink]: { skill: ["admin"] },
+
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},
 

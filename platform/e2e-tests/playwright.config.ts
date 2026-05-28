@@ -51,8 +51,8 @@ const uiTestMatch = [
   "**/llm-provider-api-keys.spec.ts",
   "**/mcp-install.spec.ts",
   "**/quickstart.spec.ts",
+  "**/skill-share.spec.ts",
   "**/static-credentials-management.spec.ts",
-  "**/test-mcp-server.spec.ts",
   "**/virtual-api-keys.spec.ts",
 ];
 

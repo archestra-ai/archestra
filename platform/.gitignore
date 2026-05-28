@@ -3,6 +3,7 @@ dist
 node_modules
 build
 .next
+.next-*
 next-env.d.ts
 
 # Logs
@@ -79,3 +80,6 @@ playwright-report/
 
 # Local planning specs
 specs/
+
+# project-local binaries bootstrapped by dev scripts (e.g., dagger CLI)
+dev/bin/

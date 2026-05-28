@@ -30,6 +30,8 @@ export const CacheKey = {
   IdpGroups: "idp-groups",
   /** Chat stream stop signal for cross-pod abort */
   ChatStop: "chat-stop",
+  /** Maps a conversation to the id of its currently-running chat stream */
+  ChatActiveStream: "chat-active-stream",
   /** Channel discovery TTL per workspace */
   ChannelDiscovery: "channel-discovery",
   /** Slack user ID → email mapping */

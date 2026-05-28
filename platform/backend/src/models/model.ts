@@ -556,6 +556,28 @@ class ModelModel {
     return result || null;
   }
 
+  static async findByModelIdsOnly(
+    modelIds: string[],
+  ): Promise<Map<string, Model>> {
+    if (modelIds.length === 0) {
+      return new Map();
+    }
+
+    const results = await db
+      .select()
+      .from(schema.modelsTable)
+      .where(inArray(schema.modelsTable.modelId, modelIds));
+
+    const map = new Map<string, Model>();
+    for (const result of results) {
+      if (!map.has(result.modelId)) {
+        map.set(result.modelId, result);
+      }
+    }
+
+    return map;
+  }
+
   /**
    * Get model capabilities for API response.
    * Uses getEffectivePricing for pricing resolution.

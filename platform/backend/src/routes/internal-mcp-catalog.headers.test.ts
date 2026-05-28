@@ -43,36 +43,319 @@ describe("Internal MCP Catalog - Header User Config Routes", () => {
     await app.close();
   });
 
-  test("rejects static sensitive header-mapped userConfig fields", async () => {
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/internal_mcp_catalog",
-      payload: {
-        name: "header-create-route",
-        serverType: "remote",
-        serverUrl: "https://example.com/mcp",
-        userConfig: {
-          access_token: {
-            type: "string",
-            title: "Access Token",
-            description: "Static auth token",
-            required: true,
-            sensitive: true,
-            headerName: "x-api-key",
-            promptOnInstallation: false,
-            default: "secret-token-123",
-          },
-        },
+  // ===========================================================================
+  // Validator matrix: header-mapped userConfig + `sensitive` flag
+  // ===========================================================================
+  //
+  // Server-side contract (validateHeaderMappedUserConfig in types/mcp-catalog.ts):
+  //   `sensitive: true` is only legal when the field has at least one prompt
+  //   flag set. Truly static fields (neither promptOnInstallation nor
+  //   promptOnPreset) must not be sensitive — their value lives in
+  //   `userConfig.default` plaintext on the catalog row.
+  //
+  // Regression note: the validator used to reduce to `promptOnInstallation
+  // === false`, which mis-classified preset-scoped fields whenever the
+  // frontend sent the prompt flag as an explicit boolean false (instead of
+  // leaving it undefined). The matrix below exercises both wire shapes so
+  // a regression to the old check would surface immediately.
+
+  describe("header sensitive-flag validator", () => {
+    type Row = {
+      caseId: string;
+      promptOnInstallation: boolean | undefined;
+      promptOnPreset: boolean | undefined;
+      sensitive: boolean;
+      expectedStatus: 200 | 400;
+      description: string;
+    };
+
+    const rows = [
+      {
+        caseId: "static-implicit",
+        promptOnInstallation: false,
+        promptOnPreset: undefined,
+        sensitive: true,
+        expectedStatus: 400,
+        description:
+          "static (promptOnPreset omitted) + sensitive → rejected (legacy wire shape)",
       },
+      {
+        caseId: "static-explicit",
+        promptOnInstallation: false,
+        promptOnPreset: false,
+        sensitive: true,
+        expectedStatus: 400,
+        description:
+          "static (promptOnPreset explicitly false) + sensitive → rejected",
+      },
+      {
+        caseId: "preset-explicit-install-false",
+        promptOnInstallation: false,
+        promptOnPreset: true,
+        sensitive: true,
+        expectedStatus: 200,
+        description:
+          "preset + sensitive with explicit promptOnInstallation:false → accepted (frontend wire shape)",
+      },
+      {
+        caseId: "preset-implicit-install",
+        promptOnInstallation: undefined,
+        promptOnPreset: true,
+        sensitive: true,
+        expectedStatus: 200,
+        description:
+          "preset + sensitive with promptOnInstallation omitted → accepted",
+      },
+      {
+        caseId: "install-sensitive",
+        promptOnInstallation: true,
+        promptOnPreset: undefined,
+        sensitive: true,
+        expectedStatus: 200,
+        description: "install + sensitive → accepted",
+      },
+      {
+        caseId: "static-nonsensitive",
+        promptOnInstallation: false,
+        promptOnPreset: undefined,
+        sensitive: false,
+        expectedStatus: 200,
+        description: "static + non-sensitive → accepted (baseline)",
+      },
+    ] satisfies Row[];
+
+    function buildUserConfigField(row: Row): Record<string, unknown> {
+      // Conditionally include the prompt flags so "omitted" really means
+      // omitted on the wire (not "explicitly undefined", which JSON drops
+      // anyway but is semantically distinct from "explicitly false" in the
+      // raw form-data world).
+      const field: Record<string, unknown> = {
+        type: "string",
+        title: "Test Header",
+        description: "Matrix-test header",
+        required: false,
+        sensitive: row.sensitive,
+        headerName: "x-test-header",
+      };
+      if (row.promptOnInstallation !== undefined) {
+        field.promptOnInstallation = row.promptOnInstallation;
+      }
+      if (row.promptOnPreset !== undefined) {
+        field.promptOnPreset = row.promptOnPreset;
+      }
+      return field;
+    }
+
+    function expectValidatorOutcome(
+      response: { statusCode: number; json: () => unknown },
+      row: Row,
+    ): void {
+      expect(response.statusCode).toBe(row.expectedStatus);
+      const body = response.json() as Record<string, unknown>;
+      if (row.expectedStatus === 400) {
+        expect(body).toMatchObject({
+          error: {
+            message: expect.stringContaining(
+              "Static header-mapped userConfig fields cannot be marked sensitive",
+            ),
+          },
+        });
+      } else {
+        // Accepted rows must persist all three flags exactly as sent so the
+        // round-trip back to the frontend matches the wire shape it sent.
+        const persisted = (
+          body.userConfig as Record<string, Record<string, unknown>>
+        ).test_field;
+        expect(persisted.sensitive).toBe(row.sensitive);
+        if (row.promptOnInstallation !== undefined) {
+          expect(persisted.promptOnInstallation).toBe(row.promptOnInstallation);
+        }
+        if (row.promptOnPreset !== undefined) {
+          expect(persisted.promptOnPreset).toBe(row.promptOnPreset);
+        }
+      }
+    }
+
+    describe("via POST /api/internal_mcp_catalog", () => {
+      test.each(rows)("$description", async (row) => {
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/internal_mcp_catalog",
+          payload: {
+            name: `header-validator-post-${row.caseId}`,
+            serverType: "remote",
+            serverUrl: "https://example.com/mcp",
+            userConfig: { test_field: buildUserConfigField(row) },
+          },
+        });
+        expectValidatorOutcome(response, row);
+      });
     });
 
-    expect(response.statusCode).toBe(400);
-    expect(response.json()).toMatchObject({
-      error: {
-        message: expect.stringContaining(
-          "Static header-mapped userConfig fields cannot be marked sensitive",
-        ),
+    describe("via PUT /api/internal_mcp_catalog/:id", () => {
+      test.each(rows)("$description", async (row) => {
+        // Seed a minimal baseline catalog the PUT can target. We can't
+        // re-use the matrix row for the baseline because the baseline must
+        // always succeed (we need an :id to PUT against), so it carries a
+        // known-good shape: empty userConfig.
+        const baselineName = `header-validator-put-baseline-${row.caseId}`;
+        const baseline = await app.inject({
+          method: "POST",
+          url: "/api/internal_mcp_catalog",
+          payload: {
+            name: baselineName,
+            serverType: "remote",
+            serverUrl: "https://example.com/mcp",
+          },
+        });
+        expect(baseline.statusCode).toBe(200);
+        const baselineId = (baseline.json() as { id: string }).id;
+
+        const response = await app.inject({
+          method: "PUT",
+          url: `/api/internal_mcp_catalog/${baselineId}`,
+          payload: {
+            name: baselineName,
+            serverType: "remote",
+            serverUrl: "https://example.com/mcp",
+            userConfig: { test_field: buildUserConfigField(row) },
+          },
+        });
+        expectValidatorOutcome(response, row);
+      });
+    });
+  });
+
+  // ===========================================================================
+  // Sensitive headers must not carry a plaintext `default`
+  // ===========================================================================
+  //
+  // applyPresetHeaderMappings falls back to `field.default` when the row's
+  // presetFieldValues lacks the key. If a preset-scoped sensitive header
+  // ships with a `default`, that default lives in plaintext userConfig
+  // JSONB and is sent on every request whose preset overlay is empty —
+  // defeating the point of marking the field sensitive. The validator must
+  // reject the combination at the door regardless of scope.
+
+  describe("sensitive header-mapped fields cannot carry a plaintext default", () => {
+    type Row = {
+      caseId: string;
+      promptOnInstallation: boolean | undefined;
+      promptOnPreset: boolean | undefined;
+      description: string;
+    };
+
+    const rows: Row[] = [
+      {
+        caseId: "preset",
+        promptOnInstallation: false,
+        promptOnPreset: true,
+        description:
+          "preset + sensitive + default → rejected (default would be read by applyPresetHeaderMappings as plaintext fallback)",
       },
+      {
+        caseId: "install",
+        promptOnInstallation: true,
+        promptOnPreset: undefined,
+        description:
+          "install + sensitive + default → rejected (default would be sent in plaintext for any caller without an overlay)",
+      },
+    ];
+
+    function buildField(row: Row): Record<string, unknown> {
+      const f: Record<string, unknown> = {
+        type: "string",
+        title: "Sensitive w/ default",
+        description: "",
+        required: false,
+        sensitive: true,
+        headerName: "x-sens-default",
+        default: "plaintext-leak",
+      };
+      if (row.promptOnInstallation !== undefined) {
+        f.promptOnInstallation = row.promptOnInstallation;
+      }
+      if (row.promptOnPreset !== undefined) {
+        f.promptOnPreset = row.promptOnPreset;
+      }
+      return f;
+    }
+
+    describe.each(["POST", "PUT"] as const)("via %s", (method) => {
+      test.each(rows)("$description", async (row) => {
+        const name = `header-sens-default-${method.toLowerCase()}-${row.caseId}`;
+        const sendOffendingPayload = async (
+          url: string,
+          httpMethod: "POST" | "PUT",
+        ) =>
+          app.inject({
+            method: httpMethod,
+            url,
+            payload: {
+              name,
+              serverType: "remote",
+              serverUrl: "https://example.com/mcp",
+              userConfig: { test_field: buildField(row) },
+            },
+          });
+
+        let response: Awaited<ReturnType<typeof app.inject>>;
+        if (method === "POST") {
+          response = await sendOffendingPayload(
+            "/api/internal_mcp_catalog",
+            "POST",
+          );
+        } else {
+          // Seed a minimal catalog, then PUT the offending payload.
+          const baseline = await app.inject({
+            method: "POST",
+            url: "/api/internal_mcp_catalog",
+            payload: {
+              name,
+              serverType: "remote",
+              serverUrl: "https://example.com/mcp",
+            },
+          });
+          expect(baseline.statusCode).toBe(200);
+          response = await sendOffendingPayload(
+            `/api/internal_mcp_catalog/${baseline.json().id}`,
+            "PUT",
+          );
+        }
+        expect(response.statusCode).toBe(400);
+        expect(response.json()).toMatchObject({
+          error: {
+            message: expect.stringContaining(
+              "Sensitive header-mapped userConfig fields cannot carry a plaintext default",
+            ),
+          },
+        });
+      });
+    });
+
+    test("the same field WITHOUT `default` is still accepted (control)", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/internal_mcp_catalog",
+        payload: {
+          name: "header-sens-no-default-control",
+          serverType: "remote",
+          serverUrl: "https://example.com/mcp",
+          userConfig: {
+            test_field: {
+              type: "string",
+              title: "Sensitive w/o default",
+              description: "",
+              required: false,
+              sensitive: true,
+              headerName: "x-sens-clean",
+              promptOnPreset: true,
+              promptOnInstallation: false,
+            },
+          },
+        },
+      });
+      expect(response.statusCode).toBe(200);
     });
   });
 

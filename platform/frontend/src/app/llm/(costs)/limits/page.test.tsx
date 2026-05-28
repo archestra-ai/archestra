@@ -5,6 +5,7 @@ import LimitsPage, { getLimitModels } from "./page";
 const mockSetCostsAction = vi.fn();
 const mockUseLimits = vi.fn();
 const mockUseAllVirtualApiKeys = vi.fn();
+const mockUseHasPermissions = vi.fn(() => ({ data: true, isPending: false }));
 
 vi.mock("next/link", () => ({
   default: ({
@@ -39,7 +40,7 @@ vi.mock("@/lib/teams/team.query", () => ({
 
 vi.mock("@/lib/organization.query", () => ({
   useOrganization: () => ({
-    data: { id: "org-1", limitCleanupInterval: "1m" },
+    data: { id: "org-1", defaultUserLimitValue: 100 },
   }),
   useOrganizationMembers: () => ({ data: [] }),
 }));
@@ -86,6 +87,11 @@ vi.mock("@/lib/hooks/use-data-table-query-params", () => ({
     searchParams: new URLSearchParams(),
     updateQueryParams: vi.fn(),
   }),
+}));
+
+vi.mock("@/lib/auth/auth.query", () => ({
+  useHasPermissions: () => mockUseHasPermissions(),
+  useMissingPermissions: () => [],
 }));
 
 vi.mock("@/components/loading", () => ({
@@ -297,25 +303,37 @@ vi.mock("@/components/searchable-multi-select", () => ({
 describe("LimitsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseHasPermissions.mockReturnValue({ data: true, isPending: false });
     mockUseLimits.mockReturnValue({ data: [], isPending: false });
     mockUseAllVirtualApiKeys.mockReturnValue({
       data: { data: [], pagination: { total: 0 } },
     });
   });
 
-  it("shows the active cleanup interval and links to LLM settings", () => {
+  it("shows a settings notice when a default user limit is configured", () => {
+    render(<LimitsPage />);
+
+    expect(screen.getByText(/default user limit applies/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/custom per-user limits override it/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/new limits use the default cleanup schedule/i),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /llm settings/i })).toHaveAttribute(
+      "href",
+      "/settings/llm",
+    );
+  });
+
+  it("hides the default user limit settings notice without settings permission", () => {
+    mockUseHasPermissions.mockReturnValue({ data: false, isPending: false });
+
     render(<LimitsPage />);
 
     expect(
-      screen.getByText(
-        /expired or exceeded limits reset on the current cleanup schedule/i,
-      ),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Every month")).toBeInTheDocument();
-
-    expect(
-      screen.getByRole("link", { name: /change it in llm settings/i }),
-    ).toHaveAttribute("href", "/settings/llm");
+      screen.queryByText(/default user limit applies/i),
+    ).not.toBeInTheDocument();
   });
 
   it("requests virtual keys with the API-supported page size", () => {

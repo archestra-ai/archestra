@@ -7,6 +7,7 @@ import type {
   ConversationShareWithTargets,
 } from "@/types";
 import ConversationChatErrorModel from "./conversation-chat-error";
+import ConversationCompactionModel from "./conversation-compaction";
 
 class ConversationShareModel {
   static async findByConversationId(params: {
@@ -238,9 +239,10 @@ class ConversationShareModel {
     if (rows.length === 0) return null;
 
     const firstRow = rows[0];
-    const chatErrors = await ConversationChatErrorModel.findByConversation(
-      share.conversationId,
-    );
+    const [chatErrors, compactions] = await Promise.all([
+      ConversationChatErrorModel.findByConversation(share.conversationId),
+      ConversationCompactionModel.findByConversation(share.conversationId),
+    ]);
     const messages = [];
 
     for (const row of rows) {
@@ -261,6 +263,7 @@ class ConversationShareModel {
       },
       messages,
       chatErrors,
+      compactions,
       sharedByUserId: share.createdByUserId,
     };
   }

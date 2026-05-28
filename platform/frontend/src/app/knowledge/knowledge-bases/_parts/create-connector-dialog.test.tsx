@@ -93,6 +93,16 @@ async function renderConfigureStep() {
   return { ...result, user };
 }
 
+async function renderGithubConfigureStep() {
+  const user = userEvent.setup();
+  const result = renderDialog();
+  await user.click(screen.getByText("GitHub"));
+  await waitFor(() => {
+    expect(screen.getByLabelText(/^Name$/)).toBeInTheDocument();
+  });
+  return { ...result, user };
+}
+
 describe("CreateConnectorDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -139,7 +149,7 @@ describe("CreateConnectorDialog", () => {
       // Cloud Instance is now in the main form, not Advanced
       expect(screen.getByText("Cloud Instance")).toBeInTheDocument();
       // Advanced-only fields should not be visible when collapsed
-      expect(screen.queryByText(/Project Key/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Project Keys/)).not.toBeInTheDocument();
     });
   });
 
@@ -150,7 +160,7 @@ describe("CreateConnectorDialog", () => {
       await user.click(screen.getByRole("button", { name: /Advanced/ }));
 
       await waitFor(() => {
-        expect(screen.getByText(/Project Key/)).toBeInTheDocument();
+        expect(screen.getByText(/Project Keys/)).toBeInTheDocument();
       });
       expect(screen.getByText(/JQL Query/)).toBeInTheDocument();
     });
@@ -161,13 +171,13 @@ describe("CreateConnectorDialog", () => {
       // Expand
       await user.click(screen.getByRole("button", { name: /Advanced/ }));
       await waitFor(() => {
-        expect(screen.getByText(/Project Key/)).toBeInTheDocument();
+        expect(screen.getByText(/Project Keys/)).toBeInTheDocument();
       });
 
       // Collapse
       await user.click(screen.getByRole("button", { name: /Advanced/ }));
       await waitFor(() => {
-        expect(screen.queryByText(/Project Key/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Project Keys/)).not.toBeInTheDocument();
       });
     });
 
@@ -177,11 +187,55 @@ describe("CreateConnectorDialog", () => {
       await user.click(screen.getByRole("button", { name: /Advanced/ }));
 
       await waitFor(() => {
-        expect(screen.getByText(/Project Key/)).toBeInTheDocument();
+        expect(screen.getByText(/Project Keys/)).toBeInTheDocument();
       });
       // Only one URL label should exist (the main one, not inside Advanced)
       const urlLabels = screen.getAllByText("URL");
       expect(urlLabels).toHaveLength(1);
+    });
+
+    it("shows GitHub file types only when repository files are enabled", async () => {
+      const { user } = await renderGithubConfigureStep();
+
+      expect(screen.getByText("Owner")).toBeInTheDocument();
+      expect(screen.getByText("Authentication Method")).toBeInTheDocument();
+      expect(
+        screen.queryByText("Labels to Skip (optional)"),
+      ).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: /Advanced/ }));
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Include Repository Files"),
+        ).toBeInTheDocument();
+      });
+      expect(screen.getByText("Labels to Skip (optional)")).toBeInTheDocument();
+      expect(
+        screen.queryByText("File Types (optional)"),
+      ).not.toBeInTheDocument();
+
+      await user.click(
+        screen.getByRole("switch", { name: /Include Repository Files/ }),
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("File Types (optional)")).toBeInTheDocument();
+      });
+    });
+
+    it("keeps GitHub authentication fields out of Advanced", async () => {
+      const { user } = await renderGithubConfigureStep();
+
+      await user.click(screen.getByRole("button", { name: /Advanced/ }));
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Include Repository Files"),
+        ).toBeInTheDocument();
+      });
+
+      expect(screen.getAllByText("Authentication Method")).toHaveLength(1);
     });
   });
 

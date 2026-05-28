@@ -29,6 +29,15 @@ export const LimitTypeSchema = z.enum([
 ]);
 export type LimitType = z.infer<typeof LimitTypeSchema>;
 
+export const LimitCleanupIntervalSchema = z.enum([
+  "1h",
+  "12h",
+  "24h",
+  "1w",
+  "1m",
+]);
+export type LimitCleanupInterval = z.infer<typeof LimitCleanupIntervalSchema>;
+
 /**
  * Base database schema derived from Drizzle
  */
@@ -36,16 +45,19 @@ export const SelectLimitSchema = createSelectSchema(schema.limitsTable, {
   entityType: LimitEntityTypeSchema,
   limitType: LimitTypeSchema,
   model: z.array(z.string()).nullable().optional(),
+  cleanupInterval: LimitCleanupIntervalSchema.optional(),
 });
 export const InsertLimitSchema = createInsertSchema(schema.limitsTable, {
   entityType: LimitEntityTypeSchema,
   limitType: LimitTypeSchema,
   model: z.array(z.string()).nullable().optional(),
+  cleanupInterval: LimitCleanupIntervalSchema.optional(),
 });
 export const UpdateLimitSchema = createUpdateSchema(schema.limitsTable, {
   entityType: LimitEntityTypeSchema,
   limitType: LimitTypeSchema,
   model: z.array(z.string()).nullable().optional(),
+  cleanupInterval: LimitCleanupIntervalSchema.optional(),
 }).omit({
   id: true,
   createdAt: true,

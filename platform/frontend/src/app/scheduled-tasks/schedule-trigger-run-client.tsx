@@ -138,10 +138,10 @@ export function ScheduleTriggerRunPage({
 
   const selectedModel = useMemo(
     () =>
-      conversation?.selectedModel
-        ? chatModels.find((item) => item.id === conversation.selectedModel)
+      conversation?.modelId
+        ? chatModels.find((item) => item.dbId === conversation.modelId)
         : undefined,
-    [conversation?.selectedModel, chatModels],
+    [conversation?.modelId, chatModels],
   );
 
   const currentProvider = selectedModel?.provider;
@@ -265,15 +265,12 @@ export function ScheduleTriggerRunPage({
   const handleModelChange = useCallback(
     (modelId: string) => {
       if (!conversation) return;
-
-      const provider = chatModels.find((item) => item.id === modelId)?.provider;
       updateConversationMutation.mutate({
         id: conversation.id,
-        selectedModel: modelId,
-        selectedProvider: provider,
+        modelId,
       });
     },
-    [chatModels, conversation, updateConversationMutation],
+    [conversation, updateConversationMutation],
   );
 
   const handleProviderChange = useCallback(
@@ -287,8 +284,7 @@ export function ScheduleTriggerRunPage({
       updateConversationMutation.mutate({
         id: conversation.id,
         chatApiKeyId,
-        selectedModel: bestModel?.id,
-        selectedProvider: bestModel ? provider : undefined,
+        modelId: bestModel?.dbId,
       });
     },
     [conversation, modelsByProvider, updateConversationMutation],
@@ -590,7 +586,7 @@ export function ScheduleTriggerRunPage({
                     error={error}
                     chatErrors={conversation?.chatErrors ?? []}
                     agentName={activeAgentName}
-                    selectedModel={conversation?.selectedModel ?? ""}
+                    selectedModel={conversation?.modelId ?? ""}
                     onToolApprovalResponse={
                       addToolApprovalResponse
                         ? ({ id, approved, reason }) => {
@@ -618,7 +614,7 @@ export function ScheduleTriggerRunPage({
                         <ArchestraPromptInput
                           onSubmit={handleSubmit}
                           status={status}
-                          selectedModel={conversation.selectedModel ?? ""}
+                          selectedModel={conversation.modelId ?? ""}
                           onModelChange={handleModelChange}
                           agentId={activeAgentId}
                           conversationId={conversationId}

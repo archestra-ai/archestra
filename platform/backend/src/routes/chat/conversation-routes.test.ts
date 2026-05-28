@@ -1,4 +1,5 @@
 import ConversationModel from "@/models/conversation";
+import ConversationAttachmentModel from "@/models/conversation-attachment";
 import MessageModel from "@/models/message";
 import ScheduleTriggerRunModel from "@/models/schedule-trigger-run";
 import type { FastifyInstanceWithZod } from "@/server";
@@ -49,8 +50,6 @@ describe("chat conversation and message routes", () => {
       url: "/api/chat/conversations",
       payload: {
         agentId: agent.id,
-        selectedModel: "gpt-4o",
-        selectedProvider: "openai",
       },
     });
 
@@ -58,8 +57,6 @@ describe("chat conversation and message routes", () => {
     expect(response.json()).toMatchObject({
       id: expect.any(String),
       agentId: agent.id,
-      selectedModel: "gpt-4o",
-      selectedProvider: "openai",
       pinnedAt: null,
     });
   });
@@ -74,8 +71,6 @@ describe("chat conversation and message routes", () => {
       userId: currentUser.id,
       organizationId,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
-      selectedProvider: "openai",
     });
 
     const pinnedAt = new Date().toISOString();
@@ -106,6 +101,29 @@ describe("chat conversation and message routes", () => {
     expect(unpinResponse.json().pinnedAt).toBeNull();
   });
 
+  test("rejects a conversation update that sets a model without an API key", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const conversation = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+    });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/chat/conversations/${conversation.id}`,
+      payload: { modelId: crypto.randomUUID() },
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
   test("allows scheduled task admins to view linked run conversations owned by another user", async ({
     makeAgent,
     makeMember,
@@ -133,8 +151,6 @@ describe("chat conversation and message routes", () => {
       userId: owner.id,
       organizationId,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
-      selectedProvider: "openai",
     });
     await MessageModel.create({
       conversationId: conversation.id,
@@ -195,8 +211,6 @@ describe("chat conversation and message routes", () => {
       userId: owner.id,
       organizationId,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
-      selectedProvider: "openai",
     });
     await MessageModel.create({
       conversationId: conversation.id,
@@ -223,8 +237,6 @@ describe("chat conversation and message routes", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
       agentId: agent.id,
-      selectedModel: "gpt-4o",
-      selectedProvider: "openai",
       userId: currentUser.id,
       messages: [
         expect.objectContaining({
@@ -264,8 +276,6 @@ describe("chat conversation and message routes", () => {
       userId: owner.id,
       organizationId,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
-      selectedProvider: "openai",
     });
     await ScheduleTriggerRunModel.setChatConversationId(
       run.id,
@@ -284,6 +294,184 @@ describe("chat conversation and message routes", () => {
 
     expect(response.statusCode).toBe(404);
     expect(response.json().error.message).toContain("Conversation not found");
+  });
+
+  test("forking a conversation with an attachment clones the row scoped to the fork and rewrites the ref", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const source = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+    });
+    const bytes = Buffer.from("integration-test-bytes", "utf8");
+    const sourceRow = await ConversationAttachmentModel.create({
+      organizationId,
+      conversationId: source.id,
+      uploadedByUserId: currentUser.id,
+      originalName: "doc.pdf",
+      mimeType: "application/pdf",
+      fileSize: bytes.byteLength,
+      contentHash: ConversationAttachmentModel.computeContentHash(bytes),
+      fileData: bytes,
+    });
+    await ConversationAttachmentModel.updateTextPreview(
+      sourceRow.id,
+      "ok",
+      "INTEGRATION_PREVIEW",
+    );
+    await MessageModel.create({
+      conversationId: source.id,
+      role: "user",
+      content: {
+        id: "message-1",
+        role: "user",
+        parts: [
+          { type: "text", text: "look at this" },
+          {
+            type: "file",
+            url: `/api/chat/attachments/${sourceRow.id}/content`,
+            mediaType: "application/pdf",
+            filename: "doc.pdf",
+            fileSize: bytes.byteLength,
+          },
+        ],
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${source.id}/fork`,
+      payload: { agentId: agent.id },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const forkBody = response.json();
+    expect(forkBody.userId).toBe(currentUser.id);
+    expect(forkBody.id).not.toBe(source.id);
+
+    // Locate the file part on the forked message; assert it points at a NEW
+    // ref id, not the source attachment's id.
+    const forkedFilePart = forkBody.messages[0].parts.find(
+      (p: { type: string }) => p.type === "file",
+    );
+    expect(forkedFilePart).toBeDefined();
+    expect(forkedFilePart.url).not.toBe(
+      `/api/chat/attachments/${sourceRow.id}/content`,
+    );
+    const newIdMatch = (forkedFilePart.url as string).match(
+      /\/api\/chat\/attachments\/([^/]+)\/content/,
+    );
+    expect(newIdMatch).not.toBeNull();
+    const newId = newIdMatch?.[1] as string;
+    expect(newId).not.toBe(sourceRow.id);
+
+    // The cloned row is scoped to the FORK conversation with identical bytes.
+    const clonedRow = await ConversationAttachmentModel.findByIdWithData(newId);
+    expect(clonedRow).not.toBeNull();
+    expect(clonedRow?.conversationId).toBe(forkBody.id);
+    expect(clonedRow?.organizationId).toBe(organizationId);
+    expect(clonedRow?.uploadedByUserId).toBe(currentUser.id);
+    expect(clonedRow?.contentHash).toBe(sourceRow.contentHash);
+    expect(clonedRow?.fileData.equals(bytes)).toBe(true);
+    expect(clonedRow?.textPreview).toBe("INTEGRATION_PREVIEW");
+
+    // Source attachment is untouched — fork is a copy, not a move.
+    const stillSource = await ConversationAttachmentModel.findByIdWithData(
+      sourceRow.id,
+    );
+    expect(stillSource?.conversationId).toBe(source.id);
+  });
+
+  test("forking a conversation with a crafted cross-conv ref does NOT clone the foreign row (IDOR guard)", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const source = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+    });
+    // A different user with a private conversation in the same org.
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, organizationId, { role: "member" });
+    const foreignAgent = await makeAgent({
+      organizationId,
+      authorId: otherUser.id,
+      scope: "personal",
+    });
+    const foreign = await ConversationModel.create({
+      userId: otherUser.id,
+      organizationId,
+      agentId: foreignAgent.id,
+    });
+    const secretBytes = Buffer.from("FOREIGN_SECRET", "utf8");
+    const foreignRow = await ConversationAttachmentModel.create({
+      organizationId,
+      conversationId: foreign.id,
+      uploadedByUserId: otherUser.id,
+      originalName: "secret.bin",
+      mimeType: "application/octet-stream",
+      fileSize: secretBytes.byteLength,
+      contentHash: ConversationAttachmentModel.computeContentHash(secretBytes),
+      fileData: secretBytes,
+    });
+
+    // Attacker persists a crafted ref to the foreign row inside their own
+    // conversation. In production this is reachable: extractInlineAttachments
+    // only rewrites `data:` URLs, leaving other urls intact.
+    await MessageModel.create({
+      conversationId: source.id,
+      role: "user",
+      content: {
+        id: "crafted-1",
+        role: "user",
+        parts: [
+          {
+            type: "file",
+            url: `/api/chat/attachments/${foreignRow.id}/content`,
+            mediaType: "application/octet-stream",
+            filename: "crafted.bin",
+          },
+        ],
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${source.id}/fork`,
+      payload: { agentId: agent.id },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const forkBody = response.json();
+    const forkedFilePart = forkBody.messages[0].parts.find(
+      (p: { type: string }) => p.type === "file",
+    );
+    // The crafted ref is preserved as-is (not rewritten) — the fork has no
+    // own clone of the foreign bytes, so materialize will silently drop it.
+    expect(forkedFilePart.url).toBe(
+      `/api/chat/attachments/${foreignRow.id}/content`,
+    );
+
+    // No attachment row exists scoped to the fork (the foreign bytes did NOT
+    // get copied across the conversation boundary).
+    const forkAttachments =
+      await ConversationAttachmentModel.findByConversationIdWithoutData(
+        forkBody.id,
+      );
+    expect(forkAttachments.length).toBe(0);
   });
 
   test("returns 404 when forking a missing conversation", async ({
@@ -336,8 +524,6 @@ describe("chat conversation and message routes", () => {
       userId: owner.id,
       organizationId,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
-      selectedProvider: "openai",
     });
     await ScheduleTriggerRunModel.setChatConversationId(
       run.id,
@@ -371,8 +557,6 @@ describe("chat conversation and message routes", () => {
       userId: owner.id,
       organizationId,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
-      selectedProvider: "openai",
     });
 
     const response = await app.inject({
@@ -453,8 +637,6 @@ describe("chat conversation and message routes", () => {
       userId: currentUser.id,
       organizationId,
       agentId: agent.id,
-      selectedModel: "gpt-4o",
-      selectedProvider: "openai",
     });
 
     const firstMessage = await MessageModel.create({

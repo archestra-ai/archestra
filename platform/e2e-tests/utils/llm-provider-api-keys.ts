@@ -28,6 +28,10 @@ export async function createLlmProviderApiKey(
     providerOptionName?: string | RegExp;
     scope?: "personal" | "org";
     baseUrl?: string;
+    // The row assertion only applies when the caller is on the API keys
+    // management page. Quickstart-style flows host the create dialog on /chat
+    // and redirect back to /chat on success, where ChatApiKeyRow does not exist.
+    waitForRow?: boolean;
   },
 ): Promise<void> {
   const addApiKeyButton = page
@@ -60,24 +64,18 @@ export async function createLlmProviderApiKey(
   }
 
   await clickButton({ page, options: { name: "Test & Create" } });
-  await expect(
-    page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${params.name}`),
-  ).toBeVisible({ timeout: 30_000 });
-}
-
-export async function deleteLlmProviderApiKey(
-  page: Page,
-  keyName: string,
-): Promise<void> {
-  const deleteButton = page.getByTestId(
-    `${E2eTestId.DeleteChatApiKeyButton}-${keyName}`,
-  );
-  if (!(await deleteButton.isVisible().catch(() => false))) {
-    return;
+  // The success toast confirms the upstream test passed and the row will be
+  // populated by the next refetch — observing it first turns a single 30 s
+  // poll on the row into two cheaper waits and surfaces clearer errors when
+  // "Test & Create" itself fails.
+  await expect(page.getByText("API key created successfully")).toBeVisible({
+    timeout: 30_000,
+  });
+  if (params.waitForRow !== false) {
+    await expect(
+      page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${params.name}`),
+    ).toBeVisible({ timeout: 30_000 });
   }
-
-  await deleteButton.click();
-  await clickButton({ page, options: { name: "Delete" } });
 }
 
 export async function createVirtualKey(

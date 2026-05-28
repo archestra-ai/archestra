@@ -355,6 +355,19 @@ export interface ChatOpsProvider {
   getThreadHistory(params: ThreadHistoryParams): Promise<ChatThreadMessage[]>;
 
   /**
+   * Get a permalink to a specific message in the provider's web UI.
+   * Used to surface a clickable thread URL in the LLM context so tools
+   * can reference the originating conversation.
+   * @param params.channelId - The channel ID containing the message
+   * @param params.messageId - The message ID (Slack ts) to link to
+   * @returns Permalink URL, or null if unavailable
+   */
+  getMessagePermalink?(params: {
+    channelId: string;
+    messageId: string;
+  }): Promise<string | null>;
+
+  /**
    * Get user's email address from their provider-specific ID
    * Used for security validation to verify the user exists in Archestra
    * @param userId - The user's ID in the provider's system (e.g., AAD Object ID for MS Teams)

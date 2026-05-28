@@ -1588,7 +1588,6 @@ describe("McpClient", () => {
 
         await McpServerModel.update(mcpServerId, { secretId: null });
         await InternalMcpCatalogModel.update(catalogId, {
-          name: "enterprise external jwt demo",
           enterpriseManagedConfig: {
             identityProviderId: identityProvider.id,
             requestedCredentialType: "bearer_token",
@@ -1727,7 +1726,6 @@ describe("McpClient", () => {
 
         await McpServerModel.update(mcpServerId, { secretId: null });
         await InternalMcpCatalogModel.update(catalogId, {
-          name: "entra protected api",
           enterpriseManagedConfig: {
             identityProviderId: entraIdentityProvider.id,
             requestedCredentialType: "bearer_token",
@@ -1858,7 +1856,6 @@ describe("McpClient", () => {
 
         await McpServerModel.update(mcpServerId, { secretId: null });
         await InternalMcpCatalogModel.update(catalogId, {
-          name: "entra protected api",
           enterpriseManagedConfig: {
             identityProviderId: entraIdentityProvider.id,
             requestedCredentialType: "bearer_token",
@@ -1899,7 +1896,7 @@ describe("McpClient", () => {
         const connectUrl = `${config.frontendBaseUrl}/auth/sso/EntraID?redirectTo=%2Fchat%2F00000000-0000-4000-8000-000000000123&mode=${LINKED_IDP_SSO_MODE}`;
         expect(result.isError).toBe(true);
         expect(result.error).toContain(
-          'Authentication required for "entra protected api"',
+          'Authentication required for "github-mcp-server"',
         );
         expect(result.error).toContain(
           "This tool needs a current EntraID session",
@@ -1909,7 +1906,7 @@ describe("McpClient", () => {
           archestraError: {
             type: "auth_required",
             catalogId,
-            catalogName: "entra protected api",
+            catalogName: "github-mcp-server",
             action: "connect_identity_provider",
             actionUrl: connectUrl,
             providerId: "EntraID",
@@ -2182,7 +2179,6 @@ describe("McpClient", () => {
         });
 
         await InternalMcpCatalogModel.update(catalogId, {
-          name: "keycloak protected demo",
           enterpriseManagedConfig: {
             identityProviderId: identityProvider.id,
             requestedCredentialType: "bearer_token",
@@ -2219,7 +2215,7 @@ describe("McpClient", () => {
 
         expect(result.isError).toBe(true);
         expect(result.error).toContain(
-          'Authentication required for "keycloak protected demo"',
+          'Authentication required for "github-mcp-server"',
         );
         expect(result.error).toContain(
           "This tool needs a current keycloak-managed-mcp session",
@@ -2231,7 +2227,7 @@ describe("McpClient", () => {
           archestraError: {
             type: "auth_required",
             catalogId,
-            catalogName: "keycloak protected demo",
+            catalogName: "github-mcp-server",
             action: "connect_identity_provider",
             actionUrl: `${config.frontendBaseUrl}/auth/sso/keycloak-managed-mcp?redirectTo=%2Fchat&mode=${LINKED_IDP_SSO_MODE}`,
             providerId: "keycloak-managed-mcp",

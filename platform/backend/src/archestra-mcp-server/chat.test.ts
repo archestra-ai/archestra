@@ -10,6 +10,7 @@ import {
   ChatOpsThreadAgentOverrideModel,
   ConversationModel,
   LlmProviderApiKeyModel,
+  ModelModel,
   OrganizationModel,
 } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
@@ -174,6 +175,30 @@ describe("chat tool execution", () => {
     );
   });
 
+  test("artifact_write succeeds without conversation persistence in chatops context", async () => {
+    const contextWithChatOps: ArchestraContext = {
+      ...mockContext,
+      conversationId: "synthetic-chatops-isolation-key",
+      chatOpsBindingId: "chatops-binding-1",
+      chatOpsThreadId: "thread-1",
+    };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}artifact_write`,
+      { content: "# ChatOps Artifact\n\nSome markdown content." },
+      contextWithChatOps,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toEqual({
+      success: true,
+      characterCount: "# ChatOps Artifact\n\nSome markdown content.".length,
+    });
+    expect((result.content[0] as any).text).toContain(
+      "ChatOps does not persist conversation artifacts",
+    );
+  });
+
   test("swap_agent succeeds with real conversation and target agent", async ({
     makeAgent,
     makeConversation,
@@ -197,12 +222,19 @@ describe("chat tool execution", () => {
       },
     );
 
+    const targetModel = await ModelModel.create({
+      externalId: "anthropic/claude-3-5-sonnet",
+      provider: "anthropic",
+      modelId: "claude-3-5-sonnet",
+      inputModalities: null,
+      outputModalities: null,
+    });
     const targetAgent = await makeAgent({
       name: "Swap Target Agent",
       agentType: "agent",
       organizationId: organizationId,
       llmApiKeyId: targetApiKey.id,
-      llmModel: "claude-3-5-sonnet",
+      modelId: targetModel.id,
     });
 
     const conversation = await makeConversation(testAgent.id, {
@@ -241,8 +273,7 @@ describe("chat tool execution", () => {
       organizationId,
     });
     expect(updatedConversation?.agentId).toBe(targetAgent.id);
-    expect(updatedConversation?.selectedModel).toBe("claude-3-5-sonnet");
-    expect(updatedConversation?.selectedProvider).toBe("anthropic");
+    expect(updatedConversation?.modelId).toBe(targetModel.id);
     expect(updatedConversation?.chatApiKeyId).toBe(targetApiKey.id);
   });
 
@@ -487,12 +518,19 @@ describe("chat tool execution", () => {
       },
     );
 
+    const defaultModel = await ModelModel.create({
+      externalId: "openai/gpt-4o",
+      provider: "openai",
+      modelId: "gpt-4o",
+      inputModalities: null,
+      outputModalities: null,
+    });
     const defaultAgent = await makeAgent({
       name: "Default Router Agent",
       agentType: "agent",
       organizationId: organizationId,
       llmApiKeyId: defaultApiKey.id,
-      llmModel: "gpt-4o",
+      modelId: defaultModel.id,
     });
     await OrganizationModel.patch(organizationId, {
       defaultAgentId: defaultAgent.id,
@@ -536,8 +574,7 @@ describe("chat tool execution", () => {
       organizationId,
     });
     expect(updatedConversation?.agentId).toBe(defaultAgent.id);
-    expect(updatedConversation?.selectedModel).toBe("gpt-4o");
-    expect(updatedConversation?.selectedProvider).toBe("openai");
+    expect(updatedConversation?.modelId).toBe(defaultModel.id);
     expect(updatedConversation?.chatApiKeyId).toBe(defaultApiKey.id);
   });
 

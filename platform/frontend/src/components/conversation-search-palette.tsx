@@ -628,7 +628,7 @@ export function ConversationSearchPalette({
                     )}
                   </CommandGroup>
                 )}
-                {conversations.length === 0 && (
+                {recentChatsView && conversations.length === 0 && (
                   <div className="py-4 text-center text-sm text-muted-foreground">
                     No recent chats
                   </div>
@@ -640,8 +640,8 @@ export function ConversationSearchPalette({
       </CommandList>
 
       <div className="border-t bg-muted/30 px-4 py-3">
-        <div className="flex items-center justify-center gap-6 flex-wrap text-xs">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-center gap-4 text-xs whitespace-nowrap">
+          <div className="flex items-center gap-1.5">
             <div className="flex items-center gap-1">
               <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
                 {modKey}
@@ -652,7 +652,7 @@ export function ConversationSearchPalette({
             </div>
             <span className="text-muted-foreground/70">Search</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <div className="flex items-center gap-1">
               <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
                 {altKey}
@@ -663,19 +663,19 @@ export function ConversationSearchPalette({
             </div>
             <span className="text-muted-foreground/70">New Chat</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
               {SHORTCUT_PIN.label}
             </kbd>
             <span className="text-muted-foreground/70">Pin / Unpin Chat</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
               {SHORTCUT_DELETE.label}
             </kbd>
             <span className="text-muted-foreground/70">Delete Chat</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <div className="flex items-center gap-1">
               <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
                 {modKey}

@@ -57,6 +57,7 @@ export const RouteId = {
   GetInternalMcpCatalogItem: "getInternalMcpCatalogItem",
   GetInternalMcpCatalogTools: "getInternalMcpCatalogTools",
   UpdateInternalMcpCatalogItem: "updateInternalMcpCatalogItem",
+  ReinstallInternalMcpCatalogItem: "reinstallInternalMcpCatalogItem",
   DeleteInternalMcpCatalogItem: "deleteInternalMcpCatalogItem",
   DeleteInternalMcpCatalogItemByName: "deleteInternalMcpCatalogItemByName",
   GetInternalMcpCatalogLabelKeys: "getInternalMcpCatalogLabelKeys",
@@ -65,6 +66,10 @@ export const RouteId = {
   ValidateDeploymentYaml: "validateDeploymentYaml",
   ResetDeploymentYaml: "resetDeploymentYaml",
   GetK8sImagePullSecrets: "getK8sImagePullSecrets",
+  // MCP Catalog Children (UI-named "presets") Routes
+  GetCatalogChildren: "getCatalogChildren",
+  CreateCatalogChild: "createCatalogChild",
+  UpdateCatalogChild: "updateCatalogChild",
 
   // MCP Server Routes
   GetMcpServers: "getMcpServers",
@@ -263,6 +268,7 @@ export const RouteId = {
   // Chat Routes
   StreamChat: "streamChat",
   StopChatStream: "stopChatStream",
+  GetActiveChatRun: "getActiveChatRun",
   GetChatConversations: "getChatConversations",
   GetChatConversation: "getChatConversation",
   GetChatAgentMcpTools: "getChatAgentMcpTools",
@@ -270,6 +276,7 @@ export const RouteId = {
   ForkChatConversation: "forkChatConversation",
   UpdateChatConversation: "updateChatConversation",
   DeleteChatConversation: "deleteChatConversation",
+  CompactChatConversation: "compactChatConversation",
   GenerateChatConversationTitle: "generateChatConversationTitle",
   GetChatMcpTools: "getChatMcpTools",
   UpdateChatMessage: "updateChatMessage",
@@ -281,6 +288,7 @@ export const RouteId = {
   GetConversationShare: "getConversationShare",
   GetSharedConversation: "getSharedConversation",
   ForkSharedConversation: "forkSharedConversation",
+  GetChatAttachmentContent: "getChatAttachmentContent",
   GetLlmModels: "getLlmModels",
   SyncLlmModels: "syncLlmModels",
 
@@ -350,6 +358,18 @@ export const RouteId = {
   // Connection Settings Routes (organization-level)
   UpdateConnectionSettings: "updateConnectionSettings",
 
+  // Preset Entity Name Routes (organization-level - configurable label for catalog presets)
+  UpdatePresetEntityName: "updatePresetEntityName",
+  UpdatePresetEntityDefaultLabel: "updatePresetEntityDefaultLabel",
+  UpdatePresetEntityDefaultValidationRegex:
+    "updatePresetEntityDefaultValidationRegex",
+
+  // Org-level preset entries (Production / Staging / Development buckets)
+  ListMcpPresetEntries: "listMcpPresetEntries",
+  CreateMcpPresetEntry: "createMcpPresetEntry",
+  UpdateMcpPresetEntry: "updateMcpPresetEntry",
+  DeleteMcpPresetEntry: "deleteMcpPresetEntry",
+
   // Knowledge Settings Routes (organization-level)
   UpdateKnowledgeSettings: "updateKnowledgeSettings",
   DropEmbeddingConfig: "dropEmbeddingConfig",
@@ -368,6 +388,8 @@ export const RouteId = {
 
   // Member Routes
   GetMemberDefaultAgent: "getMemberDefaultAgent",
+  GetMemberDefaultModel: "getMemberDefaultModel",
+  UpdateMemberDefaultModel: "updateMemberDefaultModel",
 
   // User Routes
   GetUserPermissions: "getUserPermissions",
@@ -455,6 +477,30 @@ export const RouteId = {
 
   // Invitation Routes
   CheckInvitation: "checkInvitation",
+
+  // Site Notification Routes
+  GetSiteNotification: "getSiteNotification",
+  GetSiteNotificationSettings: "getSiteNotificationSettings",
+  CreateSiteNotification: "createSiteNotification",
+  UpdateSiteNotification: "updateSiteNotification",
+  DeleteSiteNotification: "deleteSiteNotification",
+
+  // Agent Skill Routes
+  GetSkills: "getSkills",
+  CreateSkill: "createSkill",
+  GetSkill: "getSkill",
+  UpdateSkill: "updateSkill",
+  DeleteSkill: "deleteSkill",
+  DiscoverGithubSkills: "discoverGithubSkills",
+  PreviewGithubSkill: "previewGithubSkill",
+  ImportGithubSkills: "importGithubSkills",
+  GetSkillSourceRepos: "getSkillSourceRepos",
+  EnableSkillToolDefaults: "enableSkillToolDefaults",
+
+  // Skill Share Link Routes
+  GetSkillShareLinks: "getSkillShareLinks",
+  CreateSkillShareLink: "createSkillShareLink",
+  RevokeSkillShareLink: "revokeSkillShareLink",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

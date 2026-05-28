@@ -232,6 +232,48 @@ describe("knowledge-connector schemas", () => {
     });
   });
 
+  describe("GitHub connector schema", () => {
+    test("accepts GitHub App authentication config", () => {
+      const result = GithubConfigSchema.parse({
+        type: "github",
+        githubUrl: "api.github.com",
+        owner: "test-org",
+        authMethod: "github_app",
+        githubAppId: "12345",
+        githubAppInstallationId: "67890",
+      });
+
+      expect(result.authMethod).toBe("github_app");
+      expect(result.githubUrl).toBe("https://api.github.com");
+    });
+
+    test("accepts repository file type filters", () => {
+      const result = GithubConfigSchema.parse({
+        type: "github",
+        githubUrl: "api.github.com",
+        owner: "test-org",
+        includeRepositoryFiles: true,
+        fileTypes: [".md", ".yaml"],
+      });
+
+      expect(result.fileTypes).toEqual([".md", ".yaml"]);
+    });
+  });
+
+  describe("Jira connector schema", () => {
+    test("accepts comma-separated project keys", () => {
+      const result = JiraConfigSchema.parse({
+        type: "jira",
+        jiraBaseUrl: "mycompany.atlassian.net",
+        isCloud: true,
+        projectKey: "ENG, OPS",
+      });
+
+      expect(result.projectKey).toBe("ENG, OPS");
+      expect(result.jiraBaseUrl).toBe("https://mycompany.atlassian.net");
+    });
+  });
+
   describe("Salesforce schemas", () => {
     test("applies default loginUrl when omitted", () => {
       const result = SalesforceConfigSchema.parse({

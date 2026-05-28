@@ -3,7 +3,7 @@ title: Connectors
 category: Knowledge
 order: 2
 description: Supported connector types, configuration, and management
-lastUpdated: 2026-04-30
+lastUpdated: 2026-05-26
 ---
 
 <!--
@@ -39,7 +39,7 @@ Sync issues and discussions from Atlassian Jira.
 | ----------------------- | ------------------------------------------------------------------ |
 | Base URL                | Your Jira instance URL (e.g., `https://your-domain.atlassian.net`) |
 | Cloud Instance          | Toggle on for Jira Cloud, off for Jira Server/Data Center          |
-| Project Key             | Filter issues to a single project (optional)                       |
+| Project Keys            | Comma-separated project keys to include (optional)                 |
 | JQL Query               | Custom JQL to filter issues (optional)                             |
 | Comment Email Blacklist | Comma-separated emails whose comments are excluded (optional)      |
 | Labels to Skip          | Comma-separated issue labels to exclude (optional)                 |
@@ -64,19 +64,22 @@ Sync wiki pages from Atlassian Confluence.
 
 ## GitHub
 
-Sync issues and pull request discussions from GitHub.
+Sync issues, pull request discussions, and repository files from GitHub.
 
-**Indexed:** issues, pull requests, and their comments from GitHub.com or GitHub Enterprise Server.
+**Indexed:** issues, pull requests, comments, and selected text files from GitHub.com or GitHub Enterprise Server. Repository file indexing defaults to Markdown and YAML files.
 
-**Authentication:** a [personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens).
+**Authentication:** a [personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens) or a GitHub App installation. For GitHub App auth, enter the App ID and installation ID, then paste the app private key in the credential field.
 
 | Field                 | Description                                                                                     |
 | --------------------- | ----------------------------------------------------------------------------------------------- |
 | GitHub API URL        | API endpoint (e.g., `https://api.github.com` for GitHub.com, or your GHE API URL)               |
 | Owner                 | GitHub organization or username that owns the repositories                                      |
+| Authentication Method | Personal access token or GitHub App                                                            |
 | Repositories          | Comma-separated repository names to sync (optional -- leave blank to sync all org repositories) |
 | Include Issues        | Toggle to sync issues and their comments (default: on)                                          |
 | Include Pull Requests | Toggle to sync pull requests and their comments (default: on)                                   |
+| Include Repository Files | Toggle to sync repository files (default: off)                                               |
+| File Types            | Comma-separated file extensions to index when repository files are enabled (defaults to `.md`, `.mdx`, `.yaml`, `.yml`) |
 | Labels to Skip        | Comma-separated labels to exclude (optional)                                                    |
 
 ## GitLab

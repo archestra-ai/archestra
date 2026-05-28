@@ -178,7 +178,6 @@ async function makeOrganization(
       name: `Test Org ${orgId.substring(0, 8)}`,
       slug: `test-org-${orgId.substring(0, 8)}`,
       createdAt: new Date(),
-      limitCleanupInterval: null,
       theme: "cosmic-night",
       customFont: "lato",
       ...overrides,
@@ -531,6 +530,7 @@ async function makeInternalMcpCatalog(
       | "authDescription"
       | "authFields"
       | "localConfig"
+      | "localConfigSecretId"
       | "userConfig"
       | "oauthConfig"
       | "enterpriseManagedConfig"
@@ -673,7 +673,7 @@ async function makeConversation(
   overrides: Partial<
     Pick<
       InsertConversation,
-      "userId" | "organizationId" | "title" | "selectedModel" | "chatApiKeyId"
+      "userId" | "organizationId" | "title" | "modelId" | "chatApiKeyId"
     >
   > = {},
 ) {
@@ -685,7 +685,6 @@ async function makeConversation(
       organizationId: `org-${crypto.randomUUID().substring(0, 8)}`,
       agentId,
       title: `Test Conversation ${crypto.randomUUID().substring(0, 8)}`,
-      selectedModel: "gpt-4o",
       createdAt: new Date(),
       updatedAt: new Date(),
       ...overrides,

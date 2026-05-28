@@ -23,11 +23,12 @@ import {
 import { useCallback, useRef, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
-import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
-  StandardDialog,
-  StandardFormDialog,
-} from "@/components/standard-dialog";
+  downloadKnowledgeFile,
+  KnowledgeFileViewerDialog,
+} from "@/app/knowledge/files/_parts/knowledge-file-viewer-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { StandardFormDialog } from "@/components/standard-dialog";
 import {
   type TableRowAction,
   TableRowActions,
@@ -238,7 +239,7 @@ function KnowledgeFilesList() {
         onOpenChange={setIsUploadOpen}
       />
       {viewingFile && (
-        <ViewKnowledgeFileDialog
+        <KnowledgeFileViewerDialog
           file={viewingFile}
           open={!!viewingFile}
           onOpenChange={(open) => !open && setViewingFile(null)}
@@ -487,55 +488,6 @@ function EditKnowledgeFileDialog({
   );
 }
 
-function ViewKnowledgeFileDialog({
-  file,
-  open,
-  onOpenChange,
-}: {
-  file: KnowledgeFile;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  return (
-    <StandardDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title="View File"
-      description={
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="min-w-0 flex-1 truncate">{file.originalName}</div>
-          <div className="text-xs text-muted-foreground">
-            Size: {formatFileSize(file.fileSize)}
-          </div>
-        </div>
-      }
-      size="large"
-      bodyClassName="flex min-h-0 flex-col"
-      footer={
-        <>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => downloadKnowledgeFile(file)}
-          >
-            <Download className="h-4 w-4" />
-            Download
-          </Button>
-          <Button type="button" onClick={() => onOpenChange(false)}>
-            Close
-          </Button>
-        </>
-      }
-    >
-      <iframe
-        title={file.originalName}
-        src={getKnowledgeFileContentUrl(file.id)}
-        className="min-h-0 flex-1 rounded-md border bg-background"
-      />
-    </StandardDialog>
-  );
-}
-
 function FileStatusBadge({ file }: { file: KnowledgeFile }) {
   if (file.processingStatus !== "completed") {
     const label =
@@ -627,19 +579,6 @@ function AssignedAgentsBadge({ file }: { file: KnowledgeFile }) {
       </div>
     </TooltipProvider>
   );
-}
-
-function getKnowledgeFileContentUrl(fileId: string, download = false) {
-  return `/api/knowledge-files/${fileId}/content${download ? "?download=true" : ""}`;
-}
-
-function downloadKnowledgeFile(file: KnowledgeFile) {
-  const link = document.createElement("a");
-  link.href = getKnowledgeFileContentUrl(file.id, true);
-  link.download = file.originalName;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
 }
 
 function DeleteKnowledgeFileDialog({

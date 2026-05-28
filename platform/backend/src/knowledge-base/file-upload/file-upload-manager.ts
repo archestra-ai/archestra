@@ -30,7 +30,8 @@ type UploadKnowledgeFileParams = {
   userId: string;
   name: string;
   mimeType: string;
-  content: string;
+  content?: string;
+  contentBuffer?: Buffer;
   visibility: ResourceVisibilityScope;
   teamIds: string[];
   agentIds: string[];
@@ -41,7 +42,7 @@ const KNOWLEDGE_FILE_CONNECTOR_NAME_PREFIX = "Knowledge File:";
 class FileUploadManager {
   async uploadKnowledgeFile(params: UploadKnowledgeFileParams) {
     this.validateVisibility(params.visibility, params.teamIds);
-    const rawBuffer = Buffer.from(params.content, "base64");
+    const rawBuffer = this.getUploadBuffer(params);
     if (rawBuffer.byteLength > MAX_FILE_SIZE_BYTES) {
       return {
         filename: params.name,
@@ -261,6 +262,18 @@ class FileUploadManager {
     if (visibility === "team" && teamIds.length === 0) {
       throw new ApiError(400, "At least one team must be selected");
     }
+  }
+
+  private getUploadBuffer(params: UploadKnowledgeFileParams) {
+    if (params.contentBuffer) {
+      return params.contentBuffer;
+    }
+
+    if (!params.content) {
+      throw new ApiError(400, "Missing file content");
+    }
+
+    return Buffer.from(params.content, "base64");
   }
 
   private async assertAgentsBelongToOrganization(params: {

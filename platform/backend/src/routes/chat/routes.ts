@@ -1299,7 +1299,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         name: attachment.originalName,
         mimeType: attachment.mimeType,
-        content: attachment.fileData.toString("base64"),
+        contentBuffer: attachment.fileData,
         visibility: body.visibility,
         teamIds: body.teamIds,
         agentIds: body.agentIds,

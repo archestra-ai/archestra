@@ -52,6 +52,19 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
+Maintenance mode can serve the frontend overlay and public config without
+database access. The chart can only detect this when the env var is set
+directly through archestra.env.
+*/}}
+{{- define "archestra-platform.maintenanceModeEnabled" -}}
+{{- if and (hasKey .Values.archestra.env "ARCHESTRA_MAINTENANCE_MODE_MESSAGE") (ne (toString (get .Values.archestra.env "ARCHESTRA_MAINTENANCE_MODE_MESSAGE")) "") -}}
+true
+{{- else -}}
+false
+{{- end -}}
+{{- end }}
+
+{{/*
 Environment variables for the Archestra Platform container
 */}}
 {{- define "archestra-platform.env" -}}

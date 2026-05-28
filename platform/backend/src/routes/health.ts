@@ -18,7 +18,7 @@ const healthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: {
           200: z.object({
             name: z.string(),
-            status: z.string(),
+            status: z.literal("ok"),
             version: z.string(),
           }),
         },
@@ -26,7 +26,7 @@ const healthRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async () => ({
       name,
-      status: "ok",
+      status: "ok" as const,
       version,
     }),
   );
@@ -43,35 +43,49 @@ const healthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: {
           200: z.object({
             name: z.string(),
-            status: z.string(),
+            status: z.enum(["ok", "maintenance"]),
             version: z.string(),
-            database: z.string(),
+            database: z.enum(["connected", "not_checked"]),
           }),
           503: z.object({
             name: z.string(),
-            status: z.string(),
+            status: z.literal("degraded"),
             version: z.string(),
-            database: z.string(),
+            database: z.literal("disconnected"),
           }),
         },
       },
     },
     async (request, reply) => {
-      const dbHealthy = await isDatabaseHealthy();
+      // Maintenance mode must stay available while the database is offline or
+      // being upgraded, so readiness intentionally skips the DB probe here.
+      if (config.maintenanceMode) {
+        return reply.send({
+          name,
+          status: "maintenance",
+          version,
+          database: "not_checked",
+        });
+      }
 
-      const response = {
-        name,
-        status: dbHealthy ? "ok" : "degraded",
-        version,
-        database: dbHealthy ? "connected" : "disconnected",
-      };
+      const dbHealthy = await isDatabaseHealthy();
 
       if (!dbHealthy) {
         request.log.warn("Database health check failed for readiness probe");
-        return reply.status(503).send(response);
+        return reply.status(503).send({
+          name,
+          status: "degraded",
+          version,
+          database: "disconnected",
+        });
       }
 
-      return reply.send(response);
+      return reply.send({
+        name,
+        status: "ok",
+        version,
+        database: "connected",
+      });
     },
   );
 };

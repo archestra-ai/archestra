@@ -301,6 +301,15 @@ tests:
           path: spec.template.spec.initContainers[1].image
           value: registry.internal.example.com/platform/busybox:1.36
 
+  - it: should skip database init containers when maintenance mode is enabled
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_MAINTENANCE_MODE_MESSAGE: "Scheduled maintenance"
+    asserts:
+      - notExists:
+          path: spec.template.spec.initContainers
+
   - it: should apply shared resources to chart-managed init containers
     documentIndex: 1
     set:

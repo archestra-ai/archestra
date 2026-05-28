@@ -1327,7 +1327,6 @@ Uploaded [Knowledge Files](/docs/platform-knowledge-bases#files) store file byte
 - **`ARCHESTRA_MAINTENANCE_MODE_MESSAGE`** - Enables maintenance mode and displays a custom message to all users blocking access to the platform.
   - Default: Not set (maintenance mode disabled)
   - When set, all users are shown a full-screen maintenance overlay with the message instead of the normal application interface.
-  - Example: `ARCHESTRA_MAINTENANCE_MODE_MESSAGE="We are performing scheduled maintenance. Please check back in 30 minutes."`
 
 ### Enterprise Licensing
 

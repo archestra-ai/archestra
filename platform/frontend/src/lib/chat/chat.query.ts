@@ -208,12 +208,12 @@ export function useUpdateConversation() {
 
       // Update title in cache
       if (variables.title !== undefined) {
-        queryClient.setQueriesData<{ id: string; title: string | null }[]>(
-          { queryKey: ["conversations"] },
-          (old) =>
-            old?.map((c) =>
-              c.id === variables.id ? { ...c, title: data.title } : c,
-            ),
+        queryClient.setQueriesData<
+          archestraApiTypes.GetChatConversationsResponses["200"]
+        >({ queryKey: ["conversations"] }, (old) =>
+          old?.map((c) =>
+            c.id === variables.id ? { ...c, title: data.title } : c,
+          ),
         );
       }
       // Only invalidate the conversations list for sidebar-relevant changes
@@ -338,14 +338,17 @@ export function useDeleteConversation() {
       await queryClient.cancelQueries({ queryKey: ["conversations"] });
 
       // Snapshot all conversation list caches (one per search query) for rollback
-      const previousQueries = queryClient.getQueriesData<{ id: string }[]>({
+      const previousQueries = queryClient.getQueriesData<
+        archestraApiTypes.GetChatConversationsResponses["200"]
+      >({
         queryKey: ["conversations"],
       });
 
       // Optimistically remove the conversation from every cached list
-      queryClient.setQueriesData<{ id: string }[]>(
-        { queryKey: ["conversations"] },
-        (old) => (old ? old.filter((c) => c.id !== deletedId) : old),
+      queryClient.setQueriesData<
+        archestraApiTypes.GetChatConversationsResponses["200"]
+      >({ queryKey: ["conversations"] }, (old) =>
+        old ? old.filter((c) => c.id !== deletedId) : old,
       );
 
       return { previousQueries };
@@ -424,12 +427,12 @@ export function useGenerateConversationTitle() {
         (old: archestraApiTypes.GetChatConversationResponses["200"] | null) =>
           old ? { ...old, title: data.title } : old,
       );
-      queryClient.setQueriesData<{ id: string; title: string | null }[]>(
-        { queryKey: ["conversations"] },
-        (old) =>
-          old?.map((c) =>
-            c.id === variables.id ? { ...c, title: data.title } : c,
-          ),
+      queryClient.setQueriesData<
+        archestraApiTypes.GetChatConversationsResponses["200"]
+      >({ queryKey: ["conversations"] }, (old) =>
+        old?.map((c) =>
+          c.id === variables.id ? { ...c, title: data.title } : c,
+        ),
       );
     },
   });

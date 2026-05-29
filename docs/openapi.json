@@ -121334,7 +121334,8 @@
                             "type": "string",
                             "enum": [
                               "org-wide",
-                              "team-scoped"
+                              "team-scoped",
+                              "auto-sync-permissions"
                             ]
                           },
                           "teamIds": {
@@ -122463,7 +122464,8 @@
                     "type": "string",
                     "enum": [
                       "org-wide",
-                      "team-scoped"
+                      "team-scoped",
+                      "auto-sync-permissions"
                     ]
                   },
                   "teamIds": {
@@ -123222,7 +123224,8 @@
                       "type": "string",
                       "enum": [
                         "org-wide",
-                        "team-scoped"
+                        "team-scoped",
+                        "auto-sync-permissions"
                       ]
                     },
                     "teamIds": {
@@ -124301,7 +124304,8 @@
                       "type": "string",
                       "enum": [
                         "org-wide",
-                        "team-scoped"
+                        "team-scoped",
+                        "auto-sync-permissions"
                       ]
                     },
                     "teamIds": {
@@ -125362,7 +125366,8 @@
                     "type": "string",
                     "enum": [
                       "org-wide",
-                      "team-scoped"
+                      "team-scoped",
+                      "auto-sync-permissions"
                     ]
                   },
                   "teamIds": {
@@ -126027,7 +126032,8 @@
                       "type": "string",
                       "enum": [
                         "org-wide",
-                        "team-scoped"
+                        "team-scoped",
+                        "auto-sync-permissions"
                       ]
                     },
                     "teamIds": {

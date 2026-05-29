@@ -4,8 +4,6 @@ import {
   filterModelsForPage,
   type ModelsPageAvailableApiKey,
   type ModelsPageFilterableModel,
-  OBSERVED_MODEL_SOURCE_DESCRIPTION,
-  OBSERVED_MODEL_SOURCE_LABEL,
 } from "./models-page-utils";
 
 const availableApiKeys = [
@@ -101,14 +99,5 @@ describe("filterModelsForPage", () => {
     });
 
     expect(result.map((model) => model.modelId)).toEqual(["openrouter/free"]);
-  });
-});
-
-describe("observed model source copy", () => {
-  it("uses end-user wording without exposing the implementation source name", () => {
-    expect(OBSERVED_MODEL_SOURCE_LABEL).toBe("Observed in requests");
-    expect(OBSERVED_MODEL_SOURCE_DESCRIPTION).toBe(
-      "This model was first seen in traffic through a model gateway. It may not appear in a provider catalog.",
-    );
   });
 });

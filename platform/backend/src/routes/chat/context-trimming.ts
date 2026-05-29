@@ -77,24 +77,30 @@ export function trimMessagesToTokenLimit(params: {
     if (dropped) total -= chars(dropped);
   }
 
-  // 3. Truncate the last message if still over budget.
+  // 3. The last message is still over budget. Keep its text so the user's
+  // actual request survives the retry; drop image/file/tool-result parts that
+  // can't be sliced into valid parts the provider would accept. Slice the
+  // surviving text if it alone still overflows. A message with no text (e.g. a
+  // bare tool result) is dropped rather than sent malformed.
   let trimmedLast: ModelMessage | undefined = last;
   if (last && total > charBudget) {
-    if (typeof last.content === "string") {
-      const excess = total - charBudget;
-      trimmedLast = {
-        role: last.role,
-        content: last.content.slice(
-          0,
-          Math.max(last.content.length - excess, 0),
-        ),
-      } as ModelMessage;
-    } else {
-      // structured content (tool results, image/file parts) can't be sliced as
-      // a string without producing malformed parts the provider rejects, so
-      // drop the whole message rather than corrupt it.
-      trimmedLast = undefined;
-    }
+    const text =
+      typeof last.content === "string"
+        ? last.content
+        : last.content
+            .filter(
+              (part): part is { type: "text"; text: string } =>
+                part.type === "text",
+            )
+            .map((part) => part.text)
+            .join("\n");
+
+    const charsForLast = charBudget - (total - chars(last));
+    const keep = Math.max(Math.min(text.length, charsForLast), 0);
+    trimmedLast =
+      keep === 0
+        ? undefined
+        : ({ role: last.role, content: text.slice(0, keep) } as ModelMessage);
   }
 
   const result: ModelMessage[] = [...system, ...middle, trimmedLast].filter(

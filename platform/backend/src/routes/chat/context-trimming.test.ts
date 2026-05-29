@@ -151,6 +151,25 @@ describe("trimMessagesToTokenLimit", () => {
     }
   });
 
+  test("preserves the text of a structured last message, dropping image parts", () => {
+    // a current user turn carrying both text and an image; the image blows the
+    // budget but the text request must survive the retry.
+    const userMessage = {
+      role: "user",
+      content: [
+        { type: "text", text: "summarize this screenshot" },
+        { type: "image", image: `data:image/png;base64,${"A".repeat(2000)}` },
+      ],
+    } as ModelMessage;
+    const result = trimMessagesToTokenLimit({
+      messages: [userMessage],
+      maxTokens: 50,
+    });
+    // the text request survives as string content; no oversized image part.
+    const surviving = result.find((m) => m.role === "user");
+    expect(surviving?.content).toBe("summarize this screenshot");
+  });
+
   test("never returns undefined entries when only system messages exist", () => {
     const messages = [
       msg("system", "x".repeat(200)),

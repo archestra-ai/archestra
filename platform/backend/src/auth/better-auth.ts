@@ -36,6 +36,7 @@ import InvitationModel from "@/models/invitation";
 import MemberModel from "@/models/member";
 import SessionModel from "@/models/session";
 import UserModel from "@/models/user";
+import { reportAuditWriteFailure } from "@/observability/metrics/audit";
 import type { AuditEventName } from "@/types/audit-log";
 import { linkedIdentityProviderPlugin } from "./linked-idp";
 
@@ -958,6 +959,10 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
             { err },
             "[auth:audit] failed to write cancel-invitation audit row",
           );
+          reportAuditWriteFailure({
+            source: "auth",
+            resourceType: "invitation",
+          });
         }
       }
     }
@@ -1015,6 +1020,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
           { err },
           "[auth:audit] failed to write invite-member audit row",
         );
+        reportAuditWriteFailure({ source: "auth", resourceType: "invitation" });
       }
     }
   }
@@ -1065,6 +1071,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
           { err },
           "[auth:audit] failed to write accept-invitation audit row",
         );
+        reportAuditWriteFailure({ source: "auth", resourceType: "member" });
       }
     }
   }
@@ -1116,6 +1123,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
           { err },
           "[auth:audit] failed to write member role update audit row",
         );
+        reportAuditWriteFailure({ source: "auth", resourceType: "member" });
       }
     }
   }
@@ -1160,6 +1168,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
           { err },
           "[auth:audit] failed to write remove-member audit row",
         );
+        reportAuditWriteFailure({ source: "auth", resourceType: "member" });
       }
     }
   }
@@ -1623,29 +1632,34 @@ async function writeAuthAuditLog(params: {
     after = { sessionId: session.id, userId: user.id };
   }
 
-  await AuditLogModel.create({
-    organizationId,
-    actorId: user.id,
-    actorType,
-    actorName: user.name ?? null,
-    actorEmail: user.email,
-    action,
-    outcome: "success",
-    resourceType: "auth",
-    resourceId: user.id,
-    before: null,
-    after,
-    httpMethod: "POST",
-    httpPath: path,
-    httpRoute: null,
-    httpStatus: null,
-    // better-auth operates on Web Request objects; Fastify's request.id is not
-    // accessible here. requestId is null for all auth-surface audit rows.
-    requestId: null,
-    sourceIp,
-    userAgent,
-    occurredAt: new Date(),
-  });
+  try {
+    await AuditLogModel.create({
+      organizationId,
+      actorId: user.id,
+      actorType,
+      actorName: user.name ?? null,
+      actorEmail: user.email,
+      action,
+      outcome: "success",
+      resourceType: "auth",
+      resourceId: user.id,
+      before: null,
+      after,
+      httpMethod: "POST",
+      httpPath: path,
+      httpRoute: null,
+      httpStatus: null,
+      // better-auth operates on Web Request objects; Fastify's request.id is not
+      // accessible here. requestId is null for all auth-surface audit rows.
+      requestId: null,
+      sourceIp,
+      userAgent,
+      occurredAt: new Date(),
+    });
+  } catch (err) {
+    reportAuditWriteFailure({ source: "auth", resourceType: "auth" });
+    throw err;
+  }
 }
 
 /**

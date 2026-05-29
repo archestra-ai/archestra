@@ -1,6 +1,7 @@
 import logger from "@/logging";
 import AuditLogModel from "@/models/audit-log";
 import UserTokenModel from "@/models/user-token";
+import { reportAuditWriteFailure } from "@/observability/metrics/audit";
 import type { FastifyInstanceWithZod } from "@/server";
 import type { AuditActorType, AuditEventName, AuditOutcome } from "@/types";
 import {
@@ -130,6 +131,10 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
 
     void AuditLogModel.create(payload).catch((err) => {
       logger.error({ err }, "audit: failed to write audit log row");
+      reportAuditWriteFailure({
+        source: "http",
+        resourceType: payload.resourceType,
+      });
     });
   });
 }

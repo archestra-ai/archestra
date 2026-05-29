@@ -118,6 +118,30 @@ class SkillModel {
   }
 
   /**
+   * All skills sharing a name within an org. Since name uniqueness is now
+   * per-scope (personal names per author, shared names per org), a single
+   * `(org, name)` can resolve to several rows — a caller's personal skill plus
+   * a team/org skill of the same name. Callers filter these by accessibility
+   * and pick one; `findByName` returns an arbitrary row and must not be used
+   * for access-scoped lookup.
+   */
+  static async findAllByName(
+    organizationId: string,
+    name: string,
+  ): Promise<Skill[]> {
+    return await db
+      .select()
+      .from(schema.skillsTable)
+      .where(
+        and(
+          eq(schema.skillsTable.organizationId, organizationId),
+          eq(schema.skillsTable.name, name),
+        ),
+      )
+      .orderBy(desc(schema.skillsTable.createdAt));
+  }
+
+  /**
    * Create a skill, its bundled resource files, and its team assignments in
    * one transaction.
    *

@@ -100,6 +100,27 @@ const manifestContentSchema = z
       "followed by the Markdown instruction body.",
   );
 
+// resource paths are unique per skill (skill_files unique index). Reject
+// duplicates here so a repeated path is a clean validation error rather than an
+// opaque DB unique violation surfacing from createWithFiles/updateWithFiles.
+function refineUniqueFilePaths(
+  files: { path: string }[] | undefined,
+  ctx: z.RefinementCtx,
+) {
+  if (!files) return;
+  const seen = new Set<string>();
+  files.forEach((file, index) => {
+    if (seen.has(file.path)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate resource file path: ${file.path}`,
+        path: ["files", index, "path"],
+      });
+    }
+    seen.add(file.path);
+  });
+}
+
 const CreateSkillSchema = z
   .object({
     content: manifestContentSchema,
@@ -113,7 +134,8 @@ const CreateSkillSchema = z
           "for docs, `scripts/` for code, `assets/` for other files.",
       ),
   })
-  .strict();
+  .strict()
+  .superRefine((data, ctx) => refineUniqueFilePaths(data.files, ctx));
 
 const UpdateSkillSchema = z
   .object({
@@ -137,7 +159,8 @@ const UpdateSkillSchema = z
           "read_skill_file.",
       ),
   })
-  .strict();
+  .strict()
+  .superRefine((data, ctx) => refineUniqueFilePaths(data.files, ctx));
 
 const registry = defineArchestraTools([
   defineArchestraTool({
@@ -336,7 +359,10 @@ const registry = defineArchestraTools([
             args.files === undefined ? undefined : toSkillFiles(args.files),
         });
       } catch (error) {
-        if (isUniqueConstraintError(error, "skills_org_name_idx")) {
+        if (
+          isUniqueConstraintError(error, "skills_org_personal_name_idx") ||
+          isUniqueConstraintError(error, "skills_org_shared_name_idx")
+        ) {
           return errorResult(`A skill named "${parsed.name}" already exists.`);
         }
         throw error;
@@ -379,13 +405,17 @@ function requireOrgContext(context: ArchestraContext): SkillReadContext | null {
 }
 
 /**
- * Look up a skill by name and return it only if the caller can access it under
- * the skill's scope. Returns null otherwise — callers surface a generic
- * "no skill named …" so an inaccessible skill's existence is not leaked.
+ * Look up a skill by name and return the one the caller can access. Name
+ * uniqueness is per-scope, so a name can resolve to several rows (the caller's
+ * own personal skill plus a team/org skill of the same name); we keep only the
+ * accessible ones and break ties by scope precedence — a caller's own
+ * `personal` skill shadows a `team` one, which shadows `org`. Returns null when
+ * none are accessible, so callers surface a generic "no skill named …" without
+ * leaking an inaccessible skill's existence.
  */
 async function findAccessibleSkill(ctx: SkillReadContext, name: string) {
-  const skill = await SkillModel.findByName(ctx.organizationId, name);
-  if (!skill) return null;
+  const candidates = await SkillModel.findAllByName(ctx.organizationId, name);
+  if (candidates.length === 0) return null;
 
   const isSkillAdmin =
     ctx.userId !== undefined &&
@@ -395,13 +425,37 @@ async function findAccessibleSkill(ctx: SkillReadContext, name: string) {
         organizationId: ctx.organizationId,
       })
     ).isAdmin;
-  const hasAccess = await SkillTeamModel.userHasSkillAccess({
-    organizationId: ctx.organizationId,
-    userId: ctx.userId,
-    skill,
-    isSkillAdmin,
-  });
-  return hasAccess ? skill : null;
+
+  const accessible: Skill[] = [];
+  for (const skill of candidates) {
+    const hasAccess = await SkillTeamModel.userHasSkillAccess({
+      organizationId: ctx.organizationId,
+      userId: ctx.userId,
+      skill,
+      isSkillAdmin,
+    });
+    if (hasAccess) accessible.push(skill);
+  }
+  if (accessible.length === 0) return null;
+
+  accessible.sort(
+    (a, b) => scopePrecedence(a.scope) - scopePrecedence(b.scope),
+  );
+  return accessible[0];
+}
+
+/** Lower wins: a caller's own personal skill shadows a shared one of the same name. */
+function scopePrecedence(scope: Skill["scope"]): number {
+  switch (scope) {
+    case "personal":
+      return 0;
+    case "team":
+      return 1;
+    case "org":
+      return 2;
+    default:
+      return 3;
+  }
 }
 
 /**

@@ -37,6 +37,10 @@ import {
   SkillParseError,
 } from "@/skills/parser";
 import {
+  isSkillNameConflict,
+  refineUniqueFilePaths,
+} from "@/skills/validation";
+import {
   ApiError,
   constructResponseSchema,
   DeleteObjectResponseSchema,
@@ -45,10 +49,7 @@ import {
   SkillFileEncodingSchema,
   SkillWithFilesSchema,
 } from "@/types";
-import {
-  isForeignKeyConstraintError,
-  isUniqueConstraintError,
-} from "@/utils/db";
+import { isForeignKeyConstraintError } from "@/utils/db";
 
 /** A team a skill is assigned to (for `scope = 'team'` skills). */
 const SkillTeamSchema = z.object({ id: z.string(), name: z.string() });
@@ -87,23 +88,7 @@ const SkillManifestInputSchema = z
     scope: ResourceVisibilityScopeSchema.optional(),
     teamIds: z.array(z.string()).optional(),
   })
-  // Resource paths are unique per skill (skill_files unique index). Reject
-  // duplicates here so a repeated path is a clean 400 rather than surfacing as
-  // an opaque 500 from the database unique violation.
-  .superRefine((data, ctx) => {
-    if (!data.files) return;
-    const seen = new Set<string>();
-    data.files.forEach((file, index) => {
-      if (seen.has(file.path)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `Duplicate resource file path: ${file.path}`,
-          path: ["files", index, "path"],
-        });
-      }
-      seen.add(file.path);
-    });
-  });
+  .superRefine((data, ctx) => refineUniqueFilePaths(data.files, ctx));
 
 const DiscoveredSkillSchema = z.object({
   skillPath: z.string(),
@@ -840,18 +825,6 @@ function parseManifestOrThrow(raw: string) {
 
 function skillNameConflict(name: string): ApiError {
   return new ApiError(409, `A skill named "${name}" already exists`);
-}
-
-/**
- * Whether an error is a skill-name unique violation on either visibility
- * namespace (personal-per-author or shared-per-org), as opposed to a team FK or
- * a duplicate resource-file path.
- */
-function isSkillNameConflict(error: unknown): boolean {
-  return (
-    isUniqueConstraintError(error, "skills_org_personal_name_idx") ||
-    isUniqueConstraintError(error, "skills_org_shared_name_idx")
-  );
 }
 
 function toSkillFiles(

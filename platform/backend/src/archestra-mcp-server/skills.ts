@@ -32,8 +32,11 @@ import {
   escapeXmlText,
   formatSkillActivation,
 } from "@/skills/skill-activation";
+import {
+  isSkillNameConflict,
+  refineUniqueFilePaths,
+} from "@/skills/validation";
 import { ApiError, type Skill, SkillFileEncodingSchema } from "@/types";
-import { isUniqueConstraintError } from "@/utils/db";
 import {
   defineArchestraTool,
   defineArchestraTools,
@@ -99,27 +102,6 @@ const manifestContentSchema = z
       "`description` (and optional `license`, `compatibility`, `metadata`), " +
       "followed by the Markdown instruction body.",
   );
-
-// resource paths are unique per skill (skill_files unique index). Reject
-// duplicates here so a repeated path is a clean validation error rather than an
-// opaque DB unique violation surfacing from createWithFiles/updateWithFiles.
-function refineUniqueFilePaths(
-  files: { path: string }[] | undefined,
-  ctx: z.RefinementCtx,
-) {
-  if (!files) return;
-  const seen = new Set<string>();
-  files.forEach((file, index) => {
-    if (seen.has(file.path)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: `Duplicate resource file path: ${file.path}`,
-        path: ["files", index, "path"],
-      });
-    }
-    seen.add(file.path);
-  });
-}
 
 const CreateSkillSchema = z
   .object({
@@ -359,10 +341,7 @@ const registry = defineArchestraTools([
             args.files === undefined ? undefined : toSkillFiles(args.files),
         });
       } catch (error) {
-        if (
-          isUniqueConstraintError(error, "skills_org_personal_name_idx") ||
-          isUniqueConstraintError(error, "skills_org_shared_name_idx")
-        ) {
+        if (isSkillNameConflict(error)) {
           return errorResult(`A skill named "${parsed.name}" already exists.`);
         }
         throw error;

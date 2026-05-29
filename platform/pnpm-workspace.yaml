@@ -2,6 +2,7 @@ packages:
   - "backend"
   - "frontend"
   - "shared"
+  - "archestra-rs/sandbox-rs"
   - "e2e-tests"
 
 catalog:

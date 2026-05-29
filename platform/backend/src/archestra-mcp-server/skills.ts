@@ -48,8 +48,11 @@ import type { ArchestraContext } from "./types";
  * `list_skills`, `activate_skill`, and `read_skill_file` implement the
  * progressive-disclosure tiers of the Agent Skills spec: `list_skills` returns
  * the catalog, `activate_skill` returns a named skill's SKILL.md body, and
- * bundled resource files are fetched individually via `read_skill_file`.
- * Scripts are returned as readable text — they are not executed.
+ * bundled resource files are fetched individually via `read_skill_file`. To
+ * execute a skill's scripts or shell commands, the sandbox tools
+ * (`create_skill_sandbox`, `run_skill_command`, `get_skill_sandbox_artifact`)
+ * materialize the selected skills into an isolated container and run commands
+ * from the skill root.
  *
  * `create_skill` and `update_skill` let an agent author skills during a
  * conversation. Chat-authored skills are always `personal` to their author;
@@ -81,6 +84,13 @@ const SkillFileInputSchema = z.object({
   path: z
     .string()
     .min(1)
+    .refine(
+      (p) => !p.startsWith("/") && !p.split("/").some((s) => s === ".."),
+      {
+        message:
+          "path must be relative and must not contain directory traversal sequences",
+      },
+    )
     .describe("Resource path, e.g. references/API.md or scripts/run.py"),
   content: z
     .string()
@@ -164,7 +174,9 @@ const registry = defineArchestraTools([
       "Load a specialized Agent Skill — a reusable SKILL.md instruction set. " +
       "Call list_skills first to discover what is available, then call this " +
       "with a skill name to load its full instructions. Activate a skill " +
-      "before attempting the task it covers.",
+      "before attempting the task it covers. To inspect bundled resources " +
+      "use read_skill_file; to execute scripts or shell commands use " +
+      "create_skill_sandbox + run_skill_command.",
     schema: ActivateSkillSchema,
     async handler({ args, context }) {
       const ctx = requireOrgContext(context);
@@ -197,8 +209,9 @@ const registry = defineArchestraTools([
     title: "Read Skill File",
     description:
       "Read a bundled resource file from a skill. Paths come from the " +
-      "<skill_resources> list returned by activate_skill. Scripts are " +
-      "returned as readable text — they are not executed.",
+      "<skill_resources> list returned by activate_skill. This returns file " +
+      "text for inspection only — to execute a script or run shell commands, " +
+      "create a sandbox with create_skill_sandbox and call run_skill_command.",
     schema: ReadSkillFileSchema,
     async handler({ args, context }) {
       const ctx = requireOrgContext(context);

@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev --turbopack -H 127.0.0.1",
+    "//dev": "TEMP local workaround: next@16.2.6 turbopack dev server pegs CPU (300-760%) at idle on macOS arm64 (vercel/next.js#92055). Reverted from --turbopack to --webpack. Restore --turbopack once a fixed next ships.",
+    "dev": "next dev --webpack -H 127.0.0.1",
     "build": "next build --turbopack",
     "start": "NODE_ENV=production next start",
     "lint": "biome check",

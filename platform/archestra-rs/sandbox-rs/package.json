@@ -1,0 +1,27 @@
+{
+  "name": "@archestra/sandbox-rs",
+  "version": "1.2.50",
+  "private": true,
+  "type": "commonjs",
+  "main": "index.cjs",
+  "types": "index.d.ts",
+  "scripts": {
+    "build": "napi build --release --platform",
+    "build:test-helpers": "napi build --release --platform --features test-helpers",
+    "check:ci": "cargo fmt --check --all && cargo check --workspace --locked && cargo test --workspace --locked && pnpm build && pnpm smoke && pnpm build:test-helpers && pnpm smoke:panic && pnpm build",
+    "check:musl": "cargo check --workspace --locked && cargo test --workspace --locked && pnpm build && pnpm smoke && pnpm build:test-helpers && pnpm smoke:panic && pnpm build",
+    "lint": "cargo fmt --check --all",
+    "smoke": "node smoke.test.cjs",
+    "smoke:panic": "node panic-smoke.test.cjs",
+    "test": "cargo test --workspace --locked",
+    "type-check": "cargo check --workspace --locked"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^3.4.0"
+  },
+  "files": [
+    "index.cjs",
+    "index.d.ts",
+    "*.node"
+  ]
+}

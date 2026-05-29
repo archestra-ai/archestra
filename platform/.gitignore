@@ -2,6 +2,8 @@
 dist
 node_modules
 build
+target
+*.node
 .next
 .next-*
 next-env.d.ts
@@ -54,6 +56,9 @@ pids
 *.seed
 *.pid.lock
 
+# OS crash dumps
+core
+
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
@@ -67,6 +72,7 @@ prev-static-assets/*
 
 tsconfig.tsbuildinfo
 benchmark-config.env
+archestra-rs/sandbox-rs/index.js
 
 # Playwright
 /playwright/

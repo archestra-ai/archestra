@@ -1,0 +1,8 @@
+[toolchain]
+channel = "1.93.0"
+components = ["rustfmt"]
+profile = "minimal"
+targets = [
+  "aarch64-unknown-linux-musl",
+  "x86_64-unknown-linux-musl",
+]

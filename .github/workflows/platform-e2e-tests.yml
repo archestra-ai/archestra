@@ -250,6 +250,15 @@ jobs:
           echo "=== Archestra Platform Logs (main container) ==="
           kubectl logs -l app.kubernetes.io/name=archestra-platform -c archestra-platform --tail=200 2>/dev/null || true
 
+          # TEMPORARY [idp-diag] — the external-IdP validation branch logs fire
+          # mid-run (well before this dump), so --tail=200 misses them. Grep the
+          # full backend log for the marker to pin the flaky JWKS gateway e2e.
+          echo "=== [idp-diag] external IdP validation branch ==="
+          kubectl logs -l app.kubernetes.io/name=archestra-platform \
+            -c archestra-platform 2>/dev/null \
+            | grep -iE '\[idp-diag\]|JWKS JWT validation failed' \
+            || echo "(no [idp-diag] line found)"
+
           echo "=== Platform Init Container: vault-secrets ==="
           kubectl logs -l app.kubernetes.io/name=archestra-platform -c vault-secrets --tail=200 2>/dev/null || true
 
@@ -385,6 +394,15 @@ jobs:
 
           echo "=== Archestra Platform Logs (main container) ==="
           kubectl logs -l app.kubernetes.io/name=archestra-platform -c archestra-platform --tail=200 2>/dev/null || true
+
+          # TEMPORARY [idp-diag] — the external-IdP validation branch logs fire
+          # mid-run (well before this dump), so --tail=200 misses them. Grep the
+          # full backend log for the marker to pin the flaky JWKS gateway e2e.
+          echo "=== [idp-diag] external IdP validation branch ==="
+          kubectl logs -l app.kubernetes.io/name=archestra-platform \
+            -c archestra-platform 2>/dev/null \
+            | grep -iE '\[idp-diag\]|JWKS JWT validation failed' \
+            || echo "(no [idp-diag] line found)"
 
           echo "=== Platform Init Container: vault-secrets ==="
           kubectl logs -l app.kubernetes.io/name=archestra-platform -c vault-secrets --tail=200 2>/dev/null || true

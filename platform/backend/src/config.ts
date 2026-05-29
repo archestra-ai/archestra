@@ -658,9 +658,6 @@ const mcpServerBaseImage =
   process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
   `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:${appVersion}`;
 
-const defaultCodeRuntimeImage =
-  "ghcr.io/astral-sh/uv:0.9.17-python3.12-bookworm-slim";
-
 const knowledgeFileBlobStorageProvider = parseBlobStorageProvider(
   process.env.ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_BLOB_STORAGE_PROVIDER,
 );
@@ -711,6 +708,38 @@ const codeRuntimeDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost({
 // a missing/invalid runner host disables the feature instead of crashing boot.
 const codeRuntimeEnabled =
   codeRuntimeRequested && codeRuntimeDaggerRunnerHost !== undefined;
+
+// skills sandbox is on whenever both skills and the code-runtime (Dagger) are enabled.
+const skillsSandboxRequested =
+  process.env.ARCHESTRA_AGENTS_SKILLS_ENABLED === "true" && codeRuntimeEnabled;
+const skillsSandboxDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost({
+  enabled: skillsSandboxRequested,
+  envValue:
+    process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST ||
+    process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST,
+});
+const skillsSandboxEnabled =
+  skillsSandboxRequested && skillsSandboxDaggerRunnerHost !== undefined;
+
+// the unified Dagger runtime fronts both code-runtime and skills sandbox; either
+// feature flag turning on lights up the shared session + warm base.
+// when operators explicitly scope the two features to different hosts the
+// runtime can only honour one — warn loudly so this isn't silently lost.
+if (
+  process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST &&
+  process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST &&
+  process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST !==
+    process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST
+) {
+  logger.warn(
+    `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST (${process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST}) and ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST (${process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST}) differ — both features share one Dagger session, so the code-runtime host wins and the skill-sandbox value is ignored`,
+  );
+}
+const daggerRuntimeRunnerHost =
+  codeRuntimeDaggerRunnerHost ?? skillsSandboxDaggerRunnerHost;
+const daggerRuntimeEnabled =
+  (codeRuntimeEnabled || skillsSandboxEnabled) &&
+  daggerRuntimeRunnerHost !== undefined;
 
 const config = {
   frontendBaseUrl,
@@ -1045,7 +1074,6 @@ const config = {
    */
   codeRuntime: {
     enabled: codeRuntimeEnabled,
-    image: process.env.ARCHESTRA_CODE_RUNTIME_IMAGE || defaultCodeRuntimeImage,
     /** runner host for the Dagger Engine (sets _EXPERIMENTAL_DAGGER_RUNNER_HOST). */
     daggerRunnerHost: codeRuntimeDaggerRunnerHost,
     /** path to a baked-in dagger CLI (sets _EXPERIMENTAL_DAGGER_CLI_BIN). */
@@ -1064,6 +1092,80 @@ const config = {
       process.env.ARCHESTRA_CODE_RUNTIME_MAX_OUTPUT_BYTES,
       65536,
     ),
+  },
+  /**
+   * sandboxed skill-execution runtime — lets agents materialize a skill into a
+   * Dagger container and run arbitrary shell commands against the snapshot.
+   * shares the Dagger engine with `codeRuntime` but is gated on its own flag.
+   */
+  skillsSandbox: {
+    enabled: skillsSandboxEnabled,
+    daggerRunnerHost: skillsSandboxDaggerRunnerHost,
+    daggerCliBin:
+      process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_CLI_BIN ||
+      process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN ||
+      undefined,
+    cpuLimit: parsePositiveInt(
+      process.env.ARCHESTRA_SKILLS_SANDBOX_CPU_LIMIT_SECONDS,
+      30,
+    ),
+    memoryLimit: parsePositiveInt(
+      process.env.ARCHESTRA_SKILLS_SANDBOX_MEMORY_LIMIT_BYTES,
+      1024 * 1024 * 1024,
+    ),
+    wallClockSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_SKILLS_SANDBOX_WALL_CLOCK_SECONDS,
+      120,
+    ),
+    outputBytesLimit: parsePositiveInt(
+      process.env.ARCHESTRA_SKILLS_SANDBOX_OUTPUT_BYTES_LIMIT,
+      256 * 1024,
+    ),
+    artifactBytesLimit: parsePositiveInt(
+      process.env.ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT,
+      16 * 1024 * 1024,
+    ),
+  },
+  /**
+   * unified Dagger runtime — one shared session with a pre-warmed base
+   * container that hosts both `archestra__run_python` and skill-sandbox
+   * commands. The Rust crate (`@archestra/sandbox-rs`) owns the session;
+   * this block only carries enable + connection knobs.
+   */
+  daggerRuntime: {
+    enabled: daggerRuntimeEnabled,
+    runnerHost: daggerRuntimeRunnerHost,
+    cliBin:
+      process.env.ARCHESTRA_DAGGER_RUNTIME_CLI_BIN ||
+      process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_CLI_BIN ||
+      process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN ||
+      undefined,
+    maxConcurrent: parsePositiveInt(
+      process.env.ARCHESTRA_DAGGER_RUNTIME_MAX_CONCURRENT,
+      10,
+    ),
+    maxQueueLength: parsePositiveInt(
+      process.env.ARCHESTRA_DAGGER_RUNTIME_MAX_QUEUE_LENGTH,
+      50,
+    ),
+    defaults: {
+      outputBytesLimit: parsePositiveInt(
+        process.env.ARCHESTRA_DAGGER_RUNTIME_OUTPUT_BYTES_LIMIT,
+        256 * 1024,
+      ),
+      fileSizeLimitBytes: parsePositiveInt(
+        process.env.ARCHESTRA_DAGGER_RUNTIME_FILE_SIZE_LIMIT_BYTES,
+        16 * 1024 * 1024,
+      ),
+      cpuSeconds: parsePositiveInt(
+        process.env.ARCHESTRA_DAGGER_RUNTIME_CPU_SECONDS,
+        30,
+      ),
+      memoryBytes: parsePositiveInt(
+        process.env.ARCHESTRA_DAGGER_RUNTIME_MEMORY_BYTES,
+        1024 * 1024 * 1024,
+      ),
+    },
   },
   vault: {
     token: process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN || DEFAULT_VAULT_TOKEN,

@@ -1,0 +1,7 @@
+[workspace]
+members = ["sandbox-core", "sandbox-rs"]
+resolver = "2"
+
+[profile.release]
+lto = "thin"
+strip = "symbols"

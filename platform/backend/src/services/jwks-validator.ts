@@ -69,6 +69,13 @@ class JwksValidator {
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      // TEMPORARY [idp-diag] — surface the verify failure reason (expired /
+      // no-matching-key / signature / issuer / audience) at info so CI shows
+      // it. Remove once the flaky JWKS gateway e2e root cause is pinned.
+      logger.info(
+        { issuerUrl, jwksUrl, error: message },
+        "[idp-diag] jwks: JWT validation failed",
+      );
       // Expected validation failures (expired, bad signature) log at debug;
       // unexpected errors (network, malformed key) log at warn.
       const isExpected =

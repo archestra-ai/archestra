@@ -45,7 +45,7 @@ const VISIBILITY_OPTIONS: Record<
     value: "auto-sync-permissions",
     label: "Auto-sync permissions",
     description:
-      "Mirror per-document access from the source system at query time",
+      "Each document inherits access from its source; users only see results they can already read upstream",
     icon: ShieldCheck,
   },
 };
@@ -133,13 +133,6 @@ export function KnowledgeSourceVisibilitySelector({
             emptyMessage="No teams found."
           />
         </div>
-      )}
-      {visibility === "auto-sync-permissions" && (
-        <p className="text-muted-foreground text-sm">
-          Each document inherits the access list from its source. Users only see
-          results they can already read in the upstream system. Available for
-          Jira and Confluence today.
-        </p>
       )}
     </SharedVisibilitySelector>
   );

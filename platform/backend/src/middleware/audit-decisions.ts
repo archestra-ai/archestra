@@ -75,6 +75,11 @@ export const AUDIT_DECISIONS = {
   // Audited resources — mutations captured via AUDITABLE_ROUTES
   // =========================================================================
   agentsTable: { audited: true, model: AgentModel },
+  agentVersionsTable: {
+    audited: false,
+    reason:
+      "immutable append-only snapshot log; parent agentsTable carries the audit signal",
+  },
   agentToolsTable: { audited: true, model: AgentToolModel },
   apikeysTable: { audited: true, model: ApiKeyModel },
   chatopsChannelBindingsTable: {

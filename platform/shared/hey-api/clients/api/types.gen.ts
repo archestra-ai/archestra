@@ -10875,6 +10875,8 @@ export type GetAgentsResponses = {
                 name: 'dual-llm-quarantine-agent';
             } | {
                 name: 'context-compaction-subagent';
+            } | {
+                name: 'chat-title-generation-subagent';
             } | null;
             builtIn: boolean | null;
             createdAt: string;
@@ -10974,6 +10976,8 @@ export type CreateAgentData = {
             name: 'dual-llm-quarantine-agent';
         } | {
             name: 'context-compaction-subagent';
+        } | {
+            name: 'chat-title-generation-subagent';
         } | null;
         teams?: Array<string>;
         labels?: Array<{
@@ -11097,6 +11101,8 @@ export type CreateAgentResponses = {
             name: 'dual-llm-quarantine-agent';
         } | {
             name: 'context-compaction-subagent';
+        } | {
+            name: 'chat-title-generation-subagent';
         } | null;
         builtIn: boolean | null;
         createdAt: string;
@@ -11287,6 +11293,8 @@ export type GetAllAgentsResponses = {
             name: 'dual-llm-quarantine-agent';
         } | {
             name: 'context-compaction-subagent';
+        } | {
+            name: 'chat-title-generation-subagent';
         } | null;
         builtIn: boolean | null;
         createdAt: string;
@@ -11456,6 +11464,8 @@ export type GetDefaultMcpGatewayResponses = {
             name: 'dual-llm-quarantine-agent';
         } | {
             name: 'context-compaction-subagent';
+        } | {
+            name: 'chat-title-generation-subagent';
         } | null;
         builtIn: boolean | null;
         createdAt: string;
@@ -11625,6 +11635,8 @@ export type GetDefaultLlmProxyResponses = {
             name: 'dual-llm-quarantine-agent';
         } | {
             name: 'context-compaction-subagent';
+        } | {
+            name: 'chat-title-generation-subagent';
         } | null;
         builtIn: boolean | null;
         createdAt: string;
@@ -11873,6 +11885,8 @@ export type ImportAgentResponses = {
                 name: 'dual-llm-quarantine-agent';
             } | {
                 name: 'context-compaction-subagent';
+            } | {
+                name: 'chat-title-generation-subagent';
             } | null;
             builtIn: boolean | null;
             createdAt: string;
@@ -12135,6 +12149,8 @@ export type GetAgentResponses = {
             name: 'dual-llm-quarantine-agent';
         } | {
             name: 'context-compaction-subagent';
+        } | {
+            name: 'chat-title-generation-subagent';
         } | null;
         builtIn: boolean | null;
         createdAt: string;
@@ -12225,6 +12241,8 @@ export type UpdateAgentData = {
             name: 'dual-llm-quarantine-agent';
         } | {
             name: 'context-compaction-subagent';
+        } | {
+            name: 'chat-title-generation-subagent';
         } | null;
         teams?: Array<string>;
         labels?: Array<{
@@ -12350,6 +12368,8 @@ export type UpdateAgentResponses = {
             name: 'dual-llm-quarantine-agent';
         } | {
             name: 'context-compaction-subagent';
+        } | {
+            name: 'chat-title-generation-subagent';
         } | null;
         builtIn: boolean | null;
         createdAt: string;
@@ -12521,6 +12541,8 @@ export type CloneAgentResponses = {
             name: 'dual-llm-quarantine-agent';
         } | {
             name: 'context-compaction-subagent';
+        } | {
+            name: 'chat-title-generation-subagent';
         } | null;
         builtIn: boolean | null;
         createdAt: string;
@@ -35597,7 +35619,6 @@ export type GetLlmModelsResponses = {
             priceSource: 'custom' | 'models_dev' | 'default';
         };
         isBest?: boolean;
-        isFastest?: boolean;
         isFree: boolean;
         embeddingDimensions?: EmbeddingDimensions | null;
     }>;
@@ -35784,7 +35805,6 @@ export type GetModelsWithApiKeysResponses = {
         lastSyncedAt: string;
         createdAt: string;
         updatedAt: string;
-        isFastest: boolean;
         isBest: boolean;
         apiKeys: Array<{
             id: string;

@@ -29,10 +29,7 @@ import type {
   ConversationCompactionTrigger,
 } from "@/types/conversation-compaction";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
-import {
-  resolveConfiguredAgentLlm,
-  resolveFastModelName,
-} from "@/utils/llm-resolution";
+import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
 import {
   isAttachmentRefUrl,
   parseAttachmentIdFromUrl,
@@ -572,42 +569,18 @@ async function createConversationCompaction(params: {
     BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
     params.organizationId,
   );
-  const configuredCompactionLlm = compactionAgent
-    ? await resolveConfiguredAgentLlm(compactionAgent)
-    : null;
-  const provider = configuredCompactionLlm?.provider ?? params.provider;
-  const fallbackLlm = configuredCompactionLlm?.apiKey
-    ? null
-    : await resolveProviderApiKey({
-        organizationId: params.organizationId,
-        userId: params.userId,
-        provider,
-        conversationId: params.conversationId,
-        agentLlmApiKeyId: configuredCompactionLlm
-          ? null
-          : params.agentLlmApiKeyId,
-      });
-  const apiKey = configuredCompactionLlm?.apiKey ?? fallbackLlm?.apiKey;
-  const baseUrl =
-    configuredCompactionLlm?.baseUrl ?? fallbackLlm?.baseUrl ?? null;
+  const compactionLlm = await resolveAgentLlmOrDefault({
+    agent: compactionAgent,
+    organizationId: params.organizationId,
+    userId: params.userId,
+    conversationId: params.conversationId,
+  });
+  const { provider, apiKey, modelName, baseUrl } = compactionLlm;
 
   if (isApiKeyRequired(provider, apiKey)) {
     throw new Error("LLM provider API key not configured");
   }
 
-  const modelName =
-    configuredCompactionLlm?.modelName ??
-    (await resolveFastModelName(provider, fallbackLlm?.chatApiKeyId));
-  const model = createLLMModel({
-    provider,
-    apiKey,
-    agentId: compactionAgent?.id ?? params.agentId ?? params.conversationId,
-    modelName,
-    baseUrl,
-    userId: params.userId,
-    sessionId: params.conversationId,
-    source: "chat:compaction",
-  });
   const prompt = await buildCompactionPrompt({
     previousSummary: params.previousSummary,
     messages: params.compactableMessages,
@@ -618,6 +591,17 @@ async function createConversationCompaction(params: {
       compactionAgent?.systemPrompt ?? CONTEXT_COMPACTION_SYSTEM_PROMPT,
     ) ?? CONTEXT_COMPACTION_SYSTEM_PROMPT;
 
+  const model = createLLMModel({
+    provider,
+    apiKey,
+    agentId: compactionAgent?.id ?? params.agentId ?? params.conversationId,
+    modelName,
+    baseUrl,
+    userId: params.userId,
+    sessionId: params.conversationId,
+    source: "chat:compaction",
+  });
+
   const result = await generateText({
     model,
     system: systemPrompt,
@@ -627,6 +611,7 @@ async function createConversationCompaction(params: {
     abortSignal: params.abortSignal,
   });
   const summary = extractTaggedSummary(result.text) ?? result.text.trim();
+
   if (!summary) {
     throw new Error("Compaction summary was empty");
   }

@@ -35605,6 +35605,21 @@
                                   "name"
                                 ],
                                 "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string",
+                                    "enum": [
+                                      "chat-title-generation-subagent"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name"
+                                ],
+                                "additionalProperties": false
                               }
                             ]
                           },
@@ -36343,6 +36358,20 @@
                         "required": [
                           "name"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "chat-title-generation-subagent"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ]
                       }
                     ]
                   },
@@ -36615,6 +36644,21 @@
                               "type": "string",
                               "enum": [
                                 "context-compaction-subagent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "chat-title-generation-subagent"
                               ]
                             }
                           },
@@ -37401,6 +37445,21 @@
                               "name"
                             ],
                             "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "enum": [
+                                  "chat-title-generation-subagent"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "name"
+                            ],
+                            "additionalProperties": false
                           }
                         ]
                       },
@@ -38111,6 +38170,21 @@
                             "name"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "chat-title-generation-subagent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -38814,6 +38888,21 @@
                               "type": "string",
                               "enum": [
                                 "context-compaction-subagent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "chat-title-generation-subagent"
                               ]
                             }
                           },
@@ -39873,6 +39962,21 @@
                                 "name"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "enum": [
+                                    "chat-title-generation-subagent"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "name"
+                              ],
+                              "additionalProperties": false
                             }
                           ]
                         },
@@ -40630,6 +40734,21 @@
                             "name"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "chat-title-generation-subagent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -41320,6 +41439,20 @@
                         "required": [
                           "name"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "chat-title-generation-subagent"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ]
                       }
                     ]
                   },
@@ -41597,6 +41730,21 @@
                               "type": "string",
                               "enum": [
                                 "context-compaction-subagent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "chat-title-generation-subagent"
                               ]
                             }
                           },
@@ -42591,6 +42739,21 @@
                               "type": "string",
                               "enum": [
                                 "context-compaction-subagent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "chat-title-generation-subagent"
                               ]
                             }
                           },
@@ -135653,9 +135816,6 @@
                       "isBest": {
                         "type": "boolean"
                       },
-                      "isFastest": {
-                        "type": "boolean"
-                      },
                       "isFree": {
                         "type": "boolean"
                       },
@@ -136314,9 +136474,6 @@
                         "type": "string",
                         "format": "date-time"
                       },
-                      "isFastest": {
-                        "type": "boolean"
-                      },
                       "isBest": {
                         "type": "boolean"
                       },
@@ -136396,7 +136553,6 @@
                       "lastSyncedAt",
                       "createdAt",
                       "updatedAt",
-                      "isFastest",
                       "isBest",
                       "apiKeys",
                       "pricePerMillionInput",

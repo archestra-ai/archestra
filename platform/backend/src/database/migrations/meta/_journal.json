@@ -1835,6 +1835,13 @@
       "when": 1780077170359,
       "tag": "0261_skinny_zaran",
       "breakpoints": true
+    },
+    {
+      "idx": 262,
+      "version": "7",
+      "when": 1780094650175,
+      "tag": "0262_polite_wallow",
+      "breakpoints": true
     }
   ]
 }

@@ -488,7 +488,7 @@ describe("chat model routes", () => {
     ).toBe(true);
   });
 
-  test("getStaleModelSyncApiKeys treats unlinked and old OpenRouter keys as stale", async ({
+  test("getStaleModelSyncApiKeys treats old OpenRouter keys as stale", async ({
     makeSecret,
     makeLlmProviderApiKey,
   }) => {
@@ -504,47 +504,51 @@ describe("chat model routes", () => {
       secret.id,
       { provider: "openai", scope: "personal", userId: user.id },
     );
-    const unlinkedGeminiKey = await makeLlmProviderApiKey(
+    const freshGeminiKey = await makeLlmProviderApiKey(
       organizationId,
       secret.id,
       { provider: "gemini", scope: "personal", userId: user.id },
     );
 
-    const staleModel = await ModelModel.create({
-      externalId: "openrouter/openai/gpt-4o-mini",
-      provider: "openrouter",
-      modelId: "openai/gpt-4o-mini",
-      inputModalities: ["text"],
-      outputModalities: ["text"],
-      lastSyncedAt: new Date(now.getTime() - 2 * TimeInMs.Hour),
-    });
-    const freshModel = await ModelModel.create({
-      externalId: "openai/gpt-4o-mini",
-      provider: "openai",
-      modelId: "gpt-4o-mini",
-      inputModalities: ["text"],
-      outputModalities: ["text"],
-      lastSyncedAt: new Date(now.getTime() - 2 * TimeInMs.Hour),
-    });
-
-    await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
-      staleOpenRouterKey.id,
-      [{ id: staleModel.id, modelId: staleModel.modelId }],
-      "openrouter",
-    );
-    await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
-      freshOpenAiKey.id,
-      [{ id: freshModel.id, modelId: freshModel.modelId }],
-      "openai",
+    vi.spyOn(
+      LlmProviderApiKeyModelLinkModel,
+      "getModelSyncStatesForApiKeys",
+    ).mockResolvedValue(
+      new Map([
+        [
+          staleOpenRouterKey.id,
+          {
+            apiKeyId: staleOpenRouterKey.id,
+            linkedModelCount: 1,
+            oldestLastSyncedAt: new Date(now.getTime() - 2 * TimeInMs.Hour),
+          },
+        ],
+        [
+          freshOpenAiKey.id,
+          {
+            apiKeyId: freshOpenAiKey.id,
+            linkedModelCount: 1,
+            oldestLastSyncedAt: new Date(now.getTime() - 2 * TimeInMs.Hour),
+          },
+        ],
+        [
+          freshGeminiKey.id,
+          {
+            apiKeyId: freshGeminiKey.id,
+            linkedModelCount: 1,
+            oldestLastSyncedAt: new Date(now.getTime() - 2 * TimeInMs.Hour),
+          },
+        ],
+      ]),
     );
 
     const staleKeys = await getStaleModelSyncApiKeys({
-      apiKeys: [staleOpenRouterKey, freshOpenAiKey, unlinkedGeminiKey],
+      apiKeys: [staleOpenRouterKey, freshOpenAiKey, freshGeminiKey],
       now,
     });
 
     expect(staleKeys.map((key) => key.id).sort()).toEqual(
-      [staleOpenRouterKey.id, unlinkedGeminiKey.id].sort(),
+      [staleOpenRouterKey.id].sort(),
     );
   });
 

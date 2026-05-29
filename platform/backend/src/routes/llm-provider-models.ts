@@ -70,7 +70,6 @@ const LlmModelSchema = z.object({
   createdAt: z.string().optional(),
   capabilities: ModelCapabilitiesSchema.optional(),
   isBest: z.boolean().optional(),
-  isFastest: z.boolean().optional(),
   /** True when the provider charges nothing for this model (both prices are zero). */
   isFree: z.boolean(),
   embeddingDimensions: EmbeddingDimensionsSchema.nullable().optional(),
@@ -193,14 +192,13 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         .filter(({ model }) =>
           isEmbedding ? true : ModelModel.supportsTextChat(model),
         )
-        .map(({ model, isBest, isFastest }) => ({
+        .map(({ model, isBest }) => ({
           id: model.modelId,
           dbId: model.id,
           displayName: model.description || model.modelId,
           provider: model.provider,
           capabilities: ModelModel.toCapabilities(model),
           isBest,
-          isFastest,
           isFree: isFreeModel(model),
           embeddingDimensions: model.embeddingDimensions,
         }));
@@ -258,11 +256,10 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       const response = [
-        ...modelsWithApiKeys.map(({ model, isFastest, isBest, apiKeys }) => {
+        ...modelsWithApiKeys.map(({ model, isBest, apiKeys }) => {
           const pricing = ModelModel.toCapabilities(model);
           return {
             ...model,
-            isFastest,
             isBest,
             apiKeys,
             pricePerMillionInput: pricing.pricePerMillionInput,
@@ -276,7 +273,6 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const pricing = ModelModel.toCapabilities(model);
           return {
             ...model,
-            isFastest: false,
             isBest: false,
             apiKeys: [],
             pricePerMillionInput: pricing.pricePerMillionInput,

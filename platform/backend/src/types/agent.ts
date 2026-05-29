@@ -79,12 +79,17 @@ const ContextCompactionAgentConfigSchema = z.object({
   name: z.literal(BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION),
 });
 
+const ChatTitleGenerationAgentConfigSchema = z.object({
+  name: z.literal(BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION),
+});
+
 // Discriminated union — add future built-in agents here
 export const BuiltInAgentConfigSchema = z.discriminatedUnion("name", [
   PolicyConfigAgentConfigSchema,
   DualLlmMainAgentConfigSchema,
   DualLlmQuarantineAgentConfigSchema,
   ContextCompactionAgentConfigSchema,
+  ChatTitleGenerationAgentConfigSchema,
 ]);
 
 export type BuiltInAgentConfig = z.infer<typeof BuiltInAgentConfigSchema>;
@@ -99,6 +104,9 @@ export type DualLlmQuarantineAgentConfig = z.infer<
 >;
 export type ContextCompactionAgentConfig = z.infer<
   typeof ContextCompactionAgentConfigSchema
+>;
+export type ChatTitleGenerationAgentConfig = z.infer<
+  typeof ChatTitleGenerationAgentConfigSchema
 >;
 
 // Team info schema for agent responses (just id and name)

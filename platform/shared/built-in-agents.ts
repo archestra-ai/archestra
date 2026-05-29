@@ -10,6 +10,7 @@ export const BUILT_IN_AGENT_NAMES = {
   DUAL_LLM_MAIN: "Dual LLM Main Agent",
   DUAL_LLM_QUARANTINE: "Dual LLM Quarantine Agent",
   CONTEXT_COMPACTION: "Context Compaction Subagent",
+  CHAT_TITLE_GENERATION: "Chat Title Generation Subagent",
 } as const;
 
 /** Discriminator values for builtInAgentConfig.name */
@@ -18,6 +19,7 @@ export const BUILT_IN_AGENT_IDS = {
   DUAL_LLM_MAIN: "dual-llm-main-agent",
   DUAL_LLM_QUARANTINE: "dual-llm-quarantine-agent",
   CONTEXT_COMPACTION: "context-compaction-subagent",
+  CHAT_TITLE_GENERATION: "chat-title-generation-subagent",
 } as const;
 
 /** System prompt template for the policy configuration subagent.
@@ -187,10 +189,16 @@ Return only a structured summary with these sections:
 
 Keep it compact but specific. Prefer bullet points. Include short code snippets or exact strings only when losing them would make continuation harder. If a section has no relevant content, write "None".`;
 
+export const CHAT_TITLE_GENERATION_SYSTEM_PROMPT = `You generate short chat titles.
+
+Return only a concise 3-6 word title. Do not wrap the title in quotes. Do not include explanations, markdown, or punctuation unless it is part of the topic.`;
+
 /** Maps built-in agent IDs to their default system prompts for reset-to-default. */
 export const BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS: Record<string, string> = {
   [BUILT_IN_AGENT_IDS.POLICY_CONFIG]: POLICY_CONFIG_SYSTEM_PROMPT,
   [BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN]: DUAL_LLM_MAIN_SYSTEM_PROMPT,
   [BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE]: DUAL_LLM_QUARANTINE_SYSTEM_PROMPT,
   [BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION]: CONTEXT_COMPACTION_SYSTEM_PROMPT,
+  [BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION]:
+    CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
 };

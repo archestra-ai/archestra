@@ -156,7 +156,6 @@ export default function AgentSettingsPage() {
       modelId: model.id,
       provider: model.provider,
       isFree: model.isFree,
-      isFastest: model.isFastest,
       isBest: model.isBest,
     }));
   }, [allModels]);

@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import type {
   SkillShareLink,
@@ -51,7 +51,7 @@ class SkillShareLinkModel {
     const tokenHash = hashToken(rawToken);
     const tokenStart = rawToken.slice(0, TOKEN_START_LENGTH);
 
-    const link = await db.transaction(async (tx) => {
+    const link = await withDbTransaction(async (tx) => {
       const [created] = await tx
         .insert(schema.skillShareLinksTable)
         .values({

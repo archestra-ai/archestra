@@ -9,7 +9,7 @@ import {
   like,
   or,
 } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import type { InsertSkill, InsertSkillFile, Skill, UpdateSkill } from "@/types";
 
 class SkillModel {
@@ -132,7 +132,7 @@ class SkillModel {
     files: Omit<InsertSkillFile, "skillId">[];
     teamIds?: string[];
   }): Promise<Skill | null> {
-    return await db.transaction(async (tx) => {
+    return await withDbTransaction(async (tx) => {
       const [skill] = await tx
         .insert(schema.skillsTable)
         .values(params.skill)
@@ -171,7 +171,7 @@ class SkillModel {
     skill: UpdateSkill;
     files?: Omit<InsertSkillFile, "skillId">[];
   }): Promise<Skill | null> {
-    return await db.transaction(async (tx) => {
+    return await withDbTransaction(async (tx) => {
       const [skill] = await tx
         .update(schema.skillsTable)
         .set(params.skill)
@@ -205,6 +205,24 @@ class SkillModel {
       .returning({ id: schema.skillsTable.id });
 
     return rows.length > 0;
+  }
+
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select()
+      .from(schema.skillsTable)
+      .where(
+        and(
+          eq(schema.skillsTable.id, id),
+          eq(schema.skillsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    return row ?? null;
   }
 }
 

@@ -67,7 +67,16 @@ const SkillDetailSchema = SkillWithFilesSchema.extend({
 
 /** Raw resource file as submitted by the in-app editor. */
 const SkillFileInputSchema = z.object({
-  path: z.string().min(1),
+  path: z
+    .string()
+    .min(1)
+    .refine(
+      (p) => !p.startsWith("/") && !p.split("/").some((s) => s === ".."),
+      {
+        message:
+          "path must be relative and must not contain directory traversal sequences",
+      },
+    ),
   content: z.string().max(MAX_SKILL_FILE_CONTENT_CHARS),
   encoding: SkillFileEncodingSchema.optional(),
 });
@@ -604,7 +613,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ body, organizationId, user }, reply) => {
+    async (request, reply) => {
+      const { body, organizationId, user } = request;
       // Imported skills carry an explicit scope, authorized like manual create;
       // when omitted they default to `personal` so a bulk import is never
       // silently published org-wide.
@@ -671,6 +681,13 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { organizationId, created: created.length, skipped: skipped.length },
         "[Skills] GitHub import complete",
       );
+
+      // Supply the audit post-state: a bulk import has no single resourceId,
+      // so record the created skills (id + name) for traceability.
+      request.auditAfter = {
+        created: created.map((s) => ({ id: s.id, name: s.name })),
+        skipped,
+      };
 
       return reply.send({ created, skipped });
     },

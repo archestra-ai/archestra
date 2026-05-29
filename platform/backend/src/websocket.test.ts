@@ -72,6 +72,7 @@ const service = websocketService as unknown as {
   mcpExecSubscriptions: Map<WS, McpExecSubscription>;
   mcpDeploymentStatusSubscriptions: Map<WS, McpDeploymentStatusSubscription>;
   initBrowserStreamContextForTesting: () => void;
+  wss: { clients: Set<WS> } | null;
 };
 
 // Initialize browser stream context once for all tests (config mock is already applied)

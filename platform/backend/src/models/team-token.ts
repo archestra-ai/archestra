@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { ARCHESTRA_TOKEN_PREFIX } from "@shared";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { secretManager } from "@/secrets-manager";
 import type {
@@ -376,6 +376,35 @@ class TeamTokenModel {
     if (!secret?.secret) return null;
 
     return (secret.secret as { token?: string }).token ?? null;
+  }
+
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select()
+      .from(schema.teamTokensTable)
+      .where(
+        and(
+          eq(schema.teamTokensTable.id, id),
+          eq(schema.teamTokensTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      organizationId: row.organizationId,
+      teamId: row.teamId ?? null,
+      isOrganizationToken: row.isOrganizationToken,
+      name: row.name,
+      tokenStart: row.tokenStart,
+      createdAt: row.createdAt.toISOString(),
+      lastUsedAt: row.lastUsedAt?.toISOString() ?? null,
+    };
   }
 }
 

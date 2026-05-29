@@ -188,12 +188,6 @@ vi.mock("@/components/chat/chat-tools-display", () => ({
   ChatToolsDisplay: () => <div data-testid="chat-tools-display" />,
 }));
 
-vi.mock("@/components/chat/knowledge-base-upload-indicator", () => ({
-  KnowledgeBaseUploadIndicator: () => (
-    <div data-testid="knowledge-base-indicator" />
-  ),
-}));
-
 vi.mock("@/components/chat/model-selector", () => ({
   ModelSelector: () => <div data-testid="model-selector" />,
 }));

@@ -287,6 +287,32 @@ describe("KnowledgeBaseConnectorModel", () => {
       expect(byType.total).toBe(1);
       expect(byType.data[0]?.name).toBe("GitHub Docs");
     });
+
+    test("escapes wildcard characters in search", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      await makeKnowledgeBaseConnector(kb.id, org.id, {
+        name: "literal percent",
+      });
+      await makeKnowledgeBaseConnector(kb.id, org.id, {
+        name: "contains 100% marker",
+      });
+
+      const result =
+        await KnowledgeBaseConnectorModel.findByOrganizationPaginated({
+          organizationId: org.id,
+          limit: 10,
+          offset: 0,
+          search: "%",
+        });
+
+      expect(result.total).toBe(1);
+      expect(result.data[0]?.name).toBe("contains 100% marker");
+    });
   });
 
   describe("findByKnowledgeBaseId", () => {

@@ -189,9 +189,9 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 
 ## Dependency Security
 
-**Install Script Protection**: The platform disables automatic execution of install scripts via `ignore-scripts=true` in `.npmrc` to prevent supply chain attacks. Install scripts (`preinstall`, `postinstall`, `install`) can execute arbitrary code, steal secrets, and compromise the system.
+**Install Script Protection**: The platform disables automatic execution of install scripts via `ignoreScripts: true` in `pnpm-workspace.yaml` to prevent supply chain attacks. Install scripts (`preinstall`, `postinstall`, `install`) can execute arbitrary code, steal secrets, and compromise the system.
 
-**Minimum Release Age**: Packages must be published for at least 7 days before installation (`minimum-release-age=10080` minutes in `.npmrc`). This allows time for community detection and removal of malicious releases, which are typically caught within hours.
+**Minimum Release Age**: Packages must be published for at least 7 days before installation (`minimumReleaseAge: 10080` minutes in `pnpm-workspace.yaml`). This allows time for community detection and removal of malicious releases, which are typically caught within hours.
 
 **Working with Disabled Scripts**: Most packages work without install scripts. When needed, manually rebuild specific packages:
 
@@ -320,6 +320,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 
 **Backend**:
 
+- Refer to backend/architecture.md for backend architecture guidelines.
 - Use Drizzle ORM for database operations through MODELS ONLY!
 - Table exports: Use plural names with "Table" suffix (e.g., `profileLabelsTable`, `sessionsTable`)
 - Colocate test files with source (`.test.ts`)
@@ -451,6 +452,17 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - Security:
   - **Trusted (policy bypass)**: Archestra tools bypass tool invocation policies and trusted data policies — they are always allowed to execute without policy evaluation
   - **RBAC (user permissions) still enforced**: Every tool is mapped to a `{ resource, action }` permission in `TOOL_PERMISSIONS` (`archestra-mcp-server/rbac.ts`). The `tools/list` endpoint dynamically filters tools so users only see tools they have permission to use. `executeArchestraTool` performs a centralized RBAC check before executing any tool. When adding new tools, add the corresponding entry to `TOOL_PERMISSIONS` (the `Record<ArchestraToolShortName, ...>` type will cause a compile error if a tool is missing).
+
+**Skill Sandbox Runtime**:
+
+- DB-backed, Dagger-materialized execution sandbox for Agent Skills. Code lives in `backend/src/skills-sandbox/` (see its README for replay semantics and limits)
+- MCP tools exposed by `archestra-mcp-server/skill-sandbox.ts`:
+  - `create_skill_sandbox` — snapshots one or more skills into a sandbox recipe; returns a stable sandbox id and per-skill root paths
+  - `run_skill_command` — materializes the recipe in a fresh Dagger container, replays the persisted command log, executes a new command, appends to the log
+  - `get_skill_sandbox_artifact` — exports a file from a materialized sandbox into `skill_sandbox_artifacts` (bytea) and returns a typed `ArtifactRef`
+- All three tools are gated by the `skill:execute` permission (`auth/skill-permissions.ts`). `create_skill_sandbox` also enforces `skill:read` per mounted skill
+- Source of truth is Postgres (`skill_sandboxes`, `skill_sandbox_skills`, `skill_sandbox_commands`, `skill_sandbox_artifacts`); Dagger owns ephemeral filesystem state with no retention guarantee
+- Activation prompt (`skills/skill-activation.ts`) tells the model to inspect files with `read_skill_file` and use the sandbox tools to execute scripts — commands run from the skill root so the Agent Skills spec's relative paths work as-is
 
 **Testing**:
 

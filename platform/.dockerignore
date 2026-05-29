@@ -5,7 +5,16 @@ node_modules
 # Build outputs
 dist
 .next
+**/.next
+**/.next-pw
 .turbo
+**/.turbo
+target
+**/target
+**/*.node
+archestra-rs/sandbox-rs/index.js
+**/playwright-report
+**/tsconfig.tsbuildinfo
 
 # Development
 .tilt

@@ -3,6 +3,7 @@ import {
   buildUserSystemPromptContext,
   type ChatErrorResponse,
   isModelSelectionComplete,
+  ResourceVisibilityScopeSchema,
   RouteId,
   type SupportedProvider,
   TimeInMs,
@@ -12,6 +13,7 @@ import {
   convertToModelMessages,
   createUIMessageStream,
   createUIMessageStreamResponse,
+  generateId,
   generateText,
   hasToolCall,
   NoSuchToolError,
@@ -37,9 +39,10 @@ import {
   isApiKeyRequired,
 } from "@/clients/llm-client";
 import config from "@/config";
-import db from "@/database";
+import { withDbTransaction } from "@/database";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
 import { extractAndIngestDocuments } from "@/knowledge-base";
+import { fileUploadManager } from "@/knowledge-base/file-upload/file-upload-manager";
 import logger from "@/logging";
 import {
   ActiveChatRunModel,
@@ -114,6 +117,19 @@ import { cloneAttachmentsForFork } from "./normalization/clone-attachments-for-f
 import { extractInlineAttachments } from "./normalization/extract-inline-attachments";
 import { materializeAttachments } from "./normalization/materialize-attachments";
 import { normalizeChatMessages } from "./normalization/normalize-chat-messages";
+
+const PromoteChatAttachmentResultSchema = z.object({
+  filename: z.string(),
+  status: z.enum([
+    "created",
+    "duplicate",
+    "unsupported",
+    "too_large",
+    "extraction_failed",
+    "failed",
+  ]),
+  fileId: z.string().optional(),
+});
 
 function getCorrelationLogFields(traceContext: {
   sessionId?: string;
@@ -803,6 +819,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 writer.merge(
                   result.toUIMessageStream({
                     originalMessages: messages as UIMessage[],
+                    // Give the streamed assistant message a stable id. Without
+                    // generateMessageId the AI SDK leaves the response message
+                    // id empty, so the persisted assistant row can't be matched
+                    // when the approval resume re-sends the turn — the resolved
+                    // turn is appended as new rows while the original
+                    // approval-requested row is orphaned and re-renders a stale
+                    // prompt on reload (#4030).
+                    generateMessageId: generateId,
                     onError: (error) => {
                       const unavailableToolError =
                         getUnavailableToolErrorDetails(error);
@@ -1271,6 +1295,56 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       reply.raw.end(attachment.fileData);
       return reply;
+    },
+  );
+
+  fastify.post(
+    "/api/chat/attachments/:id/promote-to-knowledge-file",
+    {
+      schema: {
+        operationId: RouteId.PromoteChatAttachmentToKnowledgeFile,
+        description:
+          "Promote a conversation attachment into a reusable Knowledge File",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        body: z.object({
+          visibility: ResourceVisibilityScopeSchema.default("personal"),
+          teamIds: z.array(z.string()).default([]),
+          agentIds: z.array(z.string()).default([]),
+        }),
+        response: constructResponseSchema(PromoteChatAttachmentResultSchema),
+      },
+    },
+    async ({ params: { id }, body, user, organizationId }, reply) => {
+      const attachment = await ConversationAttachmentModel.findByIdWithData(id);
+      if (!attachment) {
+        throw new ApiError(404, "Attachment not found");
+      }
+      if (attachment.organizationId !== organizationId) {
+        throw new ApiError(404, "Attachment not found");
+      }
+
+      const conversation = await findReadableConversationById({
+        conversationId: attachment.conversationId,
+        userId: user.id,
+        organizationId,
+      });
+      if (!conversation) {
+        throw new ApiError(404, "Attachment not found");
+      }
+
+      const result = await fileUploadManager.uploadKnowledgeFile({
+        organizationId,
+        userId: user.id,
+        name: attachment.originalName,
+        mimeType: attachment.mimeType,
+        contentBuffer: attachment.fileData,
+        visibility: body.visibility,
+        teamIds: body.teamIds,
+        agentIds: body.agentIds,
+      });
+
+      return reply.send(result);
     },
   );
 
@@ -2083,7 +2157,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // run the message edit, optional subsequent-message deletion, and
       // compaction invalidation inside one transaction so a crash can't leave
       // stale compactions pointing at a now-edited or truncated history
-      await db.transaction(async (tx) => {
+      await withDbTransaction(async (tx) => {
         await MessageModel.updateTextPartAndDeleteSubsequent(
           message.id,
           partIndex,
@@ -2439,7 +2513,7 @@ async function persistNewMessages(
   context: string,
 ): Promise<number> {
   try {
-    // Get existing messages count to know how many are new
+    // Fetch existing messages to classify incoming ones as new or changed
     const existingMessages =
       await MessageModel.findByConversation(conversationId);
     const uiMessages = messages as ChatMessage[];
@@ -2448,61 +2522,88 @@ async function persistNewMessages(
       uiMessages,
     });
 
-    if (newMessages.length === 0) {
+    // Tool approvals resolve after the assistant message is first persisted.
+    // Only the onFinish persist carries the server-authoritative final
+    // messages, so content updates are applied from that path alone.
+    const changedMessages: Array<{ id: string; content: ChatMessage }> =
+      context === "onFinish"
+        ? getMessagesWithChangedContent({ existingMessages, uiMessages })
+        : [];
+
+    if (newMessages.length === 0 && changedMessages.length === 0) {
       return 0;
     }
 
-    // Check if last message has empty parts and strip it if so
-    let messagesToSave = newMessages;
-    if (newMessages[newMessages.length - 1].parts?.length === 0) {
-      messagesToSave = newMessages.slice(0, -1);
+    let persistedCount = 0;
+
+    if (newMessages.length > 0) {
+      // Check if last message has empty parts and strip it if so
+      let messagesToSave = newMessages;
+      if (newMessages[newMessages.length - 1].parts?.length === 0) {
+        messagesToSave = newMessages.slice(0, -1);
+      }
+
+      if (messagesToSave.length > 0) {
+        let messagesToStore: ChatMessage[];
+
+        // Strip base64 images and large browser tool results before storing
+        if (context === "onFinish") {
+          // Log size reduction only for onFinish (where we have complete messages)
+          const beforeSize = estimateMessagesSize(messagesToSave);
+          messagesToStore = normalizeChatMessages(messagesToSave);
+          const afterSize = estimateMessagesSize(messagesToStore);
+
+          logger.info(
+            {
+              messageCount: messagesToSave.length,
+              beforeSizeKB: Math.round(beforeSize.length / 1024),
+              afterSizeKB: Math.round(afterSize.length / 1024),
+              savedKB: Math.round(
+                (beforeSize.length - afterSize.length) / 1024,
+              ),
+              sizeEstimateReliable:
+                !beforeSize.isEstimated && !afterSize.isEstimated,
+            },
+            "[Chat] Stripped messages before saving to DB",
+          );
+        } else {
+          // For onError, just strip without detailed logging
+          messagesToStore = normalizeChatMessages(messagesToSave);
+        }
+
+        const now = Date.now();
+        const messageData = messagesToStore.map((msg, index) => ({
+          conversationId,
+          role: msg.role ?? "assistant",
+          content: msg,
+          createdAt: new Date(now + index),
+        }));
+
+        await MessageModel.bulkCreate(messageData);
+        persistedCount += messagesToSave.length;
+
+        logger.info(
+          `Appended ${messagesToSave.length} new messages to conversation ${conversationId} (${context})`,
+        );
+      }
     }
 
-    if (messagesToSave.length === 0) {
-      return 0;
-    }
-
-    let messagesToStore: ChatMessage[];
-
-    // Strip base64 images and large browser tool results before storing
-    if (context === "onFinish") {
-      // Log size reduction only for onFinish (where we have complete messages)
-      const beforeSize = estimateMessagesSize(messagesToSave);
-      messagesToStore = normalizeChatMessages(messagesToSave);
-      const afterSize = estimateMessagesSize(messagesToStore);
-
-      logger.info(
-        {
-          messageCount: messagesToSave.length,
-          beforeSizeKB: Math.round(beforeSize.length / 1024),
-          afterSizeKB: Math.round(afterSize.length / 1024),
-          savedKB: Math.round((beforeSize.length - afterSize.length) / 1024),
-          sizeEstimateReliable:
-            !beforeSize.isEstimated && !afterSize.isEstimated,
-        },
-        "[Chat] Stripped messages before saving to DB",
+    // Persist content updates for messages that already exist but changed
+    // (e.g. an assistant turn whose tool call was approved or declined).
+    for (const changedMessage of changedMessages) {
+      await MessageModel.updateContent(
+        changedMessage.id,
+        changedMessage.content,
       );
-    } else {
-      // For onError, just strip without detailed logging
-      messagesToStore = normalizeChatMessages(messagesToSave);
     }
 
-    // Append only new messages with timestamps
-    const now = Date.now();
-    const messageData = messagesToStore.map((msg, index) => ({
-      conversationId,
-      role: msg.role ?? "assistant",
-      content: msg,
-      createdAt: new Date(now + index),
-    }));
+    if (changedMessages.length > 0) {
+      logger.info(
+        `Updated ${changedMessages.length} changed messages in conversation ${conversationId} (${context})`,
+      );
+    }
 
-    await MessageModel.bulkCreate(messageData);
-
-    logger.info(
-      `Appended ${messagesToSave.length} new messages to conversation ${conversationId} (${context})`,
-    );
-
-    return messagesToSave.length;
+    return persistedCount + changedMessages.length;
   } catch (error) {
     logger.error(
       { error, conversationId, context },
@@ -2593,6 +2694,77 @@ function getMessagesNotYetPersisted(params: {
 
     return true;
   });
+}
+
+const TERMINAL_TOOL_STATES: ReadonlySet<string> = new Set([
+  "output-available",
+  "output-error",
+  "output-denied",
+]);
+
+/**
+ * Returns the stored rows that should be overwritten in place by an incoming
+ * message — specifically, an assistant turn whose tool call is still in
+ * `approval-requested` state and whose `toolCallId` arrives in a terminal
+ * state (`output-available`, `output-error`, `output-denied`).
+ *
+ * Scoped tightly to the approval-resolution flow so this update path cannot
+ * be repurposed to overwrite arbitrary earlier messages whose parts happen
+ * to differ — those edits still go through `updateTextPartAndDeleteSubsequent`.
+ */
+function getMessagesWithChangedContent(params: {
+  existingMessages: Array<{ id: string; content: unknown }>;
+  uiMessages: ChatMessage[];
+}): Array<{ id: string; content: ChatMessage }> {
+  // Index stored rows by the toolCallId of any approval-requested tool part
+  // they carry — those are the only rows this update path can target.
+  const pendingByToolCallId = new Map<
+    string,
+    { id: string; content: unknown }
+  >();
+  for (const existing of params.existingMessages) {
+    if (typeof existing.content !== "object" || existing.content === null) {
+      continue;
+    }
+    const parts = (existing.content as { parts?: unknown }).parts;
+    if (!Array.isArray(parts)) continue;
+    for (const part of parts) {
+      if (
+        typeof part === "object" &&
+        part !== null &&
+        (part as { state?: unknown }).state === "approval-requested" &&
+        typeof (part as { toolCallId?: unknown }).toolCallId === "string"
+      ) {
+        pendingByToolCallId.set(
+          (part as { toolCallId: string }).toolCallId,
+          existing,
+        );
+      }
+    }
+  }
+  if (pendingByToolCallId.size === 0) {
+    return [];
+  }
+
+  const changedMessages: Array<{ id: string; content: ChatMessage }> = [];
+  for (const incoming of normalizeChatMessages(params.uiMessages)) {
+    for (const part of incoming.parts ?? []) {
+      const state = (part as { state?: unknown }).state;
+      if (typeof state !== "string" || !TERMINAL_TOOL_STATES.has(state)) {
+        continue;
+      }
+      const toolCallId = (part as { toolCallId?: unknown }).toolCallId;
+      if (typeof toolCallId !== "string") continue;
+      const stored = pendingByToolCallId.get(toolCallId);
+      if (!stored) continue;
+      changedMessages.push({ id: stored.id, content: incoming });
+      // Each approval-requested row resolves at most once per sweep.
+      pendingByToolCallId.delete(toolCallId);
+      break;
+    }
+  }
+
+  return changedMessages;
 }
 
 function getMessageContentId(content: unknown): string | null {
@@ -3153,6 +3325,8 @@ async function validateChatApiKeyAccess(
 
 export const __test = {
   getMessagesNotYetPersisted,
+  getMessagesWithChangedContent,
+  persistNewMessages,
   prepareMessagesForProvider,
 };
 

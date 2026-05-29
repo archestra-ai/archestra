@@ -1,0 +1,23 @@
+[package]
+name = "sandbox_rs"
+version = "1.2.50"
+edition = "2024"
+build = "build.rs"
+publish = false
+
+[features]
+default = []
+test-helpers = []
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+futures-util = "0.3"
+napi = { version = "3", features = ["tokio_rt"] }
+napi-derive = "3"
+serde_json = "1"
+sandbox_core = { path = "../sandbox-core", features = ["napi"] }
+
+[build-dependencies]
+napi-build = "2"

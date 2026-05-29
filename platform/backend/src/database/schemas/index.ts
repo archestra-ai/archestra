@@ -51,6 +51,7 @@ export { default as agentSuggestedPromptsTable } from "./agent-suggested-prompt"
 export { default as agentTeamsTable } from "./agent-team";
 export { default as agentToolsTable } from "./agent-tool";
 export { default as apikeysTable } from "./api-key";
+export { default as auditLogsTable } from "./audit-log";
 export { default as browserTabStatesTable } from "./browser-tab-state";
 export {
   chatActiveRunEventsTable,
@@ -116,6 +117,11 @@ export { default as sessionsTable } from "./session";
 export { default as siteNotificationsTable } from "./site-notification";
 export { default as skillsTable } from "./skill";
 export { default as skillFilesTable } from "./skill-file";
+export { default as skillSandboxesTable } from "./skill-sandbox";
+export { default as skillSandboxArtifactsTable } from "./skill-sandbox-artifact";
+export { default as skillSandboxCommandsTable } from "./skill-sandbox-command";
+export { default as skillSandboxFileSnapshotsTable } from "./skill-sandbox-file-snapshot";
+export { default as skillSandboxSkillsTable } from "./skill-sandbox-skill";
 export {
   default as skillShareLinksTable,
   skillShareLinkSkillsTable,

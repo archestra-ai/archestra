@@ -55,7 +55,6 @@ const CONNECTOR_TYPE_OPTIONS = [
   "github",
   "gitlab",
   "servicenow",
-  "file_upload",
 ] as ConnectorType[];
 
 function formatAgentType(agentType: string): string {

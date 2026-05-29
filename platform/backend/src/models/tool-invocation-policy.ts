@@ -654,6 +654,102 @@ class ToolInvocationPolicyModel {
 
     return result.length > 0;
   }
+
+  /**
+   * Default tool-invocation policies (empty conditions) for tools assigned to
+   * agents in the organization — audit footprint for bulk-default routes.
+   */
+  static async findDefaultPoliciesSnapshotForOrganization(
+    organizationId: string,
+  ): Promise<Record<string, unknown>> {
+    const rows = await db
+      .selectDistinct({
+        toolId: schema.toolInvocationPoliciesTable.toolId,
+        action: schema.toolInvocationPoliciesTable.action,
+      })
+      .from(schema.toolInvocationPoliciesTable)
+      .innerJoin(
+        schema.agentToolsTable,
+        eq(
+          schema.agentToolsTable.toolId,
+          schema.toolInvocationPoliciesTable.toolId,
+        ),
+      )
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          sql`coalesce(jsonb_array_length(${schema.toolInvocationPoliciesTable.conditions}), 0) = 0`,
+        ),
+      );
+
+    const entries = rows
+      .map((r) => `${r.toolId}:${r.action}`)
+      .sort((a, b) => a.localeCompare(b));
+    return { defaultToolInvocationPolicies: entries };
+  }
+
+  // Org-scoped audit snapshot via the tool → agent_tools → agents.organizationId
+  // FK chain.  toolInvocationPoliciesTable has no organizationId column, so
+  // tenancy is resolved through any agent in the caller's organization that
+  // has been assigned the policy's tool.  Mirrors the join already used by
+  // `findDefaultPoliciesSnapshotForOrganization`.
+  //
+  // The route handler for PATCH/DELETE /api/tool-invocation/:id does not
+  // enforce this predicate today, but the audit fetcher must — the preHandler
+  // runs before route authz, so an unscoped fetch would persist another
+  // tenant's policy snapshot into the caller's audit_logs even when the route
+  // ultimately rejects the request.  Returns null when no agent in the
+  // organization is assigned the policy's tool.
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [scoped] = await db
+      .selectDistinct({
+        id: schema.toolInvocationPoliciesTable.id,
+        toolId: schema.toolInvocationPoliciesTable.toolId,
+        conditions: schema.toolInvocationPoliciesTable.conditions,
+        action: schema.toolInvocationPoliciesTable.action,
+        reason: schema.toolInvocationPoliciesTable.reason,
+        createdAt: schema.toolInvocationPoliciesTable.createdAt,
+        updatedAt: schema.toolInvocationPoliciesTable.updatedAt,
+      })
+      .from(schema.toolInvocationPoliciesTable)
+      .innerJoin(
+        schema.agentToolsTable,
+        eq(
+          schema.agentToolsTable.toolId,
+          schema.toolInvocationPoliciesTable.toolId,
+        ),
+      )
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
+      )
+      .where(
+        and(
+          eq(schema.toolInvocationPoliciesTable.id, id),
+          eq(schema.agentsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!scoped) return null;
+
+    return {
+      id: scoped.id,
+      toolId: scoped.toolId,
+      conditions: scoped.conditions,
+      action: scoped.action,
+      reason: scoped.reason ?? null,
+      createdAt: scoped.createdAt.toISOString(),
+      updatedAt: scoped.updatedAt.toISOString(),
+    };
+  }
 }
 
 export default ToolInvocationPolicyModel;

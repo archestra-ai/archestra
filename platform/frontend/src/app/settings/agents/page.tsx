@@ -3,13 +3,13 @@
 import type { archestraApiTypes } from "@shared";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AgentSelector } from "@/components/agent-selector";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
 import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
 import {
   LlmProviderApiKeyOptionLabel,
   LlmProviderApiKeySelectItems,
 } from "@/components/llm-provider-options";
-import { ProfileFilterOption } from "@/components/log-filter-option";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsBlock,
@@ -17,7 +17,6 @@ import {
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
 import { Button } from "@/components/ui/button";
-import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
@@ -49,13 +48,6 @@ type GlobalToolPolicy = NonNullable<
 >;
 
 type FileUploadsEnabled = "enabled" | "disabled";
-
-type AgentSelectItem = {
-  value: string;
-  label: string;
-  content?: React.ReactNode;
-  selectedContent?: React.ReactNode;
-};
 
 export default function AgentSettingsPage() {
   const { getToolName } = useArchestraMcpIdentity();
@@ -175,37 +167,6 @@ export default function AgentSettingsPage() {
   );
   const canFilterFreeModels = selectedApiKey?.provider === "openrouter";
 
-  const agentItems = useMemo(() => {
-    const items: AgentSelectItem[] = [
-      { value: "__personal__", label: "User's personal agent" },
-    ];
-    for (const agent of orgAgents ?? []) {
-      items.push({
-        value: agent.id,
-        label: agent.name,
-        content: (
-          <ProfileFilterOption
-            profile={{
-              name: agent.name,
-              icon: agent.icon ?? null,
-              agentType: "agent",
-            }}
-          />
-        ),
-        selectedContent: (
-          <ProfileFilterOption
-            profile={{
-              name: agent.name,
-              icon: agent.icon ?? null,
-              agentType: "agent",
-            }}
-          />
-        ),
-      });
-    }
-    return items;
-  }, [orgAgents]);
-
   const handleAgentChange = useCallback((value: string) => {
     setDefaultAgentId(value === "__personal__" ? "" : value);
   }, []);
@@ -315,15 +276,20 @@ export default function AgentSettingsPage() {
             noPermissionHandle="tooltip"
           >
             {({ hasPermission }) => (
-              <SearchableSelect
+              <AgentSelector
+                mode="single"
                 value={defaultAgentId || "__personal__"}
                 onValueChange={handleAgentChange}
+                agents={orgAgents ?? []}
                 placeholder="Select agent..."
                 searchPlaceholder="Search agents..."
-                items={agentItems}
                 className="w-80"
                 disabled={isSaving || !hasPermission}
                 hint="Only org-wide agents are shown"
+                personalDefaultOption={{
+                  value: "__personal__",
+                  label: "User's personal agent",
+                }}
               />
             )}
           </WithPermissions>

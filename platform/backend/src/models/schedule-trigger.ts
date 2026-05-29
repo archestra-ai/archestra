@@ -207,6 +207,28 @@ class ScheduleTriggerModel {
       .set({ lastExecutedAt: now })
       .where(eq(schema.scheduleTriggersTable.id, id));
   }
+
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const trigger = await ScheduleTriggerModel.findById(id);
+    if (!trigger || trigger.organizationId !== organizationId) return null;
+
+    return {
+      id: trigger.id,
+      name: trigger.name,
+      agentId: trigger.agentId,
+      agentName: trigger.agent?.name ?? null,
+      messageTemplate: trigger.messageTemplate,
+      cronExpression: trigger.cronExpression,
+      timezone: trigger.timezone,
+      enabled: trigger.enabled,
+      actorUserId: trigger.actorUserId,
+      lastExecutedAt: trigger.lastExecutedAt?.toISOString() ?? null,
+      createdAt: trigger.createdAt.toISOString(),
+    };
+  }
 }
 
 export default ScheduleTriggerModel;

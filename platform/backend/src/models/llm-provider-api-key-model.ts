@@ -4,7 +4,7 @@ import {
   type SupportedProvider,
 } from "@shared";
 import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import type { LlmProviderApiKey, Model } from "@/types";
 
 /** Aggregate of an API key's linked-model count and oldest sync timestamp. */
@@ -109,7 +109,7 @@ class LlmProviderApiKeyModelLinkModel {
       new Map(models.map((model) => [model.id, model])).values(),
     );
 
-    await db.transaction(async (tx) => {
+    await withDbTransaction(async (tx) => {
       // Delete existing links for this API key
       await tx
         .delete(schema.llmProviderApiKeyModelsTable)

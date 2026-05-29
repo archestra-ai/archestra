@@ -21,6 +21,8 @@ import {
 import packageJson from "../../package.json";
 
 type ProcessType = "web" | "worker" | "all";
+type BlobStorageProviderType = "db" | "s3";
+type S3BlobStorageAuthMethod = "irsa" | "static";
 
 /**
  * Load .env from platform root
@@ -563,6 +565,83 @@ export const parseTrustProxy = (
 };
 
 /** @public — exported for testability */
+export function parseBlobStorageProvider(
+  value: string | undefined,
+): BlobStorageProviderType {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === "s3" ? "s3" : "db";
+}
+
+/** @public — exported for testability */
+export function parseS3BlobStorageAuthMethod(
+  value: string | undefined,
+): S3BlobStorageAuthMethod {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === "static" ? "static" : "irsa";
+}
+
+/** @public — exported for testability */
+export function parseS3BlobStorageBucket(params: {
+  provider: BlobStorageProviderType;
+  value: string | undefined;
+}): string {
+  const bucket = params.value?.trim() ?? "";
+  if (params.provider === "s3" && !bucket) {
+    throw new Error(
+      "ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_BUCKET is required when S3 blob storage is enabled",
+    );
+  }
+  return bucket;
+}
+
+/** @public — exported for testability */
+export function parseConnectorSyncMaxDuration(
+  value: string | undefined,
+): number | undefined {
+  const DEFAULT = 3300; // 55 minutes
+  const seconds = Number.parseInt(value || String(DEFAULT), 10);
+  if (Number.isNaN(seconds) || seconds <= 0) return undefined;
+  return seconds;
+}
+
+/** @public — exported for testability */
+export function parseProcessType(value: string | undefined): ProcessType {
+  const normalized = value?.toLowerCase();
+  if (normalized === "web" || normalized === "worker") return normalized;
+  return "all";
+}
+
+/**
+ * Parse ARCHESTRA_AUDIT_LOG_RETENTION_DAYS into a non-negative integer.
+ * Default is 0 (retention disabled — audit rows are never auto-deleted).
+ * Org admins opt in by setting a positive number of days.
+ * @public — exported for testability
+ */
+export const parseAuditLogRetentionDays = (
+  envValue: string | undefined,
+): number => {
+  const DEFAULT_RETENTION_DAYS = 0;
+  const value = envValue?.trim();
+  if (!value) return DEFAULT_RETENTION_DAYS;
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed < 0) {
+    logger.warn(
+      `Invalid ARCHESTRA_AUDIT_LOG_RETENTION_DAYS value "${value}", using default ${DEFAULT_RETENTION_DAYS} (disabled)`,
+    );
+    return DEFAULT_RETENTION_DAYS;
+  }
+  return parsed;
+};
+
+/** @public — consumed by config.test.ts */
+export function parseCommaSeparatedList(value: string): string[] {
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** @public — exported for testability */
 export const getAnalyticsConfig = () => ({
   enabled: process.env.ARCHESTRA_ANALYTICS !== "disabled",
   posthog: {
@@ -579,8 +658,9 @@ const mcpServerBaseImage =
   process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
   `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:${appVersion}`;
 
-const defaultCodeRuntimeImage =
-  "ghcr.io/astral-sh/uv:0.9.17-python3.12-bookworm-slim";
+const knowledgeFileBlobStorageProvider = parseBlobStorageProvider(
+  process.env.ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_BLOB_STORAGE_PROVIDER,
+);
 
 /**
  * resolves the Dagger runner host. A misconfigured host returns `undefined`
@@ -628,6 +708,38 @@ const codeRuntimeDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost({
 // a missing/invalid runner host disables the feature instead of crashing boot.
 const codeRuntimeEnabled =
   codeRuntimeRequested && codeRuntimeDaggerRunnerHost !== undefined;
+
+// skills sandbox is on whenever both skills and the code-runtime (Dagger) are enabled.
+const skillsSandboxRequested =
+  process.env.ARCHESTRA_AGENTS_SKILLS_ENABLED === "true" && codeRuntimeEnabled;
+const skillsSandboxDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost({
+  enabled: skillsSandboxRequested,
+  envValue:
+    process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST ||
+    process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST,
+});
+const skillsSandboxEnabled =
+  skillsSandboxRequested && skillsSandboxDaggerRunnerHost !== undefined;
+
+// the unified Dagger runtime fronts both code-runtime and skills sandbox; either
+// feature flag turning on lights up the shared session + warm base.
+// when operators explicitly scope the two features to different hosts the
+// runtime can only honour one — warn loudly so this isn't silently lost.
+if (
+  process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST &&
+  process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST &&
+  process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST !==
+    process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST
+) {
+  logger.warn(
+    `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST (${process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST}) and ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST (${process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST}) differ — both features share one Dagger session, so the code-runtime host wins and the skill-sandbox value is ignored`,
+  );
+}
+const daggerRuntimeRunnerHost =
+  codeRuntimeDaggerRunnerHost ?? skillsSandboxDaggerRunnerHost;
+const daggerRuntimeEnabled =
+  (codeRuntimeEnabled || skillsSandboxEnabled) &&
+  daggerRuntimeRunnerHost !== undefined;
 
 const config = {
   frontendBaseUrl,
@@ -962,7 +1074,6 @@ const config = {
    */
   codeRuntime: {
     enabled: codeRuntimeEnabled,
-    image: process.env.ARCHESTRA_CODE_RUNTIME_IMAGE || defaultCodeRuntimeImage,
     /** runner host for the Dagger Engine (sets _EXPERIMENTAL_DAGGER_RUNNER_HOST). */
     daggerRunnerHost: codeRuntimeDaggerRunnerHost,
     /** path to a baked-in dagger CLI (sets _EXPERIMENTAL_DAGGER_CLI_BIN). */
@@ -981,6 +1092,80 @@ const config = {
       process.env.ARCHESTRA_CODE_RUNTIME_MAX_OUTPUT_BYTES,
       65536,
     ),
+  },
+  /**
+   * sandboxed skill-execution runtime — lets agents materialize a skill into a
+   * Dagger container and run arbitrary shell commands against the snapshot.
+   * shares the Dagger engine with `codeRuntime` but is gated on its own flag.
+   */
+  skillsSandbox: {
+    enabled: skillsSandboxEnabled,
+    daggerRunnerHost: skillsSandboxDaggerRunnerHost,
+    daggerCliBin:
+      process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_CLI_BIN ||
+      process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN ||
+      undefined,
+    cpuLimit: parsePositiveInt(
+      process.env.ARCHESTRA_SKILLS_SANDBOX_CPU_LIMIT_SECONDS,
+      30,
+    ),
+    memoryLimit: parsePositiveInt(
+      process.env.ARCHESTRA_SKILLS_SANDBOX_MEMORY_LIMIT_BYTES,
+      1024 * 1024 * 1024,
+    ),
+    wallClockSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_SKILLS_SANDBOX_WALL_CLOCK_SECONDS,
+      120,
+    ),
+    outputBytesLimit: parsePositiveInt(
+      process.env.ARCHESTRA_SKILLS_SANDBOX_OUTPUT_BYTES_LIMIT,
+      256 * 1024,
+    ),
+    artifactBytesLimit: parsePositiveInt(
+      process.env.ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT,
+      16 * 1024 * 1024,
+    ),
+  },
+  /**
+   * unified Dagger runtime — one shared session with a pre-warmed base
+   * container that hosts both `archestra__run_python` and skill-sandbox
+   * commands. The Rust crate (`@archestra/sandbox-rs`) owns the session;
+   * this block only carries enable + connection knobs.
+   */
+  daggerRuntime: {
+    enabled: daggerRuntimeEnabled,
+    runnerHost: daggerRuntimeRunnerHost,
+    cliBin:
+      process.env.ARCHESTRA_DAGGER_RUNTIME_CLI_BIN ||
+      process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_CLI_BIN ||
+      process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN ||
+      undefined,
+    maxConcurrent: parsePositiveInt(
+      process.env.ARCHESTRA_DAGGER_RUNTIME_MAX_CONCURRENT,
+      10,
+    ),
+    maxQueueLength: parsePositiveInt(
+      process.env.ARCHESTRA_DAGGER_RUNTIME_MAX_QUEUE_LENGTH,
+      50,
+    ),
+    defaults: {
+      outputBytesLimit: parsePositiveInt(
+        process.env.ARCHESTRA_DAGGER_RUNTIME_OUTPUT_BYTES_LIMIT,
+        256 * 1024,
+      ),
+      fileSizeLimitBytes: parsePositiveInt(
+        process.env.ARCHESTRA_DAGGER_RUNTIME_FILE_SIZE_LIMIT_BYTES,
+        16 * 1024 * 1024,
+      ),
+      cpuSeconds: parsePositiveInt(
+        process.env.ARCHESTRA_DAGGER_RUNTIME_CPU_SECONDS,
+        30,
+      ),
+      memoryBytes: parsePositiveInt(
+        process.env.ARCHESTRA_DAGGER_RUNTIME_MEMORY_BYTES,
+        1024 * 1024 * 1024,
+      ),
+    },
   },
   vault: {
     token: process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN || DEFAULT_VAULT_TOKEN,
@@ -1063,6 +1248,36 @@ const config = {
   kb: {
     hybridSearchEnabled:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED !== "false",
+    fileUpload: {
+      blobStorage: {
+        provider: knowledgeFileBlobStorageProvider,
+        s3: {
+          bucket: parseS3BlobStorageBucket({
+            provider: knowledgeFileBlobStorageProvider,
+            value: process.env.ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_BUCKET,
+          }),
+          region:
+            process.env.ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_REGION || "",
+          prefix:
+            process.env.ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_PREFIX || "",
+          endpoint:
+            process.env.ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_ENDPOINT || "",
+          forcePathStyle:
+            process.env
+              .ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_FORCE_PATH_STYLE ===
+            "true",
+          authMethod: parseS3BlobStorageAuthMethod(
+            process.env.ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_AUTH_METHOD,
+          ),
+          accessKeyId:
+            process.env.ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_ACCESS_KEY_ID ||
+            "",
+          secretAccessKey:
+            process.env
+              .ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_SECRET_ACCESS_KEY || "",
+        },
+      },
+    },
     connectorSyncMaxDurationSeconds: parseConnectorSyncMaxDuration(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS,
     ),
@@ -1096,6 +1311,11 @@ const config = {
   ngrokDomain: process.env.ARCHESTRA_NGROK_DOMAIN || "",
   processType: parseProcessType(process.env.ARCHESTRA_PROCESS_TYPE),
   maintenanceMode: process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE || null,
+  auditLog: {
+    retentionDays: parseAuditLogRetentionDays(
+      process.env.ARCHESTRA_AUDIT_LOG_RETENTION_DAYS,
+    ),
+  },
 };
 
 export const shouldRunWebServer = config.processType !== "worker";
@@ -1104,16 +1324,6 @@ export const shouldRunWorker = config.processType !== "web";
 export default config;
 
 // ===== Internal helpers =====
-
-/** @public — exported for testability */
-export function parseConnectorSyncMaxDuration(
-  value: string | undefined,
-): number | undefined {
-  const DEFAULT = 3300; // 55 minutes
-  const seconds = Number.parseInt(value || String(DEFAULT), 10);
-  if (Number.isNaN(seconds) || seconds <= 0) return undefined;
-  return seconds;
-}
 
 /**
  * Get the environment variable API key for a provider.
@@ -1127,19 +1337,4 @@ export function getProviderEnvApiKey(
     return entry.apiKey || undefined;
   }
   return undefined;
-}
-
-/** @public — exported for testability */
-export function parseProcessType(value: string | undefined): ProcessType {
-  const normalized = value?.toLowerCase();
-  if (normalized === "web" || normalized === "worker") return normalized;
-  return "all";
-}
-
-/** @public — exported for testability */
-export function parseCommaSeparatedList(value: string): string[] {
-  return value
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
 }

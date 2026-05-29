@@ -32,6 +32,7 @@ enum ToolGroup {
   Meta = "Meta",
   CodeExecution = "Code Execution",
   Skills = "Skills",
+  SkillSandbox = "Skill Sandbox",
 }
 
 const groupOrder: Record<ToolGroup, number> = {
@@ -48,6 +49,7 @@ const groupOrder: Record<ToolGroup, number> = {
   [ToolGroup.Meta]: 10,
   [ToolGroup.CodeExecution]: 11,
   [ToolGroup.Skills]: 12,
+  [ToolGroup.SkillSandbox]: 13,
 };
 
 /**
@@ -137,6 +139,10 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   read_skill_file: ToolGroup.Skills,
   create_skill: ToolGroup.Skills,
   update_skill: ToolGroup.Skills,
+
+  create_skill_sandbox: ToolGroup.SkillSandbox,
+  run_skill_command: ToolGroup.SkillSandbox,
+  get_skill_sandbox_artifact: ToolGroup.SkillSandbox,
 };
 
 // === Script entry point ===

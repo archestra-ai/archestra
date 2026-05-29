@@ -50,7 +50,7 @@ import { pathToFileURL } from "node:url";
 import { SecretsManagerType } from "@shared";
 import { eq, inArray, sql } from "drizzle-orm";
 import config from "@/config";
-import db, { initializeDatabase, schema } from "@/database";
+import db, { initializeDatabase, schema, withDbTransaction } from "@/database";
 import { getSecretsManagerTypeBasedOnEnvVars } from "@/secrets-manager";
 import { VaultClient } from "@/secrets-manager/vault-client.ee";
 import { getVaultConfigFromEnv } from "@/secrets-manager/vault-config";
@@ -1159,7 +1159,7 @@ async function phase2AtomicFlip(
     console.log(`        ${id}`);
   }
 
-  await db.transaction(async (tx) => {
+  await withDbTransaction(async (tx) => {
     for (const r of renames) {
       await tx
         .update(schema.secretsTable)
@@ -2487,7 +2487,7 @@ async function rollback(): Promise<void> {
   }
 
   let restoredCount = 0;
-  await db.transaction(async (tx) => {
+  await withDbTransaction(async (tx) => {
     const result = await tx.execute(
       sql.raw(`
       UPDATE secret AS s

@@ -32,3 +32,7 @@ Context compaction replaces older messages sent to the model with a structured h
 Compaction is handled by the built-in Context Compaction Subagent. Users with `agent:admin` permission can edit its instructions and model from the built-in agent settings. If no model is configured on the subagent, Chat uses the conversation's current provider with a fast model for that provider.
 
 Uploaded text files and PDFs are included in the compaction transcript when extractable text is available in the chat payload. If file text cannot be extracted (for example, a scanned PDF with no text layer), the summary records that limitation instead of implying the full file contents remain in context.
+
+### File Attachments
+
+Chat attachments are scoped to their conversation. Users with `knowledgeFile:create` can save a sent attachment to [Knowledge Files](/docs/platform-knowledge-bases#files), choose visibility, and select the agents or MCP Gateways that can retrieve it later.

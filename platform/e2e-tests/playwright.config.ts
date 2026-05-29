@@ -37,6 +37,7 @@ const testPatterns = {
 
 const uiTestMatch = [
   "**/agents.spec.ts",
+  "**/audit-log.spec.ts",
   "**/auth-origin.spec.ts",
   "**/auth-redirect.spec.ts",
   "**/auth.spec.ts",
@@ -57,6 +58,7 @@ const uiTestMatch = [
 ];
 
 const apiTestMatch = [
+  "**/audit-logs-api.spec.ts",
   "**/built-in-agents.spec.ts",
   "**/chat-api.spec.ts",
   "**/custom-yaml-restart.spec.ts",

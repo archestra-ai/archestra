@@ -9,6 +9,7 @@ export { default as AgentKnowledgeBaseModel } from "./agent-knowledge-base";
 export { default as AgentLabelModel } from "./agent-label";
 export { default as AgentTeamModel } from "./agent-team";
 export { default as AgentToolModel } from "./agent-tool";
+export { default as AuditLogModel } from "./audit-log";
 export { default as BrowserTabStateModel } from "./browser-tab-state";
 export { default as ActiveChatRunModel } from "./chat-active-run";
 export { default as ChatOpsChannelBindingModel } from "./chatops-channel-binding";
@@ -60,6 +61,13 @@ export { default as SecretModel } from "./secret";
 export { default as SessionModel } from "./session";
 export { default as SkillModel } from "./skill";
 export { default as SkillFileModel } from "./skill-file";
+export {
+  default as SkillSandboxModel,
+  SkillInvalidFilePathError,
+} from "./skill-sandbox";
+export { default as SkillSandboxArtifactModel } from "./skill-sandbox-artifact";
+export { default as SkillSandboxCommandModel } from "./skill-sandbox-command";
+export { default as SkillSandboxFileSnapshotModel } from "./skill-sandbox-file-snapshot";
 export { default as SkillShareLinkModel } from "./skill-share-link";
 export { default as SkillShareLinkRevisionModel } from "./skill-share-link-revision";
 export { default as SkillTeamModel } from "./skill-team";

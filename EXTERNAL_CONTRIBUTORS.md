@@ -494,3 +494,9 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @cybrdelic
 - @xoriium
 - @chaudl113
+- @willeylim
+- @OsirisLord
+- @onyedikachi-david
+- @CleanDev-Fix
+- @khabmcit
+- @vivekjhaver

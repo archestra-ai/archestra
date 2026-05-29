@@ -5,14 +5,14 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use dagger_sdk::{Config, Container, DaggerConn, connect_opts};
+use dagger_sdk::{Config, Container, ContainerWithNewFileOpts, DaggerConn, connect_opts};
 use futures_util::FutureExt;
 use futures_util::future::{BoxFuture, Shared};
 use tokio::sync::{Mutex, OnceCell, Semaphore, mpsc, oneshot};
 
 use crate::{
     ArtifactBytes, CommandExecution, Result, SKILL_SANDBOX_HOME, SKILL_SANDBOX_ROOT,
-    SKILL_SANDBOX_USER, SandboxError,
+    SKILL_SANDBOX_USER, SUPERVISOR_PATH, SandboxError,
 };
 
 /// debian + python + uv + node + npm + common cli, warmed once per process.
@@ -273,6 +273,119 @@ pub const DEFAULT_PYTHON_REQUIREMENTS: &[&str] = &["numpy", "pandas", "httpx"];
 /// logs and survives `cargo fmt`.
 const PIP_SHIM_SETUP: &str = "rm -f /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.12 && printf '%s\\n' '#!/bin/sh' 'echo \"error: pip is disabled in this sandbox. Use \\\"uv add <pkg>\\\" instead.\" >&2' 'exit 1' > /usr/local/bin/pip && chmod +x /usr/local/bin/pip && ln -s pip /usr/local/bin/pip3 && ln -s pip /usr/local/bin/pip3.12";
 
+/// command supervisor written into the warm base at `SUPERVISOR_PATH`. runs
+/// `bash -c <cmd>` in its own session under cpu (`RLIMIT_CPU`) and memory
+/// (`RLIMIT_AS`) limits, enforces the wall-clock timeout by SIGKILLing the whole
+/// process group, caps each output stream at `--out-cap` bytes, and prints a
+/// single json result on stdout. kept as a const (like `PIP_SHIM_SETUP`) so it
+/// shows up verbatim in build logs and updates with a napi rebuild rather than an
+/// image republish. stdlib-only, so any python3 on the image can run it.
+const ARCHESTRA_RUN_PY: &str = r##"#!/usr/bin/env python3
+import json
+import os
+import resource
+import signal
+import subprocess
+import sys
+import threading
+import time
+
+
+def main():
+    argv = sys.argv[1:]
+    if "--" not in argv:
+        sys.stderr.write("archestra_run: missing -- separator\n")
+        return 2
+    sep = argv.index("--")
+    flags = argv[:sep]
+    cmd = argv[sep + 1:]
+    if len(flags) % 2 != 0:
+        sys.stderr.write("archestra_run: malformed flags\n")
+        return 2
+    if not cmd:
+        sys.stderr.write("archestra_run: empty command\n")
+        return 2
+    opts = {flags[i]: flags[i + 1] for i in range(0, len(flags), 2)}
+    timeout = int(opts["--timeout"])
+    cpu = int(opts["--cpu"])
+    mem = int(opts["--mem"])
+    cap = int(opts["--out-cap"])
+
+    def preexec():
+        os.setsid()
+        if cpu > 0:
+            resource.setrlimit(resource.RLIMIT_CPU, (cpu, cpu))
+        if mem > 0:
+            resource.setrlimit(resource.RLIMIT_AS, (mem, mem))
+
+    streams = {}
+
+    def drain(name, fp):
+        buf = bytearray()
+        total = 0
+        while True:
+            chunk = fp.read(65536)
+            if not chunk:
+                break
+            total += len(chunk)
+            if len(buf) < cap:
+                buf.extend(chunk[: cap - len(buf)])
+        streams[name] = (bytes(buf), total > cap)
+
+    start = time.monotonic()
+    proc = subprocess.Popen(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=preexec
+    )
+    out_thread = threading.Thread(target=drain, args=("out", proc.stdout))
+    err_thread = threading.Thread(target=drain, args=("err", proc.stderr))
+    out_thread.start()
+    err_thread.start()
+
+    timed_out = False
+    try:
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        proc.wait()
+    out_thread.join()
+    err_thread.join()
+    duration_ms = int((time.monotonic() - start) * 1000)
+
+    out_bytes, out_trunc = streams.get("out", (b"", False))
+    err_bytes, err_trunc = streams.get("err", (b"", False))
+
+    rc = proc.returncode
+    if timed_out:
+        exit_code = 124
+    elif rc is not None and rc < 0:
+        exit_code = 128 - rc
+    else:
+        exit_code = rc if rc is not None else 0
+
+    json.dump(
+        {
+            "stdout": out_bytes.decode("utf-8", "replace"),
+            "stderr": err_bytes.decode("utf-8", "replace"),
+            "exitCode": exit_code,
+            "timedOut": timed_out,
+            "stdoutTruncated": out_trunc,
+            "stderrTruncated": err_trunc,
+            "durationMs": duration_ms,
+        },
+        sys.stdout,
+    )
+    sys.stdout.flush()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+"##;
+
 async fn build_warm_base(client: &DaggerConn) -> Result<Container> {
     let image = env::var("ARCHESTRA_DAGGER_RUNTIME_IMAGE")
         .unwrap_or_else(|_| DEFAULT_BASE_IMAGE.to_string());
@@ -294,6 +407,17 @@ async fn build_warm_base(client: &DaggerConn) -> Result<Container> {
         .container()
         .from(&image)
         .with_exec(vec!["sh".to_string(), "-c".to_string(), root_setup])
+        // written as root (0755) so every materialised container inherits a
+        // world-readable, executable supervisor without a per-call layer.
+        .with_new_file_opts(
+            SUPERVISOR_PATH,
+            ARCHESTRA_RUN_PY,
+            ContainerWithNewFileOpts {
+                permissions: Some(0o755),
+                owner: None,
+                expand: None,
+            },
+        )
         .with_user(SKILL_SANDBOX_USER)
         .with_env_variable("HOME", SKILL_SANDBOX_HOME)
         .with_env_variable("SKILL_SANDBOX_ROOT", SKILL_SANDBOX_ROOT)

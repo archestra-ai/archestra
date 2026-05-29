@@ -272,6 +272,7 @@ jobs:
         run: ./scripts/check-dagger-version-sync.sh
 
       - name: Rust musl checks
+        working-directory: ./platform/archestra-rs
         env:
           CC_x86_64_unknown_linux_musl: musl-gcc
         run: |
@@ -281,6 +282,7 @@ jobs:
         run: cargo install cargo-deny --locked
 
       - name: Rust dependency policy
+        working-directory: ./platform/archestra-rs
         run: cargo deny check --config deny.toml advisories bans licenses sources
 
       # setup-env uses --frozen-lockfile, which skips minimum-release-age checks.

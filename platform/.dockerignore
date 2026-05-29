@@ -12,7 +12,7 @@ dist
 target
 **/target
 **/*.node
-sandbox-rs/index.js
+archestra-rs/sandbox-rs/index.js
 **/playwright-report
 **/tsconfig.tsbuildinfo
 

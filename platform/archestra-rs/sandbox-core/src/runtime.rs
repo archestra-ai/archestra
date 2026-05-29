@@ -1,17 +1,34 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::time::Instant;
 
 use base64::Engine;
 use dagger_sdk::{Container, ContainerWithExecOpts, DaggerConn, ReturnType};
+use serde::Deserialize;
 use tracing::Span;
 
 use crate::session::{ArtifactRequest, RunRequest, Session};
 use crate::{
     ARTIFACT_NOT_FOUND_EXIT_CODE, ARTIFACT_TOO_LARGE_EXIT_CODE, ArtifactBytes, CommandExecution,
-    Limits, Result, SKILL_SANDBOX_ROOT, SKILL_SANDBOX_USER, SandboxError, SnapshotFile,
-    TIMEOUT_EXIT_CODE, tracing_ctx, validate_artifact_path, validate_cwd, wrap_with_timeout,
+    Result, SKILL_SANDBOX_ROOT, SKILL_SANDBOX_USER, SandboxError, SnapshotFile, supervised_argv,
+    tracing_ctx, validate_artifact_path, validate_cwd,
 };
+
+const TRUNCATION_MARKER: &str = "\n...[output truncated]";
+
+/// the json document the in-container supervisor (`SUPERVISOR_PATH`) prints on
+/// stdout. it owns output capping, the wall-clock timeout, and exit-code
+/// normalisation, so the host just deserialises it instead of scraping bash.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SupervisorResult {
+    stdout: String,
+    stderr: String,
+    exit_code: i32,
+    timed_out: bool,
+    stdout_truncated: bool,
+    stderr_truncated: bool,
+    duration_ms: u32,
+}
 
 pub(crate) async fn execute_run(
     session: Arc<Session>,
@@ -21,34 +38,28 @@ pub(crate) async fn execute_run(
     validate_cwd(&req.cwd)?;
 
     let warm = session.ensure_warm().await?;
-    let started = Instant::now();
     let materialized = materialize(session.client(), warm, &req).await?;
 
-    let wrapped = wrap_with_timeout(&req.command, req.timeout_seconds, &req.limits);
-    let executed = materialized.with_workdir(&req.cwd).with_exec_opts(
-        vec!["bash".to_string(), "-c".to_string(), wrapped],
-        any_exit_opts(),
-    );
+    let argv = supervised_argv(&req.command, req.timeout_seconds, &req.limits);
+    let executed = materialized
+        .with_workdir(&req.cwd)
+        .with_exec_opts(argv, any_exit_opts());
 
-    // dagger-sdk returns stdout/stderr as Strings, so non-UTF-8 bytes are
-    // lossily decoded at the GraphQL layer. for binary output the command
-    // should redirect to a file and use the artifact-read path (base64-safe).
-    let stdout_raw = executed.stdout().await.map_err(SandboxError::from_sdk)?;
-    let stderr_raw = executed.stderr().await.map_err(SandboxError::from_sdk)?;
-    let raw_exit = executed.exit_code().await.map_err(SandboxError::from_sdk)? as i32;
-    let stdout = crate::truncate_output(&stdout_raw, output_limit(&req.limits));
-    let stderr = crate::truncate_output(&stderr_raw, output_limit(&req.limits));
-
-    let timed_out = raw_exit == TIMEOUT_EXIT_CODE;
-    let exit_code = raw_exit;
+    // the supervisor caps output at the source and reports timeout / exit code /
+    // per-stream truncation / command-only duration in one json document on its
+    // stdout, so the only thing crossing the GraphQL boundary is bounded json.
+    let raw = executed.stdout().await.map_err(SandboxError::from_sdk)?;
+    let result: SupervisorResult = serde_json::from_str(raw.trim()).map_err(|e| {
+        SandboxError::internal(format!("failed to parse command supervisor output: {e}"))
+    })?;
 
     Ok(CommandExecution {
-        stdout: stdout.value,
-        stderr: stderr.value,
-        exit_code,
-        duration_ms: started.elapsed().as_millis().min(u128::from(u32::MAX)) as u32,
-        timed_out,
-        truncated: stdout.truncated || stderr.truncated,
+        stdout: mark_truncated(result.stdout, result.stdout_truncated),
+        stderr: mark_truncated(result.stderr, result.stderr_truncated),
+        exit_code: result.exit_code,
+        duration_ms: result.duration_ms,
+        timed_out: result.timed_out,
+        truncated: result.stdout_truncated || result.stderr_truncated,
     })
 }
 
@@ -186,11 +197,10 @@ async fn materialize(client: &DaggerConn, warm: Container, req: &RunRequest) -> 
         // each command is wrapped with its own `with_workdir` so cwd switches
         // happen via Dagger's container layer (no shell `cd` needed).
         let cwd = entry.cwd.as_deref().unwrap_or(&req.cwd);
-        let wrapped = wrap_with_timeout(&entry.command, entry.timeout_seconds, &req.limits);
-        container = container.with_workdir(cwd).with_exec_opts(
-            vec!["bash".to_string(), "-c".to_string(), wrapped],
-            any_exit_opts(),
-        );
+        let argv = supervised_argv(&entry.command, entry.timeout_seconds, &req.limits);
+        container = container
+            .with_workdir(cwd)
+            .with_exec_opts(argv, any_exit_opts());
     }
 
     let _ = client; // reserved for future host()-based bulk uploads
@@ -248,6 +258,10 @@ fn any_exit_opts<'a>() -> ContainerWithExecOpts<'a> {
     }
 }
 
-fn output_limit(limits: &Limits) -> usize {
-    limits.output_bytes_limit as usize
+fn mark_truncated(value: String, truncated: bool) -> String {
+    if truncated {
+        format!("{value}{TRUNCATION_MARKER}")
+    } else {
+        value
+    }
 }

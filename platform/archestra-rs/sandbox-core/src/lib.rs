@@ -11,7 +11,10 @@ pub use session::{DEFAULT_APT_PACKAGES, DEFAULT_BASE_IMAGE};
 pub(crate) const SKILL_SANDBOX_ROOT: &str = "/skills";
 pub(crate) const SKILL_SANDBOX_HOME: &str = "/home/sandbox";
 pub(crate) const SKILL_SANDBOX_USER: &str = "1000:1000";
-pub(crate) const TIMEOUT_EXIT_CODE: i32 = 124;
+/// path of the command supervisor injected into the warm base via `with_new_file`.
+/// it runs each user command under cpu/memory rlimits and a wall-clock timeout,
+/// caps output, and emits a structured json result (see `ARCHESTRA_RUN_PY`).
+pub(crate) const SUPERVISOR_PATH: &str = "/usr/local/bin/archestra_run";
 pub(crate) const ARTIFACT_TOO_LARGE_EXIT_CODE: isize = 65;
 pub(crate) const ARTIFACT_NOT_FOUND_EXIT_CODE: isize = 66;
 
@@ -264,47 +267,29 @@ pub async fn read_artifact(input: ReadArtifactInput) -> Result<ArtifactBytes> {
 // helpers (used by runtime.rs + tests)
 // ============================================================================
 
-pub(crate) fn wrap_with_timeout(command: &str, timeout_seconds: u32, limits: &Limits) -> String {
-    let memory_kilobytes = u64::from(limits.memory_bytes).div_ceil(1024);
-    let output_head_bytes = (limits.output_bytes_limit as usize) + 1;
-    // cwd is set via `container.with_workdir(cwd)` upstream (no shell `cd` needed).
-    // dropped `ulimit -f` (file size — blocked `uv pip install` with SIGXFSZ on
-    // packages larger than the limit) and `ulimit -u` (max processes — better
-    // handled by the engine pod's cgroup `pids.max`). kept `-t` (CPU) and `-v`
-    // (memory) as light per-command guards on top of pod cgroups.
-    // dropped the user-exit-124 → 222 remap: exit 124 now unambiguously means
-    // `timeout(1)` fired, since nothing else in the wrapper can produce it.
-    format!(
-        "_d=$(mktemp -d) || {{ echo 'mktemp failed' >&2; exit 1; }}; ulimit -t {} 2>/dev/null; ulimit -v {} 2>/dev/null; timeout --signal=KILL {}s bash -c {} >\"$_d/o\" 2>\"$_d/e\"; _x=$?; head -c {} \"$_d/o\"; head -c {} \"$_d/e\" >&2; rm -rf \"$_d\"; exit $_x",
-        limits.cpu_seconds,
-        memory_kilobytes,
-        timeout_seconds,
-        shell_quote(command),
-        output_head_bytes,
-        output_head_bytes,
-    )
-}
-
-pub(crate) struct TruncatedOutput {
-    pub value: String,
-    pub truncated: bool,
-}
-
-pub(crate) fn truncate_output(raw: &str, limit: usize) -> TruncatedOutput {
-    if raw.len() <= limit {
-        return TruncatedOutput {
-            value: raw.to_string(),
-            truncated: false,
-        };
-    }
-    let mut end = limit;
-    while !raw.is_char_boundary(end) {
-        end -= 1;
-    }
-    TruncatedOutput {
-        value: format!("{}\n...[output truncated]", &raw[..end]),
-        truncated: true,
-    }
+/// build the argv that runs `command` under the in-container supervisor
+/// (`SUPERVISOR_PATH`). the supervisor sets cpu/memory rlimits, enforces the
+/// wall-clock timeout by SIGKILLing the whole process group, caps each output
+/// stream at `output_bytes_limit` bytes, and prints a json result on stdout.
+/// the command itself is handed to `bash -c` so shell syntax still works; cwd
+/// is applied separately via `Container::with_workdir`.
+pub(crate) fn supervised_argv(command: &str, timeout_seconds: u32, limits: &Limits) -> Vec<String> {
+    vec![
+        "python3".to_string(),
+        SUPERVISOR_PATH.to_string(),
+        "--timeout".to_string(),
+        timeout_seconds.to_string(),
+        "--cpu".to_string(),
+        limits.cpu_seconds.to_string(),
+        "--mem".to_string(),
+        limits.memory_bytes.to_string(),
+        "--out-cap".to_string(),
+        limits.output_bytes_limit.to_string(),
+        "--".to_string(),
+        "bash".to_string(),
+        "-c".to_string(),
+        command.to_string(),
+    ]
 }
 
 pub(crate) fn validate_snapshot_file_path(path: &str) -> Result<()> {
@@ -437,8 +422,8 @@ mod tests {
     }
 
     #[test]
-    fn wrap_uses_timeout_and_preserves_exit_code() {
-        let wrapped = wrap_with_timeout(
+    fn supervised_argv_builds_supervisor_invocation() {
+        let argv = supervised_argv(
             "python --version",
             30,
             &Limits {
@@ -449,16 +434,19 @@ mod tests {
                 max_processes: 256,
             },
         );
-        assert!(wrapped.contains("timeout --signal=KILL 30s"));
-        assert!(wrapped.contains("python --version"));
-        assert!(wrapped.contains("head -c 1025"));
-        assert!(wrapped.contains("exit $_x"));
-        // wrap no longer cd's (workdir is set via Container.with_workdir),
-        // no longer sets ulimit -f / -u, and no longer remaps exit 124.
-        assert!(!wrapped.contains("cd '"));
-        assert!(!wrapped.contains("ulimit -f"));
-        assert!(!wrapped.contains("ulimit -u"));
-        assert!(!wrapped.contains("if [ $_i -eq 124 ]"));
+        assert_eq!(argv[0], "python3");
+        assert_eq!(argv[1], SUPERVISOR_PATH);
+        // limits are passed as explicit flags, not baked into a shell string.
+        assert!(argv.contains(&"--timeout".to_string()));
+        assert!(argv.contains(&"30".to_string()));
+        assert!(argv.contains(&"--out-cap".to_string()));
+        assert!(argv.contains(&"1024".to_string()));
+        // the command is handed verbatim to `bash -c` after the `--` separator.
+        let sep = argv
+            .iter()
+            .position(|a| a == "--")
+            .expect("missing separator");
+        assert_eq!(&argv[sep + 1..], ["bash", "-c", "python --version"]);
     }
 
     #[test]
@@ -473,14 +461,6 @@ mod tests {
         // a plain transport error stays as EngineUnreachable
         let err = SandboxError::from_sdk("connection refused");
         assert!(matches!(err, SandboxError::EngineUnreachable(_)));
-    }
-
-    #[test]
-    fn truncate_marks_oversized_output() {
-        let result = truncate_output("0123456789", 5);
-        assert!(result.truncated);
-        assert!(result.value.starts_with("01234"));
-        assert!(result.value.contains("output truncated"));
     }
 
     #[test]

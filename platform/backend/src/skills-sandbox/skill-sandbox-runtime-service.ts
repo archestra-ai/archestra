@@ -33,7 +33,7 @@ const CONSUMER_ID = "skill-sandbox";
 // exit status was lost. distinct from any value the wrapped bash subprocess
 // can produce (which is bounded to 0..255).
 const SYNTHETIC_ENGINE_FAILURE_EXIT_CODE = -1;
-// must match `DEFAULT_VENV_PYTHON` in sandbox-core/src/session.rs; we don't
+// must match `DEFAULT_VENV_PYTHON` in archestra-rs/sandbox-core/src/session.rs; we don't
 // re-export it from the napi crate to avoid coupling the TS adapter to Rust
 // build state.
 const VENV_PYTHON = "/home/sandbox/.venv/bin/python";
@@ -171,8 +171,8 @@ class SkillSandboxRuntimeService {
           path: resolvedPath,
           defaultCwd: sandbox.defaultCwd,
           pythonpath,
-          // must match runCommand's limit: wrap_with_timeout bakes
-          // `head -c <outputBytesLimit+1>` into the replay bash, so a mismatch
+          // must match runCommand's limit: the command supervisor takes
+          // `--out-cap <outputBytesLimit>` in each replayed exec, so a mismatch
           // here invalidates Dagger's per-replay layer cache.
           outputBytesLimit: config.skillsSandbox.outputBytesLimit,
           fileSizeLimitBytes: config.skillsSandbox.artifactBytesLimit,
@@ -466,7 +466,9 @@ function autoInstallCommands(
   if (namesWithReqs.size === 0) return [];
   return orderPrimaryFirst(namesWithReqs, primary).map(
     (name): ReplayCommand => {
-      const reqPath = `${skillRootPath(name)}/${REQUIREMENTS_FILE}`;
+      // shell-quote the path: skill names become path segments and may contain
+      // spaces, which would otherwise word-split the `-r` argument.
+      const reqPath = shellQuote(`${skillRootPath(name)}/${REQUIREMENTS_FILE}`);
       return {
         command: `uv pip install --python ${VENV_PYTHON} --quiet -r ${reqPath}`,
         cwd: SKILL_SANDBOX_HOME,
@@ -474,6 +476,10 @@ function autoInstallCommands(
       };
     },
   );
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
 /**

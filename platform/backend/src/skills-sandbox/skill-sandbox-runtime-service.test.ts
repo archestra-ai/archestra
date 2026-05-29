@@ -219,11 +219,22 @@ describe("__internals", () => {
     ];
     const installs = __internals.autoInstallCommands(sandbox, snapshots);
     expect(installs.map((c) => c.command)).toEqual([
-      "uv pip install --python /home/sandbox/.venv/bin/python --quiet -r /skills/skill-b/requirements.txt",
-      "uv pip install --python /home/sandbox/.venv/bin/python --quiet -r /skills/skill-a/requirements.txt",
+      "uv pip install --python /home/sandbox/.venv/bin/python --quiet -r '/skills/skill-b/requirements.txt'",
+      "uv pip install --python /home/sandbox/.venv/bin/python --quiet -r '/skills/skill-a/requirements.txt'",
     ]);
     expect(installs.every((c) => c.cwd === "/home/sandbox")).toBe(true);
     expect(installs.every((c) => c.timeoutSeconds === 180)).toBe(true);
+  });
+
+  test("autoInstallCommands shell-quotes skill names containing spaces", () => {
+    const sandbox = makeFakeSandbox({ primarySkillId: "skill-a-id" });
+    const snapshots = [
+      makeSnapshotRow("skill-a-id", "My Skill", "requirements.txt"),
+    ];
+    const installs = __internals.autoInstallCommands(sandbox, snapshots);
+    expect(installs.map((c) => c.command)).toEqual([
+      "uv pip install --python /home/sandbox/.venv/bin/python --quiet -r '/skills/My Skill/requirements.txt'",
+    ]);
   });
 
   test("autoInstallCommands returns [] when no skill ships requirements.txt", () => {

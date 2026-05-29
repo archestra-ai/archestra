@@ -117,7 +117,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json .npmrc ./
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
 COPY shared/package.json shared/
-COPY sandbox-rs/package.json sandbox-rs/
+COPY archestra-rs/sandbox-rs/package.json archestra-rs/sandbox-rs/
 COPY patches/ patches/
 
 # Install all dependencies
@@ -150,16 +150,16 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/backend/node_modules ./backend/node_modules
 COPY --from=deps /app/frontend/node_modules ./frontend/node_modules
 COPY --from=deps /app/shared/node_modules ./shared/node_modules
-COPY --from=deps /app/sandbox-rs/node_modules ./sandbox-rs/node_modules
+COPY --from=deps /app/archestra-rs/sandbox-rs/node_modules ./archestra-rs/sandbox-rs/node_modules
 
 # Copy source files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY backend ./backend
 COPY frontend ./frontend
 COPY shared ./shared
-COPY Cargo.toml Cargo.lock ./
-COPY sandbox-core ./sandbox-core
-COPY sandbox-rs ./sandbox-rs
+COPY archestra-rs/Cargo.toml archestra-rs/Cargo.lock ./archestra-rs/
+COPY archestra-rs/sandbox-core ./archestra-rs/sandbox-core
+COPY archestra-rs/sandbox-rs ./archestra-rs/sandbox-rs
 
 # Build the Rust N-API skill sandbox addon during the JS workspace build.
 RUN apk add --no-cache build-base cargo rust
@@ -267,7 +267,7 @@ RUN chmod +x /usr/local/bin/kind /usr/local/bin/docker /usr/local/bin/kubectl
 # install the Dagger CLI. The Rust dagger-sdk used by the N-API sandbox addon needs it to open a session
 # to the Dagger Engine; its npm postinstall download is blocked by
 # ignore-scripts, so the binary is pinned and built from source above.
-# keep DAGGER_VERSION in sync with dagger-sdk in sandbox-core/Cargo.toml.
+# keep DAGGER_VERSION in sync with dagger-sdk in archestra-rs/sandbox-core/Cargo.toml.
 COPY --from=go-builder /dagger-binary /usr/local/bin/dagger
 RUN chmod +x /usr/local/bin/dagger
 # point the SDK at the baked-in CLI so it never downloads one at runtime.
@@ -292,7 +292,7 @@ VOLUME /var/lib/postgresql/data /app/data
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
-COPY sandbox-rs/package.json sandbox-rs/
+COPY archestra-rs/sandbox-rs/package.json archestra-rs/sandbox-rs/
 COPY patches/ patches/
 COPY docker/scripts/docker-banner.sh /app/docker-banner.sh
 COPY docker/scripts/docker-entrypoint.sh /docker-entrypoint.sh
@@ -319,9 +319,9 @@ COPY --from=builder /app/backend/dist ./backend/dist
 COPY --from=builder /app/backend/scripts ./backend/scripts
 COPY --from=builder /app/backend/drizzle.config.ts ./backend/
 COPY --from=builder /app/backend/src/database/migrations ./backend/src/database/migrations
-COPY --from=builder /app/sandbox-rs/index.cjs ./sandbox-rs/
-COPY --from=builder /app/sandbox-rs/index.d.ts ./sandbox-rs/
-COPY --from=builder /app/sandbox-rs/*.node ./sandbox-rs/
+COPY --from=builder /app/archestra-rs/sandbox-rs/index.cjs ./archestra-rs/sandbox-rs/
+COPY --from=builder /app/archestra-rs/sandbox-rs/index.d.ts ./archestra-rs/sandbox-rs/
+COPY --from=builder /app/archestra-rs/sandbox-rs/*.node ./archestra-rs/sandbox-rs/
 RUN chmod +x /app/backend/scripts/start-production.sh
 
 # Copy built frontend

@@ -2,18 +2,31 @@ import { trace } from "@opentelemetry/api";
 import { TOOL_RUN_PYTHON_SHORT_NAME } from "@shared";
 import { z } from "zod";
 import { codeRuntimeService } from "@/code-runtime/code-runtime-service";
-import { CODE_RUNTIME_LIMITS, CodeRuntimeError, type RunCodeResult } from "@/code-runtime/types";
+import {
+  CODE_RUNTIME_LIMITS,
+  CodeRuntimeError,
+  type RunCodeResult,
+} from "@/code-runtime/types";
 import config from "@/config";
 import logger from "@/logging";
-import { defineArchestraTool, defineArchestraTools, errorResult, structuredSuccessResult } from "./helpers";
+import {
+  defineArchestraTool,
+  defineArchestraTools,
+  errorResult,
+  structuredSuccessResult,
+} from "./helpers";
 
 const RunPythonArgsSchema = z.strictObject({
   code: z
     .string()
     .min(1)
-    .refine((code) => Buffer.byteLength(code, "utf8") <= CODE_RUNTIME_LIMITS.maxCodeBytes, {
-      message: `Code must be at most ${CODE_RUNTIME_LIMITS.maxCodeBytes} bytes.`,
-    })
+    .refine(
+      (code) =>
+        Buffer.byteLength(code, "utf8") <= CODE_RUNTIME_LIMITS.maxCodeBytes,
+      {
+        message: `Code must be at most ${CODE_RUNTIME_LIMITS.maxCodeBytes} bytes.`,
+      },
+    )
     .describe("Complete Python 3 source to execute."),
   requirements: z
     .array(
@@ -21,9 +34,14 @@ const RunPythonArgsSchema = z.strictObject({
         .string()
         .trim()
         .min(1)
-        .refine((requirement) => Buffer.byteLength(requirement, "utf8") <= CODE_RUNTIME_LIMITS.maxRequirementBytes, {
-          message: `Each requirement must be at most ${CODE_RUNTIME_LIMITS.maxRequirementBytes} bytes.`,
-        })
+        .refine(
+          (requirement) =>
+            Buffer.byteLength(requirement, "utf8") <=
+            CODE_RUNTIME_LIMITS.maxRequirementBytes,
+          {
+            message: `Each requirement must be at most ${CODE_RUNTIME_LIMITS.maxRequirementBytes} bytes.`,
+          },
+        )
         .refine((requirement) => !/[\r\n\0]/.test(requirement), {
           message: "Each requirement must be a single line.",
         }),

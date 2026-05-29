@@ -2,31 +2,18 @@ import { trace } from "@opentelemetry/api";
 import { TOOL_RUN_PYTHON_SHORT_NAME } from "@shared";
 import { z } from "zod";
 import { codeRuntimeService } from "@/code-runtime/code-runtime-service";
-import {
-  CODE_RUNTIME_LIMITS,
-  CodeRuntimeError,
-  type RunCodeResult,
-} from "@/code-runtime/types";
+import { CODE_RUNTIME_LIMITS, CodeRuntimeError, type RunCodeResult } from "@/code-runtime/types";
 import config from "@/config";
 import logger from "@/logging";
-import {
-  defineArchestraTool,
-  defineArchestraTools,
-  errorResult,
-  structuredSuccessResult,
-} from "./helpers";
+import { defineArchestraTool, defineArchestraTools, errorResult, structuredSuccessResult } from "./helpers";
 
 const RunPythonArgsSchema = z.strictObject({
   code: z
     .string()
     .min(1)
-    .refine(
-      (code) =>
-        Buffer.byteLength(code, "utf8") <= CODE_RUNTIME_LIMITS.maxCodeBytes,
-      {
-        message: `Code must be at most ${CODE_RUNTIME_LIMITS.maxCodeBytes} bytes.`,
-      },
-    )
+    .refine((code) => Buffer.byteLength(code, "utf8") <= CODE_RUNTIME_LIMITS.maxCodeBytes, {
+      message: `Code must be at most ${CODE_RUNTIME_LIMITS.maxCodeBytes} bytes.`,
+    })
     .describe("Complete Python 3 source to execute."),
   requirements: z
     .array(
@@ -34,14 +21,9 @@ const RunPythonArgsSchema = z.strictObject({
         .string()
         .trim()
         .min(1)
-        .refine(
-          (requirement) =>
-            Buffer.byteLength(requirement, "utf8") <=
-            CODE_RUNTIME_LIMITS.maxRequirementBytes,
-          {
-            message: `Each requirement must be at most ${CODE_RUNTIME_LIMITS.maxRequirementBytes} bytes.`,
-          },
-        )
+        .refine((requirement) => Buffer.byteLength(requirement, "utf8") <= CODE_RUNTIME_LIMITS.maxRequirementBytes, {
+          message: `Each requirement must be at most ${CODE_RUNTIME_LIMITS.maxRequirementBytes} bytes.`,
+        })
         .refine((requirement) => !/[\r\n\0]/.test(requirement), {
           message: "Each requirement must be a single line.",
         }),
@@ -75,7 +57,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_RUN_PYTHON_SHORT_NAME,
     title: "Run Python",
     description:
-      "Execute a short Python 3 script in a throwaway sandboxed container and return its stdout, stderr, and exit code. Every call starts from a clean, ephemeral container — there is NO persistent filesystem, NO state from earlier calls, and NO inherited packages beyond the pre-warmed base (numpy, pandas, httpx). Any other dependency (Pillow, requests, scikit-learn, etc.) MUST be declared via `requirements`, or the import will fail. Network access is available; wall-clock time is limited.",
+      "Execute a short Python 3 script in a throwaway sandboxed container and return its stdout, stderr, and exit code. Every call starts from a clean, ephemeral container — there is NO persistent filesystem, NO state from earlier calls, and NO inherited packages beyond the pre-warmed base (numpy, pandas, httpx). Any other dependency (Pillow, requests, scikit-learn, etc.) MUST be declared via `requirements`, or the import will fail. Network access is available; wall-clock time is limited. Use only when the text output of the script is needed.",
     schema: RunPythonArgsSchema,
     outputSchema: RunPythonOutputSchema,
     async handler({ args, context }) {

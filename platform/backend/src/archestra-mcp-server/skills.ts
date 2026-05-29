@@ -418,22 +418,29 @@ async function findAccessibleSkill(ctx: SkillReadContext, name: string) {
   if (accessible.length === 0) return null;
 
   accessible.sort(
-    (a, b) => scopePrecedence(a.scope) - scopePrecedence(b.scope),
+    (a, b) => scopePrecedence(a, ctx.userId) - scopePrecedence(b, ctx.userId),
   );
   return accessible[0];
 }
 
-/** Lower wins: a caller's own personal skill shadows a shared one of the same name. */
-function scopePrecedence(scope: Skill["scope"]): number {
-  switch (scope) {
+/**
+ * Lower wins: a caller's *own* personal skill shadows a shared one of the same
+ * name. A personal skill authored by someone else (visible only because the
+ * caller is a skill-admin) must never shadow a shared skill, so it ranks last.
+ */
+function scopePrecedence(
+  skill: Pick<Skill, "scope" | "authorId">,
+  userId: string | undefined,
+): number {
+  switch (skill.scope) {
     case "personal":
-      return 0;
+      return skill.authorId === userId ? 0 : 3;
     case "team":
       return 1;
     case "org":
       return 2;
     default:
-      return 3;
+      return 4;
   }
 }
 

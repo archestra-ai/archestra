@@ -551,6 +551,40 @@ describe("skill tool execution", () => {
     expect(textOf(result)).not.toContain("# Other personal");
   });
 
+  test("activate_skill does not let an admin's broad access shadow a shared skill with another user's personal one", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const author = await makeUser();
+    await makeMember(author.id, organizationId, { role: MEMBER_ROLE_NAME });
+    const admin = await makeUser();
+    await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
+
+    // an admin can access every candidate, so a foreign personal "dup" survives
+    // the access filter — it must still not outrank the shared org skill.
+    await seedSkill({
+      skill: {
+        name: "dup",
+        scope: "personal",
+        authorId: author.id,
+        content: "# Other personal",
+      },
+    });
+    await seedSkill({
+      skill: { name: "dup", scope: "org", content: "# Org body" },
+    });
+
+    const result = await executeArchestraTool(
+      TOOL_ACTIVATE_SKILL_FULL_NAME,
+      { name: "dup" },
+      { ...context, userId: admin.id },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(textOf(result)).toContain("# Org body");
+    expect(textOf(result)).not.toContain("# Other personal");
+  });
+
   test("update_skill surfaces a friendly error when renaming onto an existing name", async ({
     makeUser,
     makeMember,

@@ -31,6 +31,7 @@ import {
   escapeXmlAttr,
   escapeXmlText,
   formatSkillActivation,
+  skillSandboxAvailable,
 } from "@/skills/skill-activation";
 import { ApiError, type Skill, SkillFileEncodingSchema } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
@@ -201,7 +202,13 @@ const registry = defineArchestraTools([
         "[Skills] Skill activated",
       );
 
-      return successResult(formatSkillActivation({ skill, files }));
+      return successResult(
+        formatSkillActivation({
+          skill,
+          files,
+          canRunSandbox: await canRunSkillSandbox(ctx),
+        }),
+      );
     },
   }),
   defineArchestraTool({
@@ -396,6 +403,17 @@ function requireOrgContext(context: ArchestraContext): SkillReadContext | null {
  * the skill's scope. Returns null otherwise — callers surface a generic
  * "no skill named …" so an inaccessible skill's existence is not leaked.
  */
+/** `skillSandboxAvailable` for callers that only hold a read context. */
+async function canRunSkillSandbox(ctx: SkillReadContext): Promise<boolean> {
+  if (ctx.userId === undefined) return false;
+  return skillSandboxAvailable(
+    await getSkillPermissionChecker({
+      userId: ctx.userId,
+      organizationId: ctx.organizationId,
+    }),
+  );
+}
+
 async function findAccessibleSkill(ctx: SkillReadContext, name: string) {
   const skill = await SkillModel.findByName(ctx.organizationId, name);
   if (!skill) return null;
@@ -469,14 +487,14 @@ function toSkillFiles(
 }
 
 async function listSkillCatalog(ctx: SkillReadContext) {
-  const isSkillAdmin =
-    ctx.userId !== undefined &&
-    (
-      await getSkillPermissionChecker({
-        userId: ctx.userId,
-        organizationId: ctx.organizationId,
-      })
-    ).isAdmin;
+  const checker =
+    ctx.userId !== undefined
+      ? await getSkillPermissionChecker({
+          userId: ctx.userId,
+          organizationId: ctx.organizationId,
+        })
+      : null;
+  const isSkillAdmin = checker?.isAdmin ?? false;
   const accessibleSkillIds = isSkillAdmin
     ? undefined
     : await SkillTeamModel.getUserAccessibleSkillIds({
@@ -503,9 +521,16 @@ async function listSkillCatalog(ctx: SkillReadContext) {
     )
     .join("\n");
 
+  // only advertise the sandbox path when it would actually work: the feature
+  // is enabled on this deployment and the caller can execute skills.
+  const instructions = skillSandboxAvailable(checker)
+    ? "Call activate_skill with one of these names to load its instructions. " +
+      "To run a skill's scripts or shell commands, create_skill_sandbox with " +
+      "the skill name, then run_skill_command."
+    : "Call activate_skill with one of these names to load its instructions.";
+
   return successResult(
-    `<available_skills>\n${catalog}\n</available_skills>\n` +
-      "Call activate_skill with one of these names to load its instructions.",
+    `<available_skills>\n${catalog}\n</available_skills>\n${instructions}`,
   );
 }
 

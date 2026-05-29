@@ -1,4 +1,18 @@
+import type { SkillPermissionChecker } from "@/auth/skill-permissions";
+import config from "@/config";
 import type { Skill, SkillFile } from "@/types";
+
+/**
+ * Whether the caller can actually use the skill sandbox tools: the feature is
+ * enabled on this deployment and the caller holds `skill:execute`. Gates the
+ * sandbox hint in activation/catalog output so the model is never pointed at
+ * tools that would just refuse. Fail-closed for org-token sessions (no checker).
+ */
+export function skillSandboxAvailable(
+  checker: SkillPermissionChecker | null,
+): boolean {
+  return config.skillsSandbox.enabled && (checker?.canExecute ?? false);
+}
 
 /**
  * Render a skill's SKILL.md body, compatibility note, and resource listing into
@@ -14,20 +28,31 @@ import type { Skill, SkillFile } from "@/types";
 export function formatSkillActivation({
   skill,
   files,
+  canRunSandbox,
 }: {
   skill: Pick<Skill, "name" | "content" | "compatibility">;
   files: Pick<SkillFile, "path" | "kind">[];
+  /**
+   * Whether the sandbox tools are usable for this caller (feature enabled +
+   * `skill:execute`). When false, omit the sandbox hint so we never point the
+   * model at tools that would just refuse.
+   */
+  canRunSandbox: boolean;
 }): string {
+  const sandboxHint = canRunSandbox
+    ? " To execute a script or shell command from this skill, call " +
+      "create_skill_sandbox with this skill's name, then run_skill_command — " +
+      "commands run from the skill root so relative paths from the spec " +
+      "resolve correctly. Use get_skill_sandbox_artifact to retrieve " +
+      "generated files."
+    : "";
   const resources =
     files.length > 0
       ? `\n<skill_resources>\n${files
           .map((file) => `${escapeXmlText(file.path)} (${file.kind})`)
           .join("\n")}\n</skill_resources>\n` +
-        "Inspect any resource with read_skill_file. To execute a script or " +
-        "shell command from this skill, call create_skill_sandbox with this " +
-        "skill's name, then run_skill_command — commands run from the skill " +
-        "root so relative paths from the spec resolve correctly. Use " +
-        "get_skill_sandbox_artifact to retrieve generated files."
+        "Inspect any resource with read_skill_file." +
+        sandboxHint
       : "";
 
   const compatibility = skill.compatibility

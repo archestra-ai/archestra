@@ -6,6 +6,7 @@ describe("formatSkillActivation", () => {
     const result = formatSkillActivation({
       skill: { name: "Research", content: "Do research.", compatibility: null },
       files: [],
+      canRunSandbox: true,
     });
 
     expect(result).toBe(
@@ -20,6 +21,7 @@ describe("formatSkillActivation", () => {
         { path: "references/REF.md", kind: "reference" },
         { path: "scripts/run.py", kind: "script" },
       ],
+      canRunSandbox: true,
     });
 
     expect(result).toContain(
@@ -33,6 +35,7 @@ describe("formatSkillActivation", () => {
     const result = formatSkillActivation({
       skill: { name: "Research", content: "Body", compatibility: null },
       files: [{ path: "scripts/run.py", kind: "script" }],
+      canRunSandbox: true,
     });
 
     expect(result).toContain("read_skill_file");
@@ -42,10 +45,24 @@ describe("formatSkillActivation", () => {
     expect(result).not.toMatch(/not executed/i);
   });
 
+  test("mentions read_skill_file but omits sandbox tools when unavailable", () => {
+    const result = formatSkillActivation({
+      skill: { name: "Research", content: "Body", compatibility: null },
+      files: [{ path: "scripts/run.py", kind: "script" }],
+      canRunSandbox: false,
+    });
+
+    expect(result).toContain("read_skill_file");
+    expect(result).not.toContain("create_skill_sandbox");
+    expect(result).not.toContain("run_skill_command");
+    expect(result).not.toContain("get_skill_sandbox_artifact");
+  });
+
   test("omits sandbox guidance when the skill has no resource files", () => {
     const result = formatSkillActivation({
       skill: { name: "Research", content: "Body", compatibility: null },
       files: [],
+      canRunSandbox: true,
     });
 
     expect(result).not.toContain("read_skill_file");
@@ -56,6 +73,7 @@ describe("formatSkillActivation", () => {
     const result = formatSkillActivation({
       skill: { name: "A & B <c>", content: "x", compatibility: null },
       files: [{ path: "refs/<a>.md", kind: "reference" }],
+      canRunSandbox: true,
     });
 
     expect(result).toContain('name="A &amp; B &lt;c&gt;"');

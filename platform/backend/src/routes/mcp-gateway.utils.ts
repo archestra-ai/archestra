@@ -1087,8 +1087,9 @@ export async function validateExternalIdpToken(
     });
 
     if (!result) {
-      // TEMPORARY [idp-diag] — verify failed; the reason (expired / no-key /
-      // signature / issuer / audience) is on the "[idp-diag] jwks" line.
+      // TEMPORARY [idp-diag] — verify failed; the reason (no-matching-key /
+      // issuer / audience at warn; expired / signature at debug) is on the
+      // "JWKS JWT validation failed" line.
       logger.info(
         { profileId, issuer: idpProvider.issuer, jwksUrl },
         "[idp-diag] null: jwksValidator.validateJwt returned null",

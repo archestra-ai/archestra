@@ -255,7 +255,8 @@ jobs:
           # full backend log for the marker to pin the flaky JWKS gateway e2e.
           echo "=== [idp-diag] external IdP validation branch ==="
           kubectl logs -l app.kubernetes.io/name=archestra-platform \
-            -c archestra-platform 2>/dev/null | grep -i '\[idp-diag\]' \
+            -c archestra-platform 2>/dev/null \
+            | grep -iE '\[idp-diag\]|JWKS JWT validation failed' \
             || echo "(no [idp-diag] line found)"
 
           echo "=== Platform Init Container: vault-secrets ==="
@@ -399,7 +400,8 @@ jobs:
           # full backend log for the marker to pin the flaky JWKS gateway e2e.
           echo "=== [idp-diag] external IdP validation branch ==="
           kubectl logs -l app.kubernetes.io/name=archestra-platform \
-            -c archestra-platform 2>/dev/null | grep -i '\[idp-diag\]' \
+            -c archestra-platform 2>/dev/null \
+            | grep -iE '\[idp-diag\]|JWKS JWT validation failed' \
             || echo "(no [idp-diag] line found)"
 
           echo "=== Platform Init Container: vault-secrets ==="

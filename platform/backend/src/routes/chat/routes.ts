@@ -496,21 +496,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               // assistant messages instead of rendering duplicate ones.
               originalMessages: messages as UIMessage[],
               onError: (error) => {
-                const unavailableToolError =
-                  getUnavailableToolErrorDetails(error);
-                if (unavailableToolError) {
-                  logger.info(
-                    {
-                      conversationId,
-                      unavailableToolError,
-                    },
-                    "Returning unavailable tool error without chat error mapping before stream starts",
-                  );
-                  return formatUnavailableToolErrorDetails(
-                    unavailableToolError,
-                  );
-                }
-
+                // unlike the tool-level stream handler, a NoSuchToolError here
+                // is not a recoverable tool result: it must mark the run failed
+                // and persist, so it falls through to the normal error path.
                 activeRunError =
                   error instanceof Error ? error.message : String(error);
                 // Persist messages on stream-level errors (e.g. errors thrown

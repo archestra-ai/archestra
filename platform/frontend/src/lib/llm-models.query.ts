@@ -1,6 +1,8 @@
 import {
   archestraApiSdk,
   type archestraApiTypes,
+  LAZY_MODEL_SYNC_STATUS_HEADER,
+  LAZY_MODEL_SYNC_STATUS_PENDING,
   type SupportedProvider,
 } from "@shared";
 import {
@@ -21,13 +23,15 @@ type LlmModelsParams = Partial<LlmModelsQuery> & {
   enabled?: boolean;
 };
 
-const LAZY_MODEL_SYNC_STATUS_HEADER = "x-archestra-lazy-model-sync";
-const LAZY_MODEL_SYNC_STATUS_PENDING = "pending";
-const LAZY_MODEL_SYNC_REFETCH_DELAY_MS = 1500;
-const lazyModelSyncRefetchTimers = new Map<
-  string,
-  ReturnType<typeof setTimeout>
->();
+export const LAZY_MODEL_SYNC_REFETCH_DELAY_MS = 1500;
+/** Stop polling after this many refetches so a never-resolving sync can't loop forever. */
+const LAZY_MODEL_SYNC_MAX_REFETCHES = 5;
+
+interface LazyModelSyncRefetchState {
+  attempts: number;
+  timer: ReturnType<typeof setTimeout> | null;
+}
+const lazyModelSyncRefetchState = new Map<string, LazyModelSyncRefetchState>();
 
 export type LlmModel = archestraApiTypes.GetLlmModelsResponses["200"][number];
 export type ModelCapabilities = NonNullable<LlmModel["capabilities"]>;
@@ -191,21 +195,36 @@ function scheduleRefetchAfterLazyModelSync(params: {
   response?: Response;
 }) {
   const { queryClient, queryKey, response } = params;
-  if (
-    response?.headers.get(LAZY_MODEL_SYNC_STATUS_HEADER) !==
-    LAZY_MODEL_SYNC_STATUS_PENDING
-  ) {
+  const timerKey = JSON.stringify(queryKey);
+  const state = lazyModelSyncRefetchState.get(timerKey);
+
+  const pending =
+    response?.headers.get(LAZY_MODEL_SYNC_STATUS_HEADER) ===
+    LAZY_MODEL_SYNC_STATUS_PENDING;
+  if (!pending) {
+    // sync settled (models arrived or the server stopped retrying): drop the loop.
+    if (state?.timer) {
+      clearTimeout(state.timer);
+    }
+    lazyModelSyncRefetchState.delete(timerKey);
     return;
   }
 
-  const timerKey = JSON.stringify(queryKey);
-  if (lazyModelSyncRefetchTimers.has(timerKey)) {
-    return;
+  if (state?.timer) {
+    return; // a refetch is already armed for this key
+  }
+
+  const attempts = state?.attempts ?? 0;
+  if (attempts >= LAZY_MODEL_SYNC_MAX_REFETCHES) {
+    return; // give up; a later natural query will pick up the synced models
   }
 
   const timer = setTimeout(() => {
-    lazyModelSyncRefetchTimers.delete(timerKey);
+    lazyModelSyncRefetchState.set(timerKey, {
+      attempts: attempts + 1,
+      timer: null,
+    });
     void queryClient.invalidateQueries({ queryKey });
   }, LAZY_MODEL_SYNC_REFETCH_DELAY_MS);
-  lazyModelSyncRefetchTimers.set(timerKey, timer);
+  lazyModelSyncRefetchState.set(timerKey, { attempts, timer });
 }

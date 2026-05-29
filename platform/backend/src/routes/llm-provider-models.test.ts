@@ -412,6 +412,82 @@ describe("chat model routes", () => {
     ).toBe(false);
   });
 
+  test("isModelSyncStateStale treats the exact TTL boundary as stale", () => {
+    const now = new Date("2026-05-28T12:00:00.000Z");
+    expect(
+      isModelSyncStateStale({
+        provider: "openrouter",
+        now,
+        syncState: {
+          linkedModelCount: 1,
+          oldestLastSyncedAt: new Date(now.getTime() - TimeInMs.Hour),
+        },
+      }),
+    ).toBe(true);
+  });
+
+  test("isModelSyncStateStale handles missing and zero-model sync states", () => {
+    const now = new Date("2026-05-28T12:00:00.000Z");
+
+    // null oldest timestamp with a positive count is still unusable -> stale
+    expect(
+      isModelSyncStateStale({
+        provider: "openai",
+        now,
+        syncState: { linkedModelCount: 1, oldestLastSyncedAt: null },
+      }),
+    ).toBe(true);
+
+    // zero linked models with a present sync state -> stale
+    expect(
+      isModelSyncStateStale({
+        provider: "openai",
+        now,
+        syncState: {
+          linkedModelCount: 0,
+          oldestLastSyncedAt: new Date(now.getTime() - TimeInMs.Minute),
+        },
+      }),
+    ).toBe(true);
+  });
+
+  test("isModelSyncStateStale spares zero-model keys synced recently", () => {
+    const now = new Date("2026-05-28T12:00:00.000Z");
+
+    // a key that legitimately resolves zero models must not be re-synced on
+    // every request once an attempt has been recorded within the TTL window
+    expect(
+      isModelSyncStateStale({
+        provider: "openrouter",
+        now,
+        syncState: { linkedModelCount: 0, oldestLastSyncedAt: null },
+        recentlyAttempted: true,
+      }),
+    ).toBe(false);
+
+    expect(
+      isModelSyncStateStale({
+        provider: "openrouter",
+        now,
+        syncState: { linkedModelCount: 0, oldestLastSyncedAt: null },
+        recentlyAttempted: false,
+      }),
+    ).toBe(true);
+
+    // recentlyAttempted never rescues a key whose linked models have aged out
+    expect(
+      isModelSyncStateStale({
+        provider: "openrouter",
+        now,
+        syncState: {
+          linkedModelCount: 1,
+          oldestLastSyncedAt: new Date(now.getTime() - 2 * TimeInMs.Hour),
+        },
+        recentlyAttempted: true,
+      }),
+    ).toBe(true);
+  });
+
   test("getStaleModelSyncApiKeys treats unlinked and old OpenRouter keys as stale", async ({
     makeSecret,
     makeLlmProviderApiKey,

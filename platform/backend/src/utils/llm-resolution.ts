@@ -1,6 +1,7 @@
 import {
   DEFAULT_MODELS,
   FAST_MODELS,
+  isCompleteModelSelection,
   type ModelSelection,
   OPENROUTER_FREE_MODEL_ID,
   resolveModelSelection,
@@ -16,6 +17,7 @@ import {
   MemberModel,
   ModelModel,
   OrganizationModel,
+  selectionKey,
   TeamModel,
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
@@ -310,22 +312,18 @@ async function getAvailableRankedModels(params: {
 async function filterLinkedModelSelectionLevels(
   levels: ModelSelection[],
 ): Promise<ModelSelection[]> {
-  const completeLevels = levels.filter(
-    (level): level is { modelId: string; apiKeyId: string } =>
-      Boolean(level.modelId && level.apiKeyId),
-  );
+  const completeLevels = levels.filter(isCompleteModelSelection);
   const linkedSelectionKeys =
     await LlmProviderApiKeyModelLinkModel.getLinkedModelSelectionKeys(
       completeLevels,
     );
 
   return levels.map((level) => {
-    if (!level.modelId || !level.apiKeyId) {
+    if (!isCompleteModelSelection(level)) {
       return level;
     }
 
-    const key = `${level.apiKeyId}:${level.modelId}`;
-    if (linkedSelectionKeys.has(key)) {
+    if (linkedSelectionKeys.has(selectionKey(level))) {
       return level;
     }
 

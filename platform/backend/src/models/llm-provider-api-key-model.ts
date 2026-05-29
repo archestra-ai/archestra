@@ -1,7 +1,18 @@
-import { MODEL_MARKER_PATTERNS, type SupportedProvider } from "@shared";
+import {
+  type CompleteModelSelection,
+  MODEL_MARKER_PATTERNS,
+  type SupportedProvider,
+} from "@shared";
 import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { LlmProviderApiKey, Model } from "@/types";
+
+/** Aggregate of an API key's linked-model count and oldest sync timestamp. */
+export interface ModelSyncState {
+  apiKeyId: string;
+  linkedModelCount: number;
+  oldestLastSyncedAt: Date | null;
+}
 
 /**
  * Model class for the api_key_models join table.
@@ -302,16 +313,9 @@ class LlmProviderApiKeyModelLinkModel {
     return result?.count ?? 0;
   }
 
-  static async getModelSyncStatesForApiKeys(apiKeyIds: string[]): Promise<
-    Map<
-      string,
-      {
-        apiKeyId: string;
-        linkedModelCount: number;
-        oldestLastSyncedAt: Date | null;
-      }
-    >
-  > {
+  static async getModelSyncStatesForApiKeys(
+    apiKeyIds: string[],
+  ): Promise<Map<string, ModelSyncState>> {
     if (apiKeyIds.length === 0) {
       return new Map();
     }
@@ -345,7 +349,7 @@ class LlmProviderApiKeyModelLinkModel {
   }
 
   static async getLinkedModelSelectionKeys(
-    selections: Array<{ modelId: string; apiKeyId: string }>,
+    selections: CompleteModelSelection[],
   ): Promise<Set<string>> {
     if (selections.length === 0) {
       return new Set();
@@ -605,10 +609,7 @@ export default LlmProviderApiKeyModelLinkModel;
 // Helper functions
 // ============================================================================
 
-function selectionKey(selection: {
-  modelId: string;
-  apiKeyId: string;
-}): string {
+export function selectionKey(selection: CompleteModelSelection): string {
   return `${selection.apiKeyId}:${selection.modelId}`;
 }
 

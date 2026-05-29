@@ -2,6 +2,8 @@ import {
   EmbeddingDimensionsSchema,
   isFreeModel,
   isProviderApiKeyOptional,
+  LAZY_MODEL_SYNC_STATUS_HEADER,
+  LAZY_MODEL_SYNC_STATUS_PENDING,
   RouteId,
   type SupportedProvider,
   SupportedProvidersSchema,
@@ -9,6 +11,7 @@ import {
 } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { LRUCacheManager } from "@/cache-manager";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
@@ -18,6 +21,7 @@ import {
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
+  type ModelSyncState,
   TeamModel,
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
@@ -44,8 +48,18 @@ const LAZY_MODEL_SYNC_TTL_BY_PROVIDER: Partial<
 };
 
 const lazyModelSyncsByApiKeyId = new Map<string, Promise<void>>();
-const LAZY_MODEL_SYNC_STATUS_HEADER = "x-archestra-lazy-model-sync";
-const LAZY_MODEL_SYNC_STATUS_PENDING = "pending";
+
+/**
+ * Negative cache marking API keys whose lazy sync was recently attempted (any
+ * outcome). Keys that legitimately resolve zero models are otherwise classified
+ * stale forever, re-triggering an upstream fetch on every request; this caps
+ * the re-sync rate to the provider's TTL window. Per-pod by design — a fresh
+ * pod re-attempting once per TTL is acceptable.
+ */
+const recentLazyModelSyncAttempts = new LRUCacheManager<true>({
+  maxSize: 5000,
+  defaultTtl: DEFAULT_LAZY_MODEL_SYNC_TTL_MS,
+});
 
 const LlmModelSchema = z.object({
   id: z.string(),
@@ -379,6 +393,7 @@ export async function getStaleModelSyncApiKeys(params: {
     isModelSyncStateStale({
       provider: apiKey.provider,
       syncState: syncStates.get(apiKey.id),
+      recentlyAttempted: recentLazyModelSyncAttempts.get(apiKey.id) === true,
       now,
     }),
   );
@@ -386,15 +401,26 @@ export async function getStaleModelSyncApiKeys(params: {
 
 export function isModelSyncStateStale(params: {
   provider: SupportedProvider;
-  syncState?: { linkedModelCount: number; oldestLastSyncedAt: Date | null };
+  syncState?: Pick<ModelSyncState, "linkedModelCount" | "oldestLastSyncedAt">;
+  /** Whether a lazy sync was attempted within this provider's TTL window. */
+  recentlyAttempted?: boolean;
   now?: Date;
 }): boolean {
-  const { provider, syncState, now = new Date() } = params;
-  if (!syncState || syncState.linkedModelCount === 0) {
-    return true;
-  }
-  if (!syncState.oldestLastSyncedAt) {
-    return true;
+  const {
+    provider,
+    syncState,
+    recentlyAttempted = false,
+    now = new Date(),
+  } = params;
+
+  // no usable linked models yet (unlinked key, empty provider, or failed sync):
+  // re-sync unless we already attempted recently, else we'd hammer the provider.
+  if (
+    !syncState ||
+    syncState.linkedModelCount === 0 ||
+    !syncState.oldestLastSyncedAt
+  ) {
+    return !recentlyAttempted;
   }
 
   const ttl =
@@ -479,6 +505,14 @@ function scheduleLazyModelSyncForApiKey(params: {
     })
     .finally(() => {
       lazyModelSyncsByApiKeyId.delete(apiKey.id);
+      // mark the attempt (success or failure) so a zero-model key isn't
+      // re-synced on every request until the provider's TTL elapses.
+      recentLazyModelSyncAttempts.set(
+        apiKey.id,
+        true,
+        LAZY_MODEL_SYNC_TTL_BY_PROVIDER[apiKey.provider] ??
+          DEFAULT_LAZY_MODEL_SYNC_TTL_MS,
+      );
     });
   lazyModelSyncsByApiKeyId.set(apiKey.id, sync);
   return sync;

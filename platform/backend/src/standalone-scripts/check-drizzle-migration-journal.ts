@@ -1,6 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 
+// Drizzle decides which migrations to run from the journal `when` high-water
+// mark, not just the filename order. A migration appended with an older `when`
+// can be silently skipped by databases that already applied a newer entry,
+// leaving schema objects missing while later migrations still run.
 type JournalEntry = {
   idx: number;
   tag: string;

@@ -16,6 +16,9 @@ const config: KnipConfig = {
   ignoreDependencies: [
     // Workspace dependency - resolved by pnpm
     "@shared",
+    // Native CommonJS addon loaded through package exports; knip does not
+    // resolve the workspace package's generated N-API entrypoint correctly.
+    "@archestra/sandbox-rs",
   ],
   ignoreBinaries: [
     // biome and concurrently are in root package.json

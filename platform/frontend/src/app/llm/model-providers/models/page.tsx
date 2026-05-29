@@ -64,6 +64,12 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   type ModelWithApiKeys,
@@ -78,6 +84,8 @@ import {
   canFilterFreeModelsForApiKey,
   filterModelsForPage,
   type ModelsPageModelTypeFilter,
+  OBSERVED_MODEL_SOURCE_DESCRIPTION,
+  OBSERVED_MODEL_SOURCE_LABEL,
 } from "./models-page-utils";
 
 export default function ModelsPage() {
@@ -157,7 +165,12 @@ export default function ModelsPage() {
   const setModelProvidersAction = useSetModelProvidersAction();
   useEffect(() => {
     setModelProvidersAction(
-      <Button onClick={handleRefresh} disabled={isRefreshingModels}>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleRefresh}
+        disabled={isRefreshingModels}
+      >
         <RefreshCw
           className={`h-4 w-4 ${isRefreshingModels ? "animate-spin" : ""}`}
         />
@@ -220,10 +233,19 @@ export default function ModelsPage() {
           if (apiKeys.length === 0) {
             if (row.original.discoveredViaLlmProxy) {
               return (
-                <Badge variant="secondary" className="text-xs gap-1">
-                  <ArrowLeftRight className="h-3 w-3 shrink-0" />
-                  <span>LLM Proxy</span>
-                </Badge>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge variant="secondary" className="text-xs gap-1">
+                        <ArrowLeftRight className="h-3 w-3 shrink-0" />
+                        <span>{OBSERVED_MODEL_SOURCE_LABEL}</span>
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p>{OBSERVED_MODEL_SOURCE_DESCRIPTION}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               );
             }
             return <span className="text-sm text-muted-foreground">-</span>;

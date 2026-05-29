@@ -49,6 +49,10 @@ const CONTEXT_COMPACTION_CORRECTION_PROMPT =
   "Your previous response did not follow the required format. Reply with EXACTLY ONE <summary>...</summary> block and no text outside the tags.";
 const PDF_BYTES_PER_TOKEN_ESTIMATE = 12;
 const BINARY_BYTES_PER_TOKEN_ESTIMATE = 4;
+// images are billed by dimensions, not byte size; without this ceiling a few-MB
+// image estimates at ~1M tokens (byteLength/4) and spuriously trips the
+// auto-compaction threshold every turn.
+const IMAGE_TOKEN_MAX_ESTIMATE = 1_600;
 const CONTEXT_COMPACTION_TRACE_OPERATION = "context_compaction";
 const ATTR_CONTEXT_COMPACTION_TRIGGER = "archestra.context_compaction.trigger";
 const ATTR_CONTEXT_COMPACTION_STATUS = "archestra.context_compaction.status";
@@ -341,6 +345,7 @@ export const __test = {
   resolveCompactionBoundaryMessageId,
   decodeDataUrl,
   getDataUrlMediaType,
+  estimateBinaryFileTokens,
 };
 
 function resolveContextCompactionPolicy(
@@ -1291,7 +1296,11 @@ function estimateBinaryFileTokens(params: {
     params.mediaType === "application/pdf"
       ? PDF_BYTES_PER_TOKEN_ESTIMATE
       : BINARY_BYTES_PER_TOKEN_ESTIMATE;
-  return Math.ceil(params.byteLength / bytesPerToken);
+  const estimate = Math.ceil(params.byteLength / bytesPerToken);
+  if (params.mediaType.startsWith("image/")) {
+    return Math.min(estimate, IMAGE_TOKEN_MAX_ESTIMATE);
+  }
+  return estimate;
 }
 
 async function getMessageTextForSummary(
@@ -1438,11 +1447,16 @@ function decodeDataUrl(
 
   const { mediaType, isBase64 } = parseDataUrlMetaString(match[1] ?? "");
   const payload = match[2] ?? "";
-  const buffer = isBase64
-    ? Buffer.from(payload, "base64")
-    : Buffer.from(decodeURIComponent(payload), "utf8");
-
-  return { mediaType, buffer };
+  try {
+    const buffer = isBase64
+      ? Buffer.from(payload, "base64")
+      : Buffer.from(decodeURIComponent(payload), "utf8");
+    return { mediaType, buffer };
+  } catch {
+    // malformed percent-encoding makes decodeURIComponent throw URIError;
+    // treat the url as undecodable rather than aborting the chat turn.
+    return null;
+  }
 }
 
 function parseDataUrlMeta(

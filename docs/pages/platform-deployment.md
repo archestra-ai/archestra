@@ -1050,8 +1050,9 @@ Enable polling compatibility only when your database endpoint cannot keep sessio
   - Set this when regular database traffic goes through PgBouncer transaction pooling but notifications can use a direct or session-pooled connection
 
 - **`ARCHESTRA_CHAT_SECRET_SCAN_ENABLED`** - Enables client-side pre-send scanning of chat messages for secrets and high-entropy tokens.
-  - Default: `false`
-  - When `true`, the chat composer intercepts sends and shows a confirmation dialog when the message appears to contain credentials (API keys, tokens, passwords, JWTs, PEM keys, or high-entropy strings).
+  - Default: `true`
+  - When enabled, the chat composer intercepts sends and shows a confirmation dialog when the message appears to contain credentials (API keys, tokens, passwords, JWTs, PEM keys, or high-entropy strings). Set to `false` to disable.
+  - This is a client-side convenience nudge, not a data-loss-prevention control: it runs in the browser and can be bypassed with "Send anyway".
   - Detection runs entirely in the browser — no message content is sent to the backend for scanning. The flag is read from the backend at runtime via `/api/config`, so toggling it does not require a frontend rebuild.
   - Values: `true`, `false`
 

@@ -1019,6 +1019,12 @@ export async function validateExternalIdpToken(
     // Look up the agent to check if it has an identity provider configured
     const agent = await AgentModel.findById(profileId);
     if (!agent?.identityProviderId) {
+      // TEMPORARY [idp-diag] — pin which branch fails the flaky JWKS gateway
+      // e2e (mcp-gateway-jwks/.jwt-propagation). Remove once root cause known.
+      logger.info(
+        { profileId, hasAgent: !!agent },
+        "[idp-diag] null: agent missing identityProviderId",
+      );
       return null;
     }
 
@@ -1036,9 +1042,10 @@ export async function validateExternalIdpToken(
 
     // Only OIDC providers support JWKS validation
     if (!idpProvider.oidcConfig) {
-      logger.debug(
+      // TEMPORARY [idp-diag] — promoted from debug so it's visible in CI.
+      logger.info(
         { profileId, identityProviderId: agent.identityProviderId },
-        "validateExternalIdpToken: Identity provider has no OIDC config",
+        "[idp-diag] null: identity provider has no OIDC config",
       );
       return null;
     }
@@ -1080,6 +1087,13 @@ export async function validateExternalIdpToken(
     });
 
     if (!result) {
+      // TEMPORARY [idp-diag] — verify failed; the reason (no-matching-key /
+      // issuer / audience at warn; expired / signature at debug) is on the
+      // "JWKS JWT validation failed" line.
+      logger.info(
+        { profileId, issuer: idpProvider.issuer, jwksUrl },
+        "[idp-diag] null: jwksValidator.validateJwt returned null",
+      );
       return null;
     }
 

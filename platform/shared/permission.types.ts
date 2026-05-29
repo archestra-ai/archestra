@@ -19,6 +19,7 @@ export const actions = [
   "cancel",
   "enable",
   "query",
+  "execute",
 ] as const;
 
 export const resources = [

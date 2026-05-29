@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   Bot,
   CornerDownLeftIcon,
+  Download,
   FileText,
   Globe,
   MicIcon,
@@ -118,6 +119,7 @@ import {
   getManualCompactionSkippedMessage,
   mergePersistedMessageMetadata,
 } from "@/lib/chat/chat-utils";
+import { downloadConversationMarkdown } from "@/lib/chat/export-markdown";
 import { useChatSession } from "@/lib/chat/global-chat.context";
 import {
   applyPendingActions,
@@ -1558,6 +1560,21 @@ export function ChatPageContent({
     router,
   ]);
 
+  const handleExportMarkdown = useCallback(() => {
+    if (!conversationId || messages.length === 0) return;
+    downloadConversationMarkdown({
+      messages,
+      conversationId,
+      title: conversation?.title,
+      agentName: conversation?.agent?.name,
+    });
+  }, [
+    conversationId,
+    messages,
+    conversation?.title,
+    conversation?.agent?.name,
+  ]);
+
   // Handle initial agent change (when no conversation exists)
   const handleInitialAgentChange = useCallback(
     (agentId: string) => {
@@ -1959,6 +1976,12 @@ export function ChatPageContent({
                           )}
                         </DropdownMenuItem>
                       )}
+                      {conversationId && messages.length > 0 && (
+                        <DropdownMenuItem onSelect={handleExportMarkdown}>
+                          <Download className="h-4 w-4" />
+                          Export Markdown
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuItem
                         onSelect={() => {
                           if (isArtifactOpen) {
@@ -2344,25 +2367,39 @@ export function ChatPageContent({
             onClose={closeRightPanel}
             canShowBrowser={showBrowserButton && !isPlaywrightSetupVisible}
             headerActions={
-              canManageShare ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setIsShareDialogOpen(true)}
-                  className="text-xs h-7"
-                >
-                  {isShared ? (
-                    <>
-                      <Users className="h-3 w-3 mr-1 text-primary" />
-                      <span className="text-primary">Shared</span>
-                    </>
-                  ) : (
-                    <>
-                      <Share2 className="h-3 w-3 mr-1" />
-                      Share
-                    </>
+              conversationId && messages.length > 0 ? (
+                <div className="flex items-center gap-1">
+                  {canManageShare && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsShareDialogOpen(true)}
+                      className="text-xs h-7"
+                    >
+                      {isShared ? (
+                        <>
+                          <Users className="h-3 w-3 mr-1 text-primary" />
+                          <span className="text-primary">Shared</span>
+                        </>
+                      ) : (
+                        <>
+                          <Share2 className="h-3 w-3 mr-1" />
+                          Share
+                        </>
+                      )}
+                    </Button>
                   )}
-                </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleExportMarkdown}
+                    className="text-xs h-7"
+                    title="Download chat as Markdown"
+                  >
+                    <Download className="h-3 w-3 mr-1" />
+                    Markdown
+                  </Button>
+                </div>
               ) : undefined
             }
             artifact={conversation?.artifact}

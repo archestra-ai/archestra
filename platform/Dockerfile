@@ -7,8 +7,8 @@ ARG KIND_VERSION=v0.31.0
 ARG KIND_COMMIT=a323333ff9efd8099f95a8a6b5c86c75a210d00f
 ARG DOCKER_CLI_VERSION=v29.3.0
 ARG DOCKER_CLI_COMMIT=5927d80c76b3ce5cf782be818922966e8a0d87a3
-ARG DAGGER_VERSION=v0.20.8
-ARG DAGGER_COMMIT=74bff7d10fd78dd6935c60c4514558598f216451
+ARG DAGGER_VERSION=v0.21.0
+ARG DAGGER_COMMIT=1be1867fd879109586a39d8a8d999eaf44604fee
 ARG KUBECTL_VERSION=v1.35.0
 ARG KUBECTL_COMMIT=66452049f3d692768c39c797b21b793dce80314e
 
@@ -117,6 +117,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json .npmrc ./
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
 COPY shared/package.json shared/
+COPY archestra-rs/sandbox-rs/package.json archestra-rs/sandbox-rs/
 COPY patches/ patches/
 
 # Install all dependencies
@@ -137,8 +138,8 @@ RUN set -eux; \
     rm -f picomatch-4.0.4.tgz; \
     grep -q '"version": "4.0.4"' "$target/package.json"
 
-# <----- Builder stage ----->
-FROM base AS builder
+# <----- Builder base stage ----->
+FROM base AS builder-base
 WORKDIR /app
 
 # Version arg for Sentry release tracking
@@ -149,18 +150,36 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/backend/node_modules ./backend/node_modules
 COPY --from=deps /app/frontend/node_modules ./frontend/node_modules
 COPY --from=deps /app/shared/node_modules ./shared/node_modules
+COPY --from=deps /app/archestra-rs/sandbox-rs/node_modules ./archestra-rs/sandbox-rs/node_modules
 
 # Copy source files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY backend ./backend
 COPY frontend ./frontend
 COPY shared ./shared
+COPY archestra-rs/Cargo.toml archestra-rs/Cargo.lock ./archestra-rs/
+COPY archestra-rs/sandbox-core ./archestra-rs/sandbox-core
+COPY archestra-rs/sandbox-rs ./archestra-rs/sandbox-rs
+
+# Build the Rust N-API skill sandbox addon during the JS workspace build.
+RUN apk add --no-cache build-base cargo rust
 
 # Build all workspace
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # VERSION is exported as env var for child processes (used by Sentry source map upload)
 ENV VERSION=${VERSION}
+
+FROM builder-base AS sandbox-rs-musl-smoke
+# cache cargo registry/git + the workspace target dir so heavy deps
+# (dagger-sdk, tokio, …) aren't recompiled on every build of this stage.
+RUN --mount=type=cache,target=/root/.cargo/registry \
+    --mount=type=cache,target=/root/.cargo/git \
+    --mount=type=cache,target=/app/archestra-rs/target \
+    pnpm --filter @archestra/sandbox-rs check:musl
+
+# <----- Builder stage ----->
+FROM builder-base AS builder
 
 # Use Docker secrets to securely pass various sensitive environment variables during build
 # These environment variables are NOT persisted in the final image
@@ -250,10 +269,10 @@ RUN chmod +x /usr/local/bin/kind /usr/local/bin/docker /usr/local/bin/kubectl
 #     echo "${KIND_SHA256}  /usr/local/bin/kind" | sha256sum -c - && \
 #     chmod +x /usr/local/bin/kind
 
-# install the Dagger CLI. The @dagger.io/dagger SDK needs it to open a session
+# install the Dagger CLI. The Rust dagger-sdk used by the N-API sandbox addon needs it to open a session
 # to the Dagger Engine; its npm postinstall download is blocked by
 # ignore-scripts, so the binary is pinned and built from source above.
-# keep DAGGER_VERSION in sync with @dagger.io/dagger in backend/package.json.
+# keep DAGGER_VERSION in sync with dagger-sdk in archestra-rs/sandbox-core/Cargo.toml.
 COPY --from=go-builder /dagger-binary /usr/local/bin/dagger
 RUN chmod +x /usr/local/bin/dagger
 # point the SDK at the baked-in CLI so it never downloads one at runtime.
@@ -278,6 +297,7 @@ VOLUME /var/lib/postgresql/data /app/data
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
+COPY archestra-rs/sandbox-rs/package.json archestra-rs/sandbox-rs/
 COPY patches/ patches/
 COPY docker/scripts/docker-banner.sh /app/docker-banner.sh
 COPY docker/scripts/docker-entrypoint.sh /docker-entrypoint.sh
@@ -304,6 +324,9 @@ COPY --from=builder /app/backend/dist ./backend/dist
 COPY --from=builder /app/backend/scripts ./backend/scripts
 COPY --from=builder /app/backend/drizzle.config.ts ./backend/
 COPY --from=builder /app/backend/src/database/migrations ./backend/src/database/migrations
+COPY --from=builder /app/archestra-rs/sandbox-rs/index.cjs ./archestra-rs/sandbox-rs/
+COPY --from=builder /app/archestra-rs/sandbox-rs/index.d.ts ./archestra-rs/sandbox-rs/
+COPY --from=builder /app/archestra-rs/sandbox-rs/*.node ./archestra-rs/sandbox-rs/
 RUN chmod +x /app/backend/scripts/start-production.sh
 
 # Copy built frontend

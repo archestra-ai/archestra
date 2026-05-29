@@ -34,7 +34,7 @@ export function makeConfig(
       ngrokDomain: "",
       virtualKeyDefaultExpirationSeconds: 3600,
       mcpSandboxDomain: null,
-      chatSecretScanEnabled: false,
+      chatSecretScanEnabled: true,
       ...overrides.features,
       maintenanceMode: overrides.features?.maintenanceMode ?? null,
     },

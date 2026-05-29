@@ -345,6 +345,27 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "child of skillShareLinks; revision history",
   },
+  skillSandboxesTable: {
+    audited: false,
+    reason:
+      "ephemeral execution sandbox state; runtime artifact, no admin signal",
+  },
+  skillSandboxSkillsTable: {
+    audited: false,
+    reason: "join: sandbox × skill; parent (sandbox) is ephemeral",
+  },
+  skillSandboxFileSnapshotsTable: {
+    audited: false,
+    reason: "child of sandbox; per-sandbox file snapshot",
+  },
+  skillSandboxCommandsTable: {
+    audited: false,
+    reason: "child of sandbox; append-only command replay log",
+  },
+  skillSandboxArtifactsTable: {
+    audited: false,
+    reason: "child of sandbox; exported file bytes",
+  },
   kbChunksTable: {
     audited: false,
     reason: "child of knowledge base; parent audited",

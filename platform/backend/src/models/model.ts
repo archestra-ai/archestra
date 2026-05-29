@@ -459,9 +459,9 @@ class ModelModel {
 
   /**
    * Ensure a model entry exists for the given modelId and provider.
-   * Marks the model as discovered via LLM Proxy so it's preserved even
-   * without API key links (users can set custom pricing for metrics).
-   * Used by LLM proxy to ensure models are tracked even before models.dev sync.
+   * Newly inserted rows are marked as discovered via LLM Proxy so custom
+   * models can be priced for metrics. Existing synced provider models keep
+   * their source classification so deleting the provider key can clean them up.
    */
   static async ensureModelExists(
     modelId: string,
@@ -476,12 +476,7 @@ class ModelModel {
         discoveredViaLlmProxy: true,
         lastSyncedAt: new Date(),
       })
-      .onConflictDoUpdate({
-        target: [schema.modelsTable.provider, schema.modelsTable.modelId],
-        set: {
-          discoveredViaLlmProxy: true,
-        },
-      });
+      .onConflictDoNothing();
   }
 
   /**

@@ -168,8 +168,9 @@ describe("ChatProvider retries", () => {
       });
     });
 
+    // the indicator tracks prompt (input) occupancy, not input+output total
     await waitFor(() =>
-      expect(latestSessionRef.current?.contextTokensUsed).toBe(120),
+      expect(latestSessionRef.current?.contextTokensUsed).toBe(100),
     );
 
     act(() => {
@@ -222,8 +223,9 @@ describe("ChatProvider retries", () => {
       });
     });
 
+    // the indicator tracks prompt (input) occupancy, not input+output total
     await waitFor(() =>
-      expect(latestSessionRef.current?.contextTokensUsed).toBe(120),
+      expect(latestSessionRef.current?.contextTokensUsed).toBe(100),
     );
 
     act(() => {
@@ -249,6 +251,50 @@ describe("ChatProvider retries", () => {
       }),
     );
     expect(latestSessionRef.current?.contextTokensUsed).toBe(794_797);
+  });
+
+  it("seeds context tokens from the turn-start window estimate, then refines from per-step usage", async () => {
+    const latestSessionRef: { current: ChatSessionSnapshot } = {
+      current: undefined,
+    };
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+        <CaptureChatSession
+          onSession={(session) => {
+            latestSessionRef.current = session;
+          }}
+        />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+
+    // turn-start estimate seeds the indicator before the model responds
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-context-window-estimate",
+        data: { estimatedTokens: 542_000 },
+      });
+    });
+
+    await waitFor(() =>
+      expect(latestSessionRef.current?.contextTokensUsed).toBe(542_000),
+    );
+
+    // a per-step usage event then refines the seed with the provider's real
+    // prompt size (input tokens), e.g. right after an auto-compaction drop
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-token-usage",
+        data: { inputTokens: 7_199, outputTokens: 86, totalTokens: 7_285 },
+      });
+    });
+
+    await waitFor(() =>
+      expect(latestSessionRef.current?.contextTokensUsed).toBe(7_199),
+    );
   });
 
   it("configures active-run reconnect URL and resumes when the last persisted message is from the user", async () => {

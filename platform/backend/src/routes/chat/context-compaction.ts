@@ -107,6 +107,11 @@ export type ContextCompactionResult = {
   status: ContextCompactionStatus;
   compaction: ConversationCompaction | null;
   reason?: ContextCompactionReason;
+  // estimated tokens of `messages` (what is actually sent to the model this
+  // turn), on the same yardstick as the auto-compaction threshold. Drives the
+  // live context indicator. Reuses the estimate already computed for the
+  // threshold check, so it adds no extra tokenization on the hot path.
+  inputTokenEstimate?: number;
 };
 
 export type ContextCompactionStreamData = {
@@ -183,14 +188,20 @@ async function runCompactMessagesForChat(
     );
   }
 
-  const shouldCreate =
-    !policy.requireAutoThreshold ||
-    (await shouldAutoCompact({
+  // estimate of the messages we would send without creating a new summary;
+  // reused both for the threshold decision and to seed the context indicator.
+  let messagesTokenEstimate: number | undefined;
+  let shouldCreate = !policy.requireAutoThreshold;
+  if (!shouldCreate) {
+    const decision = await shouldAutoCompact({
       provider: params.provider,
       selectedModel: params.selectedModel,
       systemPrompt: params.systemPrompt,
       messages: existingMessages,
-    }));
+    });
+    messagesTokenEstimate = decision.estimatedTokens;
+    shouldCreate = decision.shouldCompact;
+  }
 
   if (!shouldCreate) {
     return {
@@ -200,6 +211,7 @@ async function runCompactMessagesForChat(
       reason: usableLatestCompaction
         ? "using_existing_summary"
         : "below_threshold",
+      inputTokenEstimate: messagesTokenEstimate,
     };
   }
 
@@ -292,6 +304,7 @@ async function runCompactMessagesForChat(
       messages: compactedMessages,
       status: "created",
       compaction,
+      inputTokenEstimate: compaction.compactedTokenEstimate,
     };
   } catch (error) {
     if (params.abortSignal?.aborted) {
@@ -508,19 +521,22 @@ async function shouldAutoCompact(params: {
   selectedModel: string;
   systemPrompt?: string;
   messages: ChatMessage[];
-}): Promise<boolean> {
+}): Promise<{ shouldCompact: boolean; estimatedTokens: number }> {
+  const estimatedTokens = estimateChatMessagesTokens(params);
   const model = await ModelModel.findByProviderAndModelId(
     params.provider,
     params.selectedModel,
   );
   if (!model?.contextLength) {
-    return false;
+    return { shouldCompact: false, estimatedTokens };
   }
 
-  const estimatedTokens = estimateChatMessagesTokens(params);
-  return (
-    estimatedTokens >= model.contextLength * CONTEXT_COMPACTION_AUTO_THRESHOLD
-  );
+  return {
+    shouldCompact:
+      estimatedTokens >=
+      model.contextLength * CONTEXT_COMPACTION_AUTO_THRESHOLD,
+    estimatedTokens,
+  };
 }
 
 async function createConversationCompaction(params: {

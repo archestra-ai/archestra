@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   buildUserSystemPromptContext,
   type ChatErrorResponse,
+  type ContextWindowEstimate,
   isModelSelectionComplete,
   ResourceVisibilityScopeSchema,
   RouteId,
@@ -715,6 +716,19 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   });
                 }
 
+                // Seed the context indicator with the size of what we are about
+                // to send, on the same yardstick that triggers auto-compaction,
+                // so the bar is correct before the first token (and reflects a
+                // compaction drop immediately). Per-step usage refines it below.
+                if (compactionResult.inputTokenEstimate !== undefined) {
+                  writer.write({
+                    type: "data-context-window-estimate",
+                    data: {
+                      estimatedTokens: compactionResult.inputTokenEstimate,
+                    } satisfies ContextWindowEstimate,
+                  });
+                }
+
                 const modelMessages = await buildModelMessagesForProvider({
                   messages: compactionResult.messages,
                   provider,
@@ -727,6 +741,19 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   stopWhen: buildChatStopConditions(),
                   abortSignal: chatAbortController.signal,
                   onChunk: streamTextOnChunk,
+                  // Emit per-step usage so the context indicator tracks the
+                  // prompt growing across tool round-trips, instead of jumping
+                  // only once when the whole turn finishes.
+                  onStepFinish: ({ usage }) => {
+                    writer.write({
+                      type: "data-token-usage",
+                      data: {
+                        inputTokens: usage.inputTokens,
+                        outputTokens: usage.outputTokens,
+                        totalTokens: usage.totalTokens,
+                      } satisfies TokenUsage,
+                    });
+                  },
                   onFinish: async ({ usage, finishReason }) => {
                     removeAbortListeners();
                     logger.info(

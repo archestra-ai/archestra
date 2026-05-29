@@ -140,36 +140,13 @@ function DetailRow({
 }
 
 function WhenBlock({ event }: { event: AuditLog }) {
-  const occurredTs = new Date(event.occurredAt).getTime();
-  const createdTs = new Date(event.createdAt).getTime();
-  const isSame = occurredTs === createdTs;
-
   return (
-    <div className="space-y-2">
-      <div>
-        <div className="text-xs text-muted-foreground uppercase tracking-wide mb-0.5">
-          Occurred
-        </div>
-        <div className="font-mono text-xs">
-          {formatDate({ date: event.occurredAt })}
-        </div>
-        <div className="text-xs text-muted-foreground">
-          {formatRelativeTimeFromNow(event.occurredAt)}
-        </div>
+    <div>
+      <div className="font-mono text-xs">
+        {formatDate({ date: event.occurredAt })}
       </div>
-      <div>
-        <div className="text-xs text-muted-foreground uppercase tracking-wide mb-0.5">
-          Recorded
-        </div>
-        {isSame ? (
-          <div className="text-xs text-muted-foreground italic">
-            same as occurred
-          </div>
-        ) : (
-          <div className="font-mono text-xs">
-            {formatDate({ date: event.createdAt })}
-          </div>
-        )}
+      <div className="text-xs text-muted-foreground">
+        {formatRelativeTimeFromNow(event.occurredAt)}
       </div>
     </div>
   );

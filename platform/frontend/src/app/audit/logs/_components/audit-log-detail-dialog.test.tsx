@@ -105,23 +105,14 @@ describe("AuditLogDetailDialog", () => {
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith("req-copy-me");
   });
 
-  it("shows 'same as occurred' hint when occurredAt equals createdAt", () => {
-    const ts = new Date("2026-05-13T10:00:00Z").toISOString();
-    renderDialog(makeEvent({ occurredAt: ts, createdAt: ts }));
-    expect(screen.getByText(/same as occurred/i)).toBeInTheDocument();
-  });
-
-  it("shows both timestamps when occurredAt differs from createdAt", () => {
+  it("shows only the occurred timestamp, never a separate recorded one", () => {
     renderDialog(
       makeEvent({
         occurredAt: new Date("2026-05-13T10:00:00Z").toISOString(),
         createdAt: new Date("2026-05-13T10:00:05Z").toISOString(),
       }),
     );
-    // Both "Occurred" and "Recorded" labels should appear.
-    expect(screen.getByText("Occurred")).toBeInTheDocument();
-    expect(screen.getByText("Recorded")).toBeInTheDocument();
-    // The "same as occurred" hint must NOT appear.
+    expect(screen.queryByText("Recorded")).not.toBeInTheDocument();
     expect(screen.queryByText(/same as occurred/i)).not.toBeInTheDocument();
   });
 

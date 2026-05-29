@@ -221,23 +221,6 @@ jobs:
           platform-context: ./platform
           mcp-server-base-image-tag: ${{ steps.load-mcp-server-base-image.outputs.image-tag }}
 
-      # TEMPORARY — remove with the [auth-diagnostic] startup log once the
-      # setup-teams 429 flake is resolved. Surfaces the runtime auth
-      # rate-limit config: the [auth-diagnostic] startup log only reaches the
-      # failure/flaky dump via --tail=200, which misses startup, so read it
-      # directly here on every run.
-      - name: Diagnose auth rate-limit config (temporary)
-        run: |
-          POD=$(kubectl get pod -l app.kubernetes.io/name=archestra-platform \
-            -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
-          echo "=== ARCHESTRA_AUTH_RATE_LIMIT_DISABLED in pod env ==="
-          kubectl exec "$POD" -c archestra-platform -- \
-            printenv ARCHESTRA_AUTH_RATE_LIMIT_DISABLED || echo "(printenv failed / not set)"
-          echo "=== [auth-diagnostic] startup log (full backend log) ==="
-          kubectl logs -l app.kubernetes.io/name=archestra-platform \
-            -c archestra-platform 2>/dev/null | grep -i 'auth-diagnostic' \
-            || echo "(no [auth-diagnostic] line found)"
-
       - name: Run all non-quickstart E2E tests
         id: e2e
         continue-on-error: true

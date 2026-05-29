@@ -36,6 +36,7 @@ import InvitationModel from "@/models/invitation";
 import MemberModel from "@/models/member";
 import SessionModel from "@/models/session";
 import UserModel from "@/models/user";
+import { reportAuditWriteFailure } from "@/observability/metrics/audit";
 import type { AuditEventName } from "@/types/audit-log";
 import { linkedIdentityProviderPlugin } from "./linked-idp";
 
@@ -409,21 +410,6 @@ export const auth = betterAuth({
     after: createAuthMiddleware(async (ctx) => handleAfterHook(ctx)),
   },
 });
-
-// TEMPORARY DIAGNOSTIC — remove once the setup-teams 429 flake is resolved.
-// The e2e env sets ARCHESTRA_AUTH_RATE_LIMIT_DISABLED=true and the chart
-// renders it into the pod, yet better-auth's limiter still 429s sign-in under
-// CI parallelism. Log the runtime-effective flag so a CI pod log reveals
-// whether the disable actually takes effect at construction time, instead of
-// us deducing it from source. (better-auth derives rateLimit.enabled directly
-// from this, so the parsed flag is the decisive value.)
-logger.info(
-  {
-    rawEnv: process.env.ARCHESTRA_AUTH_RATE_LIMIT_DISABLED ?? null,
-    authRateLimitDisabled: config.authRateLimitDisabled,
-  },
-  "[auth-diagnostic] startup rate-limit config",
-);
 
 /**
  * Per-request stashes used to ferry data from the `before` hook to the
@@ -958,6 +944,10 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
             { err },
             "[auth:audit] failed to write cancel-invitation audit row",
           );
+          reportAuditWriteFailure({
+            source: "auth",
+            resourceType: "invitation",
+          });
         }
       }
     }
@@ -1015,6 +1005,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
           { err },
           "[auth:audit] failed to write invite-member audit row",
         );
+        reportAuditWriteFailure({ source: "auth", resourceType: "invitation" });
       }
     }
   }
@@ -1065,6 +1056,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
           { err },
           "[auth:audit] failed to write accept-invitation audit row",
         );
+        reportAuditWriteFailure({ source: "auth", resourceType: "member" });
       }
     }
   }
@@ -1116,6 +1108,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
           { err },
           "[auth:audit] failed to write member role update audit row",
         );
+        reportAuditWriteFailure({ source: "auth", resourceType: "member" });
       }
     }
   }
@@ -1160,6 +1153,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
           { err },
           "[auth:audit] failed to write remove-member audit row",
         );
+        reportAuditWriteFailure({ source: "auth", resourceType: "member" });
       }
     }
   }
@@ -1623,29 +1617,34 @@ async function writeAuthAuditLog(params: {
     after = { sessionId: session.id, userId: user.id };
   }
 
-  await AuditLogModel.create({
-    organizationId,
-    actorId: user.id,
-    actorType,
-    actorName: user.name ?? null,
-    actorEmail: user.email,
-    action,
-    outcome: "success",
-    resourceType: "auth",
-    resourceId: user.id,
-    before: null,
-    after,
-    httpMethod: "POST",
-    httpPath: path,
-    httpRoute: null,
-    httpStatus: null,
-    // better-auth operates on Web Request objects; Fastify's request.id is not
-    // accessible here. requestId is null for all auth-surface audit rows.
-    requestId: null,
-    sourceIp,
-    userAgent,
-    occurredAt: new Date(),
-  });
+  try {
+    await AuditLogModel.create({
+      organizationId,
+      actorId: user.id,
+      actorType,
+      actorName: user.name ?? null,
+      actorEmail: user.email,
+      action,
+      outcome: "success",
+      resourceType: "auth",
+      resourceId: user.id,
+      before: null,
+      after,
+      httpMethod: "POST",
+      httpPath: path,
+      httpRoute: null,
+      httpStatus: null,
+      // better-auth operates on Web Request objects; Fastify's request.id is not
+      // accessible here. requestId is null for all auth-surface audit rows.
+      requestId: null,
+      sourceIp,
+      userAgent,
+      occurredAt: new Date(),
+    });
+  } catch (err) {
+    reportAuditWriteFailure({ source: "auth", resourceType: "auth" });
+    throw err;
+  }
 }
 
 /**

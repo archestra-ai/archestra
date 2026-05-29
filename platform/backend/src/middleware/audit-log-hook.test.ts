@@ -99,6 +99,12 @@ vi.mock("./audit-log-registry", async () => {
       action: "userToken.rotated",
       resourceIdSource: "currentUserPersonalToken" as const,
     },
+    // Bulk import — no fetchById/resourceIdSource; the handler supplies the
+    // post-state via request.auditAfter and resourceId stays null.
+    "/api/bulk-imports": {
+      resourceType: "skill",
+      action: "skill.imported",
+    },
   };
 
   function resolveAuditableRouteConfig(routePattern: string | undefined) {
@@ -277,6 +283,15 @@ describe("registerAuditLogHook", () => {
     // Token rotation route.
     app.post("/api/user-tokens/me/rotate", async () => ({ ok: true }));
 
+    // Bulk import route — handler supplies the audit post-state directly.
+    app.post("/api/bulk-imports", async (request, reply) => {
+      request.auditAfter = {
+        created: [{ id: "skill-1", name: "Skill One" }],
+        skipped: ["repo/bad-skill"],
+      };
+      return reply.send({ ok: true });
+    });
+
     // Non-mutating verbs
     app.route({
       method: "HEAD",
@@ -351,6 +366,28 @@ describe("registerAuditLogHook", () => {
       });
 
       await envelopeApp.close();
+    });
+  });
+
+  describe("handler-supplied after (request.auditAfter)", () => {
+    test("uses request.auditAfter verbatim and leaves resourceId null", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/bulk-imports",
+      });
+      expect(res.statusCode).toBe(200);
+      await settle();
+
+      const rows = await getRows();
+      expect(rows).toHaveLength(1);
+      expect(rows[0].action).toBe("skill.imported");
+      expect(rows[0].outcome).toBe("success");
+      expect(rows[0].resourceId).toBeNull();
+      expect(rows[0].before).toBeNull();
+      expect(rows[0].after).toEqual({
+        created: [{ id: "skill-1", name: "Skill One" }],
+        skipped: ["repo/bad-skill"],
+      });
     });
   });
 

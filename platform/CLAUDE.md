@@ -320,6 +320,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 
 **Backend**:
 
+- Refer to backend/architecture.md for backend architecture guidelines.
 - Use Drizzle ORM for database operations through MODELS ONLY!
 - Table exports: Use plural names with "Table" suffix (e.g., `profileLabelsTable`, `sessionsTable`)
 - Colocate test files with source (`.test.ts`)

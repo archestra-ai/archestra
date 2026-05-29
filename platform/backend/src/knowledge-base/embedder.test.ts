@@ -32,7 +32,7 @@ import { KbChunkModel, KbDocumentModel } from "@/models";
 import { describe, expect, test } from "@/test";
 
 // Import after mocks are set up
-import { embeddingService } from "./embedder";
+import { classifyEmbeddingError, embeddingService } from "./embedder";
 
 function makeFakeEmbedding(seed: number): number[] {
   return Array.from({ length: 1536 }, (_, i) => (seed + i) * 0.001);
@@ -145,6 +145,25 @@ describe("EmbeddingService", () => {
 
     const updated = await KbDocumentModel.findById(doc.id);
     expect(updated?.embeddingStatus).toBe("failed");
+    expect(updated?.embeddingError).toBe("rate_limited");
+  });
+
+  test("classifies common embedding failure reasons", () => {
+    expect(classifyEmbeddingError({ status: 401 })).toBe(
+      "authentication_failed",
+    );
+    expect(classifyEmbeddingError({ status: 403 })).toBe(
+      "authentication_failed",
+    );
+    expect(classifyEmbeddingError({ status: 404 })).toBe("model_not_found");
+    expect(classifyEmbeddingError({ status: 429 })).toBe("rate_limited");
+    expect(classifyEmbeddingError({ status: 503 })).toBe("server_error");
+    expect(
+      classifyEmbeddingError(new Error("expected 1536 dimensions, got 3072")),
+    ).toBe("dimensions_mismatch");
+    expect(classifyEmbeddingError(new Error("provider failed"))).toBe(
+      "unknown",
+    );
   });
 
   test("no chunks marks document as completed with chunkCount 0", async ({

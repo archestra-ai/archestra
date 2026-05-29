@@ -1814,6 +1814,13 @@
       "when": 1779975331173,
       "tag": "0258_powerful_colonel_america",
       "breakpoints": true
+    },
+    {
+      "idx": 259,
+      "version": "7",
+      "when": 1748500000000,
+      "tag": "0259_embedding_error_enum",
+      "breakpoints": true
     }
   ]
 }

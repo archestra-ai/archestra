@@ -41,6 +41,7 @@ import {
   ConnectorTypeSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
+  EmbeddingErrorSchema,
   EmbeddingStatusSchema,
   ErrorResponsesSchema,
   KnowledgeSourceVisibilitySchema,
@@ -1230,6 +1231,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     processingStatus: UploadedFileProcessingStatusSchema,
     processingError: z.string().nullable(),
     embeddingStatus: EmbeddingStatusSchema,
+    embeddingError: EmbeddingErrorSchema.nullable(),
   });
 
   const KnowledgeFileSchema = UploadedFileSchema.extend({
@@ -1654,6 +1656,7 @@ async function enrichKnowledgeFiles(params: {
     processingStatus: file.processingStatus,
     processingError: file.processingError ?? null,
     embeddingStatus: docByFileId.get(file.id)?.embeddingStatus ?? "pending",
+    embeddingError: docByFileId.get(file.id)?.embeddingError ?? null,
     assignedAgents: (agentIdsByConnector.get(file.connectorId) ?? []).flatMap(
       (id) => {
         const agent = agentById.get(id);

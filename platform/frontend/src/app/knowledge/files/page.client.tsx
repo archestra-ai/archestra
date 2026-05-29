@@ -38,6 +38,11 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import {
@@ -482,6 +487,24 @@ function EditKnowledgeFileDialog({
   );
 }
 
+const embeddingErrorMessages: Record<string, string> = {
+  rate_limited:
+    "Embedding provider rate limit was reached. Try again after the limit resets.",
+  authentication_failed:
+    "Embedding provider rejected the configured API key or permissions.",
+  model_not_found: "Configured embedding model was not found by the provider.",
+  server_error: "Embedding provider returned a server error. Try again later.",
+  dimensions_mismatch:
+    "Embedding dimensions do not match the configured knowledge index.",
+  unknown:
+    "Embedding failed. Check the embedding provider configuration and retry.",
+};
+
+function getEmbeddingErrorMessage(embeddingError?: string | null) {
+  if (!embeddingError) return embeddingErrorMessages.unknown;
+  return embeddingErrorMessages[embeddingError] ?? embeddingErrorMessages.unknown;
+}
+
 function FileStatusBadge({ file }: { file: KnowledgeFile }) {
   if (file.processingStatus !== "completed") {
     const label =
@@ -505,16 +528,27 @@ function FileStatusBadge({ file }: { file: KnowledgeFile }) {
     );
   }
 
-  return (
+  const embeddingBadge = (
     <Badge
       variant={file.embeddingStatus === "failed" ? "destructive" : "secondary"}
-      className="text-xs"
+      className={`text-xs${file.embeddingStatus === "failed" ? " cursor-help" : ""}`}
     >
       {file.embeddingStatus === "processing" && (
         <Loader2 className="h-3 w-3 animate-spin" />
       )}
       {file.embeddingStatus === "completed" ? "Indexed" : file.embeddingStatus}
     </Badge>
+  );
+
+  if (file.embeddingStatus !== "failed") return embeddingBadge;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{embeddingBadge}</TooltipTrigger>
+      <TooltipContent>
+        {getEmbeddingErrorMessage(file.embeddingError)}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

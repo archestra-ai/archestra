@@ -10,6 +10,7 @@ import { z } from "zod";
 import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import {
+  buildUserAccessControlList,
   didKnowledgeSourceAclInputsChange,
   isTeamScopedWithoutTeams,
   knowledgeSourceAccessControlService,
@@ -624,7 +625,18 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         userId: user.id,
       });
-      const totalDocsIngested = await KbDocumentModel.countByConnector(id);
+      const documentAccess = await buildConnectorDocumentAccessContext({
+        userId: user.id,
+        userEmail: user.email,
+        organizationId,
+      });
+      const totalDocsIngested =
+        await KbDocumentModel.countByConnectorWithSearch({
+          connectorId: id,
+          organizationId,
+          userAcl: documentAccess.userAcl,
+          bypassAcl: documentAccess.bypassAcl,
+        });
       return reply.send({ ...connector, totalDocsIngested });
     },
   );
@@ -659,6 +671,11 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         userId: user.id,
       });
+      const documentAccess = await buildConnectorDocumentAccessContext({
+        userId: user.id,
+        userEmail: user.email,
+        organizationId,
+      });
 
       const [data, total] = await Promise.all([
         KbDocumentModel.findListItemsByConnector({
@@ -667,11 +684,15 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           limit,
           offset,
           search,
+          userAcl: documentAccess.userAcl,
+          bypassAcl: documentAccess.bypassAcl,
         }),
         KbDocumentModel.countByConnectorWithSearch({
           connectorId: id,
           organizationId,
           search,
+          userAcl: documentAccess.userAcl,
+          bypassAcl: documentAccess.bypassAcl,
         }),
       ]);
 
@@ -699,11 +720,18 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         userId: user.id,
       });
+      const documentAccess = await buildConnectorDocumentAccessContext({
+        userId: user.id,
+        userEmail: user.email,
+        organizationId,
+      });
 
       const existing = await KbDocumentModel.findListItemByIdAndConnector({
         documentId: docId,
         connectorId: id,
         organizationId,
+        userAcl: documentAccess.userAcl,
+        bypassAcl: documentAccess.bypassAcl,
       });
       if (!existing) {
         throw new ApiError(404, "Document not found");
@@ -730,11 +758,18 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         userId: user.id,
       });
+      const documentAccess = await buildConnectorDocumentAccessContext({
+        userId: user.id,
+        userEmail: user.email,
+        organizationId,
+      });
 
       const existing = await KbDocumentModel.findListItemByIdAndConnector({
         documentId: docId,
         connectorId: id,
         organizationId,
+        userAcl: documentAccess.userAcl,
+        bypassAcl: documentAccess.bypassAcl,
       });
       if (!existing) {
         throw new ApiError(404, "Document not found");
@@ -1593,6 +1628,26 @@ async function findConnectorOrThrow(params: {
     throw new ApiError(404, "Connector not found");
   }
   return connector;
+}
+
+async function buildConnectorDocumentAccessContext(params: {
+  userId: string;
+  userEmail: string;
+  organizationId: string;
+}) {
+  const access =
+    await knowledgeSourceAccessControlService.buildAccessControlContext({
+      userId: params.userId,
+      organizationId: params.organizationId,
+    });
+
+  return {
+    userAcl: buildUserAccessControlList({
+      userEmail: params.userEmail,
+      teamIds: access.teamIds,
+    }),
+    bypassAcl: false,
+  };
 }
 
 async function buildKnowledgeFileAccessContext(params: {

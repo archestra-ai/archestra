@@ -1,3 +1,4 @@
+import { ADMIN_ROLE_NAME } from "@shared";
 import config from "@/config";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import {
@@ -255,6 +256,103 @@ describe("knowledge base routes", () => {
       expect(body.pagination.total).toBe(1);
       expect(body.data.map((doc) => doc.title)).toEqual(["Roadmap Planning"]);
     });
+
+    test("filters connector documents by document ACL", async () => {
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "ACL Connector Docs",
+        connectorType: "jira",
+        visibility: "auto-sync-permissions",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://connector-acl.atlassian.net",
+          isCloud: true,
+          projectKey: "ACL",
+        },
+      });
+
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "visible-user-doc",
+        connectorId: connector.id,
+        title: "Visible User Doc",
+        content: "visible",
+        contentHash: "hash-visible-user-doc",
+        acl: [`user_email:${user.email}`],
+      });
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "hidden-user-doc",
+        connectorId: connector.id,
+        title: "Hidden User Doc",
+        content: "hidden",
+        contentHash: "hash-hidden-user-doc",
+        acl: ["user_email:someone-else@example.com"],
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}/documents?limit=20&offset=0`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as {
+        data: Array<{ title: string }>;
+        pagination: { total: number };
+      };
+      expect(body.pagination.total).toBe(1);
+      expect(body.data.map((doc) => doc.title)).toEqual(["Visible User Doc"]);
+    });
+
+    test("does not let knowledge source admins bypass connector document ACL", async ({
+      makeMember,
+    }) => {
+      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Admin ACL Connector Docs",
+        connectorType: "jira",
+        visibility: "auto-sync-permissions",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://connector-admin-acl.atlassian.net",
+          isCloud: true,
+          projectKey: "AAC",
+        },
+      });
+
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "admin-visible-doc",
+        connectorId: connector.id,
+        title: "Admin Visible Doc",
+        content: "visible",
+        contentHash: "hash-admin-visible-doc",
+        acl: [`user_email:${user.email}`],
+      });
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "admin-bypass-doc",
+        connectorId: connector.id,
+        title: "Admin Bypass Doc",
+        content: "hidden to non-admins",
+        contentHash: "hash-admin-bypass-doc",
+        acl: ["user_email:someone-else@example.com"],
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}/documents?limit=20&offset=0`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as {
+        data: Array<{ title: string }>;
+        pagination: { total: number };
+      };
+      expect(body.pagination.total).toBe(1);
+      expect(body.data.map((doc) => doc.title)).toEqual(["Admin Visible Doc"]);
+    });
   });
 
   describe("GET /api/connectors/:id/documents/:docId", () => {
@@ -332,6 +430,43 @@ describe("knowledge base routes", () => {
       });
 
       expect(response.statusCode).toBe(404);
+    });
+
+    test("returns 404 when the connector document ACL does not include the user", async () => {
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Connector Detail ACL",
+        connectorType: "jira",
+        visibility: "auto-sync-permissions",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://connector-detail-acl.atlassian.net",
+          isCloud: true,
+          projectKey: "CDA",
+        },
+      });
+      const document = await KbDocumentModel.create({
+        organizationId,
+        sourceId: "hidden-detail-doc",
+        connectorId: connector.id,
+        title: "Hidden Detail",
+        content: "hidden detail content",
+        contentHash: "hash-hidden-detail",
+        acl: ["user_email:someone-else@example.com"],
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}/documents/${document.id}`,
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toEqual({
+        error: {
+          message: "Document not found",
+          type: "api_not_found_error",
+        },
+      });
     });
   });
 
@@ -609,6 +744,49 @@ describe("knowledge base routes", () => {
       expect(body.name).toBe("Get Connector");
       expect(body.connectorType).toBe("jira");
       expect(body).toHaveProperty("totalDocsIngested");
+    });
+
+    test("counts only documents visible through document ACL", async () => {
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Count ACL Connector",
+        connectorType: "jira",
+        visibility: "auto-sync-permissions",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://count-acl.atlassian.net",
+          isCloud: true,
+          projectKey: "CAC",
+        },
+      });
+
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "count-visible-doc",
+        connectorId: connector.id,
+        title: "Count Visible Doc",
+        content: "visible",
+        contentHash: "hash-count-visible-doc",
+        acl: [`user_email:${user.email}`],
+      });
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "count-hidden-doc",
+        connectorId: connector.id,
+        title: "Count Hidden Doc",
+        content: "hidden",
+        contentHash: "hash-count-hidden-doc",
+        acl: ["user_email:someone-else@example.com"],
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as { totalDocsIngested: number };
+      expect(body.totalDocsIngested).toBe(1);
     });
 
     test("returns 404 for non-existent connector", async () => {

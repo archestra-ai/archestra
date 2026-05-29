@@ -65,9 +65,9 @@ export async function handleProcessUploadedFiles(
               teamIds: file.teamIds,
               ownerEmail: owner?.email,
             })
-          : knowledgeSourceAccessControlService.buildConnectorDocumentAccessControlList(
+          : (knowledgeSourceAccessControlService.buildConnectorDocumentAccessControlList(
               { connector },
-            );
+            ) ?? []);
 
       if (!isSupportedMimeType(file.originalName, file.mimeType)) {
         await KbUploadedFileModel.updateProcessingStatus(

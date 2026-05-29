@@ -95,8 +95,19 @@ class KbDocumentModel {
     limit?: number;
     offset?: number;
     search?: string;
+    userAcl?: AclEntry[];
+    bypassAcl?: boolean;
   }): Promise<KbDocumentListItemWithoutContent[]> {
     const normalizedSearch = params.search?.trim();
+    const aclCondition = buildDocumentAclCondition({
+      aclColumn: schema.kbDocumentsTable.acl,
+      userAcl: params.userAcl,
+      bypassAcl: params.bypassAcl,
+    });
+    if (aclCondition === false) {
+      return [];
+    }
+
     let query = db
       .select({
         id: schema.kbDocumentsTable.id,
@@ -133,6 +144,7 @@ class KbDocumentModel {
           normalizedSearch
             ? ilike(schema.kbDocumentsTable.title, `%${normalizedSearch}%`)
             : undefined,
+          aclCondition,
         ),
       )
       .orderBy(desc(schema.kbDocumentsTable.updatedAt))
@@ -245,8 +257,19 @@ class KbDocumentModel {
     connectorId: string;
     organizationId: string;
     search?: string;
+    userAcl?: AclEntry[];
+    bypassAcl?: boolean;
   }): Promise<number> {
     const normalizedSearch = params.search?.trim();
+    const aclCondition = buildDocumentAclCondition({
+      aclColumn: schema.kbDocumentsTable.acl,
+      userAcl: params.userAcl,
+      bypassAcl: params.bypassAcl,
+    });
+    if (aclCondition === false) {
+      return 0;
+    }
+
     const [result] = await db
       .select({ count: count() })
       .from(schema.kbDocumentsTable)
@@ -268,6 +291,7 @@ class KbDocumentModel {
           normalizedSearch
             ? ilike(schema.kbDocumentsTable.title, `%${normalizedSearch}%`)
             : undefined,
+          aclCondition,
         ),
       );
 
@@ -278,7 +302,18 @@ class KbDocumentModel {
     documentId: string;
     connectorId: string;
     organizationId: string;
+    userAcl?: AclEntry[];
+    bypassAcl?: boolean;
   }): Promise<KbDocumentListItem | null> {
+    const aclCondition = buildDocumentAclCondition({
+      aclColumn: schema.kbDocumentsTable.acl,
+      userAcl: params.userAcl,
+      bypassAcl: params.bypassAcl,
+    });
+    if (aclCondition === false) {
+      return null;
+    }
+
     const [result] = await db
       .select({
         id: schema.kbDocumentsTable.id,
@@ -314,6 +349,7 @@ class KbDocumentModel {
             schema.knowledgeBaseConnectorsTable.organizationId,
             params.organizationId,
           ),
+          aclCondition,
         ),
       )
       .limit(1);
@@ -406,3 +442,22 @@ class KbDocumentModel {
 }
 
 export default KbDocumentModel;
+
+function buildDocumentAclCondition(params: {
+  aclColumn: typeof schema.kbDocumentsTable.acl;
+  userAcl?: AclEntry[];
+  bypassAcl?: boolean;
+}) {
+  if (params.bypassAcl) {
+    return undefined;
+  }
+  if (!params.userAcl || params.userAcl.length === 0) {
+    return false as const;
+  }
+
+  const aclEntries = sql.join(
+    params.userAcl.map((entry) => sql`${entry}`),
+    sql`, `,
+  );
+  return sql`${params.aclColumn} ?| ARRAY[${aclEntries}]`;
+}

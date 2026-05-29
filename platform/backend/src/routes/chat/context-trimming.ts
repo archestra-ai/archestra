@@ -41,12 +41,21 @@ export function parseMaxInputTokens(error: unknown): number | null {
 /**
  * Trim messages to fit within a token limit.
  * Drop order: middle messages (oldest first) → system → last message.
+ *
+ * `systemPrompt` is sent to the provider separately (not part of `messages`)
+ * but still counts against the input limit, so its budget is reserved here.
  */
-export function trimMessagesToTokenLimit(
-  messages: ModelMessage[],
-  maxTokens: number,
-): ModelMessage[] {
-  const charBudget = maxTokens * CHARS_PER_TOKEN;
+export function trimMessagesToTokenLimit(params: {
+  messages: ModelMessage[];
+  maxTokens: number;
+  systemPrompt?: string;
+}): ModelMessage[] {
+  const { messages, maxTokens, systemPrompt } = params;
+  const systemPromptChars = systemPrompt?.length ?? 0;
+  const charBudget = Math.max(
+    maxTokens * CHARS_PER_TOKEN - systemPromptChars,
+    0,
+  );
   const chars = (m: ModelMessage) => JSON.stringify(m.content).length;
   let total = messages.reduce((s, m) => s + chars(m), 0);
   if (total <= charBudget || messages.length === 0) return messages;
@@ -68,18 +77,29 @@ export function trimMessagesToTokenLimit(
     if (dropped) total -= chars(dropped);
   }
 
-  // 3. Truncate last message if still over budget
+  // 3. Truncate the last message if still over budget.
   let trimmedLast: ModelMessage | undefined = last;
   if (last && total > charBudget) {
-    const lastStr = JSON.stringify(last.content);
-    const excess = total - charBudget;
-    trimmedLast = {
-      role: last.role,
-      content: lastStr.slice(0, Math.max(lastStr.length - excess, 0)),
-    } as ModelMessage;
+    if (typeof last.content === "string") {
+      const excess = total - charBudget;
+      trimmedLast = {
+        role: last.role,
+        content: last.content.slice(
+          0,
+          Math.max(last.content.length - excess, 0),
+        ),
+      } as ModelMessage;
+    } else {
+      // structured content (tool results, image/file parts) can't be sliced as
+      // a string without producing malformed parts the provider rejects, so
+      // drop the whole message rather than corrupt it.
+      trimmedLast = undefined;
+    }
   }
 
-  const result: ModelMessage[] = [...system, ...middle, trimmedLast];
+  const result: ModelMessage[] = [...system, ...middle, trimmedLast].filter(
+    (m): m is ModelMessage => m !== undefined,
+  );
 
   if (result.length < messages.length || trimmedLast !== last) {
     result.unshift({

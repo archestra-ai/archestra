@@ -1,4 +1,4 @@
-import { asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   InsertSkillSandbox,
@@ -135,14 +135,20 @@ class SkillSandboxModel {
     return result ?? null;
   }
 
-  /** All sandboxes attached to a conversation, newest first. */
-  static async listForConversation(
-    conversationId: string,
-  ): Promise<SkillSandbox[]> {
+  /** All sandboxes attached to a conversation within an org, newest first. */
+  static async listForConversation(params: {
+    conversationId: string;
+    organizationId: string;
+  }): Promise<SkillSandbox[]> {
     return await db
       .select()
       .from(schema.skillSandboxesTable)
-      .where(eq(schema.skillSandboxesTable.conversationId, conversationId))
+      .where(
+        and(
+          eq(schema.skillSandboxesTable.conversationId, params.conversationId),
+          eq(schema.skillSandboxesTable.organizationId, params.organizationId),
+        ),
+      )
       .orderBy(
         desc(schema.skillSandboxesTable.createdAt),
         desc(schema.skillSandboxesTable.id),

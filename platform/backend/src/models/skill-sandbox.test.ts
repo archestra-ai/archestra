@@ -124,13 +124,24 @@ describe("SkillSandboxModel", () => {
       skillIds: [skill.id],
     });
 
-    const found = await SkillSandboxModel.listForConversation(conversation.id);
+    const found = await SkillSandboxModel.listForConversation({
+      conversationId: conversation.id,
+      organizationId: org.id,
+    });
     expect(found.map((s) => s.id)).toEqual([second.id, first.id]);
 
-    const missing = await SkillSandboxModel.listForConversation(
-      crypto.randomUUID(),
-    );
+    const missing = await SkillSandboxModel.listForConversation({
+      conversationId: crypto.randomUUID(),
+      organizationId: org.id,
+    });
     expect(missing).toHaveLength(0);
+
+    // a sandbox in this conversation but a different org must not leak.
+    const otherOrgEmpty = await SkillSandboxModel.listForConversation({
+      conversationId: conversation.id,
+      organizationId: crypto.randomUUID(),
+    });
+    expect(otherOrgEmpty).toHaveLength(0);
   });
 });
 

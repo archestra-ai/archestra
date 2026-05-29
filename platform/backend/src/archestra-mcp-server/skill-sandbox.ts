@@ -57,7 +57,8 @@ const MAX_SKILLS_PER_SANDBOX = 16;
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const ALIAS_REGEX = /^s\d+$/;
+// aliases are 1-based (`s1` = first-created); reject `s0` up front.
+const ALIAS_REGEX = /^s[1-9]\d*$/;
 const SandboxIdOrAliasSchema = z
   .string()
   .trim()
@@ -426,6 +427,13 @@ const registry = defineArchestraTools([
         return errorResult("This tool requires an authenticated user session.");
       }
 
+      const checker = await getSkillPermissionChecker(userCtx);
+      if (!checker.canExecute) {
+        return errorResult(
+          "You do not have permission to perform this action (requires skill:execute).",
+        );
+      }
+
       const resolved = await resolveSandboxId({
         sandboxId: args.sandboxId,
         userCtx,
@@ -494,6 +502,13 @@ const registry = defineArchestraTools([
       const userCtx = requireUserContext(context);
       if (!userCtx) {
         return errorResult("This tool requires an authenticated user session.");
+      }
+
+      const checker = await getSkillPermissionChecker(userCtx);
+      if (!checker.canExecute) {
+        return errorResult(
+          "You do not have permission to perform this action (requires skill:execute).",
+        );
       }
 
       const resolved = await resolveSandboxId({
@@ -675,14 +690,11 @@ async function accessibleConversationSandboxes(
   conversationId: string,
   userCtx: UserContext,
 ) {
-  const all = await SkillSandboxModel.listForConversation(conversationId);
-  return all
-    .filter(
-      (s) =>
-        s.organizationId === userCtx.organizationId &&
-        s.userId === userCtx.userId,
-    )
-    .reverse();
+  const all = await SkillSandboxModel.listForConversation({
+    conversationId,
+    organizationId: userCtx.organizationId,
+  });
+  return all.filter((s) => s.userId === userCtx.userId).reverse();
 }
 
 function parseAlias(alias: string): number {

@@ -1,19 +1,3 @@
-CREATE TABLE "chat_attachments" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"organization_id" text NOT NULL,
-	"conversation_id" uuid NOT NULL,
-	"uploaded_by_user_id" text NOT NULL,
-	"original_name" text NOT NULL,
-	"mime_type" text NOT NULL,
-	"file_size" integer NOT NULL,
-	"content_hash" text NOT NULL,
-	"file_data" "bytea" NOT NULL,
-	"text_preview" text,
-	"text_preview_status" text DEFAULT 'pending' NOT NULL,
-	"created_at" timestamp DEFAULT now() NOT NULL,
-	"deleted_at" timestamp
-);
---> statement-breakpoint
 CREATE TABLE "skill_sandbox_artifacts" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"sandbox_id" uuid NOT NULL,
@@ -65,7 +49,6 @@ CREATE TABLE "skill_sandboxes" (
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-ALTER TABLE "chat_attachments" ADD CONSTRAINT "chat_attachments_conversation_id_conversations_id_fk" FOREIGN KEY ("conversation_id") REFERENCES "public"."conversations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "skill_sandbox_artifacts" ADD CONSTRAINT "skill_sandbox_artifacts_sandbox_id_skill_sandboxes_id_fk" FOREIGN KEY ("sandbox_id") REFERENCES "public"."skill_sandboxes"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "skill_sandbox_commands" ADD CONSTRAINT "skill_sandbox_commands_sandbox_id_skill_sandboxes_id_fk" FOREIGN KEY ("sandbox_id") REFERENCES "public"."skill_sandboxes"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "skill_sandbox_file_snapshots" ADD CONSTRAINT "skill_sandbox_file_snapshots_sandbox_id_skill_sandboxes_id_fk" FOREIGN KEY ("sandbox_id") REFERENCES "public"."skill_sandboxes"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -75,9 +58,6 @@ ALTER TABLE "skill_sandboxes" ADD CONSTRAINT "skill_sandboxes_user_id_user_id_fk
 ALTER TABLE "skill_sandboxes" ADD CONSTRAINT "skill_sandboxes_conversation_id_conversations_id_fk" FOREIGN KEY ("conversation_id") REFERENCES "public"."conversations"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "skill_sandboxes" ADD CONSTRAINT "skill_sandboxes_agent_id_agents_id_fk" FOREIGN KEY ("agent_id") REFERENCES "public"."agents"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "skill_sandboxes" ADD CONSTRAINT "skill_sandboxes_primary_skill_id_skills_id_fk" FOREIGN KEY ("primary_skill_id") REFERENCES "public"."skills"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "chat_attachments_conversation_id_idx" ON "chat_attachments" USING btree ("conversation_id");--> statement-breakpoint
-CREATE INDEX "chat_attachments_org_created_at_idx" ON "chat_attachments" USING btree ("organization_id","created_at");--> statement-breakpoint
-CREATE UNIQUE INDEX "chat_attachments_conversation_id_content_hash_live_uidx" ON "chat_attachments" USING btree ("conversation_id","content_hash") WHERE "chat_attachments"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX "skill_sandbox_artifacts_sandbox_id_idx" ON "skill_sandbox_artifacts" USING btree ("sandbox_id");--> statement-breakpoint
 CREATE INDEX "skill_sandbox_commands_sandbox_id_idx" ON "skill_sandbox_commands" USING btree ("sandbox_id");--> statement-breakpoint
 CREATE INDEX "skill_sandbox_commands_sandbox_created_idx" ON "skill_sandbox_commands" USING btree ("sandbox_id","created_at");--> statement-breakpoint

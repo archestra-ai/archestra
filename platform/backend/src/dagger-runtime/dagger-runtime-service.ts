@@ -336,8 +336,7 @@ class DaggerRuntimeService {
     budgetSeconds: number,
     fn: () => Promise<T>,
   ): Promise<T> {
-    const totalMs =
-      (budgetSeconds + config.daggerRuntime.nativeBackstopBufferSeconds) * 1000;
+    const totalMs = (budgetSeconds + NATIVE_BACKSTOP_BUFFER_SECONDS) * 1000;
     let backstopHandle: NodeJS.Timeout | undefined;
     try {
       return await new Promise<T>((resolve, reject) => {
@@ -404,6 +403,10 @@ export const daggerRuntimeService = new DaggerRuntimeService();
 const INIT_RETRY_COOLDOWN_MS = 10_000;
 // artifact reads have no per-call timeout; cap their backstop budget here.
 const ARTIFACT_BUDGET_SECONDS = 60;
+// extra wall-clock budget added to a request's own timeout before the JS-side
+// backstop assumes the engine is wedged. has to cover the first request's cold
+// image pull + warm-base build, so it's generous; not an operator-facing knob.
+const NATIVE_BACKSTOP_BUFFER_SECONDS = 180;
 
 function getTraceparent(): string | undefined {
   const carrier: Record<string, string> = {};

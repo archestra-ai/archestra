@@ -1148,15 +1148,6 @@ const config = {
       process.env.ARCHESTRA_DAGGER_RUNTIME_MAX_QUEUE_LENGTH,
       50,
     ),
-    /**
-     * extra wall-clock budget (seconds) added to a request's own timeoutSeconds
-     * before the JS-side backstop fires and assumes the engine is wedged.
-     * needs to cover cold-image pull + warm-base build for the first request.
-     */
-    nativeBackstopBufferSeconds: parsePositiveInt(
-      process.env.ARCHESTRA_DAGGER_RUNTIME_NATIVE_BACKSTOP_BUFFER_SECONDS,
-      180,
-    ),
     defaults: {
       outputBytesLimit: parsePositiveInt(
         process.env.ARCHESTRA_DAGGER_RUNTIME_OUTPUT_BYTES_LIMIT,

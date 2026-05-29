@@ -410,6 +410,16 @@ function ChatSessionHook({
     [],
   );
 
+  // a dropped connection between compaction-start and compaction-finish would
+  // otherwise leave the spinner stuck on; clear it on any stream end.
+  const clearActiveContextCompaction = useCallback(() => {
+    setContextCompaction((current) => ({
+      ...current,
+      isCompacting: false,
+      trigger: null,
+    }));
+  }, []);
+
   // Track early UI data from data-tool-ui-start events (toolCallId → resource data)
   const [earlyToolUiStarts, setEarlyToolUiStarts] = useState<
     ChatSession["earlyToolUiStarts"]
@@ -446,13 +456,7 @@ function ChatSessionHook({
     id: conversationId,
     onFinish: ({ message, isAbort }) => {
       setOptimisticToolCalls([]);
-      // a dropped connection between compaction-start and compaction-finish
-      // would otherwise leave the spinner stuck on; clear it on stream end.
-      setContextCompaction((current) => ({
-        ...current,
-        isCompacting: false,
-        trigger: null,
-      }));
+      clearActiveContextCompaction();
 
       // When the user stops mid-tool-call, the assistant message is left with a
       // tool part that never produced output, which the UI renders as a
@@ -505,11 +509,7 @@ function ChatSessionHook({
     },
     onError: (chatError) => {
       setOptimisticToolCalls([]);
-      setContextCompaction((current) => ({
-        ...current,
-        isCompacting: false,
-        trigger: null,
-      }));
+      clearActiveContextCompaction();
       queryClient.invalidateQueries({
         queryKey: ["conversation", conversationId],
       });

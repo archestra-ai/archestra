@@ -103,9 +103,11 @@ export function trimMessagesToTokenLimit(params: {
         : ({ role: last.role, content: text.slice(0, keep) } as ModelMessage);
   }
 
-  const result: ModelMessage[] = [...system, ...middle, trimmedLast].filter(
-    (m): m is ModelMessage => m !== undefined,
-  );
+  const result: ModelMessage[] = [
+    ...system,
+    ...middle,
+    ...(trimmedLast ? [trimmedLast] : []),
+  ];
 
   if (result.length < messages.length || trimmedLast !== last) {
     result.unshift({

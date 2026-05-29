@@ -1,7 +1,18 @@
-import { MODEL_MARKER_PATTERNS, type SupportedProvider } from "@shared";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import {
+  type CompleteModelSelection,
+  MODEL_MARKER_PATTERNS,
+  type SupportedProvider,
+} from "@shared";
+import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import type { LlmProviderApiKey, Model } from "@/types";
+
+/** Aggregate of an API key's linked-model count and oldest sync timestamp. */
+export interface ModelSyncState {
+  apiKeyId: string;
+  linkedModelCount: number;
+  oldestLastSyncedAt: Date | null;
+}
 
 /**
  * Model class for the api_key_models join table.
@@ -302,6 +313,76 @@ class LlmProviderApiKeyModelLinkModel {
     return result?.count ?? 0;
   }
 
+  static async getModelSyncStatesForApiKeys(
+    apiKeyIds: string[],
+  ): Promise<Map<string, ModelSyncState>> {
+    if (apiKeyIds.length === 0) {
+      return new Map();
+    }
+
+    const results = await db
+      .select({
+        apiKeyId: schema.llmProviderApiKeyModelsTable.apiKeyId,
+        linkedModelCount: sql<number>`count(*)::int`.as("linked_model_count"),
+        oldestLastSyncedAt:
+          sql<Date | null>`min(${schema.modelsTable.lastSyncedAt})`.as(
+            "oldest_last_synced_at",
+          ),
+      })
+      .from(schema.llmProviderApiKeyModelsTable)
+      .innerJoin(
+        schema.modelsTable,
+        eq(schema.llmProviderApiKeyModelsTable.modelId, schema.modelsTable.id),
+      )
+      .where(inArray(schema.llmProviderApiKeyModelsTable.apiKeyId, apiKeyIds))
+      .groupBy(schema.llmProviderApiKeyModelsTable.apiKeyId);
+
+    return new Map(
+      results.map((result) => [
+        result.apiKeyId,
+        {
+          ...result,
+          oldestLastSyncedAt: toDateOrNull(result.oldestLastSyncedAt),
+        },
+      ]),
+    );
+  }
+
+  static async getLinkedModelSelectionKeys(
+    selections: CompleteModelSelection[],
+  ): Promise<Set<string>> {
+    if (selections.length === 0) {
+      return new Set();
+    }
+
+    const uniqueSelections = Array.from(
+      new Map(
+        selections.map((selection) => [selectionKey(selection), selection]),
+      ).values(),
+    );
+
+    const conditions = uniqueSelections.map((selection) =>
+      and(
+        eq(schema.llmProviderApiKeyModelsTable.modelId, selection.modelId),
+        eq(schema.llmProviderApiKeyModelsTable.apiKeyId, selection.apiKeyId),
+      ),
+    );
+    const whereClause = or(...conditions);
+    if (!whereClause) {
+      return new Set();
+    }
+
+    const rows = await db
+      .select({
+        modelId: schema.llmProviderApiKeyModelsTable.modelId,
+        apiKeyId: schema.llmProviderApiKeyModelsTable.apiKeyId,
+      })
+      .from(schema.llmProviderApiKeyModelsTable)
+      .where(whereClause);
+
+    return new Set(rows.map(selectionKey));
+  }
+
   /**
    * Get unique models for a list of API key IDs.
    * Returns models with their data and isBest/isFastest markers,
@@ -527,6 +608,20 @@ export default LlmProviderApiKeyModelLinkModel;
 // ============================================================================
 // Helper functions
 // ============================================================================
+
+export function selectionKey(selection: CompleteModelSelection): string {
+  return `${selection.apiKeyId}:${selection.modelId}`;
+}
+
+function toDateOrNull(value: Date | string | null): Date | null {
+  if (value == null) {
+    return null;
+  }
+  if (value instanceof Date) {
+    return value;
+  }
+  return new Date(value);
+}
 
 /**
  * Find the first model matching patterns, respecting pattern priority order.

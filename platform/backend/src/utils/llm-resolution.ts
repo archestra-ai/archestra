@@ -1,6 +1,7 @@
 import {
   DEFAULT_MODELS,
   FAST_MODELS,
+  isCompleteModelSelection,
   type ModelSelection,
   OPENROUTER_FREE_MODEL_ID,
   resolveModelSelection,
@@ -16,6 +17,7 @@ import {
   MemberModel,
   ModelModel,
   OrganizationModel,
+  selectionKey,
   TeamModel,
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
@@ -68,7 +70,7 @@ export async function resolveConversationLlmSelectionForAgent(params: {
   const member = await MemberModel.getByUserId(userId, organizationId);
   const organization = await OrganizationModel.getById(organizationId);
 
-  const levels: ModelSelection[] = [
+  const configuredLevels: ModelSelection[] = [
     { modelId: params.explicitModelId, apiKeyId: params.explicitApiKeyId },
     {
       modelId: member?.defaultModelId,
@@ -81,10 +83,13 @@ export async function resolveConversationLlmSelectionForAgent(params: {
     },
   ];
 
-  const availableModels = await getAvailableRankedModels({
-    organizationId,
-    userId,
-  });
+  const [levels, availableModels] = await Promise.all([
+    filterLinkedModelSelectionLevels(configuredLevels),
+    getAvailableRankedModels({
+      organizationId,
+      userId,
+    }),
+  ]);
 
   const resolved = resolveModelSelection({ levels, availableModels });
 
@@ -302,6 +307,32 @@ async function getAvailableRankedModels(params: {
   return LlmProviderApiKeyModelLinkModel.getRankedModelsForApiKeys(
     keys.map((key) => key.id),
   );
+}
+
+async function filterLinkedModelSelectionLevels(
+  levels: ModelSelection[],
+): Promise<ModelSelection[]> {
+  const completeLevels = levels.filter(isCompleteModelSelection);
+  const linkedSelectionKeys =
+    await LlmProviderApiKeyModelLinkModel.getLinkedModelSelectionKeys(
+      completeLevels,
+    );
+
+  return levels.map((level) => {
+    if (!isCompleteModelSelection(level)) {
+      return level;
+    }
+
+    if (linkedSelectionKeys.has(selectionKey(level))) {
+      return level;
+    }
+
+    logger.info(
+      { modelId: level.modelId, apiKeyId: level.apiKeyId },
+      "Skipping configured LLM model selection because it is no longer linked to the API key",
+    );
+    return { modelId: null, apiKeyId: null };
+  });
 }
 
 /**

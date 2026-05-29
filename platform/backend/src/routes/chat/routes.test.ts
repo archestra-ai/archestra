@@ -11,17 +11,17 @@ vi.mock("ai", async (importOriginal) => {
   };
 });
 
-// Mock createDirectLLMModel to avoid actual API calls
+// Mock createLLMModel to avoid actual API calls
 vi.mock("@/clients/llm-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/clients/llm-client")>();
   return {
     ...actual,
-    createDirectLLMModel: vi.fn(() => "mocked-model"),
+    createLLMModel: vi.fn(() => "mocked-model"),
   };
 });
 
 import { archestraMcpBranding } from "@/archestra-mcp-server";
-import { createDirectLLMModel } from "@/clients/llm-client";
+import { createLLMModel } from "@/clients/llm-client";
 import ConversationModel from "@/models/conversation";
 import MessageModel from "@/models/message";
 import { test } from "@/test";
@@ -995,6 +995,9 @@ describe("generateConversationTitle", () => {
       apiKey: "test-key",
       modelName: "claude-test",
       baseUrl: null,
+      agentId: "title-agent-id",
+      userId: "user-id",
+      conversationId: "conversation-id",
       systemPrompt: "Generate a title.",
       firstUserMessage: "Help me debug this React error",
       firstAssistantMessage: "I can help with that.",
@@ -1017,6 +1020,9 @@ describe("generateConversationTitle", () => {
       apiKey: "test-key",
       modelName: "claude-test",
       baseUrl: null,
+      agentId: "title-agent-id",
+      userId: "user-id",
+      conversationId: "conversation-id",
       systemPrompt: "Generate a title.",
       firstUserMessage: "Hello",
       firstAssistantMessage: "Hi there!",
@@ -1035,6 +1041,9 @@ describe("generateConversationTitle", () => {
       apiKey: "test-key",
       modelName: "gpt-test",
       baseUrl: null,
+      agentId: "title-agent-id",
+      userId: "user-id",
+      conversationId: "conversation-id",
       systemPrompt: "Generate a title.",
       firstUserMessage: "Test",
       firstAssistantMessage: "",
@@ -1051,14 +1060,23 @@ describe("generateConversationTitle", () => {
       apiKey: "test-key",
       modelName: "configured-title-model",
       baseUrl: null,
+      agentId: "title-agent-id",
+      userId: "user-id",
+      conversationId: "conversation-id",
       systemPrompt: "Return only a title.",
       firstUserMessage: "Hello",
       firstAssistantMessage: "Hi!",
     });
 
     expect(result).toBe("Configured Model Title");
-    expect(createDirectLLMModel).toHaveBeenCalledWith(
-      expect.objectContaining({ modelName: "configured-title-model" }),
+    expect(createLLMModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: "title-agent-id",
+        modelName: "configured-title-model",
+        userId: "user-id",
+        sessionId: "conversation-id",
+        source: "chat:title_generation",
+      }),
     );
     expect(mockGenerateText).toHaveBeenCalledWith({
       model: "mocked-model",

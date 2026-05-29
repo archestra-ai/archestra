@@ -37,7 +37,7 @@ import {
   type ToolUiResourceData,
 } from "@/clients/chat-mcp-client";
 import {
-  createDirectLLMModel,
+  createLLMModel,
   createLLMModelForAgent,
   isApiKeyRequired,
 } from "@/clients/llm-client";
@@ -2099,6 +2099,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Generate title using the extracted function
       const generatedTitle = await generateConversationTitle({
         ...titleLlm,
+        agentId: titleAgent?.id ?? id,
+        userId: user.id,
+        conversationId: id,
         systemPrompt,
         firstUserMessage,
         firstAssistantMessage,
@@ -2426,6 +2429,9 @@ export interface GenerateTitleParams {
   apiKey: string | undefined;
   modelName: string;
   baseUrl: string | null;
+  agentId: string;
+  userId: string;
+  conversationId: string;
   systemPrompt: string;
   firstUserMessage: string;
   firstAssistantMessage: string;
@@ -2443,6 +2449,9 @@ export async function generateConversationTitle(
     apiKey,
     modelName,
     baseUrl,
+    agentId,
+    userId,
+    conversationId,
     systemPrompt,
     firstUserMessage,
     firstAssistantMessage,
@@ -2452,13 +2461,17 @@ export async function generateConversationTitle(
 
   logger.debug(
     { provider, modelName, hasApiKey: !!apiKey, baseUrl },
-    "Title generation: creating direct LLM model",
+    "Title generation: creating logged LLM model",
   );
 
-  const model = createDirectLLMModel({
+  const model = createLLMModel({
     provider,
     apiKey,
+    agentId,
     modelName,
+    userId,
+    sessionId: conversationId,
+    source: "chat:title_generation",
     baseUrl,
   });
 

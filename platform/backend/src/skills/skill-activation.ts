@@ -1,18 +1,4 @@
-import type { SkillPermissionChecker } from "@/auth/skill-permissions";
-import config from "@/config";
 import type { Skill, SkillFile } from "@/types";
-
-/**
- * Whether the caller can actually use the skill sandbox tools: the feature is
- * enabled on this deployment and the caller holds `skill:execute`. Gates the
- * sandbox hint in activation/catalog output so the model is never pointed at
- * tools that would just refuse. Fail-closed for org-token sessions (no checker).
- */
-export function skillSandboxAvailable(
-  checker: SkillPermissionChecker | null,
-): boolean {
-  return config.skillsSandbox.enabled && (checker?.canExecute ?? false);
-}
 
 /**
  * Render a skill's SKILL.md body, compatibility note, and resource listing into

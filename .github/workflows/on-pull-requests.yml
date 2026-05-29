@@ -482,7 +482,9 @@ jobs:
           context: ${{ matrix.context }}
           dockerfile: ${{ matrix.dockerfile }}
           target: sandbox-rs-musl-smoke
-          platforms: linux/amd64,linux/arm64
+          # amd64 only: this is a smoke build, and building arm64 here runs under
+          # QEMU emulation, which makes the Rust release compile 2-3x slower.
+          platforms: linux/amd64
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 

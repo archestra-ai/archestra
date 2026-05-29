@@ -171,7 +171,12 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV VERSION=${VERSION}
 
 FROM builder-base AS sandbox-rs-musl-smoke
-RUN pnpm --filter @archestra/sandbox-rs check:musl
+# cache cargo registry/git + the workspace target dir so heavy deps
+# (dagger-sdk, tokio, …) aren't recompiled on every build of this stage.
+RUN --mount=type=cache,target=/root/.cargo/registry \
+    --mount=type=cache,target=/root/.cargo/git \
+    --mount=type=cache,target=/app/archestra-rs/target \
+    pnpm --filter @archestra/sandbox-rs check:musl
 
 # <----- Builder stage ----->
 FROM builder-base AS builder

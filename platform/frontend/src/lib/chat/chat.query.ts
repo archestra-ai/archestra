@@ -205,14 +205,21 @@ export function useUpdateConversation() {
         (old: typeof data | undefined) =>
           mergeUpdatedConversationIntoCache(old, data, variables),
       );
+
+      // Update title in cache
+      if (variables.title !== undefined) {
+        queryClient.setQueriesData<{ id: string; title: string | null }[]>(
+          { queryKey: ["conversations"] },
+          (old) =>
+            old?.map((c) =>
+              c.id === variables.id ? { ...c, title: data.title } : c,
+            ),
+        );
+      }
       // Only invalidate the conversations list for sidebar-relevant changes
-      // (title, pin status, agent). Model/key updates don't affect the sidebar
+      // (pin status, agent). Model/key updates don't affect the sidebar
       // and unnecessary invalidation causes cascading re-renders.
-      if (
-        variables.title !== undefined ||
-        variables.pinnedAt !== undefined ||
-        variables.agentId
-      ) {
+      if (variables.pinnedAt !== undefined || variables.agentId) {
         queryClient.invalidateQueries({ queryKey: ["conversations"] });
       }
       if (variables.agentId) {

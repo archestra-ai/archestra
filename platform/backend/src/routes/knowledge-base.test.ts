@@ -353,6 +353,71 @@ describe("knowledge base routes", () => {
       expect(body.pagination.total).toBe(1);
       expect(body.data.map((doc) => doc.title)).toEqual(["Admin Visible Doc"]);
     });
+
+    test("reflects document ACL updates in connector document routes", async () => {
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Updated ACL Connector Docs",
+        connectorType: "jira",
+        visibility: "auto-sync-permissions",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://connector-updated-acl.atlassian.net",
+          isCloud: true,
+          projectKey: "UAC",
+        },
+      });
+
+      const document = await KbDocumentModel.create({
+        organizationId,
+        sourceId: "updated-acl-doc",
+        connectorId: connector.id,
+        title: "Updated ACL Doc",
+        content: "content",
+        contentHash: "hash-updated-acl-doc",
+        acl: ["user_email:old-access@example.com"],
+      });
+
+      const hiddenResponse = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}/documents?limit=20&offset=0`,
+      });
+      expect(hiddenResponse.statusCode).toBe(200);
+      expect(hiddenResponse.json().pagination.total).toBe(0);
+
+      await KbDocumentModel.update(document.id, {
+        acl: [`user_email:${user.email}`],
+      });
+
+      const connectorResponse = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}`,
+      });
+      const listResponse = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}/documents?limit=20&offset=0`,
+      });
+      const detailResponse = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}/documents/${document.id}`,
+      });
+
+      expect(connectorResponse.statusCode).toBe(200);
+      expect(connectorResponse.json().totalDocsIngested).toBe(1);
+
+      expect(listResponse.statusCode).toBe(200);
+      const listBody = listResponse.json() as {
+        data: Array<{ title: string }>;
+        pagination: { total: number };
+      };
+      expect(listBody.pagination.total).toBe(1);
+      expect(listBody.data.map((doc) => doc.title)).toEqual([
+        "Updated ACL Doc",
+      ]);
+
+      expect(detailResponse.statusCode).toBe(200);
+      expect(detailResponse.json().id).toBe(document.id);
+    });
   });
 
   describe("GET /api/connectors/:id/documents/:docId", () => {

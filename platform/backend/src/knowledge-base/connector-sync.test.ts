@@ -64,6 +64,11 @@ function makeMockConnector(
     title: string;
     content: string;
     sourceUrl?: string;
+    permissions?: {
+      users?: string[];
+      groups?: string[];
+      isPublic?: boolean;
+    };
   }>,
   options?: { hasMore?: boolean },
 ) {
@@ -183,6 +188,80 @@ describe("ConnectorSyncService", () => {
     const run = await ConnectorRunModel.findById(result.runId);
     expect(run?.documentsProcessed).toBe(1);
     expect(run?.documentsIngested).toBe(0); // Skipped because unchanged
+  });
+
+  test("executeSync refreshes ACL for unchanged auto-sync documents", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const secretId = await createSecret();
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+      visibility: "auto-sync-permissions",
+    });
+
+    await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
+
+    const content = "Content with stable hash";
+    const contentHash = createHash("sha256").update(content).digest("hex");
+
+    const existingDoc = await KbDocumentModel.create({
+      organizationId: org.id,
+      sourceId: "ext-1",
+      connectorId: connector.id,
+      title: "Doc 1",
+      content,
+      contentHash,
+      acl: ["user_email:old-access@example.com"],
+      embeddingStatus: "completed",
+    });
+    await KbChunkModel.insertMany([
+      {
+        documentId: existingDoc.id,
+        content: "chunk 1",
+        chunkIndex: 0,
+        acl: ["user_email:old-access@example.com"],
+      },
+      {
+        documentId: existingDoc.id,
+        content: "chunk 2",
+        chunkIndex: 1,
+        acl: ["user_email:old-access@example.com"],
+      },
+    ]);
+
+    setupSecret();
+    mockEnqueue.mockClear();
+    const mockImpl = makeMockConnector([
+      {
+        id: "ext-1",
+        title: "Doc 1",
+        content,
+        permissions: { users: ["new-access@example.com"] },
+      },
+    ]);
+    mockGetConnector.mockReturnValue(mockImpl);
+
+    const result = await connectorSyncService.executeSync(connector.id);
+
+    expect(result.status).toBe("success");
+
+    const run = await ConnectorRunModel.findById(result.runId);
+    expect(run?.documentsProcessed).toBe(1);
+    expect(run?.documentsIngested).toBe(0);
+    expect(mockEnqueue).not.toHaveBeenCalled();
+
+    const refreshedDoc = await KbDocumentModel.findById(existingDoc.id);
+    expect(refreshedDoc?.acl).toEqual(["user_email:new-access@example.com"]);
+    expect(refreshedDoc?.embeddingStatus).toBe("completed");
+
+    const refreshedChunks = await KbChunkModel.findByDocument(existingDoc.id);
+    expect(refreshedChunks.map((chunk) => chunk.acl)).toEqual([
+      ["user_email:new-access@example.com"],
+      ["user_email:new-access@example.com"],
+    ]);
   });
 
   test("executeSync updates document when content hash changes", async ({

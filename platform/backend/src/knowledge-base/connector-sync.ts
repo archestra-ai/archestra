@@ -446,6 +446,12 @@ class ConnectorSyncService {
     if (existing) {
       // Same content hash → skip (unchanged)
       if (existing.contentHash === contentHash) {
+        await this.refreshDocumentAclIfNeeded({
+          existing,
+          acl,
+          log,
+        });
+
         const existingChunkCount = await KbChunkModel.countByDocument(
           existing.id,
         );
@@ -617,6 +623,33 @@ class ConnectorSyncService {
     );
   }
 
+  private async refreshDocumentAclIfNeeded(params: {
+    existing: NonNullable<
+      Awaited<ReturnType<typeof KbDocumentModel.findBySourceId>>
+    >;
+    acl: AclEntry[];
+    log: pino.Logger;
+  }): Promise<void> {
+    const { existing, acl, log } = params;
+    if (haveSameAcl(existing.acl, acl)) {
+      return;
+    }
+
+    const [updatedDocument, updatedChunks] = await Promise.all([
+      KbDocumentModel.update(existing.id, { acl }),
+      KbChunkModel.updateAclByDocument(existing.id, acl),
+    ]);
+
+    log.debug(
+      {
+        kbDocumentId: existing.id,
+        updatedDocument: Boolean(updatedDocument),
+        updatedChunks,
+      },
+      "Updated unchanged document ACL",
+    );
+  }
+
   private async loadCredentials(
     secretId: string | null,
     log: pino.Logger,
@@ -641,3 +674,14 @@ class ConnectorSyncService {
 }
 
 export const connectorSyncService = new ConnectorSyncService();
+
+function haveSameAcl(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((entry, index) => entry === right[index]);
+}

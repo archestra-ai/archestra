@@ -552,6 +552,84 @@ describe("KbChunkModel", () => {
     });
   });
 
+  describe("updateAclByDocument", () => {
+    test("updates chunks for the target document only", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      const targetDoc = await KbDocumentModel.create(
+        createDocumentData(connector.id, org.id),
+      );
+      const otherDoc = await KbDocumentModel.create(
+        createDocumentData(connector.id, org.id),
+      );
+
+      await KbChunkModel.insertMany([
+        {
+          documentId: targetDoc.id,
+          content: "Target chunk",
+          chunkIndex: 0,
+          acl: ["org:*"],
+        },
+        {
+          documentId: otherDoc.id,
+          content: "Other chunk",
+          chunkIndex: 0,
+          acl: ["org:*"],
+        },
+      ]);
+
+      const updatedCount = await KbChunkModel.updateAclByDocument(
+        targetDoc.id,
+        ["user_email:new-access@example.com"],
+      );
+
+      expect(updatedCount).toBe(1);
+
+      const targetChunks = await KbChunkModel.findByDocument(targetDoc.id);
+      const otherChunks = await KbChunkModel.findByDocument(otherDoc.id);
+
+      expect(targetChunks.map((chunk) => chunk.acl)).toEqual([
+        ["user_email:new-access@example.com"],
+      ]);
+      expect(otherChunks.map((chunk) => chunk.acl)).toEqual([["org:*"]]);
+    });
+
+    test("skips chunks that already have the target ACL", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      const doc = await KbDocumentModel.create(
+        createDocumentData(connector.id, org.id),
+      );
+
+      await KbChunkModel.insertMany([
+        {
+          documentId: doc.id,
+          content: "Already correct chunk",
+          chunkIndex: 0,
+          acl: ["user_email:new-access@example.com"],
+        },
+      ]);
+
+      const updatedCount = await KbChunkModel.updateAclByDocument(doc.id, [
+        "user_email:new-access@example.com",
+      ]);
+
+      expect(updatedCount).toBe(0);
+    });
+  });
+
   describe("updateEmbeddings", () => {
     test("returns without error when updates is empty", async () => {
       await expect(

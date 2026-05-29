@@ -27,6 +27,19 @@ export interface ModelSelection {
   apiKeyId: string | null | undefined;
 }
 
+/** A selection with both ids present — the only shape that can be resolved. */
+export interface CompleteModelSelection {
+  modelId: string;
+  apiKeyId: string;
+}
+
+/** Type guard narrowing a {@link ModelSelection} to {@link CompleteModelSelection}. */
+export function isCompleteModelSelection(
+  selection: ModelSelection,
+): selection is CompleteModelSelection {
+  return Boolean(selection.modelId) && Boolean(selection.apiKeyId);
+}
+
 /**
  * A (model, key) selection is complete only when both ids are set or both are
  * empty. A half-configured selection — a model with no key, or a key with no

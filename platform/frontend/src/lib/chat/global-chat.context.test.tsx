@@ -193,7 +193,7 @@ describe("ChatProvider retries", () => {
     });
   });
 
-  it("does not overwrite live context tokens from auto compaction estimates", async () => {
+  it("updates live context tokens from auto compaction estimates", async () => {
     const latestSessionRef: { current: ChatSessionSnapshot } = {
       current: undefined,
     };
@@ -248,7 +248,7 @@ describe("ChatProvider retries", () => {
         compactedTokenEstimate: 794_797,
       }),
     );
-    expect(latestSessionRef.current?.contextTokensUsed).toBe(120);
+    expect(latestSessionRef.current?.contextTokensUsed).toBe(794_797);
   });
 
   it("configures active-run reconnect URL and resumes when the last persisted message is from the user", async () => {

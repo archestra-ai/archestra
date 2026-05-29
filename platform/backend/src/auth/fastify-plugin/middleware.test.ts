@@ -2,7 +2,7 @@ import * as Sentry from "@sentry/node";
 import { SupportedProviders } from "@shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { vi } from "vitest";
-import { describe, expect, test } from "@/test";
+import { afterEach, describe, expect, test } from "@/test";
 import { Authnz } from "./middleware";
 
 // Mock Sentry
@@ -471,6 +471,132 @@ describe("Authnz", () => {
           "Unauthenticated",
         );
       }
+    });
+  });
+
+  describe("authMethod stamping", () => {
+    /**
+     * These tests verify that populateUserInfo stamps request.authMethod
+     * with "session" or "api_key" after successful authentication.
+     * We spy on betterAuth and UserModel to control the auth flow, and restore
+     * all spies in afterEach so other tests are unaffected.
+     */
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    test("sets authMethod=session when session auth succeeds", async () => {
+      const { betterAuth } = await import("@/auth");
+      const { UserModel } = await import("@/models");
+      const { requiredEndpointPermissionsMap } = await import(
+        "@shared/access-control"
+      );
+
+      const fakeOrgId = "org-session-test";
+      const fakeUserId = "user-session-test";
+
+      vi.spyOn(betterAuth.api, "getSession").mockResolvedValue({
+        user: { id: fakeUserId },
+        session: { id: "session-abc" },
+      } as Awaited<ReturnType<typeof betterAuth.api.getSession>>);
+
+      vi.spyOn(UserModel, "getById").mockResolvedValue({
+        id: fakeUserId,
+        organizationId: fakeOrgId,
+        name: "Test User",
+        email: "test@example.com",
+        emailVerified: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        image: null,
+        twoFactorEnabled: null,
+      } as Awaited<ReturnType<typeof UserModel.getById>>);
+
+      // Allow any authenticated user by giving the operationId empty permissions.
+      // biome-ignore lint/suspicious/noExplicitAny: test instrumentation
+      const testOpId = "__authMethodSessionTest__" as any;
+      // biome-ignore lint/suspicious/noExplicitAny: test instrumentation
+      (requiredEndpointPermissionsMap as any)[testOpId] = {};
+
+      const request = {
+        url: "/api/some-route",
+        method: "GET",
+        headers: { cookie: "session=abc" },
+        id: "req-session-test",
+        routeOptions: { schema: { operationId: testOpId } },
+      } as unknown as FastifyRequest;
+      const reply = {
+        status: vi.fn().mockReturnThis(),
+        send: vi.fn(),
+      } as unknown as FastifyReply;
+
+      await authnz.handle(request, reply);
+
+      expect((request as unknown as { authMethod: string }).authMethod).toBe(
+        "session",
+      );
+
+      // biome-ignore lint/suspicious/noExplicitAny: cleanup
+      delete (requiredEndpointPermissionsMap as any)[testOpId];
+    });
+
+    test("sets authMethod=api_key when API key auth succeeds", async () => {
+      const { betterAuth } = await import("@/auth");
+      const { UserModel } = await import("@/models");
+      const { requiredEndpointPermissionsMap } = await import(
+        "@shared/access-control"
+      );
+
+      const fakeOrgId = "org-apikey-test";
+      const fakeUserId = "user-apikey-test";
+      const fakeApiKey = "archestra_test_key";
+
+      // Session fails → falls through to API key
+      vi.spyOn(betterAuth.api, "getSession").mockRejectedValue(
+        new Error("No active organization"),
+      );
+      vi.spyOn(betterAuth.api, "verifyApiKey").mockResolvedValue({
+        valid: true,
+        key: { referenceId: fakeUserId },
+      } as Awaited<ReturnType<typeof betterAuth.api.verifyApiKey>>);
+
+      vi.spyOn(UserModel, "getById").mockResolvedValue({
+        id: fakeUserId,
+        organizationId: fakeOrgId,
+        name: "API User",
+        email: "api@example.com",
+        emailVerified: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        image: null,
+        twoFactorEnabled: null,
+      } as Awaited<ReturnType<typeof UserModel.getById>>);
+
+      // biome-ignore lint/suspicious/noExplicitAny: test instrumentation
+      const testOpId = "__authMethodApiKeyTest__" as any;
+      // biome-ignore lint/suspicious/noExplicitAny: test instrumentation
+      (requiredEndpointPermissionsMap as any)[testOpId] = {};
+
+      const request = {
+        url: "/api/some-route",
+        method: "GET",
+        headers: { authorization: fakeApiKey },
+        id: "req-apikey-test",
+        routeOptions: { schema: { operationId: testOpId } },
+      } as unknown as FastifyRequest;
+      const reply = {
+        status: vi.fn().mockReturnThis(),
+        send: vi.fn(),
+      } as unknown as FastifyReply;
+
+      await authnz.handle(request, reply);
+
+      expect((request as unknown as { authMethod: string }).authMethod).toBe(
+        "api_key",
+      );
+
+      // biome-ignore lint/suspicious/noExplicitAny: cleanup
+      delete (requiredEndpointPermissionsMap as any)[testOpId];
     });
   });
 

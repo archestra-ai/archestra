@@ -1,4 +1,4 @@
-import ChatAttachmentModel from "@/models/chat-attachment";
+import ConversationAttachmentModel from "@/models/conversation-attachment";
 import { expect, test } from "@/test";
 import type { ChatMessage } from "@/types";
 import { __test, __testEstimateChatMessagesTokens } from "./context-compaction";
@@ -108,17 +108,17 @@ test("summary path includes text_preview for a ref attachment in the same conver
     organizationId: agent.organizationId,
   });
   const bytes = Buffer.from("placeholder", "utf8");
-  const row = await ChatAttachmentModel.create({
+  const row = await ConversationAttachmentModel.create({
     organizationId: conversation.organizationId,
     conversationId: conversation.id,
     uploadedByUserId: conversation.userId,
     originalName: "doc.pdf",
     mimeType: "application/pdf",
     fileSize: bytes.byteLength,
-    contentHash: ChatAttachmentModel.computeContentHash(bytes),
+    contentHash: ConversationAttachmentModel.computeContentHash(bytes),
     fileData: bytes,
   });
-  await ChatAttachmentModel.updateTextPreview(
+  await ConversationAttachmentModel.updateTextPreview(
     row.id,
     "ok",
     "MARKER_PREVIEW_TEXT for the compaction summarizer",
@@ -161,17 +161,17 @@ test("summary path silently drops refs from a DIFFERENT conversation (ACL)", asy
     organizationId: agent.organizationId,
   });
   const bytes = Buffer.from("secret", "utf8");
-  const row = await ChatAttachmentModel.create({
+  const row = await ConversationAttachmentModel.create({
     organizationId: otherConvo.organizationId,
     conversationId: otherConvo.id,
     uploadedByUserId: otherConvo.userId,
     originalName: "secret.pdf",
     mimeType: "application/pdf",
     fileSize: bytes.byteLength,
-    contentHash: ChatAttachmentModel.computeContentHash(bytes),
+    contentHash: ConversationAttachmentModel.computeContentHash(bytes),
     fileData: bytes,
   });
-  await ChatAttachmentModel.updateTextPreview(
+  await ConversationAttachmentModel.updateTextPreview(
     row.id,
     "ok",
     "SECRET_PREVIEW_must_not_leak_across_conversations",
@@ -214,17 +214,17 @@ test("summary path falls back when ref's preview status is 'failed'", async ({
     organizationId: agent.organizationId,
   });
   const bytes = Buffer.from("placeholder", "utf8");
-  const row = await ChatAttachmentModel.create({
+  const row = await ConversationAttachmentModel.create({
     organizationId: conversation.organizationId,
     conversationId: conversation.id,
     uploadedByUserId: conversation.userId,
     originalName: "broken.pdf",
     mimeType: "application/pdf",
     fileSize: bytes.byteLength,
-    contentHash: ChatAttachmentModel.computeContentHash(bytes),
+    contentHash: ConversationAttachmentModel.computeContentHash(bytes),
     fileData: bytes,
   });
-  await ChatAttachmentModel.updateTextPreview(row.id, "failed", null);
+  await ConversationAttachmentModel.updateTextPreview(row.id, "failed", null);
 
   const messages: ChatMessage[] = [
     {

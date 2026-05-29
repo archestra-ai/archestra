@@ -1,6 +1,13 @@
 import { describe, expect, test } from "vitest";
-import { allAvailableActions, permissionDescriptions } from "./access-control";
+import {
+  allAvailableActions,
+  editorPermissions,
+  memberPermissions,
+  permissionDescriptions,
+  predefinedPermissionsMap,
+} from "./access-control";
 import { internalResources, type Resource } from "./permission.types";
+import { ADMIN_ROLE_NAME } from "./roles";
 
 describe("access-control", () => {
   test("every resource:action combination has a permissionDescription", () => {
@@ -34,5 +41,30 @@ describe("access-control", () => {
     );
 
     expect(stale).toEqual([]);
+  });
+
+  describe("auditLog resource", () => {
+    test("admin role has auditLog:read", () => {
+      expect(predefinedPermissionsMap[ADMIN_ROLE_NAME].auditLog).toContain(
+        "read",
+      );
+    });
+
+    test("editor role does not have auditLog:read", () => {
+      expect(editorPermissions.auditLog).not.toContain("read");
+    });
+
+    test("member role does not have auditLog:read", () => {
+      expect(memberPermissions.auditLog).not.toContain("read");
+    });
+
+    test("permissionDescriptions has auditLog:read entry", () => {
+      expect(permissionDescriptions["auditLog:read"]).toBeDefined();
+      expect(permissionDescriptions["auditLog:read"].length).toBeGreaterThan(0);
+    });
+
+    test("auditLog only exposes the read action", () => {
+      expect(allAvailableActions.auditLog).toEqual(["read"]);
+    });
   });
 });

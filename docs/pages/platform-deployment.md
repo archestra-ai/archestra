@@ -800,6 +800,12 @@ The following environment variables can be used to configure Archestra Platform.
   - Default: `false`
   - Values: `true`, `false`
 
+- **`ARCHESTRA_GIT_BINARY_PATH`** - Path to the `git` binary. The public marketplace endpoint shells out to `git http-backend` (CGI) for clone/pull traffic — make sure the binary is present in the backend container image.
+  - Default: `git`
+
+- **`ARCHESTRA_SKILL_MARKETPLACE_CACHE_DIR`** - Directory holding materialized marketplace git repos. The cache is a derived view of the `skill_share_link_revision` history — replays are byte-identical, so wiping is safe but triggers a full rebuild on next clone. In prod, point this at a persistent volume to avoid the rebuild on container restarts.
+  - Default: `~/.archestra/skill-marketplace-cache`
+
 - **`ARCHESTRA_ANALYTICS`** - Controls PostHog analytics for product improvements.
   - Default: `enabled`
   - Set to `disabled` to opt-out of analytics
@@ -1273,12 +1279,55 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
   - Default: `true`
   - Set to `false` to use vector similarity search only.
 
+#### Knowledge Files External Blob Storage
+
+Uploaded [Knowledge Files](/docs/platform-knowledge-bases#files) store file bytes in the database by default. Set the provider to `s3` to store file bytes externally while keeping metadata and indexing state in PostgreSQL.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_BLOB_STORAGE_PROVIDER`** - File byte storage provider.
+  - Default: `db`
+  - Values: `db`, `s3`
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_BUCKET`** - S3 bucket for uploaded file bytes.
+  - Required when `ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_BLOB_STORAGE_PROVIDER=s3`
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_REGION`** - AWS region for the S3 bucket.
+  - Required when `ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_BLOB_STORAGE_PROVIDER=s3`
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_PREFIX`** - Optional object key prefix.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_ENDPOINT`** - Optional S3-compatible endpoint.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_FORCE_PATH_STYLE`** - Use path-style URLs for S3-compatible storage.
+  - Default: `false`
+  - Set to `true` when required by your S3-compatible provider.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_AUTH_METHOD`** - S3 authentication method.
+  - Default: `irsa`
+  - Values: `irsa`, `static`
+  - `irsa`: use the AWS default credential chain, including IAM Roles for Service Accounts on EKS.
+  - `static`: use `ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_ACCESS_KEY_ID` and `ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_SECRET_ACCESS_KEY`.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_ACCESS_KEY_ID`** - Static S3 access key ID.
+  - Used only when `ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_AUTH_METHOD=static`
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_SECRET_ACCESS_KEY`** - Static S3 secret access key.
+  - Used only when `ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_AUTH_METHOD=static`
+
+### Audit Log Configuration
+
+The audit log records administrative actions (mutations via `/api/*` and auth events) across your organization. Automatic retention is **disabled by default** - audit rows are kept indefinitely unless an org admin opts in by setting a positive retention window.
+
+- **`ARCHESTRA_AUDIT_LOG_RETENTION_DAYS`** - Number of days to retain audit log records before they are automatically deleted by the daily retention sweep.
+  - Default: `0` (disabled — audit rows are never auto-deleted).
+  - Set to a positive integer (e.g. `90`, `180`) to opt in to automatic purging after that many days.
+  - Must be a non-negative integer; invalid values fall back to the default (disabled).
+  - When enabled, the sweep runs once every 24 hours as a background task.
+
 ### Maintenance Mode
 
 - **`ARCHESTRA_MAINTENANCE_MODE_MESSAGE`** - Enables maintenance mode and displays a custom message to all users blocking access to the platform.
   - Default: Not set (maintenance mode disabled)
   - When set, all users are shown a full-screen maintenance overlay with the message instead of the normal application interface.
-  - Example: `ARCHESTRA_MAINTENANCE_MODE_MESSAGE="We are performing scheduled maintenance. Please check back in 30 minutes."`
 
 ### Enterprise Licensing
 

@@ -3,6 +3,7 @@ import { archestraApiSdk } from "@shared";
 import {
   ADMIN_EMAIL,
   DEFAULT_TEAM_NAME,
+  E2eTestId,
   EDITOR_EMAIL,
   ENGINEERING_TEAM_NAME,
   MARKETING_TEAM_NAME,
@@ -13,7 +14,6 @@ import {
   addCustomSelfHostedCatalogItem,
   addSharedLocalConnection,
   assignCatalogCredentialToGateway,
-  clickButton,
   closeOpenDialogs,
   createSharedTestGatewayViaApi,
   createTeamMcpGatewayViaApi,
@@ -26,6 +26,7 @@ import {
   saveOpenProfileDialog,
   settleRegistryAfterInstall,
   verifyToolCallResultViaApi,
+  waitForMcpServerAbsent,
   waitForMcpServerReadyById,
   waitForMcpServerToolsDiscovered,
 } from "../utils";
@@ -193,24 +194,53 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
         await expect(visibleStaticCredentials).toHaveLength(
           expectedAssignableCredentials.length,
         );
+        // Force the click: the credential option list re-renders when the
+        // dropdown opens, detaching the node mid-click. Same DOM-detach race
+        // assignCatalogCredentialToGateway already handles this way.
         await page
           .getByRole("option", {
             name: expectedAssignableCredentials[0] ?? "",
           })
-          .click();
+          .click({ force: true });
         await page.keyboard.press("Escape");
         await page.waitForTimeout(200);
         await saveOpenProfileDialog(page);
 
-        // Then we revoke first credential in Manage Credentials dialog, then close dialog
+        // Revoke the admin's own (personal) credential, then close dialog.
+        // Target it by its deterministic test-id rather than the first Revoke
+        // button: the row order isn't guaranteed, so a position-based click
+        // can revoke the team credential instead, leaving ADMIN_EMAIL present
+        // and failing the assertion below.
+        const personalServerId = visibleServersResponse.data?.find(
+          (server) =>
+            server.catalogId === newCatalogItem.id &&
+            !server.teamDetails &&
+            server.ownerEmail === ADMIN_EMAIL,
+        )?.id;
+        expect(
+          personalServerId,
+          "Could not resolve the admin's personal MCP server id to revoke",
+        ).toBeTruthy();
         await goToPage(page, "/mcp/registry");
         await openManageCredentialsDialog(page, catalogItemName);
-        await clickButton({ page, options: { name: "Revoke" }, first: true });
+        await page
+          .getByTestId(`${E2eTestId.RevokeCredentialButton}-personal`)
+          .click();
         await page.waitForLoadState("domcontentloaded");
         await closeOpenDialogs(page);
 
-        // And we check that the credential is revoked
-        // Use polling to handle async credential revocation in CI
+        // Revoking deletes the backing MCP server via async K8s pod teardown,
+        // which keeps the server in getMcpServers (and the dialog) until
+        // teardown completes. Wait for the backend to actually drop it (404)
+        // before asserting the UI, so the assertion isn't racing teardown
+        // latency under CI load — the cause of the prior flake.
+        if (personalServerId) {
+          await waitForMcpServerAbsent(page, personalServerId);
+        }
+
+        // And we check the dialog reflects the revoke. The backend already
+        // confirmed deletion above, so this only waits on the UI refetch —
+        // not on K8s teardown.
         const expectedCredentialsAfterRevoke = {
           Admin: [ADMIN_EMAIL, DEFAULT_TEAM_NAME],
           Editor: [EDITOR_EMAIL, ENGINEERING_TEAM_NAME],
@@ -232,7 +262,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
               remainingCredential,
             );
           }
-        }).toPass({ timeout: 30_000, intervals: [1000, 2000, 3000, 5000] });
+        }).toPass({ timeout: 15_000, intervals: [1000, 2000, 3000, 5000] });
       }
       // Cleanup admin shared gateway
       if (adminSharedGateway) {

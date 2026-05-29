@@ -295,6 +295,7 @@ export const RouteId = {
   GetSharedConversation: "getSharedConversation",
   ForkSharedConversation: "forkSharedConversation",
   GetChatAttachmentContent: "getChatAttachmentContent",
+  PromoteChatAttachmentToKnowledgeFile: "promoteChatAttachmentToKnowledgeFile",
   GetLlmModels: "getLlmModels",
   SyncLlmModels: "syncLlmModels",
 
@@ -460,8 +461,11 @@ export const RouteId = {
   GetConnectors: "getConnectors",
   CreateConnector: "createConnector",
   GetConnector: "getConnector",
+  GetConnectorDocuments: "getConnectorDocuments",
+  GetConnectorDocument: "getConnectorDocument",
   UpdateConnector: "updateConnector",
   DeleteConnector: "deleteConnector",
+  DeleteConnectorDocument: "deleteConnectorDocument",
   SyncConnector: "syncConnector",
   ForceResyncConnector: "forceResyncConnector",
   TestConnectorConnection: "testConnectorConnection",
@@ -475,11 +479,14 @@ export const RouteId = {
   GetConnectorRuns: "getConnectorRuns",
   GetConnectorRun: "getConnectorRun",
 
-  // Connector File Upload Routes
-  UploadConnectorFiles: "uploadConnectorFiles",
-  GetConnectorFiles: "getConnectorFiles",
-  GetConnectorFile: "getConnectorFile",
-  DeleteConnectorFile: "deleteConnectorFile",
+  // Knowledge File Routes
+  GetKnowledgeFiles: "getKnowledgeFiles",
+  UploadKnowledgeFiles: "uploadKnowledgeFiles",
+  GetKnowledgeFile: "getKnowledgeFile",
+  GetKnowledgeFileContent: "getKnowledgeFileContent",
+  UpdateKnowledgeFile: "updateKnowledgeFile",
+  DeleteKnowledgeFile: "deleteKnowledgeFile",
+  GetKnowledgeFileUploadConfig: "getKnowledgeFileUploadConfig",
 
   // Invitation Routes
   CheckInvitation: "checkInvitation",
@@ -502,6 +509,14 @@ export const RouteId = {
   ImportGithubSkills: "importGithubSkills",
   GetSkillSourceRepos: "getSkillSourceRepos",
   EnableSkillToolDefaults: "enableSkillToolDefaults",
+
+  // Audit Log Routes
+  GetAuditLogs: "getAuditLogs",
+
+  // Skill Share Link Routes
+  GetSkillShareLinks: "getSkillShareLinks",
+  CreateSkillShareLink: "createSkillShareLink",
+  RevokeSkillShareLink: "revokeSkillShareLink",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

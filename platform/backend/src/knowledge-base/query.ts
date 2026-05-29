@@ -27,6 +27,7 @@ interface ChunkResult {
     title: string;
     sourceUrl: string | null;
     documentId: string;
+    sourceId: string | null;
     connectorType: string | null;
   };
 }
@@ -251,6 +252,7 @@ class QueryService {
         title: row.title,
         sourceUrl: row.sourceUrl,
         documentId: row.documentId,
+        sourceId: row.sourceId ?? null,
         connectorType: row.connectorType,
       },
     }));

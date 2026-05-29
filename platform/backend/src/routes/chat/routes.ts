@@ -3,6 +3,7 @@ import {
   buildUserSystemPromptContext,
   type ChatErrorResponse,
   isModelSelectionComplete,
+  ResourceVisibilityScopeSchema,
   RouteId,
   type SupportedProvider,
   TimeInMs,
@@ -36,14 +37,15 @@ import {
   isApiKeyRequired,
 } from "@/clients/llm-client";
 import config from "@/config";
-import db from "@/database";
+import { withDbTransaction } from "@/database";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
 import { extractAndIngestDocuments } from "@/knowledge-base";
+import { fileUploadManager } from "@/knowledge-base/file-upload/file-upload-manager";
 import logger from "@/logging";
 import {
   ActiveChatRunModel,
   AgentModel,
-  ChatAttachmentModel,
+  ConversationAttachmentModel,
   ConversationChatErrorModel,
   ConversationEnabledToolModel,
   ConversationModel,
@@ -113,6 +115,19 @@ import { cloneAttachmentsForFork } from "./normalization/clone-attachments-for-f
 import { extractInlineAttachments } from "./normalization/extract-inline-attachments";
 import { materializeAttachments } from "./normalization/materialize-attachments";
 import { normalizeChatMessages } from "./normalization/normalize-chat-messages";
+
+const PromoteChatAttachmentResultSchema = z.object({
+  filename: z.string(),
+  status: z.enum([
+    "created",
+    "duplicate",
+    "unsupported",
+    "too_large",
+    "extraction_failed",
+    "failed",
+  ]),
+  fileId: z.string().optional(),
+});
 
 function getCorrelationLogFields(traceContext: {
   sessionId?: string;
@@ -1196,7 +1211,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Fetch metadata first (no fileData) so unauthorized requests don't
       // trigger a large bytea read before the 403. Only load the blob once
       // org + per-conversation access has been confirmed.
-      const meta = await ChatAttachmentModel.findById(id);
+      const meta = await ConversationAttachmentModel.findById(id);
       if (!meta) {
         throw new ApiError(404, "Attachment not found");
       }
@@ -1216,7 +1231,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(403, "No access to the owning conversation");
       }
 
-      const attachment = await ChatAttachmentModel.findByIdWithData(id);
+      const attachment = await ConversationAttachmentModel.findByIdWithData(id);
       if (!attachment) {
         // Soft-deleted between the metadata check and the blob fetch.
         throw new ApiError(404, "Attachment not found");
@@ -1241,6 +1256,56 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       reply.raw.end(attachment.fileData);
       return reply;
+    },
+  );
+
+  fastify.post(
+    "/api/chat/attachments/:id/promote-to-knowledge-file",
+    {
+      schema: {
+        operationId: RouteId.PromoteChatAttachmentToKnowledgeFile,
+        description:
+          "Promote a conversation attachment into a reusable Knowledge File",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        body: z.object({
+          visibility: ResourceVisibilityScopeSchema.default("personal"),
+          teamIds: z.array(z.string()).default([]),
+          agentIds: z.array(z.string()).default([]),
+        }),
+        response: constructResponseSchema(PromoteChatAttachmentResultSchema),
+      },
+    },
+    async ({ params: { id }, body, user, organizationId }, reply) => {
+      const attachment = await ConversationAttachmentModel.findByIdWithData(id);
+      if (!attachment) {
+        throw new ApiError(404, "Attachment not found");
+      }
+      if (attachment.organizationId !== organizationId) {
+        throw new ApiError(404, "Attachment not found");
+      }
+
+      const conversation = await findReadableConversationById({
+        conversationId: attachment.conversationId,
+        userId: user.id,
+        organizationId,
+      });
+      if (!conversation) {
+        throw new ApiError(404, "Attachment not found");
+      }
+
+      const result = await fileUploadManager.uploadKnowledgeFile({
+        organizationId,
+        userId: user.id,
+        name: attachment.originalName,
+        mimeType: attachment.mimeType,
+        contentBuffer: attachment.fileData,
+        visibility: body.visibility,
+        teamIds: body.teamIds,
+        agentIds: body.agentIds,
+      });
+
+      return reply.send(result);
     },
   );
 
@@ -2053,7 +2118,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // run the message edit, optional subsequent-message deletion, and
       // compaction invalidation inside one transaction so a crash can't leave
       // stale compactions pointing at a now-edited or truncated history
-      await db.transaction(async (tx) => {
+      await withDbTransaction(async (tx) => {
         await MessageModel.updateTextPartAndDeleteSubsequent(
           message.id,
           partIndex,

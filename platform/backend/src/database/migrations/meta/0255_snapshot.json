@@ -1,5 +1,5 @@
 {
-  "id": "116fb055-f7a9-4511-864a-172ac2512ae5",
+  "id": "581129f5-58fc-4fe1-90cd-e4000b1d753b",
   "prevId": "d9d0f3b5-50a0-47b9-ad3f-21d2f1b87820",
   "version": "7",
   "dialect": "postgresql",
@@ -1080,148 +1080,6 @@
           "columns": [
             "agent_id",
             "tool_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.agent_versions": {
-      "name": "agent_versions",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "agent_id": {
-          "name": "agent_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "version_number": {
-          "name": "version_number",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "snapshot": {
-          "name": "snapshot",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source": {
-          "name": "source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_by_name": {
-          "name": "created_by_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "agent_versions_agent_id_created_at_idx": {
-          "name": "agent_versions_agent_id_created_at_idx",
-          "columns": [
-            {
-              "expression": "agent_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "agent_versions_org_id_idx": {
-          "name": "agent_versions_org_id_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "agent_versions_agent_id_agents_id_fk": {
-          "name": "agent_versions_agent_id_agents_id_fk",
-          "tableFrom": "agent_versions",
-          "tableTo": "agents",
-          "columnsFrom": [
-            "agent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "agent_versions_created_by_user_id_fk": {
-          "name": "agent_versions_created_by_user_id_fk",
-          "tableFrom": "agent_versions",
-          "tableTo": "user",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "agent_versions_agent_id_version_number_uniq": {
-          "name": "agent_versions_agent_id_version_number_uniq",
-          "nullsNotDistinct": false,
-          "columns": [
-            "agent_id",
-            "version_number"
           ]
         }
       },
@@ -8864,6 +8722,364 @@
           "tableTo": "skills",
           "columnsFrom": [
             "skill_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.skill_share_link_revision": {
+      "name": "skill_share_link_revision",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "link_id": {
+          "name": "link_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sequence": {
+          "name": "sequence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content_hash": {
+          "name": "content_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "commit_sha": {
+          "name": "commit_sha",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "parent_sha": {
+          "name": "parent_sha",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "skill_share_link_revision_link_seq_idx": {
+          "name": "skill_share_link_revision_link_seq_idx",
+          "columns": [
+            {
+              "expression": "link_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sequence",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "skill_share_link_revision_link_id_idx": {
+          "name": "skill_share_link_revision_link_id_idx",
+          "columns": [
+            {
+              "expression": "link_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "skill_share_link_revision_link_id_skill_share_link_id_fk": {
+          "name": "skill_share_link_revision_link_id_skill_share_link_id_fk",
+          "tableFrom": "skill_share_link_revision",
+          "tableTo": "skill_share_link",
+          "columnsFrom": [
+            "link_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.skill_share_link_skill": {
+      "name": "skill_share_link_skill",
+      "schema": "",
+      "columns": {
+        "share_link_id": {
+          "name": "share_link_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "skill_id": {
+          "name": "skill_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "skill_share_link_skill_skill_id_idx": {
+          "name": "skill_share_link_skill_skill_id_idx",
+          "columns": [
+            {
+              "expression": "skill_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "skill_share_link_skill_share_link_id_skill_share_link_id_fk": {
+          "name": "skill_share_link_skill_share_link_id_skill_share_link_id_fk",
+          "tableFrom": "skill_share_link_skill",
+          "tableTo": "skill_share_link",
+          "columnsFrom": [
+            "share_link_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "skill_share_link_skill_skill_id_skills_id_fk": {
+          "name": "skill_share_link_skill_skill_id_skills_id_fk",
+          "tableFrom": "skill_share_link_skill",
+          "tableTo": "skills",
+          "columnsFrom": [
+            "skill_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "skill_share_link_skill_share_link_id_skill_id_pk": {
+          "name": "skill_share_link_skill_share_link_id_skill_id_pk",
+          "columns": [
+            "share_link_id",
+            "skill_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.skill_share_link": {
+      "name": "skill_share_link",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_by_user_id": {
+          "name": "created_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_hash": {
+          "name": "token_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_start": {
+          "name": "token_start",
+          "type": "varchar(22)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "marketplace_name": {
+          "name": "marketplace_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_used_at": {
+          "name": "last_used_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "skill_share_link_token_hash_idx": {
+          "name": "skill_share_link_token_hash_idx",
+          "columns": [
+            {
+              "expression": "token_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "skill_share_link_org_id_idx": {
+          "name": "skill_share_link_org_id_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "skill_share_link_token_start_idx": {
+          "name": "skill_share_link_token_start_idx",
+          "columns": [
+            {
+              "expression": "token_start",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "skill_share_link_organization_id_organization_id_fk": {
+          "name": "skill_share_link_organization_id_organization_id_fk",
+          "tableFrom": "skill_share_link",
+          "tableTo": "organization",
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "skill_share_link_created_by_user_id_user_id_fk": {
+          "name": "skill_share_link_created_by_user_id_user_id_fk",
+          "tableFrom": "skill_share_link",
+          "tableTo": "user",
+          "columnsFrom": [
+            "created_by_user_id"
           ],
           "columnsTo": [
             "id"

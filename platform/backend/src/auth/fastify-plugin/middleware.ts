@@ -15,6 +15,7 @@ import {
   ORGANIZATION_APPEARANCE_SETTINGS_PATH,
   PUBLIC_CONFIG_PATH,
   READY_PATH,
+  SKILL_MARKETPLACE_PREFIX,
   WELL_KNOWN_ACME_PREFIX,
   WELL_KNOWN_OAUTH_PREFIX,
 } from "@/routes/route-paths";
@@ -94,8 +95,12 @@ export class Authnz {
   }: FastifyRequest): Promise<boolean> => {
     // Skip CORS preflight and HEAD requests globally
     if (method === "OPTIONS" || method === "HEAD") {
+      // marketplace URLs embed a raw share token — omit from trace to avoid leaking it
+      const safeUrl = url.startsWith(`${SKILL_MARKETPLACE_PREFIX}/`)
+        ? undefined
+        : url;
       logger.trace(
-        { url, method },
+        { url: safeUrl, method },
         "[Authnz] Skipping auth for preflight/HEAD request",
       );
       return true;
@@ -119,6 +124,9 @@ export class Authnz {
       url === METRICS_PATH ||
       url === "/test" ||
       url.startsWith(config.mcpGateway.endpoint) ||
+      // Public skill marketplace git endpoint: token in URL, no session
+      url === config.skillMarketplace.endpoint ||
+      url.startsWith(`${config.skillMarketplace.endpoint}/`) ||
       // A2A routes use token auth handled in route, similar to MCP Gateway
       url.startsWith(config.a2aGateway.endpoint) ||
       url.startsWith(config.a2aV2Gateway.endpoint) ||
@@ -282,6 +290,7 @@ export class Authnz {
           // Populate the request decorators
           request.user = user;
           request.organizationId = organizationId;
+          request.authMethod = "session";
           logger.trace(
             { userId: user.id, organizationId },
             "[Authnz] populateUserInfo: populated from session",
@@ -320,6 +329,7 @@ export class Authnz {
             // Populate the request decorators
             request.user = user;
             request.organizationId = organizationId;
+            request.authMethod = "api_key";
             logger.trace(
               { userId: user.id, organizationId },
               "[Authnz] populateUserInfo: populated from API key",

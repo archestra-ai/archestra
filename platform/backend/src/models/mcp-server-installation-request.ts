@@ -281,6 +281,31 @@ class McpServerInstallationRequestModel {
 
     return result.rowCount !== null && result.rowCount > 0;
   }
+
+  // Globally scoped audit snapshot: mcpServerInstallationRequestTable has no
+  // organizationId column. Route handler access is gated by requestedBy=userId
+  // or admin status, not by organizationId. Intentional match.
+  static async findByIdForAudit(
+    id: string,
+    _organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const row = await McpServerInstallationRequestModel.findById(id);
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      externalCatalogId: row.externalCatalogId ?? null,
+      requestedBy: row.requestedBy,
+      status: row.status,
+      requestReason: row.requestReason ?? null,
+      adminResponse: row.adminResponse ?? null,
+      reviewedBy: row.reviewedBy ?? null,
+      reviewedAt: row.reviewedAt?.toISOString() ?? null,
+      notesCount: row.notes?.length ?? 0,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  }
 }
 
 export default McpServerInstallationRequestModel;

@@ -189,6 +189,7 @@ const contentNavGroups: NavGroup[] = [
         icon: Database,
         customIsActive: (pathname: string) =>
           pathname.startsWith("/knowledge") &&
+          !pathname.startsWith("/knowledge/files") &&
           !pathname.startsWith("/knowledge/connectors"),
         subItems: [
           {
@@ -197,6 +198,12 @@ const contentNavGroups: NavGroup[] = [
             customIsActive: (pathname: string) =>
               pathname.startsWith("/knowledge/connectors"),
           },
+          {
+            title: "Files",
+            url: "/knowledge/files",
+            customIsActive: (pathname: string) =>
+              pathname.startsWith("/knowledge/files"),
+          },
         ],
       },
       {
@@ -204,7 +211,9 @@ const contentNavGroups: NavGroup[] = [
         url: "/llm/logs",
         icon: MessagesSquare,
         customIsActive: (pathname: string) =>
-          pathname.startsWith("/llm/logs") || pathname.startsWith("/mcp/logs"),
+          pathname.startsWith("/llm/logs") ||
+          pathname.startsWith("/mcp/logs") ||
+          pathname.startsWith("/audit/logs"),
       },
       {
         title: "Connect",

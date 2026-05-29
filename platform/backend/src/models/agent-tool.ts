@@ -1222,6 +1222,122 @@ class AgentToolModel {
 
     return cleanedCount;
   }
+
+  /** Count of agent↔tool links for agents in the organization (audit footprint). */
+  static async countAssignmentsForOrganization(
+    organizationId: string,
+  ): Promise<Record<string, unknown>> {
+    const [row] = await db
+      .select({ c: count() })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+      )
+      .where(eq(schema.agentsTable.organizationId, organizationId));
+    return { agentToolAssignmentCount: Number(row?.c ?? 0) };
+  }
+
+  static async findByIdForAudit(
+    assignmentId: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [scoped] = await db
+      .select({
+        assignmentId: schema.agentToolsTable.id,
+        agentId: schema.agentToolsTable.agentId,
+        agentName: schema.agentsTable.name,
+        toolId: schema.toolsTable.id,
+        toolName: schema.toolsTable.name,
+        mcpServerId: schema.agentToolsTable.mcpServerId,
+        credentialResolutionMode:
+          schema.agentToolsTable.credentialResolutionMode,
+        updatedAt: schema.agentToolsTable.updatedAt,
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+      )
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentToolsTable.id, assignmentId),
+          eq(schema.agentsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!scoped) return null;
+
+    return AgentToolModel.toAuditSnapshot(scoped);
+  }
+
+  /** Used by `/api/agents/:agentId/tools/:toolId` where `resourceId` is the tool id. */
+  static async findByAgentAndToolForAudit(
+    agentId: string,
+    toolId: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [scoped] = await db
+      .select({
+        assignmentId: schema.agentToolsTable.id,
+        agentId: schema.agentToolsTable.agentId,
+        agentName: schema.agentsTable.name,
+        toolId: schema.toolsTable.id,
+        toolName: schema.toolsTable.name,
+        mcpServerId: schema.agentToolsTable.mcpServerId,
+        credentialResolutionMode:
+          schema.agentToolsTable.credentialResolutionMode,
+        updatedAt: schema.agentToolsTable.updatedAt,
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+      )
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          eq(schema.agentToolsTable.toolId, toolId),
+          eq(schema.agentsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!scoped) return null;
+
+    return AgentToolModel.toAuditSnapshot(scoped);
+  }
+
+  private static toAuditSnapshot(scoped: {
+    assignmentId: string;
+    agentId: string;
+    agentName: string;
+    toolId: string;
+    toolName: string;
+    mcpServerId: string | null;
+    credentialResolutionMode: string;
+    updatedAt: Date;
+  }): Record<string, unknown> {
+    return {
+      id: scoped.assignmentId,
+      agentId: scoped.agentId,
+      agentName: scoped.agentName,
+      toolId: scoped.toolId,
+      toolName: scoped.toolName,
+      mcpServerId: scoped.mcpServerId ?? null,
+      credentialResolutionMode: scoped.credentialResolutionMode,
+      updatedAt: scoped.updatedAt.toISOString(),
+    };
+  }
 }
 
 export default AgentToolModel;

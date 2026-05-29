@@ -732,6 +732,134 @@ describe("auth routes", () => {
       });
     }
   });
+
+  describe("x-archestra-client-ip is never forwarded from client input", () => {
+    // `resolveAuthClientIp` in better-auth.ts trusts only this single header,
+    // so if any auth handler forwards a client-supplied value through to
+    // better-auth, the audit IP can be spoofed. These tests make sure every
+    // forwarding handler scrubs the header and re-injects Fastify's
+    // `request.ip` instead.
+    const SPOOFED = "1.2.3.4";
+
+    function lastForwardedHeader(name: string): string | null {
+      const calls = vi.mocked(betterAuth.handler).mock.calls;
+      const last = calls[calls.length - 1]?.[0];
+      if (!last) return null;
+      return last.headers.get(name);
+    }
+
+    test("/api/auth/sign-in/sso strips spoofed x-archestra-client-ip", async () => {
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/auth/sign-in/sso",
+        headers: { "x-archestra-client-ip": SPOOFED },
+        payload: {
+          providerId: "google",
+          callbackURL: "http://localhost:3000/",
+        },
+      });
+      expect(response.statusCode).toBe(200);
+
+      const forwarded = lastForwardedHeader("x-archestra-client-ip");
+      expect(forwarded).not.toBe(SPOOFED);
+    });
+
+    test("/api/auth/organization/remove-member strips spoofed x-archestra-client-ip", async () => {
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+      await app.inject({
+        method: "POST",
+        url: "/api/auth/organization/remove-member",
+        headers: { "x-archestra-client-ip": SPOOFED },
+        payload: { memberIdOrEmail: "nobody@example.com", organizationId: "x" },
+      });
+
+      expect(lastForwardedHeader("x-archestra-client-ip")).not.toBe(SPOOFED);
+    });
+
+    test("/api/auth/* catch-all strips spoofed x-archestra-client-ip", async () => {
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+      await app.inject({
+        method: "POST",
+        url: "/api/auth/sign-in/email",
+        headers: { "x-archestra-client-ip": SPOOFED },
+        payload: { email: "a@b.c", password: "x" },
+      });
+
+      expect(lastForwardedHeader("x-archestra-client-ip")).not.toBe(SPOOFED);
+    });
+
+    test("/api/auth/oauth2/register strips spoofed x-archestra-client-ip", async () => {
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response(JSON.stringify({ client_id: "c" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+      await app.inject({
+        method: "POST",
+        url: "/api/auth/oauth2/register",
+        headers: { "x-archestra-client-ip": SPOOFED },
+        payload: { client_name: "test" },
+      });
+
+      expect(lastForwardedHeader("x-archestra-client-ip")).not.toBe(SPOOFED);
+    });
+
+    test("/api/auth/oauth2/consent strips spoofed x-archestra-client-ip", async () => {
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response(JSON.stringify({ url: "http://example.com" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+      await app.inject({
+        method: "POST",
+        url: "/api/auth/oauth2/consent",
+        headers: { "x-archestra-client-ip": SPOOFED },
+        payload: { accept: true, scope: "openid", oauth_query: "" },
+      });
+
+      expect(lastForwardedHeader("x-archestra-client-ip")).not.toBe(SPOOFED);
+    });
+
+    test("/api/auth/oauth2/authorize strips spoofed x-archestra-client-ip", async () => {
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response("ok", {
+          status: 200,
+          headers: { "content-type": "text/plain" },
+        }),
+      );
+
+      await app.inject({
+        method: "GET",
+        url: "/api/auth/oauth2/authorize?client_id=test&response_type=code",
+        headers: { "x-archestra-client-ip": SPOOFED },
+      });
+
+      expect(lastForwardedHeader("x-archestra-client-ip")).not.toBe(SPOOFED);
+    });
+  });
 });
 
 async function createAuthTestApp(): Promise<FastifyInstanceWithZod> {

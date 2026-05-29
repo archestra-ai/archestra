@@ -137,6 +137,247 @@ describe("knowledge base routes", () => {
     });
   });
 
+  describe("GET /api/connectors/:id/documents", () => {
+    test("lists documents for a connector with pagination metadata", async () => {
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Connector Docs",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://connector-docs.atlassian.net",
+          isCloud: true,
+          projectKey: "CD",
+        },
+      });
+      const otherConnector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Other Connector",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://other-connector.atlassian.net",
+          isCloud: true,
+          projectKey: "OC",
+        },
+      });
+
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "connector-doc-1",
+        connectorId: connector.id,
+        title: "Connector Alpha",
+        content: "alpha",
+        contentHash: "hash-connector-alpha",
+        acl: ["org:*"],
+      });
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "connector-doc-2",
+        connectorId: connector.id,
+        title: "Connector Beta",
+        content: "beta",
+        contentHash: "hash-connector-beta",
+        acl: ["org:*"],
+      });
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "other-connector-doc",
+        connectorId: otherConnector.id,
+        title: "Other Connector Doc",
+        content: "other",
+        contentHash: "hash-other-connector",
+        acl: ["org:*"],
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}/documents?limit=1&offset=0`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as {
+        data: Array<{ connectorId: string; connectorType: string }>;
+        pagination: { total: number; hasNext: boolean };
+      };
+      expect(body.data).toHaveLength(1);
+      expect(body.data[0]).toMatchObject({
+        connectorId: connector.id,
+        connectorType: "jira",
+      });
+      expect(body.data[0]).not.toHaveProperty("content");
+      expect(body.pagination.total).toBe(2);
+      expect(body.pagination.hasNext).toBe(true);
+    });
+
+    test("filters connector documents by title search", async () => {
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Search Connector Docs",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://connector-search.atlassian.net",
+          isCloud: true,
+          projectKey: "CS",
+        },
+      });
+
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "connector-search-1",
+        connectorId: connector.id,
+        title: "Roadmap Planning",
+        content: "roadmap",
+        contentHash: "hash-roadmap",
+        acl: ["org:*"],
+      });
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "connector-search-2",
+        connectorId: connector.id,
+        title: "Release Notes",
+        content: "release",
+        contentHash: "hash-connector-release",
+        acl: ["org:*"],
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}/documents?limit=20&offset=0&search=roadmap`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as {
+        data: Array<{ title: string }>;
+        pagination: { total: number };
+      };
+      expect(body.pagination.total).toBe(1);
+      expect(body.data.map((doc) => doc.title)).toEqual(["Roadmap Planning"]);
+    });
+  });
+
+  describe("GET /api/connectors/:id/documents/:docId", () => {
+    test("gets a single connector document including content", async () => {
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Connector Doc Detail",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://connector-detail.atlassian.net",
+          isCloud: true,
+          projectKey: "CDD",
+        },
+      });
+      const document = await KbDocumentModel.create({
+        organizationId,
+        sourceId: "connector-detail-doc",
+        connectorId: connector.id,
+        title: "Connector Detail",
+        content: "connector detail content",
+        contentHash: "hash-connector-detail",
+        acl: ["org:*"],
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}/documents/${document.id}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        id: document.id,
+        content: "connector detail content",
+        connectorType: "jira",
+      });
+    });
+
+    test("returns 404 when document belongs to another connector", async () => {
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Connector Detail A",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://connector-detail-a.atlassian.net",
+          isCloud: true,
+          projectKey: "CDA",
+        },
+      });
+      const otherConnector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Connector Detail B",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://connector-detail-b.atlassian.net",
+          isCloud: true,
+          projectKey: "CDB",
+        },
+      });
+      const otherDocument = await KbDocumentModel.create({
+        organizationId,
+        sourceId: "other-detail-doc",
+        connectorId: otherConnector.id,
+        title: "Other Detail",
+        content: "other detail content",
+        contentHash: "hash-other-detail",
+        acl: ["org:*"],
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}/documents/${otherDocument.id}`,
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+  });
+
+  describe("DELETE /api/connectors/:id/documents/:docId", () => {
+    test("deletes a connector document and cascades to chunks", async () => {
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Connector Delete Docs",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://connector-delete.atlassian.net",
+          isCloud: true,
+          projectKey: "CDD",
+        },
+      });
+      const document = await KbDocumentModel.create({
+        organizationId,
+        sourceId: "connector-delete-doc",
+        connectorId: connector.id,
+        title: "Delete Connector Doc",
+        content: "delete connector content",
+        contentHash: "hash-delete-connector",
+        acl: ["org:*"],
+      });
+      await KbChunkModel.insertMany([
+        {
+          documentId: document.id,
+          content: "connector delete chunk",
+          chunkIndex: 0,
+          acl: ["org:*"],
+        },
+      ]);
+
+      const response = await app.inject({
+        method: "DELETE",
+        url: `/api/connectors/${connector.id}/documents/${document.id}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ success: true });
+      expect(await KbDocumentModel.findById(document.id)).toBeNull();
+      expect(await KbChunkModel.findByDocument(document.id)).toEqual([]);
+    });
+  });
+
   describe("GET /api/knowledge-bases", () => {
     test("lists knowledge bases with pagination", async () => {
       await KnowledgeBaseModel.create({ organizationId, name: "KB A" });

@@ -93,9 +93,12 @@ export function AppShell({ children }: AppShellProps) {
         <AppSidebar />
         <NavAwareSidebarCircleToggle />
         <MaintenanceModeOverlay />
-        <main className="h-screen w-full flex flex-col bg-background min-w-0 relative">
+        <main className="h-screen w-full flex flex-col bg-background min-w-0 relative overflow-y-auto">
           {notification && (
-            <SiteNotificationBar content={notification.content} />
+            <SiteNotificationBar
+              content={notification.content}
+              notificationId={notification.id}
+            />
           )}
           <ImpersonationBanner />
           <header className="h-14 border-b border-border flex md:hidden items-center justify-between px-6 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">
@@ -105,7 +108,7 @@ export function AppShell({ children }: AppShellProps) {
               className="flex items-center gap-2"
             />
           </header>
-          <div className="flex-1 min-w-0 flex flex-col">
+          <div className="flex-1 min-h-0 min-w-0 flex flex-col">
             <div className="flex-1 flex flex-col">{children}</div>
             <Version />
           </div>

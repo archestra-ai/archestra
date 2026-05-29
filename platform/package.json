@@ -1,6 +1,6 @@
 {
   "name": "archestra-platform",
-  "version": "1.2.52",
+  "version": "1.2.53",
   "description": "Enterprise MCP platform",
   "author": "Archestra",
   "engines": {
@@ -44,59 +44,7 @@
     "tsx": "^4.21.0",
     "turbo": "^2.9.14"
   },
-  "pnpm": {
-    "overrides": {
-      "@fastify/reply-from": ">=12.6.2",
-      "@fastify/http-proxy": ">=11.4.4",
-      "protobufjs": ">=8.0.2",
-      "@protobufjs/utf8": ">=1.1.1",
-      "vite": "7.3.2",
-      "@hono/node-server": "1.19.11",
-      "body-parser": "2.2.1",
-      "dompurify": "3.4.0",
-      "glob": "11.1.0",
-      "esbuild": "0.27.0",
-      "mdast-util-to-hast": "13.2.1",
-      "express": "5.2.0",
-      "express-rate-limit": "8.3.1",
-      "jws": "4.0.1",
-      "qs": "6.14.2",
-      "d3-path": "3.1.0",
-      "hono": "4.12.17",
-      "kysely": "0.28.17",
-      "lodash": ">=4.18.0",
-      "lodash-es": "4.18.1",
-      "fast-xml-parser": "5.7.2",
-      "fast-xml-builder": ">=1.1.7",
-      "samlify": ">=2.13.0",
-      "fast-uri": ">=3.1.2",
-      "ajv": "8.18.0",
-      "axios": ">=1.15.2",
-      "minimatch": ">=10.2.3",
-      "rollup": ">=4.59.0",
-      "undici": "7.24.5",
-      "@xmldom/xmldom": ">=0.9.10",
-      "mammoth>@xmldom/xmldom": "0.8.13",
-      "samlify>@xmldom/xmldom": "0.8.13",
-      "path-to-regexp": ">=8.4.0",
-      "picomatch@>=4": ">=4.0.4",
-      "picomatch@<4": ">=2.3.2",
-      "fastify": ">=5.8.5",
-      "defu": ">=6.1.5",
-      "postcss": ">=8.5.10",
-      "uuid@^11": ">=11.1.1",
-      "ip-address": ">=10.1.1",
-      "brace-expansion": ">=5.0.5",
-      "smol-toml": ">=1.6.1",
-      "yaml": ">=2.8.3",
-      "@opentelemetry/exporter-prometheus": "0.217.0",
-      "@opentelemetry/sdk-node": "0.217.0"
-    },
-    "patchedDependencies": {
-      "ai@6.0.90": "patches/ai@6.0.90.patch"
-    }
-  },
-  "packageManager": "pnpm@10.33.0",
+  "packageManager": "pnpm@11.4.0",
   "dependencies": {
     "croner": "^10.0.1"
   }

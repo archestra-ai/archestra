@@ -6,8 +6,8 @@ packages:
 
 catalog:
   typescript: ^6.0.2
-  # TS 7 beta (Go-based `tsgo`) — publishes daily dev builds. .npmrc's
-  # `minimum-release-age=10080` (7 days) blocks anything newer. Pinning the
+  # TS 7 beta (Go-based `tsgo`) publishes daily dev builds. The
+  # minimumReleaseAge setting below blocks anything newer than 7 days. Pinning the
   # newest build that is already past the 7-day window.
   # To catch up with the `beta` dist-tag: as of 2026-04-23, `beta` points at
   # 7.0.0-dev.20260421.2 (pub 2026-04-21) — bump this pin on or after
@@ -15,3 +15,76 @@ catalog:
   # and pick the newest version at least 7 days old.
   "@typescript/native-preview": 7.0.0-dev.20260415.1
   zod: ^4.3.4
+overrides:
+  '@fastify/reply-from': '>=12.6.2'
+  '@fastify/http-proxy': '>=11.4.4'
+  protobufjs: '>=8.0.2'
+  '@protobufjs/utf8': '>=1.1.1'
+  vite: 7.3.2
+  '@hono/node-server': 1.19.11
+  body-parser: 2.2.1
+  dompurify: 3.4.0
+  glob: 11.1.0
+  esbuild: 0.27.0
+  mdast-util-to-hast: 13.2.1
+  express: 5.2.0
+  express-rate-limit: 8.3.1
+  jws: 4.0.1
+  qs: 6.14.2
+  d3-path: 3.1.0
+  hono: 4.12.17
+  kysely: 0.28.17
+  lodash: '>=4.18.0'
+  lodash-es: 4.18.1
+  fast-xml-parser: 5.7.2
+  fast-xml-builder: '>=1.1.7'
+  samlify: '>=2.13.0'
+  fast-uri: '>=3.1.2'
+  ajv: 8.18.0
+  axios: '>=1.15.2'
+  minimatch: '>=10.2.3'
+  rollup: '>=4.59.0'
+  undici: 7.24.5
+  '@xmldom/xmldom': '>=0.9.10'
+  mammoth>@xmldom/xmldom: 0.8.13
+  samlify>@xmldom/xmldom: 0.8.13
+  path-to-regexp: '>=8.4.0'
+  picomatch@>=4: '>=4.0.4'
+  picomatch@<4: '>=2.3.2'
+  fastify: '>=5.8.5'
+  defu: '>=6.1.5'
+  postcss: '>=8.5.10'
+  uuid@^11: '>=11.1.1'
+  ip-address: '>=10.1.1'
+  brace-expansion: '>=5.0.5'
+  smol-toml: '>=1.6.1'
+  yaml: '>=2.8.3'
+  '@opentelemetry/exporter-prometheus': 0.217.0
+  '@opentelemetry/sdk-node': 0.217.0
+patchedDependencies:
+  ai@6.0.90: patches/ai@6.0.90.patch
+
+# Enforce Node.js version requirements from package.json engines field.
+engineStrict: true
+
+# Security: Prevent automatic execution of install scripts.
+# Packages requiring scripts must be manually rebuilt with: pnpm rebuild <package-name>
+ignoreScripts: true
+
+# Runtime containers build dependencies into the image. Do not let `pnpm run`
+# or `pnpm exec` try to repair dependencies on startup.
+verifyDepsBeforeRun: false
+
+# Security: Delay installation of newly published packages.
+# 10080 minutes = 7 days.
+# https://daniakash.com/posts/simplest-supply-chain-defense/
+minimumReleaseAge: 10080
+
+# OpenTelemetry instrumentation requires these packages hoisted to root.
+# @hookform/resolvers/zod statically imports `zod/v4/core` but does not declare
+# zod as a peer dependency, so hoist zod to the root node_modules.
+publicHoistPattern:
+  - '*import-in-the-middle*'
+  - '*require-in-the-middle*'
+  - shiki
+  - zod

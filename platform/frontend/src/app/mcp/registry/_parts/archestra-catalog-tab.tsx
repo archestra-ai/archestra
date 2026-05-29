@@ -64,8 +64,8 @@ export function ArchestraCatalogTab({
   // Fetch available categories
   const { data: availableCategories = [] } = useMcpServerCategories();
 
-  const { data: userIsMcpServerAdmin = false } = useHasPermissions({
-    mcpServerInstallation: ["admin"],
+  const { data: userAllowedToCreateCatalogItem = false } = useHasPermissions({
+    mcpRegistry: ["create"],
   });
 
   // Use server-side search and category filtering
@@ -231,7 +231,9 @@ export function ArchestraCatalogTab({
                     onRequestInstallation={handleRequestInstallation}
                     onOpenReadme={setReadmeServer}
                     isInCatalog={catalogServerNames.has(server.name)}
-                    userIsMcpServerAdmin={userIsMcpServerAdmin}
+                    userAllowedToCreateCatalogItem={
+                      userAllowedToCreateCatalogItem
+                    }
                   />
                 ))}
               </div>
@@ -280,7 +282,7 @@ function ServerCard({
   onRequestInstallation,
   onOpenReadme,
   isInCatalog,
-  userIsMcpServerAdmin,
+  userAllowedToCreateCatalogItem,
 }: {
   server: archestraCatalogTypes.ArchestraMcpServerManifest;
   onSelectServer: (
@@ -293,7 +295,7 @@ function ServerCard({
     server: archestraCatalogTypes.ArchestraMcpServerManifest,
   ) => void;
   isInCatalog: boolean;
-  userIsMcpServerAdmin: boolean;
+  userAllowedToCreateCatalogItem: boolean;
 }) {
   return (
     <Card className="flex flex-col">
@@ -382,7 +384,7 @@ function ServerCard({
           </div>
           <Button
             onClick={() =>
-              userIsMcpServerAdmin
+              userAllowedToCreateCatalogItem
                 ? onSelectServer(server)
                 : onRequestInstallation(server)
             }
@@ -393,7 +395,7 @@ function ServerCard({
           >
             {isInCatalog
               ? "Added"
-              : userIsMcpServerAdmin
+              : userAllowedToCreateCatalogItem
                 ? "Use as Template"
                 : "Request to add to internal registry"}
           </Button>

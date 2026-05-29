@@ -10,7 +10,7 @@ import { createLLMModel, isApiKeyRequired } from "@/clients/llm-client";
 import logger from "@/logging";
 import {
   AgentModel,
-  ChatAttachmentModel,
+  ConversationAttachmentModel,
   ConversationCompactionModel,
   MessageModel,
   ModelModel,
@@ -1359,7 +1359,7 @@ async function extractFileTextForCompaction(
     const attachmentId = parseAttachmentIdFromUrl(url);
     if (!attachmentId) return null;
     try {
-      const row = await ChatAttachmentModel.findById(attachmentId);
+      const row = await ConversationAttachmentModel.findById(attachmentId);
       if (!row) return null;
       if (row.conversationId !== conversationId) return null;
       if (row.textPreviewStatus !== "ok" || !row.textPreview) return null;

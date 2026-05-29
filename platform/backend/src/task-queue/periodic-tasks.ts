@@ -13,6 +13,7 @@ const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
     intervalSeconds: 60,
     payload: {},
   },
+  { taskType: "audit_log_cleanup", intervalSeconds: 86400, payload: {} },
 ];
 
 export default PERIODIC_TASK_DEFINITIONS;

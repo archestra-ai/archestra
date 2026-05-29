@@ -287,7 +287,20 @@ async function withRetries(
       attempt < maxRetries &&
       params.retryStatuses.includes(response.status())
     ) {
-      await sleep(delay);
+      // better-auth's 429 carries x-retry-after (seconds until its rate-limit
+      // window clears). Honor it so a transient rate-limit recovers within
+      // this setup attempt instead of forcing a full test-level retry — the
+      // default exponential backoff never sleeps longer than the ~10s window,
+      // and retrying inside the window keeps the limiter's bucket full.
+      const headers = response.headers();
+      const retryAfterSec = Number.parseInt(
+        headers["x-retry-after"] ?? headers["retry-after"] ?? "",
+        10,
+      );
+      const waitMs = Number.isFinite(retryAfterSec)
+        ? Math.min(retryAfterSec * 1000 + 500, 20_000)
+        : delay;
+      await sleep(waitMs);
       delay *= 2;
       continue;
     }

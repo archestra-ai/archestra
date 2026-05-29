@@ -15,6 +15,8 @@ const skillSandboxFileSnapshotsTable = pgTable(
     sandboxId: uuid("sandbox_id")
       .notNull()
       .references(() => skillSandboxesTable.id, { onDelete: "cascade" }),
+    /** Denormalized owning org, copied from the parent sandbox at insert time. */
+    organizationId: text("organization_id").notNull(),
     /** Original skill id — kept for reference but not used for replay. */
     skillId: uuid("skill_id").notNull(),
     /** Skill name at capture time, used to construct the mount path. */

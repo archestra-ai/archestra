@@ -98,7 +98,6 @@ class SkillSandboxRuntimeService {
           fileSizeLimitBytes: config.skillsSandbox.artifactBytesLimit,
           cpuSeconds: config.skillsSandbox.cpuLimit,
           memoryBytes: config.skillsSandbox.memoryLimit,
-          maxProcesses: SKILL_SANDBOX_LIMITS.maxProcesses,
         });
       } catch (error) {
         // engine-level failure (unreachable / internal panic) — the command
@@ -108,6 +107,7 @@ class SkillSandboxRuntimeService {
         if (shouldRecordOnFailure(error)) {
           await this.appendSyntheticRow({
             sandboxId: params.sandboxId,
+            organizationId: sandbox.organizationId,
             command: params.command,
             cwd: params.cwd ?? null,
             timeoutSeconds,
@@ -120,6 +120,7 @@ class SkillSandboxRuntimeService {
       try {
         row = await SkillSandboxCommandModel.append({
           sandboxId: params.sandboxId,
+          organizationId: sandbox.organizationId,
           command: params.command,
           cwd: params.cwd ?? null,
           stdout: executed.stdout,
@@ -178,7 +179,6 @@ class SkillSandboxRuntimeService {
           fileSizeLimitBytes: config.skillsSandbox.artifactBytesLimit,
           cpuSeconds: config.skillsSandbox.cpuLimit,
           memoryBytes: config.skillsSandbox.memoryLimit,
-          maxProcesses: SKILL_SANDBOX_LIMITS.maxProcesses,
         });
       } catch (error) {
         throw this.toSkillError(error);
@@ -193,6 +193,7 @@ class SkillSandboxRuntimeService {
       try {
         row = await SkillSandboxArtifactModel.create({
           sandboxId: params.sandboxId,
+          organizationId: sandbox.organizationId,
           path: resolvedPath,
           mimeType,
           sizeBytes: data.byteLength,
@@ -225,6 +226,7 @@ class SkillSandboxRuntimeService {
    */
   private async appendSyntheticRow(args: {
     sandboxId: SandboxId;
+    organizationId: string;
     command: string;
     cwd: string | null;
     timeoutSeconds: number;
@@ -232,6 +234,7 @@ class SkillSandboxRuntimeService {
     try {
       await SkillSandboxCommandModel.append({
         sandboxId: args.sandboxId,
+        organizationId: args.organizationId,
         command: args.command,
         cwd: args.cwd,
         stdout: "",

@@ -134,8 +134,6 @@ pub struct Limits {
     pub cpu_seconds: u32,
     #[cfg_attr(feature = "napi", napi(js_name = "memoryBytes"))]
     pub memory_bytes: u32,
-    #[cfg_attr(feature = "napi", napi(js_name = "maxProcesses"))]
-    pub max_processes: u32,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -431,7 +429,6 @@ mod tests {
                 file_size_limit_bytes: 16 * 1024 * 1024,
                 cpu_seconds: 30,
                 memory_bytes: 1024 * 1024 * 1024,
-                max_processes: 256,
             },
         );
         assert_eq!(argv[0], "python3");

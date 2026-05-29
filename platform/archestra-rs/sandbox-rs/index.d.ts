@@ -23,7 +23,6 @@ export interface Limits {
   fileSizeLimitBytes: number
   cpuSeconds: number
   memoryBytes: number
-  maxProcesses: number
 }
 
 export interface ReadArtifactInput {

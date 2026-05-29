@@ -346,6 +346,7 @@ const registry = defineArchestraTools([
       for (const install of installs) {
         await SkillSandboxCommandModel.append({
           sandboxId: sandbox.id,
+          organizationId: sandbox.organizationId,
           command: install.command,
           cwd: install.cwd ?? null,
           stdout: "",

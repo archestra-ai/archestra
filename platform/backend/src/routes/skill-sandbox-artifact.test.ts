@@ -25,12 +25,14 @@ async function seedSandbox(params: { organizationId: string; userId: string }) {
 
 async function seedArtifact(params: {
   sandboxId: string;
+  organizationId: string;
   mimeType: string;
   data: Buffer;
   path?: string;
 }) {
   return await SkillSandboxArtifactModel.create({
     sandboxId: params.sandboxId,
+    organizationId: params.organizationId,
     path: params.path ?? "/sandbox/skills/example/out.png",
     mimeType: params.mimeType,
     sizeBytes: params.data.byteLength,
@@ -71,6 +73,7 @@ describe("GET /api/skill-sandbox/artifacts/:artifactId", () => {
     });
     const artifact = await seedArtifact({
       sandboxId: sandbox.id,
+      organizationId,
       mimeType: "image/png",
       data: PNG_FAKE,
     });
@@ -101,6 +104,7 @@ describe("GET /api/skill-sandbox/artifacts/:artifactId", () => {
     );
     const artifact = await seedArtifact({
       sandboxId: sandbox.id,
+      organizationId,
       mimeType: "image/svg+xml",
       data: svgPayload,
       path: "/sandbox/skills/example/icon.svg",
@@ -129,6 +133,7 @@ describe("GET /api/skill-sandbox/artifacts/:artifactId", () => {
     });
     const artifact = await seedArtifact({
       sandboxId: otherSandbox.id,
+      organizationId: otherOrg.id,
       mimeType: "image/png",
       data: PNG_FAKE,
     });
@@ -157,6 +162,7 @@ describe("GET /api/skill-sandbox/artifacts/:artifactId", () => {
     });
     const artifact = await seedArtifact({
       sandboxId: sandbox.id,
+      organizationId,
       mimeType: "application/pdf",
       data: Buffer.from("%PDF-1.4 ..."),
       path: '/sandbox/skills/example/weird"name\\with-quote.pdf',

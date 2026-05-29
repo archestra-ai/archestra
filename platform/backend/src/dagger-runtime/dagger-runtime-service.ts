@@ -48,7 +48,6 @@ interface LimitOverrides {
   fileSizeLimitBytes?: number;
   cpuSeconds?: number;
   memoryBytes?: number;
-  maxProcesses?: number;
 }
 
 interface RunCommandParams extends LimitOverrides {
@@ -291,7 +290,6 @@ class DaggerRuntimeService {
         overrides?.fileSizeLimitBytes ?? defaults.fileSizeLimitBytes,
       cpuSeconds: overrides?.cpuSeconds ?? defaults.cpuSeconds,
       memoryBytes: overrides?.memoryBytes ?? defaults.memoryBytes,
-      maxProcesses: overrides?.maxProcesses ?? defaults.maxProcesses,
     };
   }
 

@@ -169,6 +169,7 @@ describe("SkillSandboxFileSnapshotModel", () => {
     await SkillSandboxFileSnapshotModel.createMany([
       {
         sandboxId: sandbox.id,
+        organizationId: org.id,
         skillId: skill.id,
         skillName: "alpha",
         path: "scripts/run.sh",
@@ -234,6 +235,7 @@ describe("SkillSandboxCommandModel", () => {
 
     const first = await SkillSandboxCommandModel.append({
       sandboxId: sandbox.id,
+      organizationId: org.id,
       command: "echo hi",
       cwd: null,
       stdout: "hi\n",
@@ -245,6 +247,7 @@ describe("SkillSandboxCommandModel", () => {
     await new Promise((r) => setTimeout(r, 5));
     const second = await SkillSandboxCommandModel.append({
       sandboxId: sandbox.id,
+      organizationId: org.id,
       command: "python --version",
       cwd: "/skills/alpha/scripts",
       stdout: "Python 3.12.0\n",
@@ -283,6 +286,7 @@ describe("SkillSandboxArtifactModel", () => {
     const payload = Buffer.from("hello, world", "utf8");
     const artifact = await SkillSandboxArtifactModel.create({
       sandboxId: sandbox.id,
+      organizationId: org.id,
       path: "out/report.txt",
       mimeType: "text/plain",
       sizeBytes: payload.byteLength,
@@ -317,6 +321,7 @@ describe("SkillSandboxArtifactModel", () => {
 
     const a = await SkillSandboxArtifactModel.create({
       sandboxId: sandbox.id,
+      organizationId: org.id,
       path: "out/a.txt",
       mimeType: "text/plain",
       sizeBytes: 1,
@@ -325,6 +330,7 @@ describe("SkillSandboxArtifactModel", () => {
     await new Promise((r) => setTimeout(r, 5));
     const b = await SkillSandboxArtifactModel.create({
       sandboxId: sandbox.id,
+      organizationId: org.id,
       path: "out/b.txt",
       mimeType: "text/plain",
       sizeBytes: 1,
@@ -359,6 +365,7 @@ describe("Cascade behavior", () => {
 
     await SkillSandboxCommandModel.append({
       sandboxId: sandbox.id,
+      organizationId: org.id,
       command: "echo hi",
       cwd: null,
       stdout: "",
@@ -369,6 +376,7 @@ describe("Cascade behavior", () => {
     });
     await SkillSandboxArtifactModel.create({
       sandboxId: sandbox.id,
+      organizationId: org.id,
       path: "out/a.txt",
       mimeType: "text/plain",
       sizeBytes: 1,
@@ -377,6 +385,7 @@ describe("Cascade behavior", () => {
     await SkillSandboxFileSnapshotModel.createMany([
       {
         sandboxId: sandbox.id,
+        organizationId: org.id,
         skillId: skill.id,
         skillName: "alpha",
         path: "SKILL.md",

@@ -1,6 +1,7 @@
 CREATE TABLE "skill_sandbox_artifacts" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"sandbox_id" uuid NOT NULL,
+	"organization_id" text NOT NULL,
 	"path" text NOT NULL,
 	"mime_type" text NOT NULL,
 	"size_bytes" integer NOT NULL,
@@ -11,6 +12,7 @@ CREATE TABLE "skill_sandbox_artifacts" (
 CREATE TABLE "skill_sandbox_commands" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"sandbox_id" uuid NOT NULL,
+	"organization_id" text NOT NULL,
 	"command" text NOT NULL,
 	"cwd" text,
 	"stdout" text DEFAULT '' NOT NULL,
@@ -24,6 +26,7 @@ CREATE TABLE "skill_sandbox_commands" (
 CREATE TABLE "skill_sandbox_file_snapshots" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"sandbox_id" uuid NOT NULL,
+	"organization_id" text NOT NULL,
 	"skill_id" uuid NOT NULL,
 	"skill_name" text NOT NULL,
 	"path" text NOT NULL,

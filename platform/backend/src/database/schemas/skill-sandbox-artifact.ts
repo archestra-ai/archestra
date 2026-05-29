@@ -28,6 +28,8 @@ const skillSandboxArtifactsTable = pgTable(
     sandboxId: uuid("sandbox_id")
       .notNull()
       .references(() => skillSandboxesTable.id, { onDelete: "cascade" }),
+    /** Denormalized owning org, copied from the parent sandbox at insert time. */
+    organizationId: text("organization_id").notNull(),
     /** Path inside the sandbox the file was exported from. */
     path: text("path").notNull(),
     mimeType: text("mime_type").notNull(),

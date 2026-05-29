@@ -20,7 +20,6 @@ const invalidInput = {
     fileSizeLimitBytes: 1024,
     cpuSeconds: 1,
     memoryBytes: 64 * 1024 * 1024,
-    maxProcesses: 16,
   },
   command: "echo hi",
   cwd: "/etc",

@@ -65,7 +65,6 @@ class CodeRuntimeService {
         outputBytesLimit: config.codeRuntime.maxOutputBytes,
         cpuSeconds: CODE_RUNTIME_LIMITS.maxCpuSeconds,
         memoryBytes: CODE_RUNTIME_LIMITS.maxMemoryBytes,
-        maxProcesses: CODE_RUNTIME_LIMITS.maxProcesses,
       });
       const durationMs = executed.durationMs;
       metrics.codeRuntime.reportRun(

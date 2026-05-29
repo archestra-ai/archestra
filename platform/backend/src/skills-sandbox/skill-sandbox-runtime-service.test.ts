@@ -270,6 +270,7 @@ function makeSnapshotRow(
   return {
     id: `snap-${skillId}-${path}`,
     sandboxId: "sandbox-1",
+    organizationId: "org-1",
     skillId,
     skillName,
     path,

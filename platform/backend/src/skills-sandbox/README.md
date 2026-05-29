@@ -46,7 +46,6 @@ Defaults live in `types.ts` (`SKILL_SANDBOX_LIMITS`) and are surfaced through
 
 - `maxCpuSeconds` — wall-clock cap per command (clamped against caller request)
 - `maxMemoryBytes` — container memory cap
-- `maxProcesses` — pid limit
 - `maxQueueLength` — concurrent runs queued behind the semaphore
 - `maxArtifactBytes` — cap on exported file size
 - `maxCommandBytes` — cap on stdout/stderr captured into the command log

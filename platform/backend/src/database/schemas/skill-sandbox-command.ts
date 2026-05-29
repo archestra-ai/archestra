@@ -19,6 +19,8 @@ const skillSandboxCommandsTable = pgTable(
     sandboxId: uuid("sandbox_id")
       .notNull()
       .references(() => skillSandboxesTable.id, { onDelete: "cascade" }),
+    /** Denormalized owning org, copied from the parent sandbox at insert time. */
+    organizationId: text("organization_id").notNull(),
     /** Shell command as it was passed to the runtime. */
     command: text("command").notNull(),
     /** Working directory used for this command; `null` means `defaultCwd`. */

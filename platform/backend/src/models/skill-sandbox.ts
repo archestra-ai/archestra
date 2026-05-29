@@ -90,6 +90,7 @@ class SkillSandboxModel {
         for (const { skill, files } of skillFileMap.values()) {
           snapshotRows.push({
             sandboxId: sandbox.id,
+            organizationId: sandbox.organizationId,
             skillId: skill.id,
             skillName: skill.name,
             path: "SKILL.md",
@@ -106,6 +107,7 @@ class SkillSandboxModel {
             }
             snapshotRows.push({
               sandboxId: sandbox.id,
+              organizationId: sandbox.organizationId,
               skillId: skill.id,
               skillName: skill.name,
               path: file.path,

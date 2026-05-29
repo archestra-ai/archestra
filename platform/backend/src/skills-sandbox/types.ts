@@ -8,7 +8,6 @@ import type { SandboxId } from "@/types";
 export const SKILL_SANDBOX_LIMITS = {
   maxCpuSeconds: 30,
   maxMemoryBytes: 1024 * 1024 * 1024,
-  maxProcesses: 256,
   maxQueueLength: 50,
   maxSandboxQueueLength: 10,
   maxArtifactBytes: 16 * 1024 * 1024,

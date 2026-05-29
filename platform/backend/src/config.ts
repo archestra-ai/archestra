@@ -1165,10 +1165,6 @@ const config = {
         process.env.ARCHESTRA_DAGGER_RUNTIME_MEMORY_BYTES,
         1024 * 1024 * 1024,
       ),
-      maxProcesses: parsePositiveInt(
-        process.env.ARCHESTRA_DAGGER_RUNTIME_MAX_PROCESSES,
-        256,
-      ),
     },
   },
   vault: {

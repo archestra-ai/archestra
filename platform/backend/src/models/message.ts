@@ -153,6 +153,33 @@ class MessageModel {
     return updatedMessage;
   }
 
+  /**
+   * Replace a message's full content. Used when a turn changes after it was
+   * first persisted — e.g. a tool call that has since been approved or declined.
+   */
+  static async updateContent(
+    messageId: string,
+    content: Message["content"],
+  ): Promise<Message> {
+    // Validate the row exists so the return type holds — `.returning()`
+    // would otherwise yield `undefined` for an unknown id.
+    const message = await MessageModel.findById(messageId);
+    if (!message) {
+      throw new Error("Message not found");
+    }
+
+    const [updatedMessage] = await db
+      .update(schema.messagesTable)
+      .set({
+        content,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.messagesTable.id, messageId))
+      .returning();
+
+    return updatedMessage;
+  }
+
   static async deleteAfterMessage(
     conversationId: string,
     messageId: string,

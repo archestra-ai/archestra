@@ -61,12 +61,24 @@ describe("entropyDetector", () => {
     expect(found[0].endIndex).toBe("prefix ".length + token.length);
   });
 
-  it("flags a hex-like SHA-style digest", () => {
+  // content hashes are entropy-identical to hex secrets, so an entropy
+  // threshold cannot tell them apart. scoring against the base64-sized
+  // reference alphabet keeps single-alphabet hex below the bar — these are
+  // routinely pasted by developers and should not trigger the dialog.
+  it("does not flag a sha256 digest", () => {
     const sha =
       "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
-    const found = scan(`digest: ${sha}`);
-    expect(found).toHaveLength(1);
-    expect(found[0].internalLabel).toBe("high-entropy-token");
+    expect(scan(`digest: ${sha}`)).toEqual([]);
+  });
+
+  it("does not flag a 40-char git commit SHA", () => {
+    const sha = "9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a";
+    expect(scan(`see commit ${sha} for the fix`)).toEqual([]);
+  });
+
+  it("does not flag an md5 digest", () => {
+    const md5 = "9e107d9d372bb6826bd81d3542a419d6";
+    expect(scan(`checksum ${md5}`)).toEqual([]);
   });
 
   it("does not flag a long low-entropy token", () => {

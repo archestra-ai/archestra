@@ -7,14 +7,11 @@ packages:
 
 catalog:
   typescript: ^6.0.2
-  # TS 7 beta (Go-based `tsgo`) publishes daily dev builds. The
-  # minimumReleaseAge setting below blocks anything newer than 7 days. Pinning the
-  # newest build that is already past the 7-day window.
-  # To catch up with the `beta` dist-tag: as of 2026-04-23, `beta` points at
-  # 7.0.0-dev.20260421.2 (pub 2026-04-21) — bump this pin on or after
-  # 2026-04-28, or re-check `npm view @typescript/native-preview dist-tags`
-  # and pick the newest version at least 7 days old.
-  "@typescript/native-preview": 7.0.0-dev.20260415.1
+  # TS 7 beta (Go-based `tsgo`) publishes daily dev builds. minimumReleaseAge
+  # (7 days) acts as the safety net — pnpm rejects builds younger than that,
+  # so tracking `beta` directly is safe: the lock file always resolves to the
+  # newest build that has cleared the quarantine window.
+  "@typescript/native-preview": beta
   zod: ^4.3.4
 overrides:
   '@fastify/reply-from': '>=12.6.2'

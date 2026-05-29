@@ -642,10 +642,7 @@ function ChatSessionHook({
           originalTokenEstimate?: number;
           compactedTokenEstimate?: number;
         };
-        recordContextCompaction({
-          ...data,
-          updateContextTokens: data.trigger !== "auto",
-        });
+        recordContextCompaction(data);
         queryClient.invalidateQueries({
           queryKey: ["conversation", conversationId],
         });

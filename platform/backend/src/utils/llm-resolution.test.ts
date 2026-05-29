@@ -330,6 +330,17 @@ describe("resolveConversationLlmSelectionForAgent", () => {
       LlmProviderApiKeyModelLinkModel,
       "getRankedModelsForApiKeys",
     ).mockResolvedValue([]);
+    vi.spyOn(
+      LlmProviderApiKeyModelLinkModel,
+      "getLinkedModelSelectionKeys",
+    ).mockImplementation(
+      async (selections) =>
+        new Set(
+          selections.map(
+            (selection) => `${selection.apiKeyId}:${selection.modelId}`,
+          ),
+        ),
+    );
     vi.spyOn(ModelModel, "findById").mockResolvedValue(null);
   });
 
@@ -454,6 +465,41 @@ describe("resolveConversationLlmSelectionForAgent", () => {
 
     const result = await resolveConversationLlmSelectionForAgent({
       agent: { llmApiKeyId: null, modelId: "m-agent" },
+      organizationId: "org-1",
+      userId: "user-1",
+    });
+
+    expect(result).toEqual({
+      modelId: "m-org",
+      chatApiKeyId: "org-key",
+      selectedModel: "gpt-4o",
+      selectedProvider: "openai",
+    });
+  });
+
+  test("skips a configured model that is no longer linked to its API key", async () => {
+    vi.spyOn(OrganizationModel, "getById").mockResolvedValue({
+      id: "org-1",
+      defaultModelId: "m-org",
+      defaultLlmApiKeyId: "org-key",
+    } as never);
+    vi.spyOn(
+      LlmProviderApiKeyModelLinkModel,
+      "getLinkedModelSelectionKeys",
+    ).mockResolvedValue(new Set(["org-key:m-org"]));
+    vi.spyOn(ModelModel, "findById").mockImplementation(async (id) => {
+      if (id === "m-org") {
+        return mockModel({
+          id: "m-org",
+          modelId: "gpt-4o",
+          provider: "openai",
+        });
+      }
+      return null;
+    });
+
+    const result = await resolveConversationLlmSelectionForAgent({
+      agent: { llmApiKeyId: "stale-key", modelId: "stale-model" },
       organizationId: "org-1",
       userId: "user-1",
     });

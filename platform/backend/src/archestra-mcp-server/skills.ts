@@ -32,6 +32,7 @@ import {
   escapeXmlText,
   formatSkillActivation,
 } from "@/skills/skill-activation";
+import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { ApiError, type Skill, SkillFileEncodingSchema } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
 import {
@@ -164,19 +165,22 @@ const registry = defineArchestraTools([
         return errorResult("This tool requires an organization context.");
       }
 
-      return listSkillCatalog(ctx);
+      return listSkillCatalog(ctx, context.agent.id);
     },
   }),
   defineArchestraTool({
     shortName: TOOL_ACTIVATE_SKILL_SHORT_NAME,
     title: "Activate Skill",
+    // a static tool description can't know whether the sandbox tools are
+    // enabled, permitted, and assigned to the calling agent, so it does not
+    // mention them. The activate_skill *result* adds an agent-aware sandbox
+    // hint (see formatSkillActivation) only when they are genuinely available.
     description:
       "Load a specialized Agent Skill — a reusable SKILL.md instruction set. " +
       "Call list_skills first to discover what is available, then call this " +
       "with a skill name to load its full instructions. Activate a skill " +
       "before attempting the task it covers. To inspect bundled resources " +
-      "use read_skill_file; to execute scripts or shell commands use " +
-      "create_skill_sandbox + run_skill_command.",
+      "use read_skill_file.",
     schema: ActivateSkillSchema,
     async handler({ args, context }) {
       const ctx = requireOrgContext(context);
@@ -201,7 +205,13 @@ const registry = defineArchestraTools([
         "[Skills] Skill activated",
       );
 
-      return successResult(formatSkillActivation({ skill, files }));
+      return successResult(
+        formatSkillActivation({
+          skill,
+          files,
+          canRunSandbox: await canRunSkillSandbox(ctx, context.agent.id),
+        }),
+      );
     },
   }),
   defineArchestraTool({
@@ -391,6 +401,19 @@ function requireOrgContext(context: ArchestraContext): SkillReadContext | null {
   return { organizationId: context.organizationId, userId: context.userId };
 }
 
+/** `isSkillSandboxAvailableForAgent` for callers that only hold a read context. */
+async function canRunSkillSandbox(
+  ctx: SkillReadContext,
+  agentId: string | undefined,
+): Promise<boolean> {
+  if (ctx.userId === undefined) return false;
+  const checker = await getSkillPermissionChecker({
+    userId: ctx.userId,
+    organizationId: ctx.organizationId,
+  });
+  return isSkillSandboxAvailableForAgent({ checker, agentId });
+}
+
 /**
  * Look up a skill by name and return it only if the caller can access it under
  * the skill's scope. Returns null otherwise — callers surface a generic
@@ -468,15 +491,18 @@ function toSkillFiles(
   }));
 }
 
-async function listSkillCatalog(ctx: SkillReadContext) {
-  const isSkillAdmin =
-    ctx.userId !== undefined &&
-    (
-      await getSkillPermissionChecker({
-        userId: ctx.userId,
-        organizationId: ctx.organizationId,
-      })
-    ).isAdmin;
+async function listSkillCatalog(
+  ctx: SkillReadContext,
+  agentId: string | undefined,
+) {
+  const checker =
+    ctx.userId !== undefined
+      ? await getSkillPermissionChecker({
+          userId: ctx.userId,
+          organizationId: ctx.organizationId,
+        })
+      : null;
+  const isSkillAdmin = checker?.isAdmin ?? false;
   const accessibleSkillIds = isSkillAdmin
     ? undefined
     : await SkillTeamModel.getUserAccessibleSkillIds({
@@ -503,9 +529,20 @@ async function listSkillCatalog(ctx: SkillReadContext) {
     )
     .join("\n");
 
+  // only advertise the sandbox path when it would actually work: the feature
+  // is enabled, the caller can execute skills, and the sandbox tools are
+  // assigned to this agent (so they appear in its tools/list).
+  const instructions = (await isSkillSandboxAvailableForAgent({
+    checker,
+    agentId,
+  }))
+    ? "Call activate_skill with one of these names to load its instructions. " +
+      "To run a skill's scripts or shell commands, create_skill_sandbox with " +
+      "the skill name, then run_skill_command."
+    : "Call activate_skill with one of these names to load its instructions.";
+
   return successResult(
-    `<available_skills>\n${catalog}\n</available_skills>\n` +
-      "Call activate_skill with one of these names to load its instructions.",
+    `<available_skills>\n${catalog}\n</available_skills>\n${instructions}`,
   );
 }
 

@@ -27,10 +27,10 @@
       "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "./biome.json"]
     },
     "check:ci": {
-      "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "./biome.json", "**/knip.config.ts", "**/package.json"]
+      "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "./biome.json", "**/knip.config.ts", "**/package.json", "src/database/migrations/**"]
     },
     "check:commit": {
-      "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "./biome.json", "**/knip.config.ts", "**/package.json"]
+      "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "./biome.json", "**/knip.config.ts", "**/package.json", "src/database/migrations/**"]
     },
     "knip": {
       "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "**/knip.config.ts", "**/package.json"]

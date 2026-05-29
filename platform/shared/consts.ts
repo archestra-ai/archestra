@@ -78,6 +78,16 @@ export const USER_ID_HEADER = "X-Archestra-User-Id";
 export const SESSION_ID_HEADER = "X-Archestra-Session-Id";
 
 /**
+ * Header set on the available-models response while a lazy provider model sync
+ * is in flight. Clients refetch until it clears so freshly synced models appear.
+ */
+export const LAZY_MODEL_SYNC_STATUS_HEADER = "x-archestra-lazy-model-sync";
+
+/** Sole value of {@link LAZY_MODEL_SYNC_STATUS_HEADER}: a sync is pending. */
+export type LazyModelSyncStatus = "pending";
+export const LAZY_MODEL_SYNC_STATUS_PENDING: LazyModelSyncStatus = "pending";
+
+/**
  * Header name for interaction source.
  * Indicates where the request originated from (e.g., "chat", "chatops:slack", "email").
  * Internal-only header — external API requests default to "api".

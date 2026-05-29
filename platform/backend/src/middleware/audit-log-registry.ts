@@ -291,12 +291,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceIdSource: "organizationContext",
     fetchById: (id, _orgId) => OrganizationModel.findByIdForAudit(id, _orgId),
   },
-  // GitHub import has distinct semantics from a plain create.
+  // Bulk import creates multiple skills, so there is no single resourceId and
+  // fetchById can't represent the result. The route handler sets
+  // `request.auditAfter` with the created list; resourceId stays null.
   "/api/skills/github/import": {
     resourceType: "skill",
     action: "skill.imported",
-    resourceIdSource: "organizationContext",
-    fetchById: (id, orgId) => SkillModel.findByIdForAudit(id, orgId),
   },
 
   // Scheduled agent triggers (sub-routes resolve via `resolveAuditableRouteConfig`)

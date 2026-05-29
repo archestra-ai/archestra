@@ -88,16 +88,22 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
       request.auditResponseBodyId ??
       null;
 
+    // A handler may supply the post-state directly (e.g. bulk creates whose
+    // result can't be represented by a single fetchById); prefer it.
     const after =
-      outcome === "success"
-        ? await resolveAfterState({
-            method: request.method,
-            id,
-            organizationId: request.organizationId,
-            cfg,
-            routeParams: request.params as Record<string, unknown> | undefined,
-          })
-        : null;
+      outcome !== "success"
+        ? null
+        : request.auditAfter !== undefined
+          ? request.auditAfter
+          : await resolveAfterState({
+              method: request.method,
+              id,
+              organizationId: request.organizationId,
+              cfg,
+              routeParams: request.params as
+                | Record<string, unknown>
+                | undefined,
+            });
 
     const sourceIp = extractIp(request);
     const userAgent =

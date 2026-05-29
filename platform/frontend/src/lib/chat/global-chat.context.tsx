@@ -500,7 +500,7 @@ function ChatSessionHook({
 
     experimental_throttle: 100,
     id: conversationId,
-    onFinish: ({ message, isAbort }) => {
+    onFinish: async ({ message, isAbort }) => {
       setOptimisticToolCalls([]);
       clearActiveContextCompaction();
 
@@ -524,10 +524,13 @@ function ChatSessionHook({
         });
       }
 
-      queryClient.invalidateQueries({
+      const conversationInvalidate = queryClient.invalidateQueries({
         queryKey: ["conversation", conversationId],
       });
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+
+      const conversationsSidebarInvalidate = queryClient.invalidateQueries({
+        queryKey: ["conversations"],
+      });
 
       // After a swap_agent stop, poke the new agent so it responds.
       // The new /api/chat POST re-reads the conversation from DB and
@@ -550,6 +553,11 @@ function ChatSessionHook({
 
       // Free early UI HTML blobs now that all tool calls have rendered.
       setEarlyToolUiStarts({});
+
+      await Promise.all([
+        conversationInvalidate,
+        conversationsSidebarInvalidate,
+      ]);
 
       // Auto-generate title after the first settled exchange if still untitled
       const cachedTitle = queryClient.getQueryData<{ title?: string | null }>([

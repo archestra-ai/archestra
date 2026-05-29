@@ -10,6 +10,7 @@ import {
   getSkillPermissionChecker,
   requireSkillModifyPermission,
 } from "@/auth/skill-permissions";
+import config from "@/config";
 import logger from "@/logging";
 import {
   SkillFileModel,
@@ -171,13 +172,19 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_ACTIVATE_SKILL_SHORT_NAME,
     title: "Activate Skill",
+    // the sandbox sentence is appended only when the feature is enabled on
+    // this deployment — getArchestraMcpTools() also drops the sandbox tools
+    // from tools/list in that case, so we never name tools that aren't there.
     description:
       "Load a specialized Agent Skill — a reusable SKILL.md instruction set. " +
       "Call list_skills first to discover what is available, then call this " +
       "with a skill name to load its full instructions. Activate a skill " +
       "before attempting the task it covers. To inspect bundled resources " +
-      "use read_skill_file; to execute scripts or shell commands use " +
-      "create_skill_sandbox + run_skill_command.",
+      "use read_skill_file." +
+      (config.skillsSandbox.enabled
+        ? " To execute scripts or shell commands use create_skill_sandbox + " +
+          "run_skill_command."
+        : ""),
     schema: ActivateSkillSchema,
     async handler({ args, context }) {
       const ctx = requireOrgContext(context);

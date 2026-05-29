@@ -395,7 +395,7 @@ describe("ChatMessages", () => {
 
   it("renders unavailable tool failures as tool rows without global chat errors", () => {
     const unavailableToolError =
-      'The requested tool is not available in this chat. Use one of the available tools, or continue without calling a tool.\n\nDetails:\n{"requestedToolName":"missing_tool"}';
+      'The requested tool is not available in this chat. Available tools are listed in the details below; use an exact available tool name for the next tool call.\n\nDetails:\n{"requestedToolName":"missing_tool"}';
     const messages = [
       {
         id: "assistant-1",

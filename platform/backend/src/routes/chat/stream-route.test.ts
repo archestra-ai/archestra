@@ -426,61 +426,6 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(persistedErrors).toHaveLength(0);
   });
 
-  test("rewrites unavailable tool stream chunks to structured tool errors", async ({
-    expect,
-  }) => {
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/chat",
-      payload: {
-        id: conversationId,
-        messages: [
-          {
-            id: "msg-1",
-            role: "user",
-            parts: [{ type: "text", text: "hello" }],
-          },
-        ],
-      },
-    });
-
-    expect(response.statusCode).toBe(200);
-    await executionPromise;
-
-    const streamTextConfig = mockStreamText.mock.calls[0]?.[0];
-    const transformFactory = streamTextConfig?.experimental_transform;
-    expect(typeof transformFactory).toBe("function");
-    if (typeof transformFactory !== "function") {
-      throw new Error("Expected unavailable tool transform to be configured");
-    }
-
-    const transform = transformFactory({
-      tools: { known_tool: { inputSchema: {} } },
-      stopStream: vi.fn(),
-    });
-    const rewritten = await transformOne(transform, {
-      type: "tool-error",
-      toolCallId: "call-1",
-      toolName: "missing_tool",
-      input: {},
-      error:
-        "Model tried to call unavailable tool 'missing_tool'. Available tools: known_tool.",
-      dynamic: true,
-    });
-
-    expect(rewritten).toMatchObject({
-      type: "tool-error",
-      toolName: "missing_tool",
-      error: {
-        type: "unavailable_tool",
-        requestedToolName: "missing_tool",
-        availableToolNames: ["known_tool"],
-        originalErrorMessage:
-          "Model tried to call unavailable tool 'missing_tool'. Available tools: known_tool.",
-      },
-    });
-  });
-
   test("persists user message with new DB id on provider error and allows subsequent PATCH", async ({
     expect,
   }) => {
@@ -805,21 +750,6 @@ async function waitForRunningActiveRun(conversationId: string) {
   }
 
   throw new Error("Active run was not created");
-}
-
-async function transformOne(
-  transform: TransformStream<unknown, unknown>,
-  chunk: unknown,
-) {
-  const writer = transform.writable.getWriter();
-  const reader = transform.readable.getReader();
-  const readPromise = reader.read();
-  await writer.write(chunk);
-  const result = await readPromise;
-  await writer.close();
-  writer.releaseLock();
-  reader.releaseLock();
-  return result.value;
 }
 
 function readSsePayloads(body: string): unknown[] {

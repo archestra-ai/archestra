@@ -38,13 +38,13 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { ContextIndicator } from "@/components/chat/context-indicator";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
-import { KnowledgeBaseUploadIndicator } from "@/components/chat/knowledge-base-upload-indicator";
 import { LlmProviderApiKeySelector } from "@/components/chat/llm-provider-api-key-selector";
 import {
   ModelSelector,
   providerToLogoProvider,
 } from "@/components/chat/model-selector";
 import { PlaywrightInstallInline } from "@/components/chat/playwright-install-dialog";
+import { SensitiveDataConfirmDialog } from "@/components/chat/sensitive-data-confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -57,14 +57,15 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useProfile } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useChatPlaceholder } from "@/lib/chat/chat-placeholder.hook";
 import { conversationStorageKeys } from "@/lib/chat/chat-utils";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useModelSelectorDisplay } from "@/lib/chat/use-model-selector-display.hook";
+import { useFeature } from "@/lib/config/config.query";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { useOrganization } from "@/lib/organization.query";
+import { scanText } from "@/lib/sensitive-data";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
 import { cn } from "@/lib/utils";
 import {
@@ -72,6 +73,9 @@ import {
   parseSkillCommand,
   type SkillCommand,
 } from "./skill-commands";
+
+const CHAT_ATTACHMENT_MAX_BYTES = 50 * 1024 * 1024;
+const CHAT_ATTACHMENT_MAX_MB = CHAT_ATTACHMENT_MAX_BYTES / (1024 * 1024);
 
 export interface ArchestraPromptInputProps {
   onSubmit: (
@@ -211,9 +215,6 @@ const PromptInputContent = ({
   const supportedTypesDescription =
     getSupportedFileTypesDescription(inputModalities);
 
-  // Check if agent has a knowledge base
-  const { data: agentData } = useProfile(agentId);
-
   // Check if user can update agent settings (to show settings link in tooltip)
   const { data: canUpdateAgentSettings } = useHasPermissions({
     agentSettings: ["update"],
@@ -296,16 +297,6 @@ const PromptInputContent = ({
     },
     [controller.textInput],
   );
-
-  const knowledgeBaseIds =
-    ((agentData as Record<string, unknown> | null | undefined)
-      ?.knowledgeBaseIds as string[] | undefined) ?? [];
-  const connectorIds =
-    ((agentData as Record<string, unknown> | null | undefined)?.connectorIds as
-      | string[]
-      | undefined) ?? [];
-  const hasKnowledgeSources =
-    knowledgeBaseIds.length > 0 || connectorIds.length > 0;
 
   const isMobile = useIsMobile();
 
@@ -433,6 +424,29 @@ const PromptInputContent = ({
     ],
   );
 
+  const sensitiveDataDetectionEnabled =
+    useFeature("chatSecretScanEnabled") ?? false;
+  const [sensitiveDataDialogOpen, setSensitiveDataDialogOpen] = useState(false);
+  const pendingSubmissionRef = useRef<{
+    outgoing: PromptInputMessage;
+    e: FormEvent<HTMLFormElement>;
+    options?: { skill: ChatSkillMetadata };
+    resolve: () => void;
+    reject: (reason?: unknown) => void;
+  } | null>(null);
+
+  const dispatchSubmit = useCallback(
+    (
+      outgoing: PromptInputMessage,
+      e: FormEvent<HTMLFormElement>,
+      options?: { skill: ChatSkillMetadata },
+    ) => {
+      localStorage.removeItem(storageKey);
+      onSubmit(outgoing, e, options);
+    },
+    [onSubmit, storageKey],
+  );
+
   const handleWrappedSubmit = useCallback(
     (message: PromptInputMessage, e: FormEvent<HTMLFormElement>) => {
       const trimmed = message.text.trim();
@@ -453,17 +467,53 @@ const PromptInputContent = ({
         outgoing = { ...message, text: parsed.remaining };
       }
 
-      localStorage.removeItem(storageKey);
-      onSubmit(outgoing, e, skill ? { skill } : undefined);
+      const options = skill ? { skill } : undefined;
+
+      if (sensitiveDataDetectionEnabled && outgoing.text.length > 0) {
+        const findings = scanText(outgoing.text);
+        if (findings.length > 0) {
+          if (pendingSubmissionRef.current !== null)
+            return new Promise<void>(() => {});
+          return new Promise<void>((resolve, reject) => {
+            pendingSubmissionRef.current = {
+              outgoing,
+              e,
+              options,
+              resolve,
+              reject,
+            };
+            setSensitiveDataDialogOpen(true);
+          });
+        }
+      }
+
+      dispatchSubmit(outgoing, e, options);
     },
     [
-      onSubmit,
+      dispatchSubmit,
       onCompactConversation,
       runCompactCommand,
+      sensitiveDataDetectionEnabled,
       skillCommands,
-      storageKey,
     ],
   );
+
+  const handleSensitiveDataConfirm = useCallback(() => {
+    const pending = pendingSubmissionRef.current;
+    pendingSubmissionRef.current = null;
+    setSensitiveDataDialogOpen(false);
+    if (pending) {
+      dispatchSubmit(pending.outgoing, pending.e, pending.options);
+      pending.resolve();
+    }
+  }, [dispatchSubmit]);
+
+  const handleSensitiveDataCancel = useCallback(() => {
+    const pending = pendingSubmissionRef.current;
+    pendingSubmissionRef.current = null;
+    setSensitiveDataDialogOpen(false);
+    pending?.reject();
+  }, []);
 
   const handleFileError = useCallback(
     (err: {
@@ -476,6 +526,12 @@ const PromptInputContent = ({
             ? "This model does not support file uploads"
             : "File format is not supported by this model",
         );
+      } else if (err.code === "max_file_size") {
+        toast.error(
+          `File is too large. Maximum size is ${CHAT_ATTACHMENT_MAX_MB} MB.`,
+        );
+      } else if (err.code === "max_files") {
+        toast.error("Too many files attached.");
       }
     },
     [showFileUploadButton],
@@ -539,6 +595,7 @@ const PromptInputContent = ({
         accept={
           showFileUploadButton ? acceptedFileTypes : "application/x-empty"
         }
+        maxFileSize={CHAT_ATTACHMENT_MAX_BYTES}
         onError={handleFileError}
       >
         {/* File attachments display - shown inline above textarea */}
@@ -853,10 +910,6 @@ const PromptInputContent = ({
             )}
           </PromptInputTools>
           <div className="flex items-center gap-2">
-            <KnowledgeBaseUploadIndicator
-              attachmentCount={controller.attachments.files.length}
-              hasKnowledgeBase={hasKnowledgeSources}
-            />
             <PromptInputSpeechButton
               textareaRef={textareaRef}
               onTranscriptionChange={handleTranscriptionChange}
@@ -869,6 +922,11 @@ const PromptInputContent = ({
           </div>
         </PromptInputFooter>
       </PromptInput>
+      <SensitiveDataConfirmDialog
+        open={sensitiveDataDialogOpen}
+        onConfirm={handleSensitiveDataConfirm}
+        onCancel={handleSensitiveDataCancel}
+      />
     </div>
   );
 };
@@ -902,9 +960,28 @@ const ArchestraPromptInput = ({
   modelSource,
   onResetModelOverride,
 }: ArchestraPromptInputProps) => {
+  const handleProviderFileError = useCallback(
+    (err: {
+      code: "max_files" | "max_file_size" | "accept";
+      message: string;
+    }) => {
+      if (err.code === "max_file_size") {
+        toast.error(
+          `File is too large. Maximum size is ${CHAT_ATTACHMENT_MAX_MB} MB.`,
+        );
+      } else if (err.code === "max_files") {
+        toast.error("Too many files attached.");
+      }
+    },
+    [],
+  );
+
   return (
     <div className="flex size-full flex-col justify-end">
-      <PromptInputProvider>
+      <PromptInputProvider
+        maxFileSize={CHAT_ATTACHMENT_MAX_BYTES}
+        onError={handleProviderFileError}
+      >
         <PromptInputContent
           onSubmit={onSubmit}
           status={status}

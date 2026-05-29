@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import mcpClient from "@/clients/mcp-client";
 import db, { schema } from "@/database";
@@ -774,6 +774,94 @@ class McpServerModel {
     }
 
     return { isValid: false, errorMessage: "No catalog ID provided" };
+  }
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    // `mcp_server` has no direct `organization_id` column, so we infer org
+    // membership through related rows. A snapshot is returned only when at
+    // least one of these holds:
+    //   - team-scoped: the team belongs to the org
+    //   - personal / org-scoped with an owner: the owner is a member of the org
+    //   - unowned + teamless: pre-existing system-owned rows that have no
+    //     org linkage at all (matches the previous semantics so we don't
+    //     regress legacy data or org-wide seeded servers).
+    const [row] = await db
+      .select({
+        server: schema.mcpServersTable,
+        catalogName: schema.internalMcpCatalogTable.name,
+        catalogVersion: schema.internalMcpCatalogTable.version,
+        catalogServerUrl: schema.internalMcpCatalogTable.serverUrl,
+        catalogRequiresAuth: schema.internalMcpCatalogTable.requiresAuth,
+        catalogLocalConfig: schema.internalMcpCatalogTable.localConfig,
+        catalogOauthConfig: schema.internalMcpCatalogTable.oauthConfig,
+        catalogUserConfig: schema.internalMcpCatalogTable.userConfig,
+      })
+      .from(schema.mcpServersTable)
+      .leftJoin(
+        schema.teamsTable,
+        eq(schema.mcpServersTable.teamId, schema.teamsTable.id),
+      )
+      .leftJoin(
+        schema.membersTable,
+        and(
+          eq(schema.membersTable.userId, schema.mcpServersTable.ownerId),
+          eq(schema.membersTable.organizationId, organizationId),
+        ),
+      )
+      .leftJoin(
+        schema.internalMcpCatalogTable,
+        eq(schema.mcpServersTable.catalogId, schema.internalMcpCatalogTable.id),
+      )
+      .where(
+        and(
+          eq(schema.mcpServersTable.id, id),
+          or(
+            eq(schema.teamsTable.organizationId, organizationId),
+            isNotNull(schema.membersTable.id),
+            and(
+              isNull(schema.mcpServersTable.teamId),
+              isNull(schema.mcpServersTable.ownerId),
+            ),
+          ),
+        ),
+      )
+      .limit(1);
+
+    if (!row) return null;
+    const s = row.server;
+
+    const localConfig = row.catalogLocalConfig;
+    const transportType = localConfig?.transportType ?? "stdio";
+    const envKeys = Array.isArray(localConfig?.environment)
+      ? localConfig.environment.map((e) => e.key).sort()
+      : [];
+    const userConfigKeys = row.catalogUserConfig
+      ? Object.keys(row.catalogUserConfig).sort()
+      : [];
+
+    return {
+      id: s.id,
+      name: s.name,
+      catalogId: s.catalogId,
+      catalogName: row.catalogName ?? null,
+      catalogVersion: row.catalogVersion ?? null,
+      serverType: s.serverType,
+      scope: s.scope,
+      ownerId: s.ownerId ?? null,
+      teamId: s.teamId ?? null,
+      transportType,
+      serverUrl: row.catalogServerUrl ?? null,
+      requiresAuth: row.catalogRequiresAuth ?? null,
+      envKeys,
+      userConfigKeys,
+      hasOauthConfig: row.catalogOauthConfig !== null,
+      hasSecret: Boolean(s.secretId),
+      localInstallationStatus: s.localInstallationStatus,
+      oauthRefreshError: s.oauthRefreshError ?? null,
+      createdAt: s.createdAt.toISOString(),
+    };
   }
 }
 

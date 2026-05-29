@@ -3,7 +3,7 @@ title: Scheduled Tasks
 category: Agents
 order: 3
 description: Run agents automatically on a repeating schedule
-lastUpdated: 2026-05-07
+lastUpdated: 2026-05-26
 ---
 
 <!--
@@ -15,6 +15,10 @@ Check ../docs_writer_prompt.md before changing this file.
 Scheduled Tasks run an agent automatically on a repeating schedule. Each run sends the configured prompt to the agent and records the full conversation. The task always runs under the permissions of the user who created it.
 
 Common use cases: daily standup preparation (fetching tasks and summarizing progress before a daily meeting), or first-line support triage (periodically processing incoming support requests).
+
+## Schedule
+
+The Hourly and Daily presets cover the common cases. For anything else, the Custom option accepts a standard 5-field cron expression (`minute hour day month weekday`), evaluated in the creator's timezone. For example, `*/15 * * * *` runs every fifteen minutes and `0 9 1 * *` runs at 09:00 on the first of each month.
 
 ## Chat Follow-up
 

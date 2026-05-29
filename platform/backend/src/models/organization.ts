@@ -187,6 +187,59 @@ class OrganizationModel {
 
     return organization;
   }
+
+  /**
+   * Compact org-wide snapshot for audit logs (large/binary branding fields omitted).
+   */
+  // `id` here is always the caller's own organizationId: all registry entries
+  // for this fetcher use resourceIdSource="organizationContext", so id equals
+  // organizationId at call time. The second parameter is unused by design —
+  // the resource being audited IS the organization.
+  static async findByIdForAudit(
+    id: string,
+    _organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const org = await OrganizationModel.getById(id);
+    if (!org) return null;
+
+    const media = (v: string | null | undefined) =>
+      v && v.length > 0 ? "(set)" : null;
+
+    return {
+      id: org.id,
+      name: org.name,
+      slug: org.slug,
+      theme: org.theme,
+      customFont: org.customFont,
+      logo: media(org.logo),
+      logoDark: media(org.logoDark),
+      favicon: media(org.favicon),
+      iconLogo: media(org.iconLogo),
+      appName: org.appName ?? null,
+      ogDescription: org.ogDescription ?? null,
+      footerText: org.footerText ?? null,
+      defaultUserLimitCleanupInterval:
+        org.defaultUserLimitCleanupInterval ?? null,
+      onboardingComplete: org.onboardingComplete,
+      globalToolPolicy: org.globalToolPolicy,
+      compressionScope: org.compressionScope,
+      convertToolResultsToToon: org.convertToolResultsToToon,
+      allowChatFileUploads: org.allowChatFileUploads,
+      embeddingModel: org.embeddingModel ?? null,
+      defaultLlmModel: org.defaultLlmModel ?? null,
+      defaultLlmProvider: org.defaultLlmProvider ?? null,
+      defaultAgentId: org.defaultAgentId ?? null,
+      rerankerModel: org.rerankerModel ?? null,
+      showTwoFactor: org.showTwoFactor,
+      slimChatErrorUi: org.slimChatErrorUi,
+      oauthAccessTokenLifetimeSeconds: org.oauthAccessTokenLifetimeSeconds,
+      connectionDefaultMcpGatewayId: org.connectionDefaultMcpGatewayId ?? null,
+      connectionDefaultLlmProxyId: org.connectionDefaultLlmProxyId ?? null,
+      connectionDefaultClientId: org.connectionDefaultClientId ?? null,
+      metadata: org.metadata ?? null,
+      createdAt: org.createdAt.toISOString(),
+    };
+  }
 }
 export default OrganizationModel;
 

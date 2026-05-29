@@ -71,6 +71,7 @@ export const JiraConfigSchema = z.object({
   type: JIRA,
   jiraBaseUrl: connectorUrlSchema,
   isCloud: z.boolean(),
+  /** Single project key or comma-separated project keys. */
   projectKey: z.string().optional(),
   jqlQuery: z.string().optional(),
   commentEmailBlacklist: z.array(z.string()).optional(),
@@ -116,10 +117,14 @@ export const GithubConfigSchema = z.object({
   type: GITHUB,
   githubUrl: connectorUrlSchema,
   owner: z.string(),
+  authMethod: z.enum(["pat", "github_app"]).optional(),
+  githubAppId: z.string().optional(),
+  githubAppInstallationId: z.string().optional(),
   repos: z.array(z.string()).optional(),
   includeIssues: z.boolean().optional(),
   includePullRequests: z.boolean().optional(),
-  includeMarkdownFiles: z.boolean().optional(),
+  includeRepositoryFiles: z.boolean().optional(),
+  fileTypes: z.array(z.string()).optional(),
   labelsToSkip: z.array(z.string()).optional(),
 });
 export type GithubConfig = z.infer<typeof GithubConfigSchema>;

@@ -782,6 +782,51 @@ class ChatOpsChannelBindingModel {
 
     return deleted.length;
   }
+
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const binding = await ChatOpsChannelBindingModel.findByIdAndOrganization(
+      id,
+      organizationId,
+    );
+    if (!binding) return null;
+
+    return {
+      id: binding.id,
+      organizationId: binding.organizationId,
+      provider: binding.provider,
+      channelId: binding.channelId,
+      workspaceId: binding.workspaceId ?? null,
+      channelName: binding.channelName ?? null,
+      agentId: binding.agentId,
+      isDm: binding.isDm,
+      dmOwnerEmail: binding.dmOwnerEmail ?? null,
+      createdAt: binding.createdAt.toISOString(),
+    };
+  }
+
+  static async findBindingsFingerprintForOrganization(
+    organizationId: string,
+  ): Promise<Record<string, unknown>> {
+    const rows = await db
+      .select({
+        id: schema.chatopsChannelBindingsTable.id,
+        provider: schema.chatopsChannelBindingsTable.provider,
+        channelId: schema.chatopsChannelBindingsTable.channelId,
+        agentId: schema.chatopsChannelBindingsTable.agentId,
+      })
+      .from(schema.chatopsChannelBindingsTable)
+      .where(
+        eq(schema.chatopsChannelBindingsTable.organizationId, organizationId),
+      );
+
+    const bindings = rows
+      .map((r) => `${r.id}:${r.provider}:${r.channelId}:${r.agentId ?? ""}`)
+      .sort((a, b) => a.localeCompare(b));
+    return { bindings };
+  }
 }
 
 export default ChatOpsChannelBindingModel;

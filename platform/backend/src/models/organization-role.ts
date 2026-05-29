@@ -574,6 +574,25 @@ class OrganizationRoleModel {
     );
   }
 
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const role = await OrganizationRoleModel.getById(id, organizationId);
+    if (!role) return null;
+
+    return {
+      id: role.id,
+      organizationId: role.organizationId,
+      role: role.role,
+      name: role.name,
+      description: role.description ?? null,
+      permission: role.permission,
+      predefined: role.predefined,
+      createdAt: role.createdAt?.toISOString() ?? null,
+    };
+  }
+
   private static getPermissionsCacheKey(
     organizationId: string,
     identifier: string,

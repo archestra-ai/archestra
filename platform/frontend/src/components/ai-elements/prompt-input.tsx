@@ -145,6 +145,11 @@ const useOptionalProviderAttachments = () =>
 
 export type PromptInputProviderProps = PropsWithChildren<{
   initialInput?: string;
+  maxFileSize?: number;
+  onError?: (err: {
+    code: "max_files" | "max_file_size" | "accept";
+    message: string;
+  }) => void;
 }>;
 
 /**
@@ -153,6 +158,8 @@ export type PromptInputProviderProps = PropsWithChildren<{
  */
 export function PromptInputProvider({
   initialInput: initialTextInput = "",
+  maxFileSize,
+  onError,
   children,
 }: PromptInputProviderProps) {
   // ----- textInput state
@@ -166,24 +173,45 @@ export function PromptInputProvider({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const openRef = useRef<() => void>(() => {});
 
-  const add = useCallback((files: File[] | FileList) => {
-    const incoming = Array.from(files);
-    if (incoming.length === 0) {
-      return;
-    }
+  const add = useCallback(
+    (files: File[] | FileList) => {
+      const incoming = Array.from(files);
+      if (incoming.length === 0) {
+        return;
+      }
 
-    setAttachmentFiles((prev) =>
-      prev.concat(
-        incoming.map((file) => ({
-          id: nanoid(),
-          type: "file" as const,
-          url: URL.createObjectURL(file),
-          mediaType: getMediaType(file),
-          filename: file.name,
-        })),
-      ),
-    );
-  }, []);
+      let accepted = incoming;
+      if (maxFileSize) {
+        accepted = incoming.filter((f) => f.size <= maxFileSize);
+        if (incoming.length > 0 && accepted.length === 0) {
+          onError?.({
+            code: "max_file_size",
+            message: "All files exceed the maximum size.",
+          });
+          return;
+        }
+        if (accepted.length < incoming.length) {
+          onError?.({
+            code: "max_file_size",
+            message: "Some files exceed the maximum size.",
+          });
+        }
+      }
+
+      setAttachmentFiles((prev) =>
+        prev.concat(
+          accepted.map((file) => ({
+            id: nanoid(),
+            type: "file" as const,
+            url: URL.createObjectURL(file),
+            mediaType: getMediaType(file),
+            filename: file.name,
+          })),
+        ),
+      );
+    },
+    [maxFileSize, onError],
+  );
 
   const remove = useCallback((id: string) => {
     setAttachmentFiles((prev) => {
@@ -616,7 +644,34 @@ export const PromptInput = ({
     [],
   );
 
-  const add = usingProvider ? controller.attachments.add : addLocal;
+  const baseAdd = usingProvider ? controller.attachments.add : addLocal;
+  // addLocal already enforces maxFileSize, but the controller's add does not.
+  // Wrap so the size limit holds whether or not a PromptInputProvider is used.
+  const add = useCallback(
+    (files: File[] | FileList) => {
+      const incoming = Array.from(files);
+      if (!maxFileSize) {
+        baseAdd(files);
+        return;
+      }
+      const sized = incoming.filter((f) => f.size <= maxFileSize);
+      if (incoming.length > 0 && sized.length === 0) {
+        onError?.({
+          code: "max_file_size",
+          message: "All files exceed the maximum size.",
+        });
+        return;
+      }
+      if (sized.length < incoming.length) {
+        onError?.({
+          code: "max_file_size",
+          message: "Some files exceed the maximum size.",
+        });
+      }
+      if (sized.length > 0) baseAdd(sized);
+    },
+    [baseAdd, maxFileSize, onError],
+  );
   const remove = usingProvider ? controller.attachments.remove : removeLocal;
   const clear = usingProvider ? controller.attachments.clear : clearLocal;
   const openFileDialog = usingProvider

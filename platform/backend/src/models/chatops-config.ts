@@ -52,6 +52,37 @@ class ChatOpsConfigModel {
     logger.info("ChatOpsConfigModel: saved Slack config to DB");
   }
 
+  /**
+   * Non-secret ChatOps connectivity snapshot for audit diffs.
+   */
+  async getRedactedSnapshotForAudit(): Promise<Record<string, unknown>> {
+    const [ms, slack] = await Promise.all([
+      this.getMsTeamsConfig(),
+      this.getSlackConfig(),
+    ]);
+
+    return {
+      msTeams: ms
+        ? {
+            enabled: ms.enabled,
+            hasAppId: Boolean(ms.appId),
+            hasAppSecret: Boolean(ms.appSecret),
+            hasTenantId: Boolean(ms.tenantId),
+          }
+        : null,
+      slack: slack
+        ? {
+            enabled: slack.enabled,
+            connectionMode: slack.connectionMode,
+            hasBotToken: Boolean(slack.botToken),
+            hasSigningSecret: Boolean(slack.signingSecret),
+            hasAppId: Boolean(slack.appId),
+            hasAppLevelToken: Boolean(slack.appLevelToken),
+          }
+        : null,
+    };
+  }
+
   private async getConfig<T>(secretName: string): Promise<T | null> {
     const secretRow = await SecretModel.findByName(secretName);
     if (!secretRow) return null;

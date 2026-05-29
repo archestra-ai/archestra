@@ -2,6 +2,7 @@ import {
   AGENT_TOOL_PREFIX,
   ARCHESTRA_MCP_CATALOG_ID,
   ARCHESTRA_TOOL_SHORT_NAMES,
+  type ArchestraToolShortName,
   BUILT_IN_AGENT_IDS,
   DEFAULT_ARCHESTRA_TOOL_NAMES,
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
@@ -10,6 +11,7 @@ import {
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
   slugify,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  TOOL_RUN_PYTHON_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@shared";
@@ -33,6 +35,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata";
+import config from "@/config";
 import db, { schema } from "@/database";
 import {
   createPaginatedResult,
@@ -293,6 +296,57 @@ class ToolModel {
     }
 
     return tool;
+  }
+
+  // Org-scoped audit snapshot via tool → agent_tools → agents.organizationId.
+  // toolsTable has no organizationId column; tenancy is resolved through any
+  // agent in the caller's organization that has been assigned the tool.  Closes
+  // the snapshot-before-authz leak even though DELETE /api/tools/:id is not
+  // org-predicate-scoped at the route layer yet.
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [tool] = await db
+      .select({
+        id: schema.toolsTable.id,
+        name: schema.toolsTable.name,
+        description: schema.toolsTable.description,
+        catalogId: schema.toolsTable.catalogId,
+        agentId: schema.toolsTable.agentId,
+        delegateToAgentId: schema.toolsTable.delegateToAgentId,
+        createdAt: schema.toolsTable.createdAt,
+        updatedAt: schema.toolsTable.updatedAt,
+      })
+      .from(schema.toolsTable)
+      .innerJoin(
+        schema.agentToolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.toolsTable.id, id),
+          eq(schema.agentsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!tool) return null;
+
+    return {
+      id: tool.id,
+      name: tool.name,
+      description: tool.description ?? null,
+      catalogId: tool.catalogId ?? null,
+      agentId: tool.agentId ?? null,
+      delegateToAgentId: tool.delegateToAgentId ?? null,
+      createdAt: tool.createdAt.toISOString(),
+      updatedAt: tool.updatedAt.toISOString(),
+    };
   }
 
   static async findAll(
@@ -924,9 +978,10 @@ class ToolModel {
    * - artifact_write: for artifact management
    * - todo_write: for task tracking
    * - query_knowledge_sources: for querying the knowledge base
+   * - run_python: for code execution, only when the runtime is enabled
    *
-   * All default tools are always assigned. The query_knowledge_sources tool
-   * is filtered out at query time if the agent has no knowledge base assigned.
+   * Seeded default tools are assigned. The query_knowledge_sources tool is
+   * filtered out at query time if the agent has no knowledge base assigned.
    *
    * Only tools that have already been seeded (via {@link seedArchestraTools})
    * will be assigned. If none of the default tools exist, this method skips assignment.
@@ -936,8 +991,15 @@ class ToolModel {
   ): Promise<void> {
     const organization = await OrganizationModel.getFirst();
     archestraMcpBranding.syncFromOrganization(organization);
-    const defaultToolNames = DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES.map(
-      (shortName) => archestraMcpBranding.getToolName(shortName),
+    const defaultToolShortNames: ArchestraToolShortName[] = [
+      ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+    ];
+    if (config.codeRuntime.enabled) {
+      defaultToolShortNames.push(TOOL_RUN_PYTHON_SHORT_NAME);
+    }
+
+    const defaultToolNames = defaultToolShortNames.map((shortName) =>
+      archestraMcpBranding.getToolName(shortName),
     );
 
     const defaultTools = await db

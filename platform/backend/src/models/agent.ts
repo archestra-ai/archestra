@@ -77,7 +77,7 @@ class AgentModel {
   }
 
   /**
-   * Populate authorName on agents by looking up user names from the user table.
+   * Populate author identity on agents by looking up users in one batch.
    */
   private static async populateAuthorNames(agents: Agent[]): Promise<void> {
     const authorIds = [
@@ -88,15 +88,19 @@ class AgentModel {
     if (authorIds.length === 0) return;
 
     const users = await db
-      .select({ id: schema.usersTable.id, name: schema.usersTable.name })
+      .select({
+        id: schema.usersTable.id,
+        name: schema.usersTable.name,
+        email: schema.usersTable.email,
+      })
       .from(schema.usersTable)
       .where(inArray(schema.usersTable.id, authorIds));
 
-    const nameMap = new Map(users.map((u) => [u.id, u.name]));
+    const authorMap = new Map(users.map((user) => [user.id, user]));
     for (const agent of agents) {
-      agent.authorName = agent.authorId
-        ? (nameMap.get(agent.authorId) ?? null)
-        : null;
+      const author = agent.authorId ? authorMap.get(agent.authorId) : null;
+      agent.authorName = author?.name ?? null;
+      agent.authorEmail = author?.email ?? null;
     }
   }
 
@@ -1927,6 +1931,62 @@ class AgentModel {
       }
     }
     throw new Error("Unreachable");
+  }
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select()
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.id, id),
+          eq(schema.agentsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!row) return null;
+
+    // Fetch relational data so audit diffs capture tool/KB/team changes —
+    // not just main-table columns.  Each sub-query is lightweight (index
+    // lookup by agent_id) and the parallel fetch keeps latency low.
+    const [tools, teams, labels, knowledgeBaseIds, connectorIds, delegations] =
+      await Promise.all([
+        AgentToolModel.getToolsForAgent(id),
+        AgentTeamModel.getTeamDetailsForAgent(id),
+        AgentLabelModel.getLabelsForAgent(id),
+        AgentKnowledgeBaseModel.getKnowledgeBaseIds(id),
+        AgentConnectorAssignmentModel.getConnectorIds(id),
+        AgentToolModel.getDelegationTargets(id),
+      ]);
+
+    const delegationTargets = [...delegations]
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map((d) => ({ id: d.id, name: d.name }));
+
+    return {
+      id: row.id,
+      name: row.name,
+      organizationId: row.organizationId,
+      agentType: row.agentType,
+      scope: row.scope,
+      description: row.description ?? null,
+      systemPrompt: row.systemPrompt ?? null,
+      slug: row.slug ?? null,
+      isDefault: row.isDefault,
+      llmModel: row.llmModel ?? null,
+      toolExposureMode: row.toolExposureMode,
+      toolAssignmentMode: row.toolAssignmentMode,
+      tools: tools.map((t) => t.name).sort(),
+      knowledgeBaseIds: [...knowledgeBaseIds].sort(),
+      connectorIds: [...connectorIds].sort(),
+      teams: teams.map((t) => t.name).sort(),
+      labels: labels.sort(),
+      delegationTargets,
+      createdAt: row.createdAt.toISOString(),
+    };
   }
 }
 

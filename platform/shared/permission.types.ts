@@ -23,6 +23,7 @@ export const actions = [
 
 export const resources = [
   "agent",
+  "skill",
   "mcpGateway",
   "llmProxy",
   "toolPolicy",
@@ -30,6 +31,7 @@ export const resources = [
   "identityProvider",
   "mcpRegistry",
   "mcpServerInstallation",
+  "knowledgeFile",
   "knowledgeSource",
   "knowledgeSettings",
   "mcpServerInstallationRequest",
@@ -67,14 +69,17 @@ export const resources = [
   "invitation",
   "team",
   "apiKey",
+  "auditLog",
   "simpleView",
   "chatAgentPicker",
   "chatProviderSettings",
   "chatExpandToolCalls",
+  "siteNotification",
 ] as const;
 
 export const resourceLabels: Record<Resource, string> = {
   agent: "Agents",
+  skill: "Skills",
   mcpGateway: "MCP Gateways",
   llmProxy: "LLM Proxies",
   toolPolicy: "Tools & Policies",
@@ -85,6 +90,7 @@ export const resourceLabels: Record<Resource, string> = {
   invitation: "Invitations",
   mcpRegistry: "MCP Registry",
   mcpServerInstallation: "MCP Server Installations",
+  knowledgeFile: "Knowledge Files",
   knowledgeSource: "Knowledge Sources",
   knowledgeSettings: "Knowledge Settings",
   mcpServerInstallationRequest: "MCP Server Installation Requests",
@@ -100,6 +106,7 @@ export const resourceLabels: Record<Resource, string> = {
   llmModel: "LLM Models",
   secret: "Secrets",
   apiKey: "API Keys",
+  auditLog: "Audit Log",
   organizationSettings: "Organization Settings",
   llmSettings: "LLM Settings",
   agentSettings: "Agent Settings",
@@ -109,10 +116,12 @@ export const resourceLabels: Record<Resource, string> = {
   chatAgentPicker: "Chat Agent Picker",
   chatProviderSettings: "Chat Provider Settings",
   chatExpandToolCalls: "Chat Expand Tool Calls",
+  siteNotification: "Site Notifications",
 };
 
 export const resourceDescriptions: Record<Resource, string> = {
   agent: "Agents with prompts and tool assignments",
+  skill: "Agent skills — reusable SKILL.md instruction bundles",
   mcpGateway: "Unified MCP endpoints that aggregate tools for clients",
   llmProxy: "LLM proxy endpoints with security policies and observability",
   toolPolicy: "Tools, tool invocation policies, and trusted data policies",
@@ -131,6 +140,7 @@ export const resourceDescriptions: Record<Resource, string> = {
   llmCost: "LLM usage and cost analytics",
   mcpRegistry: "MCP server registry management",
   mcpServerInstallation: "Installed MCP servers and their runtime",
+  knowledgeFile: "Uploaded files available for knowledge retrieval",
   mcpServerInstallationRequest: "Requests for new MCP server installations",
   optimizationRule: "LLM optimization rules for routing to cheaper models",
   member: "Users and role assignments",
@@ -140,6 +150,8 @@ export const resourceDescriptions: Record<Resource, string> = {
   identityProvider: "Identity providers for authentication",
   secret: "Secrets manager configuration and connectivity",
   apiKey: "User API keys for programmatic access",
+  auditLog:
+    "Organization-wide audit trail of administrative actions and auth events",
   organizationSettings:
     "Organization settings (appearance, authentication, etc)",
   knowledgeSource:
@@ -153,6 +165,7 @@ export const resourceDescriptions: Record<Resource, string> = {
   chatExpandToolCalls:
     "Controls ability to expand and view tool call details in chat",
   organization: "Organization (internal, used by authentication system)",
+  siteNotification: "Site-wide notification banners and announcements",
 };
 
 /**
@@ -166,7 +179,7 @@ export const internalResources: Resource[] = ["organization"];
  * Used in both the create/edit role dialog and the account permissions display.
  */
 export const resourceCategories: Record<string, Resource[]> = {
-  Agents: ["agent", "agentTrigger", "scheduledTask", "agentSettings"],
+  Agents: ["agent", "skill", "agentTrigger", "scheduledTask", "agentSettings"],
   MCP: [
     "mcpGateway",
     "toolPolicy",
@@ -185,7 +198,7 @@ export const resourceCategories: Record<string, Resource[]> = {
     "llmSettings",
     "llmCost",
   ],
-  Knowledge: ["knowledgeSource", "knowledgeSettings"],
+  Knowledge: ["knowledgeFile", "knowledgeSource", "knowledgeSettings"],
   Other: [
     "chat",
     "log",
@@ -202,7 +215,9 @@ export const resourceCategories: Record<string, Resource[]> = {
     "identityProvider",
     "secret",
     "apiKey",
+    "auditLog",
     "organizationSettings",
+    "siteNotification",
   ],
 };
 

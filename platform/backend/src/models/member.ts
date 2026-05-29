@@ -491,6 +491,59 @@ class MemberModel {
   /**
    * Check if any member references the given agent as their default
    */
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select()
+      .from(schema.membersTable)
+      .where(
+        and(
+          eq(schema.membersTable.id, id),
+          eq(schema.membersTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      organizationId: row.organizationId,
+      userId: row.userId,
+      role: row.role,
+      createdAt: row.createdAt.toISOString(),
+    };
+  }
+
+  static async findByUserIdForAudit(
+    userId: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select()
+      .from(schema.membersTable)
+      .where(
+        and(
+          eq(schema.membersTable.userId, userId),
+          eq(schema.membersTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      organizationId: row.organizationId,
+      userId: row.userId,
+      role: row.role,
+      defaultAgentId: row.defaultAgentId ?? null,
+      createdAt: row.createdAt.toISOString(),
+    };
+  }
+
   static async isAgentDefault(agentId: string): Promise<boolean> {
     const [result] = await db
       .select({ count: count() })

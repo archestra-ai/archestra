@@ -6,6 +6,7 @@ import { getEmailProviderInfo } from "@/agents/incoming-email";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { codeRuntimeService } from "@/code-runtime/code-runtime-service";
 import config from "@/config";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import { OrganizationModel } from "@/models";
@@ -13,7 +14,7 @@ import { getByosVaultKvVersion, isByosEnabled } from "@/secrets-manager";
 import { EmailProviderTypeSchema, type GlobalToolPolicy } from "@/types";
 import { PUBLIC_CONFIG_PATH } from "./route-paths";
 
-const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
+export const publicConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
     PUBLIC_CONFIG_PATH,
     {
@@ -22,28 +23,18 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get public config",
         tags: ["Config"],
         response: {
-          200: z.strictObject({
-            disableBasicAuth: z.boolean(),
-            disableInvitations: z.boolean(),
-            analytics: z.strictObject({
-              enabled: z.boolean(),
-              posthog: z.strictObject({
-                key: z.string(),
-                host: z.string(),
-              }),
-            }),
-          }),
+          200: PublicConfigResponseSchema,
         },
       },
     },
     async (_request, reply) => {
-      return reply.send({
-        disableBasicAuth: config.auth.disableBasicAuth,
-        disableInvitations: config.auth.disableInvitations,
-        analytics: config.analytics,
-      });
+      return reply.send(getPublicConfigResponse());
     },
   );
+};
+
+const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  await fastify.register(publicConfigRoutes);
 
   fastify.get(
     "/api/config",
@@ -61,6 +52,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }),
             features: z.strictObject({
               orchestratorK8sRuntime: z.boolean(),
+              codeRuntime: z.boolean(),
               advancedToolFeaturesEnabled: z.boolean(),
               agentSkillsEnabled: z.boolean(),
               byosEnabled: z.boolean(),
@@ -81,6 +73,8 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               ngrokDomain: z.string(),
               virtualKeyDefaultExpirationSeconds: z.number(),
               mcpSandboxDomain: z.string().nullable(),
+              maintenanceMode: z.string().nullable(),
+              chatSecretScanEnabled: z.boolean(),
             }),
             providerBaseUrls: z.record(
               SupportedProvidersSchema,
@@ -104,6 +98,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         features: {
           orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
+          codeRuntime: codeRuntimeService.isEnabled,
           advancedToolFeaturesEnabled:
             config.agents.advancedToolFeaturesEnabled,
           agentSkillsEnabled: config.agents.skillsEnabled,
@@ -121,6 +116,8 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           virtualKeyDefaultExpirationSeconds:
             config.llmProxy.virtualKeyDefaultExpirationSeconds,
           mcpSandboxDomain: config.mcpSandbox.domain,
+          maintenanceMode: config.maintenanceMode,
+          chatSecretScanEnabled: config.chat.secretScanEnabled,
         },
         providerBaseUrls: {
           openai: config.llm.openai.baseUrl || null,
@@ -147,6 +144,28 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default configRoutes;
+
+const PublicConfigResponseSchema = z.strictObject({
+  disableBasicAuth: z.boolean(),
+  disableInvitations: z.boolean(),
+  maintenanceMode: z.string().nullable(),
+  analytics: z.strictObject({
+    enabled: z.boolean(),
+    posthog: z.strictObject({
+      key: z.string(),
+      host: z.string(),
+    }),
+  }),
+});
+
+function getPublicConfigResponse(): z.infer<typeof PublicConfigResponseSchema> {
+  return {
+    disableBasicAuth: config.auth.disableBasicAuth,
+    disableInvitations: config.auth.disableInvitations,
+    maintenanceMode: config.maintenanceMode,
+    analytics: config.analytics,
+  };
+}
 
 /**
  * Get the ngrok domain from env var or from the file written by the

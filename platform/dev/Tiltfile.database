@@ -1,12 +1,17 @@
 # Database resources
 load('ext://helm_remote', 'helm_remote')
 
+# Env-driven so a parallel Tilt session (separate worktree) doesn't collide.
+pg_namespace = os.getenv('ARCHESTRA_K8S_NAMESPACE', 'archestra-dev')
+pg_host_port = os.getenv('ARCHESTRA_POSTGRES_HOST_PORT', '5432')
+pg_metrics_host_port = os.getenv('ARCHESTRA_POSTGRES_METRICS_HOST_PORT', '9187')
+
 # PostgreSQL database for local development
 # https://dev.to/flodev/use-tilt-to-provide-easy-to-setup-development-environments-4n9d
 helm_remote(
   'postgresql',
   repo_url='https://charts.bitnami.com/bitnami',
-  namespace='archestra-dev',
+  namespace=pg_namespace,
   create_namespace=True,
   set=[
     'auth.database=archestra_dev',
@@ -44,7 +49,7 @@ helm_remote(
   ]
 )
 
-k8s_resource('postgresql', port_forwards=['5432:5432', '9187:9187'], labels=['database'])
+k8s_resource('postgresql', port_forwards=[pg_host_port + ':5432', pg_metrics_host_port + ':9187'], labels=['database'])
 
 # Database cleanup button (manual trigger only, for development)
 local_resource(

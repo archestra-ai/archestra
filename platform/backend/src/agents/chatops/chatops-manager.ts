@@ -709,9 +709,38 @@ export class ChatOpsManager {
 
     // Build the full message with context — use cleanedMessageText so
     // the "AgentName >" prefix is stripped from what the LLM sees
-    let fullMessage = cleanedMessageText;
+    const providerLabel =
+      provider.providerId === "slack"
+        ? "Slack"
+        : provider.providerId === "ms-teams"
+          ? "MS Teams"
+          : provider.providerId;
+    const threadIdForPrefix = message.threadId ?? message.messageId;
+    let systemPrefix = `(${providerLabel} conversation, thread id: ${threadIdForPrefix})`;
+    if (provider.providerId === "slack") {
+      const permalink = provider.getMessagePermalink
+        ? await provider.getMessagePermalink({
+            channelId: message.channelId,
+            messageId: threadIdForPrefix,
+          })
+        : null;
+      const contextLines = [
+        `Slack conversation context:`,
+        `- Channel ID: ${message.channelId}`,
+        `- Thread message ts: ${threadIdForPrefix}`,
+      ];
+      if (message.workspaceId) {
+        contextLines.push(`- Workspace ID: ${message.workspaceId}`);
+      }
+      if (permalink) {
+        contextLines.push(`- Thread permalink: ${permalink}`);
+      }
+      systemPrefix = contextLines.join("\n");
+    }
+
+    let fullMessage = `${systemPrefix}\n\n${cleanedMessageText}`;
     if (contextMessages.length > 0) {
-      fullMessage = `Previous conversation:\n${contextMessages.join("\n")}\n\nUser: ${cleanedMessageText}`;
+      fullMessage = `${systemPrefix}\n\nPrevious conversation:\n${contextMessages.join("\n")}\n\nUser: ${cleanedMessageText}`;
     }
 
     // Merge history attachments with current message attachments
@@ -933,8 +962,10 @@ export class ChatOpsManager {
       "[ChatOps] fetchThreadHistory called",
     );
 
-    if (!message.threadId) {
-      logger.debug("[ChatOps] No threadId, skipping thread history fetch");
+    if (!message.threadId || !message.isThreadReply) {
+      logger.debug(
+        "[ChatOps] No prior thread context, skipping thread history fetch",
+      );
       return { contextMessages: [], historyAttachments: [] };
     }
 

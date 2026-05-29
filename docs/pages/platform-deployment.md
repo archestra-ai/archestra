@@ -589,11 +589,11 @@ Enable the SSRF protection `NetworkPolicy` to prevent MCP server pods from acces
 
 ## Infrastructure as Code
 
+Manage Archestra resources from Terraform or Crossplane. Both use the same API key — mint one under Settings → API Keys (see [API Reference](/docs/platform-api-reference#authentication)).
+
 ### Terraform
 
-For managing Archestra Platform resources, you can use our official Terraform provider to manage Archestra Platform declaratively.
-
-**Provider Configuration**:
+**1. Configure the provider.** Read credentials from the environment (`export ARCHESTRA_API_KEY=...` and `export ARCHESTRA_BASE_URL=...`) or pass them inline.
 
 ```terraform
 terraform {
@@ -604,22 +604,146 @@ terraform {
   }
 }
 
-provider "archestra" {
-  base_url = "http://localhost:9000" # Your Archestra API URL
-  api_key  = "your-api-key-here"     # Can also use ARCHESTRA_API_KEY env var
+provider "archestra" {}
+```
+
+**2. Define a resource.** Register an MCP server in the catalog, then install it.
+
+```terraform
+resource "archestra_mcp_registry_catalog_item" "memory" {
+  name        = "memory"
+  description = "In-memory key-value store"
+
+  local_config = {
+    command   = "npx"
+    arguments = ["-y", "@modelcontextprotocol/server-memory"]
+  }
+}
+
+resource "archestra_mcp_server_installation" "memory" {
+  name       = "memory"
+  catalog_id = archestra_mcp_registry_catalog_item.memory.id
 }
 ```
 
-**Obtaining an API Key**: See the [API Reference](/docs/platform-api-reference#authentication) documentation for instructions on creating an API key.
-
-You can also set these values via environment variables instead of hardcoding them:
+**3. Apply.**
 
 ```bash
-export ARCHESTRA_API_KEY="your-api-key-here"
-export ARCHESTRA_BASE_URL="https://api.archestra.example.com"
+terraform init
+terraform apply
 ```
 
-For complete documentation, examples, and resource reference, visit the [Archestra Terraform Provider Documentation](https://registry.terraform.io/providers/archestra-ai/archestra/latest/docs).
+Full resource reference: [Terraform provider docs](https://registry.terraform.io/providers/archestra-ai/archestra/latest/docs).
+
+### Crossplane
+
+Crossplane v1 or v2 must already be installed in the target cluster.
+
+**1. Install the provider.** Pin the latest tag from [GitHub Releases](https://github.com/archestra-ai/terraform-provider-archestra/releases).
+
+```yaml
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-archestra
+spec:
+  package: xpkg.upbound.io/archestra/provider-archestra:v1.1.4
+```
+
+**2. Configure credentials.**
+
+```bash
+kubectl create secret generic archestra-creds \
+  -n crossplane-system \
+  --from-literal=credentials='{"api_key":"arch_...","base_url":"https://api.archestra.example.com"}'
+```
+
+```yaml
+apiVersion: archestra.crossplane.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: default
+spec:
+  credentials:
+    source: Secret
+    secretRef:
+      namespace: crossplane-system
+      name: archestra-creds
+      key: credentials
+```
+
+**3. Create a resource.** Mirror of the Terraform example above.
+
+```yaml
+apiVersion: mcp.archestra.crossplane.io/v1alpha1
+kind: RegistryCatalogItem
+metadata:
+  name: memory
+spec:
+  forProvider:
+    name: memory
+    description: In-memory key-value store
+    localConfig:
+      command: npx
+      arguments:
+        - "-y"
+        - "@modelcontextprotocol/server-memory"
+  providerConfigRef:
+    name: default
+---
+apiVersion: mcp.archestra.crossplane.io/v1alpha1
+kind: ServerInstallation
+metadata:
+  name: memory
+spec:
+  forProvider:
+    name: memory
+    catalogIdRef:
+      name: memory
+  providerConfigRef:
+    name: default
+```
+
+Full resource reference: [Crossplane provider README](https://github.com/archestra-ai/terraform-provider-archestra/blob/main/crossplane/README.md).
+
+### Crossplane
+
+The same resources are also available as a Crossplane v1/v2 provider for teams that prefer GitOps-style reconciliation on Kubernetes. The xpkg is [upjet](https://github.com/crossplane/upjet)-generated from the Terraform provider's schema and published from the same release tag, so the two stay version-locked.
+
+**Install the provider**:
+
+```yaml
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-archestra
+spec:
+  package: xpkg.upbound.io/archestra/provider-archestra:v1.1.4
+```
+
+**Configure credentials** (the API key is the same one used by the Terraform provider — see [API Reference](/docs/platform-api-reference#authentication)):
+
+```bash
+kubectl create secret generic archestra-creds \
+  -n crossplane-system \
+  --from-literal=credentials='{"api_key":"arch_...","base_url":"https://api.archestra.example.com"}'
+```
+
+```yaml
+apiVersion: archestra.crossplane.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: default
+spec:
+  credentials:
+    source: Secret
+    secretRef:
+      namespace: crossplane-system
+      name: archestra-creds
+      key: credentials
+```
+
+For supported resources, examples, and the contributor flow, see the [Crossplane provider README](https://github.com/archestra-ai/terraform-provider-archestra/blob/main/crossplane/README.md). Resource coverage is partial — current state and the gap vs. the Terraform provider are tracked on the [coverage badge](https://github.com/archestra-ai/terraform-provider-archestra#archestra-provider).
 
 ## Environment Variables
 
@@ -675,6 +799,12 @@ The following environment variables can be used to configure Archestra Platform.
 - **`ARCHESTRA_AGENTS_SKILLS_ENABLED`** - Enables Agent Skills — reusable `SKILL.md` instruction sets that agents load on demand. When off, the Skills page and its sidebar link are hidden and the feature cannot be enabled for an organization.
   - Default: `false`
   - Values: `true`, `false`
+
+- **`ARCHESTRA_GIT_BINARY_PATH`** - Path to the `git` binary. The public marketplace endpoint shells out to `git http-backend` (CGI) for clone/pull traffic — make sure the binary is present in the backend container image.
+  - Default: `git`
+
+- **`ARCHESTRA_SKILL_MARKETPLACE_CACHE_DIR`** - Directory holding materialized marketplace git repos. The cache is a derived view of the `skill_share_link_revision` history — replays are byte-identical, so wiping is safe but triggers a full rebuild on next clone. In prod, point this at a persistent volume to avoid the rebuild on container restarts.
+  - Default: `~/.archestra/skill-marketplace-cache`
 
 - **`ARCHESTRA_ANALYTICS`** - Controls PostHog analytics for product improvements.
   - Default: `enabled`
@@ -896,6 +1026,34 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: `anthropic`
   - Options: `anthropic`, `openai`, `gemini`
   - Used when no profile-specific provider is configured
+
+Active chat run wake-ups use Postgres `LISTEN/NOTIFY` by default. This gives fast reconnect replay and Stop handling without waiting for the fallback poll interval. Poll intervals still exist in this mode as a safety net, so missed notifications or broken listener connections do not block progress forever.
+
+Enable polling compatibility only when your database endpoint cannot keep session-stable listener connections, such as PgBouncer transaction pooling or some managed/serverless database proxies. In that mode, active run replay and Stop handling rely on periodic database reads. Lower intervals react faster but create more reads; higher intervals reduce database load but make replay and Stop slower.
+
+- **`ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS`** - Fallback/poll interval for replaying active chat runs after reconnect.
+  - Default: `500`
+  - Load model: roughly one replay-check read per reconnecting client per interval while waiting for new events
+
+- **`ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS`** - Interval for checking whether a running chat stream has been explicitly stopped.
+  - With Postgres `LISTEN/NOTIFY`, Stop requests normally wake streams immediately; this interval is only a safety fallback if notification wake-up is missed
+  - With polling compatibility enabled, this is the primary polling interval
+  - Default: `30000` with Postgres `LISTEN/NOTIFY`, `500` when polling compatibility is enabled
+  - Load model: roughly one stop-check read per running chat stream per interval
+
+- **`ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED`** - Uses polling only instead of the default Postgres `LISTEN/NOTIFY` wake-ups for active chat run replay and stop detection.
+  - Default: `false`
+  - Keep disabled when direct Postgres or session pooling is available
+
+- **`ARCHESTRA_CHAT_ACTIVE_RUN_NOTIFY_DATABASE_URL`** - Optional Postgres connection string for active chat run `LISTEN/NOTIFY`.
+  - Default: Uses `ARCHESTRA_DATABASE_URL`
+  - Set this when regular database traffic goes through PgBouncer transaction pooling but notifications can use a direct or session-pooled connection
+
+- **`ARCHESTRA_CHAT_SECRET_SCAN_ENABLED`** - Enables client-side pre-send scanning of chat messages for secrets and high-entropy tokens.
+  - Default: `false`
+  - When `true`, the chat composer intercepts sends and shows a confirmation dialog when the message appears to contain credentials (API keys, tokens, passwords, JWTs, PEM keys, or high-entropy strings).
+  - Detection runs entirely in the browser — no message content is sent to the backend for scanning. The flag is read from the backend at runtime via `/api/config`, so toggling it does not require a frontend rebuild.
+  - Values: `true`, `false`
 
 ### MCP Apps Sandbox
 
@@ -1120,6 +1278,56 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
 - **`ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED`** - Enable or disable hybrid search (combines vector similarity with full-text search using Reciprocal Rank Fusion).
   - Default: `true`
   - Set to `false` to use vector similarity search only.
+
+#### Knowledge Files External Blob Storage
+
+Uploaded [Knowledge Files](/docs/platform-knowledge-bases#files) store file bytes in the database by default. Set the provider to `s3` to store file bytes externally while keeping metadata and indexing state in PostgreSQL.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_BLOB_STORAGE_PROVIDER`** - File byte storage provider.
+  - Default: `db`
+  - Values: `db`, `s3`
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_BUCKET`** - S3 bucket for uploaded file bytes.
+  - Required when `ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_BLOB_STORAGE_PROVIDER=s3`
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_REGION`** - AWS region for the S3 bucket.
+  - Required when `ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_BLOB_STORAGE_PROVIDER=s3`
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_PREFIX`** - Optional object key prefix.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_ENDPOINT`** - Optional S3-compatible endpoint.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_FORCE_PATH_STYLE`** - Use path-style URLs for S3-compatible storage.
+  - Default: `false`
+  - Set to `true` when required by your S3-compatible provider.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_AUTH_METHOD`** - S3 authentication method.
+  - Default: `irsa`
+  - Values: `irsa`, `static`
+  - `irsa`: use the AWS default credential chain, including IAM Roles for Service Accounts on EKS.
+  - `static`: use `ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_ACCESS_KEY_ID` and `ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_SECRET_ACCESS_KEY`.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_ACCESS_KEY_ID`** - Static S3 access key ID.
+  - Used only when `ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_AUTH_METHOD=static`
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_SECRET_ACCESS_KEY`** - Static S3 secret access key.
+  - Used only when `ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_AUTH_METHOD=static`
+
+### Audit Log Configuration
+
+The audit log records administrative actions (mutations via `/api/*` and auth events) across your organization. Automatic retention is **disabled by default** - audit rows are kept indefinitely unless an org admin opts in by setting a positive retention window.
+
+- **`ARCHESTRA_AUDIT_LOG_RETENTION_DAYS`** - Number of days to retain audit log records before they are automatically deleted by the daily retention sweep.
+  - Default: `0` (disabled — audit rows are never auto-deleted).
+  - Set to a positive integer (e.g. `90`, `180`) to opt in to automatic purging after that many days.
+  - Must be a non-negative integer; invalid values fall back to the default (disabled).
+  - When enabled, the sweep runs once every 24 hours as a background task.
+
+### Maintenance Mode
+
+- **`ARCHESTRA_MAINTENANCE_MODE_MESSAGE`** - Enables maintenance mode and displays a custom message to all users blocking access to the platform.
+  - Default: Not set (maintenance mode disabled)
+  - When set, all users are shown a full-screen maintenance overlay with the message instead of the normal application interface.
 
 ### Enterprise Licensing
 

@@ -177,7 +177,7 @@ export async function initializeMcpSession(
     token: string;
   },
 ): Promise<void> {
-  await makeApiRequest({
+  const response = await makeApiRequest({
     request,
     method: "post",
     urlSuffix: `${MCP_GATEWAY_URL_SUFFIX}/${options.profileId}`,
@@ -193,6 +193,22 @@ export async function initializeMcpSession(
       },
     },
   });
+
+  // MCP gateway can return 200 with a JSON-RPC `{ "error": {...} }` body when
+  // auth fails — `makeApiRequest` only throws on HTTP-level errors, so without
+  // this check `initializeMcpSession` would silently succeed on a JWT
+  // verification failure. Today this is masked because every caller of
+  // `waitForMcpGatewayJwtReady` also runs `listMcpTools` (which does check the
+  // body) — fixing it here closes the latent trap for any future
+  // `requireToolsListed: false` caller.
+  const initResult = (await response.json()) as {
+    error?: { message?: string; code?: number };
+  };
+  if (initResult.error) {
+    throw new Error(
+      `MCP initialize failed: ${initResult.error.message} (code: ${initResult.error.code})`,
+    );
+  }
 }
 
 export async function waitForGatewayIdentityProviderReady(params: {
@@ -295,8 +311,9 @@ type McpTool = {
 /**
  * Polls initialize (+ optional tool listing) until the MCP gateway accepts
  * external-JWT auth for this agent. After `agents.identityProviderId` is set,
- * the gateway's JWT-verifier cache refreshes asynchronously, so the first
- * initialize calls can return 401. ~80 s total backoff covers cold-cache CI.
+ * the JWKS keys must be fetched from the IdP on the first validation attempt;
+ * in CI that endpoint is a cold WireMock pod and the first verify can fail
+ * for tens of seconds. ~150 s total backoff covers the worst observed cases.
  */
 export async function waitForMcpGatewayJwtReady(params: {
   request: APIRequestContext;
@@ -307,10 +324,16 @@ export async function waitForMcpGatewayJwtReady(params: {
 }): Promise<McpTool[]> {
   const requireToolsListed = params.requireToolsListed !== false;
   const delaysMs = [
-    0, 500, 1000, 2000, 4000, 8000, 8000, 8000, 8000, 8000, 8000, 8000, 8000,
-    8000,
+    0, 500, 1000, 2000, 4000, 8000, 8000, 8000, 10_000, 10_000, 10_000, 10_000,
+    15_000, 15_000, 15_000, 15_000, 15_000, 15_000,
   ];
   let lastError: unknown;
+  // Track every distinct failure mode encountered so the final throw points
+  // at the actual cause instead of just the last attempt's error. The real
+  // flake mode (cold JWKS vs. IdP-config not propagated vs. transient 5xx)
+  // is otherwise invisible across the ~161s retry window.
+  const seenErrors = new Map<string, number>();
+  const seenStates = new Map<string, number>();
 
   for (const delayMs of delaysMs) {
     if (delayMs > 0) {
@@ -339,18 +362,30 @@ export async function waitForMcpGatewayJwtReady(params: {
       if (matches) {
         return tools;
       }
+
+      const stateKey = params.expectedToolName
+        ? `missing-tool:${params.expectedToolName} (count=${tools.length})`
+        : `empty-tools-list`;
+      seenStates.set(stateKey, (seenStates.get(stateKey) ?? 0) + 1);
     } catch (error) {
       lastError = error;
+      const msg = error instanceof Error ? error.message : String(error);
+      seenErrors.set(msg, (seenErrors.get(msg) ?? 0) + 1);
     }
   }
 
-  throw (
-    lastError ??
-    new Error(
-      params.expectedToolName
-        ? `Tool ${params.expectedToolName} was not available via JWT auth`
-        : "MCP Gateway did not become ready for external JWT auth",
-    )
+  const errorSummary = [
+    ...[...seenErrors.entries()].map(([m, n]) => `[error×${n}] ${m}`),
+    ...[...seenStates.entries()].map(([m, n]) => `[state×${n}] ${m}`),
+  ].join(" | ");
+
+  const headline = params.expectedToolName
+    ? `Tool ${params.expectedToolName} was not available via JWT auth`
+    : "MCP Gateway did not become ready for external JWT auth";
+
+  const lastMsg = lastError instanceof Error ? lastError.message : "";
+  throw new Error(
+    `${headline} — ${delaysMs.length} attempts over ~${Math.round(delaysMs.reduce((a, b) => a + b, 0) / 1000)}s. ${errorSummary || "(no failure signal captured)"}${lastMsg && !errorSummary.includes(lastMsg) ? ` Last: ${lastMsg}` : ""}`,
   );
 }
 

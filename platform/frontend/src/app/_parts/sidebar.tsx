@@ -18,6 +18,7 @@ import {
   type LucideIcon,
   MessageCircle,
   MessagesSquare,
+  MoreHorizontal,
   Network,
   Route,
   Settings,
@@ -188,6 +189,7 @@ const contentNavGroups: NavGroup[] = [
         icon: Database,
         customIsActive: (pathname: string) =>
           pathname.startsWith("/knowledge") &&
+          !pathname.startsWith("/knowledge/files") &&
           !pathname.startsWith("/knowledge/connectors"),
         subItems: [
           {
@@ -196,6 +198,12 @@ const contentNavGroups: NavGroup[] = [
             customIsActive: (pathname: string) =>
               pathname.startsWith("/knowledge/connectors"),
           },
+          {
+            title: "Files",
+            url: "/knowledge/files",
+            customIsActive: (pathname: string) =>
+              pathname.startsWith("/knowledge/files"),
+          },
         ],
       },
       {
@@ -203,7 +211,9 @@ const contentNavGroups: NavGroup[] = [
         url: "/llm/logs",
         icon: MessagesSquare,
         customIsActive: (pathname: string) =>
-          pathname.startsWith("/llm/logs") || pathname.startsWith("/mcp/logs"),
+          pathname.startsWith("/llm/logs") ||
+          pathname.startsWith("/mcp/logs") ||
+          pathname.startsWith("/audit/logs"),
       },
       {
         title: "Connect",
@@ -294,6 +304,21 @@ const NavPrimary = ({
     <SidebarGroup>
       <SidebarMenu>
         {permittedHeaderItems.map(renderItem)}
+        <SidebarMenuItem className="hidden group-data-[collapsible=icon]:block">
+          <SidebarMenuButton
+            tooltip="Search chats"
+            onClick={() => {
+              window.dispatchEvent(
+                new CustomEvent("open-conversation-search", {
+                  detail: { recentChatsView: true },
+                }),
+              );
+            }}
+          >
+            <MoreHorizontal />
+            <span>Search chats</span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
         {groups.map((group) => {
           const permittedItems = group.items.filter(
             (item) => permissionMap[item.url] ?? true,

@@ -1,4 +1,5 @@
 import type { TaskQueueService } from "../task-queue";
+import { handleAuditLogCleanup } from "./audit-log-cleanup-handler";
 import { handleBatchEmbedding } from "./batch-embedding-handler";
 import { handleCheckDueConnectors } from "./check-due-connectors-handler";
 import { handleCheckDueScheduleTriggers } from "./check-due-schedule-triggers-handler";
@@ -25,4 +26,5 @@ export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
     "schedule_trigger_run_execute",
     handleScheduleTriggerRunExecution,
   );
+  taskQueueService.registerHandler("audit_log_cleanup", handleAuditLogCleanup);
 }

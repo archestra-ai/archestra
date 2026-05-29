@@ -1,5 +1,5 @@
 import { MEMBER_ROLE_NAME } from "@shared";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type {
@@ -205,6 +205,35 @@ class InvitationModel {
       .where(eq(schema.invitationsTable.id, invitationId));
     logger.debug({ invitationId }, "InvitationModel.delete: completed");
     return result;
+  }
+
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select()
+      .from(schema.invitationsTable)
+      .where(
+        and(
+          eq(schema.invitationsTable.id, id),
+          eq(schema.invitationsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      organizationId: row.organizationId,
+      email: row.email,
+      role: row.role ?? null,
+      status: row.status,
+      inviterId: row.inviterId,
+      expiresAt: row.expiresAt.toISOString(),
+      createdAt: row.createdAt.toISOString(),
+    };
   }
 }
 

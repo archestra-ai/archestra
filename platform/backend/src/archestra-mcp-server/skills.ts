@@ -234,7 +234,7 @@ const registry = defineArchestraTools([
       }
 
       return successResult(
-        `<skill_file skill="${escapeXmlAttr(skill.name)}" path="${escapeXmlAttr(file.path)}">\n${file.content}\n</skill_file>`,
+        `<skill_file skill="${escapeXmlAttr(skill.name)}" path="${escapeXmlAttr(file.path)}">\n${escapeXmlText(file.content)}\n</skill_file>`,
       );
     },
   }),

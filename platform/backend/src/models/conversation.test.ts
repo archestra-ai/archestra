@@ -253,7 +253,7 @@ describe("ConversationModel", () => {
     );
   });
 
-  test("updated conversation moves to top of list", async ({
+  test("updating a conversation title does not change list order", async ({
     makeUser,
     makeOrganization,
     makeAgent,
@@ -287,16 +287,19 @@ describe("ConversationModel", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    // Update the first conversation - should move it to the top
+    // Update the first conversation - order should stay the same,
+    // only new message exhange changes the order
     await ConversationModel.update(first.id, user.id, org.id, {
       title: "First Updated",
     });
 
-    // Verify first is now on top after being updated
+    // Order is unchanged; only the title was updated.
     conversations = await ConversationModel.findAll(user.id, org.id);
-    expect(conversations[0].id).toBe(first.id);
-    expect(conversations[0].title).toBe("First Updated");
-    expect(conversations[1].id).toBe(second.id);
+    expect(conversations[0].id).toBe(second.id);
+    expect(conversations[1].id).toBe(first.id);
+    expect(conversations.find((c) => c.id === first.id)?.title).toBe(
+      "First Updated",
+    );
   });
 
   test("adding a message moves conversation to top of list", async ({

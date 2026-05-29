@@ -66794,7 +66794,6 @@
                         "format": "date-time"
                       },
                       "lastMessageAt": {
-                        "nullable": true,
                         "type": "string",
                         "format": "date-time"
                       },
@@ -67465,7 +67464,6 @@
                       "format": "date-time"
                     },
                     "lastMessageAt": {
-                      "nullable": true,
                       "type": "string",
                       "format": "date-time"
                     },
@@ -68113,7 +68111,6 @@
                       "format": "date-time"
                     },
                     "lastMessageAt": {
-                      "nullable": true,
                       "type": "string",
                       "format": "date-time"
                     },
@@ -68802,7 +68799,6 @@
                       "format": "date-time"
                     },
                     "lastMessageAt": {
-                      "nullable": true,
                       "type": "string",
                       "format": "date-time"
                     },
@@ -70328,7 +70324,6 @@
                       "format": "date-time"
                     },
                     "lastMessageAt": {
-                      "nullable": true,
                       "type": "string",
                       "format": "date-time"
                     },
@@ -71343,7 +71338,6 @@
                           "format": "date-time"
                         },
                         "lastMessageAt": {
-                          "nullable": true,
                           "type": "string",
                           "format": "date-time"
                         },
@@ -72947,7 +72941,6 @@
                       "format": "date-time"
                     },
                     "lastMessageAt": {
-                      "nullable": true,
                       "type": "string",
                       "format": "date-time"
                     },
@@ -73619,7 +73612,6 @@
                       "format": "date-time"
                     },
                     "lastMessageAt": {
-                      "nullable": true,
                       "type": "string",
                       "format": "date-time"
                     },
@@ -74283,7 +74275,6 @@
                       "format": "date-time"
                     },
                     "lastMessageAt": {
-                      "nullable": true,
                       "type": "string",
                       "format": "date-time"
                     },
@@ -74957,7 +74948,6 @@
                       "format": "date-time"
                     },
                     "lastMessageAt": {
-                      "nullable": true,
                       "type": "string",
                       "format": "date-time"
                     },
@@ -180727,7 +180717,6 @@
                       "format": "date-time"
                     },
                     "lastMessageAt": {
-                      "nullable": true,
                       "type": "string",
                       "format": "date-time"
                     },

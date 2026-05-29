@@ -1828,6 +1828,13 @@
       "when": 1780058162096,
       "tag": "0260_repair-conversation-attachments-table",
       "breakpoints": true
+    },
+    {
+      "idx": 261,
+      "version": "7",
+      "when": 1780075799518,
+      "tag": "0261_aspiring_dreaming_celestial",
+      "breakpoints": true
     }
   ]
 }

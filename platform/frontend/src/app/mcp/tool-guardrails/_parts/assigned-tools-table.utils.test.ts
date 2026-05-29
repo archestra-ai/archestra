@@ -1,6 +1,10 @@
 import type { archestraApiTypes } from "@shared";
 import { describe, expect, it } from "vitest";
-import { getVisibleCatalogSources } from "./assigned-tools-table.utils";
+import {
+  getVisibleCatalogSources,
+  OBSERVED_TOOL_SOURCE_DESCRIPTION,
+  OBSERVED_TOOL_SOURCE_LABEL,
+} from "./assigned-tools-table.utils";
 
 type InternalMcpCatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
@@ -46,5 +50,14 @@ describe("getVisibleCatalogSources", () => {
         }),
       ]),
     ).toHaveLength(1);
+  });
+});
+
+describe("observed tool source copy", () => {
+  it("uses end-user wording without exposing the implementation source name", () => {
+    expect(OBSERVED_TOOL_SOURCE_LABEL).toBe("Observed tools");
+    expect(OBSERVED_TOOL_SOURCE_DESCRIPTION).toBe(
+      "Tools observed in agent-provider traffic, not installed from an MCP server catalog.",
+    );
   });
 });

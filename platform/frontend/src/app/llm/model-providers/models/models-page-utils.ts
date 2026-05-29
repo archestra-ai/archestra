@@ -4,6 +4,10 @@ export type ModelsPageModelTypeFilter = "all" | "chat" | "embedding";
 
 export type ModelsPageAvailableApiKey = readonly [string, { provider: string }];
 
+export const OBSERVED_MODEL_SOURCE_LABEL = "Observed in requests";
+export const OBSERVED_MODEL_SOURCE_DESCRIPTION =
+  "This model was first seen in traffic through a model gateway. It may not appear in a provider catalog.";
+
 export type ModelsPageFilterableModel = {
   modelId: string;
   provider: string;

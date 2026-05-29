@@ -10,7 +10,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { TruncatedText } from "@/components/truncated-text";
 import { Button } from "@/components/ui/button";
@@ -100,8 +100,12 @@ export function ChatSidebarSection() {
     ? (pathname.split("/").at(-1) ?? null)
     : null;
 
-  const pinnedChats = conversations.filter((c) => c.pinnedAt);
-  const recentUnpinnedChats = conversations.filter((c) => !c.pinnedAt);
+  const pinnedChats = conversations
+    .filter((c) => c.pinnedAt)
+    .slice(0, SIDEBAR_CHAT_SLOTS);
+  const recentUnpinnedChats = conversations
+    .filter((c) => !c.pinnedAt)
+    .slice(0, Math.max(0, SIDEBAR_CHAT_SLOTS - pinnedChats.length));
 
   useEffect(() => {
     if (editingId && inputRef.current) {

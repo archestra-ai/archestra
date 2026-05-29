@@ -11,6 +11,7 @@ type ChatSessionSnapshot = ReturnType<
 const mocks = vi.hoisted(() => ({
   addToolApprovalResponse: vi.fn(),
   addToolResult: vi.fn(),
+  getQueryData: vi.fn(),
   invalidateQueries: vi.fn(),
   mutate: vi.fn(),
   regenerate: vi.fn(),
@@ -39,6 +40,7 @@ vi.mock("sonner", () => ({
 
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({
+    getQueryData: mocks.getQueryData,
     invalidateQueries: mocks.invalidateQueries,
   }),
 }));
@@ -361,7 +363,10 @@ describe("ChatProvider auto title generation", () => {
   ];
 
   it("titles an untitled chat after a tool-only agent-swap exchange", async () => {
+    let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
+
     mocks.useChat.mockImplementation((options) => {
+      chatOptions = options;
       return {
         addToolApprovalResponse: mocks.addToolApprovalResponse,
         addToolResult: mocks.addToolResult,
@@ -372,8 +377,12 @@ describe("ChatProvider auto title generation", () => {
         setMessages: mocks.setMessages,
         status: "ready",
         stop: mocks.stop,
-        _options: options,
       };
+    });
+
+    // Simulate the "instant title" set on conversation creation (first user message text)
+    mocks.getQueryData.mockReturnValue({
+      title: "Show me the Archestra PM board",
     });
 
     render(
@@ -382,8 +391,21 @@ describe("ChatProvider auto title generation", () => {
       </ChatProvider>,
     );
 
+    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+
+    // Trigger onFinish to simulate the AI stream completing
+    act(() => {
+      chatOptions?.onFinish?.({
+        message: swapMessages[swapMessages.length - 1],
+        isAbort: false,
+      });
+    });
+
     await waitFor(() =>
-      expect(mocks.mutate).toHaveBeenCalledWith({ id: "conversation-1" }),
+      expect(mocks.mutate).toHaveBeenCalledWith(
+        { id: "conversation-1", regenerate: true },
+        expect.any(Object),
+      ),
     );
   });
 

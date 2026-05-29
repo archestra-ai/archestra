@@ -107,7 +107,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
@@ -1200,18 +1199,38 @@ export function AgentDialog({
           onSubmit={handleSave}
         >
           {agent && isInternalAgent && (
-            <div className="shrink-0 px-4 pt-3 border-b">
-              <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList>
-                  <TabsTrigger value="settings">Settings</TabsTrigger>
-                  <TabsTrigger
-                    value="history"
-                    data-testid={E2eTestId.PromptHistoryTab}
-                  >
-                    Prompt History
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
+            <div className="shrink-0 flex gap-4 px-4 border-b">
+              <button
+                type="button"
+                onClick={() => setActiveTab("settings")}
+                className={cn(
+                  "relative pb-3 pt-3 text-sm font-medium transition-colors hover:text-foreground",
+                  activeTab === "settings"
+                    ? "text-foreground"
+                    : "text-muted-foreground",
+                )}
+              >
+                Settings
+                {activeTab === "settings" && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                )}
+              </button>
+              <button
+                type="button"
+                data-testid={E2eTestId.PromptHistoryTab}
+                onClick={() => setActiveTab("history")}
+                className={cn(
+                  "relative pb-3 pt-3 text-sm font-medium transition-colors hover:text-foreground",
+                  activeTab === "history"
+                    ? "text-foreground"
+                    : "text-muted-foreground",
+                )}
+              >
+                Prompt History
+                {activeTab === "history" && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                )}
+              </button>
             </div>
           )}
           {activeTab !== "history" && (

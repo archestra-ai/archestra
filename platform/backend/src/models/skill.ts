@@ -121,9 +121,10 @@ class SkillModel {
    * Create a skill, its bundled resource files, and its team assignments in
    * one transaction.
    *
-   * Returns `null` when a skill with the same name already exists in the
-   * organization. The insert is atomic (`ON CONFLICT DO NOTHING` on the
-   * org+name unique index), so this is race-free against concurrent creates.
+   * Returns `null` when a name conflict already exists in the skill's
+   * visibility namespace (personal names per author, team/org names per org).
+   * The insert is atomic (`ON CONFLICT DO NOTHING`, matching whichever partial
+   * unique index applies), so this is race-free against concurrent creates.
    * When `teamIds` is supplied the team rows are inserted in the same
    * transaction, so a failed assignment cannot leave a scoped skill orphaned.
    */
@@ -136,9 +137,7 @@ class SkillModel {
       const [skill] = await tx
         .insert(schema.skillsTable)
         .values(params.skill)
-        .onConflictDoNothing({
-          target: [schema.skillsTable.organizationId, schema.skillsTable.name],
-        })
+        .onConflictDoNothing()
         .returning();
 
       if (!skill) return null;
@@ -162,14 +161,20 @@ class SkillModel {
   }
 
   /**
-   * Update a skill's metadata and replace its resource files.
+   * Update a skill's metadata, resource files, and team assignments atomically.
    *
    * Passing `files` replaces the full set; omitting it leaves files untouched.
+   * Passing `teamIds` replaces the team assignments (an empty array clears
+   * them); omitting it leaves them untouched. Doing the metadata, file, and
+   * team writes in one transaction means a failed team sync (e.g. a team
+   * deleted mid-request) rolls the whole update back, so a scope change can
+   * never be committed with a team set that leaves the skill orphaned.
    */
   static async updateWithFiles(params: {
     id: string;
     skill: UpdateSkill;
     files?: Omit<InsertSkillFile, "skillId">[];
+    teamIds?: string[];
   }): Promise<Skill | null> {
     return await withDbTransaction(async (tx) => {
       const [skill] = await tx
@@ -190,6 +195,20 @@ class SkillModel {
             .insert(schema.skillFilesTable)
             .values(
               params.files.map((file) => ({ ...file, skillId: params.id })),
+            );
+        }
+      }
+
+      if (params.teamIds !== undefined) {
+        await tx
+          .delete(schema.skillTeamsTable)
+          .where(eq(schema.skillTeamsTable.skillId, params.id));
+
+        if (params.teamIds.length > 0) {
+          await tx
+            .insert(schema.skillTeamsTable)
+            .values(
+              params.teamIds.map((teamId) => ({ skillId: params.id, teamId })),
             );
         }
       }

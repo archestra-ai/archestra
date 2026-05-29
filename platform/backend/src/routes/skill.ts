@@ -80,12 +80,30 @@ const SkillFileInputSchema = z.object({
  * files untouched; passing `[]` clears them. `scope` defaults to `personal`;
  * `teamIds` is only meaningful for `scope = 'team'`.
  */
-const SkillManifestInputSchema = z.object({
-  content: z.string().min(1).max(MAX_SKILL_FILE_BYTES),
-  files: z.array(SkillFileInputSchema).max(MAX_FILES_PER_SKILL).optional(),
-  scope: ResourceVisibilityScopeSchema.optional(),
-  teamIds: z.array(z.string()).optional(),
-});
+const SkillManifestInputSchema = z
+  .object({
+    content: z.string().min(1).max(MAX_SKILL_FILE_BYTES),
+    files: z.array(SkillFileInputSchema).max(MAX_FILES_PER_SKILL).optional(),
+    scope: ResourceVisibilityScopeSchema.optional(),
+    teamIds: z.array(z.string()).optional(),
+  })
+  // Resource paths are unique per skill (skill_files unique index). Reject
+  // duplicates here so a repeated path is a clean 400 rather than surfacing as
+  // an opaque 500 from the database unique violation.
+  .superRefine((data, ctx) => {
+    if (!data.files) return;
+    const seen = new Set<string>();
+    data.files.forEach((file, index) => {
+      if (seen.has(file.path)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Duplicate resource file path: ${file.path}`,
+          path: ["files", index, "path"],
+        });
+      }
+      seen.add(file.path);
+    });
+  });
 
 const DiscoveredSkillSchema = z.object({
   skillPath: z.string(),
@@ -334,23 +352,32 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       let updated: Skill | null;
       try {
-        updated = await SkillModel.updateWithFiles({
-          id,
-          skill: {
-            name: parsed.name,
-            description: parsed.description,
-            content: parsed.content,
-            license: parsed.license,
-            compatibility: parsed.compatibility,
-            metadata: parsed.metadata,
-            scope: newScope,
-          },
-          files:
-            body.files === undefined ? undefined : toSkillFiles(body.files),
-        });
+        // The metadata, files, and team assignments are updated in a single
+        // transaction (see SkillModel.updateWithFiles), so a team deleted
+        // mid-request rolls the whole update back rather than leaving a
+        // team-scoped skill with no teams. teamIds is only synced when scope or
+        // teams actually change; otherwise it is left untouched.
+        updated = await withTeamFkErrorMapped(() =>
+          SkillModel.updateWithFiles({
+            id,
+            skill: {
+              name: parsed.name,
+              description: parsed.description,
+              content: parsed.content,
+              license: parsed.license,
+              compatibility: parsed.compatibility,
+              metadata: parsed.metadata,
+              scope: newScope,
+            },
+            files:
+              body.files === undefined ? undefined : toSkillFiles(body.files),
+            teamIds: scopeChanged || teamsChanged ? newTeamIds : undefined,
+          }),
+        );
       } catch (error) {
-        // only the org+name index — not a duplicate resource-file path
-        if (isUniqueConstraintError(error, "skills_org_name_idx")) {
+        // Name conflict within the skill's visibility namespace — not a team FK
+        // (mapped above) or a duplicate resource-file path (rejected at input).
+        if (isSkillNameConflict(error)) {
           throw skillNameConflict(parsed.name);
         }
         throw error;
@@ -358,11 +385,6 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!updated) {
         throw new ApiError(404, "Skill not found");
-      }
-      if (scopeChanged || teamsChanged) {
-        await withTeamFkErrorMapped(() =>
-          SkillTeamModel.syncSkillTeams(id, newTeamIds),
-        );
       }
 
       return reply.send(await loadSkillDetail(updated));
@@ -818,6 +840,18 @@ function parseManifestOrThrow(raw: string) {
 
 function skillNameConflict(name: string): ApiError {
   return new ApiError(409, `A skill named "${name}" already exists`);
+}
+
+/**
+ * Whether an error is a skill-name unique violation on either visibility
+ * namespace (personal-per-author or shared-per-org), as opposed to a team FK or
+ * a duplicate resource-file path.
+ */
+function isSkillNameConflict(error: unknown): boolean {
+  return (
+    isUniqueConstraintError(error, "skills_org_personal_name_idx") ||
+    isUniqueConstraintError(error, "skills_org_shared_name_idx")
+  );
 }
 
 function toSkillFiles(

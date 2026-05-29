@@ -408,11 +408,22 @@ export function useGenerateConversationTitle() {
       return data;
     },
     onSuccess: (data, variables) => {
-      if (!data) return;
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
-      queryClient.invalidateQueries({
-        queryKey: ["conversation", variables.id],
-      });
+      if (!data) {
+        return;
+      }
+
+      queryClient.setQueryData(
+        ["conversation", variables.id],
+        (old: archestraApiTypes.GetChatConversationResponses["200"] | null) =>
+          old ? { ...old, title: data.title } : old,
+      );
+      queryClient.setQueriesData<{ id: string; title: string | null }[]>(
+        { queryKey: ["conversations"] },
+        (old) =>
+          old?.map((c) =>
+            c.id === variables.id ? { ...c, title: data.title } : c,
+          ),
+      );
     },
   });
 }

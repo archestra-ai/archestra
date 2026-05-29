@@ -94,7 +94,6 @@ import {
   clearSsoSignInRedirectPath,
   getSsoSignInRedirectPath,
 } from "@/lib/auth/sso-sign-in-attempt";
-import { useRecentlyGeneratedTitles } from "@/lib/chat/chat.hook";
 import {
   fetchConversationEnabledTools,
   useCompactConversation,
@@ -120,7 +119,7 @@ import {
   mergePersistedMessageMetadata,
 } from "@/lib/chat/chat-utils";
 import { downloadConversationMarkdown } from "@/lib/chat/export-markdown";
-import { useChatSession } from "@/lib/chat/global-chat.context";
+import { useChatSession, useGlobalChat } from "@/lib/chat/global-chat.context";
 import {
   applyPendingActions,
   clearPendingActions,
@@ -629,14 +628,8 @@ export function ChatPageContent({
     setForkAgentId(accessibleSharedAgentId);
   }, [accessibleSharedAgentId, isForkDialogOpen]);
 
-  // Track title generation for typing animation in the header
-  const conversationForTitleTracking = useMemo(
-    () =>
-      conversation ? [{ id: conversation.id, title: conversation.title }] : [],
-    [conversation],
-  );
-  const { recentlyGeneratedTitles: headerAnimatingTitles } =
-    useRecentlyGeneratedTitles(conversationForTitleTracking);
+  // Conversations whose title should play the typing animation (shared via chat context)
+  const { animatingTitleIds: headerAnimatingTitles } = useGlobalChat();
 
   // Initialize artifact panel state when conversation loads or changes
   useEffect(() => {

@@ -412,6 +412,62 @@ describe("ChatProvider auto title generation", () => {
   });
 });
 
+describe("ChatProvider title animation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("marks a title as animating and auto-clears it after the animation window", async () => {
+    let markTitleAnimating: ((id: string) => void) | undefined;
+    let animatingTitleIds: Set<string> = new Set();
+
+    render(
+      <ChatProvider>
+        <CaptureTitleAnimation
+          onValue={(value) => {
+            markTitleAnimating = value.markTitleAnimating;
+            animatingTitleIds = value.animatingTitleIds;
+          }}
+        />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(markTitleAnimating).toBeDefined());
+
+    vi.useFakeTimers();
+    act(() => {
+      markTitleAnimating?.("conversation-1");
+    });
+    expect(animatingTitleIds.has("conversation-1")).toBe(true);
+
+    act(() => {
+      vi.advanceTimersByTime(3000);
+    });
+    expect(animatingTitleIds.has("conversation-1")).toBe(false);
+  });
+});
+
+function CaptureTitleAnimation({
+  onValue,
+}: {
+  onValue: (value: {
+    markTitleAnimating: (id: string) => void;
+    animatingTitleIds: Set<string>;
+  }) => void;
+}) {
+  const { markTitleAnimating, animatingTitleIds } = useGlobalChat();
+
+  useEffect(() => {
+    onValue({ markTitleAnimating, animatingTitleIds });
+  }, [onValue, markTitleAnimating, animatingTitleIds]);
+
+  return null;
+}
+
 function RegisterChatSession({
   initialMessages,
 }: {

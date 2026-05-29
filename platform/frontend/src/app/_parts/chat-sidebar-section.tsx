@@ -37,7 +37,6 @@ import {
 import { TypingText } from "@/components/ui/typing-text";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useRecentlyGeneratedTitles } from "@/lib/chat/chat.hook";
 import {
   useConversations,
   useDeleteConversation,
@@ -49,6 +48,7 @@ import {
   getConversationDisplayTitle,
   getConversationShareTooltip,
 } from "@/lib/chat/chat-utils";
+import { useGlobalChat } from "@/lib/chat/global-chat.context";
 import { cn } from "@/lib/utils";
 
 const SIDEBAR_CHAT_SLOTS = 3;
@@ -91,9 +91,8 @@ export function ChatSidebarSection() {
     chat: ["delete"],
   });
 
-  // Track conversations with recently auto-generated titles for animation
-  const { recentlyGeneratedTitles, regeneratingTitles, triggerRegeneration } =
-    useRecentlyGeneratedTitles(conversations);
+  // Conversations whose title should play the typing animation (shared via chat context)
+  const { animatingTitleIds, markTitleAnimating } = useGlobalChat();
 
   const { isMobile, setOpenMobile } = useSidebar();
 
@@ -161,14 +160,19 @@ export function ChatSidebarSection() {
     }
   };
 
-  const handleRegenerateTitle = async (id: string) => {
-    // Mark as regenerating (shows loading state until new title arrives)
-    triggerRegeneration(id);
+  const handleRegenerateTitle = (id: string) => {
     // Close edit mode
     setEditingId(null);
     setEditingTitle("");
     // Regenerate the title
-    await generateTitleMutation.mutateAsync({ id, regenerate: true });
+    generateTitleMutation.mutate(
+      { id, regenerate: true },
+      {
+        onSuccess: (data) => {
+          if (data) markTitleAnimating(id);
+        },
+      },
+    );
   };
 
   const handleTogglePin = (id: string, isPinned: boolean) => {
@@ -189,8 +193,10 @@ export function ChatSidebarSection() {
   ) => {
     const isCurrentConversation = currentConversationId === conv.id;
     const displayTitle = getConversationDisplayTitle(conv.title, conv.messages);
-    const hasRecentlyGeneratedTitle = recentlyGeneratedTitles.has(conv.id);
-    const isRegenerating = regeneratingTitles.has(conv.id);
+    const hasRecentlyGeneratedTitle = animatingTitleIds.has(conv.id);
+    const isRegenerating =
+      generateTitleMutation.isPending &&
+      generateTitleMutation.variables?.id === conv.id;
     const isMenuOpen = openMenuId === conv.id;
     const isPinned = !!conv.pinnedAt;
 

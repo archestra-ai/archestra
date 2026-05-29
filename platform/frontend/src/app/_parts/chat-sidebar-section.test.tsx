@@ -31,11 +31,10 @@ vi.mock("@/lib/chat/chat-utils", () => ({
     title ?? "Untitled chat",
 }));
 
-vi.mock("@/lib/chat/chat.hook", () => ({
-  useRecentlyGeneratedTitles: () => ({
-    recentlyGeneratedTitles: new Set(),
-    regeneratingTitles: new Set(),
-    triggerRegeneration: vi.fn(),
+vi.mock("@/lib/chat/global-chat.context", () => ({
+  useGlobalChat: () => ({
+    animatingTitleIds: new Set(),
+    markTitleAnimating: vi.fn(),
   }),
 }));
 
@@ -60,8 +59,9 @@ vi.mock("@/lib/chat/chat.query", () => ({
     isPending: false,
   }),
   useGenerateConversationTitle: () => ({
-    mutateAsync: vi.fn(),
+    mutate: vi.fn(),
     isPending: false,
+    variables: undefined,
   }),
   usePinConversation: () => ({ mutate: vi.fn() }),
 }));

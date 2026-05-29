@@ -167,7 +167,14 @@ interface ChatContextValue {
   notifySessionUpdate: () => void;
   scheduleCleanup: (conversationId: string) => void;
   cancelCleanup: (conversationId: string) => void;
+  /** Conversation IDs whose title should currently play the typing animation */
+  animatingTitleIds: Set<string>;
+  /** Mark a conversation's title to play the typing animation (auto-clears after a few seconds) */
+  markTitleAnimating: (conversationId: string) => void;
 }
+
+/** How long a freshly generated title keeps playing the typing animation */
+const TITLE_ANIMATION_DURATION = 3000;
 
 const ChatContext = createContext<ChatContextValue | null>(null);
 
@@ -179,10 +186,37 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [sessions, setSessions] = useState<Set<string>>(new Set());
   // Version counter to trigger re-renders when sessions update
   const [sessionVersion, setSessionVersion] = useState(0);
+  // Conversation IDs currently playing the title typing animation
+  const [animatingTitleIds, setAnimatingTitleIds] = useState<Set<string>>(
+    new Set(),
+  );
+  // Per-conversation timers that clear the animation, so they don't cancel each other
+  const titleAnimationTimersRef = useRef(new Map<string, NodeJS.Timeout>());
 
   // Increment version when sessions change (triggers re-renders in consumers)
   const notifySessionUpdate = useCallback(() => {
     setSessionVersion((v) => v + 1);
+  }, []);
+
+  const markTitleAnimating = useCallback((conversationId: string) => {
+    setAnimatingTitleIds((prev) => new Set(prev).add(conversationId));
+
+    // Reset any in-flight timer for this conversation so the window restarts
+    const existingTimer = titleAnimationTimersRef.current.get(conversationId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    const timer = setTimeout(() => {
+      titleAnimationTimersRef.current.delete(conversationId);
+      setAnimatingTitleIds((prev) => {
+        const next = new Set(prev);
+        next.delete(conversationId);
+        return next;
+      });
+    }, TITLE_ANIMATION_DURATION);
+
+    titleAnimationTimersRef.current.set(conversationId, timer);
   }, []);
 
   const cancelCleanup = useCallback((conversationId: string) => {
@@ -302,6 +336,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       for (const timer of cleanupTimersRef.current.values()) {
         clearTimeout(timer);
       }
+
+      for (const timer of titleAnimationTimersRef.current.values()) {
+        clearTimeout(timer);
+      }
     };
   }, []);
 
@@ -313,6 +351,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       notifySessionUpdate,
       scheduleCleanup,
       cancelCleanup,
+      animatingTitleIds,
+      markTitleAnimating,
     }),
     [
       registerSession,
@@ -321,6 +361,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       notifySessionUpdate,
       scheduleCleanup,
       cancelCleanup,
+      animatingTitleIds,
+      markTitleAnimating,
     ],
   );
 
@@ -334,6 +376,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           initialMessages={initialMessagesRef.current.get(conversationId) ?? []}
           sessionsRef={sessionsRef}
           notifySessionUpdate={notifySessionUpdate}
+          markTitleAnimating={markTitleAnimating}
         />
       ))}
       {children}
@@ -346,11 +389,13 @@ function ChatSessionHook({
   initialMessages,
   sessionsRef,
   notifySessionUpdate,
+  markTitleAnimating,
 }: {
   conversationId: string;
   initialMessages: UIMessage[];
   sessionsRef: React.MutableRefObject<Map<string, ChatSession>>;
   notifySessionUpdate: () => void;
+  markTitleAnimating: (conversationId: string) => void;
 }) {
   const queryClient = useQueryClient();
   const appName = useAppName();
@@ -514,10 +559,19 @@ function ChatSessionHook({
       const firstUserText = getConversationDisplayTitle(null, stableMessages);
 
       if (cachedTitle === firstUserText) {
-        generateTitleMutation.mutate({
-          id: conversationId,
-          regenerate: true,
-        });
+        generateTitleMutation.mutate(
+          {
+            id: conversationId,
+            regenerate: true,
+          },
+          {
+            onSuccess: (data) => {
+              if (data) {
+                markTitleAnimating(conversationId);
+              }
+            },
+          },
+        );
       }
     },
     onError: (chatError) => {

@@ -132,7 +132,7 @@ importers:
         version: 0.0.4
       '@archestra/sandbox-rs':
         specifier: workspace:*
-        version: link:../sandbox-rs
+        version: link:../archestra-rs/sandbox-rs
       '@aws-crypto/sha256-js':
         specifier: ^5.2.0
         version: 5.2.0

@@ -508,7 +508,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ body, organizationId }, reply) => {
+    async ({ body, organizationId, user }, reply) => {
       const result = await runImport(() =>
         discoverSkills({
           repoUrl: body.repoUrl,
@@ -517,15 +517,22 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
       );
 
-      // Flag skills whose name already exists in the org so the UI can disable
-      // them in the multi-select.
-      const skills = await Promise.all(
-        result.skills.map(async (skill) => ({
-          ...skill,
-          exists:
-            (await SkillModel.findByName(organizationId, skill.name)) !== null,
-        })),
-      );
+      // Flag names an import would actually collide with so the UI can disable
+      // them in the multi-select. Mirrors the per-scope unique indexes: a shared
+      // skill of that name, or this user's own personal skill — another user's
+      // personal skill of the same name cannot block the import, so it must not
+      // disable the row. (The hint stays scope-blind: it cannot know the target
+      // scope yet, so a shared name still flags even though a personal import
+      // could coexist — the conservative direction.)
+      const collisions = await SkillModel.findImportNameCollisions({
+        organizationId,
+        userId: user.id,
+        names: result.skills.map((skill) => skill.name),
+      });
+      const skills = result.skills.map((skill) => ({
+        ...skill,
+        exists: collisions.has(skill.name),
+      }));
 
       return reply.send({ ...result, skills });
     },

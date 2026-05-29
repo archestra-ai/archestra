@@ -173,3 +173,85 @@ describe("SkillModel.updateWithFiles team sync atomicity", () => {
     expect(after?.scope).toBe("personal");
   });
 });
+
+describe("SkillModel.findImportNameCollisions", () => {
+  test("another user's personal skill of the same name is not a collision", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const importer = await makeUser();
+
+    await SkillModel.createWithFiles({
+      skill: skillInput({
+        organizationId: org.id,
+        authorId: owner.id,
+        name: "notes",
+        scope: "personal",
+      }),
+      files: [],
+    });
+
+    const collisions = await SkillModel.findImportNameCollisions({
+      organizationId: org.id,
+      userId: importer.id,
+      names: ["notes"],
+    });
+
+    expect(collisions.has("notes")).toBe(false);
+  });
+
+  test("the importer's own personal skill of the same name is a collision", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const importer = await makeUser();
+
+    await SkillModel.createWithFiles({
+      skill: skillInput({
+        organizationId: org.id,
+        authorId: importer.id,
+        name: "notes",
+        scope: "personal",
+      }),
+      files: [],
+    });
+
+    const collisions = await SkillModel.findImportNameCollisions({
+      organizationId: org.id,
+      userId: importer.id,
+      names: ["notes"],
+    });
+
+    expect(collisions.has("notes")).toBe(true);
+  });
+
+  test("a shared (org) skill is a collision regardless of who owns it", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const importer = await makeUser();
+
+    await SkillModel.createWithFiles({
+      skill: skillInput({
+        organizationId: org.id,
+        authorId: owner.id,
+        name: "shared",
+        scope: "org",
+      }),
+      files: [],
+    });
+
+    const collisions = await SkillModel.findImportNameCollisions({
+      organizationId: org.id,
+      userId: importer.id,
+      names: ["shared"],
+    });
+
+    expect(collisions.has("shared")).toBe(true);
+  });
+});

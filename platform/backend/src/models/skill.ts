@@ -11,6 +11,7 @@ import {
 } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import type { InsertSkill, InsertSkillFile, Skill, UpdateSkill } from "@/types";
+import type { ResourceVisibilityScope } from "@/types/visibility";
 
 class SkillModel {
   static async findByOrganization(params: {
@@ -139,6 +140,41 @@ class SkillModel {
         ),
       )
       .orderBy(desc(schema.skillsTable.createdAt));
+  }
+
+  /**
+   * Of `names`, the ones an import by `userId` would collide with, mirroring the
+   * two partial unique indexes: a shared (team/org) skill of that name, or the
+   * importer's own personal skill of that name. Another user's personal skill is
+   * deliberately excluded — per-scope uniqueness lets personal names coexist, so
+   * it cannot block this user's import. Backs the discover "name exists" hint.
+   */
+  static async findImportNameCollisions(params: {
+    organizationId: string;
+    userId: string;
+    names: string[];
+  }): Promise<Set<string>> {
+    if (params.names.length === 0) return new Set();
+
+    const sharedScopes: ResourceVisibilityScope[] = ["team", "org"];
+    const rows = await db
+      .select({ name: schema.skillsTable.name })
+      .from(schema.skillsTable)
+      .where(
+        and(
+          eq(schema.skillsTable.organizationId, params.organizationId),
+          inArray(schema.skillsTable.name, params.names),
+          or(
+            inArray(schema.skillsTable.scope, sharedScopes),
+            and(
+              eq(schema.skillsTable.scope, "personal"),
+              eq(schema.skillsTable.authorId, params.userId),
+            ),
+          ),
+        ),
+      );
+
+    return new Set(rows.map((row) => row.name));
   }
 
   /**

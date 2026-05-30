@@ -1,41 +1,125 @@
 import { EmbeddingErrorCode } from "@shared";
-import { eq } from "drizzle-orm";
-import JSZip from "jszip";
+import { and, eq } from "drizzle-orm";
+import { vi } from "vitest";
 import db, { schema } from "@/database";
-import * as fileProcessor from "@/knowledge-base/connectors/file-upload/file-processor";
-import {
-  KbDocumentModel,
-  KbUploadedFileModel,
-  KnowledgeBaseConnectorModel,
-} from "@/models";
+import { embeddingService } from "@/knowledge-base/embedder";
+import { KbUploadedFileModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
-import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
+import { handleProcessUploadedFiles } from "@/task-queue/handlers/process-uploaded-files-handler";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+  vi as testVi,
+} from "@/test";
 import type { User } from "@/types";
 
-function buildJsonBody(
-  files: Array<{ name: string; content: Buffer; mimeType: string }>,
-): {
-  payload: object;
-} {
+const mockEmbeddingsCreate = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({
+    object: "list",
+    data: [],
+    model: "text-embedding-3-small",
+    usage: { prompt_tokens: 0, total_tokens: 0 },
+  }),
+);
+
+vi.mock("openai", () => {
+  class MockOpenAI {
+    static APIError = class APIError extends Error {
+      status: number;
+      constructor(status: number, message: string) {
+        super(message);
+        this.status = status;
+      }
+    };
+    embeddings = { create: mockEmbeddingsCreate };
+  }
+  return { default: MockOpenAI };
+});
+
+vi.mock("@/knowledge-base/file-upload/blob-storage-providers", () => {
+  const databaseProvider = {
+    name: "db",
+    put: async (params: { data: Buffer }) => ({
+      provider: "db",
+      key: null,
+      dbData: params.data,
+    }),
+    get: async (params: { dbData: Buffer | null }) => params.dbData,
+    delete: async () => {},
+  };
+
   return {
-    payload: {
-      files: files.map((f) => ({
-        name: f.name,
-        mimeType: f.mimeType,
-        content: f.content.toString("base64"),
-      })),
-    },
+    getConfiguredBlobStorageProvider: () => databaseProvider,
+    getBlobStorageProvider: () => databaseProvider,
+  };
+});
+
+function makeEmbeddingContext() {
+  return {
+    apiKey: "test-key",
+    baseUrl: null,
+    model: "text-embedding-3-small" as const,
+    dimensions: 1536,
+    provider: "openai" as const,
+    inputModalities: null,
   };
 }
 
-describe("connector file upload routes", () => {
+function buildUploadPayload(
+  files: Array<{ name: string; content: Buffer; mimeType: string }>,
+) {
+  return {
+    visibility: "personal" as const,
+    teamIds: [],
+    agentIds: [],
+    files: files.map((f) => ({
+      name: f.name,
+      mimeType: f.mimeType,
+      content: f.content.toString("base64"),
+    })),
+  };
+}
+
+async function uploadFile(
+  app: FastifyInstanceWithZod,
+  file: { name: string; content: Buffer; mimeType: string },
+) {
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/knowledge-files",
+    payload: buildUploadPayload([file]),
+  });
+  expect(response.statusCode).toBe(200);
+  const fileId = response.json().results[0].fileId as string;
+  const uploaded = await KbUploadedFileModel.findById(fileId);
+  if (!uploaded) throw new Error("Expected uploaded file to exist");
+  return { fileId, connectorId: uploaded.connectorId };
+}
+
+async function runWorkers(fileId: string, connectorId: string) {
+  await handleProcessUploadedFiles({ connectorId, fileIds: [fileId] });
+  const doc = await db
+    .select()
+    .from(schema.kbDocumentsTable)
+    .where(
+      and(
+        eq(schema.kbDocumentsTable.connectorId, connectorId),
+        eq(schema.kbDocumentsTable.sourceId, fileId),
+      ),
+    )
+    .then((rows) => rows[0]);
+  if (!doc) throw new Error("Expected document after upload worker");
+  await embeddingService.processDocument(doc.id, makeEmbeddingContext());
+}
+
+describe("knowledge file upload processing", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
   let organizationId: string;
-  let fileUploadConnector: Awaited<
-    ReturnType<typeof KnowledgeBaseConnectorModel.create>
-  >;
 
   beforeEach(async ({ makeOrganization, makeUser }) => {
     user = await makeUser();
@@ -55,417 +139,118 @@ describe("connector file upload routes", () => {
     const { default: knowledgeBaseRoutes } = await import("./knowledge-base");
     await app.register(knowledgeBaseRoutes);
 
-    fileUploadConnector = await KnowledgeBaseConnectorModel.create({
-      organizationId,
-      name: "File Upload Connector",
-      connectorType: "file_upload",
-      config: { type: "file_upload" },
-    });
+    mockEmbeddingsCreate.mockImplementation(
+      async ({ input }: { input: string[] }) => ({
+        object: "list",
+        data: input.map((_, i) => ({
+          object: "embedding",
+          embedding: Array.from({ length: 1536 }, (__, j) => (i + j) * 0.001),
+          index: i,
+        })),
+        model: "text-embedding-3-small",
+        usage: {
+          prompt_tokens: input.length * 5,
+          total_tokens: input.length * 5,
+        },
+      }),
+    );
   });
 
   afterEach(async () => {
-    vi.restoreAllMocks();
+    testVi.restoreAllMocks();
     await app.close();
   });
 
-  describe("POST /api/connectors/:id/files", () => {
-    test("creates file and document records from an uploaded text file", async () => {
-      const { payload } = buildJsonBody([
-        {
-          name: "notes.txt",
-          content: Buffer.from("Hello, world!"),
-          mimeType: "text/plain",
-        },
-      ]);
-
-      const response = await app.inject({
-        method: "POST",
-        url: `/api/connectors/${fileUploadConnector.id}/files`,
-        payload,
-      });
-
-      expect(response.statusCode).toBe(200);
-      const result = response.json();
-      expect(result.results).toHaveLength(1);
-      expect(result.results[0]).toMatchObject({
-        filename: "notes.txt",
-        status: "created",
-      });
-      expect(result.results[0].fileId).toBeDefined();
-    });
-
+  describe("POST /api/knowledge-files", () => {
     test("detects duplicate content and returns duplicate status", async () => {
       const content = Buffer.from("Duplicate content for dedup test");
 
-      const { payload: payload1 } = buildJsonBody([
-        { name: "first-upload.txt", content, mimeType: "text/plain" },
-      ]);
-      await app.inject({
+      const first = await app.inject({
         method: "POST",
-        url: `/api/connectors/${fileUploadConnector.id}/files`,
-        payload: payload1,
+        url: "/api/knowledge-files",
+        payload: buildUploadPayload([
+          { name: "first-upload.txt", content, mimeType: "text/plain" },
+        ]),
+      });
+      expect(first.statusCode).toBe(200);
+
+      const second = await app.inject({
+        method: "POST",
+        url: "/api/knowledge-files",
+        payload: buildUploadPayload([
+          { name: "second-upload.txt", content, mimeType: "text/plain" },
+        ]),
       });
 
-      const { payload: payload2 } = buildJsonBody([
-        { name: "second-upload.txt", content, mimeType: "text/plain" },
-      ]);
-      const response = await app.inject({
-        method: "POST",
-        url: `/api/connectors/${fileUploadConnector.id}/files`,
-        payload: payload2,
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json().results[0]).toMatchObject({
+      expect(second.statusCode).toBe(200);
+      expect(second.json().results[0]).toMatchObject({
         filename: "second-upload.txt",
         status: "duplicate",
-      });
-    });
-
-    test("rejects files larger than the 10MB size limit", async () => {
-      const oversized = Buffer.alloc(
-        fileProcessor.MAX_FILE_SIZE_BYTES + 1,
-        0x61,
-      );
-      const { payload } = buildJsonBody([
-        { name: "toobig.txt", content: oversized, mimeType: "text/plain" },
-      ]);
-
-      const response = await app.inject({
-        method: "POST",
-        url: `/api/connectors/${fileUploadConnector.id}/files`,
-        payload,
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json().results[0]).toMatchObject({
-        filename: "toobig.txt",
-        status: "too_large",
-      });
-    });
-
-    test("accepts files at the 10MB size limit", async () => {
-      vi.spyOn(fileProcessor, "extractTextFiles").mockResolvedValueOnce({
-        extracted: [
-          {
-            filename: "maxsize.txt",
-            text: "content at the limit",
-            rawBytes: Buffer.from("content at the limit"),
-            mimeType: "text/plain",
-          },
-        ],
-        skipped: [],
-      });
-
-      const atLimit = Buffer.alloc(fileProcessor.MAX_FILE_SIZE_BYTES, 0x61);
-      const { payload } = buildJsonBody([
-        { name: "maxsize.txt", content: atLimit, mimeType: "text/plain" },
-      ]);
-
-      const response = await app.inject({
-        method: "POST",
-        url: `/api/connectors/${fileUploadConnector.id}/files`,
-        payload,
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json().results[0]).toMatchObject({
-        filename: "maxsize.txt",
-        status: "created",
-      });
-    });
-
-    test("rejects unsupported file types", async () => {
-      const { payload } = buildJsonBody([
-        {
-          name: "program.exe",
-          content: Buffer.from("binary content"),
-          mimeType: "application/octet-stream",
-        },
-      ]);
-
-      const response = await app.inject({
-        method: "POST",
-        url: `/api/connectors/${fileUploadConnector.id}/files`,
-        payload,
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json().results[0]).toMatchObject({
-        filename: "program.exe",
-        status: "unsupported",
-      });
-    });
-
-    test("returns 400 when the connector is not of file_upload type", async () => {
-      const jiraConnector = await KnowledgeBaseConnectorModel.create({
-        organizationId,
-        name: "Jira Connector For File Test",
-        connectorType: "jira",
-        config: {
-          type: "jira",
-          jiraBaseUrl: "https://test.atlassian.net",
-          isCloud: true,
-          projectKey: "TEST",
-        },
-      });
-
-      const { payload } = buildJsonBody([
-        {
-          name: "test.txt",
-          content: Buffer.from("text"),
-          mimeType: "text/plain",
-        },
-      ]);
-
-      const response = await app.inject({
-        method: "POST",
-        url: `/api/connectors/${jiraConnector.id}/files`,
-        payload,
-      });
-
-      expect(response.statusCode).toBe(400);
-    });
-
-    test("returns 404 for a non-existent connector", async () => {
-      const { payload } = buildJsonBody([
-        {
-          name: "test.txt",
-          content: Buffer.from("text"),
-          mimeType: "text/plain",
-        },
-      ]);
-
-      const response = await app.inject({
-        method: "POST",
-        url: `/api/connectors/${crypto.randomUUID()}/files`,
-        payload,
-      });
-
-      expect(response.statusCode).toBe(404);
-    });
-
-    test("handles zip files by extracting the text files inside", async () => {
-      const zip = new JSZip();
-      zip.file("readme.txt", "Content of the readme inside the zip");
-      const zipBuffer = await zip.generateAsync({ type: "nodebuffer" });
-
-      const { payload } = buildJsonBody([
-        {
-          name: "archive.zip",
-          content: zipBuffer,
-          mimeType: "application/zip",
-        },
-      ]);
-
-      const response = await app.inject({
-        method: "POST",
-        url: `/api/connectors/${fileUploadConnector.id}/files`,
-        payload,
-      });
-
-      expect(response.statusCode).toBe(200);
-      const result = response.json();
-      expect(result.results).toHaveLength(1);
-      expect(result.results[0]).toMatchObject({
-        filename: "readme.txt",
-        status: "created",
-      });
-    });
-
-    test("extracts files from nested folders inside a zip", async () => {
-      const zip = new JSZip();
-      zip.file("docs/readme.txt", "Content in the docs folder");
-      zip.file("docs/subfolder/notes.txt", "Content in a nested subfolder");
-      const zipBuffer = await zip.generateAsync({ type: "nodebuffer" });
-
-      const { payload } = buildJsonBody([
-        { name: "nested.zip", content: zipBuffer, mimeType: "application/zip" },
-      ]);
-
-      const response = await app.inject({
-        method: "POST",
-        url: `/api/connectors/${fileUploadConnector.id}/files`,
-        payload,
-      });
-
-      expect(response.statusCode).toBe(200);
-      const result = response.json();
-      expect(result.results).toHaveLength(2);
-      expect(result.results).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            filename: "docs/readme.txt",
-            status: "created",
-          }),
-          expect.objectContaining({
-            filename: "docs/subfolder/notes.txt",
-            status: "created",
-          }),
-        ]),
-      );
-    });
-
-    test("extracts same-named files from different nested folders as distinct entries", async () => {
-      const zip = new JSZip();
-      zip.file("draft/report.txt", "Draft version of the report");
-      zip.file("final/report.txt", "Final version of the report");
-      const zipBuffer = await zip.generateAsync({ type: "nodebuffer" });
-
-      const { payload } = buildJsonBody([
-        {
-          name: "reports.zip",
-          content: zipBuffer,
-          mimeType: "application/zip",
-        },
-      ]);
-
-      const response = await app.inject({
-        method: "POST",
-        url: `/api/connectors/${fileUploadConnector.id}/files`,
-        payload,
-      });
-
-      expect(response.statusCode).toBe(200);
-      const result = response.json();
-      // Both files are created — not deduplicated despite sharing a basename
-      expect(result.results).toHaveLength(2);
-      expect(result.results).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            filename: "draft/report.txt",
-            status: "created",
-          }),
-          expect.objectContaining({
-            filename: "final/report.txt",
-            status: "created",
-          }),
-        ]),
-      );
-
-      // Verify both are stored as separate records with distinct paths
-      const listResponse = await app.inject({
-        method: "GET",
-        url: `/api/connectors/${fileUploadConnector.id}/files`,
-      });
-      const files = listResponse.json().data;
-      expect(files).toHaveLength(2);
-      const originalNames = files.map(
-        (f: { originalName: string }) => f.originalName,
-      );
-      expect(originalNames).toContain("draft/report.txt");
-      expect(originalNames).toContain("final/report.txt");
-    });
-
-    test("handles pdf files", async () => {
-      vi.spyOn(fileProcessor, "extractTextFiles").mockResolvedValueOnce({
-        extracted: [
-          {
-            filename: "report.pdf",
-            text: "Extracted PDF text content",
-            rawBytes: Buffer.from("pdf-like bytes"),
-            mimeType: "application/pdf",
-          },
-        ],
-        skipped: [],
-      });
-
-      const { payload } = buildJsonBody([
-        {
-          name: "report.pdf",
-          content: Buffer.from("pdf-like bytes"),
-          mimeType: "application/pdf",
-        },
-      ]);
-
-      const response = await app.inject({
-        method: "POST",
-        url: `/api/connectors/${fileUploadConnector.id}/files`,
-        payload,
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json().results[0]).toMatchObject({
-        filename: "report.pdf",
-        status: "created",
       });
     });
 
     test("handles a race: when the pre-check is bypassed the unique constraint prevents a double-insert and the conflict handler returns 'duplicate'", async () => {
       const content = Buffer.from("Identical content to trigger a race");
 
-      // Step 1 — insert the first copy normally so a row exists in the DB.
-      const { payload: firstPayload } = buildJsonBody([
-        { name: "race-first.txt", content, mimeType: "text/plain" },
-      ]);
       const first = await app.inject({
         method: "POST",
-        url: `/api/connectors/${fileUploadConnector.id}/files`,
-        payload: firstPayload,
+        url: "/api/knowledge-files",
+        payload: buildUploadPayload([
+          { name: "race-first.txt", content, mimeType: "text/plain" },
+        ]),
       });
       expect(first.statusCode).toBe(200);
       expect(first.json().results[0].status).toBe("created");
 
-      vi.spyOn(KbUploadedFileModel, "findByContentHash").mockResolvedValueOnce(
-        null,
-      );
+      testVi
+        .spyOn(KbUploadedFileModel, "findByContentHash")
+        .mockResolvedValueOnce(null);
 
-      const { payload: secondPayload } = buildJsonBody([
-        { name: "race-second.txt", content, mimeType: "text/plain" },
-      ]);
       const second = await app.inject({
         method: "POST",
-        url: `/api/connectors/${fileUploadConnector.id}/files`,
-        payload: secondPayload,
+        url: "/api/knowledge-files",
+        payload: buildUploadPayload([
+          { name: "race-second.txt", content, mimeType: "text/plain" },
+        ]),
       });
 
-      // The isContentHashConflict handler must catch the constraint violation
-      // and return a graceful "duplicate" instead of a 500.
       expect(second.statusCode).toBe(200);
       expect(second.json().results[0]).toMatchObject({
         filename: "race-second.txt",
         status: "duplicate",
       });
 
-      // The unique index must have prevented a second row from being inserted.
+      const firstFileId = first.json().results[0].fileId as string;
+      const firstFile = await KbUploadedFileModel.findById(firstFileId);
+      if (!firstFile) throw new Error("Expected first file to exist");
+
       const rows = await db
         .select()
         .from(schema.kbUploadedFilesTable)
         .where(
-          eq(schema.kbUploadedFilesTable.connectorId, fileUploadConnector.id),
+          eq(schema.kbUploadedFilesTable.connectorId, firstFile.connectorId),
         );
       expect(rows).toHaveLength(1);
     });
   });
 
-  describe("GET /api/connectors/:id/files/:fileId", () => {
-    test("returns a single uploaded file by ID", async () => {
-      const { payload } = buildJsonBody([
-        {
-          name: "single.txt",
-          content: Buffer.from("Single file content"),
-          mimeType: "text/plain",
-        },
-      ]);
-
-      const uploadResponse = await app.inject({
-        method: "POST",
-        url: `/api/connectors/${fileUploadConnector.id}/files`,
-        payload,
+  describe("GET /api/knowledge-files/:fileId — embedding states", () => {
+    test("returns basic file fields", async () => {
+      const { fileId } = await uploadFile(app, {
+        name: "single.txt",
+        content: Buffer.from("Single file content"),
+        mimeType: "text/plain",
       });
-
-      const fileId = uploadResponse.json().results[0].fileId;
 
       const response = await app.inject({
         method: "GET",
-        url: `/api/connectors/${fileUploadConnector.id}/files/${fileId}`,
+        url: `/api/knowledge-files/${fileId}`,
       });
 
       expect(response.statusCode).toBe(200);
       const file = response.json();
       expect(file).toMatchObject({
         id: fileId,
-        connectorId: fileUploadConnector.id,
         originalName: "single.txt",
         mimeType: "text/plain",
       });
@@ -473,35 +258,74 @@ describe("connector file upload routes", () => {
       expect(file).toHaveProperty("createdAt");
     });
 
-    test("returns embeddingError from the associated document", async () => {
-      const { payload } = buildJsonBody([
-        {
-          name: "fail.txt",
-          content: Buffer.from("Failing content"),
-          mimeType: "text/plain",
-        },
-      ]);
-      const uploadResponse = await app.inject({
-        method: "POST",
-        url: `/api/connectors/${fileUploadConnector.id}/files`,
-        payload,
-      });
-      const fileId = uploadResponse.json().results[0].fileId;
-
-      await KbDocumentModel.create({
-        connectorId: fileUploadConnector.id,
-        organizationId,
-        sourceId: fileId,
-        title: "fail.txt",
-        content: "Failing content",
-        contentHash: "fail-hash",
-        embeddingStatus: "failed",
-        embeddingError: EmbeddingErrorCode.Authentication,
+    test("returns pending with null embeddingError before the worker runs", async () => {
+      const { fileId } = await uploadFile(app, {
+        name: "nodoc.txt",
+        content: Buffer.from("Not yet embedded"),
+        mimeType: "text/plain",
       });
 
       const response = await app.inject({
         method: "GET",
-        url: `/api/connectors/${fileUploadConnector.id}/files/${fileId}`,
+        url: `/api/knowledge-files/${fileId}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().embeddingStatus).toBe("pending");
+      expect(response.json().embeddingError).toBeNull();
+    });
+
+    test("returns completed with null embeddingError after workers succeed", async () => {
+      const { fileId, connectorId } = await uploadFile(app, {
+        name: "done.txt",
+        content: Buffer.from("Fully embedded content"),
+        mimeType: "text/plain",
+      });
+
+      await runWorkers(fileId, connectorId);
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/knowledge-files/${fileId}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().embeddingStatus).toBe("completed");
+      expect(response.json().embeddingError).toBeNull();
+    });
+
+    test("returns failed with embeddingError after embedding worker fails", async () => {
+      const { fileId, connectorId } = await uploadFile(app, {
+        name: "fail.txt",
+        content: Buffer.from("Content that fails to embed"),
+        mimeType: "text/plain",
+      });
+
+      await handleProcessUploadedFiles({ connectorId, fileIds: [fileId] });
+
+      const OpenAIMod = (await import("openai")).default;
+      const authError = Object.assign(new Error("Unauthorized"), {
+        status: 401,
+      });
+      Object.setPrototypeOf(authError, OpenAIMod.APIError.prototype);
+      mockEmbeddingsCreate.mockRejectedValueOnce(authError);
+
+      const doc = await db
+        .select()
+        .from(schema.kbDocumentsTable)
+        .where(
+          and(
+            eq(schema.kbDocumentsTable.connectorId, connectorId),
+            eq(schema.kbDocumentsTable.sourceId, fileId),
+          ),
+        )
+        .then((rows) => rows[0]);
+      if (!doc) throw new Error("Expected document after upload worker");
+      await embeddingService.processDocument(doc.id, makeEmbeddingContext());
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/knowledge-files/${fileId}`,
       });
 
       expect(response.statusCode).toBe(200);
@@ -511,143 +335,77 @@ describe("connector file upload routes", () => {
       );
     });
 
-    test("returns embeddingError null when no document exists yet", async () => {
-      const { payload } = buildJsonBody([
-        {
-          name: "nodoc.txt",
-          content: Buffer.from("Not yet embedded"),
-          mimeType: "text/plain",
-        },
-      ]);
-      const uploadResponse = await app.inject({
-        method: "POST",
-        url: `/api/connectors/${fileUploadConnector.id}/files`,
-        payload,
-      });
-      const fileId = uploadResponse.json().results[0].fileId;
-
-      const response = await app.inject({
-        method: "GET",
-        url: `/api/connectors/${fileUploadConnector.id}/files/${fileId}`,
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json().embeddingStatus).toBe("pending");
-      expect(response.json().embeddingError).toBeNull();
-    });
-
     test("returns 404 when the file does not exist", async () => {
       const response = await app.inject({
         method: "GET",
-        url: `/api/connectors/${fileUploadConnector.id}/files/${crypto.randomUUID()}`,
+        url: `/api/knowledge-files/${crypto.randomUUID()}`,
       });
 
       expect(response.statusCode).toBe(404);
     });
   });
 
-  describe("GET /api/connectors/:id/files", () => {
+  describe("GET /api/knowledge-files — list embedding states", () => {
     test("returns an empty list when no files have been uploaded", async () => {
       const response = await app.inject({
         method: "GET",
-        url: `/api/connectors/${fileUploadConnector.id}/files`,
+        url: "/api/knowledge-files",
       });
 
       expect(response.statusCode).toBe(200);
       expect(response.json().data).toEqual([]);
     });
 
-    test("lists files uploaded to the connector", async () => {
-      const { payload } = buildJsonBody([
-        {
-          name: "listed.txt",
-          content: Buffer.from("File list test content"),
-          mimeType: "text/plain",
-        },
-      ]);
-
-      await app.inject({
-        method: "POST",
-        url: `/api/connectors/${fileUploadConnector.id}/files`,
-        payload,
-      });
-
-      const listResponse = await app.inject({
-        method: "GET",
-        url: `/api/connectors/${fileUploadConnector.id}/files`,
-      });
-
-      expect(listResponse.statusCode).toBe(200);
-      const listBody = listResponse.json();
-      expect(listBody.data).toHaveLength(1);
-      expect(listBody.data[0]).toMatchObject({
-        originalName: "listed.txt",
+    test("returns pending with null embeddingError before the worker runs", async () => {
+      await uploadFile(app, {
+        name: "list-pending.txt",
+        content: Buffer.from("Pending list content"),
         mimeType: "text/plain",
       });
-      expect(listBody.data[0]).toHaveProperty("id");
-      expect(listBody.data[0]).toHaveProperty("contentHash");
-      expect(listBody.data[0]).toHaveProperty("embeddingStatus");
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/knowledge-files",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const item = response.json().data[0];
+      expect(item.embeddingStatus).toBe("pending");
+      expect(item.embeddingError).toBeNull();
     });
 
-    test("includes embeddingError from associated document in each list item", async () => {
-      const { payload } = buildJsonBody([
-        {
-          name: "err-file.txt",
-          content: Buffer.from("Error content"),
-          mimeType: "text/plain",
-        },
-      ]);
-      const uploadResponse = await app.inject({
-        method: "POST",
-        url: `/api/connectors/${fileUploadConnector.id}/files`,
-        payload,
-      });
-      const fileId = uploadResponse.json().results[0].fileId;
-
-      await KbDocumentModel.create({
-        connectorId: fileUploadConnector.id,
-        organizationId,
-        sourceId: fileId,
-        title: "err-file.txt",
-        content: "Error content",
-        contentHash: "err-hash",
-        embeddingStatus: "failed",
-        embeddingError: EmbeddingErrorCode.DimensionsMismatch,
+    test("returns completed with null embeddingError after workers succeed", async () => {
+      const { fileId, connectorId } = await uploadFile(app, {
+        name: "list-done.txt",
+        content: Buffer.from("List completed content"),
+        mimeType: "text/plain",
       });
 
-      const listResponse = await app.inject({
+      await runWorkers(fileId, connectorId);
+
+      const response = await app.inject({
         method: "GET",
-        url: `/api/connectors/${fileUploadConnector.id}/files`,
+        url: "/api/knowledge-files",
       });
 
-      expect(listResponse.statusCode).toBe(200);
-      const item = listResponse.json().data[0];
-      expect(item.embeddingStatus).toBe("failed");
-      expect(item.embeddingError).toBe(EmbeddingErrorCode.DimensionsMismatch);
+      expect(response.statusCode).toBe(200);
+      const item = response.json().data[0];
+      expect(item.embeddingStatus).toBe("completed");
+      expect(item.embeddingError).toBeNull();
     });
   });
 
-  describe("DELETE /api/connectors/:id/files/:fileId", () => {
+  describe("DELETE /api/knowledge-files/:fileId", () => {
     test("deletes an uploaded file and removes it from the file list", async () => {
-      const { payload } = buildJsonBody([
-        {
-          name: "to-delete.txt",
-          content: Buffer.from("Content to be deleted"),
-          mimeType: "text/plain",
-        },
-      ]);
-
-      const uploadResponse = await app.inject({
-        method: "POST",
-        url: `/api/connectors/${fileUploadConnector.id}/files`,
-        payload,
+      const { fileId } = await uploadFile(app, {
+        name: "to-delete.txt",
+        content: Buffer.from("Content to be deleted"),
+        mimeType: "text/plain",
       });
-
-      const fileId = uploadResponse.json().results[0].fileId;
 
       const deleteResponse = await app.inject({
         method: "DELETE",
-        url: `/api/connectors/${fileUploadConnector.id}/files/${fileId}`,
+        url: `/api/knowledge-files/${fileId}`,
       });
 
       expect(deleteResponse.statusCode).toBe(200);
@@ -655,7 +413,7 @@ describe("connector file upload routes", () => {
 
       const listResponse = await app.inject({
         method: "GET",
-        url: `/api/connectors/${fileUploadConnector.id}/files`,
+        url: "/api/knowledge-files",
       });
 
       expect(listResponse.json().data).toHaveLength(0);
@@ -664,7 +422,7 @@ describe("connector file upload routes", () => {
     test("returns 404 when the file does not exist", async () => {
       const response = await app.inject({
         method: "DELETE",
-        url: `/api/connectors/${fileUploadConnector.id}/files/${crypto.randomUUID()}`,
+        url: `/api/knowledge-files/${crypto.randomUUID()}`,
       });
 
       expect(response.statusCode).toBe(404);

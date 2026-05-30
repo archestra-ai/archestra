@@ -936,8 +936,9 @@ function mapGeminiErrorToCode(
 function mapStatusCodeToErrorCode(
   statusCode: number | undefined,
 ): ChatErrorCode {
-  const effective = statusCode === 529 ? 500 : statusCode;
-  return mapHttpStatusToChatError(effective);
+  const effectiveStatus = statusCode === 529 ? 500 : statusCode;
+
+  return mapHttpStatusToChatError(effectiveStatus);
 }
 
 // =============================================================================

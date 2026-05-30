@@ -1,22 +1,18 @@
 import {
   addNomicTaskPrefix,
   EMBEDDING_BATCH_SIZE,
-  EmbeddingErrorCode,
-  mapHttpStatusToEmbeddingError,
+  type EmbeddingErrorCode,
 } from "@shared";
-import { DrizzleQueryError } from "drizzle-orm/errors";
 import logger from "@/logging";
 import { KbChunkModel, KbDocumentModel } from "@/models";
+import { classifyEmbeddingError } from "./embedder.classify";
 import {
-  AzureEmbeddingError,
   callEmbedding,
   type EmbeddingApiResponse,
   type EmbeddingInput,
-  GeminiEmbeddingError,
   getEmbeddingDiscriminator,
   getEmbeddingRetryDelayMs,
   isRetryableEmbeddingError,
-  OpenAIEmbeddingError,
 } from "./embedding-clients";
 import {
   buildEmbeddingInteraction,
@@ -361,68 +357,4 @@ function chunkToEmbeddingInput(
     content + (metadataSuffix ?? ""),
     "search_document",
   );
-}
-
-const MAX_DEPTH = 5;
-
-/**
- * Check if an error (or its cause) is a PostgreSQL vector dimensions mismatch
- * Drizzle wraps database errors, so the cause chain is walked up to 5 layers.
- * @param error
- * @param depth
- * @return boolean
- */
-function isDimensionsMismatchError(error: unknown, depth = 0): boolean {
-  if (depth > MAX_DEPTH || !(error instanceof Error)) {
-    return false;
-  }
-
-  const isDimensionsMismatch = error.message
-    .toLowerCase()
-    .includes("dimensions");
-
-  if (isDimensionsMismatch) {
-    return true;
-  }
-
-  const cause = (error as { cause?: unknown }).cause;
-
-  if (cause) {
-    return isDimensionsMismatchError(cause, depth + 1);
-  }
-
-  return false;
-}
-
-function classifyEmbeddingError(error: unknown): EmbeddingErrorCode {
-  const isApiError =
-    error instanceof AzureEmbeddingError ||
-    error instanceof GeminiEmbeddingError ||
-    error instanceof OpenAIEmbeddingError;
-
-  const isLengthMismatchError =
-    error instanceof Error &&
-    error.message.match(/^Embedding API returned \d+ results for \d+ inputs$/);
-
-  const isDBError = error instanceof DrizzleQueryError;
-
-  if (isApiError) {
-    if (
-      error.status === 400 &&
-      error.message.includes("the input length exceeds the context length")
-    ) {
-      return EmbeddingErrorCode.ContextTooLong;
-    }
-    return mapHttpStatusToEmbeddingError(error.status);
-  }
-
-  if (isLengthMismatchError) {
-    return EmbeddingErrorCode.LengthMismatch;
-  }
-
-  if (isDBError && isDimensionsMismatchError(error)) {
-    return EmbeddingErrorCode.DimensionsMismatch;
-  }
-
-  return EmbeddingErrorCode.Unknown;
 }

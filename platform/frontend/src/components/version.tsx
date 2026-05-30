@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, memo } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import config from "@/lib/config/config";
 import { useHealth } from "@/lib/config/health.query";
 import { useLatestGitHubRelease } from "@/lib/github/github-release.query";
@@ -101,4 +101,4 @@ export const Version = memo(function Version({ inline = false }: VersionProps) {
       )}
     </div>
   );
-})
+});

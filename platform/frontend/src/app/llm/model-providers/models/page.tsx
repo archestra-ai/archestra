@@ -363,8 +363,6 @@ export default function ModelsPage() {
                       id,
                       name,
                       provider,
-                      scope: "org" as const,
-                      teamName: null,
                     },
                   ];
                 },

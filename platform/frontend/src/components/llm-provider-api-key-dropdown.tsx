@@ -40,8 +40,9 @@ import { cn } from "@/lib/utils";
 
 type DropdownLlmProviderApiKey = Pick<
   LlmProviderApiKey,
-  "id" | "name" | "provider" | "scope" | "teamName"
->;
+  "id" | "name" | "provider"
+> &
+  Partial<Pick<LlmProviderApiKey, "scope" | "teamName">>;
 
 interface LlmProviderApiKeyDropdownProps {
   availableKeys: DropdownLlmProviderApiKey[];
@@ -236,7 +237,7 @@ export function LlmProviderApiKeyDropdown({
                     className="cursor-pointer"
                   >
                     <div className="flex min-w-0 flex-1 items-center gap-2">
-                      {SCOPE_ICONS[key.scope]}
+                      {key.scope ? SCOPE_ICONS[key.scope] : null}
                       <span className="truncate">{key.name}</span>
                       {key.scope === "team" && key.teamName ? (
                         <Badge
@@ -309,7 +310,7 @@ function sortProviders(params: {
 }) {
   const { providers, currentProvider } = params;
 
-  return providers.sort((a, b) => {
+  return [...providers].sort((a, b) => {
     if (a === currentProvider) return -1;
     if (b === currentProvider) return 1;
     return a.localeCompare(b);

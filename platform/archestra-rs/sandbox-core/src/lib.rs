@@ -301,12 +301,20 @@ pub(crate) fn supervised_argv(command: &str, timeout_seconds: u32, limits: &Limi
 }
 
 pub(crate) fn validate_snapshot_file_path(path: &str) -> Result<()> {
-    match path {
-        _ if path.starts_with('/') || path.split('/').any(|segment| segment == "..") => Err(
-            SandboxError::InvalidInput(format!("invalid snapshot file path: {path:?}")),
-        ),
-        _ => Ok(()),
+    if path.starts_with('/') || path.split('/').any(|segment| segment == "..") {
+        return Err(SandboxError::InvalidInput(format!(
+            "invalid snapshot file path: {path:?}"
+        )));
     }
+    Ok(())
+}
+
+/// true when `path` is exactly one of the sandbox roots or nested beneath it.
+/// the single source of truth for the artifact/cwd/pythonpath allowlist checks.
+fn within_sandbox_roots(path: &str) -> bool {
+    [SKILL_SANDBOX_ROOT, SKILL_SANDBOX_HOME]
+        .iter()
+        .any(|root| path == *root || path.strip_prefix(root).is_some_and(|r| r.starts_with('/')))
 }
 
 pub(crate) fn validate_artifact_path(path: &str) -> Result<()> {
@@ -323,15 +331,10 @@ pub(crate) fn validate_artifact_path(path: &str) -> Result<()> {
             "invalid artifact path: {path:?}"
         )));
     }
-    if path.starts_with('/') {
-        let allowed = [SKILL_SANDBOX_ROOT, SKILL_SANDBOX_HOME]
-            .iter()
-            .any(|root| path == *root || path.starts_with(&format!("{root}/")));
-        if !allowed {
-            return Err(SandboxError::InvalidInput(format!(
-                "artifact path must be under {SKILL_SANDBOX_ROOT} or {SKILL_SANDBOX_HOME}: {path:?}"
-            )));
-        }
+    if path.starts_with('/') && !within_sandbox_roots(path) {
+        return Err(SandboxError::InvalidInput(format!(
+            "artifact path must be under {SKILL_SANDBOX_ROOT} or {SKILL_SANDBOX_HOME}: {path:?}"
+        )));
     }
     Ok(())
 }
@@ -359,10 +362,7 @@ pub(crate) fn validate_pythonpath(pythonpath: &str) -> Result<()> {
                 "pythonpath entries must be absolute: {entry:?}"
             )));
         }
-        let allowed = [SKILL_SANDBOX_ROOT, SKILL_SANDBOX_HOME]
-            .iter()
-            .any(|root| entry == *root || entry.starts_with(&format!("{root}/")));
-        if !allowed {
+        if !within_sandbox_roots(entry) {
             return Err(SandboxError::InvalidInput(format!(
                 "pythonpath entries must be under {SKILL_SANDBOX_ROOT} or {SKILL_SANDBOX_HOME}: {entry:?}"
             )));
@@ -380,10 +380,7 @@ pub(crate) fn validate_cwd(cwd: &str) -> Result<()> {
             "cwd must be an absolute path: {cwd:?}"
         )));
     }
-    let allowed = [SKILL_SANDBOX_ROOT, SKILL_SANDBOX_HOME]
-        .iter()
-        .any(|root| cwd == *root || cwd.starts_with(&format!("{root}/")));
-    if !allowed {
+    if !within_sandbox_roots(cwd) {
         return Err(SandboxError::InvalidInput(format!(
             "cwd must be under {SKILL_SANDBOX_ROOT} or {SKILL_SANDBOX_HOME}: {cwd:?}"
         )));
@@ -399,12 +396,12 @@ pub(crate) fn format_artifact_error(prefix: &str, path: &str, stderr: &str) -> S
 }
 
 pub(crate) fn skill_root_path(skill_name: &str) -> Result<String> {
-    match skill_name {
-        _ if skill_name.contains('/') || skill_name.contains("..") => Err(
-            SandboxError::InvalidInput(format!("invalid skill name: {skill_name:?}")),
-        ),
-        _ => Ok(format!("{SKILL_SANDBOX_ROOT}/{skill_name}")),
+    if skill_name.contains('/') || skill_name.contains("..") {
+        return Err(SandboxError::InvalidInput(format!(
+            "invalid skill name: {skill_name:?}"
+        )));
     }
+    Ok(format!("{SKILL_SANDBOX_ROOT}/{skill_name}"))
 }
 
 pub(crate) fn shell_quote(value: &str) -> String {

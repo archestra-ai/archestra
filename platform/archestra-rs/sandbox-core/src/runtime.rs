@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use base64::Engine;
-use dagger_sdk::{Container, ContainerWithExecOpts, DaggerConn, ReturnType};
+use dagger_sdk::{Container, ContainerWithExecOpts, ReturnType};
 use serde::Deserialize;
 use tracing::Span;
 
@@ -55,7 +55,7 @@ pub(crate) async fn execute_run(
     validate_cwd(&req.cwd)?;
 
     let warm = session.ensure_warm().await?;
-    let materialized = materialize(session.client(), warm, &req).await?;
+    let materialized = materialize(warm, &req).await?;
 
     let argv = supervised_argv(&req.command, req.timeout_seconds, &req.limits);
     let executed = materialized
@@ -120,7 +120,7 @@ pub(crate) async fn execute_read_artifact(
         traceparent: None,
         pythonpath: req.pythonpath,
     };
-    let materialized = materialize(session.client(), warm, &run).await?;
+    let materialized = materialize(warm, &run).await?;
     let bytes_limit = u64::from(req.limits.file_size_limit_bytes);
     let command = format!(
         "[ -e {path} ] || {{ echo 'artifact not found: {path}' >&2; exit {not_found}; }}; _s=$(stat -c '%s' {path}) && [ \"$_s\" -le {limit} ] || {{ echo 'artifact is too large' >&2; exit {too_large}; }}; base64 -w0 {path}",
@@ -197,7 +197,7 @@ pub(crate) async fn execute_check_session(
     skip_all,
     fields(snapshots = req.snapshots.len(), replay.len = req.replay_commands.len())
 )]
-async fn materialize(client: &DaggerConn, warm: Container, req: &RunRequest) -> Result<Container> {
+async fn materialize(warm: Container, req: &RunRequest) -> Result<Container> {
     let mut container = warm;
 
     if !req.snapshots.is_empty() {
@@ -244,7 +244,6 @@ async fn materialize(client: &DaggerConn, warm: Container, req: &RunRequest) -> 
             .with_exec_opts(argv, any_exit_opts());
     }
 
-    let _ = client; // reserved for future host()-based bulk uploads
     Ok(container)
 }
 

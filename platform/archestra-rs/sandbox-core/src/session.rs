@@ -184,10 +184,10 @@ async fn spawn() -> Result<Arc<SessionHandle>> {
             Ok(())
         })
         .await;
-        if let Err(err) = result {
-            if let Some(tx) = fail_tx.take() {
-                let _ = tx.send(SandboxError::engine(err));
-            }
+        if let Err(err) = result
+            && let Some(tx) = fail_tx.take()
+        {
+            let _ = tx.send(SandboxError::engine(err));
         }
     });
 
@@ -241,11 +241,13 @@ async fn run_loop(client: DaggerConn, mut rx: mpsc::Receiver<SessionMsg>) {
                     max = MAX_CONCURRENT_HANDLERS,
                     "dagger handler pool saturated; waiting for a permit"
                 );
-                permits
-                    .clone()
-                    .acquire_owned()
-                    .await
-                    .expect("session semaphore was closed")
+                match permits.clone().acquire_owned().await {
+                    Ok(permit) => permit,
+                    // the semaphore lives as long as this loop and is never
+                    // closed; an error means it was dropped out from under us,
+                    // so stop accepting work and let the session tear down.
+                    Err(_) => break,
+                }
             }
         };
         let session = session.clone();
@@ -262,10 +264,6 @@ pub(crate) struct Session {
 }
 
 impl Session {
-    pub(crate) fn client(&self) -> &DaggerConn {
-        &self.client
-    }
-
     pub(crate) async fn ensure_warm(&self) -> Result<Container> {
         let container = self
             .warm

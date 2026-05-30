@@ -66,8 +66,6 @@ export function LlmProviderApiKeySelector({
   // without looping when our own mutations cause provider changes.
   const autoSelectedForProviderRef = useRef<string | null>(null);
 
-  const keysByProvider = useKeysByProvider(availableKeys);
-
   // Group keys by scope (personal, team, org) for auto-selection priority
   const keysByScope = useMemo(() => {
     const grouped: Record<ResourceVisibilityScope, LlmProviderApiKey[]> = {
@@ -82,6 +80,11 @@ export function LlmProviderApiKeySelector({
 
     return grouped;
   }, [availableKeys]);
+
+  const providerKeys = useMemo(() => {
+    if (!currentProvider) return [];
+    return availableKeys.filter((key) => key.provider === currentProvider);
+  }, [availableKeys, currentProvider]);
 
   // Find selected key
   const currentConversationChatApiKey = useMemo(() => {
@@ -121,11 +124,6 @@ export function LlmProviderApiKeySelector({
       return;
     }
 
-    // Get keys for the current provider (prefer matching provider)
-    const providerKeys = currentProvider
-      ? (keysByProvider[currentProvider] ?? [])
-      : [];
-
     // Priority: personal > team > org (within current provider)
     const personalKeys = providerKeys.filter((k) => k.scope === "personal");
     const teamKeys = providerKeys.filter((k) => k.scope === "team");
@@ -164,7 +162,7 @@ export function LlmProviderApiKeySelector({
     isLoading,
     conversationId,
     currentProvider,
-    keysByProvider,
+    providerKeys,
     keysByScope,
     onApiKeyChange,
   ]);
@@ -228,19 +226,4 @@ export function LlmProviderApiKeySelector({
       showChatTestIds
     />
   );
-}
-
-function useKeysByProvider(availableKeys: LlmProviderApiKey[]) {
-  return useMemo(() => {
-    const grouped = {} as Record<SupportedProvider, LlmProviderApiKey[]>;
-
-    for (const key of availableKeys) {
-      if (!grouped[key.provider]) {
-        grouped[key.provider] = [];
-      }
-      grouped[key.provider].push(key);
-    }
-
-    return grouped;
-  }, [availableKeys]);
 }

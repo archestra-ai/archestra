@@ -140,6 +140,7 @@ export function ProviderKeyMappingsField({
             triggerVariant="select"
             triggerClassName="w-full h-10 text-sm"
             popoverClassName="w-[var(--radix-popover-trigger-width)]"
+            popoverPortal={false}
             emptyTriggerLabel="Select key"
             triggerTestId={E2eTestId.VirtualKeyParentKeySelect}
           />

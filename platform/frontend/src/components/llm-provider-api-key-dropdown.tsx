@@ -17,6 +17,7 @@ import {
   Users,
 } from "lucide-react";
 import Image from "next/image";
+import { useMemo } from "react";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
 import { Badge } from "@/components/ui/badge";
@@ -95,11 +96,18 @@ export function LlmProviderApiKeyDropdown({
   organizationDefaultSelected = false,
   onSelectOrganizationDefault,
 }: LlmProviderApiKeyDropdownProps) {
-  const keysByProvider = groupKeysByProvider(availableKeys);
-  const availableProviders = sortProviders({
-    providers: Object.keys(keysByProvider) as SupportedProvider[],
-    currentProvider,
-  });
+  const keysByProvider = useMemo(
+    () => groupKeysByProvider(availableKeys),
+    [availableKeys],
+  );
+  const availableProviders = useMemo(
+    () =>
+      sortProviders({
+        providers: Object.keys(keysByProvider) as SupportedProvider[],
+        currentProvider,
+      }),
+    [keysByProvider, currentProvider],
+  );
   const selectedKey = availableKeys.find((key) => key.id === selectedApiKeyId);
   const fallbackTriggerLabel =
     emptyTriggerLabel ??

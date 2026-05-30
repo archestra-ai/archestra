@@ -46,6 +46,7 @@ import { Toggle } from "@/components/ui/toggle";
 import {
   Tooltip,
   TooltipContent,
+  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { resolveAutoSelectedModel } from "@/lib/chat/use-chat-preferences";
@@ -212,17 +213,23 @@ function ModelCapabilityBadges({
   }
 
   return (
-    <div className="flex items-center gap-0.5">
-      {hasVision && (
-        <CapabilityIcon icon={ImageIcon} label="Supports vision (images)" />
-      )}
-      {hasAudio && <CapabilityIcon icon={Mic} label="Supports audio input" />}
-      {hasVideo && <CapabilityIcon icon={Video} label="Supports video input" />}
-      {hasPdf && <CapabilityIcon icon={FileText} label="Supports PDF input" />}
-      {hasToolCalling && (
-        <CapabilityIcon icon={Settings2} label="Supports tool calling" />
-      )}
-    </div>
+    <TooltipProvider delayDuration={300}>
+      <div className="flex items-center gap-0.5">
+        {hasVision && (
+          <CapabilityIcon icon={ImageIcon} label="Supports vision (images)" />
+        )}
+        {hasAudio && <CapabilityIcon icon={Mic} label="Supports audio input" />}
+        {hasVideo && (
+          <CapabilityIcon icon={Video} label="Supports video input" />
+        )}
+        {hasPdf && (
+          <CapabilityIcon icon={FileText} label="Supports PDF input" />
+        )}
+        {hasToolCalling && (
+          <CapabilityIcon icon={Settings2} label="Supports tool calling" />
+        )}
+      </div>
+    </TooltipProvider>
   );
 }
 
@@ -239,17 +246,19 @@ function ContextLengthIndicator({
   }
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground font-mono">
-          <Layers className="size-3" />
-          {formatContextLength(contextLength)}
-        </span>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="text-xs">
-        {contextLength.toLocaleString()} token context window
-      </TooltipContent>
-    </Tooltip>
+    <TooltipProvider delayDuration={300}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground font-mono">
+            <Layers className="size-3" />
+            {formatContextLength(contextLength)}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs">
+          {contextLength.toLocaleString()} token context window
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
@@ -268,23 +277,25 @@ function PricingIndicator({
   }
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="inline-flex items-center text-muted-foreground">
-          <DollarSign className="size-3" />
-        </span>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="text-xs">
-        <div className="flex flex-col gap-0.5">
-          {pricePerMillionInput && (
-            <span>Input: ${pricePerMillionInput}/M tokens</span>
-          )}
-          {pricePerMillionOutput && (
-            <span>Output: ${pricePerMillionOutput}/M tokens</span>
-          )}
-        </div>
-      </TooltipContent>
-    </Tooltip>
+    <TooltipProvider delayDuration={300}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex items-center text-muted-foreground">
+            <DollarSign className="size-3" />
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs">
+          <div className="flex flex-col gap-0.5">
+            {pricePerMillionInput && (
+              <span>Input: ${pricePerMillionInput}/M tokens</span>
+            )}
+            {pricePerMillionOutput && (
+              <span>Output: ${pricePerMillionOutput}/M tokens</span>
+            )}
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 

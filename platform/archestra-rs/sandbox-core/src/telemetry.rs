@@ -17,6 +17,14 @@ pub fn init() {
     imp::init();
 }
 
+/// force-flush pending traces/logs. call on graceful shutdown so the last
+/// (unexported) batch isn't lost. idempotent; a no-op unless the `telemetry`
+/// feature is enabled and `init` has run.
+pub fn flush() {
+    #[cfg(feature = "telemetry")]
+    imp::flush();
+}
+
 /// matches the node SDK default; the per-signal `/v1/...` path is appended
 /// explicitly because the http exporter uses a provided endpoint verbatim.
 #[cfg(any(feature = "telemetry", test))]
@@ -26,12 +34,21 @@ const DEFAULT_ENDPOINT: &str = "http://localhost:4318";
 /// base (`http://host:4318`), a version base (`.../v1`), or a per-signal url
 /// (`.../v1/traces`, what the node trace exporter wants), so any of those
 /// suffixes is stripped back to the base that each signal then appends its own
-/// path to. order matters: the longer per-signal suffixes are tried before the
-/// bare `/v1` so the loop's first match doesn't truncate `/v1/traces` to `/v1`.
+/// path to. the singular `/v1/trace` / `/v1/log` are common typos the node
+/// helper also tolerates, so they're stripped too for parity. order matters:
+/// longer suffixes are tried before shorter ones (`/v1/traces` before
+/// `/v1/trace` before `/v1`) so the loop's first match doesn't truncate early.
 #[cfg(any(feature = "telemetry", test))]
 fn normalize_base(raw: &str) -> String {
     let trimmed = raw.trim().trim_end_matches('/');
-    for suffix in ["/v1/traces", "/v1/logs", "/v1/metrics", "/v1"] {
+    for suffix in [
+        "/v1/traces",
+        "/v1/trace",
+        "/v1/logs",
+        "/v1/log",
+        "/v1/metrics",
+        "/v1",
+    ] {
         if let Some(base) = trimmed.strip_suffix(suffix) {
             return base.trim_end_matches('/').to_string();
         }
@@ -53,16 +70,18 @@ mod imp {
     use opentelemetry_sdk::Resource;
     use opentelemetry_sdk::propagation::TraceContextPropagator;
     use opentelemetry_sdk::runtime;
-    use tracing_subscriber::EnvFilter;
+    use tracing_subscriber::filter::LevelFilter;
     use tracing_subscriber::prelude::*;
+    use tracing_subscriber::{EnvFilter, Layer};
 
     use super::{DEFAULT_ENDPOINT, normalize_base};
 
     const SERVICE_NAME: &str = "archestra-sandbox-rs";
 
-    // keep the logger provider alive for the process lifetime; dropping it would
-    // tear down its batch-export task. the tracer provider stays alive via the
-    // global registration.
+    // keep both providers alive for the process lifetime: dropping either tears
+    // down its batch-export task, and they're also what `flush` force-flushes on
+    // shutdown. the tracer is additionally registered globally for propagation.
+    static TRACER_PROVIDER: OnceLock<opentelemetry_sdk::trace::TracerProvider> = OnceLock::new();
     static LOGGER_PROVIDER: OnceLock<opentelemetry_sdk::logs::LoggerProvider> = OnceLock::new();
     static INIT: Once = Once::new();
 
@@ -95,6 +114,8 @@ mod imp {
             .with_resource(resource.clone())
             .build();
         let tracer = tracer_provider.tracer(SERVICE_NAME);
+        // retain a handle for `flush`; the clone shares the same batch processor.
+        let _ = TRACER_PROVIDER.set(tracer_provider.clone());
         opentelemetry::global::set_tracer_provider(tracer_provider);
 
         // --- logs ---
@@ -115,23 +136,53 @@ mod imp {
         // sandbox is a leaf today but may itself call traced services later).
         opentelemetry::global::set_text_map_propagator(TraceContextPropagator::new());
 
-        let filter = EnvFilter::try_from_env("ARCHESTRA_SANDBOX_RS_LOG")
-            .or_else(|_| EnvFilter::try_from_default_env())
-            .unwrap_or_else(|_| EnvFilter::new("info"));
-
         tracing_subscriber::registry()
-            .with(filter)
-            // local visibility (tilt/container logs); ansi off for log scrapers.
+            // the env filter governs LOG verbosity only (fmt + the otel log
+            // bridge). it is deliberately NOT applied to the span layer: lowering
+            // it to warn/error to quiet native logs must not also drop the
+            // info-level instrument spans the traces pipeline depends on.
             .with(
+                // local visibility (tilt/container logs); ansi off for log scrapers.
                 tracing_subscriber::fmt::layer()
                     .with_ansi(false)
-                    .with_writer(std::io::stderr),
+                    .with_writer(std::io::stderr)
+                    .with_filter(log_filter()),
             )
-            .with(tracing_opentelemetry::layer().with_tracer(tracer))
-            .with(log_bridge)
+            .with(
+                tracing_opentelemetry::layer()
+                    .with_tracer(tracer)
+                    .with_filter(LevelFilter::INFO),
+            )
+            .with(log_bridge.with_filter(log_filter()))
             .try_init()?;
 
         Ok(())
+    }
+
+    /// log verbosity for fmt/Loki output, from `ARCHESTRA_SANDBOX_RS_LOG` (or the
+    /// standard `RUST_LOG` fallback), defaulting to `info`. kept separate from the
+    /// span layer so it can be tuned without disabling traces.
+    fn log_filter() -> EnvFilter {
+        EnvFilter::try_from_env("ARCHESTRA_SANDBOX_RS_LOG")
+            .or_else(|_| EnvFilter::try_from_default_env())
+            .unwrap_or_else(|_| EnvFilter::new("info"))
+    }
+
+    pub(super) fn flush() {
+        if let Some(provider) = TRACER_PROVIDER.get() {
+            for result in provider.force_flush() {
+                if let Err(err) = result {
+                    eprintln!("sandbox-rs: trace flush failed: {err}");
+                }
+            }
+        }
+        if let Some(provider) = LOGGER_PROVIDER.get() {
+            for result in provider.force_flush() {
+                if let Err(err) = result {
+                    eprintln!("sandbox-rs: log flush failed: {err}");
+                }
+            }
+        }
     }
 
     /// the shared env var may hold either a bare base (`http://host:4318`) or a
@@ -196,6 +247,16 @@ mod tests {
         // stripped too, so we don't double it to /v1/v1/traces
         assert_eq!(normalize_base("http://host:4318/v1"), "http://host:4318");
         assert_eq!(normalize_base("http://host:4318/v1/"), "http://host:4318");
+        // the singular /v1/trace and /v1/log typos (which the node helper also
+        // tolerates) are stripped back to the base, not appended onto.
+        assert_eq!(
+            normalize_base("http://host:4318/v1/trace"),
+            "http://host:4318"
+        );
+        assert_eq!(
+            normalize_base("http://host:4318/v1/log"),
+            "http://host:4318"
+        );
         // a custom path that is not a signal suffix is preserved
         assert_eq!(
             normalize_base("http://host:4318/otlp"),

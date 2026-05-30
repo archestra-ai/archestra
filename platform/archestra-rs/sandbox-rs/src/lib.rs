@@ -26,6 +26,15 @@ pub async fn read_artifact(input: core::ReadArtifactInput) -> napi::Result<core:
     catch_core(core::read_artifact(input)).await
 }
 
+/// force-flush pending OTLP traces/logs. the backend calls this on graceful
+/// shutdown so the final batch isn't lost. intentionally sync: the blocking
+/// flush runs on the JS thread while the batch-export tasks drain on the tokio
+/// runtime — calling it from inside the runtime (an async fn) would deadlock.
+#[napi(js_name = "flushTelemetry")]
+pub fn flush_telemetry() {
+    core::telemetry::flush();
+}
+
 #[cfg(feature = "test-helpers")]
 #[napi(js_name = "__testPanic")]
 pub fn test_panic() -> napi::Result<()> {

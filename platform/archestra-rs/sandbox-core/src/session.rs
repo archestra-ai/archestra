@@ -219,7 +219,10 @@ async fn run_loop(client: DaggerConn, mut rx: mpsc::Receiver<SessionMsg>) {
         warm: OnceCell::new(),
     });
     let permits = Arc::new(Semaphore::new(MAX_CONCURRENT_HANDLERS));
-    // kick warmup off in the background so it overlaps with the first request
+    // kick warmup off in the background so it overlaps with the first request.
+    // this runs detached and shared across callers, so its `warm_base.build`
+    // span has no caller traceparent and lands as its own root trace rather than
+    // nested under whichever request triggered the cold start.
     {
         let session = session.clone();
         tokio::spawn(async move {

@@ -1849,6 +1849,13 @@
       "when": 1780144031600,
       "tag": "0263_quick_viper",
       "breakpoints": true
+    },
+    {
+      "idx": 264,
+      "version": "7",
+      "when": 1780152356463,
+      "tag": "0264_cultured_quentin_quire",
+      "breakpoints": true
     }
   ]
 }

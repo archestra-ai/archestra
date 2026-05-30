@@ -59,13 +59,17 @@ const extendedFields = {
 
 export const SelectKbDocumentSchema = createSelectSchema(
   schema.kbDocumentsTable,
-  extendedFields,
+  {
+    ...extendedFields,
+    embeddingError: EmbeddingErrorSchema.nullable(),
+  },
 );
 export const InsertKbDocumentSchema = createInsertSchema(
   schema.kbDocumentsTable,
   {
     ...extendedFields,
     embeddingStatus: EmbeddingStatusSchema.optional(),
+    embeddingError: EmbeddingErrorSchema.nullable().optional(),
     acl: z.array(AclEntrySchema).optional(),
     metadata: KbDocumentMetadataSchema.optional(),
   },
@@ -74,6 +78,7 @@ export const UpdateKbDocumentSchema = createUpdateSchema(
   schema.kbDocumentsTable,
   {
     embeddingStatus: EmbeddingStatusSchema.optional(),
+    embeddingError: EmbeddingErrorSchema.nullable().optional(),
     acl: z.array(AclEntrySchema).optional(),
     metadata: KbDocumentMetadataSchema.optional(),
   },

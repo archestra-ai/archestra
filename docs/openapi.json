@@ -127700,6 +127700,10 @@
                               "failed"
                             ]
                           },
+                          "embeddingError": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "chunkCount": {
                             "type": "integer",
                             "minimum": -2147483648,
@@ -127819,6 +127823,7 @@
                           "acl",
                           "metadata",
                           "embeddingStatus",
+                          "embeddingError",
                           "chunkCount",
                           "createdAt",
                           "updatedAt",
@@ -128202,6 +128207,10 @@
                         "failed"
                       ]
                     },
+                    "embeddingError": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "chunkCount": {
                       "type": "integer",
                       "minimum": -2147483648,
@@ -128322,6 +128331,7 @@
                     "acl",
                     "metadata",
                     "embeddingStatus",
+                    "embeddingError",
                     "chunkCount",
                     "createdAt",
                     "updatedAt",
@@ -131871,6 +131881,24 @@
                               "failed"
                             ]
                           },
+                          "embeddingError": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "api_unauthorized",
+                              "api_permission_denied",
+                              "api_bad_request",
+                              "api_not_found",
+                              "api_conflict",
+                              "api_unprocessable_entity",
+                              "api_rate_limit",
+                              "api_generic_error",
+                              "context_length_exceeded",
+                              "length_mismatch",
+                              "dimensions_mismatch",
+                              "unknown"
+                            ]
+                          },
                           "assignedAgents": {
                             "type": "array",
                             "items": {
@@ -131908,6 +131936,7 @@
                           "processingStatus",
                           "processingError",
                           "embeddingStatus",
+                          "embeddingError",
                           "assignedAgents"
                         ],
                         "additionalProperties": false
@@ -132644,6 +132673,24 @@
                         "failed"
                       ]
                     },
+                    "embeddingError": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "api_unauthorized",
+                        "api_permission_denied",
+                        "api_bad_request",
+                        "api_not_found",
+                        "api_conflict",
+                        "api_unprocessable_entity",
+                        "api_rate_limit",
+                        "api_generic_error",
+                        "context_length_exceeded",
+                        "length_mismatch",
+                        "dimensions_mismatch",
+                        "unknown"
+                      ]
+                    },
                     "assignedAgents": {
                       "type": "array",
                       "items": {
@@ -132681,6 +132728,7 @@
                     "processingStatus",
                     "processingError",
                     "embeddingStatus",
+                    "embeddingError",
                     "assignedAgents"
                   ],
                   "additionalProperties": false
@@ -133053,6 +133101,24 @@
                         "failed"
                       ]
                     },
+                    "embeddingError": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "api_unauthorized",
+                        "api_permission_denied",
+                        "api_bad_request",
+                        "api_not_found",
+                        "api_conflict",
+                        "api_unprocessable_entity",
+                        "api_rate_limit",
+                        "api_generic_error",
+                        "context_length_exceeded",
+                        "length_mismatch",
+                        "dimensions_mismatch",
+                        "unknown"
+                      ]
+                    },
                     "assignedAgents": {
                       "type": "array",
                       "items": {
@@ -133090,6 +133156,7 @@
                     "processingStatus",
                     "processingError",
                     "embeddingStatus",
+                    "embeddingError",
                     "assignedAgents"
                   ],
                   "additionalProperties": false

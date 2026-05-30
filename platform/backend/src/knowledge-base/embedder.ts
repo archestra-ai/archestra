@@ -249,8 +249,7 @@ class EmbeddingService {
 
     for (const { documentId, chunkIds, chunkCount } of docChunkMap) {
       const failedChunk = chunkIds.find((id) => failedChunkIds.has(id));
-      const anyFailed = Boolean(failedChunk);
-      if (anyFailed) {
+      if (failedChunk !== undefined) {
         await KbDocumentModel.update(documentId, {
           embeddingStatus: "failed",
           embeddingError: failedChunksErrors.get(failedChunk),
@@ -394,11 +393,10 @@ function isDimensionsMismatchError(error: unknown, depth = 0): boolean {
 /**
  * Classify Embedding error to one of values of EmbeddingError enum
  *
- * exported so it can be tested
  * @param error
  * @return EmbeddingError
  */
-export function classifyEmbeddingError(error: unknown): EmbeddingError {
+function classifyEmbeddingError(error: unknown): EmbeddingError {
   const isApiError =
     error instanceof AzureEmbeddingError ||
     error instanceof GeminiEmbeddingError ||

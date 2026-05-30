@@ -55,7 +55,6 @@ const uiTestMatch = [
   "**/skill-share.spec.ts",
   "**/static-credentials-management.spec.ts",
   "**/virtual-api-keys.spec.ts",
-  "**/connector-files.spec.ts",
 ];
 
 const apiTestMatch = [

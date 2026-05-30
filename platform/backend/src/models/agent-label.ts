@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
-import db, { schema, type Transaction } from "@/database";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import type { AgentLabelGetResponse, AgentLabelWithDetails } from "@/types";
 
 class AgentLabelModel {
@@ -89,7 +89,7 @@ class AgentLabelModel {
     agentId: string,
     labels: AgentLabelWithDetails[],
   ): Promise<void> {
-    await db.transaction(async (tx) => {
+    await withDbTransaction(async (tx) => {
       // Delete all existing labels for this agent
       await tx
         .delete(schema.agentLabelsTable)
@@ -128,7 +128,7 @@ class AgentLabelModel {
     deletedKeys: number;
     deletedValues: number;
   }> {
-    return await db.transaction(async (tx) => {
+    return await withDbTransaction(async (tx) => {
       // Find orphaned keys (not referenced in agent_labels OR mcp_catalog_labels)
       const orphanedKeys = await tx
         .select({ id: schema.labelKeysTable.id })

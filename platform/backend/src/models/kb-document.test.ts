@@ -282,6 +282,49 @@ describe("KbDocumentModel", () => {
     });
   });
 
+  describe("findByConnectorSourcePairs", () => {
+    test("returns documents matching connector and source id pairs", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb1 = await makeKnowledgeBase(org.id);
+      const kb2 = await makeKnowledgeBase(org.id);
+      const connector1 = await makeKnowledgeBaseConnector(kb1.id, org.id);
+      const connector2 = await makeKnowledgeBaseConnector(kb2.id, org.id);
+
+      await KbDocumentModel.create(
+        createDocumentData(connector1.id, org.id, {
+          sourceId: "shared-source",
+          title: "First connector document",
+        }),
+      );
+      await KbDocumentModel.create(
+        createDocumentData(connector2.id, org.id, {
+          sourceId: "shared-source",
+          title: "Second connector document",
+        }),
+      );
+      await KbDocumentModel.create(
+        createDocumentData(connector2.id, org.id, {
+          sourceId: "other-source",
+          title: "Other document",
+        }),
+      );
+
+      const found = await KbDocumentModel.findByConnectorSourcePairs([
+        { connectorId: connector1.id, sourceId: "shared-source" },
+        { connectorId: connector2.id, sourceId: "other-source" },
+      ]);
+
+      expect(found.map((doc) => doc.title).sort()).toEqual([
+        "First connector document",
+        "Other document",
+      ]);
+    });
+  });
+
   describe("update", () => {
     test("updates a document title", async ({
       makeOrganization,
@@ -415,52 +458,6 @@ describe("KbDocumentModel", () => {
 
       // PGlite may return 0
       expect(count).toBe(0);
-    });
-  });
-
-  describe("countByKnowledgeBase", () => {
-    test("returns the count of documents in a knowledge base", async ({
-      makeOrganization,
-      makeKnowledgeBase,
-      makeKnowledgeBaseConnector,
-    }) => {
-      const org = await makeOrganization();
-      const kb = await makeKnowledgeBase(org.id);
-      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
-      await KbDocumentModel.create(createDocumentData(connector.id, org.id));
-      await KbDocumentModel.create(createDocumentData(connector.id, org.id));
-
-      const count = await KbDocumentModel.countByKnowledgeBase(kb.id);
-      expect(count).toBe(2);
-    });
-
-    test("returns 0 when no documents exist", async ({
-      makeOrganization,
-      makeKnowledgeBase,
-    }) => {
-      const org = await makeOrganization();
-      const kb = await makeKnowledgeBase(org.id);
-
-      const count = await KbDocumentModel.countByKnowledgeBase(kb.id);
-      expect(count).toBe(0);
-    });
-
-    test("does not count documents from other knowledge bases", async ({
-      makeOrganization,
-      makeKnowledgeBase,
-      makeKnowledgeBaseConnector,
-    }) => {
-      const org = await makeOrganization();
-      const kb1 = await makeKnowledgeBase(org.id);
-      const kb2 = await makeKnowledgeBase(org.id);
-      const connector1 = await makeKnowledgeBaseConnector(kb1.id, org.id);
-      const connector2 = await makeKnowledgeBaseConnector(kb2.id, org.id);
-      await KbDocumentModel.create(createDocumentData(connector1.id, org.id));
-      await KbDocumentModel.create(createDocumentData(connector1.id, org.id));
-      await KbDocumentModel.create(createDocumentData(connector2.id, org.id));
-
-      const count = await KbDocumentModel.countByKnowledgeBase(kb1.id);
-      expect(count).toBe(2);
     });
   });
 

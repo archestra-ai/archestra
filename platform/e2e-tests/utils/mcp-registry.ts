@@ -132,6 +132,35 @@ export async function waitForMcpServerReadyById(
   );
 }
 
+export async function waitForMcpServerAbsent(
+  page: Page,
+  mcpServerId: string,
+  options?: { timeoutMs?: number },
+): Promise<void> {
+  const timeoutMs = options?.timeoutMs ?? 60_000;
+  const start = Date.now();
+  let delay = 500;
+  let lastStatus: number | null = null;
+  while (Date.now() - start < timeoutMs) {
+    const response = await page.request.get(
+      `${UI_BASE_URL}/api/mcp_server/${mcpServerId}`,
+      { headers: { Origin: UI_BASE_URL } },
+    );
+    lastStatus = response.status();
+    // Revoking a credential deletes its MCP server via async K8s pod
+    // teardown; the row (and thus a 200) persists until teardown finishes.
+    // A 404 is the authoritative "actually gone" signal.
+    if (lastStatus === 404) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    delay = Math.min(delay * 1.5, 5000);
+  }
+  throw new Error(
+    `MCP server ${mcpServerId} was not deleted (never returned 404) within ${timeoutMs}ms (last status: ${lastStatus ?? "n/a"})`,
+  );
+}
+
 export async function waitForMcpServerToolsDiscovered(
   page: Page,
   catalogItemName?: string,

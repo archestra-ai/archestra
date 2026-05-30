@@ -5,7 +5,7 @@ import {
   type SupportedProvider,
 } from "@shared";
 import { and, count, eq, ilike, inArray, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import type { PaginatedResult } from "@/database/utils/pagination";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import logger from "@/logging";
@@ -95,7 +95,7 @@ class VirtualApiKeyModel {
       FORCE_DB,
     );
 
-    const virtualKey = await db.transaction(async (tx) => {
+    const virtualKey = await withDbTransaction(async (tx) => {
       const [createdVirtualKey] = await tx
         .insert(schema.virtualApiKeysTable)
         .values({
@@ -161,7 +161,7 @@ class VirtualApiKeyModel {
     const { id, name, expiresAt, scope, authorId, teamIds, providerApiKeys } =
       params;
 
-    const updatedVirtualKey = await db.transaction(async (tx) => {
+    const updatedVirtualKey = await withDbTransaction(async (tx) => {
       const [updated] = await tx
         .update(schema.virtualApiKeysTable)
         .set({
@@ -611,6 +611,28 @@ class VirtualApiKeyModel {
       );
 
     return rows.map((row) => row.teamId);
+  }
+
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const row = await VirtualApiKeyModel.findById(id);
+    if (!row || row.organizationId !== organizationId) return null;
+
+    const teamIds = await VirtualApiKeyModel.getTeamIdsForVirtualApiKey(id);
+
+    return {
+      id: row.id,
+      organizationId: row.organizationId,
+      name: row.name,
+      scope: row.scope,
+      authorId: row.authorId,
+      teamIds: [...teamIds].sort(),
+      tokenStart: row.tokenStart,
+      expiresAt: row.expiresAt?.toISOString() ?? null,
+      createdAt: row.createdAt.toISOString(),
+    };
   }
 
   static async getVisibilityForVirtualApiKeyIds(

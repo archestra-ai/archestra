@@ -26,7 +26,15 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // Agents
   agent: ["read", "create", "update", "delete", "team-admin", "admin"],
-  skill: ["read", "create", "update", "delete", "team-admin", "admin"],
+  skill: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "team-admin",
+    "admin",
+    "execute",
+  ],
   agentTrigger: ["read", "create", "update", "delete"],
   scheduledTask: ["read", "create", "update", "delete", "admin"],
 
@@ -48,6 +56,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   mcpServerInstallationRequest: ["read", "create", "update", "delete", "admin"],
 
   // Knowledge
+  knowledgeFile: ["read", "create", "update", "delete", "admin"],
   knowledgeSource: ["read", "create", "update", "delete", "query", "admin"],
 
   // Other
@@ -56,6 +65,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],
+  auditLog: ["read"],
   agentSettings: ["read", "update"],
   llmSettings: ["read", "update"],
   knowledgeSettings: ["read", "update"],
@@ -83,7 +93,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 export const editorPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete", "team-admin"],
-  skill: ["read", "create", "update", "delete", "team-admin"],
+  skill: ["read", "create", "update", "delete", "team-admin", "execute"],
   agentTrigger: ["read", "create", "update", "delete"],
   scheduledTask: ["read", "create", "update", "delete"],
 
@@ -105,6 +115,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   mcpServerInstallationRequest: ["read", "create", "update", "delete"],
 
   // Knowledge
+  knowledgeFile: ["read", "create", "update", "delete"],
   knowledgeSource: ["read", "create", "update", "delete", "query"],
 
   // Other
@@ -113,6 +124,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],
+  auditLog: [],
   agentSettings: [],
   llmSettings: ["read", "update"],
   knowledgeSettings: ["read", "update"],
@@ -140,7 +152,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
 export const memberPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete"],
-  skill: ["read", "create", "update", "delete"],
+  skill: ["read", "create", "update", "delete", "execute"],
   agentTrigger: [],
   scheduledTask: ["read", "create", "update", "delete"],
 
@@ -162,6 +174,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   mcpServerInstallationRequest: ["read", "create", "update"],
 
   // Knowledge
+  knowledgeFile: ["read"],
   knowledgeSource: ["read", "query"],
 
   // Other
@@ -170,6 +183,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],
+  auditLog: [],
   agentSettings: [],
   llmSettings: [],
   knowledgeSettings: [],
@@ -230,6 +244,7 @@ export const permissionDescriptions: Record<string, string> = {
   "skill:team-admin": "Manage team assignments for agent skills",
   "skill:admin":
     "Full administrative control over all agent skills, bypassing team restrictions",
+  "skill:execute": "Execute skill scripts",
   "agentTrigger:read":
     "View agent trigger configurations (Slack, MS Teams, email)",
   "agentTrigger:create": "Set up new agent triggers",
@@ -349,6 +364,8 @@ export const permissionDescriptions: Record<string, string> = {
   "apiKey:read": "View API keys",
   "apiKey:create": "Create API keys",
   "apiKey:delete": "Delete API keys",
+  "auditLog:read":
+    "View the organization-wide audit log of administrative actions",
   "organizationSettings:read":
     "View organization settings (appearance, authentication, etc)",
   "organizationSettings:update":
@@ -360,6 +377,12 @@ export const permissionDescriptions: Record<string, string> = {
   "knowledgeSource:query": "Query knowledge sources for information retrieval",
   "knowledgeSource:admin":
     "View all Knowledge Bases and Connectors, bypassing visibility restrictions",
+  "knowledgeFile:read": "View uploaded Knowledge Files",
+  "knowledgeFile:create": "Upload Knowledge Files",
+  "knowledgeFile:update": "Modify Knowledge File visibility and agent access",
+  "knowledgeFile:delete": "Delete Knowledge Files",
+  "knowledgeFile:admin":
+    "View all Knowledge Files, bypassing visibility restrictions",
   "knowledgeSettings:read":
     "View knowledge settings (embedding and reranking models)",
   "knowledgeSettings:update":
@@ -710,6 +733,10 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetChatAttachmentContent]: {
     chat: ["read"],
+  },
+  [RouteId.PromoteChatAttachmentToKnowledgeFile]: {
+    chat: ["read"],
+    knowledgeFile: ["create"],
   },
   [RouteId.GetChatAgentMcpTools]: {
     agent: ["read"],
@@ -1091,8 +1118,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetConnectors]: { knowledgeSource: ["read"] },
   [RouteId.CreateConnector]: { knowledgeSource: ["create"] },
   [RouteId.GetConnector]: { knowledgeSource: ["read"] },
+  [RouteId.GetConnectorDocuments]: { knowledgeSource: ["read"] },
+  [RouteId.GetConnectorDocument]: { knowledgeSource: ["read"] },
   [RouteId.UpdateConnector]: { knowledgeSource: ["update"] },
   [RouteId.DeleteConnector]: { knowledgeSource: ["delete"] },
+  [RouteId.DeleteConnectorDocument]: { knowledgeSource: ["delete"] },
   [RouteId.SyncConnector]: { knowledgeSource: ["update"] },
   [RouteId.ForceResyncConnector]: { knowledgeSource: ["update"] },
   [RouteId.TestConnectorConnection]: { knowledgeSource: ["read"] },
@@ -1108,11 +1138,14 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetConnectorRuns]: { knowledgeSource: ["read"] },
   [RouteId.GetConnectorRun]: { knowledgeSource: ["read"] },
 
-  // Connector File Upload Routes
-  [RouteId.UploadConnectorFiles]: { knowledgeSource: ["update"] },
-  [RouteId.GetConnectorFiles]: { knowledgeSource: ["read"] },
-  [RouteId.GetConnectorFile]: { knowledgeSource: ["read"] },
-  [RouteId.DeleteConnectorFile]: { knowledgeSource: ["delete"] },
+  // Knowledge File Routes
+  [RouteId.GetKnowledgeFiles]: { knowledgeFile: ["read"] },
+  [RouteId.UploadKnowledgeFiles]: { knowledgeFile: ["create"] },
+  [RouteId.GetKnowledgeFile]: { knowledgeFile: ["read"] },
+  [RouteId.GetKnowledgeFileContent]: { knowledgeFile: ["read"] },
+  [RouteId.UpdateKnowledgeFile]: { knowledgeFile: ["update"] },
+  [RouteId.DeleteKnowledgeFile]: { knowledgeFile: ["delete"] },
+  [RouteId.GetKnowledgeFileUploadConfig]: { knowledgeFile: ["read"] },
 
   // Agent Skill Routes - per-instance scope is enforced in the handlers
   [RouteId.GetSkills]: { skill: ["read"] },
@@ -1125,6 +1158,19 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.ImportGithubSkills]: { skill: ["create"] },
   [RouteId.GetSkillSourceRepos]: { skill: ["read"] },
   [RouteId.EnableSkillToolDefaults]: { skill: ["admin"] },
+  [RouteId.GetSkillSandboxArtifact]: { skill: ["execute"] },
+
+  // Audit Log Routes
+  [RouteId.GetAuditLogs]: {
+    auditLog: ["read"],
+  },
+
+  // Skill Share Link Routes - admin-only. Per-skill org-isolation enforced in handlers.
+  // The public marketplace git endpoint stays outside this map; it is allowlisted in
+  // the auth middleware (`SKILL_MARKETPLACE_PREFIX`), mirroring `MCP_GATEWAY_PREFIX`.
+  [RouteId.GetSkillShareLinks]: { skill: ["admin"] },
+  [RouteId.CreateSkillShareLink]: { skill: ["admin"] },
+  [RouteId.RevokeSkillShareLink]: { skill: ["admin"] },
 
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},
@@ -1186,9 +1232,11 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // Logs
   "/llm/logs": { log: ["read"] },
   "/mcp/logs": { log: ["read"] },
+  "/audit/logs": { auditLog: ["read"] },
 
   // Knowledge
   "/knowledge/knowledge-bases": { knowledgeSource: ["read"] },
+  "/knowledge/files": { knowledgeFile: ["read"] },
   "/knowledge/connectors": { knowledgeSource: ["read"] },
 
   // Settings

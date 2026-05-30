@@ -31,6 +31,10 @@ const nextConfig: NextConfig = {
   // Disable dev indicators so they don't show up in docs automated screenshots
   devIndicators: false,
   turbopack: {
+    // pin the workspace root (where pnpm-lock.yaml lives) so Next.js 16 doesn't
+    // misinfer it in this monorepo and panic with "Next.js package not found"
+    // when following pnpm's hoisted next symlink.
+    root: resolve(import.meta.dirname, ".."),
     resolveAlias: {
       "@shared/access-control": "../shared/access-control.ts",
     },
@@ -44,6 +48,14 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     proxyTimeout: 300000, // 5 minutes in milliseconds - prevents SSE stream timeout
+    // Next defaults the proxy body limit to 10MB; raise it well above the
+    // backend's 70MB default so an operator who increases ARCHESTRA_API_BODY_LIMIT
+    // at runtime doesn't also have to rebuild the FE image. (next.config.ts is
+    // evaluated at build time in `output: "standalone"` mode, so this value is
+    // baked into the image — making it env-driven would silently drift from
+    // the backend's runtime value.) Anything the proxy lets through still gets
+    // sized-checked by the backend's bodyLimit, which is the authoritative cap.
+    proxyClientMaxBodySize: "200mb",
   },
   httpAgentOptions: {
     keepAlive: true,
@@ -81,6 +93,10 @@ const nextConfig: NextConfig = {
       {
         source: "/_sandbox/:path*",
         destination: `${backendUrl}/_sandbox/:path*`,
+      },
+      {
+        source: "/skills/m/:path*",
+        destination: `${backendUrl}/skills/m/:path*`,
       },
       {
         source: "/ws",

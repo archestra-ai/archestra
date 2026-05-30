@@ -1,12 +1,13 @@
 "use client";
 
 import { PageLayout } from "@/components/page-layout";
-import { LOGS_LAYOUT_CONFIG } from "@/consts";
+import { useLogsLayoutConfig } from "@/lib/audit-log/use-logs-layout-config";
 
 export default function McpLogsLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return <PageLayout {...LOGS_LAYOUT_CONFIG}>{children}</PageLayout>;
+  const config = useLogsLayoutConfig();
+  return <PageLayout {...config}>{children}</PageLayout>;
 }

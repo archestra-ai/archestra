@@ -184,120 +184,36 @@ export const OPENROUTER_LATEST_ALIAS_PREFIX = "~";
 /**
  * Pattern-based model markers per provider.
  * Patterns are substrings that model IDs must contain (case-insensitive).
- * Used to identify "fastest" (lightweight, low latency) and "best" (highest quality) models.
+ * Used to identify "best" (highest quality) models.
  *
  * IMPORTANT: Patterns are checked in array order (first match wins).
  * More specific patterns should come before general ones.
  */
-export const MODEL_MARKER_PATTERNS: Record<
-  SupportedProvider,
-  {
-    fastest: string[];
-    best: string[];
-  }
-> = {
-  anthropic: {
-    fastest: ["haiku-4-5-20251001", "haiku-4-5"],
-    best: ["opus-4-7"],
-  },
-  openai: {
-    fastest: ["gpt-5.4-nano", "gpt-5.4-mini"],
-    best: ["gpt-5.5-pro", "gpt-5.5"],
-  },
-  gemini: {
-    fastest: ["gemini-3.1-flash-lite", "gemini-3.5-flash"],
-    best: ["gemini-3.1-pro-preview"],
-  },
-  cerebras: {
-    fastest: ["llama3.1-8b"],
-    best: ["zai-glm-4.7"],
-  },
-  cohere: {
-    fastest: ["command-r7b-12-2024"],
-    best: ["command-a-plus-05-2026"],
-  },
-  mistral: {
-    fastest: ["mistral-small-2603"],
-    best: ["mistral-medium-2604"],
-  },
-  perplexity: {
-    fastest: ["sonar"],
-    best: ["sonar-deep-research", "sonar-reasoning-pro", "sonar-pro"],
-  },
-  groq: {
-    fastest: ["openai/gpt-oss-20b", "llama-3.1-8b-instant"],
-    best: ["openai/gpt-oss-120b"],
-  },
-  xai: {
-    fastest: ["grok-4.3"],
-    best: ["grok-4.3"],
-  },
-  openrouter: {
-    fastest: ["openrouter/auto"],
-    best: [
-      "anthropic/claude-opus-4.7",
-      "openai/gpt-5.5-pro",
-      "openai/gpt-5.5",
-      "google/gemini-3.1-pro-preview",
-      "x-ai/grok-4.3",
-      "deepseek/deepseek-v4-pro",
-    ],
-  },
-  ollama: {
-    fastest: ["gpt-oss:20b", "llama3.2:3b", "phi4-mini"],
-    best: ["gpt-oss:120b", "llama4:maverick", "llama4:scout", "qwen3:235b"],
-  },
-  vllm: {
-    fastest: ["gpt-oss-20b", "llama-3.2-3b", "phi-4-mini"],
-    best: ["gpt-oss-120b", "llama-4-maverick", "llama-4-scout", "qwen3-235b"],
-  },
-  zhipuai: {
-    fastest: ["glm-4.7-flash"],
-    best: ["glm-5.1"],
-  },
-  deepseek: {
-    fastest: ["deepseek-v4-flash"],
-    best: ["deepseek-v4-pro"],
-  },
-  minimax: {
-    fastest: ["minimax-m2.7-highspeed"],
-    best: ["minimax-m2.7"],
-  },
-  azure: {
-    fastest: ["gpt-5.4-nano", "gpt-5.4-mini"],
-    best: ["gpt-5.5"],
-  },
-  bedrock: {
-    fastest: ["amazon.nova-2-lite-v1:0", "amazon.nova-lite-v1:0"],
-    best: ["anthropic.claude-opus-4-7"],
-  },
-};
-
-/**
- * Fast models for each provider, used as fallback for title generation and other quick operations.
- * These are optimized for speed and cost rather than capability.
- *
- * Primary resolution uses LlmProviderApiKeyModelLinkModel.getFastestModel() from the database.
- * This map serves as a fallback when no database result is available.
- */
-export const FAST_MODELS: Record<SupportedProvider, string> = {
-  anthropic: "claude-haiku-4-5-20251001",
-  openai: "gpt-5.4-mini",
-  openrouter: "openrouter/auto",
-  gemini: "gemini-3.5-flash",
-  cerebras: "llama3.1-8b", // cerebras focuses on speed, all their models are fast
-  cohere: "command-r7b-12-2024", // cohere's fast model
-  vllm: "default", // vLLM uses whatever model is deployed
-  ollama: "llama3.2", // common fast model for Ollama
-  zhipuai: "glm-4.7-flash", // zhipu's fast model
-  minimax: "MiniMax-M2.7-highspeed", // minimax's fastest model
-  deepseek: "deepseek-v4-flash", // deepSeek's fast model
-  bedrock: "amazon.nova-2-lite-v1:0", // bedrock's fast model
-  mistral: "mistral-small-2603", // mistral's fast model
-  perplexity: "sonar", // perplexity's fast model
-  groq: "llama-3.1-8b-instant", // groq's fast model
-  xai: "grok-4.3", // xAI's fast model
-  azure: "gpt-5.4-mini",
+export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
+  anthropic: ["opus-4-7"],
+  openai: ["gpt-5.5-pro", "gpt-5.5"],
+  gemini: ["gemini-3.1-pro-preview", "gemini-2.5-pro"],
+  cerebras: ["zai-glm-4.7"],
+  cohere: ["command-a-plus-05-2026"],
+  mistral: ["mistral-medium-2604"],
+  perplexity: ["sonar-deep-research", "sonar-reasoning-pro", "sonar-pro"],
+  groq: ["openai/gpt-oss-120b"],
+  xai: ["grok-4.3"],
+  openrouter: [
+    "anthropic/claude-opus-4.7",
+    "openai/gpt-5.5-pro",
+    "openai/gpt-5.5",
+    "google/gemini-3.1-pro-preview",
+    "x-ai/grok-4.3",
+    "deepseek/deepseek-v4-pro",
+  ],
+  ollama: ["gpt-oss:120b", "llama4:maverick", "llama4:scout", "qwen3:235b"],
+  vllm: ["gpt-oss-120b", "llama-4-maverick", "llama-4-scout", "qwen3-235b"],
+  zhipuai: ["glm-5.1"],
+  deepseek: ["deepseek-v4-pro"],
+  minimax: ["minimax-m2.7"],
+  azure: ["gpt-5.5"],
+  bedrock: ["anthropic.claude-opus-4-7"],
 };
 
 /**

@@ -1,5 +1,5 @@
 import { eq, inArray } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 
 class ConversationEnabledToolModel {
@@ -92,7 +92,7 @@ class ConversationEnabledToolModel {
       }
     }
 
-    await db.transaction(async (tx) => {
+    await withDbTransaction(async (tx) => {
       // Update the conversation to mark it as having custom tool selection
       await tx
         .update(schema.conversationsTable)
@@ -135,7 +135,7 @@ class ConversationEnabledToolModel {
       "ConversationEnabledToolModel.clearCustomSelection: clearing",
     );
 
-    await db.transaction(async (tx) => {
+    await withDbTransaction(async (tx) => {
       // Update the conversation to mark it as not having custom tool selection
       await tx
         .update(schema.conversationsTable)

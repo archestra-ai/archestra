@@ -77,7 +77,11 @@ import {
 } from "@/lib/tools/tool.query";
 import { isMcpToolByProperties } from "@/lib/tools/tool.utils";
 import type { ToolsInitialData } from "../types";
-import { getVisibleCatalogSources } from "./assigned-tools-table.utils";
+import {
+  getVisibleCatalogSources,
+  OBSERVED_TOOL_SOURCE_DESCRIPTION,
+  OBSERVED_TOOL_SOURCE_LABEL,
+} from "./assigned-tools-table.utils";
 import { CallPolicyToggle } from "./call-policy-toggle";
 
 type GetToolsWithAssignmentsQueryParams = NonNullable<
@@ -577,11 +581,11 @@ export function AssignedToolsTable({
                     className="bg-amber-700 text-white gap-1.5"
                   >
                     <Network className="h-3.5 w-3.5 shrink-0" />
-                    LLM Proxy
+                    {OBSERVED_TOOL_SOURCE_LABEL}
                   </Badge>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>Tool discovered via agent-LLM communication</p>
+                  <p>{OBSERVED_TOOL_SOURCE_DESCRIPTION}</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -821,17 +825,21 @@ export function AssignedToolsTable({
               },
               {
                 value: "llm-proxy",
-                label: "LLM Proxy",
+                label: OBSERVED_TOOL_SOURCE_LABEL,
                 content: (
                   <div className="flex items-center gap-2 min-w-0">
                     <Network className="h-4 w-4 shrink-0" />
-                    <span className="truncate">LLM Proxy</span>
+                    <span className="truncate">
+                      {OBSERVED_TOOL_SOURCE_LABEL}
+                    </span>
                   </div>
                 ),
                 selectedContent: (
                   <div className="flex items-center gap-2 min-w-0">
                     <Network className="h-4 w-4 shrink-0" />
-                    <span className="truncate">LLM Proxy</span>
+                    <span className="truncate">
+                      {OBSERVED_TOOL_SOURCE_LABEL}
+                    </span>
                   </div>
                 ),
               },

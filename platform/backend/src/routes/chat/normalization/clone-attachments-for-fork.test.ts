@@ -1,4 +1,4 @@
-import ChatAttachmentModel from "@/models/chat-attachment";
+import ConversationAttachmentModel from "@/models/conversation-attachment";
 import { expect, test } from "@/test";
 import type { ChatMessage } from "@/types";
 import { cloneAttachmentsForFork } from "./clone-attachments-for-fork";
@@ -17,17 +17,21 @@ test("clones the underlying row and rewrites refs to the new id", async ({
     organizationId: agent.organizationId,
   });
   const bytes = Buffer.from("forkable-bytes", "utf8");
-  const row = await ChatAttachmentModel.create({
+  const row = await ConversationAttachmentModel.create({
     organizationId: source.organizationId,
     conversationId: source.id,
     uploadedByUserId: source.userId,
     originalName: "doc.pdf",
     mimeType: "application/pdf",
     fileSize: bytes.byteLength,
-    contentHash: ChatAttachmentModel.computeContentHash(bytes),
+    contentHash: ConversationAttachmentModel.computeContentHash(bytes),
     fileData: bytes,
   });
-  await ChatAttachmentModel.updateTextPreview(row.id, "ok", "FORK_PREVIEW");
+  await ConversationAttachmentModel.updateTextPreview(
+    row.id,
+    "ok",
+    "FORK_PREVIEW",
+  );
 
   const sourceMessages: ChatMessage[] = [
     {
@@ -54,7 +58,8 @@ test("clones the underlying row and rewrites refs to the new id", async ({
   });
 
   // The ref URL was rewritten to a NEW id, not the source id.
-  const forkedPart = forked[0].parts![1];
+  const forkedPart = forked[0].parts?.[1];
+  if (!forkedPart) throw new Error("Expected cloned file part");
   expect(forkedPart.type).toBe("file");
   expect(forkedPart.url).not.toBe(refUrl(row.id));
   expect(forkedPart.url).toMatch(
@@ -66,25 +71,26 @@ test("clones the underlying row and rewrites refs to the new id", async ({
   const parsed = (forkedPart.url as string).match(
     /\/api\/chat\/attachments\/([^/]+)\/content/,
   );
-  const newId = parsed![1];
-  const clonedRow = await ChatAttachmentModel.findByIdWithData(newId);
+  const newId = parsed?.[1];
+  if (!newId) throw new Error("Expected cloned attachment id");
+  const clonedRow = await ConversationAttachmentModel.findByIdWithData(newId);
   expect(clonedRow).not.toBeNull();
-  expect(clonedRow!.conversationId).toBe(fork.id);
-  expect(clonedRow!.organizationId).toBe(fork.organizationId);
-  expect(clonedRow!.uploadedByUserId).toBe(fork.userId);
-  expect(clonedRow!.contentHash).toBe(row.contentHash);
-  expect(clonedRow!.fileSize).toBe(row.fileSize);
-  expect(clonedRow!.fileData.equals(bytes)).toBe(true);
-  expect(clonedRow!.textPreview).toBe("FORK_PREVIEW");
-  expect(clonedRow!.textPreviewStatus).toBe("ok");
+  expect(clonedRow?.conversationId).toBe(fork.id);
+  expect(clonedRow?.organizationId).toBe(fork.organizationId);
+  expect(clonedRow?.uploadedByUserId).toBe(fork.userId);
+  expect(clonedRow?.contentHash).toBe(row.contentHash);
+  expect(clonedRow?.fileSize).toBe(row.fileSize);
+  expect(clonedRow?.fileData.equals(bytes)).toBe(true);
+  expect(clonedRow?.textPreview).toBe("FORK_PREVIEW");
+  expect(clonedRow?.textPreviewStatus).toBe("ok");
 
   // Source row stays untouched — fork is a copy, not a move.
-  const sourceRow = await ChatAttachmentModel.findByIdWithData(row.id);
+  const sourceRow = await ConversationAttachmentModel.findByIdWithData(row.id);
   expect(sourceRow).not.toBeNull();
-  expect(sourceRow!.conversationId).toBe(source.id);
+  expect(sourceRow?.conversationId).toBe(source.id);
 
   // Input array is not mutated.
-  expect(sourceMessages[0].parts![1].url).toBe(refUrl(row.id));
+  expect(sourceMessages[0].parts?.[1].url).toBe(refUrl(row.id));
 });
 
 test("deduplicates identical refs into a single clone", async ({
@@ -99,14 +105,14 @@ test("deduplicates identical refs into a single clone", async ({
     organizationId: agent.organizationId,
   });
   const bytes = Buffer.from("once", "utf8");
-  const row = await ChatAttachmentModel.create({
+  const row = await ConversationAttachmentModel.create({
     organizationId: source.organizationId,
     conversationId: source.id,
     uploadedByUserId: source.userId,
     originalName: "once.txt",
     mimeType: "text/plain",
     fileSize: bytes.byteLength,
-    contentHash: ChatAttachmentModel.computeContentHash(bytes),
+    contentHash: ConversationAttachmentModel.computeContentHash(bytes),
     fileData: bytes,
   });
 
@@ -145,8 +151,8 @@ test("deduplicates identical refs into a single clone", async ({
     newUploadedByUserId: fork.userId,
   });
 
-  const urlA = forked[0].parts![0].url as string;
-  const urlB = forked[1].parts![1].url as string;
+  const urlA = forked[0].parts?.[0].url as string;
+  const urlB = forked[1].parts?.[1].url as string;
   // Both refs in the fork point at the SAME new id (one clone, not two).
   expect(urlA).toBe(urlB);
   expect(urlA).not.toBe(refUrl(row.id));
@@ -209,7 +215,7 @@ test("legacy inline data: URLs are passed through untouched", async ({
   });
 
   // Data URL pass-through — fork still works for pre-v1 conversations.
-  expect(forked[0].parts![0].url).toBe(dataUrl);
+  expect(forked[0].parts?.[0].url).toBe(dataUrl);
 });
 
 test("refuses to clone a row whose conversationId is NOT the source (IDOR guard)", async ({
@@ -229,14 +235,14 @@ test("refuses to clone a row whose conversationId is NOT the source (IDOR guard)
     organizationId: agent.organizationId,
   });
   const secretBytes = Buffer.from("FOREIGN_SECRET_BYTES", "utf8");
-  const foreignRow = await ChatAttachmentModel.create({
+  const foreignRow = await ConversationAttachmentModel.create({
     organizationId: foreign.organizationId,
     conversationId: foreign.id,
     uploadedByUserId: foreign.userId,
     originalName: "secret.bin",
     mimeType: "application/octet-stream",
     fileSize: secretBytes.byteLength,
-    contentHash: ChatAttachmentModel.computeContentHash(secretBytes),
+    contentHash: ConversationAttachmentModel.computeContentHash(secretBytes),
     fileData: secretBytes,
   });
 
@@ -267,17 +273,16 @@ test("refuses to clone a row whose conversationId is NOT the source (IDOR guard)
   });
 
   // The crafted ref does NOT get cloned — its url is left untouched in the fork.
-  expect(forked[0].parts![0].url).toBe(refUrl(foreignRow.id));
+  expect(forked[0].parts?.[0].url).toBe(refUrl(foreignRow.id));
 
   // No new row was created in the fork pointing at the foreign bytes.
-  const forkRows = await ChatAttachmentModel.findByConversationIdWithoutData(
-    fork.id,
-  );
+  const forkRows =
+    await ConversationAttachmentModel.findByConversationIdWithoutData(fork.id);
   expect(forkRows.length).toBe(0);
 
   // The foreign row is untouched.
-  const stillForeign = await ChatAttachmentModel.findByIdWithData(
+  const stillForeign = await ConversationAttachmentModel.findByIdWithData(
     foreignRow.id,
   );
-  expect(stillForeign!.conversationId).toBe(foreign.id);
+  expect(stillForeign?.conversationId).toBe(foreign.id);
 });

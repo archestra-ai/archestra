@@ -3,6 +3,7 @@
 import { type UIMessage, useChat } from "@ai-sdk/react";
 import {
   type ArchestraToolShortName,
+  type ContextWindowEstimate,
   EXTERNAL_AGENT_ID_HEADER,
   getArchestraToolShortName,
   makeSwapAgentPokeText,
@@ -410,6 +411,16 @@ function ChatSessionHook({
     [],
   );
 
+  // a dropped connection between compaction-start and compaction-finish would
+  // otherwise leave the spinner stuck on; clear it on any stream end.
+  const clearActiveContextCompaction = useCallback(() => {
+    setContextCompaction((current) => ({
+      ...current,
+      isCompacting: false,
+      trigger: null,
+    }));
+  }, []);
+
   // Track early UI data from data-tool-ui-start events (toolCallId → resource data)
   const [earlyToolUiStarts, setEarlyToolUiStarts] = useState<
     ChatSession["earlyToolUiStarts"]
@@ -446,6 +457,7 @@ function ChatSessionHook({
     id: conversationId,
     onFinish: ({ message, isAbort }) => {
       setOptimisticToolCalls([]);
+      clearActiveContextCompaction();
 
       // When the user stops mid-tool-call, the assistant message is left with a
       // tool part that never produced output, which the UI renders as a
@@ -498,6 +510,7 @@ function ChatSessionHook({
     },
     onError: (chatError) => {
       setOptimisticToolCalls([]);
+      clearActiveContextCompaction();
       queryClient.invalidateQueries({
         queryKey: ["conversation", conversationId],
       });
@@ -609,8 +622,22 @@ function ChatSessionHook({
       if (dataPart.type === "data-token-usage") {
         const usage = dataPart.data as TokenUsage;
         setTokenUsage(usage);
-        if (typeof usage.totalTokens === "number") {
-          setContextTokensUsed(usage.totalTokens);
+        // The indicator tracks context-window occupancy, which is the prompt
+        // (input) size; totalTokens additionally folds in output and would
+        // overstate how full the window is.
+        const occupancy = usage.inputTokens ?? usage.totalTokens;
+        if (typeof occupancy === "number") {
+          setContextTokensUsed(occupancy);
+        }
+      }
+
+      // Seed the indicator at turn start with the backend's estimate of the
+      // outgoing prompt, on the same yardstick as auto-compaction. Per-step
+      // data-token-usage events then refine it with the provider's real count.
+      if (dataPart.type === "data-context-window-estimate") {
+        const data = dataPart.data as ContextWindowEstimate;
+        if (typeof data.estimatedTokens === "number") {
+          setContextTokensUsed(data.estimatedTokens);
         }
       }
 
@@ -630,10 +657,7 @@ function ChatSessionHook({
           originalTokenEstimate?: number;
           compactedTokenEstimate?: number;
         };
-        recordContextCompaction({
-          ...data,
-          updateContextTokens: data.trigger !== "auto",
-        });
+        recordContextCompaction(data);
         queryClient.invalidateQueries({
           queryKey: ["conversation", conversationId],
         });

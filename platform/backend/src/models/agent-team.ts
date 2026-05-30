@@ -1,5 +1,5 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import type { AgentAccessContext } from "@/types";
 import { findAgentAccessContextById } from "./agent-access-context";
@@ -212,7 +212,7 @@ class AgentTeamModel {
       { agentId, teamCount: teamIds.length },
       "AgentTeamModel.syncAgentTeams: syncing teams",
     );
-    await db.transaction(async (tx) => {
+    await withDbTransaction(async (tx) => {
       // Delete all existing team assignments
       await tx
         .delete(schema.agentTeamsTable)

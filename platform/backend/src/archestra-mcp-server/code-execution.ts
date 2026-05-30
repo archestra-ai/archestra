@@ -75,7 +75,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_RUN_PYTHON_SHORT_NAME,
     title: "Run Python",
     description:
-      "Execute a short Python 3 script in a throwaway sandboxed container and return its stdout, stderr, and exit code. Script files are isolated per call; numpy, pandas, and httpx are pre-warmed, and additional packages can be requested with requirements. Network access is available; wall-clock time is limited.",
+      "Execute a short Python 3 script in a throwaway sandboxed container and return its stdout, stderr, and exit code. Every call starts from a clean, ephemeral container — there is NO persistent filesystem, NO state from earlier calls, and NO inherited packages beyond the pre-warmed base (numpy, pandas, httpx). Any other dependency (Pillow, requests, scikit-learn, etc.) MUST be declared via `requirements`, or the import will fail. Network access is available; wall-clock time is limited. Use only when the text output of the script is needed.",
     schema: RunPythonArgsSchema,
     outputSchema: RunPythonOutputSchema,
     async handler({ args, context }) {

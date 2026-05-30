@@ -540,5 +540,42 @@ describe("context compaction helpers", () => {
     test("returns null for non-data URLs", () => {
       expect(__test.decodeDataUrl("https://example.com/file.txt")).toBeNull();
     });
+
+    test("returns null for malformed percent-encoding instead of throwing", () => {
+      // a lone '%' makes decodeURIComponent throw URIError; the token-estimate
+      // hot path must degrade rather than abort the chat turn.
+      expect(__test.decodeDataUrl("data:text/plain,%")).toBeNull();
+    });
+  });
+
+  describe("estimateBinaryFileTokens", () => {
+    test("caps image estimates at the per-image ceiling", () => {
+      const fourMb = 4 * 1024 * 1024;
+      expect(
+        __test.estimateBinaryFileTokens({
+          mediaType: "image/png",
+          byteLength: fourMb,
+        }),
+      ).toBe(1_600);
+    });
+
+    test("does not cap non-image binaries", () => {
+      const fourMb = 4 * 1024 * 1024;
+      expect(
+        __test.estimateBinaryFileTokens({
+          mediaType: "application/octet-stream",
+          byteLength: fourMb,
+        }),
+      ).toBeGreaterThan(1_600);
+    });
+
+    test("a small image estimates below the ceiling", () => {
+      expect(
+        __test.estimateBinaryFileTokens({
+          mediaType: "image/jpeg",
+          byteLength: 2_000,
+        }),
+      ).toBe(500);
+    });
   });
 });

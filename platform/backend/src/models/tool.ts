@@ -298,6 +298,57 @@ class ToolModel {
     return tool;
   }
 
+  // Org-scoped audit snapshot via tool → agent_tools → agents.organizationId.
+  // toolsTable has no organizationId column; tenancy is resolved through any
+  // agent in the caller's organization that has been assigned the tool.  Closes
+  // the snapshot-before-authz leak even though DELETE /api/tools/:id is not
+  // org-predicate-scoped at the route layer yet.
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [tool] = await db
+      .select({
+        id: schema.toolsTable.id,
+        name: schema.toolsTable.name,
+        description: schema.toolsTable.description,
+        catalogId: schema.toolsTable.catalogId,
+        agentId: schema.toolsTable.agentId,
+        delegateToAgentId: schema.toolsTable.delegateToAgentId,
+        createdAt: schema.toolsTable.createdAt,
+        updatedAt: schema.toolsTable.updatedAt,
+      })
+      .from(schema.toolsTable)
+      .innerJoin(
+        schema.agentToolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.toolsTable.id, id),
+          eq(schema.agentsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!tool) return null;
+
+    return {
+      id: tool.id,
+      name: tool.name,
+      description: tool.description ?? null,
+      catalogId: tool.catalogId ?? null,
+      agentId: tool.agentId ?? null,
+      delegateToAgentId: tool.delegateToAgentId ?? null,
+      createdAt: tool.createdAt.toISOString(),
+      updatedAt: tool.updatedAt.toISOString(),
+    };
+  }
+
   static async findAll(
     userId?: string,
     isAgentAdmin?: boolean,

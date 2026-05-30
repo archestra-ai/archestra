@@ -38,7 +38,6 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { ContextIndicator } from "@/components/chat/context-indicator";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
-import { KnowledgeBaseUploadIndicator } from "@/components/chat/knowledge-base-upload-indicator";
 import { LlmProviderApiKeySelector } from "@/components/chat/llm-provider-api-key-selector";
 import {
   ModelSelector,
@@ -58,7 +57,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useProfile } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useChatPlaceholder } from "@/lib/chat/chat-placeholder.hook";
 import { conversationStorageKeys } from "@/lib/chat/chat-utils";
@@ -217,9 +215,6 @@ const PromptInputContent = ({
   const supportedTypesDescription =
     getSupportedFileTypesDescription(inputModalities);
 
-  // Check if agent has a knowledge base
-  const { data: agentData } = useProfile(agentId);
-
   // Check if user can update agent settings (to show settings link in tooltip)
   const { data: canUpdateAgentSettings } = useHasPermissions({
     agentSettings: ["update"],
@@ -302,16 +297,6 @@ const PromptInputContent = ({
     },
     [controller.textInput],
   );
-
-  const knowledgeBaseIds =
-    ((agentData as Record<string, unknown> | null | undefined)
-      ?.knowledgeBaseIds as string[] | undefined) ?? [];
-  const connectorIds =
-    ((agentData as Record<string, unknown> | null | undefined)?.connectorIds as
-      | string[]
-      | undefined) ?? [];
-  const hasKnowledgeSources =
-    knowledgeBaseIds.length > 0 || connectorIds.length > 0;
 
   const isMobile = useIsMobile();
 
@@ -925,10 +910,6 @@ const PromptInputContent = ({
             )}
           </PromptInputTools>
           <div className="flex items-center gap-2">
-            <KnowledgeBaseUploadIndicator
-              attachmentCount={controller.attachments.files.length}
-              hasKnowledgeBase={hasKnowledgeSources}
-            />
             <PromptInputSpeechButton
               textareaRef={textareaRef}
               onTranscriptionChange={handleTranscriptionChange}

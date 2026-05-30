@@ -443,6 +443,29 @@ class OptimizationRuleModel {
       "OptimizationRuleModel.ensureDefaultOptimizationRules: completed",
     );
   }
+
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const row = await OptimizationRuleModel.findByIdForOrganization(
+      id,
+      organizationId,
+    );
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      entityType: row.entityType,
+      entityId: row.entityId,
+      conditions: row.conditions,
+      provider: row.provider,
+      targetModel: row.targetModel,
+      enabled: row.enabled,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  }
 }
 
 export default OptimizationRuleModel;

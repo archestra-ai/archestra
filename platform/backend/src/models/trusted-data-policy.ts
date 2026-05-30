@@ -1,5 +1,5 @@
 import { CONTEXT_EXTERNAL_AGENT_ID, CONTEXT_TEAM_IDS } from "@shared";
-import { desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { get } from "lodash-es";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import db, { schema } from "@/database";
@@ -643,6 +643,102 @@ class TrustedDataPolicyModel {
     }
 
     return results;
+  }
+
+  /**
+   * Default trusted-data policies (empty conditions) for tools assigned to
+   * agents in the organization — audit footprint for bulk-default routes.
+   */
+  static async findDefaultPoliciesSnapshotForOrganization(
+    organizationId: string,
+  ): Promise<Record<string, unknown>> {
+    const rows = await db
+      .selectDistinct({
+        toolId: schema.trustedDataPoliciesTable.toolId,
+        action: schema.trustedDataPoliciesTable.action,
+      })
+      .from(schema.trustedDataPoliciesTable)
+      .innerJoin(
+        schema.agentToolsTable,
+        eq(
+          schema.agentToolsTable.toolId,
+          schema.trustedDataPoliciesTable.toolId,
+        ),
+      )
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          sql`coalesce(jsonb_array_length(${schema.trustedDataPoliciesTable.conditions}), 0) = 0`,
+        ),
+      );
+
+    const entries = rows
+      .map((r) => `${r.toolId}:${r.action}`)
+      .sort((a, b) => a.localeCompare(b));
+    return { defaultTrustedDataPolicies: entries };
+  }
+
+  // Org-scoped audit snapshot via the tool → agent_tools → agents.organizationId
+  // FK chain.  trustedDataPoliciesTable has no organizationId column, so
+  // tenancy is resolved through any agent in the caller's organization that
+  // has been assigned the policy's tool.  Mirrors the join already used by
+  // `findDefaultPoliciesSnapshotForOrganization`.
+  //
+  // The route handler for PATCH/DELETE /api/trusted-data-policies/:id does not
+  // enforce this predicate today, but the audit fetcher must — the preHandler
+  // runs before route authz, so an unscoped fetch would persist another
+  // tenant's policy snapshot into the caller's audit_logs even when the route
+  // ultimately rejects the request.  Returns null when no agent in the
+  // organization is assigned the policy's tool.
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [scoped] = await db
+      .selectDistinct({
+        id: schema.trustedDataPoliciesTable.id,
+        toolId: schema.trustedDataPoliciesTable.toolId,
+        description: schema.trustedDataPoliciesTable.description,
+        conditions: schema.trustedDataPoliciesTable.conditions,
+        action: schema.trustedDataPoliciesTable.action,
+        createdAt: schema.trustedDataPoliciesTable.createdAt,
+        updatedAt: schema.trustedDataPoliciesTable.updatedAt,
+      })
+      .from(schema.trustedDataPoliciesTable)
+      .innerJoin(
+        schema.agentToolsTable,
+        eq(
+          schema.agentToolsTable.toolId,
+          schema.trustedDataPoliciesTable.toolId,
+        ),
+      )
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
+      )
+      .where(
+        and(
+          eq(schema.trustedDataPoliciesTable.id, id),
+          eq(schema.agentsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!scoped) return null;
+
+    return {
+      id: scoped.id,
+      toolId: scoped.toolId,
+      description: scoped.description ?? null,
+      conditions: scoped.conditions,
+      action: scoped.action,
+      createdAt: scoped.createdAt.toISOString(),
+      updatedAt: scoped.updatedAt.toISOString(),
+    };
   }
 }
 

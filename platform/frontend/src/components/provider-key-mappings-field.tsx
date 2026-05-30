@@ -137,7 +137,7 @@ export function ProviderKeyMappingsField({
               setSelectedApiKeyId(keyId);
               setApiKeySelectorOpen(false);
             }}
-            triggerVariant="button"
+            triggerVariant="select"
             triggerClassName="w-full h-10 text-sm"
             popoverClassName="w-[var(--radix-popover-trigger-width)]"
             emptyTriggerLabel="Select key"

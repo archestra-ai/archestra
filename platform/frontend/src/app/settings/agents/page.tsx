@@ -199,7 +199,7 @@ export default function AgentSettingsPage() {
                     setDefaultModel("");
                     setApiKeySelectorOpen(false);
                   }}
-                  triggerVariant="button"
+                  triggerVariant="select"
                   triggerClassName="w-80"
                   popoverClassName="w-80"
                   emptyTriggerLabel="Select API key..."

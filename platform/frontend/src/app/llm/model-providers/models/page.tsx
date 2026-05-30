@@ -376,7 +376,7 @@ export default function ModelsPage() {
                 setApiKeyFilter(value);
                 setApiKeyFilterOpen(false);
               }}
-              triggerVariant="button"
+              triggerVariant="select"
               triggerClassName="w-full sm:w-[280px] h-9 text-sm"
               popoverClassName="w-[var(--radix-popover-trigger-width)]"
               allOptionLabel="All provider API keys"

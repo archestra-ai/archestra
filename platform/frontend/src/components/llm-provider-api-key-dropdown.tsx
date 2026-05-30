@@ -8,7 +8,14 @@ import {
   type ResourceVisibilityScope,
   type SupportedProvider,
 } from "@shared";
-import { Building2, CheckIcon, Key, User, Users } from "lucide-react";
+import {
+  Building2,
+  CheckIcon,
+  ChevronDown,
+  Key,
+  User,
+  Users,
+} from "lucide-react";
 import Image from "next/image";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
@@ -43,7 +50,7 @@ interface LlmProviderApiKeyDropdownProps {
   onOpenChange: (open: boolean) => void;
   onSelectKey: (keyId: string) => void;
   currentProvider?: SupportedProvider;
-  triggerVariant?: "prompt-input" | "button";
+  triggerVariant?: "prompt-input" | "button" | "select";
   triggerClassName?: string;
   popoverClassName?: string;
   popoverPortal?: boolean;
@@ -102,28 +109,39 @@ export function LlmProviderApiKeyDropdown({
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
-        {triggerVariant === "button" ? (
+        {triggerVariant === "button" || triggerVariant === "select" ? (
           <Button
             variant="outline"
             size="sm"
             disabled={disabled}
             className={cn(
               "h-9 min-w-0 justify-start gap-1.5 px-3 text-sm",
+              triggerVariant === "select" && "justify-between",
               triggerClassName,
             )}
+            data-testid={triggerTestId}
           >
-            {selectedKey ? (
-              <>
-                <ProviderIcon provider={selectedKey.provider} />
-                <span className="truncate font-medium">{selectedKey.name}</span>
-              </>
-            ) : (
-              <>
-                <Key className="h-3 w-3 shrink-0" />
-                <span className="truncate text-muted-foreground">
-                  {fallbackTriggerLabel}
-                </span>
-              </>
+            <span className="flex min-w-0 items-center gap-1.5">
+              {selectedKey ? (
+                <>
+                  <ProviderIcon provider={selectedKey.provider} />
+                  <span className="truncate font-medium">
+                    {selectedKey.name}
+                  </span>
+                </>
+              ) : (
+                <>
+                  {triggerVariant === "button" && (
+                    <Key className="h-3 w-3 shrink-0" />
+                  )}
+                  <span className="truncate text-muted-foreground">
+                    {fallbackTriggerLabel}
+                  </span>
+                </>
+              )}
+            </span>
+            {triggerVariant === "select" && (
+              <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
             )}
           </Button>
         ) : (

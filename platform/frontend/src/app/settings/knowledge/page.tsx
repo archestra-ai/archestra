@@ -311,7 +311,7 @@ function ApiKeySelector({
         onChange(keyId);
         setApiKeySelectorOpen(false);
       }}
-      triggerVariant="button"
+      triggerVariant="select"
       triggerClassName={cn(
         "w-full",
         pulse && "animate-pulse ring-2 ring-primary/40",

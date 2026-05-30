@@ -536,6 +536,15 @@ const PromptInputContent = ({
     },
     [showFileUploadButton],
   );
+
+  const handleModelSelectorOpenChange = useCallback((open: boolean) => {
+    if (!open) {
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 100);
+    }
+  }, []);
+
   const submitStatus = status === "error" ? "ready" : status;
 
   return (
@@ -866,13 +875,7 @@ const PromptInputContent = ({
                     <ModelSelector
                       selectedModel={selectedModel}
                       onModelChange={onModelChange}
-                      onOpenChange={(open) => {
-                        if (!open) {
-                          setTimeout(() => {
-                            textareaRef.current?.focus();
-                          }, 100);
-                        }
-                      }}
+                      onOpenChange={handleModelSelectorOpenChange}
                       apiKeyId={
                         conversationId
                           ? currentConversationChatApiKeyId

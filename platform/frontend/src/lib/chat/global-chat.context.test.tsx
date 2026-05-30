@@ -11,6 +11,7 @@ type ChatSessionSnapshot = ReturnType<
 const mocks = vi.hoisted(() => ({
   addToolApprovalResponse: vi.fn(),
   addToolResult: vi.fn(),
+  getQueryData: vi.fn(),
   invalidateQueries: vi.fn(),
   mutate: vi.fn(),
   regenerate: vi.fn(),
@@ -39,6 +40,7 @@ vi.mock("sonner", () => ({
 
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({
+    getQueryData: mocks.getQueryData,
     invalidateQueries: mocks.invalidateQueries,
   }),
 }));
@@ -168,8 +170,9 @@ describe("ChatProvider retries", () => {
       });
     });
 
+    // the indicator tracks prompt (input) occupancy, not input+output total
     await waitFor(() =>
-      expect(latestSessionRef.current?.contextTokensUsed).toBe(120),
+      expect(latestSessionRef.current?.contextTokensUsed).toBe(100),
     );
 
     act(() => {
@@ -222,8 +225,9 @@ describe("ChatProvider retries", () => {
       });
     });
 
+    // the indicator tracks prompt (input) occupancy, not input+output total
     await waitFor(() =>
-      expect(latestSessionRef.current?.contextTokensUsed).toBe(120),
+      expect(latestSessionRef.current?.contextTokensUsed).toBe(100),
     );
 
     act(() => {
@@ -249,6 +253,50 @@ describe("ChatProvider retries", () => {
       }),
     );
     expect(latestSessionRef.current?.contextTokensUsed).toBe(794_797);
+  });
+
+  it("seeds context tokens from the turn-start window estimate, then refines from per-step usage", async () => {
+    const latestSessionRef: { current: ChatSessionSnapshot } = {
+      current: undefined,
+    };
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+        <CaptureChatSession
+          onSession={(session) => {
+            latestSessionRef.current = session;
+          }}
+        />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+
+    // turn-start estimate seeds the indicator before the model responds
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-context-window-estimate",
+        data: { estimatedTokens: 542_000 },
+      });
+    });
+
+    await waitFor(() =>
+      expect(latestSessionRef.current?.contextTokensUsed).toBe(542_000),
+    );
+
+    // a per-step usage event then refines the seed with the provider's real
+    // prompt size (input tokens), e.g. right after an auto-compaction drop
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-token-usage",
+        data: { inputTokens: 7_199, outputTokens: 86, totalTokens: 7_285 },
+      });
+    });
+
+    await waitFor(() =>
+      expect(latestSessionRef.current?.contextTokensUsed).toBe(7_199),
+    );
   });
 
   it("configures active-run reconnect URL and resumes when the last persisted message is from the user", async () => {
@@ -361,7 +409,10 @@ describe("ChatProvider auto title generation", () => {
   ];
 
   it("titles an untitled chat after a tool-only agent-swap exchange", async () => {
+    let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
+
     mocks.useChat.mockImplementation((options) => {
+      chatOptions = options;
       return {
         addToolApprovalResponse: mocks.addToolApprovalResponse,
         addToolResult: mocks.addToolResult,
@@ -372,8 +423,12 @@ describe("ChatProvider auto title generation", () => {
         setMessages: mocks.setMessages,
         status: "ready",
         stop: mocks.stop,
-        _options: options,
       };
+    });
+
+    // Simulate the "instant title" set on conversation creation (first user message text)
+    mocks.getQueryData.mockReturnValue({
+      title: "Show me the Archestra PM board",
     });
 
     render(
@@ -382,24 +437,42 @@ describe("ChatProvider auto title generation", () => {
       </ChatProvider>,
     );
 
+    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+
+    // Trigger onFinish to simulate the AI stream completing
+    act(() => {
+      chatOptions?.onFinish?.({
+        message: swapMessages[swapMessages.length - 1],
+        isAbort: false,
+      });
+    });
+
     await waitFor(() =>
-      expect(mocks.mutate).toHaveBeenCalledWith({ id: "conversation-1" }),
+      expect(mocks.mutate).toHaveBeenCalledWith(
+        { id: "conversation-1", regenerate: true },
+        expect.any(Object),
+      ),
     );
   });
 
-  it("does not regenerate a title the conversation already has", async () => {
-    conversationMock.data = { title: "Existing title" };
-    mocks.useChat.mockImplementation(() => ({
-      addToolApprovalResponse: mocks.addToolApprovalResponse,
-      addToolResult: mocks.addToolResult,
-      error: undefined,
-      messages: swapMessages,
-      regenerate: mocks.regenerate,
-      sendMessage: mocks.sendMessage,
-      setMessages: mocks.setMessages,
-      status: "ready",
-      stop: mocks.stop,
-    }));
+  it("titles an existing untitled chat after the first settled exchange", async () => {
+    let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
+
+    mocks.useChat.mockImplementation((options) => {
+      chatOptions = options;
+      return {
+        addToolApprovalResponse: mocks.addToolApprovalResponse,
+        addToolResult: mocks.addToolResult,
+        error: undefined,
+        messages: swapMessages,
+        regenerate: mocks.regenerate,
+        sendMessage: mocks.sendMessage,
+        setMessages: mocks.setMessages,
+        status: "ready",
+        stop: mocks.stop,
+      };
+    });
+    mocks.getQueryData.mockReturnValue({ title: null });
 
     render(
       <ChatProvider>
@@ -408,9 +481,155 @@ describe("ChatProvider auto title generation", () => {
     );
 
     await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+
+    act(() => {
+      chatOptions?.onFinish?.({
+        message: swapMessages[swapMessages.length - 1],
+        isAbort: false,
+      });
+    });
+
+    await waitFor(() =>
+      expect(mocks.mutate).toHaveBeenCalledWith(
+        { id: "conversation-1", regenerate: false },
+        expect.any(Object),
+      ),
+    );
+  });
+
+  it("does not regenerate a title the conversation already has", async () => {
+    let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
+
+    mocks.useChat.mockImplementation((options) => {
+      chatOptions = options;
+      return {
+        addToolApprovalResponse: mocks.addToolApprovalResponse,
+        addToolResult: mocks.addToolResult,
+        error: undefined,
+        messages: swapMessages,
+        regenerate: mocks.regenerate,
+        sendMessage: mocks.sendMessage,
+        setMessages: mocks.setMessages,
+        status: "ready",
+        stop: mocks.stop,
+      };
+    });
+    mocks.getQueryData.mockReturnValue({ title: "Existing title" });
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+    act(() => {
+      chatOptions?.onFinish?.({
+        message: swapMessages[swapMessages.length - 1],
+        isAbort: false,
+      });
+    });
+
     expect(mocks.mutate).not.toHaveBeenCalled();
   });
+
+  it("attempts automatic title generation only once", async () => {
+    let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
+
+    mocks.useChat.mockImplementation((options) => {
+      chatOptions = options;
+      return {
+        addToolApprovalResponse: mocks.addToolApprovalResponse,
+        addToolResult: mocks.addToolResult,
+        error: undefined,
+        messages: swapMessages,
+        regenerate: mocks.regenerate,
+        sendMessage: mocks.sendMessage,
+        setMessages: mocks.setMessages,
+        status: "ready",
+        stop: mocks.stop,
+      };
+    });
+    mocks.getQueryData.mockReturnValue({ title: null });
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+
+    act(() => {
+      chatOptions?.onFinish?.({
+        message: swapMessages[swapMessages.length - 1],
+        isAbort: false,
+      });
+      chatOptions?.onFinish?.({
+        message: swapMessages[swapMessages.length - 1],
+        isAbort: false,
+      });
+    });
+
+    await waitFor(() => expect(mocks.mutate).toHaveBeenCalledTimes(1));
+  });
 });
+
+describe("ChatProvider title animation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("marks a title as animating and auto-clears it after the animation window", async () => {
+    let markTitleAnimating: ((id: string) => void) | undefined;
+    let animatingTitleIds: Set<string> = new Set();
+
+    render(
+      <ChatProvider>
+        <CaptureTitleAnimation
+          onValue={(value) => {
+            markTitleAnimating = value.markTitleAnimating;
+            animatingTitleIds = value.animatingTitleIds;
+          }}
+        />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(markTitleAnimating).toBeDefined());
+
+    vi.useFakeTimers();
+    act(() => {
+      markTitleAnimating?.("conversation-1");
+    });
+    expect(animatingTitleIds.has("conversation-1")).toBe(true);
+
+    act(() => {
+      vi.advanceTimersByTime(3000);
+    });
+    expect(animatingTitleIds.has("conversation-1")).toBe(false);
+  });
+});
+
+function CaptureTitleAnimation({
+  onValue,
+}: {
+  onValue: (value: {
+    markTitleAnimating: (id: string) => void;
+    animatingTitleIds: Set<string>;
+  }) => void;
+}) {
+  const { markTitleAnimating, animatingTitleIds } = useGlobalChat();
+
+  useEffect(() => {
+    onValue({ markTitleAnimating, animatingTitleIds });
+  }, [onValue, markTitleAnimating, animatingTitleIds]);
+
+  return null;
+}
 
 function RegisterChatSession({
   initialMessages,

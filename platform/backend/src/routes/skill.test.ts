@@ -148,6 +148,22 @@ describe("skill routes", () => {
       expect(response.statusCode).toBe(409);
     });
 
+    test("rejects duplicate resource file paths with a 400", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: {
+          content: MANIFEST,
+          files: [
+            { path: "references/FORMS.md", content: "# Forms" },
+            { path: "references/FORMS.md", content: "# Dup" },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
     test("rejects a manifest larger than the size cap", async () => {
       const response = await app.inject({
         method: "POST",

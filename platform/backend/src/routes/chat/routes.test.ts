@@ -11,24 +11,17 @@ vi.mock("ai", async (importOriginal) => {
   };
 });
 
-// Mock createDirectLLMModel to avoid actual API calls
+// Mock createLLMModel to avoid actual API calls
 vi.mock("@/clients/llm-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/clients/llm-client")>();
   return {
     ...actual,
-    createDirectLLMModel: vi.fn(() => "mocked-model"),
+    createLLMModel: vi.fn(() => "mocked-model"),
   };
 });
 
-// Mock LlmProviderApiKeyModelLinkModel for fast model DB lookup
-const mockGetFastestModel = vi.hoisted(() => vi.fn());
-vi.mock("@/models/llm-provider-api-key-model", () => ({
-  default: { getFastestModel: mockGetFastestModel },
-}));
-
-import { FAST_MODELS } from "@shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
-import { createDirectLLMModel } from "@/clients/llm-client";
+import { createLLMModel } from "@/clients/llm-client";
 import ConversationModel from "@/models/conversation";
 import MessageModel from "@/models/message";
 import { test } from "@/test";
@@ -947,8 +940,7 @@ describe("buildTitlePrompt", () => {
 
     expect(prompt).toContain("User: How do I create a React component?");
     expect(prompt).not.toContain("Assistant:");
-    expect(prompt).toContain("Generate a short, concise title");
-    expect(prompt).toContain("3-6 words");
+    expect(prompt).toContain("Chat conversation messages:");
   });
 
   it("builds prompt with both user and assistant messages", () => {
@@ -963,12 +955,12 @@ describe("buildTitlePrompt", () => {
     );
   });
 
-  it("includes instructions for title format", () => {
+  it("leaves title formatting instructions to the system prompt", () => {
     const prompt = buildTitlePrompt("Hello", "Hi there");
 
-    expect(prompt).toContain("Respond with ONLY the title");
-    expect(prompt).toContain("no quotes");
-    expect(prompt).toContain("no explanation");
+    expect(prompt).toContain("User: Hello");
+    expect(prompt).toContain("Assistant: Hi there");
+    expect(prompt).not.toContain("Respond with ONLY the title");
   });
 });
 
@@ -1001,7 +993,12 @@ describe("generateConversationTitle", () => {
     const result = await generateConversationTitle({
       provider: "anthropic",
       apiKey: "test-key",
+      modelName: "claude-test",
       baseUrl: null,
+      agentId: "title-agent-id",
+      userId: "user-id",
+      conversationId: "conversation-id",
+      systemPrompt: "Generate a title.",
       firstUserMessage: "Help me debug this React error",
       firstAssistantMessage: "I can help with that.",
     });
@@ -1021,7 +1018,12 @@ describe("generateConversationTitle", () => {
     const result = await generateConversationTitle({
       provider: "anthropic",
       apiKey: "test-key",
+      modelName: "claude-test",
       baseUrl: null,
+      agentId: "title-agent-id",
+      userId: "user-id",
+      conversationId: "conversation-id",
+      systemPrompt: "Generate a title.",
       firstUserMessage: "Hello",
       firstAssistantMessage: "Hi there!",
     });
@@ -1037,7 +1039,12 @@ describe("generateConversationTitle", () => {
     const result = await generateConversationTitle({
       provider: "openai",
       apiKey: "test-key",
+      modelName: "gpt-test",
       baseUrl: null,
+      agentId: "title-agent-id",
+      userId: "user-id",
+      conversationId: "conversation-id",
+      systemPrompt: "Generate a title.",
       firstUserMessage: "Test",
       firstAssistantMessage: "",
     });
@@ -1045,79 +1052,37 @@ describe("generateConversationTitle", () => {
     expect(result).toBe("Title With Whitespace");
   });
 
-  it("uses fastest model from DB when chatApiKeyId is provided", async () => {
-    mockGetFastestModel.mockResolvedValueOnce({ modelId: "db-fast-model" });
-    mockGenerateText.mockResolvedValueOnce({ text: "DB Model Title" });
+  it("uses the resolved built-in agent model and system prompt", async () => {
+    mockGenerateText.mockResolvedValueOnce({ text: "Configured Model Title" });
 
     const result = await generateConversationTitle({
       provider: "anthropic",
       apiKey: "test-key",
-      chatApiKeyId: "api-key-123",
+      modelName: "configured-title-model",
       baseUrl: null,
+      agentId: "title-agent-id",
+      userId: "user-id",
+      conversationId: "conversation-id",
+      systemPrompt: "Return only a title.",
       firstUserMessage: "Hello",
       firstAssistantMessage: "Hi!",
     });
 
-    expect(result).toBe("DB Model Title");
-    expect(mockGetFastestModel).toHaveBeenCalledWith("api-key-123");
-    expect(createDirectLLMModel).toHaveBeenCalledWith(
-      expect.objectContaining({ modelName: "db-fast-model" }),
+    expect(result).toBe("Configured Model Title");
+    expect(createLLMModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: "title-agent-id",
+        modelName: "configured-title-model",
+        userId: "user-id",
+        sessionId: "conversation-id",
+        source: "chat:title_generation",
+      }),
     );
-  });
-
-  it("falls back to FAST_MODELS when no chatApiKeyId", async () => {
-    mockGenerateText.mockResolvedValueOnce({ text: "Fallback Title" });
-
-    await generateConversationTitle({
-      provider: "anthropic",
-      apiKey: "test-key",
-      baseUrl: null,
-      firstUserMessage: "Hello",
-      firstAssistantMessage: "Hi!",
+    expect(mockGenerateText).toHaveBeenCalledWith({
+      model: "mocked-model",
+      system: "Return only a title.",
+      prompt: "Chat conversation messages:\n\nUser: Hello\n\nAssistant: Hi!",
     });
-
-    expect(mockGetFastestModel).not.toHaveBeenCalled();
-    expect(createDirectLLMModel).toHaveBeenCalledWith(
-      expect.objectContaining({ modelName: FAST_MODELS.anthropic }),
-    );
-  });
-
-  it("falls back to FAST_MODELS when getFastestModel returns null", async () => {
-    mockGetFastestModel.mockResolvedValueOnce(null);
-    mockGenerateText.mockResolvedValueOnce({ text: "Null Fallback Title" });
-
-    await generateConversationTitle({
-      provider: "openai",
-      apiKey: "test-key",
-      chatApiKeyId: "api-key-456",
-      baseUrl: null,
-      firstUserMessage: "Hello",
-      firstAssistantMessage: "Hi!",
-    });
-
-    expect(mockGetFastestModel).toHaveBeenCalledWith("api-key-456");
-    expect(createDirectLLMModel).toHaveBeenCalledWith(
-      expect.objectContaining({ modelName: FAST_MODELS.openai }),
-    );
-  });
-
-  it("falls back to FAST_MODELS when getFastestModel throws", async () => {
-    mockGetFastestModel.mockRejectedValueOnce(new Error("DB Error"));
-    mockGenerateText.mockResolvedValueOnce({ text: "Error Fallback Title" });
-
-    await generateConversationTitle({
-      provider: "gemini",
-      apiKey: "test-key",
-      chatApiKeyId: "api-key-789",
-      baseUrl: null,
-      firstUserMessage: "Hello",
-      firstAssistantMessage: "Hi!",
-    });
-
-    expect(mockGetFastestModel).toHaveBeenCalledWith("api-key-789");
-    expect(createDirectLLMModel).toHaveBeenCalledWith(
-      expect.objectContaining({ modelName: FAST_MODELS.gemini }),
-    );
   });
 });
 

@@ -8,7 +8,17 @@ import type {
   RevisionPayloadFile,
   SkillShareLinkRevision,
 } from "@/types/skill-share-link-revision";
+import { isUniqueConstraintError } from "@/utils/db";
 import { computeLayout, type MaterializeRequest } from "./layout";
+
+/**
+ * Sequence appends are serialized in-process by the per-link lock, but multiple
+ * replicas share the same revision table. When two pods materialize the same
+ * link concurrently they can derive the same `sequence`; the unique index
+ * rejects the loser. Re-read the latest revision and retry rather than failing
+ * the clone.
+ */
+const REVISION_APPEND_MAX_ATTEMPTS = 5;
 
 /**
  * Materializes a share link's git repository on disk, backed by an append-only
@@ -156,7 +166,7 @@ export class MarketplaceMaterializer {
     const contentHash = computeContentHash(files);
     const repoPath = this.repoPathFor(req.linkId);
 
-    const latest = await this.revisionStore.getLatestByLink(req.linkId);
+    let latest = await this.revisionStore.getLatestByLink(req.linkId);
 
     if (latest && latest.contentHash === contentHash) {
       await this.syncDiskToRevisions(req.linkId);
@@ -168,33 +178,61 @@ export class MarketplaceMaterializer {
       };
     }
 
-    await this.syncDiskToRevisions(req.linkId);
+    for (let attempt = 0; ; attempt++) {
+      await this.syncDiskToRevisions(req.linkId);
 
-    const sequence = (latest?.sequence ?? 0) + 1;
-    const createdAt = roundToSeconds(new Date());
-    const message = formatMessage(sequence, contentHash);
+      const sequence = (latest?.sequence ?? 0) + 1;
+      const createdAt = roundToSeconds(new Date());
+      const message = formatMessage(sequence, contentHash);
 
-    const commitSha = await this.commitOnDisk({
-      repoPath,
-      files,
-      parentSha: latest?.commitSha ?? null,
-      date: createdAt,
-      message,
-    });
-
-    await this.revisionStore.append(
-      {
-        linkId: req.linkId,
-        contentHash,
-        commitSha,
+      const commitSha = await this.commitOnDisk({
+        repoPath,
+        files,
         parentSha: latest?.commitSha ?? null,
-        createdAt,
-        payload: { files },
-      },
-      sequence,
-    );
+        date: createdAt,
+        message,
+      });
 
-    return { repoPath, commitHash: commitSha, contentHash, reused: false };
+      try {
+        await this.revisionStore.append(
+          {
+            linkId: req.linkId,
+            contentHash,
+            commitSha,
+            parentSha: latest?.commitSha ?? null,
+            createdAt,
+            payload: { files },
+          },
+          sequence,
+        );
+        return { repoPath, commitHash: commitSha, contentHash, reused: false };
+      } catch (error) {
+        const lastAttempt = attempt >= REVISION_APPEND_MAX_ATTEMPTS - 1;
+        if (
+          lastAttempt ||
+          !isUniqueConstraintError(
+            error,
+            "skill_share_link_revision_link_seq_idx",
+          )
+        ) {
+          throw error;
+        }
+
+        // Another replica appended this sequence first. Re-read the latest
+        // revision; if it already produced our content, reuse it, otherwise
+        // retry on top of the new head.
+        latest = await this.revisionStore.getLatestByLink(req.linkId);
+        if (latest && latest.contentHash === contentHash) {
+          await this.syncDiskToRevisions(req.linkId);
+          return {
+            repoPath,
+            commitHash: latest.commitSha,
+            contentHash,
+            reused: true,
+          };
+        }
+      }
+    }
   }
 
   private async syncDiskToRevisions(linkId: string): Promise<void> {

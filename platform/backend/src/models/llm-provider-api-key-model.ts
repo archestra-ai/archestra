@@ -94,7 +94,7 @@ class LlmProviderApiKeyModelLinkModel {
   /**
    * Sync models for an API key.
    * This replaces all existing model links with the new set.
-   * Also detects and marks the "fastest" and "best" models for the provider.
+   * Also detects and marks the "best" model for the provider.
    *
    * @param apiKeyId - The database ID of the API key
    * @param models - Array of models with their database ID and modelId string
@@ -117,7 +117,7 @@ class LlmProviderApiKeyModelLinkModel {
 
       // Insert new links
       if (uniqueModels.length > 0) {
-        // Detect fastest and best models using pattern matching
+        // Detect the best model using pattern matching
         // Patterns are checked in order (first pattern = highest priority)
         const patterns = MODEL_MARKER_PATTERNS[provider];
         const sorted = [...uniqueModels].sort((a, b) =>
@@ -125,20 +125,12 @@ class LlmProviderApiKeyModelLinkModel {
         );
 
         // Find first matching model respecting pattern priority order
-        const fastestModel = findFirstMatchByPatternPriority(
-          sorted,
-          patterns.fastest,
-        );
-        const bestModel = findFirstMatchByPatternPriority(
-          sorted,
-          patterns.best,
-        );
+        const bestModel = findFirstMatchByPatternPriority(sorted, patterns);
 
         // Build values with markers
         const values = uniqueModels.map((model) => ({
           apiKeyId,
           modelId: model.id,
-          isFastest: model.id === fastestModel?.id,
           isBest: model.id === bestModel?.id,
         }));
 
@@ -155,7 +147,6 @@ class LlmProviderApiKeyModelLinkModel {
                 schema.llmProviderApiKeyModelsTable.modelId,
               ],
               set: {
-                isFastest: sql`excluded.is_fastest`,
                 isBest: sql`excluded.is_best`,
               },
             });
@@ -167,12 +158,11 @@ class LlmProviderApiKeyModelLinkModel {
   /**
    * Get all models with their linked API keys.
    * Only returns models that have at least one API key linked.
-   * Includes isFastest and isBest markers (true if ANY linked API key has the marker).
+   * Includes isBest marker (true if ANY linked API key has the marker).
    */
   static async getAllModelsWithApiKeys(): Promise<
     Array<{
       model: Model;
-      isFastest: boolean;
       isBest: boolean;
       apiKeys: Array<{
         id: string;
@@ -189,7 +179,6 @@ class LlmProviderApiKeyModelLinkModel {
     const relationships = await db
       .select({
         model: schema.modelsTable,
-        isFastest: schema.llmProviderApiKeyModelsTable.isFastest,
         isBest: schema.llmProviderApiKeyModelsTable.isBest,
         apiKeyId: schema.llmProviderApiKeysTable.id,
         apiKeyName: schema.llmProviderApiKeysTable.name,
@@ -215,12 +204,11 @@ class LlmProviderApiKeyModelLinkModel {
       );
 
     // Group by model, collecting API keys for each
-    // isFastest/isBest are true if ANY linked API key has the marker
+    // isBest is true if ANY linked API key has the marker
     const modelMap = new Map<
       string,
       {
         model: Model;
-        isFastest: boolean;
         isBest: boolean;
         apiKeys: Array<{
           id: string;
@@ -239,7 +227,6 @@ class LlmProviderApiKeyModelLinkModel {
       if (!entry) {
         entry = {
           model: rel.model,
-          isFastest: false,
           isBest: false,
           apiKeys: [],
         };
@@ -247,7 +234,6 @@ class LlmProviderApiKeyModelLinkModel {
       }
 
       // Set markers if any relationship has them
-      if (rel.isFastest) entry.isFastest = true;
       if (rel.isBest) entry.isBest = true;
 
       entry.apiKeys.push({
@@ -385,28 +371,24 @@ class LlmProviderApiKeyModelLinkModel {
 
   /**
    * Get unique models for a list of API key IDs.
-   * Returns models with their data and isBest/isFastest markers,
+   * Returns models with their data and isBest marker,
    * ordered by provider and modelId.
-   * A model is marked as best/fastest if ANY of the provided API keys marks it so.
+   * A model is marked as best if ANY of the provided API keys marks it so.
    */
   static async getModelsForApiKeyIds(
     apiKeyIds: string[],
-  ): Promise<Array<{ model: Model; isBest: boolean; isFastest: boolean }>> {
+  ): Promise<Array<{ model: Model; isBest: boolean }>> {
     if (apiKeyIds.length === 0) {
       return [];
     }
 
-    // Get models with aggregated markers (true if ANY linked key has the marker)
+    // Get models with aggregated best marker (true if ANY linked key has the marker)
     const results = await db
       .select({
         model: schema.modelsTable,
         isBest:
           sql<boolean>`bool_or(${schema.llmProviderApiKeyModelsTable.isBest})`.as(
             "is_best_agg",
-          ),
-        isFastest:
-          sql<boolean>`bool_or(${schema.llmProviderApiKeyModelsTable.isFastest})`.as(
-            "is_fastest_agg",
           ),
       })
       .from(schema.llmProviderApiKeyModelsTable)
@@ -424,7 +406,6 @@ class LlmProviderApiKeyModelLinkModel {
     return results.map((r) => ({
       model: r.model,
       isBest: r.isBest,
-      isFastest: r.isFastest,
     }));
   }
   /**
@@ -555,33 +536,6 @@ class LlmProviderApiKeyModelLinkModel {
     }
 
     return modelsByApiKeyId;
-  }
-
-  /**
-   * Get the "fastest" model for a specific API key.
-   * Returns the model marked with is_fastest=true, or falls back to the first model.
-   */
-  static async getFastestModel(apiKeyId: string): Promise<Model | null> {
-    const [result] = await db
-      .select({ model: schema.modelsTable })
-      .from(schema.llmProviderApiKeyModelsTable)
-      .innerJoin(
-        schema.modelsTable,
-        eq(schema.llmProviderApiKeyModelsTable.modelId, schema.modelsTable.id),
-      )
-      .where(
-        and(
-          eq(schema.llmProviderApiKeyModelsTable.apiKeyId, apiKeyId),
-          eq(schema.llmProviderApiKeyModelsTable.isFastest, true),
-        ),
-      )
-      .limit(1);
-
-    if (result?.model) {
-      return result.model;
-    }
-
-    return LlmProviderApiKeyModelLinkModel.getFirstModelForApiKey(apiKeyId);
   }
 
   /**

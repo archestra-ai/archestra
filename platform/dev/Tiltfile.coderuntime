@@ -52,3 +52,23 @@ local_resource(
   labels=['code-runtime'],
   resource_deps=['dagger-engine'],
 )
+
+# Rebuild the native skill-sandbox addon (napi) when its Rust sources change.
+# Tilt has no other knowledge of the cargo build, and the compiled .node is
+# gitignored — without this the backend silently loads a stale (or missing)
+# binary. The backend depends on this resource (Tiltfile.dev), and because Node
+# caches the loaded .node, a rebuild restarts the backend so the fresh binary
+# is picked up. Only runs under the code runtime, the addon's sole consumer.
+local_resource(
+  'sandbox-rs-build',
+  cmd='pnpm --filter @archestra/sandbox-rs build',
+  deps=[
+    '../archestra-rs/sandbox-rs/src',
+    '../archestra-rs/sandbox-core/src',
+    '../archestra-rs/sandbox-rs/Cargo.toml',
+    '../archestra-rs/sandbox-core/Cargo.toml',
+    '../archestra-rs/Cargo.lock',
+  ],
+  resource_deps=['pnpm-install'],
+  labels=['code-runtime'],
+)

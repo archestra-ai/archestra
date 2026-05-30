@@ -1,4 +1,4 @@
-import { Fingerprint, Sparkles, Star, Zap } from "lucide-react";
+import { Fingerprint, Sparkles, Star } from "lucide-react";
 import { InlineTag } from "@/components/ui/inline-tag";
 
 export function FreeModelBadge() {
@@ -22,17 +22,6 @@ export function UnknownCapabilitiesBadge() {
   return (
     <InlineTag className="text-muted-foreground bg-muted">
       capabilities unknown
-    </InlineTag>
-  );
-}
-
-export function FastestModelBadge() {
-  return (
-    <InlineTag
-      icon={<Zap />}
-      className="text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-950"
-    >
-      fastest
     </InlineTag>
   );
 }

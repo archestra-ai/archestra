@@ -1,8 +1,4 @@
-import {
-  FAST_MODELS,
-  OPENROUTER_FREE_MODEL_ID,
-  type SupportedProvider,
-} from "@shared";
+import type { SupportedProvider } from "@shared";
 import { vi } from "vitest";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import {
@@ -16,10 +12,10 @@ import {
 import { beforeEach, describe, expect, test } from "@/test";
 import * as llmApiKeyResolution from "@/utils/llm-api-key-resolution";
 import {
+  resolveAgentLlmOrDefault,
   resolveBestAvailableLlm,
   resolveConfiguredAgentLlm,
   resolveConversationLlmSelectionForAgent,
-  resolveFastModelName,
 } from "./llm-resolution";
 
 vi.mock("@/clients/gemini-client", () => ({
@@ -618,69 +614,125 @@ describe("resolveConfiguredAgentLlm", () => {
   });
 });
 
-describe("resolveFastModelName", () => {
+describe("resolveAgentLlmOrDefault", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(llmApiKeyResolution, "resolveProviderApiKey").mockResolvedValue(
+      NO_KEY,
+    );
   });
 
-  test("returns hardcoded FAST_MODELS fallback when no chatApiKeyId", async () => {
-    const result = await resolveFastModelName("anthropic", undefined);
+  test("uses an explicitly configured agent model and key", async () => {
+    vi.spyOn(LlmProviderApiKeyModel, "findById").mockResolvedValue({
+      id: "key-123",
+      provider: "anthropic",
+      secretId: null,
+      baseUrl: null,
+      inferenceBaseUrl: null,
+    } as never);
+    vi.spyOn(ModelModel, "findById").mockResolvedValue(
+      mockModel({
+        id: "model-123",
+        provider: "anthropic",
+        modelId: "claude-configured",
+      }),
+    );
 
-    expect(result).toBe(FAST_MODELS.anthropic);
-  });
-
-  test("returns fastest model from DB when chatApiKeyId is provided", async () => {
-    vi.spyOn(
-      LlmProviderApiKeyModelLinkModel,
-      "getFastestModel",
-    ).mockResolvedValue({
-      ...MOCK_MODEL,
-      modelId: "claude-haiku-3-5",
+    const result = await resolveAgentLlmOrDefault({
+      agent: { llmApiKeyId: "key-123", modelId: "model-123" },
+      organizationId: "org-1",
+      userId: "user-1",
     });
 
-    const result = await resolveFastModelName("anthropic", "key-123");
-
-    expect(result).toBe("claude-haiku-3-5");
-    expect(
-      LlmProviderApiKeyModelLinkModel.getFastestModel,
-    ).toHaveBeenCalledWith("key-123");
+    expect(result).toEqual({
+      provider: "anthropic",
+      apiKey: undefined,
+      modelName: "claude-configured",
+      baseUrl: null,
+    });
   });
 
-  test("falls back to hardcoded model when DB has no fastest model", async () => {
+  test("falls back to organization default model and key", async () => {
+    vi.spyOn(OrganizationModel, "getById").mockResolvedValue({
+      id: "org-1",
+      defaultModelId: "model-org",
+      defaultLlmApiKeyId: "key-org",
+    } as never);
+    vi.spyOn(ModelModel, "findById").mockResolvedValue(
+      mockModel({
+        id: "model-org",
+        provider: "bedrock",
+        modelId: "anthropic.claude-sonnet-4-5",
+      }),
+    );
+    vi.spyOn(llmApiKeyResolution, "resolveProviderApiKey").mockResolvedValue({
+      apiKey: "org-key",
+      source: "organization",
+      chatApiKeyId: "key-org",
+      baseUrl: "https://bedrock.example.test",
+    });
+
+    const result = await resolveAgentLlmOrDefault({
+      agent: null,
+      organizationId: "org-1",
+      userId: "user-1",
+    });
+
+    expect(result).toEqual({
+      provider: "bedrock",
+      apiKey: "org-key",
+      modelName: "anthropic.claude-sonnet-4-5",
+      baseUrl: "https://bedrock.example.test",
+    });
+  });
+
+  test("falls back to best available model when no organization default is set", async () => {
+    vi.spyOn(OrganizationModel, "getById").mockResolvedValue({
+      id: "org-1",
+      defaultModelId: null,
+      defaultLlmApiKeyId: null,
+    } as never);
+    vi.spyOn(TeamModel, "getUserTeamIds").mockResolvedValue([]);
     vi.spyOn(
-      LlmProviderApiKeyModelLinkModel,
-      "getFastestModel",
-    ).mockResolvedValue(null);
-
-    const result = await resolveFastModelName("openai", "key-456");
-
-    expect(result).toBe(FAST_MODELS.openai);
-  });
-
-  test("falls back to hardcoded model when DB lookup throws", async () => {
-    vi.spyOn(
-      LlmProviderApiKeyModelLinkModel,
-      "getFastestModel",
-    ).mockRejectedValue(new Error("DB connection failed"));
-
-    const result = await resolveFastModelName("openai", "key-789");
-
-    expect(result).toBe(FAST_MODELS.openai);
-  });
-
-  test("always uses the free router for OpenRouter, bypassing the DB lookup", async () => {
-    const getFastestModel = vi.spyOn(
-      LlmProviderApiKeyModelLinkModel,
-      "getFastestModel",
+      LlmProviderApiKeyModel,
+      "getAvailableKeysForUser",
+    ).mockResolvedValue([{ id: "key-available" }] as never);
+    vi.spyOn(LlmProviderApiKeyModelLinkModel, "getBestModel").mockResolvedValue(
+      mockModel({
+        id: "model-best",
+        provider: "openai",
+        modelId: "gpt-best",
+      }),
+    );
+    vi.spyOn(ModelModel, "findById").mockResolvedValue(
+      mockModel({
+        id: "model-best",
+        provider: "openai",
+        modelId: "gpt-best",
+      }),
+    );
+    vi.spyOn(llmApiKeyResolution, "resolveProviderApiKey").mockImplementation(
+      async ({ provider }) =>
+        provider === "openai"
+          ? {
+              apiKey: "openai-key",
+              source: "personal",
+              chatApiKeyId: "key-available",
+              baseUrl: null,
+            }
+          : NO_KEY,
     );
 
-    expect(await resolveFastModelName("openrouter", undefined)).toBe(
-      OPENROUTER_FREE_MODEL_ID,
-    );
-    expect(await resolveFastModelName("openrouter", "key-123")).toBe(
-      OPENROUTER_FREE_MODEL_ID,
-    );
-    // openrouter/auto (the marked "fastest" model) is paid — never resolved here.
-    expect(getFastestModel).not.toHaveBeenCalled();
+    const result = await resolveAgentLlmOrDefault({
+      organizationId: "org-1",
+      userId: "user-1",
+    });
+
+    expect(result).toEqual({
+      provider: "openai",
+      apiKey: "openai-key",
+      modelName: "gpt-best",
+      baseUrl: null,
+    });
   });
 });

@@ -20,7 +20,6 @@ export type ModelPricing = Array<{
   pricePerMillionInput: string;
   pricePerMillionOutput: string;
   isFree?: boolean;
-  isFastest?: boolean;
   isBest?: boolean;
 }>;
 
@@ -132,7 +131,6 @@ export function LlmModelPicker(props: LlmModelPickerProps) {
     pricePerMillionInput: price.pricePerMillionInput,
     pricePerMillionOutput: price.pricePerMillionOutput,
     isFree: price.isFree,
-    isFastest: price.isFastest,
     isBest: price.isBest,
   }));
 

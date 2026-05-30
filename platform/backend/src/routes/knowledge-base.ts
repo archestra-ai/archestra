@@ -41,7 +41,7 @@ import {
   ConnectorTypeSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
-  EmbeddingErrorSchema,
+  EmbeddingErrorCodeSchema,
   EmbeddingStatusSchema,
   ErrorResponsesSchema,
   KnowledgeSourceVisibilitySchema,
@@ -1231,7 +1231,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     processingStatus: UploadedFileProcessingStatusSchema,
     processingError: z.string().nullable(),
     embeddingStatus: EmbeddingStatusSchema,
-    embeddingError: EmbeddingErrorSchema.nullable(),
+    embeddingError: EmbeddingErrorCodeSchema.nullable(),
   });
 
   const KnowledgeFileSchema = UploadedFileSchema.extend({

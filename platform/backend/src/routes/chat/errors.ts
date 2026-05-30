@@ -12,6 +12,7 @@ import {
   type ChatErrorResponse,
   GeminiErrorCodes,
   GeminiErrorReasons,
+  mapHttpStatusToChatError,
   OllamaErrorTypes,
   OpenAIErrorTypes,
   RetryableErrorCodes,
@@ -929,38 +930,14 @@ function mapGeminiErrorToCode(
 }
 
 /**
- * Generic status code to error code mapping (fallback)
+ * Generic status code to error code mapping (fallback).
+ * 529 is Anthropic-specific "overloaded" — normalised to ServerError.
  */
 function mapStatusCodeToErrorCode(
   statusCode: number | undefined,
 ): ChatErrorCode {
-  if (!statusCode) {
-    return ChatErrorCode.Unknown;
-  }
-
-  switch (statusCode) {
-    case 400:
-      return ChatErrorCode.InvalidRequest;
-    case 401:
-      return ChatErrorCode.Authentication;
-    case 403:
-      return ChatErrorCode.PermissionDenied;
-    case 404:
-      return ChatErrorCode.NotFound;
-    case 413:
-      return ChatErrorCode.ContextTooLong;
-    case 422:
-      return ChatErrorCode.InvalidRequest;
-    case 429:
-      return ChatErrorCode.RateLimit;
-    case 529: // Anthropic overloaded
-      return ChatErrorCode.ServerError;
-    default:
-      if (statusCode >= 500) {
-        return ChatErrorCode.ServerError;
-      }
-      return ChatErrorCode.Unknown;
-  }
+  const effective = statusCode === 529 ? 500 : statusCode;
+  return mapHttpStatusToChatError(effective);
 }
 
 // =============================================================================

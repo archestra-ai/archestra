@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  KbEmbeddingErrorMessages,
   KNOWLEDGE_FILE_ACCEPT_ATTRIBUTE,
   KNOWLEDGE_FILE_SUPPORTED_FORMATS_LABEL,
   type ResourceVisibilityScope,
@@ -576,22 +577,6 @@ function FileStatusBadge({ file }: { file: KnowledgeFile }) {
   const variant = variants[embeddingStatus] ?? "secondary";
   const label = labels[embeddingStatus] ?? embeddingStatus;
 
-  const errorLabels: Record<KnowledgeFile["embeddingError"], string> = {
-    api_bad_request: "Model can't process data. Check uploaded file",
-    api_conflict: "Conflict happened. Try again", // I don't know when we can reach this, but present in OpenAI error codes, gotta support
-    api_generic_error: "API error",
-    api_not_found: "Model not found",
-    api_permission_denied: "Permission denied. Check API key",
-    api_rate_limit: "Too many requests. Try again",
-    api_unauthorized: "Unauthorized. Check API key",
-    api_unprocessable_entity: "Model can't process data. Check uploaded file",
-    dimensions_mismatch: "Model embedding dimensions are misconfigured",
-    context_length_exceeded:
-      "Context length exceeded, probably model is misconfigured", // Error copy should be adjusted here IMO
-    length_mismatch: "API returned incorrect amount of results",
-    unknown: "Unknown error",
-  } as const;
-
   return (
     <BadgeWithTooltip
       label={label}
@@ -599,7 +584,8 @@ function FileStatusBadge({ file }: { file: KnowledgeFile }) {
       isLoading={embeddingStatus === "processing"}
       tooltip={
         embeddingStatus === "failed"
-          ? errorLabels[embeddingError ?? "unknown"]
+          ? (KbEmbeddingErrorMessages[embeddingError] ??
+            KbEmbeddingErrorMessages.unknown)
           : null
       }
     />

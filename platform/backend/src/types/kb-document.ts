@@ -1,3 +1,4 @@
+import { EmbeddingErrorCodeSchema } from "@shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -31,21 +32,8 @@ export const EmbeddingStatusSchema = z.enum([
 ]);
 export type EmbeddingStatus = z.infer<typeof EmbeddingStatusSchema>;
 
-export const EmbeddingErrorSchema = z.enum([
-  "api_unauthorized",
-  "api_permission_denied",
-  "api_bad_request",
-  "api_not_found",
-  "api_conflict",
-  "api_unprocessable_entity",
-  "api_rate_limit",
-  "api_generic_error",
-  "context_length_exceeded",
-  "length_mismatch",
-  "dimensions_mismatch",
-  "unknown",
-]);
-export type EmbeddingError = z.infer<typeof EmbeddingErrorSchema>;
+export { EmbeddingErrorCodeSchema };
+export type EmbeddingError = z.infer<typeof EmbeddingErrorCodeSchema>;
 
 export const KbDocumentMetadataSchema = z.record(z.string(), z.unknown());
 export type KbDocumentMetadata = z.infer<typeof KbDocumentMetadataSchema>;
@@ -61,7 +49,7 @@ export const SelectKbDocumentSchema = createSelectSchema(
   schema.kbDocumentsTable,
   {
     ...extendedFields,
-    embeddingError: EmbeddingErrorSchema.nullable(),
+    embeddingError: EmbeddingErrorCodeSchema.nullable(),
   },
 );
 export const InsertKbDocumentSchema = createInsertSchema(
@@ -69,7 +57,7 @@ export const InsertKbDocumentSchema = createInsertSchema(
   {
     ...extendedFields,
     embeddingStatus: EmbeddingStatusSchema.optional(),
-    embeddingError: EmbeddingErrorSchema.nullable().optional(),
+    embeddingError: EmbeddingErrorCodeSchema.nullable().optional(),
     acl: z.array(AclEntrySchema).optional(),
     metadata: KbDocumentMetadataSchema.optional(),
   },
@@ -78,7 +66,7 @@ export const UpdateKbDocumentSchema = createUpdateSchema(
   schema.kbDocumentsTable,
   {
     embeddingStatus: EmbeddingStatusSchema.optional(),
-    embeddingError: EmbeddingErrorSchema.nullable().optional(),
+    embeddingError: EmbeddingErrorCodeSchema.nullable().optional(),
     acl: z.array(AclEntrySchema).optional(),
     metadata: KbDocumentMetadataSchema.optional(),
   },

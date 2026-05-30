@@ -1,8 +1,12 @@
-import { addNomicTaskPrefix, EMBEDDING_BATCH_SIZE } from "@shared";
+import {
+  addNomicTaskPrefix,
+  EMBEDDING_BATCH_SIZE,
+  EmbeddingErrorCode,
+  mapHttpStatusToEmbeddingError,
+} from "@shared";
 import { DrizzleQueryError } from "drizzle-orm/errors";
 import logger from "@/logging";
 import { KbChunkModel, KbDocumentModel } from "@/models";
-import type { EmbeddingError } from "../types";
 import {
   AzureEmbeddingError,
   callEmbedding,
@@ -205,7 +209,7 @@ class EmbeddingService {
     const ctx = orgConfig.config;
     const embeddingResults = new Map<string, number[]>();
     const failedChunkIds = new Set<string>();
-    const failedChunksErrors = new Map<string, EmbeddingError>();
+    const failedChunksErrors = new Map<string, EmbeddingErrorCode>();
 
     for (let i = 0; i < allChunks.length; i += EMBEDDING_BATCH_SIZE) {
       const batch = allChunks.slice(i, i + EMBEDDING_BATCH_SIZE);
@@ -390,13 +394,7 @@ function isDimensionsMismatchError(error: unknown, depth = 0): boolean {
   return false;
 }
 
-/**
- * Classify Embedding error to one of values of EmbeddingError enum
- *
- * @param error
- * @return EmbeddingError
- */
-function classifyEmbeddingError(error: unknown): EmbeddingError {
+function classifyEmbeddingError(error: unknown): EmbeddingErrorCode {
   const isApiError =
     error instanceof AzureEmbeddingError ||
     error instanceof GeminiEmbeddingError ||
@@ -409,39 +407,22 @@ function classifyEmbeddingError(error: unknown): EmbeddingError {
   const isDBError = error instanceof DrizzleQueryError;
 
   if (isApiError) {
-    switch (error.status) {
-      case 400:
-        if (
-          error.message.includes("the input length exceeds the context length")
-        ) {
-          return "context_length_exceeded";
-        }
-
-        return "api_bad_request";
-      case 401:
-        return "api_unauthorized";
-      case 403:
-        return "api_permission_denied";
-      case 404:
-        return "api_not_found";
-      case 409:
-        return "api_conflict";
-      case 422:
-        return "api_unprocessable_entity";
-      case 429:
-        return "api_rate_limit";
-      default:
-        return "api_generic_error";
+    if (
+      error.status === 400 &&
+      error.message.includes("the input length exceeds the context length")
+    ) {
+      return EmbeddingErrorCode.ContextTooLong;
     }
+    return mapHttpStatusToEmbeddingError(error.status);
   }
 
   if (isLengthMismatchError) {
-    return "length_mismatch";
+    return EmbeddingErrorCode.LengthMismatch;
   }
 
   if (isDBError && isDimensionsMismatchError(error)) {
-    return "dimensions_mismatch";
+    return EmbeddingErrorCode.DimensionsMismatch;
   }
 
-  return "unknown";
+  return EmbeddingErrorCode.Unknown;
 }

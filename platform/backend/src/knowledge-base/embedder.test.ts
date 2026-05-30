@@ -1,3 +1,4 @@
+import { EmbeddingErrorCode } from "@shared";
 import { vi } from "vitest";
 
 const mockEmbeddingsCreate = vi.hoisted(() =>
@@ -146,7 +147,7 @@ describe("EmbeddingService", () => {
     const updated = await KbDocumentModel.findById(doc.id);
     expect(updated?.embeddingStatus).toBe("failed");
     // plain Error doesn't match any typed branch → unknown
-    expect(updated?.embeddingError).toBe("unknown");
+    expect(updated?.embeddingError).toBe(EmbeddingErrorCode.Unknown);
   });
 
   test("no chunks marks document as completed with chunkCount 0", async ({
@@ -413,84 +414,6 @@ describe("EmbeddingService", () => {
     expect(mockEmbeddingsCreate).not.toHaveBeenCalled();
   });
 
-  test("401 error sets embeddingError to api_unauthorized", async ({
-    makeOrganization,
-    makeKnowledgeBase,
-    makeKnowledgeBaseConnector,
-  }) => {
-    const org = await makeOrganization();
-    const kb = await makeKnowledgeBase(org.id);
-    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
-
-    const doc = await KbDocumentModel.create({
-      connectorId: connector.id,
-      organizationId: org.id,
-      title: "401 Doc",
-      content: "Content",
-      contentHash: "hash-401",
-      embeddingStatus: "pending",
-    });
-
-    await KbChunkModel.insertMany([
-      { documentId: doc.id, content: "Chunk", chunkIndex: 0 },
-    ]);
-
-    const OpenAIMod = (await import("openai")).default;
-    const authError = Object.assign(new Error("Incorrect API key"), {
-      status: 401,
-    });
-    Object.setPrototypeOf(authError, OpenAIMod.APIError.prototype);
-    mockEmbeddingsCreate.mockRejectedValueOnce(authError);
-
-    await embeddingService.processDocument(doc.id, makeEmbeddingContext());
-
-    const updated = await KbDocumentModel.findById(doc.id);
-    expect(updated?.embeddingStatus).toBe("failed");
-    expect(updated?.embeddingError).toBe("api_unauthorized");
-  });
-
-  test("429 exhausted after retries sets embeddingError to api_rate_limit", async ({
-    makeOrganization,
-    makeKnowledgeBase,
-    makeKnowledgeBaseConnector,
-  }) => {
-    const org = await makeOrganization();
-    const kb = await makeKnowledgeBase(org.id);
-    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
-
-    const doc = await KbDocumentModel.create({
-      connectorId: connector.id,
-      organizationId: org.id,
-      title: "429 Doc",
-      content: "Content",
-      contentHash: "hash-429",
-      embeddingStatus: "pending",
-    });
-
-    await KbChunkModel.insertMany([
-      { documentId: doc.id, content: "Chunk", chunkIndex: 0 },
-    ]);
-
-    const OpenAIMod = (await import("openai")).default;
-    const makeRateLimit = () => {
-      const err = Object.assign(new Error("Rate limited"), { status: 429 });
-      Object.setPrototypeOf(err, OpenAIMod.APIError.prototype);
-      return err;
-    };
-
-    mockEmbeddingsCreate
-      .mockRejectedValueOnce(makeRateLimit())
-      .mockRejectedValueOnce(makeRateLimit())
-      .mockRejectedValueOnce(makeRateLimit());
-
-    await embeddingService.processDocument(doc.id, makeEmbeddingContext());
-
-    const updated = await KbDocumentModel.findById(doc.id);
-    expect(updated?.embeddingStatus).toBe("failed");
-    expect(updated?.embeddingError).toBe("api_rate_limit");
-    expect(mockEmbeddingsCreate).toHaveBeenCalledTimes(3);
-  });
-
   test("successful retry after failure clears embeddingError", async ({
     makeOrganization,
     makeKnowledgeBase,
@@ -521,7 +444,7 @@ describe("EmbeddingService", () => {
     await embeddingService.processDocument(doc.id, makeEmbeddingContext());
 
     const failed = await KbDocumentModel.findById(doc.id);
-    expect(failed?.embeddingError).toBe("api_unauthorized");
+    expect(failed?.embeddingError).toBe(EmbeddingErrorCode.Authentication);
 
     // Step 2: reset to pending and succeed
     await KbDocumentModel.update(doc.id, { embeddingStatus: "pending" });

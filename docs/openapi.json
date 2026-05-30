@@ -127702,7 +127702,19 @@
                           },
                           "embeddingError": {
                             "nullable": true,
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "authentication",
+                              "permission_denied",
+                              "invalid_request",
+                              "not_found",
+                              "context_too_long",
+                              "rate_limit",
+                              "server_error",
+                              "length_mismatch",
+                              "dimensions_mismatch",
+                              "unknown"
+                            ]
                           },
                           "chunkCount": {
                             "type": "integer",
@@ -128209,7 +128221,19 @@
                     },
                     "embeddingError": {
                       "nullable": true,
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "authentication",
+                        "permission_denied",
+                        "invalid_request",
+                        "not_found",
+                        "context_too_long",
+                        "rate_limit",
+                        "server_error",
+                        "length_mismatch",
+                        "dimensions_mismatch",
+                        "unknown"
+                      ]
                     },
                     "chunkCount": {
                       "type": "integer",
@@ -131885,15 +131909,13 @@
                             "nullable": true,
                             "type": "string",
                             "enum": [
-                              "api_unauthorized",
-                              "api_permission_denied",
-                              "api_bad_request",
-                              "api_not_found",
-                              "api_conflict",
-                              "api_unprocessable_entity",
-                              "api_rate_limit",
-                              "api_generic_error",
-                              "context_length_exceeded",
+                              "authentication",
+                              "permission_denied",
+                              "invalid_request",
+                              "not_found",
+                              "context_too_long",
+                              "rate_limit",
+                              "server_error",
                               "length_mismatch",
                               "dimensions_mismatch",
                               "unknown"
@@ -132677,15 +132699,13 @@
                       "nullable": true,
                       "type": "string",
                       "enum": [
-                        "api_unauthorized",
-                        "api_permission_denied",
-                        "api_bad_request",
-                        "api_not_found",
-                        "api_conflict",
-                        "api_unprocessable_entity",
-                        "api_rate_limit",
-                        "api_generic_error",
-                        "context_length_exceeded",
+                        "authentication",
+                        "permission_denied",
+                        "invalid_request",
+                        "not_found",
+                        "context_too_long",
+                        "rate_limit",
+                        "server_error",
                         "length_mismatch",
                         "dimensions_mismatch",
                         "unknown"
@@ -133105,15 +133125,13 @@
                       "nullable": true,
                       "type": "string",
                       "enum": [
-                        "api_unauthorized",
-                        "api_permission_denied",
-                        "api_bad_request",
-                        "api_not_found",
-                        "api_conflict",
-                        "api_unprocessable_entity",
-                        "api_rate_limit",
-                        "api_generic_error",
-                        "context_length_exceeded",
+                        "authentication",
+                        "permission_denied",
+                        "invalid_request",
+                        "not_found",
+                        "context_too_long",
+                        "rate_limit",
+                        "server_error",
                         "length_mismatch",
                         "dimensions_mismatch",
                         "unknown"

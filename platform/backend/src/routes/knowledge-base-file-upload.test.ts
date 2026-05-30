@@ -1,3 +1,4 @@
+import { EmbeddingErrorCode } from "@shared";
 import { eq } from "drizzle-orm";
 import JSZip from "jszip";
 import db, { schema } from "@/database";
@@ -495,7 +496,7 @@ describe("connector file upload routes", () => {
         content: "Failing content",
         contentHash: "fail-hash",
         embeddingStatus: "failed",
-        embeddingError: "api_unauthorized",
+        embeddingError: EmbeddingErrorCode.Authentication,
       });
 
       const response = await app.inject({
@@ -505,7 +506,9 @@ describe("connector file upload routes", () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json().embeddingStatus).toBe("failed");
-      expect(response.json().embeddingError).toBe("api_unauthorized");
+      expect(response.json().embeddingError).toBe(
+        EmbeddingErrorCode.Authentication,
+      );
     });
 
     test("returns embeddingError null when no document exists yet", async () => {
@@ -609,7 +612,7 @@ describe("connector file upload routes", () => {
         content: "Error content",
         contentHash: "err-hash",
         embeddingStatus: "failed",
-        embeddingError: "dimensions_mismatch",
+        embeddingError: EmbeddingErrorCode.DimensionsMismatch,
       });
 
       const listResponse = await app.inject({
@@ -620,7 +623,7 @@ describe("connector file upload routes", () => {
       expect(listResponse.statusCode).toBe(200);
       const item = listResponse.json().data[0];
       expect(item.embeddingStatus).toBe("failed");
-      expect(item.embeddingError).toBe("dimensions_mismatch");
+      expect(item.embeddingError).toBe(EmbeddingErrorCode.DimensionsMismatch);
     });
   });
 

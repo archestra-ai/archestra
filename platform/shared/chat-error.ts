@@ -251,28 +251,29 @@ export const MinimaxErrorTypes = {
  * Normalized error codes for chat errors across all LLM providers.
  * These provide a consistent set of error categories regardless of the underlying provider.
  */
-export enum ChatErrorCode {
+export const ChatErrorCode = {
   /** Rate/quota exceeded - retryable after delay */
-  RateLimit = "rate_limit",
+  RateLimit: "rate_limit",
   /** Invalid or missing API key */
-  Authentication = "authentication",
+  Authentication: "authentication",
   /** API key lacks permissions for the requested resource */
-  PermissionDenied = "permission_denied",
+  PermissionDenied: "permission_denied",
   /** Malformed or invalid request */
-  InvalidRequest = "invalid_request",
+  InvalidRequest: "invalid_request",
   /** Model or resource not found */
-  NotFound = "not_found",
+  NotFound: "not_found",
   /** Input exceeds the model's context window */
-  ContextTooLong = "context_too_long",
+  ContextTooLong: "context_too_long",
   /** Content blocked by safety filters */
-  ContentFiltered = "content_filtered",
+  ContentFiltered: "content_filtered",
   /** Provider server error - retryable */
-  ServerError = "server_error",
+  ServerError: "server_error",
   /** Network/connection issues - retryable */
-  NetworkError = "network_error",
+  NetworkError: "network_error",
   /** Catch-all for unrecognized errors */
-  Unknown = "unknown",
-}
+  Unknown: "unknown",
+} as const;
+export type ChatErrorCode = (typeof ChatErrorCode)[keyof typeof ChatErrorCode];
 
 /**
  * User-friendly error messages for each error code
@@ -297,6 +298,36 @@ export const ChatErrorMessages: Record<ChatErrorCode, string> = {
     "Connection error. Please check your network and try again.",
   [ChatErrorCode.Unknown]: "An unexpected error occurred. Please try again.",
 };
+
+/**
+ * Maps an HTTP status code to a normalized ChatErrorCode.
+ * Embedding error classification reuses this via mapHttpStatusToEmbeddingError.
+ */
+export function mapHttpStatusToChatError(
+  status: number | undefined,
+): ChatErrorCode {
+  switch (status) {
+    case 400:
+    case 409:
+    case 422:
+      return ChatErrorCode.InvalidRequest;
+    case 401:
+      return ChatErrorCode.Authentication;
+    case 403:
+      return ChatErrorCode.PermissionDenied;
+    case 404:
+      return ChatErrorCode.NotFound;
+    case 413:
+      return ChatErrorCode.ContextTooLong;
+    case 429:
+      return ChatErrorCode.RateLimit;
+    default:
+      if (status !== undefined && status >= 500) {
+        return ChatErrorCode.ServerError;
+      }
+      return ChatErrorCode.Unknown;
+  }
+}
 
 /**
  * Error codes that indicate the operation can be retried

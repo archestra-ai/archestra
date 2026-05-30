@@ -209,12 +209,10 @@ pub struct ArtifactBytes {
 
 #[tracing::instrument(name = "sandbox.check_session.request", skip_all)]
 pub async fn check_session(input: CheckSessionInput) -> Result<()> {
-    tracing_ctx::attach_parent(&tracing::Span::current(), input.traceparent.as_deref());
-    session::submit(|reply| session::SessionMsg::CheckSession {
-        traceparent: input.traceparent,
-        reply,
-    })
-    .await
+    let span = tracing::Span::current();
+    tracing_ctx::attach_parent(&span, input.traceparent.as_deref());
+    let traceparent = tracing_ctx::current_traceparent(&span).or(input.traceparent);
+    session::submit(move |reply| session::SessionMsg::CheckSession { traceparent, reply }).await
 }
 
 #[tracing::instrument(
@@ -223,8 +221,11 @@ pub async fn check_session(input: CheckSessionInput) -> Result<()> {
     fields(cwd = %input.cwd, command.len = input.command.len())
 )]
 pub async fn run_sandbox(input: RunSandboxInput) -> Result<CommandExecution> {
-    tracing_ctx::attach_parent(&tracing::Span::current(), input.traceparent.as_deref());
-    let traceparent = input.traceparent.clone();
+    let span = tracing::Span::current();
+    tracing_ctx::attach_parent(&span, input.traceparent.as_deref());
+    // forward this request span as the work span's parent so the detached work
+    // nests under it; fall back to the caller traceparent when otel is inactive.
+    let traceparent = tracing_ctx::current_traceparent(&span).or_else(|| input.traceparent.clone());
     validate_cwd(&input.cwd)?;
     if let Some(pp) = input.pythonpath.as_deref() {
         validate_pythonpath(pp)?;
@@ -247,8 +248,9 @@ pub async fn run_sandbox(input: RunSandboxInput) -> Result<CommandExecution> {
 
 #[tracing::instrument(name = "sandbox.read_artifact.request", skip_all, fields(path = %input.path))]
 pub async fn read_artifact(input: ReadArtifactInput) -> Result<ArtifactBytes> {
-    tracing_ctx::attach_parent(&tracing::Span::current(), input.traceparent.as_deref());
-    let traceparent = input.traceparent.clone();
+    let span = tracing::Span::current();
+    tracing_ctx::attach_parent(&span, input.traceparent.as_deref());
+    let traceparent = tracing_ctx::current_traceparent(&span).or_else(|| input.traceparent.clone());
     validate_artifact_path(&input.path)?;
     validate_cwd(&input.default_cwd)?;
     if let Some(pp) = input.pythonpath.as_deref() {

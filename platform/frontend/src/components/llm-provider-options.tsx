@@ -2,13 +2,7 @@
 
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SelectItem } from "@/components/ui/select";
 
 export function LlmProviderOptionLabel({
   icon,
@@ -52,36 +46,6 @@ export function LlmProviderOptionLabel({
   );
 }
 
-export function LlmProviderApiKeyOptionLabel({
-  icon,
-  providerName,
-  keyName,
-  secondaryLabel,
-}: {
-  icon: string;
-  providerName: string;
-  keyName: string;
-  secondaryLabel?: string;
-}) {
-  return (
-    <div className="flex items-center gap-2">
-      <Image
-        src={icon}
-        alt={providerName}
-        width={16}
-        height={16}
-        className="rounded dark:invert"
-      />
-      <span>{keyName}</span>
-      {secondaryLabel && (
-        <Badge variant="outline" className="text-xs">
-          {secondaryLabel}
-        </Badge>
-      )}
-    </div>
-  );
-}
-
 export function LlmProviderSelectItems({
   options,
 }: {
@@ -110,64 +74,4 @@ export function LlmProviderSelectItems({
       />
     </SelectItem>
   ));
-}
-
-export function LlmProviderApiKeySelectItems({
-  options,
-}: {
-  options: {
-    value: string;
-    icon: string;
-    providerName: string;
-    keyName: string;
-    secondaryLabel?: string;
-    disabled?: boolean;
-  }[];
-}) {
-  return options.map((option) => (
-    <SelectItem
-      key={option.value}
-      value={option.value}
-      disabled={option.disabled}
-    >
-      <LlmProviderApiKeyOptionLabel
-        icon={option.icon}
-        providerName={option.providerName}
-        keyName={option.keyName}
-        secondaryLabel={option.secondaryLabel}
-      />
-    </SelectItem>
-  ));
-}
-
-export function LlmProviderApiKeyFilterSelect({
-  value,
-  onValueChange,
-  options,
-  allLabel = "All provider API keys",
-  className = "w-full sm:w-[280px]",
-}: {
-  value: string;
-  onValueChange: (value: string) => void;
-  options: {
-    value: string;
-    icon: string;
-    providerName: string;
-    keyName: string;
-    secondaryLabel?: string;
-  }[];
-  allLabel?: string;
-  className?: string;
-}) {
-  return (
-    <Select value={value} onValueChange={onValueChange}>
-      <SelectTrigger className={className}>
-        <SelectValue placeholder={allLabel} />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="all">{allLabel}</SelectItem>
-        <LlmProviderApiKeySelectItems options={options} />
-      </SelectContent>
-    </Select>
-  );
 }

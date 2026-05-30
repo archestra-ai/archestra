@@ -9,7 +9,9 @@ import {
   type SupportedProvider,
 } from "@shared";
 import { Building2, CheckIcon, Key, User, Users } from "lucide-react";
+import Image from "next/image";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
+import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,8 +30,13 @@ import {
 import type { LlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
 import { cn } from "@/lib/utils";
 
+type DropdownLlmProviderApiKey = Pick<
+  LlmProviderApiKey,
+  "id" | "name" | "provider" | "scope" | "teamName"
+>;
+
 interface LlmProviderApiKeyDropdownProps {
-  availableKeys: LlmProviderApiKey[];
+  availableKeys: DropdownLlmProviderApiKey[];
   selectedApiKeyId: string | null;
   disabled?: boolean;
   open: boolean;
@@ -39,8 +46,14 @@ interface LlmProviderApiKeyDropdownProps {
   triggerVariant?: "prompt-input" | "button";
   triggerClassName?: string;
   popoverClassName?: string;
+  popoverPortal?: boolean;
   searchPlaceholder?: string;
+  emptyTriggerLabel?: string;
+  triggerTestId?: string;
   showChatTestIds?: boolean;
+  allOptionLabel?: string;
+  allOptionSelected?: boolean;
+  onSelectAllOption?: () => void;
   allowOrganizationDefault?: boolean;
   organizationDefaultSelected?: boolean;
   onSelectOrganizationDefault?: () => void;
@@ -63,8 +76,14 @@ export function LlmProviderApiKeyDropdown({
   triggerVariant = "prompt-input",
   triggerClassName,
   popoverClassName,
+  popoverPortal = true,
   searchPlaceholder = "Search API Keys...",
+  emptyTriggerLabel,
+  triggerTestId,
   showChatTestIds = false,
+  allOptionLabel,
+  allOptionSelected = false,
+  onSelectAllOption,
   allowOrganizationDefault = false,
   organizationDefaultSelected = false,
   onSelectOrganizationDefault,
@@ -75,6 +94,10 @@ export function LlmProviderApiKeyDropdown({
     currentProvider,
   });
   const selectedKey = availableKeys.find((key) => key.id === selectedApiKeyId);
+  const fallbackTriggerLabel =
+    emptyTriggerLabel ??
+    (allOptionSelected && allOptionLabel ? allOptionLabel : undefined) ??
+    (allowOrganizationDefault ? "Organization default" : "Select API key...");
 
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
@@ -85,20 +108,22 @@ export function LlmProviderApiKeyDropdown({
             size="sm"
             disabled={disabled}
             className={cn(
-              "h-8 max-w-[250px] gap-1.5 px-3 text-xs",
+              "h-9 min-w-0 justify-start gap-1.5 px-3 text-sm",
               triggerClassName,
             )}
           >
-            <Key className="h-3 w-3 shrink-0" />
             {selectedKey ? (
               <>
-                <span className="h-2 w-2 shrink-0 rounded-full bg-green-500" />
+                <ProviderIcon provider={selectedKey.provider} />
                 <span className="truncate font-medium">{selectedKey.name}</span>
               </>
             ) : (
-              <span className="truncate text-muted-foreground">
-                Organization default
-              </span>
+              <>
+                <Key className="h-3 w-3 shrink-0" />
+                <span className="truncate text-muted-foreground">
+                  {fallbackTriggerLabel}
+                </span>
+              </>
             )}
           </Button>
         ) : (
@@ -106,7 +131,10 @@ export function LlmProviderApiKeyDropdown({
             disabled={disabled}
             className={cn("max-w-[220px] min-w-0", triggerClassName)}
             data-testid={
-              showChatTestIds ? E2eTestId.ChatApiKeySelectorTrigger : undefined
+              triggerTestId ??
+              (showChatTestIds
+                ? E2eTestId.ChatApiKeySelectorTrigger
+                : undefined)
             }
           >
             <Key className="size-4 shrink-0" />
@@ -116,6 +144,7 @@ export function LlmProviderApiKeyDropdown({
       <PopoverContent
         className={cn("w-80 p-0", popoverClassName)}
         align="start"
+        portal={popoverPortal}
       >
         <Command>
           <CommandInput
@@ -126,8 +155,20 @@ export function LlmProviderApiKeyDropdown({
                 : undefined
             }
           />
-          <CommandList>
+          <CommandList onWheelCapture={(event) => event.stopPropagation()}>
             <CommandEmpty>No API keys found.</CommandEmpty>
+            {allOptionLabel && onSelectAllOption && (
+              <CommandGroup>
+                <CommandItem onSelect={onSelectAllOption}>
+                  <span className="text-muted-foreground">
+                    {allOptionLabel}
+                  </span>
+                  {allOptionSelected && (
+                    <CheckIcon className="ml-auto h-4 w-4 shrink-0" />
+                  )}
+                </CommandItem>
+              </CommandGroup>
+            )}
             {allowOrganizationDefault && onSelectOrganizationDefault && (
               <CommandGroup>
                 <CommandItem onSelect={onSelectOrganizationDefault}>
@@ -154,7 +195,7 @@ export function LlmProviderApiKeyDropdown({
                     ? getChatApiKeySelectorProviderGroupTestId(provider)
                     : undefined
                 }
-                heading={providerDisplayNames[provider] ?? provider}
+                heading={<ProviderGroupHeading provider={provider} />}
               >
                 {keysByProvider[provider]?.map((key) => (
                   <CommandItem
@@ -171,14 +212,14 @@ export function LlmProviderApiKeyDropdown({
                     <div className="flex min-w-0 flex-1 items-center gap-2">
                       {SCOPE_ICONS[key.scope]}
                       <span className="truncate">{key.name}</span>
-                      {key.scope === "team" && key.teamName && (
+                      {key.scope === "team" && key.teamName ? (
                         <Badge
                           variant="outline"
                           className="px-1 py-0 text-[10px]"
                         >
                           {key.teamName}
                         </Badge>
-                      )}
+                      ) : null}
                     </div>
                     {selectedApiKeyId === key.id && (
                       <CheckIcon className="h-4 w-4 shrink-0" />
@@ -194,8 +235,8 @@ export function LlmProviderApiKeyDropdown({
   );
 }
 
-function groupKeysByProvider(availableKeys: LlmProviderApiKey[]) {
-  const grouped = {} as Record<SupportedProvider, LlmProviderApiKey[]>;
+function groupKeysByProvider(availableKeys: DropdownLlmProviderApiKey[]) {
+  const grouped = {} as Record<SupportedProvider, DropdownLlmProviderApiKey[]>;
 
   for (const key of availableKeys) {
     if (!grouped[key.provider]) {
@@ -205,6 +246,35 @@ function groupKeysByProvider(availableKeys: LlmProviderApiKey[]) {
   }
 
   return grouped;
+}
+
+function ProviderGroupHeading({ provider }: { provider: SupportedProvider }) {
+  const providerName = providerDisplayNames[provider] ?? provider;
+
+  return (
+    <span className="flex items-center gap-1.5">
+      <ProviderIcon provider={provider} />
+      <span>{PROVIDER_CONFIG[provider]?.name ?? providerName}</span>
+    </span>
+  );
+}
+
+function ProviderIcon({ provider }: { provider: SupportedProvider }) {
+  const providerConfig = PROVIDER_CONFIG[provider];
+
+  if (!providerConfig?.icon) {
+    return <Key className="h-3.5 w-3.5 shrink-0" />;
+  }
+
+  return (
+    <Image
+      src={providerConfig.icon}
+      alt={providerConfig.name}
+      width={14}
+      height={14}
+      className="shrink-0 rounded dark:invert"
+    />
+  );
 }
 
 function sortProviders(params: {

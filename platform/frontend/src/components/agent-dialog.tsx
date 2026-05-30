@@ -1828,7 +1828,9 @@ export function AgentDialog({
                               }}
                               currentProvider={currentLlmProvider ?? undefined}
                               triggerVariant="button"
+                              triggerClassName="h-8 max-w-[250px] text-xs"
                               popoverClassName="w-96"
+                              popoverPortal={false}
                               searchPlaceholder="Search API keys..."
                               allowOrganizationDefault
                               organizationDefaultSelected={!llmApiKeyId}

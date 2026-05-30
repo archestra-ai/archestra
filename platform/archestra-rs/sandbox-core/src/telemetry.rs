@@ -159,13 +159,11 @@ mod imp {
         Ok(())
     }
 
-    /// log verbosity for fmt/Loki output, from `ARCHESTRA_SANDBOX_RS_LOG` (or the
-    /// standard `RUST_LOG` fallback), defaulting to `info`. kept separate from the
-    /// span layer so it can be tuned without disabling traces.
+    /// log verbosity for fmt/Loki output, from the standard `RUST_LOG`, defaulting
+    /// to `info`. kept separate from the span layer so it can be tuned without
+    /// disabling traces.
     fn log_filter() -> EnvFilter {
-        EnvFilter::try_from_env("ARCHESTRA_SANDBOX_RS_LOG")
-            .or_else(|_| EnvFilter::try_from_default_env())
-            .unwrap_or_else(|_| EnvFilter::new("info"))
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"))
     }
 
     pub(super) fn flush() {

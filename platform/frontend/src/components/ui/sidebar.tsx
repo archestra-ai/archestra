@@ -614,7 +614,9 @@ function SidebarMenuButton({
     />
   );
 
-  if (!tooltip) {
+  const hideTooltip = state !== "collapsed" || isMobile;
+
+  if (!tooltip || hideTooltip) {
     return button;
   }
 
@@ -623,7 +625,6 @@ function SidebarMenuButton({
       children: tooltip,
     };
   }
-  const hideTooltip = state !== "collapsed" || isMobile;
 
   return (
     <Tooltip>

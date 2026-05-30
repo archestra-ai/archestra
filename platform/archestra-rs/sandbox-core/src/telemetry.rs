@@ -23,13 +23,15 @@ pub fn init() {
 const DEFAULT_ENDPOINT: &str = "http://localhost:4318";
 
 /// reduce the shared endpoint env var to a bare base. it may hold either a
-/// base (`http://host:4318`) or a per-signal url (`.../v1/traces`, what the
-/// node trace exporter wants), so any signal suffix is stripped back to the
-/// base that each signal then appends its own path to.
+/// base (`http://host:4318`), a version base (`.../v1`), or a per-signal url
+/// (`.../v1/traces`, what the node trace exporter wants), so any of those
+/// suffixes is stripped back to the base that each signal then appends its own
+/// path to. order matters: the longer per-signal suffixes are tried before the
+/// bare `/v1` so the loop's first match doesn't truncate `/v1/traces` to `/v1`.
 #[cfg(any(feature = "telemetry", test))]
 fn normalize_base(raw: &str) -> String {
     let trimmed = raw.trim().trim_end_matches('/');
-    for suffix in ["/v1/traces", "/v1/logs", "/v1/metrics"] {
+    for suffix in ["/v1/traces", "/v1/logs", "/v1/metrics", "/v1"] {
         if let Some(base) = trimmed.strip_suffix(suffix) {
             return base.trim_end_matches('/').to_string();
         }
@@ -43,6 +45,7 @@ mod imp {
     use std::env;
     use std::sync::{Once, OnceLock};
 
+    use base64::prelude::{BASE64_STANDARD, Engine as _};
     use opentelemetry::KeyValue;
     use opentelemetry::trace::TracerProvider as _;
     use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
@@ -142,16 +145,30 @@ mod imp {
             .unwrap_or_else(|| DEFAULT_ENDPOINT.to_string())
     }
 
-    /// mirrors the node side: a bearer token becomes an `Authorization` header.
+    /// mirrors the node side: a bearer token takes precedence, otherwise a
+    /// username/password pair falls back to HTTP basic auth. both become an
+    /// `Authorization` header; nothing configured means no header.
     fn auth_headers() -> Option<HashMap<String, String>> {
-        let bearer = env::var("ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER")
-            .ok()
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())?;
-        Some(HashMap::from([(
-            "Authorization".to_string(),
-            format!("Bearer {bearer}"),
-        )]))
+        let trimmed_env = |key| {
+            env::var(key)
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+        };
+
+        if let Some(bearer) = trimmed_env("ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER") {
+            return Some(auth_header(format!("Bearer {bearer}")));
+        }
+
+        // basic auth requires both halves; a lone username or password is ignored.
+        let username = trimmed_env("ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME")?;
+        let password = trimmed_env("ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD")?;
+        let encoded = BASE64_STANDARD.encode(format!("{username}:{password}"));
+        Some(auth_header(format!("Basic {encoded}")))
+    }
+
+    fn auth_header(value: String) -> HashMap<String, String> {
+        HashMap::from([("Authorization".to_string(), value)])
     }
 }
 
@@ -175,6 +192,10 @@ mod tests {
             normalize_base("http://host:4318/v1/logs"),
             "http://host:4318"
         );
+        // a bare version base (supported by the node endpoint helpers) is
+        // stripped too, so we don't double it to /v1/v1/traces
+        assert_eq!(normalize_base("http://host:4318/v1"), "http://host:4318");
+        assert_eq!(normalize_base("http://host:4318/v1/"), "http://host:4318");
         // a custom path that is not a signal suffix is preserved
         assert_eq!(
             normalize_base("http://host:4318/otlp"),

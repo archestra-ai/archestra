@@ -104,7 +104,7 @@ interface InitialAgentSelectorProps {
   onAgentChange: (agentId: string) => void;
 }
 
-export function InitialAgentSelector({
+export const InitialAgentSelector = memo(function InitialAgentSelector({
   currentAgentId,
   currentAgentName,
   onAgentChange,
@@ -512,7 +512,7 @@ export function InitialAgentSelector({
       )}
     </>
   );
-}
+});
 
 // Reusable dialog header with back button and close
 function DialogHeader({

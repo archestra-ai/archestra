@@ -19,7 +19,7 @@ import {
   XIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { LocalServerInstallDialog } from "@/app/mcp/registry/_parts/local-server-install-dialog";
 import { NoAuthInstallDialog } from "@/app/mcp/registry/_parts/no-auth-install-dialog";
@@ -232,6 +232,13 @@ export function InitialAgentSelector({
     setSearch("");
   };
 
+  const handleAddTool = useCallback(() => {
+    if (currentAgentId) {
+      setEditingAgentId(currentAgentId);
+      setDialogView("add-tool");
+    }
+  }, [currentAgentId]);
+
   const editingAgent = useMemo(
     () => allAgents.find((a) => a.id === editingAgentId) ?? null,
     [allAgents, editingAgentId],
@@ -278,12 +285,7 @@ export function InitialAgentSelector({
               subagents={triggerSubagents}
               connectorTypes={agentConnectorTypes}
               showAddButton={canEditCurrentAgent}
-              onAdd={() => {
-                if (currentAgentId) {
-                  setEditingAgentId(currentAgentId);
-                  setDialogView("add-tool");
-                }
-              }}
+              onAdd={handleAddTool}
             />
           </PromptInputButton>
         </PopoverTrigger>
@@ -2027,7 +2029,7 @@ type SubagentItem = {
   icon?: string | null;
 };
 
-function ToolServerAvatarGroup({
+const ToolServerAvatarGroup = memo(function ToolServerAvatarGroup({
   catalogs,
   subagents = [],
   connectorTypes = [],
@@ -2121,4 +2123,4 @@ function ToolServerAvatarGroup({
       )}
     </div>
   );
-}
+});

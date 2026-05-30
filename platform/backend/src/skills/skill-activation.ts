@@ -48,7 +48,7 @@ export function formatSkillActivation({
     : "";
 
   return (
-    `<skill_content name="${escapeXmlAttr(skill.name)}">\n${skill.content}\n</skill_content>` +
+    `<skill_content name="${escapeXmlAttr(skill.name)}">\n${escapeXmlText(skill.content)}\n</skill_content>` +
     compatibility +
     resources
   );

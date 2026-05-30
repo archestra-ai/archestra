@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
 import {
+  BUILT_IN_AGENT_IDS,
   buildUserSystemPromptContext,
+  CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
   type ChatErrorResponse,
+  type ContextWindowEstimate,
   isModelSelectionComplete,
   ResourceVisibilityScopeSchema,
   RouteId,
@@ -34,7 +37,7 @@ import {
   type ToolUiResourceData,
 } from "@/clients/chat-mcp-client";
 import {
-  createDirectLLMModel,
+  createLLMModel,
   createLLMModelForAgent,
   isApiKeyRequired,
 } from "@/clients/llm-client";
@@ -85,11 +88,10 @@ import {
   UpdateConversationSchema,
   UuidIdSchema,
 } from "@/types";
-import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import {
+  resolveAgentLlmOrDefault,
   resolveConversationLlmSelectionForAgent,
   resolveConversationModel,
-  resolveFastModelName,
 } from "@/utils/llm-resolution";
 import { estimateMessagesSize } from "@/utils/message-size";
 import {
@@ -715,6 +717,19 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   });
                 }
 
+                // Seed the context indicator with the size of what we are about
+                // to send, on the same yardstick that triggers auto-compaction,
+                // so the bar is correct before the first token (and reflects a
+                // compaction drop immediately). Per-step usage refines it below.
+                if (compactionResult.inputTokenEstimate !== undefined) {
+                  writer.write({
+                    type: "data-context-window-estimate",
+                    data: {
+                      estimatedTokens: compactionResult.inputTokenEstimate,
+                    } satisfies ContextWindowEstimate,
+                  });
+                }
+
                 const modelMessages = await buildModelMessagesForProvider({
                   messages: compactionResult.messages,
                   provider,
@@ -727,6 +742,19 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   stopWhen: buildChatStopConditions(),
                   abortSignal: chatAbortController.signal,
                   onChunk: streamTextOnChunk,
+                  // Emit per-step usage so the context indicator tracks the
+                  // prompt growing across tool round-trips, instead of jumping
+                  // only once when the whole turn finishes.
+                  onStepFinish: ({ usage }) => {
+                    writer.write({
+                      type: "data-token-usage",
+                      data: {
+                        inputTokens: usage.inputTokens,
+                        outputTokens: usage.outputTokens,
+                        totalTokens: usage.totalTokens,
+                      } satisfies TokenUsage,
+                    });
+                  },
                   onFinish: async ({ usage, finishReason }) => {
                     removeAbortListeners();
                     logger.info(
@@ -2041,35 +2069,27 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send(conversation);
       }
 
-      // Use the conversation's model provider for title generation so the
-      // title is generated with the same provider as the chat.
-      const { provider } = await resolveConversationModel(conversation.modelId);
-
-      logger.debug(
-        { conversationId: id, resolvedProvider: provider },
-        "Title generation: resolved provider",
+      const titleAgent = await AgentModel.getBuiltInAgent(
+        BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION,
+        organizationId,
       );
-
-      // Resolve API key using the centralized function (handles all providers)
-      const { apiKey, chatApiKeyId, baseUrl } = await resolveProviderApiKey({
+      const titleLlm = await resolveAgentLlmOrDefault({
+        agent: titleAgent,
         organizationId,
         userId: user.id,
-        provider,
         conversationId: id,
       });
+      const systemPrompt =
+        renderSystemPrompt(
+          titleAgent?.systemPrompt ?? CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
+        ) ?? CHAT_TITLE_GENERATION_SYSTEM_PROMPT;
 
       logger.debug(
-        {
-          conversationId: id,
-          provider,
-          hasApiKey: !!apiKey,
-          chatApiKeyId,
-          baseUrl,
-        },
-        "Title generation: resolved API key",
+        { conversationId: id, provider: titleLlm.provider },
+        "Title generation: resolved built-in agent LLM",
       );
 
-      if (isApiKeyRequired(provider, apiKey)) {
+      if (isApiKeyRequired(titleLlm.provider, titleLlm.apiKey)) {
         throw new ApiError(
           400,
           "LLM Provider API key not configured. Please configure it in Provider Settings.",
@@ -2078,17 +2098,18 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Generate title using the extracted function
       const generatedTitle = await generateConversationTitle({
-        provider,
-        apiKey,
-        chatApiKeyId,
-        baseUrl,
+        ...titleLlm,
+        agentId: titleAgent?.id ?? id,
+        userId: user.id,
+        conversationId: id,
+        systemPrompt,
         firstUserMessage,
         firstAssistantMessage,
       });
 
       if (!generatedTitle) {
         logger.warn(
-          { conversationId: id, provider },
+          { conversationId: id, provider: titleLlm.provider },
           "Title generation: returned null (generation failed)",
         );
         // Return the conversation without title update on error
@@ -2395,11 +2416,9 @@ export function buildTitlePrompt(
     ? `User: ${firstUserMessage}\n\nAssistant: ${firstAssistantMessage}`
     : `User: ${firstUserMessage}`;
 
-  return `Generate a short, concise title (3-6 words) for a chat conversation that includes the following messages:
+  return `Chat conversation messages:
 
-${contextMessages}
-
-The title should capture the main topic or theme of the conversation. Respond with ONLY the title, no quotes, no explanation. DON'T WRAP THE TITLE IN QUOTES!!!`;
+${contextMessages}`;
 }
 
 /**
@@ -2408,8 +2427,12 @@ The title should capture the main topic or theme of the conversation. Respond wi
 export interface GenerateTitleParams {
   provider: SupportedProvider;
   apiKey: string | undefined;
-  chatApiKeyId?: string;
+  modelName: string;
   baseUrl: string | null;
+  agentId: string;
+  userId: string;
+  conversationId: string;
+  systemPrompt: string;
   firstUserMessage: string;
   firstAssistantMessage: string;
 }
@@ -2424,28 +2447,33 @@ export async function generateConversationTitle(
   const {
     provider,
     apiKey,
-    chatApiKeyId,
+    modelName,
     baseUrl,
+    agentId,
+    userId,
+    conversationId,
+    systemPrompt,
     firstUserMessage,
     firstAssistantMessage,
   } = params;
 
-  const modelName = await resolveFastModelName(provider, chatApiKeyId);
+  const titlePrompt = buildTitlePrompt(firstUserMessage, firstAssistantMessage);
 
   logger.debug(
-    { provider, modelName, chatApiKeyId, hasApiKey: !!apiKey, baseUrl },
-    "Title generation: creating direct LLM model",
+    { provider, modelName, hasApiKey: !!apiKey, baseUrl },
+    "Title generation: creating logged LLM model",
   );
 
-  // Create model for title generation (direct call, not through LLM Proxy)
-  const model = createDirectLLMModel({
+  const model = createLLMModel({
     provider,
     apiKey,
+    agentId,
     modelName,
+    userId,
+    sessionId: conversationId,
+    source: "chat:title_generation",
     baseUrl,
   });
-
-  const titlePrompt = buildTitlePrompt(firstUserMessage, firstAssistantMessage);
 
   try {
     logger.debug(
@@ -2454,6 +2482,7 @@ export async function generateConversationTitle(
     );
     const result = await generateText({
       model,
+      system: systemPrompt,
       prompt: titlePrompt,
     });
 

@@ -37,6 +37,10 @@ import {
   SkillParseError,
 } from "@/skills/parser";
 import {
+  isSkillNameConflict,
+  refineUniqueFilePaths,
+} from "@/skills/validation";
+import {
   ApiError,
   constructResponseSchema,
   DeleteObjectResponseSchema,
@@ -45,10 +49,7 @@ import {
   SkillFileEncodingSchema,
   SkillWithFilesSchema,
 } from "@/types";
-import {
-  isForeignKeyConstraintError,
-  isUniqueConstraintError,
-} from "@/utils/db";
+import { isForeignKeyConstraintError } from "@/utils/db";
 
 /** A team a skill is assigned to (for `scope = 'team'` skills). */
 const SkillTeamSchema = z.object({ id: z.string(), name: z.string() });
@@ -89,12 +90,14 @@ const SkillFileInputSchema = z.object({
  * files untouched; passing `[]` clears them. `scope` defaults to `personal`;
  * `teamIds` is only meaningful for `scope = 'team'`.
  */
-const SkillManifestInputSchema = z.object({
-  content: z.string().min(1).max(MAX_SKILL_FILE_BYTES),
-  files: z.array(SkillFileInputSchema).max(MAX_FILES_PER_SKILL).optional(),
-  scope: ResourceVisibilityScopeSchema.optional(),
-  teamIds: z.array(z.string()).optional(),
-});
+const SkillManifestInputSchema = z
+  .object({
+    content: z.string().min(1).max(MAX_SKILL_FILE_BYTES),
+    files: z.array(SkillFileInputSchema).max(MAX_FILES_PER_SKILL).optional(),
+    scope: ResourceVisibilityScopeSchema.optional(),
+    teamIds: z.array(z.string()).optional(),
+  })
+  .superRefine((data, ctx) => refineUniqueFilePaths(data.files, ctx));
 
 const DiscoveredSkillSchema = z.object({
   skillPath: z.string(),
@@ -343,23 +346,32 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       let updated: Skill | null;
       try {
-        updated = await SkillModel.updateWithFiles({
-          id,
-          skill: {
-            name: parsed.name,
-            description: parsed.description,
-            content: parsed.content,
-            license: parsed.license,
-            compatibility: parsed.compatibility,
-            metadata: parsed.metadata,
-            scope: newScope,
-          },
-          files:
-            body.files === undefined ? undefined : toSkillFiles(body.files),
-        });
+        // The metadata, files, and team assignments are updated in a single
+        // transaction (see SkillModel.updateWithFiles), so a team deleted
+        // mid-request rolls the whole update back rather than leaving a
+        // team-scoped skill with no teams. teamIds is only synced when scope or
+        // teams actually change; otherwise it is left untouched.
+        updated = await withTeamFkErrorMapped(() =>
+          SkillModel.updateWithFiles({
+            id,
+            skill: {
+              name: parsed.name,
+              description: parsed.description,
+              content: parsed.content,
+              license: parsed.license,
+              compatibility: parsed.compatibility,
+              metadata: parsed.metadata,
+              scope: newScope,
+            },
+            files:
+              body.files === undefined ? undefined : toSkillFiles(body.files),
+            teamIds: scopeChanged || teamsChanged ? newTeamIds : undefined,
+          }),
+        );
       } catch (error) {
-        // only the org+name index — not a duplicate resource-file path
-        if (isUniqueConstraintError(error, "skills_org_name_idx")) {
+        // Name conflict within the skill's visibility namespace — not a team FK
+        // (mapped above) or a duplicate resource-file path (rejected at input).
+        if (isSkillNameConflict(error)) {
           throw skillNameConflict(parsed.name);
         }
         throw error;
@@ -367,11 +379,6 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!updated) {
         throw new ApiError(404, "Skill not found");
-      }
-      if (scopeChanged || teamsChanged) {
-        await withTeamFkErrorMapped(() =>
-          SkillTeamModel.syncSkillTeams(id, newTeamIds),
-        );
       }
 
       return reply.send(await loadSkillDetail(updated));
@@ -510,7 +517,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ body, organizationId }, reply) => {
+    async ({ body, organizationId, user }, reply) => {
       const result = await runImport(() =>
         discoverSkills({
           repoUrl: body.repoUrl,
@@ -519,15 +526,22 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
       );
 
-      // Flag skills whose name already exists in the org so the UI can disable
-      // them in the multi-select.
-      const skills = await Promise.all(
-        result.skills.map(async (skill) => ({
-          ...skill,
-          exists:
-            (await SkillModel.findByName(organizationId, skill.name)) !== null,
-        })),
-      );
+      // Flag names an import would actually collide with so the UI can disable
+      // them in the multi-select. Mirrors the per-scope unique indexes: a shared
+      // skill of that name, or this user's own personal skill — another user's
+      // personal skill of the same name cannot block the import, so it must not
+      // disable the row. (The hint stays scope-blind: it cannot know the target
+      // scope yet, so a shared name still flags even though a personal import
+      // could coexist — the conservative direction.)
+      const collisions = await SkillModel.findImportNameCollisions({
+        organizationId,
+        userId: user.id,
+        names: result.skills.map((skill) => skill.name),
+      });
+      const skills = result.skills.map((skill) => ({
+        ...skill,
+        exists: collisions.has(skill.name),
+      }));
 
       return reply.send({ ...result, skills });
     },

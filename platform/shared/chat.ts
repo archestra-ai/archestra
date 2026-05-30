@@ -14,6 +14,16 @@ export interface TokenUsage {
   totalTokens: number | undefined;
 }
 
+/**
+ * Estimated context-window occupancy streamed at the start of a turn, on the
+ * same token yardstick that drives auto-compaction. Seeds the context
+ * indicator before the model responds; per-step `TokenUsage` then refines it
+ * with the provider's actual prompt size.
+ */
+export interface ContextWindowEstimate {
+  estimatedTokens: number;
+}
+
 // ============================================================================
 // Chat Message Part Types
 // ============================================================================

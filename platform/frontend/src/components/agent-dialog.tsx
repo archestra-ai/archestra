@@ -218,6 +218,10 @@ function getBuiltInAgentConfigForSave(params: {
       return {
         name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
       };
+    case BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION:
+      return {
+        name: BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION,
+      };
     default: {
       // exhaustive check: a new BUILT_IN_AGENT_ID will fail the build here
       const _exhaustive: never = params.builtInAgentName;

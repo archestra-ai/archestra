@@ -274,7 +274,7 @@ You can generate an API key from the [OpenRouter dashboard](https://openrouter.a
 
 ### Popular Models
 
-- `openrouter/auto` - OpenRouter's Auto Router; picks the best model per request, billed at that model's rate. Marked "Fastest", pinned to the top of the picker.
+- `openrouter/auto` - OpenRouter's Auto Router; picks the best model per request, billed at that model's rate.
 - `openrouter/free` - OpenRouter's Free Models Router; see below.
 - `~`-prefixed ids such as `~anthropic/claude-sonnet-latest` are OpenRouter "latest" aliases that always redirect to the newest model in a family. They sync and behave like ordinary models, and are shown with a "Latest" badge in the picker.
 

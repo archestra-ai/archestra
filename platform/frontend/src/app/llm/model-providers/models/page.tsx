@@ -32,7 +32,6 @@ import { LlmProviderApiKeyFilterSelect } from "@/components/llm-provider-options
 import {
   BestModelBadge,
   EmbeddingModelBadge,
-  FastestModelBadge,
   FreeModelBadge,
   LatestModelBadge,
   UnknownCapabilitiesBadge,
@@ -215,7 +214,6 @@ export default function ModelsPage() {
               <div className="mt-0.5 flex flex-wrap items-center gap-2">
                 {isFree && <FreeModelBadge />}
                 {isLatestAlias && <LatestModelBadge />}
-                {row.original.isFastest && <FastestModelBadge />}
                 {row.original.isBest && <BestModelBadge />}
                 {row.original.embeddingDimensions !== null && (
                   <EmbeddingModelBadge />

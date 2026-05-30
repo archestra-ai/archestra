@@ -1,9 +1,7 @@
 import {
   DEFAULT_MODELS,
-  FAST_MODELS,
   isCompleteModelSelection,
   type ModelSelection,
-  OPENROUTER_FREE_MODEL_ID,
   resolveModelSelection,
   type SupportedProvider,
   SupportedProvidersSchema,
@@ -240,51 +238,82 @@ export async function resolveConfiguredAgentLlm(agent: {
 }
 
 /**
- * Resolve the fastest/cheapest model for a provider (used for title generation).
- * Tries the database lookup first, falls back to the hardcoded FAST_MODELS map.
+ * Resolve an agent's configured LLM, filling in the provider API key when the
+ * agent only pins a model. If the agent has no usable model selection, fall
+ * back to organization/default resolution.
  */
-export async function resolveFastModelName(
-  provider: SupportedProvider,
-  chatApiKeyId: string | undefined,
-): Promise<string> {
-  // OpenRouter meta calls always go through the free router: the "fastest"
-  // marker is openrouter/auto, which is paid and fails outright on a
-  // zero-balance free-only key.
-  if (provider === "openrouter") {
-    return OPENROUTER_FREE_MODEL_ID;
+export async function resolveAgentLlmOrDefault(params: {
+  agent?: { llmApiKeyId: string | null; modelId: string | null } | null;
+  organizationId: string;
+  userId?: string;
+  conversationId?: string;
+}): Promise<ResolvedLlmSelection> {
+  const configuredLlm = params.agent
+    ? await resolveConfiguredAgentLlm(params.agent)
+    : null;
+
+  if (configuredLlm) {
+    const fallbackKey = configuredLlm.apiKey
+      ? null
+      : await resolveProviderApiKey({
+          organizationId: params.organizationId,
+          userId: params.userId,
+          provider: configuredLlm.provider,
+          conversationId: params.conversationId,
+          agentLlmApiKeyId: params.agent?.llmApiKeyId ?? null,
+        });
+
+    return {
+      ...configuredLlm,
+      apiKey: configuredLlm.apiKey ?? fallbackKey?.apiKey,
+      baseUrl: configuredLlm.baseUrl ?? fallbackKey?.baseUrl ?? null,
+    };
   }
 
-  if (!chatApiKeyId) {
-    const fallback = FAST_MODELS[provider];
-    logger.debug(
-      { provider, modelName: fallback },
-      "resolveFastModelName: no chatApiKeyId, using hardcoded fast model",
-    );
-    return fallback;
-  }
+  return resolveDefaultLlmSelection(params);
+}
 
-  try {
-    const fastestModel =
-      await LlmProviderApiKeyModelLinkModel.getFastestModel(chatApiKeyId);
-    if (fastestModel) {
-      logger.debug(
-        { provider, chatApiKeyId, modelId: fastestModel.modelId },
-        "resolveFastModelName: resolved fastest model from DB",
-      );
-      return fastestModel.modelId;
+/**
+ * Resolve the default LLM for built-in subagent operations:
+ * organization default first, then best available DB-backed model, then the
+ * env/Vertex/config fallback used during bootstrap.
+ */
+async function resolveDefaultLlmSelection(params: {
+  organizationId: string;
+  userId?: string;
+}): Promise<ResolvedLlmSelection> {
+  const organization = await OrganizationModel.getById(params.organizationId);
+
+  if (organization?.defaultModelId && organization.defaultLlmApiKeyId) {
+    const model = await ModelModel.findById(organization.defaultModelId);
+    if (model) {
+      const { apiKey, baseUrl } = await resolveProviderApiKey({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        provider: model.provider,
+        agentLlmApiKeyId: organization.defaultLlmApiKeyId,
+      });
+      return {
+        provider: model.provider,
+        apiKey,
+        modelName: model.modelId,
+        baseUrl,
+      };
     }
-    logger.debug(
-      { provider, chatApiKeyId },
-      "resolveFastModelName: no fastest model in DB, using hardcoded fallback",
-    );
-  } catch (error) {
-    logger.warn(
-      { error, chatApiKeyId },
-      "resolveFastModelName: failed to resolve from DB, falling back to hardcoded model",
-    );
   }
 
-  return FAST_MODELS[provider];
+  const bestAvailable = await resolveBestAvailableLlm(params);
+  if (bestAvailable) {
+    return bestAvailable;
+  }
+
+  const fallback = resolveDefaultLlmFromEnv();
+  return {
+    provider: fallback.provider,
+    apiKey: getProviderEnvApiKey(fallback.provider),
+    modelName: fallback.model,
+    baseUrl: null,
+  };
 }
 
 // ===== Internal helpers =====

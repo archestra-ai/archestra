@@ -9,17 +9,20 @@ use sandbox_core as core;
 
 #[napi(js_name = "checkSession")]
 pub async fn check_session(input: Option<core::CheckSessionInput>) -> napi::Result<()> {
+    core::telemetry::init();
     let input = input.unwrap_or_default();
     catch_core(core::check_session(input)).await
 }
 
 #[napi(js_name = "runSandbox")]
 pub async fn run_sandbox(input: core::RunSandboxInput) -> napi::Result<core::CommandExecution> {
+    core::telemetry::init();
     catch_core(core::run_sandbox(input)).await
 }
 
 #[napi(js_name = "readArtifact")]
 pub async fn read_artifact(input: core::ReadArtifactInput) -> napi::Result<core::ArtifactBytes> {
+    core::telemetry::init();
     catch_core(core::read_artifact(input)).await
 }
 

@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 mod runtime;
 mod session;
+pub mod telemetry;
 mod tracing_ctx;
 
 pub use session::{DEFAULT_APT_PACKAGES, DEFAULT_BASE_IMAGE};
@@ -206,8 +207,9 @@ pub struct ArtifactBytes {
     pub size_bytes: u32,
 }
 
-#[tracing::instrument(skip_all, fields(traceparent = input.traceparent.as_deref()))]
+#[tracing::instrument(name = "sandbox.check_session.request", skip_all)]
 pub async fn check_session(input: CheckSessionInput) -> Result<()> {
+    tracing_ctx::attach_parent(&tracing::Span::current(), input.traceparent.as_deref());
     session::submit(|reply| session::SessionMsg::CheckSession {
         traceparent: input.traceparent,
         reply,
@@ -215,8 +217,13 @@ pub async fn check_session(input: CheckSessionInput) -> Result<()> {
     .await
 }
 
-#[tracing::instrument(skip_all, fields(traceparent = input.traceparent.as_deref()))]
+#[tracing::instrument(
+    name = "sandbox.run.request",
+    skip_all,
+    fields(cwd = %input.cwd, command.len = input.command.len())
+)]
 pub async fn run_sandbox(input: RunSandboxInput) -> Result<CommandExecution> {
+    tracing_ctx::attach_parent(&tracing::Span::current(), input.traceparent.as_deref());
     let traceparent = input.traceparent.clone();
     validate_cwd(&input.cwd)?;
     if let Some(pp) = input.pythonpath.as_deref() {
@@ -238,8 +245,9 @@ pub async fn run_sandbox(input: RunSandboxInput) -> Result<CommandExecution> {
     .await
 }
 
-#[tracing::instrument(skip_all, fields(traceparent = input.traceparent.as_deref()))]
+#[tracing::instrument(name = "sandbox.read_artifact.request", skip_all, fields(path = %input.path))]
 pub async fn read_artifact(input: ReadArtifactInput) -> Result<ArtifactBytes> {
+    tracing_ctx::attach_parent(&tracing::Span::current(), input.traceparent.as_deref());
     let traceparent = input.traceparent.clone();
     validate_artifact_path(&input.path)?;
     validate_cwd(&input.default_cwd)?;

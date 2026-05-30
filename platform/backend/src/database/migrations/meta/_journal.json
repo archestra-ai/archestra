@@ -1842,6 +1842,13 @@
       "when": 1780094650175,
       "tag": "0262_polite_wallow",
       "breakpoints": true
+    },
+    {
+      "idx": 263,
+      "version": "7",
+      "when": 1780144031600,
+      "tag": "0263_quick_viper",
+      "breakpoints": true
     }
   ]
 }

@@ -455,19 +455,24 @@ describe("ChatProvider auto title generation", () => {
     );
   });
 
-  it("does not regenerate a title the conversation already has", async () => {
-    conversationMock.data = { title: "Existing title" };
-    mocks.useChat.mockImplementation(() => ({
-      addToolApprovalResponse: mocks.addToolApprovalResponse,
-      addToolResult: mocks.addToolResult,
-      error: undefined,
-      messages: swapMessages,
-      regenerate: mocks.regenerate,
-      sendMessage: mocks.sendMessage,
-      setMessages: mocks.setMessages,
-      status: "ready",
-      stop: mocks.stop,
-    }));
+  it("titles an existing untitled chat after the first settled exchange", async () => {
+    let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
+
+    mocks.useChat.mockImplementation((options) => {
+      chatOptions = options;
+      return {
+        addToolApprovalResponse: mocks.addToolApprovalResponse,
+        addToolResult: mocks.addToolResult,
+        error: undefined,
+        messages: swapMessages,
+        regenerate: mocks.regenerate,
+        sendMessage: mocks.sendMessage,
+        setMessages: mocks.setMessages,
+        status: "ready",
+        stop: mocks.stop,
+      };
+    });
+    mocks.getQueryData.mockReturnValue({ title: null });
 
     render(
       <ChatProvider>
@@ -476,7 +481,97 @@ describe("ChatProvider auto title generation", () => {
     );
 
     await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+
+    act(() => {
+      chatOptions?.onFinish?.({
+        message: swapMessages[swapMessages.length - 1],
+        isAbort: false,
+      });
+    });
+
+    await waitFor(() =>
+      expect(mocks.mutate).toHaveBeenCalledWith(
+        { id: "conversation-1", regenerate: false },
+        expect.any(Object),
+      ),
+    );
+  });
+
+  it("does not regenerate a title the conversation already has", async () => {
+    let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
+
+    mocks.useChat.mockImplementation((options) => {
+      chatOptions = options;
+      return {
+        addToolApprovalResponse: mocks.addToolApprovalResponse,
+        addToolResult: mocks.addToolResult,
+        error: undefined,
+        messages: swapMessages,
+        regenerate: mocks.regenerate,
+        sendMessage: mocks.sendMessage,
+        setMessages: mocks.setMessages,
+        status: "ready",
+        stop: mocks.stop,
+      };
+    });
+    mocks.getQueryData.mockReturnValue({ title: "Existing title" });
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+    act(() => {
+      chatOptions?.onFinish?.({
+        message: swapMessages[swapMessages.length - 1],
+        isAbort: false,
+      });
+    });
+
     expect(mocks.mutate).not.toHaveBeenCalled();
+  });
+
+  it("attempts automatic title generation only once", async () => {
+    let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
+
+    mocks.useChat.mockImplementation((options) => {
+      chatOptions = options;
+      return {
+        addToolApprovalResponse: mocks.addToolApprovalResponse,
+        addToolResult: mocks.addToolResult,
+        error: undefined,
+        messages: swapMessages,
+        regenerate: mocks.regenerate,
+        sendMessage: mocks.sendMessage,
+        setMessages: mocks.setMessages,
+        status: "ready",
+        stop: mocks.stop,
+      };
+    });
+    mocks.getQueryData.mockReturnValue({ title: null });
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+
+    act(() => {
+      chatOptions?.onFinish?.({
+        message: swapMessages[swapMessages.length - 1],
+        isAbort: false,
+      });
+      chatOptions?.onFinish?.({
+        message: swapMessages[swapMessages.length - 1],
+        isAbort: false,
+      });
+    });
+
+    await waitFor(() => expect(mocks.mutate).toHaveBeenCalledTimes(1));
   });
 });
 

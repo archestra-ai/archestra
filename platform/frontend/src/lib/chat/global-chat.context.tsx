@@ -34,10 +34,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { filterOptimisticToolCalls } from "@/components/chat/chat-messages.utils";
-import {
-  useConversation,
-  useGenerateConversationTitle,
-} from "@/lib/chat/chat.query";
+import { useGenerateConversationTitle } from "@/lib/chat/chat.query";
 import {
   pruneEmptyTrailingAssistantMessage,
   restoreRenderableAssistantParts,
@@ -420,8 +417,8 @@ function ChatSessionHook({
       lastCompaction: null,
     });
   const generateTitleMutation = useGenerateConversationTitle();
-  // Read from the shared TanStack cache so we only auto-title untitled chats
-  const { data: conversation } = useConversation(conversationId);
+  // Track if title generation has been attempted for this conversation
+  const titleGenerationAttemptedRef = useRef(false);
   // Track when swap_agent was called so we can auto-poke the new agent on finish
   // Stores the poke text to send, or null if no swap is pending
   const swapAgentPendingRef = useRef<string | null>(null);
@@ -567,11 +564,16 @@ function ChatSessionHook({
       ])?.title;
       const firstUserText = getConversationDisplayTitle(null, stableMessages);
 
-      if (cachedTitle === firstUserText) {
+      const shouldGenerateTitle =
+        !titleGenerationAttemptedRef.current &&
+        (!cachedTitle || cachedTitle === firstUserText);
+
+      if (shouldGenerateTitle) {
+        titleGenerationAttemptedRef.current = true;
         generateTitleMutation.mutate(
           {
             id: conversationId,
-            regenerate: true,
+            regenerate: cachedTitle === firstUserText,
           },
           {
             onSuccess: (data) => {
